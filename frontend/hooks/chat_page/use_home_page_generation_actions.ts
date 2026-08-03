@@ -6,7 +6,6 @@ import {
   normalizeChatResponsePayload,
   normalizeGenerationStatusPayload,
 } from "../../lib/chat_page/api_contract";
-import { isNearBottom } from "../../lib/chat_page/dom";
 import { isLatestChatTurnAnswered } from "../../lib/chat_page/home_page_controller_utils";
 import {
   prependUiChatMessagesWithinLimit,
@@ -166,15 +165,8 @@ export function useHomePageGenerationActions({
   // history) and errors that must not be missed may call this. It is never used
   // to follow generated output: scrolling every time the answer grows pushes the
   // line the reader is on off the top, which is unreadable on a phone.
-  const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
-    const container = chatMessagesRef.current;
-    if (!container) {
-      pendingAutoScrollRef.current = true;
-      return;
-    }
-    if (force || isNearBottom(container)) {
-      pendingAutoScrollRef.current = true;
-    }
+  const requestScrollToBottom = useCallback(() => {
+    pendingAutoScrollRef.current = true;
   }, []);
 
   const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
@@ -281,9 +273,9 @@ export function useHomePageGenerationActions({
           },
         ];
       });
-      scheduleAutoScrollIfNeeded(true);
+      requestScrollToBottom();
     },
-    [removeThinkingMessages, scheduleAutoScrollIfNeeded],
+    [removeThinkingMessages, requestScrollToBottom],
   );
 
   const notifyStoredHistoryWriteIssue = useCallback((result: StoredHistoryWriteResult) => {
@@ -348,9 +340,9 @@ export function useHomePageGenerationActions({
       setHistoryHasMore(false);
       setHistoryNextBeforeId(null);
       setIsLoadingOlder(false);
-      scheduleAutoScrollIfNeeded(true);
+      requestScrollToBottom();
     },
-    [scheduleAutoScrollIfNeeded],
+    [requestScrollToBottom],
   );
 
   const fetchChatHistoryPage = useCallback(async (roomId: string, beforeId?: number | null) => {
@@ -937,7 +929,7 @@ export function useHomePageGenerationActions({
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
+      requestScrollToBottom,
     ],
   );
 
@@ -1044,7 +1036,7 @@ export function useHomePageGenerationActions({
           setIsLoadingOlder(false);
           setMessages(nextMessages);
           saveUiMessagesToLocalStorage(roomId, nextMessages);
-          scheduleAutoScrollIfNeeded(true);
+          requestScrollToBottom();
         };
 
         let uiMessages = toUiMessages(loadedHistory.messages);
@@ -1103,7 +1095,7 @@ export function useHomePageGenerationActions({
         console.error("履歴取得失敗:", error);
       }
     },
-    [connectToGenerationStream, fetchChatHistoryPage, saveUiMessagesToLocalStorage, scheduleAutoScrollIfNeeded],
+    [connectToGenerationStream, fetchChatHistoryPage, saveUiMessagesToLocalStorage, requestScrollToBottom],
   );
 
   const loadOlderChatHistory = useCallback(async () => {
@@ -1293,7 +1285,7 @@ export function useHomePageGenerationActions({
         streamedText: "",
         updatedAt: Date.now(),
       });
-      scheduleAutoScrollIfNeeded(true);
+      requestScrollToBottom();
 
       try {
         const response = await resilientFetch(
@@ -1363,7 +1355,7 @@ export function useHomePageGenerationActions({
         // An arriving answer never moves the view; only an error, which must not
         // be missed, still pulls the view to the bottom.
         if (!(response.ok && (data.response || data.parts?.length))) {
-          scheduleAutoScrollIfNeeded(true);
+          requestScrollToBottom();
         }
         return response.ok && Boolean(data.response || data.parts?.length);
       } catch (error) {
@@ -1398,7 +1390,7 @@ export function useHomePageGenerationActions({
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
+      requestScrollToBottom,
     ],
   );
 
@@ -1475,7 +1467,7 @@ export function useHomePageGenerationActions({
         streamedText: "",
         updatedAt: Date.now(),
       });
-      scheduleAutoScrollIfNeeded(true);
+      requestScrollToBottom();
 
       try {
         const response = await resilientFetch(
@@ -1538,7 +1530,7 @@ export function useHomePageGenerationActions({
           ];
         });
         clearStoredGenerationState(roomId);
-        scheduleAutoScrollIfNeeded(true);
+        requestScrollToBottom();
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           if (isGenerationActive(generation)) {
@@ -1568,7 +1560,7 @@ export function useHomePageGenerationActions({
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
+      requestScrollToBottom,
     ],
   );
 
@@ -1622,7 +1614,7 @@ export function useHomePageGenerationActions({
         streamedText: "",
         updatedAt: Date.now(),
       });
-      scheduleAutoScrollIfNeeded(true);
+      requestScrollToBottom();
 
       try {
         const response = await resilientFetch(
@@ -1680,7 +1672,7 @@ export function useHomePageGenerationActions({
           ];
         });
         clearStoredGenerationState(roomId);
-        scheduleAutoScrollIfNeeded(true);
+        requestScrollToBottom();
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           if (isGenerationActive(generation)) {
@@ -1710,12 +1702,12 @@ export function useHomePageGenerationActions({
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
+      requestScrollToBottom,
     ],
   );
 
   return {
-    scheduleAutoScrollIfNeeded,
+    requestScrollToBottom,
     disconnectActiveGeneration,
     persistCurrentRoomId,
     saveUiMessagesToLocalStorage,
