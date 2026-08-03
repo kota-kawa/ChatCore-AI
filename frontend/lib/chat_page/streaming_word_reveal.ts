@@ -37,6 +37,15 @@ export const WORD_REVEAL_STAGGER_MS = 14;
 // the cap, so the output speed itself never slows down.
 export const WORD_REVEAL_MAX_LAG_MS = 240;
 
+// 1フレームでアニメーション対象にしてよい追記量の上限。パーツ更新・復元・
+// 長い処理落ち明けなどでテキストが一括で飛び込んだ場合は、後からまとめて
+// フェードさせず即時表示する。通常のストリーミングでは1フレームの追記が
+// この量に達することはない。
+// Cap on how much appended text may animate in one frame. When text lands in
+// bulk (parts updates, restore, after a long stall) it shows instantly instead
+// of fading in afterwards; ordinary streaming never appends this much per frame.
+export const MAX_ANIMATED_APPEND_CHARS = 240;
+
 // 1文字で1語として扱うCJK文字かどうか。
 // Whether the character is CJK and therefore a word on its own.
 export function isCjkChar(char: string) {
@@ -125,6 +134,18 @@ export class WordRevealTimeline {
 
   private lastScheduledAt = Number.NEGATIVE_INFINITY;
 
+  // 既知コンテンツの境界。これより前のオフセットは過去のフレームで描画済みの
+  // 内容なので、予約を失っていても（pruneやリマップずれの後でも）決して
+  // 透明へ戻さない。コードフェンスの確定でアニメ対象テキストが縮み、
+  // アニメーション対象範囲が後退した場合などに、表示済みの語が「新規」として
+  // 未来開始で再登録され、点滅してもう一度フェードする不具合を防ぐ。
+  // Boundary of known content. Offsets below it were rendered in earlier
+  // frames, so they must never turn transparent again even when their
+  // schedule was lost (after prune or a remap mismatch). This is what stops
+  // already-visible words from blinking and fading again when e.g. a code
+  // fence finalizes, the animatable text shrinks and the tail window recedes.
+  private knownEnd = 0;
+
   // 表示テキストの変化に予約を追従させる。純粋な追記なら何もしない。Markdownの
   // 整形確定（例: `**強調` が `<strong>` になり `**` が消える）ではテキストが
   // 途中から差し替わるため、共通接頭辞より後ろの予約を長さ差分だけずらして
@@ -138,7 +159,16 @@ export class WordRevealTimeline {
   sync(text: string) {
     const previous = this.lastText;
     this.lastText = text;
-    if (previous === text || text.startsWith(previous)) return;
+    if (previous === text) return;
+    if (text.startsWith(previous)) {
+      // 純粋な追記: 前フレームまでの内容が既知コンテンツになる。一括追記は
+      // アニメーションさせず全文を既知にする（後追いフェードの防止）。
+      // Pure append: everything up to the previous frame is now known. A bulk
+      // append marks the whole text known so nothing fades in after the fact.
+      this.knownEnd =
+        text.length - previous.length > MAX_ANIMATED_APPEND_CHARS ? text.length : previous.length;
+      return;
+    }
 
     let divergence = 0;
     const comparable = Math.min(previous.length, text.length);
@@ -156,6 +186,14 @@ export class WordRevealTimeline {
     remapped.forEach(([offset, scheduled]) => {
       this.scheduledAt.set(offset, scheduled);
     });
+
+    // 差し替え後の既知境界は「前フレームの内容が新テキスト内で占める範囲」。
+    // 差し替えと同時に追記された分だけが新規扱いになる。一括追記は即時表示。
+    // After a reflow the known boundary is the extent the previous content
+    // occupies in the new text; only what was appended alongside stays new,
+    // and a bulk append still shows instantly.
+    this.knownEnd = Math.max(0, Math.min(previous.length + delta, text.length));
+    if (text.length - this.knownEnd > MAX_ANIMATED_APPEND_CHARS) this.knownEnd = text.length;
   }
 
   // 語の開始時刻からの経過時間（ms）。開始前の語は負値を返し、再生済みの語は
@@ -165,6 +203,11 @@ export class WordRevealTimeline {
   elapsedFor(wordStart: number, now: number): number | null {
     let scheduled = this.scheduledAt.get(wordStart);
     if (scheduled === undefined) {
+      // 既知コンテンツ内で予約が見つからない語は表示済み扱いにして素通しする。
+      // ここで新規予約すると、表示済みの語が透明へ戻って点滅・再フェードする。
+      // A known-content word without a schedule is treated as already shown.
+      // Scheduling it afresh would turn visible text transparent again.
+      if (wordStart < this.knownEnd) return null;
       scheduled = Math.min(
         Math.max(now, this.lastScheduledAt + WORD_REVEAL_STAGGER_MS),
         now + WORD_REVEAL_MAX_LAG_MS,
