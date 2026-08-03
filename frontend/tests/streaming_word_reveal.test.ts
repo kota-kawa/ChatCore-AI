@@ -270,6 +270,41 @@ test("WordRevealTimeline treats known words without a schedule as already visibl
   assert.equal(timeline.elapsedFor(12, 1000), 0);
 });
 
+test("WordRevealTimeline animates new text when the body ends with a stable suffix", () => {
+  const timeline = new WordRevealTimeline();
+  // Markdownの描画は本文の後ろに改行のテキストノードを残すため、1文字の追記でも
+  // 「純粋な追記」に見えない。ここで全文を既知にしてしまうと、生成中のテキストが
+  // 一度もフェードインしなくなる（実際に起きていた不具合）。
+  // Markdown rendering leaves a newline text node after the body, so even a
+  // one character append does not look like a pure append. Marking the whole
+  // text known here stopped streamed text from ever fading in.
+  timeline.sync("abc\n");
+  timeline.sync("abcde\n");
+
+  assert.equal(timeline.knownBoundary, 3);
+  assert.equal(timeline.elapsedFor(3, 1000), 0);
+});
+
+test("WordRevealTimeline leaves the unchanged tail of a reflow alone", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("abc\n");
+  timeline.sync("abcde\n");
+
+  // 共通接尾辞は前フレームにもあった内容なので、予約が無くても新規にしない。
+  // The common suffix was on screen already, so it never becomes new content.
+  assert.equal(timeline.elapsedFor(5, 1000), null);
+});
+
+test("WordRevealTimeline treats a shrinking reflow as fully known", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("Streaming **bold**\n");
+  timeline.sync("Streaming bold\n");
+
+  // コードフェンスや強調の確定でテキストが縮んだフレームには新規コンテンツが無い。
+  // A frame where the text shrank (a fence or emphasis finalizing) adds nothing.
+  assert.equal(timeline.knownBoundary, "Streaming bold\n".length);
+});
+
 test("WordRevealTimeline exposes the boundary of already rendered content", () => {
   const timeline = new WordRevealTimeline();
   timeline.sync("hello");
