@@ -656,32 +656,16 @@
   content: none;
 }
 
-/* ストリーミング中の末尾カーソル: 点滅バーではなく、テキスト末尾に追従して
-   呼吸する丸ドットで生成中を示す。コードブロックや表が末尾の間は付けない。 */
-:where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
-:where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > blockquote:last-child > p:last-child::after,
-:where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > :is(ul, ol):last-child li:last-child:not(:has(li))::after {
-  content: "";
-  display: inline-block;
-  width: 0.5em;
-  height: 0.5em;
-  margin-left: 0.35ch;
-  border-radius: 50%;
-  background: currentColor;
-  vertical-align: -0.05em;
-  animation: streamCursorBreathe 1.2s ease-in-out infinite;
-}
+/* 生成中の進行表示は単語フェードイン（streaming_text.css）が担うため、
+   末尾カーソルは付けない。透明のまま開始待ちの語がある間、ドットだけが
+   先行して見えてしまうため。
+   The word fade-in (streaming_text.css) is the progress indicator, so no
+   trailing cursor: with queued still-transparent words a dot would run
+   ahead of the visible text. */
 
 @media (prefers-reduced-motion: reduce) {
   :where(body.chat-page, .chat-page-shell) .message-wrapper--streaming {
     animation: none;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
-  :where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > blockquote:last-child > p:last-child::after,
-  :where(body.chat-page, .chat-page-shell) .bot-message--streaming .bot-message-part--text:last-child > div > :is(ul, ol):last-child li:last-child:not(:has(li))::after {
-    animation: none;
-    opacity: 0.6;
   }
 }
 
@@ -1772,18 +1756,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes streamCursorBreathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1);
   }
 }
 
