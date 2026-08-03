@@ -196,8 +196,8 @@ export function PromptShareAuthorProfileModal({
                 t("promptShare.loading")
               ) : (
                 <>
+                  <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginRight: "4px" }}></i>
                   {t("promptShare.loadMore")}
-                  <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginLeft: "4px" }}></i>
                 </>
               )}
             </button>
