@@ -1,15 +1,19 @@
-// 描画済みボットメッセージの末尾に、単語ごとのフェードインを適用するDOM処理。
-// ChatGPT / Claude と同様に「新しく現れた語だけ」がふわりと立ち上がるようにする。
+// 描画済みボットメッセージの末尾に、チャンクごとのフェードインを適用するDOM処理。
+// 「新しく現れたひとかたまり」だけがふわりと立ち上がるようにする。1文字ずつでは
+// 生成が速いときにタイプライターに見えるため、数語ぶんをまとめて1回で見せる。
 // メッセージはストリーミング中フレーム毎にHTMLごと差し替わるため、ここで付ける
 // spanも毎フレーム作り直される。負のanimation-delayで再生位置を引き継ぐ。
-// DOM pass that fades in each newly revealed word at the tail of a rendered bot
-// message, the way ChatGPT / Claude reveal their output. The message HTML is
+// DOM pass that fades in each newly revealed chunk at the tail of a rendered
+// bot message, so a few words rise together instead of one character at a time
+// (which reads as a typewriter when generation is fast). The message HTML is
 // replaced every frame while streaming, so these spans are rebuilt every frame
 // and resume mid-animation through a negative animation-delay.
 
+import type { RevealWord } from "./streaming_word_reveal";
 import {
   WORD_REVEAL_DURATION_MS,
   WordRevealTimeline,
+  segmentRevealChunks,
   segmentRevealWords,
 } from "./streaming_word_reveal";
 
@@ -74,9 +78,40 @@ function collectTextNodes(container: HTMLElement) {
   return { entries, total };
 }
 
-// 1つのテキストノードを、アニメーション対象の語だけspanで包んだ断片へ置き換える。
-// Replace one text node with a fragment whose animating words are wrapped.
-function wrapWordsInTextNode(
+// チャンクを、実際にアニメーションさせる区間へ切り分ける。ストリーミング中は
+// 末尾のチャンクが文字を足しながら伸びるため、チャンク全体を1単位で扱うと
+// 「表示済みの部分が巻き戻る」か「追記部分がフェード無しで出る」のどちらかに
+// なる。表示済み境界と既存の予約位置で分割し、どちらも起こらないようにする。
+// Cut a chunk into the spans that actually animate. While streaming, the last
+// chunk keeps growing as characters arrive; treating it as one unit would
+// either rewind the part already on screen or pop the appended part in with no
+// fade. Splitting at the known boundary and at existing schedules avoids both.
+function splitChunkStarts(
+  chunk: RevealWord,
+  entry: TextNodeEntry,
+  wordStarts: Set<number>,
+  timeline: WordRevealTimeline,
+) {
+  const offset = entry.start;
+  const starts = new Set<number>([chunk.start]);
+  const known = timeline.knownBoundary - offset;
+  if (known > chunk.start && known < chunk.end) starts.add(known);
+  timeline.scheduledStartsWithin(offset + chunk.start, offset + chunk.end).forEach((start) => {
+    // 語頭に一致する予約だけを分割点にする。整形確定でテキストが差し替わると
+    // 予約は文字数差でずらして引き継がれるため、語の途中を指す予約が残る。
+    // それを再生単位にすると、表示済みのテキストが開始待ち（透明）に戻る。
+    // Only schedules that land on a word start may split. A markdown reflow
+    // shifts schedules by the length delta, which leaves some of them pointing
+    // mid-word; reviving those would put visible text back into the queued
+    // (transparent) state.
+    if (wordStarts.has(start - offset)) starts.add(start - offset);
+  });
+  return Array.from(starts).sort((left, right) => left - right);
+}
+
+// 1つのテキストノードを、アニメーション対象の区間だけspanで包んだ断片へ置き換える。
+// Replace one text node with a fragment whose animating spans are wrapped.
+function wrapChunksInTextNode(
   entry: TextNodeEntry,
   tailStart: number,
   timeline: WordRevealTimeline,
@@ -87,31 +122,38 @@ function wrapWordsInTextNode(
   if (!document_) return;
 
   const fragment = document_.createDocumentFragment();
+  const wordStarts = new Set(segmentRevealWords(text).map((word) => word.start));
   let cursor = 0;
-  let hasWrappedWord = false;
+  let hasWrappedChunk = false;
 
-  segmentRevealWords(text).forEach((word) => {
-    const absoluteStart = entry.start + word.start;
-    if (absoluteStart < tailStart) return;
-    const elapsed = timeline.elapsedFor(absoluteStart, now);
-    if (elapsed === null) return;
+  segmentRevealChunks(text, entry.start).forEach((chunk) => {
+    if (entry.start + chunk.start < tailStart) return;
+    const starts = splitChunkStarts(chunk, entry, wordStarts, timeline);
 
-    if (word.start > cursor) {
-      fragment.appendChild(document_.createTextNode(text.slice(cursor, word.start)));
-    }
-    const span = document_.createElement("span");
-    span.className = REVEAL_WORD_CLASS;
-    // 負のdelayは再生途中から再開、正のdelayは開始待ち（fill:bothで透明のまま）。
-    // A negative delay resumes mid-play; a positive one waits to start
-    // (fill: both keeps the word transparent until then).
-    span.style.animationDelay = `${Math.round(-elapsed)}ms`;
-    span.textContent = text.slice(word.start, word.end);
-    fragment.appendChild(span);
-    cursor = word.end;
-    hasWrappedWord = true;
+    starts.forEach((start, index) => {
+      const end = index + 1 < starts.length ? starts[index + 1] : chunk.end;
+      const elapsed = timeline.elapsedFor(entry.start + start, now);
+      // 再生し終えた区間はspanを付けず、素のテキストとして次の slice に含める。
+      // A finished span is left as plain text and folded into the next slice.
+      if (elapsed === null) return;
+
+      if (start > cursor) {
+        fragment.appendChild(document_.createTextNode(text.slice(cursor, start)));
+      }
+      const span = document_.createElement("span");
+      span.className = REVEAL_WORD_CLASS;
+      // 負のdelayは再生途中から再開、正のdelayは開始待ち（fill:bothで透明のまま）。
+      // A negative delay resumes mid-play; a positive one waits to start
+      // (fill: both keeps the text transparent until then).
+      span.style.animationDelay = `${Math.round(-elapsed)}ms`;
+      span.textContent = text.slice(start, end);
+      fragment.appendChild(span);
+      cursor = end;
+      hasWrappedChunk = true;
+    });
   });
 
-  if (!hasWrappedWord) return;
+  if (!hasWrappedChunk) return;
   if (cursor < text.length) {
     fragment.appendChild(document_.createTextNode(text.slice(cursor)));
   }
@@ -134,7 +176,7 @@ export function applyStreamingWordReveal(
   const tailStart = Math.max(0, total - REVEAL_TAIL_CHARS);
   entries.forEach((entry) => {
     if (entry.start + entry.node.data.length <= tailStart) return;
-    wrapWordsInTextNode(entry, tailStart, timeline, now);
+    wrapChunksInTextNode(entry, tailStart, timeline, now);
   });
 
   timeline.prune(tailStart);
