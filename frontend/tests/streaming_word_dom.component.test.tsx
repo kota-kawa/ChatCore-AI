@@ -68,6 +68,23 @@ describe("applyStreamingWordReveal", () => {
     expect(delays).toEqual(["-120ms", `${WORD_REVEAL_STAGGER_MS - 120}ms`]);
   });
 
+  it("does not replay visible words when markdown finalizes mid-stream", () => {
+    const timeline = new WordRevealTimeline();
+    const first = renderContainer("<p>Streaming **bold</p>");
+    applyStreamingWordReveal(first, timeline, 1000);
+
+    // `**` が <strong> へ確定し、描画テキストが途中から差し替わるフレーム。
+    // The frame where `**` collapses into <strong> and the text shifts.
+    const second = renderContainer("<p>Streaming <strong>bold</strong></p>");
+    applyStreamingWordReveal(second, timeline, 1000 + WORD_REVEAL_DURATION_MS + WORD_REVEAL_STAGGER_MS);
+
+    // 再生し終えていた "Streaming" は透明に戻らず、素のテキストのまま残る。
+    // "Streaming" already finished playing and must not fade in again.
+    const words = revealedWords(second);
+    expect(words).not.toContain("Streaming");
+    expect(second.textContent).toBe("Streaming bold");
+  });
+
   it("stops wrapping a word once its animation finished", () => {
     const timeline = new WordRevealTimeline();
     const first = renderContainer("<p>Hello world</p>");

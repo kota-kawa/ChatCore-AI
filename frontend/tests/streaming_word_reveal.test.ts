@@ -76,36 +76,54 @@ test("clampToWordBoundary does not stall on a word that starts the text", () => 
 
 test("WordRevealTimeline reports elapsed time and retires finished words", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(50);
+  timeline.sync("a".repeat(50));
 
   assert.equal(timeline.elapsedFor(10, 1000), 0);
   assert.equal(timeline.elapsedFor(10, 1100), 100);
   assert.equal(timeline.elapsedFor(10, 1000 + WORD_REVEAL_DURATION_MS), null);
 });
 
-test("WordRevealTimeline forgets offsets when the text shrinks", () => {
+test("WordRevealTimeline keeps prefix schedules when the text truncates", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(50);
+  timeline.sync("a".repeat(50));
   timeline.elapsedFor(10, 1000);
 
-  timeline.sync(20);
+  timeline.sync("a".repeat(20));
 
-  assert.equal(timeline.elapsedFor(10, 1200), 0);
+  // 切り詰め後も、共通接頭辞に残った語のアニメーションは巻き戻らない。
+  // A word that survived the truncation keeps playing instead of restarting.
+  assert.equal(timeline.elapsedFor(10, 1200), 200);
 });
 
 test("WordRevealTimeline keeps offsets while the text only grows", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(50);
+  timeline.sync("a".repeat(50));
   timeline.elapsedFor(10, 1000);
 
-  timeline.sync(80);
+  timeline.sync("a".repeat(80));
 
   assert.equal(timeline.elapsedFor(10, 1100), 100);
 });
 
+test("WordRevealTimeline shifts schedules across a markdown reflow", () => {
+  const timeline = new WordRevealTimeline();
+  // "Streaming **bold now" → 整形確定で "Streaming bold now" になるケース。
+  // The `**` collapses when markdown finalizes, shifting later offsets by -2.
+  timeline.sync("Streaming **bold now");
+  timeline.elapsedFor(0, 1000);
+  timeline.elapsedFor(17, 1000);
+
+  timeline.sync("Streaming bold now");
+
+  // 差し替え位置より前の語はそのまま、後ろの語は差分だけずれて引き継がれる。
+  // Words before the edit keep their slot; later ones shift by the delta.
+  assert.equal(timeline.elapsedFor(0, 1100), 100);
+  assert.equal(timeline.elapsedFor(15, 1100), 100 - WORD_REVEAL_STAGGER_MS);
+});
+
 test("WordRevealTimeline staggers words that arrive in the same frame", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(100);
+  timeline.sync("a".repeat(100));
 
   // 同時に届いた語でも開始時刻が1語ずつ後ろへずれ、カスケードになる。
   // Words seen at the same instant still start one stagger step apart.
@@ -116,7 +134,7 @@ test("WordRevealTimeline staggers words that arrive in the same frame", () => {
 
 test("WordRevealTimeline caps how far the cascade may trail the text", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(10000);
+  timeline.sync("a".repeat(10000));
 
   let last: number | null = 0;
   for (let word = 0; word < 200; word += 1) {
@@ -130,7 +148,7 @@ test("WordRevealTimeline caps how far the cascade may trail the text", () => {
 
 test("WordRevealTimeline prunes only records outside the animated tail", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync(500);
+  timeline.sync("a".repeat(500));
   timeline.elapsedFor(10, 1000);
   assert.equal(timeline.elapsedFor(400, 1000), -WORD_REVEAL_STAGGER_MS);
 

@@ -126,7 +126,9 @@ export function applyStreamingWordReveal(
   now = nowMs(),
 ) {
   const { entries, total } = collectTextNodes(container);
-  timeline.sync(total);
+  // 予約の追従（差分リマップ）にはオフセットだけでなく本文が必要。
+  // The remap that keeps schedules aligned needs the text, not just lengths.
+  timeline.sync(entries.map((entry) => entry.node.data).join(""));
   container.style.setProperty(REVEAL_DURATION_PROPERTY, `${WORD_REVEAL_DURATION_MS}ms`);
 
   const tailStart = Math.max(0, total - REVEAL_TAIL_CHARS);
