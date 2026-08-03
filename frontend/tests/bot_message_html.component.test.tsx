@@ -50,3 +50,28 @@ describe("BotMessageHtml web-search citations", () => {
     expect(container.textContent).toContain("危険な参照です。");
   });
 });
+
+describe("BotMessageHtml streaming reveal", () => {
+  it("fades in the words of the part that is still generating", () => {
+    const { container } = render(<BotMessageHtml text="流れるように出力します" streaming />);
+
+    expect(container.querySelectorAll("span.streaming-word").length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("流れるように出力します");
+  });
+
+  it("leaves a finished message as plain markup", () => {
+    const { container } = render(<BotMessageHtml text="出力が完了しました" />);
+
+    expect(container.querySelector("span.streaming-word")).toBeNull();
+  });
+
+  it("drops the reveal markup once streaming ends", () => {
+    const { container, rerender } = render(<BotMessageHtml text="出力の途中です" streaming />);
+    expect(container.querySelectorAll("span.streaming-word").length).toBeGreaterThan(0);
+
+    rerender(<BotMessageHtml text="出力の途中です" />);
+
+    expect(container.querySelector("span.streaming-word")).toBeNull();
+    expect(container.textContent).toContain("出力の途中です");
+  });
+});
