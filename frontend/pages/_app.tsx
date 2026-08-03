@@ -11,6 +11,7 @@ import "../public/static/css/components/sidebar.css";
 import "../public/static/css/components/prompt_assist.css";
 import "../public/static/css/components/new_prompt_modal.css";
 import "../public/static/css/components/prompt_category_select.css";
+import "../public/static/css/components/streaming_text.css";
 import "../public/static/css/pages/chat/setup.css";
 import "../public/static/css/pages/chat/chat_layout.css";
 import "../public/static/css/pages/chat/chat_messages.css";

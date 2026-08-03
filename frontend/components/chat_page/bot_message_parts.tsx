@@ -10,14 +10,23 @@ import { InteractiveButtons } from "./interactive_buttons";
 type BotMessagePartsProps = {
   fallbackText: string;
   parts?: ChatMessagePart[];
+  // 生成中かどうか。末尾のテキストパートだけが単語フェードインの対象になる
+  // Whether generation is in flight; only the last text part fades words in
+  streaming?: boolean;
 };
 
 // ボットメッセージを構成するパーツ（テキスト / サンドボックスアーティファクト / インタラクティブボタン）を順番に描画するコンポーネント
 // Component that renders the parts of a bot message in order (text / sandbox artifact / interactive buttons)
-function BotMessagePartsComponent({ fallbackText, parts }: BotMessagePartsProps) {
+function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: BotMessagePartsProps) {
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty
   const renderParts = parts && parts.length > 0 ? parts : [{ type: "text" as const, text: fallbackText }];
+  // 伸び続けるのは最後のテキストパートだけなので、そこだけをアニメーション対象にする
+  // Only the last text part keeps growing, so only it is animated
+  const lastTextPartIndex = renderParts.reduce(
+    (lastIndex, part, index) => (part.type === "text" && part.text ? index : lastIndex),
+    -1
+  );
 
   return (
     <div className="bot-message-parts">
@@ -25,7 +34,7 @@ function BotMessagePartsComponent({ fallbackText, parts }: BotMessagePartsProps)
         if (part.type === "text") {
           return part.text ? (
             <div key={`text-${index}`} className="bot-message-part bot-message-part--text">
-              <BotMessageHtml text={part.text} />
+              <BotMessageHtml text={part.text} streaming={streaming && index === lastTextPartIndex} />
             </div>
           ) : null;
         }
