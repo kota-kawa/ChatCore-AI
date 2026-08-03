@@ -69,7 +69,12 @@ import {
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 import { useTranslation } from "../../contexts/locale_context";
 
-const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
+// SSE は回線切替時にブラウザから明示的なエラーとして通知されないことがある。
+// 最初はすぐ再接続し、以後は上限付きバックオフでサーバー側で継続中の生成へ戻る。
+// An SSE connection may end without a useful browser error during a network
+// handoff. Reconnect immediately once, then use capped backoff while the
+// generation continues on the server.
+const GENERATION_STREAM_RECONNECT_DELAYS_MS = [0, 500, 1_000, 2_000, 4_000, 8_000, 15_000];
 
 // ストリーム進行状態（復元用）を localStorage へ書き込む最短間隔。
 // チャンク毎に全文を同期書き込みすると応答が伸びるほどメインスレッドを
@@ -86,10 +91,57 @@ const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
 // and makes the last part of a fast response snap into view.
 const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
-function waitForDuration(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
+function createAbortError(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+}
+
+function waitForDuration(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(createAbortError(signal));
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      window.clearTimeout(timerId);
+      reject(createAbortError(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+function waitUntilOnline(signal: AbortSignal) {
+  if (typeof window === "undefined" || navigator.onLine !== false) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const onOnline = () => {
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError(signal));
+    };
+    const cleanup = () => {
+      window.removeEventListener("online", onOnline);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    window.addEventListener("online", onOnline, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function waitForGenerationStreamReconnect(attempt: number, signal: AbortSignal) {
+  await waitUntilOnline(signal);
+  const delayIndex = Math.min(attempt, GENERATION_STREAM_RECONNECT_DELAYS_MS.length - 1);
+  await waitForDuration(GENERATION_STREAM_RECONNECT_DELAYS_MS[delayIndex], signal);
 }
 
 // Map server-side branch metadata onto a UI message so the branch navigator
@@ -668,7 +720,7 @@ export function useHomePageGenerationActions({
         ensureStreamingMessage();
       }
 
-      const openReconnectStream = async () => {
+      const openReconnectStream = async (): Promise<Response | "unavailable" | null> => {
         const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
         if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
 
@@ -682,7 +734,12 @@ export function useHomePageGenerationActions({
             },
             { timeoutMs: 0 }
           );
-          if (!reconnectResponse.ok) return null;
+          if (!reconnectResponse.ok) {
+            if (reconnectResponse.status >= 400 && reconnectResponse.status < 500 && reconnectResponse.status !== 408 && reconnectResponse.status !== 429) {
+              return "unavailable";
+            }
+            return null;
+          }
           return reconnectResponse;
         } catch {
           return null;
@@ -839,10 +896,14 @@ export function useHomePageGenerationActions({
             if (done) break;
           }
         } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            if (generation.abortController.signal.aborted || !isGenerationActive(generation)) {
-              return "aborted" as const;
-            }
+          if (generation.abortController.signal.aborted || !isGenerationActive(generation)) {
+            return "aborted" as const;
+          }
+          // Network handoffs usually surface as TypeError, but some browsers
+          // use AbortError when they tear down an existing SSE response.  Both
+          // mean the request itself was not cancelled by the user, so resume
+          // from the last event ID instead of treating the answer as failed.
+          if (error instanceof TypeError || (error as { name?: string })?.name === "AbortError") {
             return "interrupted" as const;
           }
           throw error;
@@ -864,7 +925,8 @@ export function useHomePageGenerationActions({
 
       try {
         let activeResponse = response;
-        for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
+        let reconnectAttempt = 0;
+        while (isGenerationActive(generation)) {
           const result = await readStreamResponse(activeResponse);
           if (!isGenerationActive(generation)) return false;
 
@@ -886,23 +948,29 @@ export function useHomePageGenerationActions({
             return false;
           }
 
-          const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
-          if (!streamedText || reconnectDelay === undefined) {
-            persistInterruptedStream(
-              streamedText
-                ? localize("ストリームが途中で終了しました。ここまでの応答を保存しました。", "The stream ended early. The response received so far was saved.")
-                : localize("ストリームが途中で終了しました。", "The stream ended early."),
-            );
-            return false;
+          try {
+            await waitForGenerationStreamReconnect(reconnectAttempt, generation.abortController.signal);
+          } catch (error) {
+            if (generation.abortController.signal.aborted || !isGenerationActive(generation)) return false;
+            throw error;
           }
-
-          await waitForDuration(reconnectDelay);
+          reconnectAttempt += 1;
           if (!isGenerationActive(generation)) return false;
 
           const reconnectResponse = await openReconnectStream();
-          if (!reconnectResponse) {
-            persistInterruptedStream(localize("ストリームが途中で終了しました。ここまでの応答を保存しました。", "The stream ended early. The response received so far was saved."));
+          if (reconnectResponse === "unavailable") {
+            persistInterruptedStream(
+              streamedText
+                ? localize("ストリームを再開できませんでした。ここまでの応答を保存しました。", "The stream could not be resumed. The response received so far was saved.")
+                : localize("ストリームを再開できませんでした。", "The stream could not be resumed."),
+            );
             return false;
+          }
+          if (!reconnectResponse) {
+            // A lost Wi-Fi connection can make the first few reconnects fail
+            // even after the browser reports online. Keep the local progress
+            // and continue retrying until the user stops the generation.
+            continue;
           }
           activeResponse = reconnectResponse;
         }
@@ -931,6 +999,44 @@ export function useHomePageGenerationActions({
       removeThinkingMessages,
       requestScrollToBottom,
     ],
+  );
+
+  const recoverInitialGenerationStream = useCallback(
+    async (roomId: string, generation: ActiveGeneration): Promise<Response | null> => {
+      let reconnectAttempt = 0;
+
+      while (isGenerationActive(generation)) {
+        try {
+          await waitForGenerationStreamReconnect(reconnectAttempt, generation.abortController.signal);
+        } catch {
+          return null;
+        }
+        reconnectAttempt += 1;
+
+        try {
+          const response = await resilientFetch(
+            `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+            {
+              credentials: "same-origin",
+              signal: generation.abortController.signal,
+            },
+            { timeoutMs: 0 },
+          );
+          if (response.ok) return response;
+
+          // A 4xx response means the original request was not accepted (or the
+          // session is no longer valid); retries cannot safely recreate a POST.
+          if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+            return null;
+          }
+        } catch {
+          if (generation.abortController.signal.aborted) return null;
+        }
+      }
+
+      return null;
+    },
+    [isGenerationActive],
   );
 
   const connectToGenerationStream = useCallback(
@@ -1359,7 +1465,7 @@ export function useHomePageGenerationActions({
         }
         return response.ok && Boolean(data.response || data.parts?.length);
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        if (generation.abortController.signal.aborted) {
           if (isGenerationActive(generation)) {
             setMessages((previous) => {
               if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -1367,6 +1473,15 @@ export function useHomePageGenerationActions({
             });
           }
           return false;
+        }
+
+        // The POST may have reached the server even when the client loses the
+        // response during a Wi-Fi/mobile handoff. Do not resend it (which could
+        // create a duplicate turn); attach to the generation the server already
+        // started instead.
+        const recoveredResponse = await recoverInitialGenerationStream(roomId, generation);
+        if (recoveredResponse && isGenerationActive(generation)) {
+          return consumeStreamingChatResponse(recoveredResponse, generation);
         }
 
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1387,6 +1502,7 @@ export function useHomePageGenerationActions({
       currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      recoverInitialGenerationStream,
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
