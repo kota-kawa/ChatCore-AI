@@ -68,6 +68,28 @@ function createStreamResponse(blocks: string[], onFirstRead: () => void) {
   } as unknown as Response;
 }
 
+function createInterruptedStreamResponse(block: string) {
+  let hasSentBlock = false;
+  return {
+    ok: true,
+    headers: {
+      get: (name: string) => (name.toLowerCase() === "content-type" ? "text/event-stream" : null),
+    },
+    body: {
+      getReader: () => ({
+        read: async () => {
+          if (!hasSentBlock) {
+            hasSentBlock = true;
+            return { value: encoder.encode(block), done: false };
+          }
+          throw new TypeError("network changed");
+        },
+        cancel: async () => undefined,
+      }),
+    },
+  } as unknown as Response;
+}
+
 function chunkBlock(id: number, text: string) {
   return `id: ${id}\nevent: chunk\ndata: ${JSON.stringify({ text })}\n\n`;
 }
@@ -177,7 +199,9 @@ describe("auto-scroll during generation", () => {
 
   it("still scrolls to the bottom when the user sends a message", async () => {
     const recorder = createScrollRecorder(() => "sending");
-    resilientFetchMock.mockImplementation(async () => createStreamResponse([], () => undefined));
+    resilientFetchMock.mockImplementation(async () => createStreamResponse([
+      doneBlock(1, "送信を受け付けました。"),
+    ], () => undefined));
 
     const messagesRef = { current: [] as UiChatMessage[] };
     const { result } = renderHook(() => useGenerationHarness(recorder.ref, messagesRef));
@@ -188,5 +212,25 @@ describe("auto-scroll during generation", () => {
 
     expect(messagesRef.current.some((message) => message.sender === "user")).toBe(true);
     expect(recorder.requests).toContain("sending");
+  });
+
+  it("reconnects to an interrupted SSE stream without losing received text", async () => {
+    const recorder = createScrollRecorder(() => "streaming");
+    resilientFetchMock
+      .mockResolvedValueOnce(createInterruptedStreamResponse(chunkBlock(1, "切断前の応答。")))
+      .mockResolvedValueOnce(createStreamResponse([
+        doneBlock(2, "切断前の応答。回線復帰後も続けて受信できます。"),
+      ], () => undefined));
+
+    const messagesRef = { current: [] as UiChatMessage[] };
+    const { result } = renderHook(() => useGenerationHarness(recorder.ref, messagesRef));
+
+    await act(async () => {
+      await result.current.generateResponse("やあ", "model", "room-1");
+    });
+
+    expect(resilientFetchMock).toHaveBeenCalledTimes(2);
+    expect(messagesRef.current.some((message) => message.error)).toBe(false);
+    expect(messagesRef.current.at(-1)?.text).toBe("切断前の応答。回線復帰後も続けて受信できます。");
   });
 });
