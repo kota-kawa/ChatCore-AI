@@ -157,6 +157,15 @@ export function useHomePageGenerationActions({
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
+  // 次の描画で最下部へスクロールする予約。呼ぶのはユーザー自身の操作（送信・編集
+  // 送信・再生成の開始・ルーム切替・履歴読み込み）と、見落とすと困るエラーのときだけ。
+  // 生成中の追従スクロールには使わない。回答が伸びるたびに画面を送ると、読んでいる
+  // 行が下から押し上げられ、スマホでは特に読めたものではなくなる。
+  // Request a scroll to the bottom on the next render. Only user-initiated moves
+  // (sending, editing, starting a regeneration, switching rooms, loading
+  // history) and errors that must not be missed may call this. It is never used
+  // to follow generated output: scrolling every time the answer grows pushes the
+  // line the reader is on off the top, which is unreadable on a phone.
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
     const container = chatMessagesRef.current;
     if (!container) {
@@ -505,7 +514,6 @@ export function useHomePageGenerationActions({
             };
           });
         });
-        scheduleAutoScrollIfNeeded();
         if (smoothedLength < separatedDisplayText.pacedText.length) {
           scheduleStreamedChunkRender();
           return;
@@ -569,7 +577,6 @@ export function useHomePageGenerationActions({
             },
           ];
         });
-        scheduleAutoScrollIfNeeded();
         return newId;
       };
 
@@ -585,7 +592,6 @@ export function useHomePageGenerationActions({
             };
           });
         });
-        scheduleAutoScrollIfNeeded();
       };
 
       const finalizeStreamingMessage = (
@@ -629,7 +635,6 @@ export function useHomePageGenerationActions({
             }));
           }
           clearStoredGenerationState(roomId);
-          scheduleAutoScrollIfNeeded();
           return;
         }
 
@@ -656,7 +661,6 @@ export function useHomePageGenerationActions({
           }));
         }
         clearStoredGenerationState(roomId);
-        scheduleAutoScrollIfNeeded();
       };
 
       const persistInterruptedStream = (message: string) => {
@@ -747,7 +751,6 @@ export function useHomePageGenerationActions({
               };
             });
           });
-          scheduleAutoScrollIfNeeded();
           return;
         }
 
@@ -1181,12 +1184,16 @@ export function useHomePageGenerationActions({
         setHistoryNextBeforeId(loaded.pagination.nextBeforeId);
         setMessages(uiMessages);
         saveUiMessagesToLocalStorage(roomId, uiMessages);
-        scheduleAutoScrollIfNeeded();
+        // 編集・再生成の直後に走るため、ここで下端へ送ると回答の追従スクロールが
+        // 戻ってしまう。分岐表示の更新だけを行い、スクロール位置には触れない。
+        // This runs right after an edit or regeneration, so scrolling here would
+        // bring the follow-the-answer behaviour back. Refresh the branch data
+        // only and leave the scroll position where the reader put it.
       } catch {
         // Keep the optimistic messages if the refresh fails.
       }
     },
-    [fetchChatHistoryPage, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage, scheduleAutoScrollIfNeeded],
+    [fetchChatHistoryPage, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
   );
 
   // Switch the active branch to the requested sibling version and render the
@@ -1352,7 +1359,12 @@ export function useHomePageGenerationActions({
           applyRoomTitleUpdate(roomId, data.roomTitle);
         }
         clearStoredGenerationState(roomId);
-        scheduleAutoScrollIfNeeded(true);
+        // 回答が届いても画面は動かさない。見落とすと困るエラーだけ下端へ送る。
+        // An arriving answer never moves the view; only an error, which must not
+        // be missed, still pulls the view to the bottom.
+        if (!(response.ok && (data.response || data.parts?.length))) {
+          scheduleAutoScrollIfNeeded(true);
+        }
         return response.ok && Boolean(data.response || data.parts?.length);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -1509,7 +1521,6 @@ export function useHomePageGenerationActions({
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
           }
           clearStoredGenerationState(roomId);
-          scheduleAutoScrollIfNeeded(true);
           void refreshActivePath(roomId);
           return;
         }
@@ -1652,7 +1663,6 @@ export function useHomePageGenerationActions({
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
           }
           clearStoredGenerationState(roomId);
-          scheduleAutoScrollIfNeeded(true);
           void refreshActivePath(roomId);
           return;
         }
