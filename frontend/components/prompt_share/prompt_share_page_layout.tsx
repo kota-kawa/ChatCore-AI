@@ -383,7 +383,14 @@ export function PromptSharePageLayout({
                 onClick={onLoadMoreResults}
                 disabled={isLoadingMoreResults}
               >
-                {isLoadingMoreResults ? t("common.loading") : t("promptShare.loadMore")}
+                {isLoadingMoreResults ? (
+                  t("common.loading")
+                ) : (
+                  <>
+                    {t("promptShare.loadMore")}
+                    <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginLeft: "4px" }}></i>
+                  </>
+                )}
               </button>
             </div>
           ) : null}

@@ -192,7 +192,14 @@ export function PromptShareAuthorProfileModal({
               disabled={isLoadingMore}
               onClick={onLoadMore}
             >
-              {isLoadingMore ? t("promptShare.loading") : t("promptShare.loadMore")}
+              {isLoadingMore ? (
+                t("promptShare.loading")
+              ) : (
+                <>
+                  {t("promptShare.loadMore")}
+                  <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginLeft: "4px" }}></i>
+                </>
+              )}
             </button>
           ) : null}
         </div>
