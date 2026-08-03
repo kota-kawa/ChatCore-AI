@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND,
   advanceStreamPace,
   clampToCodePointBoundary,
   createStreamPace,
@@ -69,6 +70,24 @@ test("advanceStreamPace does not surge when a large chunk lands", () => {
     burstStep <= Math.max(steadyStep * 2, 4),
     `a burst must not multiply the speed at once (steady=${steadyStep}, burst=${burstStep})`,
   );
+});
+
+test("advanceStreamPace caps very fast output so the fade remains visible", () => {
+  const pace = createStreamPace(0, 0);
+  let length = 0;
+
+  for (let now = FRAME_MS; now <= 1000; now += FRAME_MS) {
+    length = advanceStreamPace(pace, 10_000, now);
+  }
+
+  // モデルが全文を即座に返しても、画面上では設定した速度を超えて流さない。
+  // Even if the model returns everything at once, the visible stream stays at
+  // the configured rate so newly appended characters can actually fade in.
+  assert.ok(
+    length <= MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND,
+    `visible output exceeded the cap (${length} chars in one second)`,
+  );
+  assert.ok(length >= MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND - 3);
 });
 
 test("advanceStreamPace snaps down when the target shrinks", () => {

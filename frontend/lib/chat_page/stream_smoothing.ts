@@ -22,6 +22,14 @@ const RATE_TAU_MS = 450;
 // Minimum reveal rate (chars/ms) so a tiny backlog never looks stalled.
 const MIN_RATE_CHARS_PER_MS = 0.05;
 
+// 高速なモデルでもフェードが見える表示速度の上限。ネットワーク上の生成速度と
+// 画面上の表示速度を分離し、1フレームで大量の文字が同時に現れるのを防ぐ。
+// Maximum visible rate that keeps the fade perceptible even with a fast model.
+// Decoupling display speed from network speed prevents a whole block of text
+// from appearing in a single frame.
+export const MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND = 120;
+const MAX_RATE_CHARS_PER_MS = MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND / 1000;
+
 // 1回の更新で進めてよい時間の上限。タブ非表示明けなどの巨大なdtで一気に
 // 進んでしまわないようにする。
 // Cap on the elapsed time per update so a huge dt (e.g. after the tab was
@@ -66,7 +74,10 @@ export function advanceStreamPace(pace: StreamPace, targetLength: number, now: n
     pace.rate += (targetRate - pace.rate) * blend;
   }
 
-  const rate = Math.max(pace.rate, MIN_RATE_CHARS_PER_MS);
+  const rate = Math.min(
+    Math.max(pace.rate, MIN_RATE_CHARS_PER_MS),
+    MAX_RATE_CHARS_PER_MS,
+  );
   pace.length = Math.min(targetLength, pace.length + rate * dt);
   return Math.floor(pace.length);
 }
