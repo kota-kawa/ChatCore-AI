@@ -85,8 +85,8 @@ export function PromptShareShareModal({
         </header>
 
         <div className="prompt-share-dialog__body cc-share-modal__body">
-          {/* 共有URLを表示する読み取り専用入力フィールド / Read-only input field displaying the share URL */}
-          <div className="prompt-share-dialog__row cc-share-modal__row">
+          {/* 共有URLと、その右端に収めたコピーボタン / Share URL with the copy button pinned to its right edge */}
+          <div className="cc-share-modal__field">
             <input
               type="text"
               id="prompt-share-link-input"
@@ -95,22 +95,10 @@ export function PromptShareShareModal({
               aria-label={t("promptShare.shareUrl")}
               value={shareUrl}
             />
-          </div>
-
-          {/* コピー・シェア操作のフィードバックメッセージ / Feedback message for copy/share actions */}
-          <p
-            id="prompt-share-status"
-            className={`prompt-share-dialog__status cc-share-modal__status${shareStatus.isError ? " prompt-share-dialog__status--error cc-share-modal__status--error" : ""}`}
-          >
-            {shareStatus.text}
-          </p>
-
-          <div className="prompt-share-dialog__actions cc-share-modal__actions">
-            {/* URLをクリップボードにコピーするボタン / Button to copy URL to clipboard */}
             <button
               type="button"
               id="prompt-share-copy-btn"
-              className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
+              className="cc-share-modal__copy"
               aria-label={t("promptShare.copyLink")}
               title={t("promptShare.copyLink")}
               ref={promptShareCopyButtonRef}
@@ -121,13 +109,63 @@ export function PromptShareShareModal({
             >
               <i className="bi bi-files" aria-hidden="true"></i>
             </button>
+          </div>
+
+          {/* コピー・シェア操作のフィードバックメッセージ / Feedback message for copy/share actions */}
+          <p
+            id="prompt-share-status"
+            className={`prompt-share-dialog__status cc-share-modal__status${shareStatus.isError ? " prompt-share-dialog__status--error cc-share-modal__status--error" : ""}`}
+          >
+            {shareStatus.text}
+          </p>
+
+          {/* 共有先（X・LINE・Facebook・端末共有） / Share destinations (X, LINE, Facebook, device share) */}
+          <div className="cc-share-modal__channels">
+            <a
+              id="prompt-share-sns-x"
+              className="cc-share-modal__channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={shareSnsLinks.x}
+              title="X"
+            >
+              <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
+                ></path>
+              </svg>
+              <span className="sr-only">X</span>
+            </a>
+            <a
+              id="prompt-share-sns-line"
+              className="cc-share-modal__channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={shareSnsLinks.line}
+              title="LINE"
+            >
+              <i className="bi bi-chat-dots" aria-hidden="true"></i>
+              <span className="sr-only">LINE</span>
+            </a>
+            <a
+              id="prompt-share-sns-facebook"
+              className="cc-share-modal__channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={shareSnsLinks.facebook}
+              title="Facebook"
+            >
+              <i className="bi bi-facebook" aria-hidden="true"></i>
+              <span className="sr-only">Facebook</span>
+            </a>
 
             {/* Web Share APIが利用可能な場合のみネイティブシェアボタンを表示 / Native share button shown only when Web Share API is available */}
             {supportsNativeShare ? (
               <button
                 type="button"
                 id="prompt-share-web-btn"
-                className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
+                className="cc-share-modal__channel"
                 aria-label={t("promptShare.shareOnDevice")}
                 title={t("promptShare.shareOnDevice")}
                 disabled={shareActionLoading}
@@ -138,32 +176,6 @@ export function PromptShareShareModal({
                 <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
               </button>
             ) : null}
-          </div>
-
-          {/* SNSシェアリンク（X・LINE・Facebook） / SNS share links (X, LINE, Facebook) */}
-          <div className="prompt-share-dialog__sns cc-share-modal__sns">
-            <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
-              <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
-                ></path>
-              </svg>
-              <span>X</span>
-            </a>
-            <a id="prompt-share-sns-line" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line}>
-              <i className="bi bi-chat-dots"></i>
-              <span>LINE</span>
-            </a>
-            <a
-              id="prompt-share-sns-facebook"
-              target="_blank"
-              rel="noopener noreferrer"
-              href={shareSnsLinks.facebook}
-            >
-              <i className="bi bi-facebook"></i>
-              <span>Facebook</span>
-            </a>
           </div>
         </div>
       </div>

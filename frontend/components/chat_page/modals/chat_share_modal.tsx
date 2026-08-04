@@ -87,8 +87,8 @@ export function ChatShareModal({
         </header>
 
         <div className="chat-share-modal__body cc-share-modal__body">
-          {/* 共有リンクの表示欄 / Share link display field */}
-          <div className="chat-share-link-row cc-share-modal__row">
+          {/* 共有リンクと、その右端に収めたコピーボタン / Share link with the copy button pinned to its right edge */}
+          <div className="cc-share-modal__field">
             <input
               type="text"
               id="chat-share-link-input"
@@ -96,6 +96,17 @@ export function ChatShareModal({
               placeholder={locale === "en" ? "Preparing share link" : "共有リンクを準備しています"}
               value={shareUrl}
             />
+            <button
+              type="button"
+              id="chat-share-copy-btn"
+              className="cc-share-modal__copy"
+              aria-label={t("chat.copyLink")}
+              title={t("chat.copyLink")}
+              disabled={shareLoading}
+              onClick={copyShareLink}
+            >
+              <i className="bi bi-files" aria-hidden="true"></i>
+            </button>
           </div>
 
           {/* 共有状態のステータスメッセージ / Share status message */}
@@ -106,57 +117,60 @@ export function ChatShareModal({
             {shareStatus.message}
           </p>
 
-          {/* リンクコピーと端末共有ボタン / Link copy and device share buttons */}
-          <div className="chat-share-actions cc-share-modal__actions">
-            <button
-              type="button"
-              id="chat-share-copy-btn"
-              className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
-              aria-label={t("chat.copyLink")}
-              title={t("chat.copyLink")}
-              disabled={shareLoading}
-              onClick={copyShareLink}
+          {/* 共有先（X / LINE / Facebook / 端末共有）/ Share destinations (X / LINE / Facebook / device share) */}
+          <div className="cc-share-modal__channels">
+            <a
+              id="chat-share-sns-x"
+              className="cc-share-modal__channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={shareXUrl}
+              title="X"
             >
-              <i className="bi bi-files" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              id="chat-share-web-btn"
-              className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
-              aria-label={locale === "en" ? "Share from this device" : "端末で共有"}
-              title={locale === "en" ? "Share from this device" : "端末で共有"}
-              disabled={shareLoading}
-              onClick={shareWithNativeSheet}
-              hidden={!supportsNativeShare}
-            >
-              <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
-            </button>
-          </div>
-
-          {/* SNS共有リンク（X / LINE / Facebook）/ SNS share links (X / LINE / Facebook) */}
-          <div className="chat-share-sns cc-share-modal__sns">
-            <a id="chat-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareXUrl}>
               <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   fill="currentColor"
                   d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
                 ></path>
               </svg>
-              <span>X</span>
+              <span className="sr-only">X</span>
             </a>
-            <a id="chat-share-sns-line" target="_blank" rel="noopener noreferrer" href={shareLineUrl}>
-              <i className="bi bi-chat-dots"></i>
-              <span>LINE</span>
+            <a
+              id="chat-share-sns-line"
+              className="cc-share-modal__channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={shareLineUrl}
+              title="LINE"
+            >
+              <i className="bi bi-chat-dots" aria-hidden="true"></i>
+              <span className="sr-only">LINE</span>
             </a>
             <a
               id="chat-share-sns-facebook"
+              className="cc-share-modal__channel"
               target="_blank"
               rel="noopener noreferrer"
               href={shareFacebookUrl}
+              title="Facebook"
             >
-              <i className="bi bi-facebook"></i>
-              <span>Facebook</span>
+              <i className="bi bi-facebook" aria-hidden="true"></i>
+              <span className="sr-only">Facebook</span>
             </a>
+            {/* Web Share APIが使える端末でのみ端末共有を表示 / Device share appears only when the Web Share API is available */}
+            {supportsNativeShare ? (
+              <button
+                type="button"
+                id="chat-share-web-btn"
+                className="cc-share-modal__channel"
+                aria-label={locale === "en" ? "Share from this device" : "端末で共有"}
+                title={locale === "en" ? "Share from this device" : "端末で共有"}
+                disabled={shareLoading}
+                onClick={shareWithNativeSheet}
+              >
+                <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

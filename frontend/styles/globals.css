@@ -61,7 +61,6 @@ body {
   --cc-share-text-muted: #54645d;
   --cc-share-control-border: rgba(174, 211, 203, 0.9);
   --cc-share-control-bg: rgba(250, 252, 251, 0.94);
-  --cc-share-close-color: #54706a;
   --cc-share-accent: #0f766e;
   --cc-share-accent-hover: #115e59;
   --cc-share-primary-text: #ffffff;
@@ -82,7 +81,6 @@ body {
   --cc-share-text-muted: var(--ps-text-muted, #5f6368);
   --cc-share-control-border: rgba(189, 211, 234, 0.9);
   --cc-share-control-bg: rgba(248, 251, 255, 0.94);
-  --cc-share-close-color: #5f7288;
   --cc-share-accent: #28517b;
   --cc-share-accent-hover: #174ea6;
   --cc-share-primary-text: #ffffff;
@@ -103,7 +101,6 @@ body {
   --cc-share-text-muted: #9a7a52;
   --cc-share-control-border: rgba(191, 122, 23, 0.26);
   --cc-share-control-bg: rgba(255, 255, 255, 0.86);
-  --cc-share-close-color: #7b4b13;
   --cc-share-accent: #8f5a17;
   --cc-share-accent-hover: #4a2b09;
   --cc-share-primary-text: #ffffff;
@@ -124,7 +121,6 @@ body {
   --cc-share-text-muted: #94a3b8;
   --cc-share-control-border: rgba(45, 212, 191, 0.22);
   --cc-share-control-bg: rgba(15, 23, 42, 0.86);
-  --cc-share-close-color: #5eead4;
   --cc-share-accent: #5eead4;
   --cc-share-accent-hover: #99f6e4;
   --cc-share-primary-text: #052e2b;
@@ -145,7 +141,6 @@ body {
   --cc-share-text-muted: #94a3b8;
   --cc-share-control-border: rgba(96, 165, 250, 0.24);
   --cc-share-control-bg: rgba(15, 23, 42, 0.86);
-  --cc-share-close-color: #93c5fd;
   --cc-share-accent: #93c5fd;
   --cc-share-accent-hover: #bfdbfe;
   --cc-share-primary-text: #0f172a;
@@ -166,7 +161,6 @@ body {
   --cc-share-text-muted: #cbd5e1;
   --cc-share-control-border: rgba(245, 158, 11, 0.24);
   --cc-share-control-bg: rgba(15, 23, 42, 0.86);
-  --cc-share-close-color: #fbbf24;
   --cc-share-accent: #fbbf24;
   --cc-share-accent-hover: #fde68a;
   --cc-share-primary-text: #1f2937;
@@ -176,135 +170,197 @@ body {
   --cc-share-surface-hover: rgba(30, 41, 59, 1);
 }
 
+/* 共有モーダル（チャット / プロンプト / メモ）の共通レイアウト */
+/* Shared layout for the chat, prompt, and memo share modals */
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
   background: var(--cc-share-backdrop);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px) saturate(1.08);
+  -webkit-backdrop-filter: blur(12px) saturate(1.08);
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
   position: relative;
-  width: min(92%, 620px);
-  max-height: 92vh;
+  width: min(92%, 440px);
+  max-height: min(92vh, 680px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
   padding: 1.5rem;
-  border-radius: 20px;
+  border-radius: 22px;
   border: 1px solid var(--cc-share-content-border);
   background: var(--cc-share-content-bg);
   color: var(--cc-share-text-strong);
   box-shadow: var(--cc-share-content-shadow);
 }
 
+/* ページ側の装飾オーバーレイが見出しを白くかぶせてしまうため無効化する */
+/* Disable the page-level decorative overlay that washes out the heading */
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content::before {
+  content: none;
+}
+
+/* 閉じるボタンは主役ではないため、輪郭を持たない控えめな見た目にする */
+/* The close button stays quiet with no outline so it never competes with the link */
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close {
   position: absolute;
-  top: 0.95rem;
-  right: 0.95rem;
+  top: 0.8rem;
+  right: 0.8rem;
   z-index: 2;
-  width: 2.5rem;
-  height: 2.5rem;
-  min-width: 2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid var(--cc-share-control-border);
-  background: var(--cc-share-surface);
-  color: var(--cc-share-close-color);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--cc-share-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  /* ページ側が !important で影を付けているため、同じ強さで打ち消す */
+  /* The page-level rule sets a shadow with !important, so match it to cancel out */
+  box-shadow: none !important;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close:hover {
   background: var(--cc-share-surface-hover);
-  border-color: var(--cc-share-focus-border);
-  color: var(--cc-share-accent-hover);
-  transform: translateY(-1px);
+  border-color: var(--cc-share-control-border);
+  color: var(--cc-share-text-strong);
+  transform: none;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close svg {
-  width: 1rem;
-  height: 1rem;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close i {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0 3.35rem 0 0;
+  gap: 0.25rem;
+  padding: 0 2.6rem 0 0;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
   margin: 0;
   color: var(--cc-share-text-strong);
-  font-size: 1.48rem;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__lead {
   margin: 0;
   color: var(--cc-share-text-muted);
-  font-size: 0.92rem;
-  line-height: 1.65;
+  font-size: 0.83rem;
+  line-height: 1.5;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__body {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row {
-  margin: 0;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row--labeled {
-  display: grid;
-  grid-template-columns: 95px minmax(0, 1fr);
-  align-items: center;
   gap: 0.55rem;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row label {
-  color: var(--cc-share-text-muted);
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input,
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger {
-  width: 100%;
-  min-height: 48px;
-  border-radius: 14px;
+/* リンク欄はコピーボタンを内包する1つのフィールドとして扱う */
+/* The link row is a single field that contains the copy button */
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.3rem 0.3rem 0.3rem 0.9rem;
+  border-radius: 16px;
   border: 1px solid var(--cc-share-control-border);
   background: var(--cc-share-control-bg);
-  color: var(--cc-share-text-strong);
-  font: inherit;
-  padding: 0.86rem 1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input:focus,
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger:focus-visible {
-  outline: none;
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__field:focus-within {
   border-color: var(--cc-share-focus-border);
-  box-shadow:
-    0 0 0 4px var(--cc-share-focus-ring),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 4px var(--cc-share-focus-ring);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__field input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--cc-share-text-strong);
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__field input:focus,
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__field input:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* コピーボタンはリンク欄の右端に収める */
+/* The copy button sits flush at the right edge of the link field */
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__copy {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--cc-share-accent);
+  border-radius: 12px;
+  background: var(--cc-share-accent);
+  color: var(--cc-share-primary-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__copy:hover:not(:disabled) {
+  background: var(--cc-share-accent-hover);
+  border-color: var(--cc-share-accent-hover);
+  transform: none;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__copy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__copy i {
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__status {
   margin: 0;
-  min-height: 1.35rem;
-  color: var(--cc-share-accent);
-  font-size: 0.86rem;
+  min-height: 1.25rem;
+  padding: 0 0.15rem;
+  color: var(--cc-share-text-muted);
+  font-size: 0.8rem;
   line-height: 1.55;
 }
 
@@ -312,186 +368,85 @@ body {
   color: #dc2626;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__actions {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.7rem;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__icon-btn {
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  min-height: 42px;
-  padding: 0;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:is(.primary-button, .submit-btn) {
-  border: 1px solid var(--cc-share-accent);
-  background: var(--cc-share-accent);
-  color: var(--cc-share-primary-text);
-  box-shadow: 0 10px 22px var(--cc-share-focus-ring);
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn.secondary-button {
-  border: 1px solid var(--cc-share-control-border);
-  background: var(--cc-share-surface);
-  color: var(--cc-share-accent);
-  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.05);
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:disabled {
-  opacity: 0.56;
-  cursor: not-allowed;
-  transform: none;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__icon-btn i {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--cc-share-text-muted);
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0.34rem 0.74rem;
-  border: 1px solid var(--cc-share-control-border);
-  border-radius: 999px;
-  background: var(--cc-share-surface);
-  color: var(--cc-share-text-muted);
-  font-weight: 700;
-}
-
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns {
+/* 共有先はアイコンのみのタイルを等幅で並べる */
+/* Share destinations are icon-only tiles laid out in equal columns */
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channels {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.5rem;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a {
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
   min-height: 46px;
-  padding: 0.54rem 0.72rem;
+  margin: 0;
+  padding: 0;
   border-radius: 14px;
   border: 1px solid var(--cc-share-control-border);
   background: var(--cc-share-surface);
-  color: var(--cc-share-accent);
+  color: var(--cc-share-text-muted);
   text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 700;
-  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a:hover {
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channel:hover {
   background: var(--cc-share-surface-hover);
   border-color: var(--cc-share-focus-border);
-  color: var(--cc-share-accent-hover);
-  transform: translateY(-1px);
+  color: var(--cc-share-accent);
+  transform: none;
 }
 
-:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns .share-x-icon {
-  width: 0.94rem;
-  height: 0.94rem;
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channel i {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channel .share-x-icon {
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
 }
 
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
-  background: var(--cc-share-backdrop);
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal :is(.cc-share-modal__close, .cc-share-modal__copy, .cc-share-modal__channel):focus-visible {
+  outline: 2px solid var(--cc-share-focus-border);
+  outline-offset: 2px;
 }
 
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
-  border-color: var(--cc-share-content-border);
-  background: var(--cc-share-content-bg);
-  color: var(--cc-share-text-strong);
-  box-shadow: var(--cc-share-content-shadow);
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
-  color: var(--cc-share-text-strong);
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__lead {
-  color: var(--cc-share-text-muted);
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn.secondary-button,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta span {
-  border-color: var(--cc-share-control-border);
-  background: var(--cc-share-surface);
-  color: var(--cc-share-accent);
-  box-shadow: none;
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input {
-  color: var(--cc-share-text-strong);
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row label,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta {
-  color: var(--cc-share-text-muted);
-}
-
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close:hover,
-[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a:hover {
-  background: var(--cc-share-surface-hover);
-  border-color: var(--cc-share-focus-border);
-  color: var(--cc-share-accent-hover);
-}
-
+/* スマホではボトムシートとして表示する */
+/* On phones the dialog is presented as a bottom sheet */
 @media (max-width: 640px) {
   :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
-    padding: 0.75rem;
-    align-items: center;
+    padding: 0;
+    align-items: flex-end;
+    justify-content: center;
   }
 
   :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
-    width: min(100%, 620px);
-    max-height: calc(100dvh - 1.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    padding: 1rem 0.95rem calc(1rem + env(safe-area-inset-bottom, 0px));
-    border-radius: 18px;
+    width: 100%;
+    max-width: none;
+    max-height: 88dvh;
+    padding: 1.25rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
   }
 
   :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header {
-    padding-right: 3rem;
+    padding-right: 2.4rem;
   }
 
   :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
   :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
-    font-size: 1.24rem;
+    font-size: 1.08rem;
   }
 
-  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row--labeled,
-  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns {
-    grid-template-columns: 1fr;
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__channel {
+    min-height: 50px;
   }
 }
 
