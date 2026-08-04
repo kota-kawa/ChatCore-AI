@@ -41,9 +41,9 @@ export function MemoSidebar({
             <header className="memo-sidebar-header">
               <div className="memo-sidebar-brand">
                 <span className="memo-sidebar-brand-icon" aria-hidden="true">
-                  <i className="bi bi-journal-bookmark-fill"></i>
+                  <img src="/static/chatcore-memo.png" alt="" />
                 </span>
-                <span className="memo-sidebar-title">Notebook</span>
+                <span className="memo-sidebar-title">ChatCore Memo</span>
               </div>
               <button
                 type="button"

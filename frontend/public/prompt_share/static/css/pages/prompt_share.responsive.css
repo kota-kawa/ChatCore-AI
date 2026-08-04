@@ -298,8 +298,14 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .hero-kicker {
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
+    font-size: 0.86rem;
+    letter-spacing: 0.03em;
+    gap: 0.4rem;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .hero-kicker__logo {
+    width: 22px;
+    height: 22px;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .hero-description {

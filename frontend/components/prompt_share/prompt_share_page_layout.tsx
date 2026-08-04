@@ -175,7 +175,12 @@ export function PromptSharePageLayout({
 
       <header className="prompts-header" aria-labelledby="promptShareHeroTitle">
         <div className="prompts-header__inner">
-          <p className="hero-kicker">Prompt Share</p>
+          {/* ロゴ＋サービス名のブランドロックアップ。ロゴは装飾なのでalt空＋aria-hiddenにする */}
+          {/* Brand lockup of logo + service name; the logo is decorative so alt is empty and aria-hidden */}
+          <p className="hero-kicker">
+            <img className="hero-kicker__logo" src="/static/chatcore-share.png" alt="" aria-hidden="true" />
+            <span>ChatCore Share</span>
+          </p>
           <h1 id="promptShareHeroTitle" className="hero-title">
             {t("promptShare.heroTitle")}
           </h1>
