@@ -244,16 +244,16 @@ export const MODEL_OPTIONS: ModelOption[] = [
     shortLabel: "GPT-OSS 120B",
   },
   {
-    value: "qwen/qwen3.6-27b",
-    label: "Qwen 3.6 27B",
-    descriptionKey: "chat.modelDeepThinking",
-    shortLabel: "Qwen 3.6 27B",
-  },
-  {
     value: "gpt-5.6-luna",
     label: "GPT-5.6 Luna",
     descriptionKey: "chat.modelBalanced",
     shortLabel: "GPT-5.6 Luna",
+  },
+  {
+    value: "qwen/qwen3.6-27b",
+    label: "Qwen 3.6 27B",
+    descriptionKey: "chat.modelDeepThinking",
+    shortLabel: "Qwen 3.6 27B",
   },
   {
     value: "claude-haiku-4-5-20251001",
