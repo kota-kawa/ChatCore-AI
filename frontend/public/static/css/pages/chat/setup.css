@@ -717,22 +717,22 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%) !important;
-  border: 1px solid rgba(19, 78, 74, 0.82) !important;
+  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
+  border: 1px solid rgba(15, 118, 110, 0.5) !important;
   color: #ffffff !important;
-  box-shadow: 0 6px 14px rgba(19, 78, 74, 0.32) !important;
+  box-shadow: 0 4px 10px rgba(15, 118, 110, 0.2) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-detail-toggle:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%) !important;
-  border-color: rgba(15, 63, 59, 0.92) !important;
-  box-shadow: 0 10px 20px rgba(19, 78, 74, 0.4) !important;
+  background: linear-gradient(135deg, #115e59 0%, #0f766e 100%) !important;
+  border-color: rgba(15, 94, 89, 0.7) !important;
+  box-shadow: 0 8px 16px rgba(15, 118, 110, 0.28) !important;
   transform: translateY(-2px) scale(1.06) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-detail-toggle:active {
   transform: translateY(0) scale(0.96) !important;
-  box-shadow: 0 4px 10px rgba(19, 78, 74, 0.3) !important;
+  box-shadow: 0 3px 8px rgba(15, 118, 110, 0.22) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-detail-toggle:focus-visible {
@@ -1308,10 +1308,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     height: 40px;
     min-width: 40px;
     min-height: 40px;
-    background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%) !important;
-    border: 1px solid rgba(19, 78, 74, 0.82) !important;
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
+    border: 1px solid rgba(15, 118, 110, 0.5) !important;
     color: #ffffff !important;
-    box-shadow: 0 5px 12px rgba(19, 78, 74, 0.3) !important;
+    box-shadow: 0 3px 8px rgba(15, 118, 110, 0.18) !important;
   }
 
   :where(body.chat-page, .chat-page-shell) .task-detail-toggle i {
@@ -1452,24 +1452,24 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%) !important;
-  border: 1px solid rgba(94, 234, 212, 0.72) !important;
+  background: linear-gradient(135deg, #115e59 0%, #0d9488 100%) !important;
+  border: 1px solid rgba(94, 234, 212, 0.45) !important;
   color: #ffffff !important;
   box-shadow:
-    0 6px 14px rgba(2, 6, 23, 0.4),
-    inset 0 0 0 1px rgba(204, 251, 241, 0.12) !important;
+    0 4px 10px rgba(2, 6, 23, 0.3),
+    inset 0 0 0 1px rgba(204, 251, 241, 0.08) !important;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%) !important;
-  border-color: rgba(153, 246, 228, 0.86) !important;
-  box-shadow: 0 10px 20px rgba(2, 6, 23, 0.5) !important;
+  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
+  border-color: rgba(153, 246, 228, 0.65) !important;
+  box-shadow: 0 8px 16px rgba(2, 6, 23, 0.38) !important;
   transform: translateY(-2px) scale(1.06) !important;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:active {
   transform: translateY(0) scale(0.96) !important;
-  box-shadow: 0 4px 10px rgba(2, 6, 23, 0.4) !important;
+  box-shadow: 0 3px 8px rgba(2, 6, 23, 0.32) !important;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:focus-visible {
