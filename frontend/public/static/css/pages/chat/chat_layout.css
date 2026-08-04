@@ -161,6 +161,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   min-height: 32px;
   padding: 0.35rem 0.8rem;
   border-radius: var(--radius-full, 999px);
@@ -170,6 +171,7 @@
   font-size: var(--chat-font-label-size, 0.8125rem);
   font-weight: var(--chat-font-label-weight, 500);
   letter-spacing: var(--chat-font-label-tracking, 0);
+  white-space: nowrap;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-mode-badge {
