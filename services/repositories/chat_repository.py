@@ -183,9 +183,34 @@ class ChatRepository:
 
         raise RuntimeError("Failed to create chat room after retry attempts.")
 
-    def delete_room_if_no_assistant_messages(self, room_id: str, user_id: int) -> bool:
-        # アシスタントからの応答がまだ存在しない場合に限り、チャットルームを削除する
-        # Delete the chat room only if there are no assistant messages yet.
+    @staticmethod
+    def _trailing_unanswered_user_ids(
+        path: list[dict[str, Any]],
+        children: dict[int | None, list[int]],
+    ) -> list[int]:
+        # アクティブパス末尾に連なる「返答が付かなかったユーザー発話」のIDを集める。
+        # 別バージョンの枝を巻き込まないよう、削除対象以外の子を持つノードで打ち切る。
+        # Collect the trailing user messages on the active path that never got a
+        # reply. Stop at any node that still has a child outside the removal set
+        # so sibling branches are never cascaded away.
+        removable: set[int] = set()
+        for node in reversed(path):
+            if node["sender"] != "user":
+                break
+            child_ids = children.get(node["id"], [])
+            if any(child_id not in removable for child_id in child_ids):
+                break
+            removable.add(node["id"])
+        return [node["id"] for node in path if node["id"] in removable]
+
+    def delete_unanswered_user_messages(self, room_id: str, user_id: int) -> bool:
+        # 生成に失敗したターンのユーザー発話だけを取り除き、ルーム自体は残す。
+        # ルームを消すと、画面を開いたままのクライアントが以後 404 になり会話を
+        # 続けられなくなるため、掃除の対象は「返答が付かなかった発話」に限定する。
+        # Drop only the user messages of a turn whose generation failed, keeping
+        # the room itself. Deleting the room would make every later request from
+        # the still-open client fail with 404, so cleanup is limited to the
+        # messages that never received an answer.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -198,30 +223,37 @@ class ChatRepository:
                     if not row or row[0] != user_id:
                         return False
 
-                    cursor.execute(
-                        """
-                        SELECT 1
-                          FROM chat_history
-                         WHERE chat_room_id = %s
-                           AND sender = 'assistant'
-                         LIMIT 1
-                        """,
-                        (room_id,),
-                    )
-                    if cursor.fetchone():
+                    nodes, active_root_id = self._load_room_tree(cursor, room_id)
+                    children = self._children_by_parent(nodes)
+                    path = self._walk_active_path(nodes, active_root_id, children)
+                    removable_ids = self._trailing_unanswered_user_ids(path, children)
+                    if not removable_ids:
                         return False
 
-                    # assistant 応答がまだない部屋だけを消す。生成失敗・quota 超過時の掃除用で、
-                    # 会話済みの部屋を誤って消さないためのガード。
-                    # Only delete rooms without assistant responses. This guards against
-                    # deleting rooms with conversations, used for cleanup on failures.
-                    cursor.execute("DELETE FROM chat_history WHERE chat_room_id = %s", (room_id,))
+                    # 削除する先頭ノードの親から伸びていたアクティブポインタを外す。
+                    # Detach the active pointer that led into the removed range.
+                    first_removed = nodes[removable_ids[0]]
+                    parent_id = first_removed["parent_id"]
+                    if parent_id is None or parent_id not in nodes:
+                        cursor.execute(
+                            "UPDATE chat_rooms SET active_root_id = %s WHERE id = %s",
+                            (None, room_id),
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE chat_history SET active_child_id = %s WHERE id = %s AND chat_room_id = %s",
+                            (None, parent_id, room_id),
+                        )
+
+                    placeholders = ", ".join(["%s"] * len(removable_ids))
                     cursor.execute(
-                        "DELETE FROM chat_rooms WHERE id = %s AND user_id = %s",
-                        (room_id, user_id),
+                        "DELETE FROM chat_history"
+                        f" WHERE chat_room_id = %s AND id IN ({placeholders})",
+                        (room_id, *removable_ids),
                     )
+                    deleted = cursor.rowcount > 0
                     conn.commit()
-                    return cursor.rowcount > 0
+                    return deleted
                 except Error as exc:
                     self._rollback(conn)
                     # 再試行可能なエラーの場合はスリープを挟んで再試行
@@ -236,7 +268,7 @@ class ChatRepository:
                 finally:
                     cursor.close()
 
-        raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
+        raise RuntimeError("Failed to delete unanswered chat messages after retry attempts.")
 
     def rename_room(self, room_id: str, new_title: str) -> None:
         # チャットルームのタイトルを変更する

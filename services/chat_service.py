@@ -71,10 +71,10 @@ def create_chat_room_in_db(room_id: str, user_id: int, title: str, mode: str = "
     return _get_chat_repository().create_room(room_id, user_id, title, mode)
 
 
-# アシスタントからの応答が1つもない場合、チャットルームを削除する
-# Delete the chat room if it contains no assistant messages
-def delete_chat_room_if_no_assistant_messages(room_id: str, user_id: int) -> bool:
-    return _get_chat_repository().delete_room_if_no_assistant_messages(room_id, user_id)
+# 返答が付かなかった末尾のユーザー発話を削除する（ルームは残す）
+# Delete the trailing user messages that never got a reply (the room is kept)
+def delete_unanswered_user_messages(room_id: str, user_id: int) -> bool:
+    return _get_chat_repository().delete_unanswered_user_messages(room_id, user_id)
 
 
 # チャットルームのタイトルを変更する

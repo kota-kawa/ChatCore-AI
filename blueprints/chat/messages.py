@@ -21,7 +21,7 @@ from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
 from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
-    delete_chat_room_if_no_assistant_messages,
+    delete_unanswered_user_messages,
     save_message_to_db,
     get_chat_room_messages,
     get_room_web_search_contexts,
@@ -523,52 +523,52 @@ def _build_llm_stream_response(
     )
 
 
-# アシスタントからの返答が無い（空の）チャットルームを破棄・削除する関数
-# Permanently discard/delete a chat room if no assistant messages exist in it.
-def _discard_room_without_assistant_response(
+# 返答が付かなかった末尾のユーザー発話を破棄する関数（ルーム自体は残す）
+# Discard the trailing user messages that never got a reply (the room is kept).
+def _discard_unanswered_user_messages(
     chat_room_id: str,
     *,
     user_id: int | None = None,
     sid: str | None = None,
 ) -> bool:
     """
-    アシスタントからの返答がない空のチャットルームを破棄（削除）します。
-    Permanently discards a chat room if no assistant messages exist in it.
+    返答が付かなかった末尾のユーザー発話を破棄します。
+    Discards the trailing user messages that never received a reply.
     """
-    deleted = False
+    discarded = False
     if user_id is not None:
-        deleted = delete_chat_room_if_no_assistant_messages(chat_room_id, user_id) or deleted
+        discarded = delete_unanswered_user_messages(chat_room_id, user_id) or discarded
     if sid is not None:
-        deleted = ephemeral_store.delete_room_if_no_assistant_messages(sid, chat_room_id) or deleted
-    return deleted
+        discarded = ephemeral_store.delete_unanswered_user_messages(sid, chat_room_id) or discarded
+    return discarded
 
 
-# エラー等で生成失敗した際、アシスタント返答の無いチャットルームを安全に破棄クリーンアップする関数
-# Safely discard a newly created room that has no assistant responses after a failed generation.
-def _cleanup_failed_room_without_assistant_response(
+# エラー等で生成に失敗した際、返答が付かなかったユーザー発話を安全に掃除する関数
+# Safely discard the unanswered user messages left behind by a failed generation.
+def _cleanup_unanswered_user_messages(
     chat_room_id: str,
     *,
     user_id: int | None = None,
     sid: str | None = None,
 ) -> None:
     """
-    エラーなどで生成に失敗した際、アシスタント返答がない空ルームを安全に破棄クリーンアップします。
-    Safely discards a newly created room with no assistant responses after a failed generation.
+    生成に失敗したターンのユーザー発話を掃除します。ルームは残すため、そのまま会話を続けられます。
+    Cleans up the user messages of a failed turn. The room is kept so the user can keep chatting.
     """
     try:
-        deleted = _discard_room_without_assistant_response(
+        discarded = _discard_unanswered_user_messages(
             chat_room_id,
             user_id=user_id,
             sid=sid,
         )
-        if deleted:
+        if discarded:
             logger.info(
-                "Discarded chat room without assistant response after failed generation.",
+                "Discarded unanswered user messages after failed generation.",
                 extra={"chat_room_id": chat_room_id, "user_id": user_id, "sid": sid},
             )
     except Exception:
         logger.exception(
-            "Failed to discard chat room without assistant response.",
+            "Failed to discard unanswered user messages after failed generation.",
             extra={"chat_room_id": chat_room_id, "user_id": user_id, "sid": sid},
         )
 
@@ -1082,9 +1082,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             build_generation_key=build_generation_key,
             has_active_generation=has_active_generation,
             consume_llm_daily_quota=consume_llm_daily_quota,
-            cleanup_failed_room_without_assistant_response=(
-                _cleanup_failed_room_without_assistant_response
-            ),
+            cleanup_unanswered_user_messages=_cleanup_unanswered_user_messages,
             get_seconds_until_daily_reset=get_seconds_until_daily_reset,
             is_streaming_model=is_streaming_model,
             start_generation_job=start_generation_job,
@@ -1350,12 +1348,10 @@ async def chat_regenerate(
                 model=model,
                 persist_response=persist_response,
                 on_finished=on_finished,
-                on_error=partial(
-                    _cleanup_failed_room_without_assistant_response,
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                ),
+                # 再生成はこのリクエストで新しいユーザー発話を保存していないため、
+                # 失敗時に掃除する対象がない。掃除すると既存の発話まで消えてしまう。
+                # Regeneration saves no new user message, so there is nothing to
+                # clean up; running the cleanup would delete an existing message.
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
             )
@@ -1756,7 +1752,7 @@ async def chat_edit_and_regenerate(
                 persist_response=persist_response,
                 on_finished=on_finished,
                 on_error=partial(
-                    _cleanup_failed_room_without_assistant_response,
+                    _cleanup_unanswered_user_messages,
                     chat_room_id,
                     user_id=user_id,
                     sid=sid,

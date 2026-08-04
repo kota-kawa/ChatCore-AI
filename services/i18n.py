@@ -63,6 +63,9 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
     "言語設定の取得に失敗しました。": "Failed to load the language preference.",
     "言語設定の更新に失敗しました。": "Failed to update the language preference.",
     "該当ルームが見つかりません": "The requested chat room could not be found.",
+    "AIからの回答が空でした。もう一度お試しください。": (
+        "The AI returned an empty answer. Please try again."
+    ),
     "共有リンクが見つかりません": "The shared link could not be found.",
     "共有対象のメモが見つかりません。": "The memo to share could not be found.",
     "プロンプト一覧のカーソルが不正です。": "The prompt feed cursor is invalid.",

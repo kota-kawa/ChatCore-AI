@@ -117,6 +117,37 @@ class FakeCursor:
             self._result_one = (room.get("active_root_id"),) if room else None
             return
 
+        # ルーム所有者の取得をシミュレート
+        # Simulate retrieving the owner of a chat room
+        if normalized.startswith("SELECT user_id FROM chat_rooms"):
+            (room_id,) = params
+            room = self.store["rooms"].get(room_id)
+            self._result_one = (room.get("user_id"),) if room else None
+            return
+
+        # 指定IDのメッセージ削除（子孫へのカスケード込み）をシミュレート
+        # Simulate deleting messages by id, cascading to their descendants
+        if normalized.startswith("DELETE FROM chat_history WHERE chat_room_id = %s AND id IN"):
+            room_id, *target_ids = params
+            doomed = set(target_ids)
+            changed = True
+            while changed:
+                changed = False
+                for row in self.store["history"]:
+                    if row["chat_room_id"] != room_id or row["id"] in doomed:
+                        continue
+                    if row["parent_id"] in doomed:
+                        doomed.add(row["id"])
+                        changed = True
+            remaining = [
+                row
+                for row in self.store["history"]
+                if row["chat_room_id"] != room_id or row["id"] not in doomed
+            ]
+            self.rowcount = len(self.store["history"]) - len(remaining)
+            self.store["history"] = remaining
+            return
+
         # 親メッセージIDの取得をシミュレート
         # Simulate retrieving the parent message ID of a message
         if normalized.startswith("SELECT parent_id FROM chat_history"):
@@ -185,7 +216,9 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.store = {
             "seq": 1,
             "history": [],
-            "rooms": {"room-1": {"active_root_id": None, "title": "新規チャット"}},
+            "rooms": {
+                "room-1": {"active_root_id": None, "title": "新規チャット", "user_id": 42},
+            },
         }
         self.repo = ChatRepository(
             connection_getter=lambda: FakeConnection(self.store),
@@ -385,6 +418,75 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertEqual(
             messages[0]["attached_file_contents"],
             [{"name": "notes.txt", "content": "重要な結論はAです"}],
+        )
+
+    # 生成に失敗したターンでは、返答が付かなかったユーザー発話だけが消え、
+    # ルームと過去のやり取りはそのまま残ることを検証します。
+    # Verify that a failed turn only removes the unanswered user message while the
+    # room and the earlier exchange stay intact.
+    def test_unanswered_cleanup_removes_only_the_failed_turn(self):
+        u1 = self._save("hi", "user")
+        a1 = self._save("hello", "assistant", u1)
+        self._save("次はどうする？", "user", a1)
+
+        discarded = self.repo.delete_unanswered_user_messages("room-1", 42)
+
+        self.assertTrue(discarded)
+        self.assertEqual(self._texts(self.repo.get_active_path("room-1")), [("hi", "user"), ("hello", "assistant")])
+        # ルームは残るため、同じ画面からそのまま送り直せる。
+        # The room itself survives, so the same view can simply send again.
+        self.assertIn("room-1", self.store["rooms"])
+
+    # 初回ターンが失敗しても、ルームは削除されず空の状態で残ることを検証します。
+    # Verify that a failed first turn empties the room instead of deleting it.
+    def test_unanswered_cleanup_keeps_room_after_first_turn_failure(self):
+        self._save("hi", "user")
+
+        discarded = self.repo.delete_unanswered_user_messages("room-1", 42)
+
+        self.assertTrue(discarded)
+        self.assertEqual(self.repo.get_active_path("room-1"), [])
+        self.assertIn("room-1", self.store["rooms"])
+        self.assertIsNone(self.store["rooms"]["room-1"]["active_root_id"])
+
+    # 回答済みのターンしかない場合は、何も削除しないことを検証します。
+    # Verify that nothing is removed when every turn already has an answer.
+    def test_unanswered_cleanup_keeps_answered_turns(self):
+        u1 = self._save("hi", "user")
+        self._save("hello", "assistant", u1)
+
+        discarded = self.repo.delete_unanswered_user_messages("room-1", 42)
+
+        self.assertFalse(discarded)
+        self.assertEqual(len(self.repo.get_active_path("room-1")), 2)
+
+    # 他ユーザーのルームには手を出さないことを検証します。
+    # Verify that another user's room is never touched.
+    def test_unanswered_cleanup_ignores_other_users_rooms(self):
+        self._save("hi", "user")
+
+        discarded = self.repo.delete_unanswered_user_messages("room-1", 99)
+
+        self.assertFalse(discarded)
+        self.assertEqual(len(self.repo.get_active_path("room-1")), 1)
+
+    # 編集で分岐した発話を消すとき、元の枝を巻き添えにしないことを検証します。
+    # Verify that removing an edited branch never cascades into the original one.
+    def test_unanswered_cleanup_preserves_sibling_branches(self):
+        u1 = self._save("hi", "user")
+        a1 = self._save("hello", "assistant", u1)
+        # 編集による兄弟ブランチ（未回答）を作る。
+        # Create an unanswered sibling branch produced by an edit.
+        self._save("hi (edited)", "user")
+
+        discarded = self.repo.delete_unanswered_user_messages("room-1", 42)
+
+        self.assertTrue(discarded)
+        remaining_ids = {row["id"] for row in self.store["history"]}
+        self.assertEqual(remaining_ids, {u1, a1})
+        self.assertEqual(
+            self._texts(self.repo.get_active_path("room-1")),
+            [("hi", "user"), ("hello", "assistant")],
         )
 
 

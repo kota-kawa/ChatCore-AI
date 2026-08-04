@@ -58,44 +58,54 @@ class EphemeralChatStore:
             logger.warning("Failed to decode ephemeral room payload; using empty fallback.", exc_info=True)
             return {}
 
-    # ルーム情報から作成日時(datetime)をパースして取得します。
-    # Parse and retrieve the creation datetime from the room data.
-    def _created_at_from_room(self, room: dict) -> Optional[datetime]:
-        created_at = room.get("created_at")
-        # 作成日時キーが存在しない場合は None を返します。
-        # Return None if the creation time key does not exist.
-        if not created_at:
+    # ISO文字列またはdatetimeを datetime へ正規化します。
+    # Normalize an ISO string or datetime value into a datetime.
+    def _parse_timestamp(self, value: object) -> Optional[datetime]:
+        # 値が存在しない場合は None を返します。
+        # Return None when the value is missing.
+        if not value:
             return None
         # 既に datetime 型の場合はそのまま返し、文字列の場合はISO形式からパースします。
         # Return immediately if already a datetime instance, otherwise parse ISO format string.
-        if isinstance(created_at, datetime):
-            return created_at
+        if isinstance(value, datetime):
+            return value
         try:
-            return datetime.fromisoformat(created_at)
+            return datetime.fromisoformat(str(value))
         except (TypeError, ValueError):
             return None
+
+    # 有効期限の起点となる「最終利用時刻」を取得します。
+    # Retrieve the last-activity timestamp used as the expiry baseline.
+    def _expiry_baseline(self, room: dict) -> Optional[datetime]:
+        # 有効期限は作成時刻ではなく最終利用時刻から数える。会話中に突然ルームが
+        # 消えて「該当ルームが見つかりません」になるのを防ぐため。
+        # Expiry is counted from the last activity instead of the creation time so
+        # a room in active use never vanishes mid-conversation.
+        return self._parse_timestamp(room.get("last_active_at")) or self._parse_timestamp(
+            room.get("created_at")
+        )
 
     # ルームの残り有効期限(TTL)を秒単位で計算します。
     # Calculate the remaining Time-To-Live (TTL) of the room in seconds.
     def _remaining_ttl(self, room: dict) -> int:
-        created_at = self._created_at_from_room(room)
-        # 作成日時が取得できない場合はデフォルトの有効期限を返します。
-        # Return the default expiration duration if the creation time is unavailable.
-        if created_at is None:
+        baseline = self._expiry_baseline(room)
+        # 起点が取得できない場合はデフォルトの有効期限を返します。
+        # Return the default expiration duration if the baseline is unavailable.
+        if baseline is None:
             return self.expiration_seconds
-        elapsed = (datetime.now() - created_at).total_seconds()
+        elapsed = (datetime.now() - baseline).total_seconds()
         remaining = int(self.expiration_seconds - elapsed)
         return max(0, remaining)
 
     # ルームが有効期限切れしているかを判定します。
     # Check whether the room has expired.
     def _is_expired(self, room: dict) -> bool:
-        created_at = self._created_at_from_room(room)
-        # 作成日時が取得できない場合は期限切れではないと判定します。
-        # Treat as not expired if the creation time is unavailable.
-        if created_at is None:
+        baseline = self._expiry_baseline(room)
+        # 起点が取得できない場合は期限切れではないと判定します。
+        # Treat as not expired if the baseline is unavailable.
+        if baseline is None:
             return False
-        return (datetime.now() - created_at).total_seconds() > self.expiration_seconds
+        return (datetime.now() - baseline).total_seconds() > self.expiration_seconds
 
     # メモリ内の期限切れチャットルームを走査して削除します（Redis利用時はRedis側が自動制御するため不要）。
     # Scan and remove expired rooms from memory (not needed for Redis as it manages TTL automatically).
@@ -127,10 +137,12 @@ class EphemeralChatStore:
     def create_room(self, sid: str, room_id: str, title: str) -> None:
         # 新規ルームを作成し、作成時刻を保持して有効期限計算に使う
         # Create a room and keep creation time for TTL calculations.
+        created_at = datetime.now().isoformat()
         room = {
             "title": title,
             "messages": [],
-            "created_at": datetime.now().isoformat(),
+            "created_at": created_at,
+            "last_active_at": created_at,
         }
         redis_client = self._get_redis()
         # Redisが利用可能な場合は、TTLを指定してRedisに保存します。
@@ -174,6 +186,9 @@ class EphemeralChatStore:
     # 更新されたチャットルームデータを永続化します。
     # Persist the updated chat room data.
     def _save_room(self, sid: str, room_id: str, room: dict) -> bool:
+        # 書き込みは利用中の証拠なので、保存のたびに有効期限の起点を更新する。
+        # A write means the room is in use, so refresh the expiry baseline on save.
+        room["last_active_at"] = datetime.now().isoformat()
         # Redis では残TTLを再計算して保存し、期限切れなら保存せず削除する
         # Recalculate remaining TTL for Redis; delete instead of saving when expired.
         redis_client = self._get_redis()
@@ -248,9 +263,9 @@ class EphemeralChatStore:
         room["messages"] = messages[:last_idx]
         return self._save_room(sid, room_id, room)
 
-    # ルーム内にAIアシスタントからの返答がない場合、ルームを削除します。
-    # Delete the room if it contains no response messages from the assistant.
-    def delete_room_if_no_assistant_messages(self, sid: str, room_id: str) -> bool:
+    # 返答が付かなかった末尾のユーザー発話を取り除きます（ルーム自体は残します）。
+    # Remove the trailing user messages that never got a reply (the room is kept).
+    def delete_unanswered_user_messages(self, sid: str, room_id: str) -> bool:
         room = self.get_room(sid, room_id)
         # ルームが存在しない場合は False を返します。
         # Return False if the room does not exist.
@@ -258,12 +273,18 @@ class EphemeralChatStore:
             return False
 
         messages = room.get("messages") or []
-        # アシスタントからのメッセージが1つでもある場合は削除せずに False を返します。
-        # Return False without deleting if there is at least one assistant message.
-        if any(message.get("role") == "assistant" for message in messages):
+        # 末尾から連続するユーザー発話だけを切り落とす。ルームを削除してしまうと
+        # 画面を開いたままのクライアントが以後 404 になり会話を続けられない。
+        # Trim only the trailing run of user messages. Deleting the room would
+        # make every later request from the still-open client fail with 404.
+        end = len(messages)
+        while end > 0 and messages[end - 1].get("role") == "user":
+            end -= 1
+        if end == len(messages):
             return False
 
-        return self.delete_room(sid, room_id)
+        room["messages"] = messages[:end]
+        return self._save_room(sid, room_id, room)
 
     # ルームのタイトルを変更します。
     # Rename the chat room title.

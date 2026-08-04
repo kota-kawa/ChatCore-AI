@@ -17,6 +17,7 @@ from blueprints.chat.messages import (
     get_chat_history,
 )
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
@@ -315,20 +316,20 @@ class ChatStreamingTestCase(unittest.TestCase):
                         return_value=[{"role": "user", "content": "こんにちは"}],
                     ):
                         with patch(
-                            "blueprints.chat.messages.delete_chat_room_if_no_assistant_messages",
+                            "blueprints.chat.messages.delete_unanswered_user_messages",
                             return_value=True,
-                        ) as mock_delete_room:
+                        ) as mock_discard_messages:
                             response = asyncio.run(chat(request))
 
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(response.status_code, 400)
         self.assertIn("invalid-model", payload["error"])
         mock_save_message.assert_not_called()
-        mock_delete_room.assert_not_called()
+        mock_discard_messages.assert_not_called()
 
-    # 日本語: ストリーミング生成時にエラーが発生した場合、アシスタントの返答がないゲスト用チャットルームが破棄されることを検証します。
-    # English: Verify that a streaming generation error discards a guest room when there is no assistant reply.
-    def test_streaming_generation_error_discards_guest_room_without_assistant_reply(self):
+    # 日本語: ストリーミング生成が失敗した場合、ルームは残したまま未回答のユーザー発話だけが破棄されることを検証します。
+    # English: Verify that a streaming failure discards only the unanswered user message and keeps the room.
+    def test_streaming_generation_error_discards_unanswered_guest_message(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "room-guest", "model": "claude-haiku-4-5-20251001"},
             session={},
@@ -357,9 +358,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                                         ),
                                     ):
                                         with patch(
-                                            "blueprints.chat.messages.ephemeral_store.delete_room_if_no_assistant_messages",
+                                            "blueprints.chat.messages.ephemeral_store.delete_unanswered_user_messages",
                                             return_value=True,
-                                        ) as mock_delete_room:
+                                        ) as mock_discard_messages:
                                             response = asyncio.run(chat(request))
 
                                             # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
@@ -377,7 +378,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIsInstance(response, StreamingResponse)
         self.assertIn("event: error", body)
         self.assertIn("OPENAI_API_KEY が未設定です。", body)
-        mock_delete_room.assert_called_once_with("sid-1", "room-guest")
+        # ルームは消さず、返答が付かなかった発話だけを取り除く。
+        # The room is kept; only the message that got no reply is removed.
+        mock_discard_messages.assert_called_once_with("sid-1", "room-guest")
 
     # 日本語: バックグラウンドの生成ジョブが、最終的なアシスタントの返答をゲストユーザー用に正常に永続化することを検証します。
     # English: Verify that the background generation job successfully persists the final assistant reply for guest users.
@@ -407,6 +410,34 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages,
             [("sid-1", "default", "assistant", "こんにちは")],
         )
+
+    # 日本語: 生成結果が空だった場合、空の応答を保存せずエラーとして扱い、未回答発話の掃除が走ることを検証します。
+    # English: Verify that an empty generation is reported as an error, is never persisted, and triggers the unanswered-message cleanup.
+    def test_background_generation_job_reports_empty_response_as_error(self):
+        persisted_messages = []
+        cleanup_calls = []
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            return_value=iter([]),
+        ):
+            job = start_generation_job(
+                "guest:sid-empty:default",
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+                on_error=lambda: cleanup_calls.append(True),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: error", body)
+        self.assertNotIn("event: done", body)
+        self.assertIn(ERROR_CHAT_EMPTY_RESPONSE, body)
+        # 空の吹き出しを残さないよう、空応答は保存しない。
+        # An empty reply is never persisted, so no blank bubble is left behind.
+        self.assertEqual(persisted_messages, [])
+        self.assertEqual(len(cleanup_calls), 1)
 
     # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。
     # English: Verify that stopping mid-generation persists the partial text and includes it in the aborted event.

@@ -113,6 +113,7 @@ function useGenerationHarness(scrollRef: { current: boolean }, messagesRef: { cu
         : action;
     setRenderTick((tick) => tick + 1);
   };
+  const [, setChatInput] = useState("");
   const [, setChatRooms] = useState<ChatRoom[]>([]);
   const [, setCurrentRoomId] = useState<string | null>("room-1");
   const [, setCurrentRoomMode] = useState<"normal" | "temporary">("normal");
@@ -144,6 +145,7 @@ function useGenerationHarness(scrollRef: { current: boolean }, messagesRef: { cu
     pendingAutoScrollRef: scrollRef,
     prependScrollRestoreRef,
     streamLastEventIdByRoomRef,
+    setChatInput,
     setChatRooms,
     setCurrentRoomId,
     setCurrentRoomMode,

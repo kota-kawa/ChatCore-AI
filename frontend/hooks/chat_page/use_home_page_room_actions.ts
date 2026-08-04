@@ -62,6 +62,7 @@ type UseHomePageRoomActionsParams = {
     roomId: string,
     attachedFiles?: AttachedFile[],
     roomMode?: ChatRoomMode,
+    options?: { unsentInputText?: string },
   ) => Promise<boolean>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   switchBranch: (messageId: number, roomId: string) => Promise<void>;
@@ -534,7 +535,16 @@ export function useHomePageRoomActions({
         const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
         setAttachedFiles([]);
         setSetupInfo("");
-        const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
+        const generationPromise = generateResponse(
+          firstMessage,
+          selectedModel,
+          roomId,
+          filesToSend,
+          roomMode,
+          // タスク見出しを含む整形済み本文ではなく、ユーザーが入力した状況説明を戻す。
+          // Restore the situation the user typed, not the composed task header.
+          { unsentInputText: currentSetupInfo },
+        );
         setPageViewState("chat");
         setLaunchingTaskName(null);
         setLaunchingTaskId(null);
@@ -612,7 +622,14 @@ export function useHomePageRoomActions({
       const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
       setAttachedFiles([]);
       setSetupInfo("");
-      const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
+      const generationPromise = generateResponse(
+        firstMessage,
+        selectedModel,
+        roomId,
+        filesToSend,
+        roomMode,
+        { unsentInputText: firstMessage },
+      );
       setPageViewState("chat");
 
       const completed = await generationPromise;
@@ -668,7 +685,9 @@ export function useHomePageRoomActions({
       setChatInput("");
     }
     setAttachedFiles([]);
-    void generateResponse(message, selectedModel, roomId, filesToSend);
+    void generateResponse(message, selectedModel, roomId, filesToSend, undefined, {
+      unsentInputText: message,
+    });
   }, [attachedFiles, chatInput, generateResponse, isGenerating, selectedModel, setAttachedFiles, stopGeneration]);
 
   const handleRegenerateMessage = useCallback(() => {

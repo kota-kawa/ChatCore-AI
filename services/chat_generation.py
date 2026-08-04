@@ -16,6 +16,7 @@ from fastapi import Request
 
 from .background_executor import submit_background_task
 from services.cache import get_redis_client
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
@@ -1154,6 +1155,24 @@ class ChatGenerationJob:
                     for part in message_parts
                 ]
         self.response = bot_reply
+
+        # 本文もUIパーツも空なら「回答なし」であり、成功として保存してはいけない。
+        # 空の応答を保存すると空の吹き出しが残り、ユーザー発話だけが積み上がる。
+        # An empty body with no UI parts means there is no answer at all, so it must
+        # not be persisted as a success: an empty reply leaves a blank bubble behind
+        # and the conversation ends up as a pile of unanswered user messages.
+        if not bot_reply.strip() and not message_parts:
+            logger.warning(
+                "Chat generation produced an empty response.",
+                extra={"model": self._model},
+            )
+            error_message = ERROR_CHAT_EMPTY_RESPONSE
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": True},
+                invoke_error_callback=True,
+            )
+            return
 
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう永続化する
         # Serialize this turn's search results so later turns can reference them.

@@ -333,6 +333,7 @@ export function useHomePageController() {
     pendingAutoScrollRef,
     prependScrollRestoreRef,
     streamLastEventIdByRoomRef,
+    setChatInput,
     setChatRooms,
     setCurrentRoomId,
     setCurrentRoomMode,
