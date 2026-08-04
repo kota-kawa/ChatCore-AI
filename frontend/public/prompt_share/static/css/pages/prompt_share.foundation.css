@@ -207,13 +207,26 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   z-index: 1;
 }
 
+/* ロゴとサービス名を横並びにするブランドロックアップ。
+   サービス名の表記を保つため大文字変換は行わない */
+/* Brand lockup placing the logo beside the service name;
+   no uppercase transform so the service name keeps its own casing */
 :where(body.prompt-share-page, .prompt-share-page) .hero-kicker {
   margin: 0;
-  font-size: 0.76rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.9);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .hero-kicker__logo {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .hero-title {
