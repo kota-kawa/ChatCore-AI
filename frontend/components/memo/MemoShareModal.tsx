@@ -51,7 +51,8 @@ export function MemoShareModal({
               </p>
             </header>
             <div className="memo-share-modal__body cc-share-modal__body">
-              <div className="memo-share-modal__row cc-share-modal__row">
+              {/* 共有リンクと、その右端に収めたコピーボタン / Share link with the copy button pinned to its right edge */}
+              <div className="cc-share-modal__field">
                 <input
                   id="memo-share-link-input"
                   type="text"
@@ -59,32 +60,49 @@ export function MemoShareModal({
                   value={shareUrl}
                   placeholder={t("memo.preparingShareLink")}
                 />
+                <button
+                  type="button"
+                  className="cc-share-modal__copy"
+                  aria-label={t("memo.copyLink")}
+                  title={t("memo.copyLink")}
+                  onClick={() => { void copyShareLink(); }}
+                  disabled={shareLoading || !shareUrl}
+                >
+                  <i className="bi bi-files" aria-hidden="true"></i>
+                </button>
               </div>
               {shareStatus && <p className={`memo-share-modal__status cc-share-modal__status memo-share-modal__status--${shareStatus.type}${shareStatus.type === "error" ? " cc-share-modal__status--error" : ""}`}>{shareStatus.text}</p>}
-              <div className="memo-share-modal__actions cc-share-modal__actions">
-                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label={t("memo.copyLink")} title={t("memo.copyLink")} onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
-                {supportsNativeShare && (
-                  <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label={t("memo.shareOnDevice")} title={t("memo.shareOnDevice")} onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
-                )}
-              </div>
-              <div className="memo-share-modal__sns cc-share-modal__sns">
-                <a target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
+              {/* 共有先（X / LINE / Facebook / 端末共有） / Share destinations (X / LINE / Facebook / device share) */}
+              <div className="cc-share-modal__channels">
+                <a className="cc-share-modal__channel" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x} title="X">
                   <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       fill="currentColor"
                       d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
                     ></path>
                   </svg>
-                  <span>X</span>
+                  <span className="sr-only">X</span>
                 </a>
-                <a target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line}>
-                  <i className="bi bi-chat-dots"></i>
-                  <span>LINE</span>
+                <a className="cc-share-modal__channel" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line} title="LINE">
+                  <i className="bi bi-chat-dots" aria-hidden="true"></i>
+                  <span className="sr-only">LINE</span>
                 </a>
-                <a target="_blank" rel="noopener noreferrer" href={shareSnsLinks.facebook}>
-                  <i className="bi bi-facebook"></i>
-                  <span>Facebook</span>
+                <a className="cc-share-modal__channel" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.facebook} title="Facebook">
+                  <i className="bi bi-facebook" aria-hidden="true"></i>
+                  <span className="sr-only">Facebook</span>
                 </a>
+                {supportsNativeShare && (
+                  <button
+                    type="button"
+                    className="cc-share-modal__channel"
+                    aria-label={t("memo.shareOnDevice")}
+                    title={t("memo.shareOnDevice")}
+                    onClick={() => { void openNativeShareSheet(); }}
+                    disabled={shareLoading || !shareUrl}
+                  >
+                    <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                  </button>
+                )}
               </div>
             </div>
           </div>
