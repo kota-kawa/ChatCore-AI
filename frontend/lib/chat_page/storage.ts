@@ -210,6 +210,20 @@ export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry): 
   return writeStoredHistory(roomId, [...existing, entry]);
 }
 
+// 送信できなかった発話を表示キャッシュからも取り消す。末尾が一致するときだけ削除し、
+// 並行して届いた別の書き込みを巻き戻さないようにする。
+// Undo a message that could not be sent from the display cache. It only removes
+// the entry when the tail still matches, so a concurrent write is never rewound.
+export function removeLastStoredHistoryEntry(
+  roomId: string,
+  entry: StoredHistoryEntry,
+): StoredHistoryWriteResult | null {
+  const existing = readStoredHistory(roomId);
+  const last = existing[existing.length - 1];
+  if (!last || last.sender !== entry.sender || last.text !== entry.text) return null;
+  return writeStoredHistory(roomId, existing.slice(0, -1));
+}
+
 export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
   const existing = readStoredHistory(roomId);
   return writeStoredHistory(roomId, [...entries, ...existing]);
