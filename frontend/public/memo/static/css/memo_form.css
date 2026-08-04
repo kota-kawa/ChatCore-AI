@@ -91,18 +91,22 @@ body.memo-page.modal-open {
   overflow: hidden;
 }
 
+/* ロゴ画像自体が色と形を持つため、下地のグラデーションと影は置かない */
+/* The logo image carries its own color and shape, so no background gradient or shadow behind it */
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-brand-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
-  font-size: 0.78rem;
-  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.32);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-sidebar-brand-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-title {
@@ -114,7 +118,7 @@ body.memo-page.modal-open {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: opacity 0.18s, max-width 0.26s;
-  max-width: 120px;
+  max-width: 150px;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-toggle {
