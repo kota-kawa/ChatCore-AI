@@ -119,7 +119,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             build_generation_key=Mock(return_value="user:42:room-1"),
             has_active_generation=Mock(return_value=False),
             consume_llm_daily_quota=Mock(return_value=(True, 1, 300)),
-            cleanup_failed_room_without_assistant_response=Mock(),
+            cleanup_unanswered_user_messages=Mock(),
             get_seconds_until_daily_reset=Mock(return_value=60),
             is_streaming_model=Mock(return_value=False),
             start_generation_job=Mock(),

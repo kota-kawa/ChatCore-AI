@@ -80,15 +80,36 @@ class EphemeralChatStoreMemoryTest(unittest.TestCase):
         with patch("services.ephemeral_store.get_redis_client", return_value=None):
             store = EphemeralChatStore(expiration_seconds=10)
             store.create_room("sid", "room", "title")
-            store._memory["sid"]["room"]["created_at"] = datetime.now() - timedelta(seconds=20)
+            stale = (datetime.now() - timedelta(seconds=20)).isoformat()
+            store._memory["sid"]["room"]["created_at"] = stale
+            store._memory["sid"]["room"]["last_active_at"] = stale
 
             store.cleanup()
 
             self.assertFalse(store.room_exists("sid", "room"))
 
-    # 日本語: deleteroomifなしassistantmessages削除するユーザーonlyroomことを検証します。
-    # English: Verify that delete room if no assistant messages deletes user only room.
-    def test_delete_room_if_no_assistant_messages_deletes_user_only_room(self):
+    # 日本語: 会話が続いている間はルームの有効期限が延長されることを検証します。
+    # English: Verify that an actively used room has its expiry extended.
+    def test_memory_activity_extends_expiration(self):
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
+        with patch("services.ephemeral_store.get_redis_client", return_value=None):
+            store = EphemeralChatStore(expiration_seconds=10)
+            store.create_room("sid", "room", "title")
+            store._memory["sid"]["room"]["created_at"] = (
+                datetime.now() - timedelta(seconds=20)
+            ).isoformat()
+
+            # 利用（メッセージ追加）で最終利用時刻が更新され、期限切れにならない。
+            # Using the room refreshes the last-activity timestamp, so it survives.
+            store.append_message("sid", "room", "user", "hello")
+            store.cleanup()
+
+            self.assertTrue(store.room_exists("sid", "room"))
+
+    # 日本語: 返答が付かなかったユーザー発話だけを取り除き、ルームは残すことを検証します。
+    # English: Verify that only the unanswered user message is removed and the room is kept.
+    def test_delete_unanswered_user_messages_keeps_room(self):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch("services.ephemeral_store.get_redis_client", return_value=None):
@@ -96,14 +117,17 @@ class EphemeralChatStoreMemoryTest(unittest.TestCase):
             store.create_room("sid", "room", "title")
             store.append_message("sid", "room", "user", "hello")
 
-            deleted = store.delete_room_if_no_assistant_messages("sid", "room")
+            discarded = store.delete_unanswered_user_messages("sid", "room")
 
-            self.assertTrue(deleted)
-            self.assertFalse(store.room_exists("sid", "room"))
+            self.assertTrue(discarded)
+            # ルームが残るので、ユーザーはそのまま会話を続けられる。
+            # The room survives so the user can keep chatting in it.
+            self.assertTrue(store.room_exists("sid", "room"))
+            self.assertEqual(store.get_messages("sid", "room"), [])
 
-    # 日本語: assistantreplyを使用する場合、deleteroomifなしassistantmessages保持するroomことを検証します。
-    # English: Verify that delete room if no assistant messages keeps room with assistant reply.
-    def test_delete_room_if_no_assistant_messages_keeps_room_with_assistant_reply(self):
+    # 日本語: 回答済みのターンは削除されないことを検証します。
+    # English: Verify that answered turns are left untouched.
+    def test_delete_unanswered_user_messages_keeps_answered_turns(self):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch("services.ephemeral_store.get_redis_client", return_value=None):
@@ -112,10 +136,28 @@ class EphemeralChatStoreMemoryTest(unittest.TestCase):
             store.append_message("sid", "room", "user", "hello")
             store.append_message("sid", "room", "assistant", "hi")
 
-            deleted = store.delete_room_if_no_assistant_messages("sid", "room")
+            discarded = store.delete_unanswered_user_messages("sid", "room")
 
-            self.assertFalse(deleted)
-            self.assertTrue(store.room_exists("sid", "room"))
+            self.assertFalse(discarded)
+            self.assertEqual(len(store.get_messages("sid", "room")), 2)
+
+    # 日本語: 直近の未回答発話だけを取り除き、過去のやり取りは残すことを検証します。
+    # English: Verify that only the latest unanswered message is trimmed.
+    def test_delete_unanswered_user_messages_trims_only_trailing_messages(self):
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
+        with patch("services.ephemeral_store.get_redis_client", return_value=None):
+            store = EphemeralChatStore(expiration_seconds=60)
+            store.create_room("sid", "room", "title")
+            store.append_message("sid", "room", "user", "hello")
+            store.append_message("sid", "room", "assistant", "hi")
+            store.append_message("sid", "room", "user", "again")
+
+            discarded = store.delete_unanswered_user_messages("sid", "room")
+
+            self.assertTrue(discarded)
+            messages = store.get_messages("sid", "room")
+            self.assertEqual([m["role"] for m in messages], ["user", "assistant"])
 
     # 日本語: rediscreatedatがisostringことを検証します。
     # English: Verify that redis created at is iso string.

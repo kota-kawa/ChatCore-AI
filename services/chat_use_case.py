@@ -17,6 +17,7 @@ from services.attached_files import (
 )
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import normalize_response_with_artifact_retry
 from services.llm import (
     LlmAuthenticationError,
@@ -82,7 +83,7 @@ class ChatPostUseCaseDependencies:
     build_generation_key: Callable[..., Any]
     has_active_generation: Callable[..., Any]
     consume_llm_daily_quota: Callable[..., Any]
-    cleanup_failed_room_without_assistant_response: Callable[..., Any]
+    cleanup_unanswered_user_messages: Callable[..., Any]
     get_seconds_until_daily_reset: Callable[[], int]
     is_streaming_model: Callable[[str], bool]
     start_generation_job: Callable[..., Any]
@@ -547,7 +548,7 @@ class ChatPostUseCase:
             # quota 失敗時にユーザー発話だけを残すと、次回の文脈が「未回答の発話」から始まる。
             # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
             await run_blocking(
-                deps.cleanup_failed_room_without_assistant_response,
+                deps.cleanup_unanswered_user_messages,
                 chat_room_id,
                 user_id=user_id,
                 sid=sid,
@@ -641,7 +642,7 @@ class ChatPostUseCase:
                     persist_response=persist_response,
                     on_finished=on_finished,
                     on_error=partial(
-                        deps.cleanup_failed_room_without_assistant_response,
+                        deps.cleanup_unanswered_user_messages,
                         chat_room_id,
                         user_id=user_id,
                         sid=sid,
@@ -669,7 +670,7 @@ class ChatPostUseCase:
             bot_reply = await run_blocking(deps.get_llm_response, response_messages, model)
         except LlmInvalidModelError as exc:
             await run_blocking(
-                deps.cleanup_failed_room_without_assistant_response,
+                deps.cleanup_unanswered_user_messages,
                 chat_room_id,
                 user_id=user_id,
                 sid=sid,
@@ -677,7 +678,7 @@ class ChatPostUseCase:
             return deps.jsonify({"error": str(exc)}, status_code=400)
         except LlmRateLimitError as exc:
             await run_blocking(
-                deps.cleanup_failed_room_without_assistant_response,
+                deps.cleanup_unanswered_user_messages,
                 chat_room_id,
                 user_id=user_id,
                 sid=sid,
@@ -695,7 +696,7 @@ class ChatPostUseCase:
                 "LLM authentication/configuration error while generating chat response."
             )
             await run_blocking(
-                deps.cleanup_failed_room_without_assistant_response,
+                deps.cleanup_unanswered_user_messages,
                 chat_room_id,
                 user_id=user_id,
                 sid=sid,
@@ -711,7 +712,7 @@ class ChatPostUseCase:
                 retryable,
             )
             await run_blocking(
-                deps.cleanup_failed_room_without_assistant_response,
+                deps.cleanup_unanswered_user_messages,
                 chat_room_id,
                 user_id=user_id,
                 sid=sid,
@@ -817,6 +818,26 @@ class ChatPostUseCase:
             if augmentation.result is not None and augmentation.result.has_sources
             else None
         )
+
+        # 本文もUIパーツも空なら回答が無いのと同じ。空の応答を保存すると空の吹き出しが
+        # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。
+        # An empty body with no UI parts is the same as no answer at all. Persisting
+        # it would leave a blank bubble and let unanswered user messages pile up.
+        if not bot_reply.strip() and not message_parts:
+            deps.logger.warning(
+                "Chat generation produced an empty response.",
+                extra={"chat_room_id": chat_room_id, "model": model},
+            )
+            await run_blocking(
+                deps.cleanup_unanswered_user_messages,
+                chat_room_id,
+                user_id=user_id,
+                sid=sid,
+            )
+            return deps.jsonify(
+                {"error": ERROR_CHAT_EMPTY_RESPONSE, "retryable": True},
+                status_code=502,
+            )
 
         saved_assistant_message_id: int | None = None
         generated_room_title: str | None = None
