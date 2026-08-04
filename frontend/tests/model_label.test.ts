@@ -8,15 +8,27 @@ import { jaMessages, type MessageKey } from "../lib/i18n/catalogs/ja";
 
 const translate = (catalog: Record<string, string>) => (key: MessageKey) => catalog[key];
 
-test("model labels keep the model name and localize only the usage hint", () => {
-  const [groq] = MODEL_OPTIONS;
-  assert.equal(
-    formatModelOptionLabel(groq, translate(jaMessages), "ja"),
-    "GPT-OSS 120B（標準・高品質な応答）"
+test("model labels keep the model name and localize the model-specific usage hint", () => {
+  const expectedJapaneseLabels = [
+    "GPT-OSS 120B（高速応答）",
+    "Qwen 3.6 27B（深い思考）",
+    "GPT-5.6 Luna（バランス型）",
+    "Claude Haiku 4.5（丁寧な文章）",
+  ];
+  const expectedEnglishLabels = [
+    "GPT-OSS 120B (fast responses)",
+    "Qwen 3.6 27B (deep thinking)",
+    "GPT-5.6 Luna (balanced)",
+    "Claude Haiku 4.5 (careful writing)",
+  ];
+
+  assert.deepEqual(
+    MODEL_OPTIONS.map((option) => formatModelOptionLabel(option, translate(jaMessages), "ja")),
+    expectedJapaneseLabels,
   );
-  assert.equal(
-    formatModelOptionLabel(groq, translate(enMessages), "en"),
-    "GPT-OSS 120B (balanced, high-quality answers)"
+  assert.deepEqual(
+    MODEL_OPTIONS.map((option) => formatModelOptionLabel(option, translate(enMessages), "en")),
+    expectedEnglishLabels,
   );
 });
 
