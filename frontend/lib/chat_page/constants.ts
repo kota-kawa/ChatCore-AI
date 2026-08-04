@@ -240,25 +240,25 @@ export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "openai/gpt-oss-120b",
     label: "GPT-OSS 120B",
-    descriptionKey: "chat.modelStandard",
+    descriptionKey: "chat.modelFast",
     shortLabel: "GPT-OSS 120B",
-  },
-  {
-    value: "qwen/qwen3.6-27b",
-    label: "Qwen 3.6 27B",
-    descriptionKey: "chat.modelStandard",
-    shortLabel: "Qwen 3.6 27B",
   },
   {
     value: "gpt-5.6-luna",
     label: "GPT-5.6 Luna",
-    descriptionKey: "chat.modelReasoning",
+    descriptionKey: "chat.modelBalanced",
     shortLabel: "GPT-5.6 Luna",
+  },
+  {
+    value: "qwen/qwen3.6-27b",
+    label: "Qwen 3.6 27B",
+    descriptionKey: "chat.modelDeepThinking",
+    shortLabel: "Qwen 3.6 27B",
   },
   {
     value: "claude-haiku-4-5-20251001",
     label: "Claude Haiku 4.5",
-    descriptionKey: "chat.modelLightweight",
+    descriptionKey: "chat.modelCarefulWriting",
     shortLabel: "Claude Haiku 4.5",
   },
 ];
