@@ -290,9 +290,15 @@ export default function SharedPromptPage({
   const promptTitle = prompt?.title || (english ? "Shared prompt" : "共有プロンプト");
   const pageTitle = `${promptTitle} | ${english ? "Shared on Chat Core" : "Chat Core 共有"}`;
   const description = buildMetaDescription(payload);
-  const formatLabel = getPromptFormatLabel(contentFormat);
-  const mediaLabel = getPromptMediaLabel(mediaType);
-  const categoryLabel = getCategoryLabelOrFallback(prompt?.category);
+  // ラベルは必ず現在のロケールを明示して解決する。省略すると <html lang> から
+  // 読むフォールバックが働き、SSR では常に日本語・クライアントでは英語となって
+  // ハイドレーション不一致を起こす。
+  // Always resolve labels with the active locale. Without it the helpers fall back to
+  // reading <html lang>, which is Japanese during SSR and English on the client — a
+  // guaranteed hydration mismatch.
+  const formatLabel = getPromptFormatLabel(contentFormat, locale);
+  const mediaLabel = getPromptMediaLabel(mediaType, locale);
+  const categoryLabel = getCategoryLabelOrFallback(prompt?.category, undefined, locale);
   // ページURLからオリジンを取り出す（OG画像・パンくずの絶対URL組み立てに使用）
   // Extract the origin from the page URL (used to build absolute URLs for the OG image and breadcrumb)
   const pageOrigin = (() => {
@@ -452,7 +458,7 @@ export default function SharedPromptPage({
                         <div>
                           <strong>{resource.path}</strong>
                           <span>
-                            {getSkillResourceRoleLabel(resource.role)}
+                            {getSkillResourceRoleLabel(resource.role, locale)}
                             {resource.language ? ` · ${resource.language}` : ""}
                           </span>
                         </div>
@@ -521,9 +527,9 @@ export default function SharedPromptPage({
                         ) : null}
                         <div className="shared-prompt-recommendation-card__body">
                           <div className="shared-prompt-recommendation-card__pills">
-                            <span>{getCategoryLabelOrFallback(recommendedPrompt.category)}</span>
-                            <span>{getPromptFormatLabel(recommendationFormat)}</span>
-                            <span>{getPromptMediaLabel(recommendationMedia)}</span>
+                            <span>{getCategoryLabelOrFallback(recommendedPrompt.category, undefined, locale)}</span>
+                            <span>{getPromptFormatLabel(recommendationFormat, locale)}</span>
+                            <span>{getPromptMediaLabel(recommendationMedia, locale)}</span>
                           </div>
                           <h3>{recommendedPrompt.title || (english ? "Shared prompt" : "共有プロンプト")}</h3>
                           <p>{buildRecommendationPreview(recommendedPrompt)}</p>
