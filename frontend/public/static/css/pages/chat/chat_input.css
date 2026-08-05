@@ -97,6 +97,43 @@
   line-height: inherit;
 }
 
+/* 未保存モード：送信しても履歴が残らないことを入力欄そのもので示す。
+   ヘッダーにバッジを置くと狭い画面で戻るボタンやサイドバー開閉ボタンと
+   場所を取り合うため、状態表示は常に目に入る入力欄側へ寄せている。
+   ブランドの緑と competing しないよう、警告色のオレンジで塗る */
+:where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(251, 146, 60, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(255, 247, 237, 0.98) 0%, rgba(255, 234, 212, 0.96) 100%);
+  border-color: rgba(234, 88, 12, 0.5);
+}
+
+:where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper:focus-within {
+  border-color: rgba(234, 88, 12, 0.55);
+  box-shadow:
+    0 0 0 4px rgba(249, 115, 22, 0.16),
+    0 18px 38px rgba(124, 45, 18, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(251, 146, 60, 0.24), transparent 34%),
+    linear-gradient(180deg, rgba(255, 252, 248, 0.99) 0%, rgba(255, 243, 230, 0.97) 100%);
+}
+
+/* プレースホルダーは通常のグレーだとオレンジの下地に埋もれるので、
+   同系色で少し濃くして状態表示として読ませる */
+:where(body.chat-page, .chat-page-shell) .input-container--temporary #user-input::placeholder {
+  color: #c2410c;
+}
+
+/* 添付・送信ボタンも同じ変数の系統で塗り替える。停止ボタン（.send-btn--stop）は
+   生成中を示す赤のままにしたいので、そちらの指定を上書きしない */
+:where(body.chat-page, .chat-page-shell) .input-container--temporary .chat-attach-btn,
+:where(body.chat-page, .chat-page-shell) .input-container--temporary #send-btn:not(.send-btn--stop) {
+  --chat-button-base: #f97316;
+  --chat-button-accent: #ea580c;
+  --chat-button-shadow-color: rgba(234, 88, 12, 0.28);
+}
+
 :where(body.chat-page, .chat-page-shell) #send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn,
@@ -254,6 +291,38 @@
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #user-input::placeholder {
   color: #64748b;
+}
+
+/* 未保存モード（ダーク）：暗い面では彩度を落として発光させない */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(249, 115, 22, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(46, 34, 24, 0.98) 0%, rgba(33, 24, 17, 0.96) 100%);
+  border-color: rgba(251, 146, 60, 0.42);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper:focus-within {
+  border-color: rgba(251, 146, 60, 0.6);
+  box-shadow:
+    0 0 0 4px rgba(249, 115, 22, 0.16),
+    0 18px 38px rgba(2, 6, 23, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(249, 115, 22, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(56, 40, 27, 0.99) 0%, rgba(38, 27, 19, 0.97) 100%);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary #user-input::placeholder {
+  color: #fdba74;
+}
+
+/* ダークの添付ボタンは後方でテーマ色を指定し直しているため、こちらも
+   テーマ付きで上書きしないと緑のまま残る */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary .chat-attach-btn,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary #send-btn:not(.send-btn--stop) {
+  --chat-button-base: #fb923c;
+  --chat-button-accent: #f97316;
+  --chat-button-shadow-color: rgba(249, 115, 22, 0.28);
 }
 
 /* ─── スマートフォン (≤576px) ─── */

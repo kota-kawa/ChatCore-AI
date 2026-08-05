@@ -84,6 +84,7 @@ export const jaMessages = {
   "chat.new": "新規チャット",
   "chat.search": "チャットを検索",
   "chat.inputPlaceholder": "メッセージを入力",
+  "chat.inputPlaceholderTemporary": "未保存モードで入力",
   "chat.stop": "生成を停止",
   "chat.regenerate": "回答を再生成",
   "chat.copy": "回答をコピー",

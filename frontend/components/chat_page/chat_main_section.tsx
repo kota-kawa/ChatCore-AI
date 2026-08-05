@@ -312,9 +312,10 @@ function ChatMainSectionComponent() {
           >
             <i className="bi bi-arrow-left"></i>
           </button>
-          {currentRoomMode === "temporary" && (
-            <span className="chat-room-mode-badge">{english ? "Temporary" : "未保存"}</span>
-          )}
+          {/* 未保存モードの表示はヘッダーではなく入力欄側で行う（狭い画面では
+              戻るボタンや会話面に浮かぶサイドバー開閉ボタンと場所を取り合うため）。 */}
+          {/* Temporary mode is surfaced on the composer instead of the header, which
+              runs out of room on narrow screens. */}
         </div>
         <div className="header-right">
           {/* AI モデルをその場で切り替えられるドロップダウンメニュー */}
@@ -728,9 +729,14 @@ function ChatMainSectionComponent() {
           {/* Input container: dropzone overlay, URL chips, attachment chips, textarea, send button */}
           <div
             ref={chatFooterRef}
-            className={`input-container chat-attachment-dropzone ${
-              isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
-            }`.trim()}
+            className={[
+              "input-container",
+              "chat-attachment-dropzone",
+              isAttachmentDropActive ? "chat-attachment-dropzone--active" : "",
+              // 未保存モードでは入力欄自体を警告色にして、送信内容が残らないことを示す。
+              // Tint the composer in temporary mode so it is clear nothing is being saved.
+              currentRoomMode === "temporary" ? "input-container--temporary" : "",
+            ].filter(Boolean).join(" ")}
             {...attachmentDropzoneProps}
           >
             {/* ドラッグ中に全面に表示されるドロップ受付オーバーレイ。 */}
@@ -815,7 +821,11 @@ function ChatMainSectionComponent() {
                 ref={chatInputRef}
                 id="user-input"
                 rows={1}
-                placeholder={isChatLaunching ? (english ? "Preparing chat…" : "チャットを準備しています...") : t("chat.inputPlaceholder")}
+                placeholder={
+                  isChatLaunching
+                    ? (english ? "Preparing chat…" : "チャットを準備しています...")
+                    : t(currentRoomMode === "temporary" ? "chat.inputPlaceholderTemporary" : "chat.inputPlaceholder")
+                }
                 value={chatInput}
                 disabled={isChatLaunching}
                 enterKeyHint="send"
