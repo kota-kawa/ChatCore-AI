@@ -500,6 +500,7 @@ export function useHomePageController() {
     stopGeneration,
     taskLaunchInProgressRef,
     temporaryModeEnabled,
+    setTemporaryModeEnabled,
     selectedRoomIds,
     setChatInput,
     setChatRooms,
