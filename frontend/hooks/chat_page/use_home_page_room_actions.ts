@@ -81,6 +81,7 @@ type UseHomePageRoomActionsParams = {
   stopGeneration: () => Promise<void>;
   taskLaunchInProgressRef: MutableRefObject<boolean>;
   temporaryModeEnabled: boolean;
+  setTemporaryModeEnabled: Dispatch<SetStateAction<boolean>>;
   selectedRoomIds: Set<string>;
   setChatInput: Dispatch<SetStateAction<string>>;
   setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
@@ -139,6 +140,7 @@ export function useHomePageRoomActions({
   stopGeneration,
   taskLaunchInProgressRef,
   temporaryModeEnabled,
+  setTemporaryModeEnabled,
   selectedRoomIds,
   setChatInput,
   setChatRooms,
@@ -355,9 +357,21 @@ export function useHomePageRoomActions({
     setLaunchingTaskName(null);
     setLaunchingTaskId(null);
     setSetupInfo("");
+    // 未保存モードは一度の実行につき1回限りの指定にする。戻ってきたら
+    // チェックを外し、次回の送信を通常モードに戻す。
+    // Temporary mode is a one-shot toggle: clear it on return so the next
+    // send defaults back to normal mode.
+    setTemporaryModeEnabled(false);
     closeShareModal();
     scheduleSetupViewportFit();
-  }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskId, setLaunchingTaskName, setPageViewState]);
+  }, [
+    closeOverlaySidebar,
+    closeShareModal,
+    setLaunchingTaskId,
+    setLaunchingTaskName,
+    setPageViewState,
+    setTemporaryModeEnabled,
+  ]);
 
   const handleAccessChat = useCallback(async () => {
     if (accessChatInProgressRef.current) return;
