@@ -27,6 +27,17 @@ test("SandboxArtifactFrame renders a script-only sandbox iframe", () => {
   assert.match(markup, /referrerPolicy="no-referrer"|referrerpolicy="no-referrer"/);
 });
 
+test("SandboxArtifactFrame leaves srcDoc out of the server-rendered markup", () => {
+  // srcDoc の CSP は window.location.origin に依存するためサーバーでは組み立てられない。
+  // SSR 時点で srcDoc を出すとハイドレーション不一致になるので、マウント後に流し込む。
+  // The srcDoc CSP depends on window.location.origin, so it cannot be built on the server.
+  // Emitting it during SSR would break hydration; it is injected after mount instead.
+  const markup = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact }));
+
+  assert.doesNotMatch(markup, /srcdoc=/i);
+  assert.match(markup, /<iframe/);
+});
+
 test("buildSandboxArtifactSrcDoc includes restrictive CSP and escapes script endings", () => {
   const srcDoc = buildSandboxArtifactSrcDoc({
     ...artifact,
