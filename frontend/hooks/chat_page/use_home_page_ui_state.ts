@@ -51,6 +51,23 @@ function readStoredTemporaryModeEnabled() {
   }
 }
 
+/**
+ * 保存されたAIモデル選択を読み込む
+ * Read the stored AI model selection
+ */
+function readStoredSelectedModel() {
+  if (typeof window === "undefined") return DEFAULT_MODEL;
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.selectedModel);
+    // 未知のモデル値（旧バージョンの選択肢など）は既定モデルにフォールバックする
+    // Fall back to the default model for unknown values (e.g. a retired option)
+    return MODEL_OPTIONS.some((option) => option.value === stored) ? (stored as string) : DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+}
+
 function readInitialPageViewState(): HomePageViewState {
   if (typeof window === "undefined") return "setup";
 
@@ -124,6 +141,7 @@ export function useHomePageUiState() {
   useIsomorphicLayoutEffect(() => {
     setSetupInfo(readStoredSetupInfo());
     setTemporaryModeEnabled(readStoredTemporaryModeEnabled());
+    setSelectedModel(readStoredSelectedModel());
     setRawPageViewState(readRestorableHomePageViewState());
     setStoredSetupStateLoaded(true);
   }, []);
@@ -164,6 +182,19 @@ export function useHomePageUiState() {
       // ignore localStorage failures
     }
   }, [storedSetupStateLoaded, temporaryModeEnabled]);
+
+  // 選択されたAIモデルの変更をローカルストレージに保存する
+  // Save the selected AI model to local storage
+  useEffect(() => {
+    if (!storedSetupStateLoaded) return;
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.selectedModel, selectedModel);
+    } catch {
+      // ローカルストレージの失敗を無視する
+      // ignore localStorage failures
+    }
+  }, [selectedModel, storedSetupStateLoaded]);
 
   const isChatVisible = pageViewState !== "setup";
   const isSetupVisible = pageViewState !== "chat";
