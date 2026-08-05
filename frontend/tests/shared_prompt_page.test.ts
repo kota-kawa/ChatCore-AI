@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import SharedPromptPage from "../pages/shared/prompt/[id]/[[...slug]]";
+import { LocaleProvider } from "../contexts/locale_context";
 
 test("shared prompt page renders links to random prompt recommendations", () => {
   const html = renderToStaticMarkup(
@@ -88,4 +89,47 @@ test("shared skill page renders multiple named resources with copy actions", () 
   assert.match(html, /scripts\/run\.ts/);
   assert.match(html, /references\/api\.md/);
   assert.equal((html.match(/コピー/g) || []).length, 2);
+});
+
+test("shared prompt page renders labels in the requested locale during SSR", () => {
+  // ラベルが <html lang> のフォールバックを使うと、SSR は日本語・クライアントは
+  // 英語になり、ハイドレーション不一致（React error #418 / #425）を起こす。
+  // If the labels fall back to <html lang>, SSR renders Japanese while the client
+  // renders English, breaking hydration (React error #418 / #425).
+  const props = {
+    payload: {
+      prompt: {
+        id: 55,
+        title: "Shared prompt in English",
+        category: "business",
+        content: "Body text.",
+        content_format: "prompt",
+        media_type: "text"
+      }
+    },
+    recommendedPrompts: [],
+    promptHtml: {
+      content: "<p>Body text.</p>",
+      inputExamples: "",
+      outputExamples: "",
+      skillMarkdown: "",
+      skillPythonScript: ""
+    },
+    pageUrl: "https://chatcore-ai.com/shared/prompt/55/shared-prompt-in-english",
+    defaultOgImageUrl: "https://chatcore-ai.com/static/img.jpg"
+  };
+
+  const renderWithLocale = (locale: "en" | "ja") => renderToStaticMarkup(
+    React.createElement(LocaleProvider, {
+      initialLocale: locale,
+      children: React.createElement(SharedPromptPage, props)
+    })
+  );
+
+  const englishHtml = renderWithLocale("en");
+  const japaneseHtml = renderWithLocale("ja");
+
+  assert.match(englishHtml, /shared-prompt-pill">Format: Prompt</);
+  assert.doesNotMatch(englishHtml, /プロンプト/);
+  assert.match(japaneseHtml, /shared-prompt-pill">フォーマット: プロンプト</);
 });

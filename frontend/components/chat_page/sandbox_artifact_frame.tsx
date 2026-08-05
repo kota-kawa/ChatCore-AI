@@ -277,7 +277,21 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
   const [errorMessage, setErrorMessage] = useState("");
-  const srcDoc = useMemo(() => buildSandboxArtifactSrcDoc(artifact, locale === "en"), [artifact, locale]);
+  // srcDoc の CSP には自オリジンの絶対URL（window.location.origin）が必要なため、
+  // サーバーでは組み立てられない。SSR とハイドレーション初回は srcDoc を付けず、
+  // マウント後に流し込むことでハイドレーション不一致と不正なCSPソースを避ける。
+  // The srcDoc CSP needs same-origin absolute URLs (window.location.origin), which the
+  // server cannot produce. Render without srcDoc during SSR and the first hydration
+  // render, then inject it after mount to avoid both a hydration mismatch and an
+  // invalid CSP source.
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  const srcDoc = useMemo(
+    () => (isMounted ? buildSandboxArtifactSrcDoc(artifact, locale === "en") : undefined),
+    [artifact, isMounted, locale]
+  );
 
   // アーティファクトが変わったら高さとエラーをリセットする
   // Reset height and error when the artifact changes
