@@ -867,6 +867,7 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertIn("Use only evidence_id values that actually appear below", content)
         self.assertIn("Never shorten it to [[src_...]]", content)
         self.assertIn("not user-facing text", content)
+        self.assertIn("inline-code, plain-text URLs", content)
 
     def test_resolve_citations_converts_only_known_markers_and_returns_offsets(self):
         result = self._result()
@@ -882,14 +883,14 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
 
         self.assertEqual(
             resolved.text,
-            "事実A [1](https://example.com/a) と"
-            "事実B [2](https://example.com/report_%28final%29)。不明 。",
+            "事実A `https://example.com/a` と"
+            "事実B `https://example.com/report_(final)`。不明 。",
         )
         self.assertEqual(len(resolved.citations), 2)
         self.assertEqual(len(resolved.invalid_markers), 1)
         for citation in resolved.citations:
             rendered = resolved.text[citation.start : citation.end]
-            self.assertTrue(rendered.startswith(f"[{citation.ordinal}]("))
+            self.assertEqual(rendered, f"`{citation.url}`")
             self.assertEqual(citation.url, result.sources[citation.ordinal - 1].url)
             self.assertEqual(citation.title, result.sources[citation.ordinal - 1].title)
 

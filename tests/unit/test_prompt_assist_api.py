@@ -88,6 +88,8 @@ class PromptAssistApiTestCase(unittest.TestCase):
             AI_AGENT_SYSTEM_PROMPT,
         )
         self.assertIn("Prefer the words shown on screen", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("Never create clickable URLs", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("full URL verbatim in inline code", AI_AGENT_SYSTEM_PROMPT)
 
     # 日本語: プロンプトアシスト要求するログインことを検証します。
     # English: Verify that prompt assist requires login.
