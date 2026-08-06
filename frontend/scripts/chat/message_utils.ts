@@ -128,7 +128,7 @@ function sanitizeMessageHtml(dirtyHtml: string, options: SanitizeMessageHtmlOpti
     typeof purifier.sanitize === "function"
       ? purifier.sanitize(dirtyHtml, {
           ALLOWED_TAGS: allowedTags,
-          ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class", "type", "checked", "disabled"],
+          ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class", "type", "checked", "disabled", "referrerpolicy"],
           ALLOWED_URI_REGEXP: SAFE_URI_PATTERN,
           ALLOW_DATA_ATTR: false
         })

@@ -257,6 +257,25 @@ function bindWebSearchSourcesAccordions(container: HTMLElement) {
   };
 }
 
+// サイトfaviconの読み込み失敗時に、出典ごとの頭文字フォールバックへ切り替える。
+// Switch failed site favicons to the source-specific initial fallback.
+function bindWebSearchCitationFavicons(container: HTMLElement) {
+  const cleanupCallbacks: Array<() => void> = [];
+
+  container
+    .querySelectorAll<HTMLImageElement>("img.web-search-citation__favicon")
+    .forEach((favicon) => {
+      const icon = favicon.closest<HTMLElement>(".web-search-citation__icon");
+      if (!icon) return;
+      const showFallback = () => icon.classList.add("web-search-citation__icon--fallback");
+      favicon.addEventListener("error", showFallback);
+      if (favicon.complete && favicon.naturalWidth === 0) showFallback();
+      cleanupCallbacks.push(() => favicon.removeEventListener("error", showFallback));
+    });
+
+  return () => cleanupCallbacks.forEach((cleanup) => cleanup());
+}
+
 // LLMのボットメッセージをサニタイズされたHTMLとしてレンダリングするコンポーネント
 // Component that renders LLM bot messages as sanitized HTML
 function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProps) {
@@ -282,7 +301,12 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
     } else {
       revealTimelineRef.current = null;
     }
-    return bindWebSearchSourcesAccordions(container);
+    const cleanupAccordions = bindWebSearchSourcesAccordions(container);
+    const cleanupFavicons = bindWebSearchCitationFavicons(container);
+    return () => {
+      cleanupAccordions();
+      cleanupFavicons();
+    };
   }, [formatted, streaming]);
 
   return <div ref={containerRef}></div>;

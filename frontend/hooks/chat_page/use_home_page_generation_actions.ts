@@ -18,7 +18,10 @@ import {
   clampToCodePointBoundary,
   createStreamPace,
 } from "../../lib/chat_page/stream_smoothing";
-import { splitStreamDisplayText } from "../../lib/chat_page/stream_display_text";
+import {
+  normalizeCitationChipStreamBoundary,
+  splitStreamDisplayText,
+} from "../../lib/chat_page/stream_display_text";
 import {
   WORD_REVEAL_DURATION_MS,
   WORD_REVEAL_MAX_LAG_MS,
@@ -571,13 +574,22 @@ export function useHomePageGenerationActions({
         // boundary. Growing character by character re-wraps the streaming line
         // every frame and shifts the characters being read (worst on phones);
         // growing in chunks makes re-wraps rare and each fade-in legible.
-        const displayLength = clampToCodePointBoundary(
+        let displayLength = clampToCodePointBoundary(
           separatedDisplayText.pacedText,
           clampToWordBoundary(
             separatedDisplayText.pacedText,
             clampToRevealChunkBoundary(separatedDisplayText.pacedText, smoothedLength),
           ),
         );
+        displayLength = normalizeCitationChipStreamBoundary(
+          separatedDisplayText.pacedText,
+          displayLength,
+        );
+        // チップ内部のHTML文字数をペーシング待ちにしない。完成済みチップを一度に
+        // 表示したあとは、その直後の本文から通常速度で再開する。
+        // Skip markup bytes after atomically revealing a complete chip, then
+        // resume normal pacing with the text immediately after it.
+        if (displayLength > streamPace.length) streamPace.length = displayLength;
         const displayText = [
           separatedDisplayText.instantPrefix,
           separatedDisplayText.pacedText.slice(0, displayLength),

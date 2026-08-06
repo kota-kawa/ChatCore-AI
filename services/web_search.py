@@ -178,6 +178,9 @@ class WebSearchSource:
     hostname: str
     age: str
     snippets: tuple[str, ...]
+    # Brave が提供するサイト固有favicon。未提供時は引用描画時にサイト直下へフォールバックする。
+    # Site-specific favicon from Brave; citation rendering falls back to the site's root icon.
+    favicon_url: str = ""
     # 重要そうなページから取得した本文抜粋（取得できなかった場合は空文字）
     # Readable body text fetched from an important result page ("" when not fetched).
     page_text: str = ""
@@ -853,6 +856,15 @@ def _parse_brave_context_response(
             max_chars=220,
         )
         hostname = _normalize_text(metadata.get("hostname"), max_chars=180)
+        meta_url = metadata.get("meta_url") if isinstance(metadata.get("meta_url"), dict) else {}
+        profile = metadata.get("profile") if isinstance(metadata.get("profile"), dict) else {}
+        favicon_url = _normalize_text(
+            item.get("favicon")
+            or metadata.get("favicon")
+            or meta_url.get("favicon")
+            or profile.get("img"),
+            max_chars=1000,
+        )
         snippets_payload = item.get("snippets")
         snippets: list[str] = []
         if isinstance(snippets_payload, list):
@@ -870,6 +882,7 @@ def _parse_brave_context_response(
                 hostname=hostname,
                 age=_source_age_text(metadata.get("age")),
                 snippets=tuple(snippets),
+                favicon_url=favicon_url,
             )
         )
         if len(sources) >= WEB_SEARCH_DEFAULT_MAX_RESULTS:
@@ -1167,10 +1180,21 @@ def _render_citation_chip(source: WebSearchSource) -> str:
     url = source.url.strip()
     label = source.title.strip() or source.hostname.strip() or url
     title = source.title.strip() or source.hostname.strip() or url
+    fallback_label = (source.hostname.strip() or label).removeprefix("www.")[:1].upper() or "?"
+    favicon_url = source.favicon_url.strip()
+    if not _is_safe_citation_url(favicon_url):
+        parsed_source_url = urlsplit(url)
+        favicon_url = urlunsplit(
+            (parsed_source_url.scheme, parsed_source_url.netloc, "/favicon.ico", "", "")
+        )
     return (
         f'<a class="web-search-citation" href="{escape(url, quote=True)}" '
         f'target="_blank" title="{escape(title, quote=True)}">'
-        '<span class="web-search-citation__icon"></span>'
+        '<span class="web-search-citation__icon">'
+        f'<span class="web-search-citation__fallback">{escape(fallback_label)}</span>'
+        f'<img class="web-search-citation__favicon" src="{escape(favicon_url, quote=True)}" '
+        'alt="" referrerpolicy="no-referrer">'
+        '</span>'
         f'<span class="web-search-citation__label">{escape(label)}</span>'
         '</a>'
     )
@@ -1277,6 +1301,7 @@ def serialize_web_search_result(result: WebSearchResult) -> dict[str, Any]:
                 "hostname": source.hostname,
                 "age": source.age,
                 "snippets": list(source.snippets),
+                "favicon_url": source.favicon_url,
                 "page_text": source.page_text,
                 "evidence_id": source.evidence_id,
             }
@@ -1324,6 +1349,7 @@ def deserialize_web_search_result(data: Any) -> WebSearchResult | None:
                 hostname=str(raw.get("hostname") or ""),
                 age=str(raw.get("age") or ""),
                 snippets=snippets,
+                favicon_url=str(raw.get("favicon_url") or ""),
                 page_text=str(raw.get("page_text") or ""),
                 evidence_id=str(raw.get("evidence_id") or ""),
             )

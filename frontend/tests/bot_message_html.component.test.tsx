@@ -4,6 +4,18 @@ import { describe, expect, it } from "vitest";
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
 
 describe("BotMessageHtml web-search citations", () => {
+  it("renders a site-specific favicon and falls back when loading fails", () => {
+    const response = '<a class="web-search-citation" href="https://example.com" target="_blank"><span class="web-search-citation__icon"><span class="web-search-citation__fallback">E</span><img class="web-search-citation__favicon" src="https://example.com/favicon.ico" alt="" referrerpolicy="no-referrer"></span><span class="web-search-citation__label">Example</span></a>';
+    const { container } = render(<BotMessageHtml text={response} />);
+    const favicon = container.querySelector<HTMLImageElement>(".web-search-citation__favicon");
+    const icon = container.querySelector(".web-search-citation__icon");
+
+    expect(favicon?.getAttribute("src")).toBe("https://example.com/favicon.ico");
+    expect(favicon?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    favicon?.dispatchEvent(new Event("error"));
+    expect(icon).toHaveClass("web-search-citation__icon--fallback");
+  });
+
   it("renders a leading web-search trace and a safe numbered Markdown citation", () => {
     const response = [
       '<details class="web-search-sources web-search-sources--trace">',

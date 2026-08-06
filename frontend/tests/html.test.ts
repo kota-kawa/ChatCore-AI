@@ -15,9 +15,9 @@ test("sanitizeClassAttributeValue preserves web search source UI classes", () =>
 test("sanitizeClassAttributeValue preserves inline web search citation classes", () => {
   assert.equal(
     sanitizeClassAttributeValue(
-      "web-search-citation web-search-citation__icon web-search-citation__label unsafe-class",
+      "web-search-citation web-search-citation__icon web-search-citation__icon--fallback web-search-citation__favicon web-search-citation__fallback web-search-citation__label unsafe-class",
     ),
-    "web-search-citation web-search-citation__icon web-search-citation__label",
+    "web-search-citation web-search-citation__icon web-search-citation__icon--fallback web-search-citation__favicon web-search-citation__fallback web-search-citation__label",
   );
 });
 

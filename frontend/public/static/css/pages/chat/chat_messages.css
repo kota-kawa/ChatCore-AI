@@ -982,31 +982,40 @@
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 1rem;
+  height: 1rem;
+  overflow: hidden;
   border-radius: 999px;
-  background: #e76f2b;
-  box-shadow: inset 0 0 0 1px rgba(154, 52, 18, 0.24);
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
 }
 
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon::before,
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon::after {
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__fallback {
+  position: relative;
+  z-index: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__favicon {
   position: absolute;
-  content: "";
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   border-radius: 999px;
+  background: #ffffff;
+  object-fit: cover;
 }
 
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon::before {
-  inset: 0.19rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon::after {
-  top: 0.12rem;
-  bottom: 0.12rem;
-  left: 0.39rem;
-  right: 0.39rem;
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon--fallback .web-search-citation__favicon {
+  display: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__label {
@@ -1896,6 +1905,12 @@
   background: #273449;
   box-shadow: 0 4px 10px rgba(2, 6, 23, 0.42);
   color: #ffffff;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon {
+  background: #475569;
+  color: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.18);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
