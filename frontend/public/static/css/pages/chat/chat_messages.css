@@ -2400,7 +2400,7 @@
 
 :where(body.chat-page, .chat-page-shell) .interactive-buttons-question {
   font-weight: 500;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-dark, #0f172a);
   font-size: 0.95rem;
 }
 
@@ -2442,7 +2442,7 @@
 
 :where(body.chat-page, .chat-page-shell) .interactive-button.secondary:hover:not(:disabled) {
   background: var(--surface-hover, #f1f5f9);
-  color: var(--text-primary, #0f172a);
+  color: var(--text-dark, #0f172a);
 }
 
 /* タスク起動メッセージの「裏側のタスクプロンプト」を折り畳みで表示する。 */

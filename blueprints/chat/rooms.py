@@ -24,11 +24,16 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.project_service import assign_room_to_project
+from services.shared_chat_fork import (
+    fork_shared_chat_into_db_room,
+    fork_shared_chat_into_ephemeral_room,
+)
 from services.datetime_serialization import serialize_datetime_iso
 
 from services.request_models import (
     ChatRoomIdRequest,
     ChatRoomIdsRequest,
+    ForkSharedChatRoomRequest,
     NewChatRoomRequest,
     RenameChatRoomRequest,
     ShareChatRoomRequest,
@@ -920,4 +925,81 @@ async def shared_chat_room(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to fetch shared chat room payload.",
+        )
+
+
+# 共有チャットを閲覧者自身のチャットとして複製するAPIエンドポイント
+# API endpoint that forks a shared chat into a chat room owned by the viewer.
+@chat_bp.post("/api/fork_shared_chat_room", name="chat.fork_shared_chat_room")
+async def fork_shared_chat_room(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
+    """
+    共有チャットの会話を複製し、閲覧者が続きを話せる自分のチャットルームを作成します。
+    共有元のルームは読み取り専用のまま変更されません。
+    Copies a shared conversation into a chat room owned by the viewer so they can continue it.
+    The shared source room stays read-only and is never modified.
+    """
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    await run_blocking(cleanup_ephemeral_chats)
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        ForkSharedChatRoomRequest,
+        error_message=ERROR_TOKEN_REQUIRED,
+    )
+    if validation_error is not None:
+        return validation_error
+
+    token = payload.token
+    room_id = payload.id
+    session = request.session
+
+    try:
+        if "user_id" in session:
+            # ログインユーザーは自分の通常ルームとしてDBに永続化する
+            # Authenticated viewers get a persisted normal room of their own.
+            result = await run_blocking(
+                fork_shared_chat_into_db_room,
+                token,
+                room_id,
+                session["user_id"],
+            )
+            return jsonify(result, status_code=201)
+
+        # 非ログインユーザーもそのまま続きを話せるようにするが、ゲストの日次上限は
+        # 新規ルーム作成と同じ基準で消費する
+        # Guests can continue too, but the fork consumes the same daily quota as creating a room.
+        allowed, message = await run_blocking(
+            consume_guest_chat_daily_limit,
+            request,
+            service=resolved_auth_limit_service,
+        )
+        if not allowed:
+            return jsonify_rate_limited(
+                message or "1日10回までです",
+                retry_after=get_seconds_until_tomorrow(),
+            )
+
+        sid = get_session_id(session)
+        result = await run_blocking(
+            fork_shared_chat_into_ephemeral_room,
+            token,
+            sid,
+            room_id,
+            ephemeral_store,
+        )
+        register_guest_room(session, room_id)
+        return jsonify(result, status_code=201)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to fork shared chat room.",
         )

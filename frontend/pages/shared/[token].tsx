@@ -1,36 +1,13 @@
 import type { GetServerSideProps } from "next";
-import { SandboxArtifactFrame } from "../../components/chat_page/sandbox_artifact_frame";
-import MarkdownContent from "../../components/MarkdownContent";
+import { useEffect } from "react";
+import { SharedChatContinueButton } from "../../components/shared_chat/shared_chat_continue_button";
+import { SharedChatMessageList } from "../../components/shared_chat/shared_chat_message_list";
 import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
-import type { ChatMessagePart } from "../../lib/chat_page/types";
+import { decodeStoredMessage } from "../../lib/shared_chat/message_text";
+import type { SharedChatPayload } from "../../lib/shared_chat/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { useTranslation } from "../../contexts/locale_context";
-
-// 共有チャットの個別メッセージを表す型
-// Represents a single message in a shared chat
-type SharedMessage = {
-  message: string;
-  message_parts?: ChatMessagePart[];
-  sender: "user" | "assistant" | string;
-  timestamp?: string;
-};
-
-// 共有チャットルームのメタ情報を表す型
-// Represents metadata for a shared chat room
-type SharedRoom = {
-  id: string;
-  title?: string;
-  created_at?: string;
-};
-
-// バックエンドから取得した共有チャット全体のペイロード型
-// Top-level payload returned from the shared chat API
-type SharedChatPayload = {
-  room?: SharedRoom;
-  messages?: SharedMessage[];
-  error?: string;
-};
 
 // ページコンポーネントに渡されるProps型
 // Props passed to the SharedChatPage component
@@ -38,23 +15,14 @@ type SharedChatPageProps = {
   payload: SharedChatPayload;
   pageUrl: string;
   ogImageUrl: string;
+  // 「このチャットを続ける」で複製元を指定するための共有トークン。
+  // Share token identifying the source conversation for "continue this chat".
+  token: string;
 };
 
 // APIレスポンスの型エイリアス（ペイロードと同一構造）
 // Type alias for the API response (same shape as the payload)
 type SharedChatResponse = SharedChatPayload;
-
-// DBに保存されたHTMLエスケープ済み文字列を表示用プレーンテキストに戻す
-// Reverses HTML entity encoding so stored messages render correctly
-function decodeStoredMessage(raw: string) {
-  return raw
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
 
 // リバースプロキシ経由でも正しいホスト名を取得するためにヘッダーを正規化する
 // Normalises the Host header so it works correctly behind reverse proxies
@@ -151,16 +119,23 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
     props: {
       payload,
       pageUrl,
-      ogImageUrl
+      ogImageUrl,
+      token
     }
   };
 };
 
 // 共有チャットの読み取り専用ビューを表示するページコンポーネント
 // Page component that renders a read-only view of a shared chat conversation
-export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedChatPageProps) {
+export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: SharedChatPageProps) {
   const { locale } = useTranslation();
   const english = locale === "en";
+  // 他ページと共通の右下アクションメニューをクライアント側で登録する
+  // Register the shared bottom-right action menu on the client.
+  useEffect(() => {
+    void import("../../scripts/components/popup_menu");
+  }, []);
+
   const title = payload.room?.title || (english ? "Shared chat" : "共有チャット");
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   const pageTitle = `${title} | ${english ? "Shared on Chat Core" : "Chat Core 共有"}`;
@@ -195,82 +170,48 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
         structuredData={structuredData}
       />
 
-      <div className="shared-chat-page">
+      {/* chat-page-shell を付けることで、通常チャットと同じデザイントークンと
+          メッセージのスタイル（chat_messages.css）がそのまま適用される。 */}
+      {/* The chat-page-shell class brings in the same design tokens and message styles
+          (chat_messages.css) that the regular chat view uses. */}
+      <div className="shared-chat-page chat-page-shell">
+        {/* 他ページと共通の右下メニュー / Shared bottom-right menu used across pages */}
+        <action-menu></action-menu>
+
         {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}
         {payload.error ? (
           <div className="shared-chat-error cc-fade-in">{payload.error}</div>
         ) : (
           <div className="shared-chat-shell cc-fade-in">
             <header className="shared-chat-header">
-              <h1 className="shared-chat-header__title">{title}</h1>
-              {payload.room?.created_at ? (
+              <div className="shared-chat-header__text">
+                <h1 className="shared-chat-header__title">{title}</h1>
                 <p className="shared-chat-header__meta">
-                  {english ? "Created" : "作成日"}: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+                  <span className="shared-chat-header__badge">
+                    <i className="bi bi-eye" aria-hidden="true"></i>
+                    {english ? "Read-only" : "読み取り専用"}
+                  </span>
+                  {payload.room?.created_at ? (
+                    <span>
+                      {english ? "Created" : "作成日"}: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+                    </span>
+                  ) : null}
                 </p>
-              ) : null}
+              </div>
+              <SharedChatContinueButton token={token} />
             </header>
 
             <main className="shared-chat-messages">
-              {messages.length === 0 ? (
-                <p className="shared-chat-empty">{english ? "This shared chat has no messages yet." : "この共有チャットにはまだメッセージがありません。"}</p>
-              ) : null}
-
-              {messages.map((message, index) => {
-                // "user" 以外の送信者はすべて "assistant" として扱う
-                // Treat any sender value other than "user" as "assistant"
-                const normalizedSender = message.sender === "user" ? "user" : "assistant";
-                const decoded = decodeStoredMessage(message.message || "");
-                const parts = Array.isArray(message.message_parts) ? message.message_parts : [];
-                return (
-                  <article
-                    key={`${normalizedSender}-${index}-${message.timestamp || ""}`}
-                    className={`shared-chat-message shared-chat-message--${normalizedSender}`}
-                  >
-                    {normalizedSender === "assistant" && parts.length > 0 ? (
-                      <div className="shared-chat-message__parts">
-                        {parts.map((part, partIndex) => {
-                          if (part.type === "text") {
-                            return (
-                              <MarkdownContent
-                                key={`text-${partIndex}`}
-                                text={part.text}
-                                className="md-content"
-                              />
-                            );
-                          }
-                          if (part.type === "sandbox_artifact") {
-                            return (
-                              <SandboxArtifactFrame
-                                key={`artifact-${partIndex}`}
-                                artifact={part.artifact}
-                              />
-                            );
-                          }
-                          if (part.type === "interactive_buttons") {
-                            {/* 共有ページでは対話型ボタンは機能しないため非活性状態で表示する */}
-                            {/* Interactive buttons are non-functional on shared pages, so display them as disabled */}
-                            return (
-                              <div key={`buttons-${partIndex}`} style={{ marginTop: "1rem", opacity: 0.7 }}>
-                                <strong>{part.buttons.question}</strong>
-                                <div style={{ fontSize: "0.85rem", color: "#666" }}>({english ? "Interactive buttons are unavailable in shared views" : "対話型ボタンは共有画面では動作しません"})</div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
-                      </div>
-                    ) : normalizedSender === "assistant" ? (
-                      <MarkdownContent text={decoded} className="md-content" />
-                    ) : (
-                      decoded
-                    )}
-                  </article>
-                );
-              })}
+              <SharedChatMessageList
+                messages={messages}
+                emptyLabel={english ? "This shared chat has no messages yet." : "この共有チャットにはまだメッセージがありません。"}
+              />
             </main>
 
             <footer className="shared-chat-footer">
-              {english ? "This page is read-only. Messages cannot be sent or edited." : "このページは読み取り専用です。送信や編集はできません。"}
+              {english
+                ? "This page is read-only. “Continue this chat” copies the conversation into your own chat; the original stays unchanged."
+                : "このページは読み取り専用です。「このチャットを続ける」を押すと、会話が自分のチャットに複製され、共有元は変更されません。"}
             </footer>
           </div>
         )}

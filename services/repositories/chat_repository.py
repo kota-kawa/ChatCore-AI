@@ -156,6 +156,36 @@ class ChatRepository:
 
         raise RuntimeError("Failed to save chat message after retry attempts.")
 
+    def copy_messages_into_room(
+        self,
+        chat_room_id: str,
+        messages: list[dict[str, Any]],
+    ) -> int:
+        # 共有チャットの複製用に、メッセージ列を直線の枝として新しいルームへ書き込む。
+        # 元の分岐（active でない枝）は複製しないので、読み手には共有時点の会話だけが残る。
+        # Copy a message sequence into a room as a single straight branch (used when forking a
+        # shared chat). Non-active branches are intentionally not copied, so the fork contains
+        # exactly the conversation the reader saw.
+        parent_id: int | None = None
+        copied = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            sender = "user" if message.get("sender") == "user" else "assistant"
+            message_parts = message.get("message_parts")
+            new_id = self.save_message(
+                chat_room_id,
+                str(message.get("message") or ""),
+                sender,
+                parent_id=parent_id,
+                message_parts=message_parts if isinstance(message_parts, list) else None,
+            )
+            if new_id is None:
+                break
+            parent_id = new_id
+            copied += 1
+        return copied
+
     def create_room(self, room_id: str, user_id: int, title: str, mode: str = "normal") -> None:
         # 新しいチャットルームを作成する
         # Create a new chat room.

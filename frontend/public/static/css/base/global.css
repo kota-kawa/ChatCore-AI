@@ -53,10 +53,8 @@ body::-webkit-scrollbar,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar {
   width: var(--scrollbar-size-current);
@@ -83,10 +81,8 @@ body::-webkit-scrollbar-track,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar-track {
   background:
@@ -120,10 +116,8 @@ body::-webkit-scrollbar-thumb,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar-thumb {
   background:
@@ -155,10 +149,8 @@ body::-webkit-scrollbar-thumb:hover,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover-current);
@@ -184,10 +176,8 @@ body::-webkit-scrollbar-thumb:active,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active-current);
@@ -213,10 +203,8 @@ body::-webkit-scrollbar-corner,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 )::-webkit-scrollbar-corner {
   background: transparent;
@@ -240,10 +228,8 @@ body::-webkit-scrollbar-corner,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre,
   .bot-message table,
-  .shared-chat-message--assistant .md-content table,
   .memo-modal__markdown table
 ) {
   --scrollbar-size-current: var(--scrollbar-size-thin, var(--scrollbar-size));
@@ -278,7 +264,6 @@ body::-webkit-scrollbar-corner,
   .code-block-container pre,
   .memo-modal__markdown pre,
   .memo-modal__markdown .code-block-container pre,
-  .shared-chat-message--assistant .md-content pre,
   .md-content pre
 ) {
   --scrollbar-track-current: rgba(255, 255, 255, 0.08);
