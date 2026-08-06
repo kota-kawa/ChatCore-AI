@@ -33,12 +33,22 @@
 
 .shared-chat-page .shared-chat-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   padding: 1.1rem var(--space-6, 1.5rem) 0.9rem;
   border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
   background: var(--surface-primary, #ffffff);
   color: var(--text-dark, #1a1a1a);
+}
+
+.shared-chat-page .shared-chat-header__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 16rem;
 }
 
 .shared-chat-page .shared-chat-header__title {
@@ -70,6 +80,61 @@
   color: var(--primary-dark, #0f7a51);
   font-weight: var(--chat-font-ui-weight, 500);
   white-space: nowrap;
+}
+
+/* 「このチャットを続ける」CTA。共有ページで唯一の主要アクションなので塗りボタンにする */
+/* The "continue this chat" CTA is the only primary action here, so it gets a solid button */
+.shared-chat-page .shared-chat-continue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.shared-chat-page .shared-chat-continue__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.05rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--primary-color, #19c37d);
+  color: var(--text-light, #ffffff);
+  font-size: var(--chat-font-ui-size, 0.875rem);
+  font-weight: var(--chat-font-ui-weight, 500);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, filter 0.2s ease;
+}
+
+.shared-chat-page .shared-chat-continue__button:hover:not(:disabled) {
+  background: var(--primary-hover, #14a76a);
+}
+
+.shared-chat-page .shared-chat-continue__button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.shared-chat-page .shared-chat-continue__hint {
+  margin: 0;
+  max-width: 22rem;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.5;
+  text-align: right;
+}
+
+.shared-chat-page .shared-chat-continue__error {
+  margin: 0;
+  max-width: 22rem;
+  color: var(--danger-color, #dc2626);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.5;
+  text-align: right;
 }
 
 /* ダークテーマではブランド緑の濃色が背景に沈むため、明るいアクセントに置き換える */
@@ -130,6 +195,23 @@
 @media (max-width: 576px) {
   .shared-chat-page .shared-chat-shell {
     border-radius: var(--radius-lg, 20px);
+  }
+
+  /* 狭い画面では CTA を全幅にして、タイトルの下に素直に積む */
+  /* On narrow screens the CTA goes full width and stacks under the title */
+  .shared-chat-page .shared-chat-continue {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .shared-chat-page .shared-chat-continue__button {
+    justify-content: center;
+  }
+
+  .shared-chat-page .shared-chat-continue__hint,
+  .shared-chat-page .shared-chat-continue__error {
+    max-width: none;
+    text-align: left;
   }
 
   .shared-chat-page .shared-chat-header,

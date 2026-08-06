@@ -40,6 +40,15 @@ def save_message_to_db(
     )
 
 
+# メッセージ列を1本の枝として別のチャットルームへ複製する（共有チャットの複製で使用）
+# Copy a message sequence into another chat room as a single branch (used when forking a shared chat)
+def copy_messages_into_chat_room(
+    chat_room_id: str,
+    messages: list[dict[str, Any]],
+) -> int:
+    return _get_chat_repository().copy_messages_into_room(chat_room_id, messages)
+
+
 # チャットルームのアクティブな対話パス（履歴）を取得する
 # Retrieve the active interaction path (history) of the chat room
 def get_active_path(

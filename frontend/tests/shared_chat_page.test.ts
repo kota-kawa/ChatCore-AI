@@ -21,7 +21,8 @@ function renderSharedChatPage(payload: Record<string, unknown>) {
       children: React.createElement(SharedChatPage, {
         payload,
         pageUrl: "https://chatcore-ai.com/shared/token",
-        ogImageUrl: "https://chatcore-ai.com/static/og.jpg"
+        ogImageUrl: "https://chatcore-ai.com/static/og.jpg",
+        token: "share-token"
       })
     })
   );
@@ -50,6 +51,18 @@ test("shared chat page renders the shared bottom-right action menu", () => {
   const html = renderSharedChatPage(basePayload);
 
   assert.match(html, /<action-menu><\/action-menu>/);
+});
+
+// 共有ページからは「このチャットを続ける」で自分のチャットへ複製できる。
+// The shared page offers "continue this chat", which forks the conversation into the viewer's own chat.
+test("shared chat page offers a button to continue the conversation", () => {
+  const html = renderSharedChatPage(basePayload);
+
+  assert.match(html, /class="shared-chat-continue__button[^"]*"/);
+  assert.match(html, /このチャットを続ける/);
+  // 読み取り専用であること自体は引き続き明示する。
+  // The read-only nature of the page is still stated explicitly.
+  assert.match(html, /読み取り専用/);
 });
 
 // サーバー側では DOMPurify が使えず整形結果がエスケープされるため、ユーザー発言の

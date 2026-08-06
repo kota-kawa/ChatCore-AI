@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from "next";
 import { useEffect } from "react";
+import { SharedChatContinueButton } from "../../components/shared_chat/shared_chat_continue_button";
 import { SharedChatMessageList } from "../../components/shared_chat/shared_chat_message_list";
 import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
@@ -14,6 +15,9 @@ type SharedChatPageProps = {
   payload: SharedChatPayload;
   pageUrl: string;
   ogImageUrl: string;
+  // 「このチャットを続ける」で複製元を指定するための共有トークン。
+  // Share token identifying the source conversation for "continue this chat".
+  token: string;
 };
 
 // APIレスポンスの型エイリアス（ペイロードと同一構造）
@@ -115,14 +119,15 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
     props: {
       payload,
       pageUrl,
-      ogImageUrl
+      ogImageUrl,
+      token
     }
   };
 };
 
 // 共有チャットの読み取り専用ビューを表示するページコンポーネント
 // Page component that renders a read-only view of a shared chat conversation
-export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedChatPageProps) {
+export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: SharedChatPageProps) {
   const { locale } = useTranslation();
   const english = locale === "en";
   // 他ページと共通の右下アクションメニューをクライアント側で登録する
@@ -179,18 +184,21 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
         ) : (
           <div className="shared-chat-shell cc-fade-in">
             <header className="shared-chat-header">
-              <h1 className="shared-chat-header__title">{title}</h1>
-              <p className="shared-chat-header__meta">
-                <span className="shared-chat-header__badge">
-                  <i className="bi bi-eye" aria-hidden="true"></i>
-                  {english ? "Read-only" : "読み取り専用"}
-                </span>
-                {payload.room?.created_at ? (
-                  <span>
-                    {english ? "Created" : "作成日"}: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+              <div className="shared-chat-header__text">
+                <h1 className="shared-chat-header__title">{title}</h1>
+                <p className="shared-chat-header__meta">
+                  <span className="shared-chat-header__badge">
+                    <i className="bi bi-eye" aria-hidden="true"></i>
+                    {english ? "Read-only" : "読み取り専用"}
                   </span>
-                ) : null}
-              </p>
+                  {payload.room?.created_at ? (
+                    <span>
+                      {english ? "Created" : "作成日"}: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <SharedChatContinueButton token={token} />
             </header>
 
             <main className="shared-chat-messages">
@@ -201,7 +209,9 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
             </main>
 
             <footer className="shared-chat-footer">
-              {english ? "This page is read-only. Messages cannot be sent or edited." : "このページは読み取り専用です。送信や編集はできません。"}
+              {english
+                ? "This page is read-only. “Continue this chat” copies the conversation into your own chat; the original stays unchanged."
+                : "このページは読み取り専用です。「このチャットを続ける」を押すと、会話が自分のチャットに複製され、共有元は変更されません。"}
             </footer>
           </div>
         )}
