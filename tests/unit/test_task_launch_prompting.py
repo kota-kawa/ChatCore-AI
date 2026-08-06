@@ -68,6 +68,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Never expose raw tool syntax", BASE_SYSTEM_PROMPT)
         self.assertIn("internal citation labels such as `[[src_...]]`", BASE_SYSTEM_PROMPT)
         self.assertIn("exact `[[source:<evidence_id>]]` form", BASE_SYSTEM_PROMPT)
+        self.assertIn("Never create clickable URLs", BASE_SYSTEM_PROMPT)
+        self.assertIn("full URL verbatim in inline code", BASE_SYSTEM_PROMPT)
 
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.

@@ -29,6 +29,24 @@ describe("MarkdownContent", () => {
     });
   });
 
+  it("renders inline-code URLs as plain text instead of links", async () => {
+    const { container } = render(
+      <MarkdownContent
+        text={"参照先: `https://example.com/reference`"}
+        className="md-content"
+      />
+    );
+
+    const host = container.querySelector(".md-content");
+
+    await waitFor(() => {
+      expect(host?.querySelector("code")?.textContent).toBe(
+        "https://example.com/reference"
+      );
+      expect(host?.querySelector("a")).toBeNull();
+    });
+  });
+
   it("renders the provided ssrHtml as-is on the initial render", () => {
     const { container } = render(
       <MarkdownContent
