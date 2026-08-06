@@ -12,6 +12,15 @@ test("sanitizeClassAttributeValue preserves web search source UI classes", () =>
   );
 });
 
+test("sanitizeClassAttributeValue preserves inline web search citation classes", () => {
+  assert.equal(
+    sanitizeClassAttributeValue(
+      "web-search-citation web-search-citation__icon web-search-citation__label unsafe-class",
+    ),
+    "web-search-citation web-search-citation__icon web-search-citation__label",
+  );
+});
+
 test("sanitizeClassAttributeValue preserves memo preview blank line spacer class", () => {
   assert.equal(
     sanitizeClassAttributeValue("memo-preserved-blank-line unsafe-class"),

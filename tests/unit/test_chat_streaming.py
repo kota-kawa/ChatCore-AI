@@ -740,11 +740,12 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted = persisted_records[0]
         self.assertNotIn(marker, persisted["response"])
         self.assertIn(
-            "最新版です。`https://example.com/python-release`",
+            '最新版です。<a class="web-search-citation" '
+            'href="https://example.com/python-release"',
             persisted["response"],
         )
         self.assertNotIn(marker, body)
-        self.assertIn("`https://example.com/python-release`", body)
+        self.assertIn('class=\\"web-search-citation\\"', body)
 
         context = persisted["web_search_context"]
         self.assertEqual(len(context), 1)
@@ -759,7 +760,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         citation = context[0]["citations"][0]
         self.assertEqual(
             persisted["response"][citation["start"] : citation["end"]],
-            "`https://example.com/python-release`",
+            '<a class="web-search-citation" href="https://example.com/python-release" '
+            'target="_blank" title="Python Release"><span class="web-search-citation__icon"></span>'
+            '<span class="web-search-citation__label">Python Release</span></a>',
         )
 
     # 日本語: 省略された内部引用markerが分割配信されても画面表示や保存内容に漏れないことを検証します。

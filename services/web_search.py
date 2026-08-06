@@ -1139,7 +1139,7 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
         f'<web_search_context query="{safe_query}" searched_at="{result.searched_at}">',
         "A real-time web search with Brave has already been run for this turn. Use the content below as the current web search results and base your answer on it.",
         "While this context is present, never say that you cannot browse or cannot search in real time. Answer from these sources instead.",
-        "For facts that come from the web, use the evidence_id of the matching source and put a citation marker in the form [[source:<evidence_id>]] immediately after the fact (for example [[source:src_0123456789abcdefabcd]]). These markers are converted into inline-code, plain-text URLs to the real sources after you answer.",
+        "For facts that come from the web, use the evidence_id of the matching source and put a citation marker in the form [[source:<evidence_id>]] immediately after the fact (for example [[source:src_0123456789abcdefabcd]]). These markers are converted into compact source chips that open the real sources after you answer.",
         "Use only evidence_id values that actually appear below, exactly as written. Do not put result numbers, URLs, titles, or guessed IDs into a marker, and do not create an ordinary Markdown link in place of a citation marker.",
         "The marker is internal transport syntax, not user-facing text. Use only the exact [[source:<evidence_id>]] form above. Never shorten it to [[src_...]], output a bare evidence_id, mention the marker syntax, or expose any other internal label in your prose.",
         "When there is at least one source, you must not end the answer with only \"I am not aware of that\", \"I recommend checking\", or \"please see the official site\". Always summarize directly from the search results.",
@@ -1161,15 +1161,19 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
     return {"role": "system", "content": content}
 
 
-def _inline_code_url(url: str) -> str:
-    # URL中の連続バッククォートより長い区切りを選び、URLをインラインコードとして安全に表示する。
-    # Pick a delimiter longer than any backtick sequence in the URL so Markdown renders it as plain text.
-    longest_backtick_run = max(
-        (len(match.group(0)) for match in re.finditer(r"`+", url)),
-        default=0,
+def _render_citation_chip(source: WebSearchSource) -> str:
+    # 回答本文の引用を、URLを露出しないコンパクトな出典チップとして描画する。
+    # Render answer citations as compact source chips without exposing raw URLs.
+    url = source.url.strip()
+    label = source.title.strip() or source.hostname.strip() or url
+    title = source.title.strip() or source.hostname.strip() or url
+    return (
+        f'<a class="web-search-citation" href="{escape(url, quote=True)}" '
+        f'target="_blank" title="{escape(title, quote=True)}">'
+        '<span class="web-search-citation__icon"></span>'
+        f'<span class="web-search-citation__label">{escape(label)}</span>'
+        '</a>'
     )
-    delimiter = "`" * (longest_backtick_run + 1)
-    return f"{delimiter}{url}{delimiter}"
 
 
 def _is_safe_citation_url(url: str) -> bool:
@@ -1192,9 +1196,9 @@ def resolve_web_search_citations(
     answer_text: str,
     result: WebSearchResult | None,
 ) -> WebSearchCitationResolution:
-    # 有効な [[source:evidence_id]] markerだけをプレーンテキストURLへ変換する純粋関数。
+    # 有効な [[source:evidence_id]] markerだけを出典チップへ変換する純粋関数。
     # 未知・不正なmarkerは回答へ残さず、invalid_markersで呼び出し側へ通知する。
-    # Purely resolve valid [[source:evidence_id]] markers to plain-text source URLs.
+    # Purely resolve valid [[source:evidence_id]] markers to source chips.
     # Unknown/malformed markers are removed and reported to the caller.
     text = str(answer_text or "")
     source_lookup: dict[str, tuple[int, WebSearchSource]] = {}
@@ -1220,10 +1224,10 @@ def resolve_web_search_citations(
             invalid_markers.append(marker)
         else:
             ordinal, source = matched_source
-            plain_text_url = _inline_code_url(source.url)
+            citation_chip = _render_citation_chip(source)
             start = output_length
-            output_parts.append(plain_text_url)
-            output_length += len(plain_text_url)
+            output_parts.append(citation_chip)
+            output_length += len(citation_chip)
             citations.append(
                 WebSearchCitation(
                     evidence_id=source.evidence_id,
