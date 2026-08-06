@@ -19,7 +19,8 @@ import {
 
 // アニメーションを適用しない要素。折り返しや強調表示が崩れやすいものを除外する。
 // Elements left untouched: their layout or highlighting breaks when split.
-const SKIP_ELEMENT_SELECTOR = "pre, code, svg, table, .katex, .web-search-sources";
+const SKIP_ELEMENT_SELECTOR =
+  "pre, code, svg, table, .katex, .web-search-sources, .web-search-citation";
 
 // 末尾から遡ってアニメーション対象にする文字数。生成中の末尾だけで十分なので、
 // 長い応答でも1フレームあたりの処理量が一定に保たれる。

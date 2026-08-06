@@ -263,6 +263,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "sources": {
                 "https://example.com/a": {
                     "hostname": "example.com",
+                    "favicon": "https://cdn.example.com/favicon.ico",
                     "age": ["2026-04-30"],
                 }
             },
@@ -283,6 +284,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(result.query, "example query")
         self.assertEqual(len(result.sources), 1)
         self.assertEqual(result.sources[0].hostname, "example.com")
+        self.assertEqual(result.sources[0].favicon_url, "https://cdn.example.com/favicon.ico")
         self.assertEqual(result.sources[0].snippets, ("Snippet one", "Snippet two"))
         self.assertEqual(
             result.sources[0].evidence_id,
@@ -813,6 +815,7 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
                     hostname="example.com",
                     age="",
                     snippets=("A fact",),
+                    favicon_url="https://cdn.example.com/a.ico",
                 ),
                 web_search.WebSearchSource(
                     url="https://example.com/report_(final)",
@@ -884,10 +887,16 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertEqual(
             resolved.text,
             '事実A <a class="web-search-citation" href="https://example.com/a" '
-            'target="_blank" title="Source A"><span class="web-search-citation__icon"></span>'
+            'target="_blank" title="Source A"><span class="web-search-citation__icon">'
+            '<span class="web-search-citation__fallback">E</span>'
+            '<img class="web-search-citation__favicon" src="https://cdn.example.com/a.ico" '
+            'alt="" referrerpolicy="no-referrer"></span>'
             '<span class="web-search-citation__label">Source A</span></a> と'
             '事実B <a class="web-search-citation" href="https://example.com/report_(final)" '
-            'target="_blank" title="Source B"><span class="web-search-citation__icon"></span>'
+            'target="_blank" title="Source B"><span class="web-search-citation__icon">'
+            '<span class="web-search-citation__fallback">E</span>'
+            '<img class="web-search-citation__favicon" src="https://example.com/favicon.ico" '
+            'alt="" referrerpolicy="no-referrer"></span>'
             '<span class="web-search-citation__label">Source B</span></a>。不明 。',
         )
         self.assertEqual(len(resolved.citations), 2)
@@ -1069,6 +1078,7 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         self.assertEqual(len(restored.sources), 1)
         source = restored.sources[0]
         self.assertEqual(source.url, "https://example.com/python")
+        self.assertEqual(source.favicon_url, "")
         self.assertEqual(source.page_text, "full body text")
         self.assertEqual(source.snippets, ("Python released news.", "More detail."))
 

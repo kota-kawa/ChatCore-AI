@@ -15,6 +15,9 @@ export type StreamDisplayText = {
 const LEADING_WEB_SEARCH_TRACE =
   /^(\s*)<details\b[^>]*class\s*=\s*(["'])[^"']*\bweb-search-sources\b[^"']*\2[^>]*>/i;
 const DETAILS_TAG = /<\/?details\b[^>]*>/gi;
+const COMPLETE_WEB_SEARCH_CITATION =
+  /<a\b[^>]*class\s*=\s*(["'])[^"']*\bweb-search-citation\b[^"']*\1[^>]*>[\s\S]*?<\/a>/gi;
+const WEB_SEARCH_CITATION_START = /<a\b[^>]*class\s*=\s*(["'])[^"']*\bweb-search-citation\b/i;
 
 // ネストしたdetailsを深さで追跡し、先頭のWeb検索ブロックに対応する閉じタグを探す。
 // Track nested details by depth to find the closing tag for the leading trace.
@@ -55,4 +58,31 @@ export function splitStreamDisplayText(text: string): StreamDisplayText {
     instantPrefix: text.slice(0, prefixEnd),
     pacedText: text.slice(prefixEnd),
   };
+}
+
+// 引用チップHTMLを不可分な表示単位として扱う。表示位置が完成済みチップの途中なら
+// 閉じタグ直後まで進め、不完全な末尾チップなら開始位置まで戻す。
+// Treat citation-chip HTML as atomic. Advance through a complete chip instead
+// of slicing its markup, or hold before an incomplete trailing chip.
+export function normalizeCitationChipStreamBoundary(text: string, length: number): number {
+  const boundedLength = Math.max(0, Math.min(length, text.length));
+  COMPLETE_WEB_SEARCH_CITATION.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = COMPLETE_WEB_SEARCH_CITATION.exec(text)) !== null) {
+    const start = match.index;
+    const end = COMPLETE_WEB_SEARCH_CITATION.lastIndex;
+    if (boundedLength > start && boundedLength < end) return end;
+  }
+
+  const trailingText = text.slice(0, boundedLength);
+  const possibleStart = trailingText.lastIndexOf("<a");
+  if (possibleStart >= 0) {
+    const possibleCitation = text.slice(possibleStart);
+    if (WEB_SEARCH_CITATION_START.test(possibleCitation) && !possibleCitation.includes("</a>")) {
+      return possibleStart;
+    }
+  }
+
+  return boundedLength;
 }

@@ -761,7 +761,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(
             persisted["response"][citation["start"] : citation["end"]],
             '<a class="web-search-citation" href="https://example.com/python-release" '
-            'target="_blank" title="Python Release"><span class="web-search-citation__icon"></span>'
+            'target="_blank" title="Python Release"><span class="web-search-citation__icon">'
+            '<span class="web-search-citation__fallback">E</span>'
+            '<img class="web-search-citation__favicon" src="https://example.com/favicon.ico" '
+            'alt="" referrerpolicy="no-referrer"></span>'
             '<span class="web-search-citation__label">Python Release</span></a>',
         )
 
