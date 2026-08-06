@@ -761,7 +761,13 @@ const initSidebarToggle = () => {
   window.addEventListener("resize", closeSidebar, { signal });
 };
 
+let codeBlockCopyButtonsInitialized = false;
+
+// コードブロックのコピーボタンは document 委譲で処理するため、ページごとに一度だけ登録する。
+// The code block copy buttons are handled via document delegation, so register the listener once per page.
 function initCodeBlockCopyButtons() {
+  if (codeBlockCopyButtonsInitialized) return;
+  codeBlockCopyButtonsInitialized = true;
   document.addEventListener("click", onCodeBlockCopyButtonClick);
 }
 
@@ -776,6 +782,7 @@ function initChatUi() {
 
 export {
   initChatUi,
+  initCodeBlockCopyButtons,
   showChatInterface,
   showTypingIndicator,
   hideTypingIndicator,

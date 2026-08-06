@@ -1,313 +1,115 @@
 /* shared_chat.css
-   Shared chat read-only page styling.
+   共有チャット（読み取り専用）ページのページシェルのみを定義する。
+   メッセージそのものの見た目は .chat-page-shell 経由で chat_messages.css を
+   そのまま使うため、ここでメッセージのスタイルを重複定義しないこと。
+   Page shell for the read-only shared chat page. Message styling comes from
+   chat_messages.css through the .chat-page-shell class, so never duplicate it here.
 */
 
 .shared-chat-page {
-  min-height: 100vh;
-  min-height: 100svh;
-  background: var(--surface-tertiary, #f2f5f3);
-  padding: 1.2rem;
+  /* .chat-page-shell の縦中央寄せは、会話が画面より長いときに上端が切れるため
+     上寄せに戻す */
+  /* .chat-page-shell centers vertically; realign to the top so long conversations
+     are not clipped at the start */
+  align-items: flex-start;
+  padding: clamp(0.5rem, 2vw, 1.5rem);
 }
 
 .shared-chat-page .shared-chat-shell {
-  width: min(960px, 100%);
+  /* 通常チャットの #chat-container と同じカード表現（高さだけ内容に追従させる） */
+  /* Same card treatment as the regular chat's #chat-container, but height follows content */
+  position: relative;
+  z-index: 1;
+  width: min(100%, var(--chat-shell-max-width, 1560px));
   margin: 0 auto;
   background: var(--surface-primary, #ffffff);
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  border-radius: var(--radius-lg, 20px);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.14);
+  border-radius: var(--radius-xl, 24px);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 24px 48px -12px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
 .shared-chat-page .shared-chat-header {
-  padding: 1rem 1.15rem;
-  background: var(--primary-gradient);
-  color: var(--text-light, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem var(--space-6, 1.5rem) 0.9rem;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
 }
 
 .shared-chat-page .shared-chat-header__title {
   margin: 0;
-  font-size: var(--text-lg, 1.0625rem);
-  font-weight: 700;
+  font-size: var(--text-xl, 1.125rem);
+  font-weight: var(--chat-font-heading-weight, 600);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .shared-chat-page .shared-chat-header__meta {
-  margin: 0.25rem 0 0;
-  font-size: var(--text-xs, 0.8125rem);
-  opacity: 0.9;
-}
-
-.shared-chat-page .shared-chat-messages {
-  padding: 1rem 1.15rem 1.2rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.shared-chat-page .shared-chat-message {
-  max-width: 88%;
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--radius-md, 14px);
-  font-size: var(--text-base, 0.9375rem);
-  line-height: var(--leading-relaxed, 1.6);
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.shared-chat-page .shared-chat-message--user {
-  margin-left: auto;
-  background: var(--primary-color, #19c37d);
-  color: var(--text-light, #ffffff);
-  border-radius: 14px 14px 4px 14px;
-}
-
-.shared-chat-page .shared-chat-message--assistant {
-  margin-right: auto;
-  background: var(--surface-tertiary, #f2f5f3);
-  color: var(--text-dark, #1a1a1a);
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
-}
-
-.shared-chat-page .shared-chat-message__parts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  min-width: 0;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact {
-  position: relative;
-  width: min(760px, 100%);
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(13, 148, 136, 0.16);
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 12px 32px -18px rgba(15, 118, 110, 0.24);
-  contain: layout paint;
-}
-
-/* カード上端のティールのアクセントライン（生成UIカードのシグネチャ） */
-/* Teal accent line across the card top (the generated-UI card signature) */
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: linear-gradient(90deg, #0f766e, #2dd4bf 42%, rgba(45, 212, 191, 0) 88%);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.82rem 1rem 0.76rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-  background: linear-gradient(180deg, rgba(240, 253, 250, 0.6), rgba(248, 250, 252, 0.35));
-  min-width: 0;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__heading {
-  min-width: 0;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__title {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin: 0;
-  color: #0f172a;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--chat-font-label-size, 0.8125rem);
 }
 
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__description {
-  margin: 0.22rem 0 0;
-  color: #64748b;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge {
+.shared-chat-page .shared-chat-header__badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.38rem;
-  flex-shrink: 0;
-  margin-top: 0.1rem;
-  padding: 0.3rem 0.62rem;
-  border: 1px solid rgba(13, 148, 136, 0.22);
+  gap: 0.3rem;
+  padding: 0.16rem 0.55rem;
+  border: 1px solid var(--primary-border, rgba(25, 195, 125, 0.2));
   border-radius: 999px;
-  background: rgba(240, 253, 250, 0.8);
-  color: #0f766e;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1;
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+  font-weight: var(--chat-font-ui-weight, 500);
   white-space: nowrap;
 }
 
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #14b8a6;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
-  animation: sandboxArtifactPulse 2.4s ease-in-out infinite;
+/* ダークテーマではブランド緑の濃色が背景に沈むため、明るいアクセントに置き換える */
+/* The dark brand green sinks into the dark surface, so switch to a lighter accent */
+[data-theme="dark"] .shared-chat-page .shared-chat-header__badge {
+  border-color: rgba(110, 231, 183, 0.28);
+  background: rgba(110, 231, 183, 0.12);
+  color: #6ee7b7;
 }
 
-@keyframes sandboxArtifactPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
+/* 会話面。行の左右余白は .chat-message-row（chat_messages.css）が持つため、
+   ここでは上下の余白だけを与える */
+/* Conversation surface. Horizontal padding lives on .chat-message-row
+   (chat_messages.css), so only vertical spacing is set here. */
+.shared-chat-page .shared-chat-messages {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6, 1.5rem) 0 var(--space-4, 1rem);
+  background: var(--surface-primary, #ffffff);
+  min-width: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge-dot {
-    animation: none;
-  }
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__frame {
-  display: block;
-  width: 100%;
-  min-height: 160px;
-  max-height: 900px;
-  border: 0;
-  background: #fff;
-  transition: height 0.12s ease;
-}
-
-.shared-chat-page .shared-chat-message__parts .sandbox-artifact__error {
-  margin: 0;
-  padding: 0.55rem 1rem;
-  border-top: 1px solid rgba(190, 18, 60, 0.14);
-  color: #be123c;
-  background: rgba(255, 241, 242, 0.88);
-  font-size: 0.78rem;
-  line-height: 1.45;
+/* 読み取り専用なので対話型ボタンは押せない。その理由を添える */
+/* Interactive buttons cannot be pressed on a read-only page; explain why */
+.shared-chat-page .interactive-buttons-readonly-note {
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.5;
 }
 
 .shared-chat-page .shared-chat-empty {
+  padding: 0 var(--space-6, 1.5rem);
   color: var(--text-secondary, #6b7280);
   font-size: var(--text-sm, 0.875rem);
 }
 
-.shared-chat-page .shared-chat-message--assistant .md-content {
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content > * { margin: 0.5rem 0; }
-.shared-chat-page .shared-chat-message--assistant .md-content > :first-child { margin-top: 0; }
-.shared-chat-page .shared-chat-message--assistant .md-content > :last-child { margin-bottom: 0; }
-
-.shared-chat-page .shared-chat-message--assistant .md-content p { margin: 0.4rem 0; }
-
-.shared-chat-page .shared-chat-message--assistant .md-content h1,
-.shared-chat-page .shared-chat-message--assistant .md-content h2,
-.shared-chat-page .shared-chat-message--assistant .md-content h3,
-.shared-chat-page .shared-chat-message--assistant .md-content h4,
-.shared-chat-page .shared-chat-message--assistant .md-content h5,
-.shared-chat-page .shared-chat-message--assistant .md-content h6 {
-  margin: 0.8rem 0 0.3rem;
-  font-weight: 700;
-  line-height: var(--leading-tight, 1.4);
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content h1 { font-size: 1.1rem; }
-.shared-chat-page .shared-chat-message--assistant .md-content h2 { font-size: 1rem; }
-.shared-chat-page .shared-chat-message--assistant .md-content h3 { font-size: 0.95rem; }
-
-.shared-chat-page .shared-chat-message--assistant .md-content ul,
-.shared-chat-page .shared-chat-message--assistant .md-content ol {
-  margin: 0.4rem 0 0.4rem 1rem;
-  padding-left: 0.7rem;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content li + li { margin-top: 0.2rem; }
-
-.shared-chat-page .shared-chat-message--assistant .md-content blockquote {
-  margin: 0.5rem 0;
-  padding: 0.4rem 0.8rem;
-  border-left: 3px solid var(--primary-border, rgba(25, 195, 125, 0.18));
-  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
-  border-radius: 0 5px 5px 0;
-  font-style: italic;
-  color: var(--text-secondary, #6b7280);
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: rgba(0, 0, 0, 0.06);
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px;
-  font-size: 0.85em;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content pre {
-  margin: 0.5rem 0;
-  padding: 0.75rem 0.9rem;
-  background: #1e1e2e;
-  border-radius: 7px;
-  overflow-x: auto;
-  line-height: var(--leading-normal, 1.5);
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content pre code {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  color: #cdd6f4;
-  font-size: 0.83rem;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content strong { font-weight: 700; }
-.shared-chat-page .shared-chat-message--assistant .md-content em { font-style: italic; }
-
-.shared-chat-page .shared-chat-message--assistant .md-content hr {
-  border: none;
-  border-top: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  margin: 0.8rem 0;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.87rem;
-  margin: 0.5rem 0;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content th,
-.shared-chat-page .shared-chat-message--assistant .md-content td {
-  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  padding: 0.35rem 0.6rem;
-  text-align: left;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content th {
-  background: var(--surface-secondary, #f9fafb);
-  font-weight: 700;
-}
-
-.shared-chat-page .shared-chat-message--assistant .md-content a {
-  color: var(--success-color, #15803d);
-  text-decoration: underline;
-}
-
 .shared-chat-page .shared-chat-error {
+  position: relative;
+  z-index: 1;
   width: min(760px, 100%);
   margin: 0 auto;
   background: var(--surface-primary, #ffffff);
@@ -318,7 +120,7 @@
 }
 
 .shared-chat-page .shared-chat-footer {
-  padding: 0.82rem 1.15rem 1rem;
+  padding: 0.82rem var(--space-6, 1.5rem) 1rem;
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
   background: var(--surface-secondary, #f9fafb);
   color: var(--text-secondary, #6b7280);
@@ -326,23 +128,13 @@
 }
 
 @media (max-width: 576px) {
-  .shared-chat-page {
-    padding: 0.5rem;
-  }
-
   .shared-chat-page .shared-chat-shell {
-    border-radius: 12px;
+    border-radius: var(--radius-lg, 20px);
   }
 
   .shared-chat-page .shared-chat-header,
-.shared-chat-page .shared-chat-messages,
-.shared-chat-page .shared-chat-footer {
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
-  }
-
-  .shared-chat-page .shared-chat-message {
-    max-width: 94%;
-    font-size: var(--text-sm, 0.875rem);
+  .shared-chat-page .shared-chat-footer {
+    padding-left: var(--space-4, 1rem);
+    padding-right: var(--space-4, 1rem);
   }
 }
