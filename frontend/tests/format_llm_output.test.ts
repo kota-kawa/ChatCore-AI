@@ -32,7 +32,7 @@ test("first formatLLMOutput call renders the web-search trace block instead of e
   assert.doesNotMatch(html, /&lt;details/);
 });
 
-test("formatLLMOutput keeps a leading web-search trace and renders numbered Markdown citations", () => {
+test("formatLLMOutput keeps a leading web-search trace and renders source citation chips", () => {
   const trace = [
     '<details class="web-search-sources web-search-sources--trace">',
     '<summary class="web-search-sources__summary">',
@@ -42,14 +42,16 @@ test("formatLLMOutput keeps a leading web-search trace and renders numbered Mark
     "</details>",
   ].join("\n");
   const html = formatLLMOutput(
-    `${trace}\n\n確認できた内容です。[1](https://example.com/report?year=2026&lang=ja)`,
+    `${trace}\n\n確認できた内容です。<a class="web-search-citation" href="https://example.com/report?year=2026&lang=ja" target="_blank" title="Example Report"><span class="web-search-citation__icon"></span><span class="web-search-citation__label">Example Report</span></a>`,
   );
 
   assert.match(html, /^<details class="web-search-sources web-search-sources--trace">/);
   assert.match(
     html,
-    /<a href="https:\/\/example\.com\/report\?year=2026&lang=ja">1<\/a>/,
+    /<a class="web-search-citation" href="https:\/\/example\.com\/report\?year=2026&lang=ja" target="_blank" title="Example Report">/,
   );
+  assert.match(html, /<span class="web-search-citation__label">Example Report<\/span>/);
+  assert.doesNotMatch(html, />https:\/\/example\.com\/report/);
   assert.ok(html.indexOf("</details>") < html.indexOf("確認できた内容です。"));
 });
 
