@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -58,7 +59,8 @@ test("shared chat page renders the shared bottom-right action menu", () => {
 test("shared chat page offers a button to continue the conversation", () => {
   const html = renderSharedChatPage(basePayload);
 
-  assert.match(html, /class="shared-chat-continue__button[^"]*"/);
+  const continueButtons = html.match(/class="shared-chat-continue__button[^"]*"/g) ?? [];
+  assert.equal(continueButtons.length, 2, "the continue action appears in the header and at the page end");
   assert.match(html, /このチャットを続ける/);
   // 読み取り専用であること自体は引き続き明示する。
   // The read-only nature of the page is still stated explicitly.
@@ -82,4 +84,21 @@ test("shared chat page renders only the error message when the fetch failed", ()
 
   assert.match(html, /共有リンクが見つかりませんでした。/);
   assert.ok(!html.includes("chat-message-row"), "no message rows are rendered on the error page");
+});
+
+// 共有ページはメッセージの共通スタイルのため chat-page-shell を使用するが、通常チャット用の
+// モバイル固定レイアウトを継承してはいけない。会話が画面を超えてもページ全体をスクロールできる。
+// The shared page uses chat-page-shell for common message styles, but must not inherit the
+// regular chat's fixed mobile layout: long conversations need normal document scrolling.
+test("shared chat keeps document scrolling on phones", () => {
+  const stylesheet = readFileSync(
+    new URL("../public/static/css/pages/chat/shared_chat.css", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(stylesheet, /\.shared-chat-page\.chat-page-shell\s*\{/);
+  assert.match(stylesheet, /\.shared-chat-page\.chat-page-shell\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(stylesheet, /\.shared-chat-page\.chat-page-shell\s*\{[\s\S]*?height:\s*auto;/);
+  assert.match(stylesheet, /\.shared-chat-page\.chat-page-shell\s*\{[\s\S]*?overflow:\s*visible;/);
+  assert.match(stylesheet, /\.shared-chat-page\.chat-page-shell\s*\{[\s\S]*?touch-action:\s*pan-y;/);
 });

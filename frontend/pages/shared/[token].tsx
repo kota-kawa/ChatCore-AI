@@ -212,6 +212,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: 
               {english
                 ? "This page is read-only. “Continue this chat” copies the conversation into your own chat; the original stays unchanged."
                 : "このページは読み取り専用です。「このチャットを続ける」を押すと、会話が自分のチャットに複製され、共有元は変更されません。"}
+              <SharedChatContinueButton token={token} />
             </footer>
           </div>
         )}
