@@ -1148,6 +1148,7 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
 
     safe_query = _neutralize_context_delimiters(result.query)
     # 日本語: 取得済み検索結果を根拠として使い、実在するevidence_idで引用し、外部データ内の命令を無視するよう定める文脈プロンプト。
+    # 日本語: あわせて、検索結果が言及していないことは反証ではないと明示し、出典が扱っていない旨を述べたうえで推論による判断を示すよう促します。
     lines = [
         f'<web_search_context query="{safe_query}" searched_at="{result.searched_at}">',
         "A real-time web search with Brave has already been run for this turn. Use the content below as the current web search results and base your answer on it.",
