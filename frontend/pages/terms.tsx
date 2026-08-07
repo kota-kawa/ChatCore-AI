@@ -1,6 +1,7 @@
 import { SeoHead } from "../components/SeoHead";
+import Link from "next/link";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
-import { absoluteUrl } from "../lib/seo";
+import { absoluteUrl, localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
 
 const TERMS_TITLE = "利用規約 | ChatCore-AI";
@@ -43,7 +44,7 @@ const TERMS_SECTIONS: LegalSection[] = [
         </p>
         <p>
           個人情報の取り扱いについては、
-          <a href="/privacy">プライバシーポリシー</a>をあわせてご確認ください。
+          <Link href="/privacy">プライバシーポリシー</Link>をあわせてご確認ください。
         </p>
       </>
     )
@@ -191,7 +192,7 @@ const TERMS_SUMMARY_EN: LegalSummaryItem[] = [
   { icon: "bi-patch-question", title: "Verify AI answers", text: "AI responses may be wrong. Check important information before relying on it." }
 ];
 const TERMS_SECTIONS_EN: LegalSection[] = [
-  { id: "article-1", number: "Article 1", heading: "Application", body: <><p>These Terms govern use of ChatCore-AI (the “Service”) provided by Chat Core (the “Operator”). By using the Service, you agree to these Terms.</p><p>Please also review our <a href="/privacy">Privacy Policy</a>.</p></> },
+  { id: "article-1", number: "Article 1", heading: "Application", body: <><p>These Terms govern use of ChatCore-AI (the “Service”) provided by Chat Core (the “Operator”). By using the Service, you agree to these Terms.</p><p>Please also review our <Link href="/privacy">Privacy Policy</Link>.</p></> },
   { id: "article-2", number: "Article 2", heading: "Accounts", body: <><p>An account is required. You may register with email or a Google account.</p><ul><li>Provide accurate registration information.</li><li>Keep authentication credentials secure.</li><li>Do not transfer or lend your account to another person.</li></ul></> },
   { id: "article-3", number: "Article 3", heading: "Fees", body: <p>Core features are free. If paid features are introduced, their details and price will be announced in advance.</p> },
   { id: "article-4", number: "Article 4", heading: "Prohibited conduct", body: <><p>You must not:</p><ul><li>Violate law or public order.</li><li>Infringe intellectual property, privacy, reputation, or other rights.</li><li>Gain unauthorized access, overload, or disrupt the Service.</li><li>Post personal or confidential information in public areas.</li><li>Use the Service to create illegal or harmful content.</li><li>Engage in conduct the Operator reasonably considers inappropriate.</li></ul></> },
@@ -236,11 +237,20 @@ export default function TermsPage() {
   const english = locale === "en";
   const title = english ? "Terms of Service | ChatCore-AI" : TERMS_TITLE;
   const description = english ? "Terms governing accounts, acceptable use, content rights, AI-generated content, and availability of ChatCore-AI." : TERMS_DESCRIPTION;
+  const homeUrl = localizedAbsoluteUrl("/", locale);
+  const pageUrl = localizedAbsoluteUrl("/terms", locale);
   const structuredData = termsStructuredData.map((entry) => {
-    if (entry["@type"] === "WebPage") return { ...entry, name: title, description, inLanguage: locale };
-    if (entry["@type"] === "BreadcrumbList" && english) return { ...entry, itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
-      { "@type": "ListItem", position: 2, name: "Terms of Service", item: absoluteUrl("/terms") }
+    if (entry["@type"] === "WebPage") return {
+      ...entry,
+      name: title,
+      url: pageUrl,
+      description,
+      inLanguage: locale,
+      isPartOf: { ...entry.isPartOf, url: homeUrl }
+    };
+    if (entry["@type"] === "BreadcrumbList") return { ...entry, itemListElement: [
+      { "@type": "ListItem", position: 1, name: english ? "Home" : "ホーム", item: homeUrl },
+      { "@type": "ListItem", position: 2, name: english ? "Terms of Service" : "利用規約", item: pageUrl }
     ] };
     return entry;
   });

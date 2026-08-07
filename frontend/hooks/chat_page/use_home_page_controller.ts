@@ -976,7 +976,7 @@ export function useHomePageController() {
 
   useEffect(() => {
     const restoreIfHomePage = () => {
-      if (window.location.pathname !== "/") return;
+      if (!["/", "/en", "/en/"].includes(window.location.pathname)) return;
       restoreHomeViewFromStorage();
     };
 

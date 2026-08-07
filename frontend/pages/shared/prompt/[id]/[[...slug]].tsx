@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import MarkdownContent from "../../../../components/MarkdownContent";
 import { SeoHead } from "../../../../components/SeoHead";
+import { localizePublicPath } from "../../../../lib/seo";
 import { formatDateTime } from "../../../../lib/datetime";
 import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
 import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdown_ssr";
@@ -228,7 +229,10 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     if (canonicalSlug && requestedSlug !== canonicalSlug) {
       return {
         redirect: {
-          destination: buildPromptPath(prompt.id, prompt.title),
+          destination: localizePublicPath(
+            buildPromptPath(prompt.id, prompt.title),
+            context.locale === "en" ? "en" : "ja"
+          ),
           permanent: true
         }
       };

@@ -7,10 +7,12 @@ test("sitemap includes public crawlable application pages", () => {
   const sitemap = buildSitemapXml("https://example.com/", "2026-05-20T00:00:00.000Z");
 
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
-  assert.match(sitemap, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  assert.match(sitemap, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9" xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml">/);
 
   for (const route of PUBLIC_SITEMAP_ROUTES) {
     assert.match(sitemap, new RegExp(`<loc>https://example\\.com${route.path}</loc>`));
+    const englishPath = route.path === "/" ? "/en" : `/en${route.path}`;
+    assert.match(sitemap, new RegExp(`<loc>https://example\\.com${englishPath}</loc>`));
   }
 
   assert.match(sitemap, /<loc>https:\/\/example\.com\/prompt_share<\/loc>/);
@@ -19,6 +21,9 @@ test("sitemap includes public crawlable application pages", () => {
   assert.match(sitemap, /<loc>https:\/\/example\.com\/help<\/loc>/);
   assert.match(sitemap, /<loc>https:\/\/example\.com\/terms<\/loc>/);
   assert.match(sitemap, /<loc>https:\/\/example\.com\/privacy<\/loc>/);
+  assert.match(sitemap, /hreflang="ja" href="https:\/\/example\.com\/help"/);
+  assert.match(sitemap, /hreflang="en" href="https:\/\/example\.com\/en\/help"/);
+  assert.match(sitemap, /hreflang="x-default" href="https:\/\/example\.com\/help"/);
 });
 
 test("sitemap escapes XML-sensitive origin values", () => {
@@ -38,7 +43,8 @@ test("sitemap appends dynamic prompt routes with per-route lastmod", () => {
   // 静的ルートは引き続き含まれる / Static routes are still present
   assert.match(sitemap, /<loc>https:\/\/example\.com\/<\/loc>/);
   // 個別プロンプトページがloc・lastmodとともに出力される / Individual prompt pages are emitted with loc and lastmod
-  assert.match(sitemap, /<loc>https:\/\/example\.com\/shared\/prompt\/42<\/loc>\n\s*<lastmod>2026-06-01T00:00:00\.000Z<\/lastmod>/);
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/shared\/prompt\/42<\/loc>(?:(?!<\/url>)[\s\S])*<lastmod>2026-06-01T00:00:00\.000Z<\/lastmod>/);
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/en\/shared\/prompt\/42<\/loc>(?:(?!<\/url>)[\s\S])*<lastmod>2026-06-01T00:00:00\.000Z<\/lastmod>/);
   // lastmod未指定のルートはグローバルlastmodにフォールバックする / Routes without lastmod fall back to the global lastmod
-  assert.match(sitemap, /<loc>https:\/\/example\.com\/shared\/prompt\/abc<\/loc>\n\s*<lastmod>2026-05-20T00:00:00\.000Z<\/lastmod>/);
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/shared\/prompt\/abc<\/loc>(?:(?!<\/url>)[\s\S])*<lastmod>2026-05-20T00:00:00\.000Z<\/lastmod>/);
 });

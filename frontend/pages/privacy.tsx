@@ -1,6 +1,7 @@
 import { SeoHead } from "../components/SeoHead";
+import Link from "next/link";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
-import { absoluteUrl } from "../lib/seo";
+import { absoluteUrl, localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
 
 const PRIVACY_TITLE = "プライバシーポリシー | ChatCore-AI";
@@ -158,7 +159,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
           利用者は、自身の情報について開示・訂正・削除を求めることができます。メールアドレスの変更やアカウントの削除は、ログイン後の設定画面からいつでも行えます。
         </p>
         <p>
-          その他のご請求は、<a href="/help#account">ヘルプページ</a>記載のお問い合わせ方法によりご連絡ください。
+          その他のご請求は、<Link href="/help#account">ヘルプページ</Link>記載のお問い合わせ方法によりご連絡ください。
         </p>
       </>
     )
@@ -262,11 +263,20 @@ export default function PrivacyPage() {
   const description = english
     ? "How ChatCore-AI collects, uses, shares, retains, and deletes account information and user content."
     : PRIVACY_DESCRIPTION;
+  const homeUrl = localizedAbsoluteUrl("/", locale);
+  const pageUrl = localizedAbsoluteUrl("/privacy", locale);
   const structuredData = privacyStructuredData.map((entry) => {
-    if (entry["@type"] === "WebPage") return { ...entry, name: title, description, inLanguage: locale };
-    if (entry["@type"] === "BreadcrumbList" && english) return { ...entry, itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
-      { "@type": "ListItem", position: 2, name: "Privacy Policy", item: absoluteUrl("/privacy") }
+    if (entry["@type"] === "WebPage") return {
+      ...entry,
+      name: title,
+      url: pageUrl,
+      description,
+      inLanguage: locale,
+      isPartOf: { ...entry.isPartOf, url: homeUrl }
+    };
+    if (entry["@type"] === "BreadcrumbList") return { ...entry, itemListElement: [
+      { "@type": "ListItem", position: 1, name: english ? "Home" : "ホーム", item: homeUrl },
+      { "@type": "ListItem", position: 2, name: english ? "Privacy Policy" : "プライバシーポリシー", item: pageUrl }
     ] };
     return entry;
   });

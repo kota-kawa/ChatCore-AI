@@ -7,7 +7,7 @@ import type {
   PromptFeedResponse,
   PromptPagination
 } from "../../scripts/prompt_share/types";
-import { absoluteUrl } from "../../lib/seo";
+import { localizedAbsoluteUrl } from "../../lib/seo";
 import type { Locale } from "../../lib/i18n/config";
 import { promptShareText } from "../../scripts/prompt_share/i18n";
 
@@ -28,13 +28,13 @@ export function getPromptShareStructuredData(locale: Locale) {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: promptShareText("promptShare.structuredName", undefined, locale),
-    url: absoluteUrl("/prompt_share"),
+    url: localizedAbsoluteUrl("/prompt_share", locale),
     description: promptShareText("promptShare.seoDescription", undefined, locale),
     inLanguage: locale,
     isPartOf: {
       "@type": "WebSite",
       name: "Chat Core",
-      url: absoluteUrl("/")
+      url: localizedAbsoluteUrl("/", locale)
     }
   };
 }

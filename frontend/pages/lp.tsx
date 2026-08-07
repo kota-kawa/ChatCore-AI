@@ -5,7 +5,7 @@ import { LpFinalCta, LpFooter } from "../components/lp/lp_footer";
 import { LpFlow } from "../components/lp/lp_flow";
 import { LpHeader } from "../components/lp/lp_header";
 import { LpHero } from "../components/lp/lp_hero";
-import { absoluteUrl } from "../lib/seo";
+import { absoluteUrl, localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
 import type { Locale } from "../lib/i18n/config";
 
@@ -56,17 +56,26 @@ const lpStructuredData = [
 // Localize the structured data (FAQ, WebPage, and breadcrumbs all need translating)
 export function buildLpStructuredData(locale: Locale, title: string, description: string) {
   const faqItems = locale === "en" ? LP_FAQ_ITEMS_EN : LP_FAQ_ITEMS;
+  const homeUrl = localizedAbsoluteUrl("/", locale);
+  const pageUrl = localizedAbsoluteUrl("/lp", locale);
   return lpStructuredData.map((entry) => {
     if (entry["@type"] === "FAQPage") {
       return { ...entry, mainEntity: faqItems.map((item) => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answer } })) };
     }
     if (entry["@type"] === "WebPage") {
-      return { ...entry, name: title, description, inLanguage: locale };
+      return {
+        ...entry,
+        name: title,
+        url: pageUrl,
+        description,
+        inLanguage: locale,
+        isPartOf: { ...entry.isPartOf, url: homeUrl }
+      };
     }
-    if (entry["@type"] === "BreadcrumbList" && locale === "en") {
+    if (entry["@type"] === "BreadcrumbList") {
       return { ...entry, itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
-        { "@type": "ListItem", position: 2, name: "About ChatCore-AI", item: absoluteUrl("/lp") }
+        { "@type": "ListItem", position: 1, name: locale === "en" ? "Home" : "ホーム", item: homeUrl },
+        { "@type": "ListItem", position: 2, name: locale === "en" ? "About ChatCore-AI" : "ChatCore-AIとは", item: pageUrl }
       ] };
     }
     return entry;

@@ -1,9 +1,10 @@
 import { SeoHead } from "../components/SeoHead";
+import Link from "next/link";
 import { HELP_CATEGORIES } from "../components/help/help_content";
 import { HELP_CATEGORIES_EN } from "../components/help/help_content_en";
 import { LpFooter } from "../components/lp/lp_footer";
 import { LpHeader } from "../components/lp/lp_header";
-import { absoluteUrl } from "../lib/seo";
+import { absoluteUrl, localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
 
 const HELP_TITLE = "ヘルプセンター | ChatCore-AI";
@@ -81,6 +82,8 @@ const helpStructuredData = [
 // Help center page (quick start + FAQ grouped by category)
 export default function HelpPage() {
   const { locale, t } = useTranslation();
+  const homeUrl = localizedAbsoluteUrl("/", locale);
+  const pageUrl = localizedAbsoluteUrl("/help", locale);
   const categories = locale === "en" ? HELP_CATEGORIES_EN : HELP_CATEGORIES;
   const quickstartCards = locale === "en" ? [
     { href: "/", icon: "", useFavicon: true, name: "AI CHAT", title: "Start an AI chat", description: "Ask questions, draft content, and explore ideas naturally." },
@@ -92,12 +95,19 @@ export default function HelpPage() {
       return { ...entry, mainEntity: categories.flatMap((category) => category.items.map((item) => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answers.join(" ") } }))) };
     }
     if (entry["@type"] === "WebPage") {
-      return { ...entry, name: t("help.title"), description: t("help.description"), inLanguage: locale };
+      return {
+        ...entry,
+        name: t("help.title"),
+        url: pageUrl,
+        description: t("help.description"),
+        inLanguage: locale,
+        isPartOf: { ...entry.isPartOf, url: homeUrl }
+      };
     }
-    if (entry["@type"] === "BreadcrumbList" && locale === "en") {
+    if (entry["@type"] === "BreadcrumbList") {
       return { ...entry, itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
-        { "@type": "ListItem", position: 2, name: "Help Center", item: absoluteUrl("/help") }
+        { "@type": "ListItem", position: 1, name: locale === "en" ? "Home" : "ホーム", item: homeUrl },
+        { "@type": "ListItem", position: 2, name: locale === "en" ? "Help Center" : "ヘルプセンター", item: pageUrl }
       ] };
     }
     return entry;
@@ -136,14 +146,14 @@ export default function HelpPage() {
           <section className="help-quickstart" aria-label={locale === "en" ? "Quick start" : "クイックスタート"}>
             <div className="lp-container help-quickstart__grid">
               {quickstartCards.map((card) => (
-                <a key={card.href} href={card.href} className="lp-feature-card">
+                <Link key={card.href} href={card.href} className="lp-feature-card">
                   <span className="lp-feature-card__icon" aria-hidden="true">
                     {card.useFavicon ? <img src="/static/favicon.png" alt="" /> : <i className={`bi ${card.icon}`}></i>}
                   </span>
                   <span className="lp-feature-card__name">{card.name}</span>
                   <span className="lp-feature-card__title">{card.title}</span>
                   <span className="lp-feature-card__description">{card.description}</span>
-                </a>
+                </Link>
               ))}
             </div>
           </section>
@@ -214,12 +224,12 @@ export default function HelpPage() {
                     >
                       {locale === "en" ? "Contact (Issue)" : "お問い合わせ（Issue）"}
                     </a>
-                    <a href="/terms" className="lp-btn lp-btn--ghost">
+                    <Link href="/terms" className="lp-btn lp-btn--ghost">
                       {locale === "en" ? "Terms" : "利用規約"}
-                    </a>
-                    <a href="/privacy" className="lp-btn lp-btn--ghost">
+                    </Link>
+                    <Link href="/privacy" className="lp-btn lp-btn--ghost">
                       {locale === "en" ? "Privacy Policy" : "プライバシーポリシー"}
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </div>

@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { useTranslation } from "../../contexts/locale_context";
+
 // 最終CTAセクション（深緑の締めのブロック）
 // Final CTA section (deep-green closing block)
 export function LpFinalCta() {
@@ -19,9 +22,9 @@ export function LpFinalCta() {
           )}
         </h2>
         <p className="lp-final-cta__note">{locale === "en" ? "Create an account in minutes. Chat Core is free to use." : "登録は数分で完了します。いつでも無料で使えます。"}</p>
-        <a href="/register" className="lp-btn lp-btn--inverse lp-btn--large">
+        <Link href="/register" className="lp-btn lp-btn--inverse lp-btn--large">
           {t("lp.start")}
-        </a>
+        </Link>
       </div>
     </section>
   );
@@ -36,10 +39,10 @@ export function LpFooter() {
       <div className="lp-container lp-footer__inner">
         <p className="lp-footer__brand">ChatCore-AI</p>
         <nav className="lp-footer__nav" aria-label={locale === "en" ? "Site links" : "サイト内リンク"}>
-          <a href="/">{t("nav.chat")}</a>
-          <a href="/prompt_share">{t("nav.promptShare")}</a>
-          <a href="/memo">{t("nav.memo")}</a>
-          <a href="/help">{t("nav.help")}</a>
+          <Link href="/">{t("nav.chat")}</Link>
+          <Link href="/prompt_share">{t("nav.promptShare")}</Link>
+          <Link href="/memo">{t("nav.memo")}</Link>
+          <Link href="/help">{t("nav.help")}</Link>
           <a
             href="https://docs.google.com/forms/d/e/1FAIpQLSe2QqacIPAnKeZtFGHxb61YYjVjrrixcIsV2wDPoyFMXG-F2w/viewform?usp=publish-editor"
             target="_blank"
@@ -47,14 +50,13 @@ export function LpFooter() {
           >
             {locale === "en" ? "Contact" : "お問い合わせ"}
           </a>
-          <a href="/terms">{locale === "en" ? "Terms" : "利用規約"}</a>
-          <a href="/privacy">{locale === "en" ? "Privacy" : "プライバシーポリシー"}</a>
-          <a href="/login">{t("nav.login")}</a>
-          <a href="/register">{locale === "en" ? "Sign up" : "新規登録"}</a>
+          <Link href="/terms">{locale === "en" ? "Terms" : "利用規約"}</Link>
+          <Link href="/privacy">{locale === "en" ? "Privacy" : "プライバシーポリシー"}</Link>
+          <Link href="/login">{t("nav.login")}</Link>
+          <Link href="/register">{locale === "en" ? "Sign up" : "新規登録"}</Link>
         </nav>
         <p className="lp-footer__copyright">© {new Date().getFullYear()} Chat Core</p>
       </div>
     </footer>
   );
 }
-import { useTranslation } from "../../contexts/locale_context";

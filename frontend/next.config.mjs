@@ -22,6 +22,13 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["marked"],
+  // 日本語は従来URL、英語は /en 配下の独立URLとして公開する。
+  // Keep Japanese on the existing URLs and publish English under /en.
+  i18n: {
+    locales: ["ja", "en"],
+    defaultLocale: "ja",
+    localeDetection: false
+  },
   async headers() {
     return [
       {

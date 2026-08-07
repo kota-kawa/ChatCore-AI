@@ -9,32 +9,36 @@ import { ProjectSection } from "../components/chat_page/project_section";
 import { NewProjectModal } from "../components/chat_page/modals/new_project_modal";
 import { HomePageContextProvider } from "../contexts/chat_page/home_page_context";
 import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
-import { absoluteUrl, DEFAULT_SEO_DESCRIPTION } from "../lib/seo";
+import { localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
+import type { Locale } from "../lib/i18n/config";
 
-const homeStructuredData = [
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: "ChatCore-AI",
-    applicationCategory: "ProductivityApplication",
-    operatingSystem: "Web",
-    url: absoluteUrl("/"),
-    description: DEFAULT_SEO_DESCRIPTION,
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "JPY"
+function buildHomeStructuredData(locale: Locale, description: string) {
+  const homeUrl = localizedAbsoluteUrl("/", locale);
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      name: "ChatCore-AI",
+      applicationCategory: "ProductivityApplication",
+      operatingSystem: "Web",
+      url: homeUrl,
+      description,
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "JPY"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Chat Core",
+      url: homeUrl,
+      inLanguage: locale
     }
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "Chat Core",
-    url: absoluteUrl("/"),
-    inLanguage: "ja"
-  }
-];
+  ];
+}
 
 // ホームページのメインコンポーネント
 // Main component for the home page
@@ -115,7 +119,7 @@ export default function HomePage() {
         title={t("home.seoTitle")}
         description={t("home.seoDescription")}
         canonicalPath="/"
-        structuredData={homeStructuredData}
+        structuredData={buildHomeStructuredData(locale, t("home.seoDescription"))}
       />
 
       <HomePageContextProvider controller={controller}>

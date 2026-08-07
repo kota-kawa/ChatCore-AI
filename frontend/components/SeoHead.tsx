@@ -8,6 +8,7 @@ import {
   DEFAULT_SEO_DESCRIPTION,
   DEFAULT_SEO_TITLE,
   jsonLdScriptContent,
+  localizedAbsoluteUrl,
   SITE_NAME,
   TWITTER_SITE
 } from "../lib/seo";
@@ -49,7 +50,10 @@ export function SeoHead({
   const { locale, t } = useTranslation();
   const resolvedTitle = title === DEFAULT_SEO_TITLE ? t("home.seoTitle") : title;
   const resolvedDescription = description === DEFAULT_SEO_DESCRIPTION ? t("home.seoDescription") : description;
-  const resolvedCanonicalUrl = canonicalUrl || (canonicalPath ? absoluteUrl(canonicalPath) : "");
+  const canonicalSource = canonicalUrl || (canonicalPath ? absoluteUrl(canonicalPath) : "");
+  const resolvedCanonicalUrl = canonicalSource ? localizedAbsoluteUrl(canonicalSource, locale) : "";
+  const japaneseUrl = canonicalSource ? localizedAbsoluteUrl(canonicalSource, "ja") : "";
+  const englishUrl = canonicalSource ? localizedAbsoluteUrl(canonicalSource, "en") : "";
   const resolvedImageUrl = absoluteUrl(imageUrl);
   // noindexフラグに応じてrobotsメタタグの内容を切り替える
   // Switch robots meta tag content based on the noindex flag
@@ -78,6 +82,9 @@ export function SeoHead({
       <meta property="og:title" content={resolvedTitle} />
       <meta property="og:description" content={resolvedDescription} />
       {resolvedCanonicalUrl ? <link rel="canonical" href={resolvedCanonicalUrl} /> : null}
+      {!noindex && japaneseUrl ? <link rel="alternate" hrefLang="ja" href={japaneseUrl} /> : null}
+      {!noindex && englishUrl ? <link rel="alternate" hrefLang="en" href={englishUrl} /> : null}
+      {!noindex && japaneseUrl ? <link rel="alternate" hrefLang="x-default" href={japaneseUrl} /> : null}
       {resolvedCanonicalUrl ? <meta property="og:url" content={resolvedCanonicalUrl} /> : null}
       {/* OGP画像メタタグ / OGP image meta tags */}
       {resolvedImageUrl ? <meta property="og:image" content={resolvedImageUrl} /> : null}

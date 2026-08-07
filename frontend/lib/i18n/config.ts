@@ -43,6 +43,17 @@ export function resolveRequestLocale(cookieHeader?: string, acceptLanguage?: str
   return readLocaleCookie(cookieHeader) ?? resolveAcceptLanguage(acceptLanguage) ?? DEFAULT_LOCALE;
 }
 
+// URLで指定された言語を最優先し、ルート情報がない場合だけ従来の自動判定へ戻す。
+// Prefer an explicit route locale and only fall back to the legacy request detection
+// when routing information is unavailable.
+export function resolvePageLocale(
+  routeLocale?: string,
+  cookieHeader?: string,
+  acceptLanguage?: string | string[]
+): Locale {
+  return normalizeLocale(routeLocale) ?? resolveRequestLocale(cookieHeader, acceptLanguage);
+}
+
 export function getRuntimeLocale(): Locale {
   if (typeof document === "undefined") return DEFAULT_LOCALE;
   return normalizeLocale(document.documentElement.lang) ?? DEFAULT_LOCALE;
