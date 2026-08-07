@@ -1,9 +1,12 @@
 // ボットメッセージ内のWeb検索出典UI（アコーディオン開閉・favicon・オーバーフロー制御）
-// のDOM挙動。描画コンポーネントから切り出し、bot_message_html.tsx は
-// 「本文を描画してフェードインを付ける」責務だけを持つようにする。
+// のDOM挙動。生成中はメッセージが毎フレーム再描画されるため、リスナは要素ごとに
+// 貼らずコンテナへ一度だけ委譲する。要素単位で貼り直すと、再描画のたびに
+// 登録解除が挟まって開閉アニメーションが打ち切られ、クリックが無視されていた。
 // DOM behaviour for the web-search source UI inside bot messages (accordion
-// toggling, favicons, overflow handling). Split out of the rendering component
-// so bot_message_html.tsx only owns "render the body and fade the words in".
+// toggling, favicons, overflow handling). Messages re-render every frame while
+// generating, so listeners are delegated to the container once instead of being
+// attached per element: re-attaching them per render tore down handlers
+// mid-animation and made clicks look ignored.
 
 import { prefersReducedMotion } from "./dom";
 
@@ -17,6 +20,16 @@ const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animatio
 // 展開時にスクロールで確保するパディング量（px）
 // Padding (px) to ensure while scrolling on expand
 const WEB_SEARCH_SOURCES_REVEAL_PADDING = 16;
+
+const ROOT_DETAILS_SELECTOR = "details.web-search-sources";
+const ROOT_SUMMARY_SELECTOR = ".web-search-sources__summary";
+const NESTED_DETAILS_SELECTOR =
+  "details.web-search-sources__step-details, details.web-search-sources__source-details";
+const OPEN_NESTED_DETAILS_SELECTOR =
+  "details.web-search-sources__step-details[open], details.web-search-sources__source-details[open]";
+const FAVICON_SELECTOR = "img.web-search-citation__favicon";
+const CITATION_ICON_SELECTOR = ".web-search-citation__icon";
+const CITATION_ICON_FALLBACK_CLASS = "web-search-citation__icon--fallback";
 
 // detailsの子要素からWebソース一覧リスト要素を取得する
 // Get the web source list element from the children of a details element
@@ -38,19 +51,18 @@ function resetWebSearchSourcesListStyles(list: HTMLElement) {
 
 // 展開されたWebソースの詳細がビューポートに収まるようにオーバーフロー状態を更新する
 // Update overflow state so expanded web source details fit within the viewport
-function setWebSearchOverflowState(sourceDetails: HTMLElement) {
-  const row = sourceDetails.closest<HTMLElement>(".chat-message-row");
-  const wrapper = sourceDetails.closest<HTMLElement>(".message-wrapper");
-  const selector = "details.web-search-sources__step-details[open], details.web-search-sources__source-details[open]";
-  const hasOpenSourceDetails = Boolean(row?.querySelector(selector));
+function updateWebSearchOverflowState(element: HTMLElement) {
+  const row = element.closest<HTMLElement>(".chat-message-row");
+  const wrapper = element.closest<HTMLElement>(".message-wrapper");
+  const hasOpenSourceDetails = Boolean(row?.querySelector(OPEN_NESTED_DETAILS_SELECTOR));
 
-  [row, wrapper].forEach((element) => {
-    if (!element) return;
+  [row, wrapper].forEach((target) => {
+    if (!target) return;
     if (hasOpenSourceDetails) {
-      element.dataset.webSearchOverflowActive = "true";
+      target.dataset.webSearchOverflowActive = "true";
       return;
     }
-    delete element.dataset.webSearchOverflowActive;
+    delete target.dataset.webSearchOverflowActive;
   });
 }
 
@@ -65,16 +77,10 @@ function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   activeWebSearchSourceAnimations.delete(details);
 }
 
-// チャットメッセージスクローラーのDOM要素を取得する
-// Get the DOM element of the chat messages scroller
-function getChatMessagesScroller(element: HTMLElement) {
-  return element.closest<HTMLElement>(".chat-messages");
-}
-
 // 展開したWebソースがスクローラー内に収まるようにスクロール位置を調整する
 // Adjust the scroll position so expanded web sources are visible within the scroller
-function revealWebSearchSources(details: HTMLDetailsElement) {
-  const scroller = getChatMessagesScroller(details);
+function revealWebSearchSources(details: HTMLElement) {
+  const scroller = details.closest<HTMLElement>(".chat-messages");
   if (!scroller) {
     details.scrollIntoView({ block: "nearest" });
     return;
@@ -106,7 +112,7 @@ function revealWebSearchSources(details: HTMLDetailsElement) {
 
 // 次のアニメーションフレームでWebソースの表示位置を調整するリクエストをスケジュールする
 // Schedule a reveal position adjustment for web sources in the next animation frame
-function scheduleWebSearchSourcesReveal(details: HTMLDetailsElement) {
+function scheduleWebSearchSourcesReveal(details: HTMLElement) {
   if (typeof window === "undefined") return;
 
   window.requestAnimationFrame(() => {
@@ -188,75 +194,73 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
   };
 }
 
-// コンテナ内のWebソースアコーディオンにクリックイベントをバインドし、クリーンアップ関数を返す
-// Bind click events to web source accordions in the container and return a cleanup function
-export function bindWebSearchSourcesAccordions(container: HTMLElement) {
-  const cleanupCallbacks: Array<() => void> = [];
+// faviconの読み込みが失敗している出典アイコンをフォールバック表示へ切り替える。
+// Switch source icons whose favicon failed to load over to the fallback initial.
+function showCitationFallback(favicon: HTMLImageElement) {
+  favicon
+    .closest<HTMLElement>(CITATION_ICON_SELECTOR)
+    ?.classList.add(CITATION_ICON_FALLBACK_CLASS);
+}
 
-  container.querySelectorAll<HTMLDetailsElement>("details.web-search-sources").forEach((details) => {
-    const summary = details.querySelector<HTMLElement>(".web-search-sources__summary");
-    if (!summary) return;
+// 描画（差分パッチ）直後に、実行時の状態を実DOMへ合わせ直す。
+// 読み込み済みで失敗しているfaviconはerrorイベントが来ないため、ここで拾う。
+// Re-align runtime state with the live DOM right after a render (patch).
+// A favicon that already finished loading and failed fires no error event, so
+// it is picked up here.
+export function syncWebSearchSourcesState(container: HTMLElement) {
+  container.querySelectorAll<HTMLImageElement>(FAVICON_SELECTOR).forEach((favicon) => {
+    if (favicon.complete && favicon.naturalWidth === 0) showCitationFallback(favicon);
+  });
+  updateWebSearchOverflowState(container);
+}
 
-    const handleSummaryClick = (event: MouseEvent) => {
-      event.preventDefault();
-      const shouldOpen = !details.open || details.dataset.webSearchSourcesState === "closing";
-      animateWebSearchSources(details, shouldOpen);
-    };
+// 出典UIのイベントをコンテナへ委譲し、解除関数を返す。マウント中は貼り替えない。
+// Delegate the source UI events to the container and return a cleanup function.
+// The listeners stay in place for the whole mounted lifetime.
+export function bindWebSearchSourcesInteractions(container: HTMLElement) {
+  const handleClick = (event: MouseEvent) => {
+    if (!(event.target instanceof Element)) return;
+    const summary = event.target.closest<HTMLElement>(ROOT_SUMMARY_SELECTOR);
+    if (!summary || !container.contains(summary)) return;
+    const details = summary.closest<HTMLDetailsElement>(ROOT_DETAILS_SELECTOR);
+    if (!details) return;
 
-    summary.addEventListener("click", handleSummaryClick);
-    cleanupCallbacks.push(() => {
-      summary.removeEventListener("click", handleSummaryClick);
+    event.preventDefault();
+    const shouldOpen = !details.open || details.dataset.webSearchSourcesState === "closing";
+    animateWebSearchSources(details, shouldOpen);
+  };
+
+  // error と toggle はバブルしないため、キャプチャ段階で受け取る。
+  // error and toggle do not bubble, so they are captured on the way down.
+  const handleError = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.matches(FAVICON_SELECTOR)) return;
+    showCitationFallback(target);
+  };
+
+  const handleToggle = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLDetailsElement) || !target.matches(NESTED_DETAILS_SELECTOR)) return;
+    updateWebSearchOverflowState(target);
+    if (target.open) scheduleWebSearchSourcesReveal(target);
+  };
+
+  container.addEventListener("click", handleClick);
+  container.addEventListener("error", handleError, true);
+  container.addEventListener("toggle", handleToggle, true);
+
+  return () => {
+    container.removeEventListener("click", handleClick);
+    container.removeEventListener("error", handleError, true);
+    container.removeEventListener("toggle", handleToggle, true);
+    container.querySelectorAll<HTMLDetailsElement>(ROOT_DETAILS_SELECTOR).forEach((details) => {
       cancelWebSearchSourcesAnimation(details);
       const list = getWebSearchSourcesList(details);
       if (list) resetWebSearchSourcesListStyles(list);
     });
-  });
-
-  // ステップ詳細・ソース詳細のトグルイベントでオーバーフロー状態を更新する
-  // Update overflow state on toggle events for step details and source details
-  container
-    .querySelectorAll<HTMLDetailsElement>(
-      "details.web-search-sources__step-details, details.web-search-sources__source-details"
-    )
-    .forEach((details) => {
-      const handleToggle = () => {
-        setWebSearchOverflowState(details);
-        if (details.open) scheduleWebSearchSourcesReveal(details);
-      };
-
-      details.addEventListener("toggle", handleToggle);
-      setWebSearchOverflowState(details);
-      cleanupCallbacks.push(() => {
-        details.removeEventListener("toggle", handleToggle);
-        const row = details.closest<HTMLElement>(".chat-message-row");
-        const wrapper = details.closest<HTMLElement>(".message-wrapper");
-        if (row) delete row.dataset.webSearchOverflowActive;
-        if (wrapper) delete wrapper.dataset.webSearchOverflowActive;
-      });
-    });
-
-  return () => {
-    cleanupCallbacks.forEach((cleanup) => {
-      cleanup();
-    });
+    const row = container.closest<HTMLElement>(".chat-message-row");
+    const wrapper = container.closest<HTMLElement>(".message-wrapper");
+    if (row) delete row.dataset.webSearchOverflowActive;
+    if (wrapper) delete wrapper.dataset.webSearchOverflowActive;
   };
-}
-
-// サイトfaviconの読み込み失敗時に、出典ごとの頭文字フォールバックへ切り替える。
-// Switch failed site favicons to the source-specific initial fallback.
-export function bindWebSearchCitationFavicons(container: HTMLElement) {
-  const cleanupCallbacks: Array<() => void> = [];
-
-  container
-    .querySelectorAll<HTMLImageElement>("img.web-search-citation__favicon")
-    .forEach((favicon) => {
-      const icon = favicon.closest<HTMLElement>(".web-search-citation__icon");
-      if (!icon) return;
-      const showFallback = () => icon.classList.add("web-search-citation__icon--fallback");
-      favicon.addEventListener("error", showFallback);
-      if (favicon.complete && favicon.naturalWidth === 0) showFallback();
-      cleanupCallbacks.push(() => favicon.removeEventListener("error", showFallback));
-    });
-
-  return () => cleanupCallbacks.forEach((cleanup) => cleanup());
 }

@@ -1,13 +1,16 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
-import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
+import { patchSanitizedHTML } from "../../scripts/chat/message_utils";
 import { prefersReducedMotion } from "../../lib/chat_page/dom";
-import { applyStreamingWordReveal } from "../../lib/chat_page/streaming_word_dom";
+import {
+  applyStreamingWordReveal,
+  clearStreamingWordReveal
+} from "../../lib/chat_page/streaming_word_dom";
 import { WordRevealTimeline } from "../../lib/chat_page/streaming_word_reveal";
 import {
-  bindWebSearchCitationFavicons,
-  bindWebSearchSourcesAccordions
+  bindWebSearchSourcesInteractions,
+  syncWebSearchSourcesState
 } from "../../lib/chat_page/web_search_sources_dom";
 
 // SSR環境ではuseEffect、クライアント環境ではuseLayoutEffectを使用する（ハイドレーション互換）
@@ -34,12 +37,28 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
   // Recompute formatted HTML only when text changes
   const formatted = useMemo(() => formatLLMOutput(text), [text]);
 
+  // 出典UIのイベントはマウント時に一度だけ委譲する。生成中の再描画ごとに貼り替えると
+  // 開閉アニメーションが打ち切られ、クリックが無視されてしまう。本文の挿入より先に
+  // 登録するため、この効果は描画の効果より前に宣言する。
+  // Delegate the source UI events once on mount: re-attaching them on every
+  // streaming re-render tore down handlers mid-animation and made clicks look
+  // ignored. Declared before the render effect so the listeners exist before any
+  // content (and therefore any favicon load) is inserted.
+  useIsomorphicLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return bindWebSearchSourcesInteractions(container);
+  }, []);
+
   // DOMへの書き込みはレイアウト計算前に行う必要があるためuseIsomorphicLayoutEffectを使用する
   // Use useIsomorphicLayoutEffect as DOM writes must occur before layout calculations
   useIsomorphicLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    renderSanitizedHTML(container, formatted);
+    // 差分適用の前に単語spanを畳み、実DOMをHTMLと同じ形に戻す。
+    // Fold away the reveal spans first so the live DOM matches the incoming HTML.
+    clearStreamingWordReveal(container);
+    patchSanitizedHTML(container, formatted);
     // 生成が終わった描画ではspanを付けないため、完成後のDOMに残骸は残らない
     // The finished render adds no spans, so completed messages keep a clean DOM
     if (streaming && !prefersReducedMotion()) {
@@ -48,12 +67,7 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
     } else {
       revealTimelineRef.current = null;
     }
-    const cleanupAccordions = bindWebSearchSourcesAccordions(container);
-    const cleanupFavicons = bindWebSearchCitationFavicons(container);
-    return () => {
-      cleanupAccordions();
-      cleanupFavicons();
-    };
+    syncWebSearchSourcesState(container);
   }, [formatted, streaming]);
 
   return <div ref={containerRef}></div>;

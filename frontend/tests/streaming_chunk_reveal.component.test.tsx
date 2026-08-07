@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { formatLLMOutput } from "../scripts/chat/chat_ui";
-import { renderSanitizedHTML } from "../scripts/chat/message_utils";
+import { patchSanitizedHTML } from "../scripts/chat/message_utils";
 import {
   advanceStreamPace,
   clampToCodePointBoundary,
   createStreamPace,
 } from "../lib/chat_page/stream_smoothing";
-import { applyStreamingWordReveal } from "../lib/chat_page/streaming_word_dom";
+import {
+  applyStreamingWordReveal,
+  clearStreamingWordReveal,
+} from "../lib/chat_page/streaming_word_dom";
+import { patchElementChildren } from "../lib/chat_page/streaming_dom_patch";
 import {
   WordRevealTimeline,
   clampToRevealChunkBoundary,
@@ -66,7 +70,7 @@ function readCharacterStates(container: HTMLElement): Set<number> {
 function runStreamingFrames(
   source = SOURCE,
   render: (container: HTMLElement, text: string) => void = (container, text) => {
-    container.innerHTML = `<p>${text}</p>`;
+    patchElementChildren(container, `<p>${text}</p>`);
   },
 ): FrameState[] {
   const pace = createStreamPace(0, 0);
@@ -88,6 +92,11 @@ function runStreamingFrames(
       clampToWordBoundary(pacedText, clampToRevealChunkBoundary(pacedText, smoothed)),
     );
 
+    // 本番と同じ順序で1フレームを再現する。単語spanを畳んでから差分適用し、
+    // そのあとフェードインを付け直す。
+    // Reproduce one production frame in order: fold the reveal spans away, patch
+    // the DOM, then re-apply the fade-in.
+    clearStreamingWordReveal(container);
     render(container, pacedText.slice(0, displayLength));
     applyStreamingWordReveal(container, timeline, now);
     frames.push({
@@ -145,7 +154,7 @@ describe("streamed reveal, end to end", () => {
     // text used to skip its fade on those frames, so only the first moment
     // animated. Assert the fade keeps running for the whole reply.
     const frames = runStreamingFrames(MARKDOWN_SOURCE, (container, text) => {
-      renderSanitizedHTML(container, formatLLMOutput(text));
+      patchSanitizedHTML(container, formatLLMOutput(text));
     });
 
     const growing = frames.filter(
