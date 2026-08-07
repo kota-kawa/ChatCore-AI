@@ -71,6 +71,28 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Never create clickable URLs", BASE_SYSTEM_PROMPT)
         self.assertIn("full URL verbatim in inline code", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 根拠が乏しい場合でも俯瞰的な推論で判断するよう指示していることを検証します。
+    # English: Verify the prompt tells the model to reason to a judgment when evidence is thin.
+    def test_base_system_prompt_allows_reasoned_judgment_without_data(self):
+        self.assertIn("Absence of evidence is not disproof", BASE_SYSTEM_PROMPT)
+        self.assertIn("unverified, not false", BASE_SYSTEM_PROMPT)
+        self.assertIn("step back and reason it through", BASE_SYSTEM_PROMPT)
+        self.assertIn("commit to the conclusion", BASE_SYSTEM_PROMPT)
+        self.assertIn('Do not retreat into "there is no data"', BASE_SYSTEM_PROMPT)
+        self.assertIn("do not discard sound reasoning", BASE_SYSTEM_PROMPT)
+        self.assertIn("Treat them as reasoning problems", BASE_SYSTEM_PROMPT)
+        self.assertIn("plain confidence signal", BASE_SYSTEM_PROMPT)
+
+    # 日本語: 検索文脈が無い場合でも推論で答えるよう実行時コンテキストが促すことを検証します。
+    # English: Verify the runtime context asks for reasoning when no search context exists.
+    def test_runtime_context_prefers_reasoning_over_refusing_without_sources(self):
+        prompt = _build_base_system_prompt(locale="ja")
+
+        self.assertIn("Reason from stable background", prompt)
+        self.assertIn("only when the answer truly depends on that fact", prompt)
+        self.assertIn("Search results that do not mention a claim do not disprove it", prompt)
+        self.assertIn("label that judgment as inference", prompt)
+
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.
     def test_base_system_prompt_includes_generative_ui_stability_rules(self):

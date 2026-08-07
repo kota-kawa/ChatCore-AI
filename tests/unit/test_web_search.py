@@ -751,6 +751,30 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIsNotNone(message)
         self.assertIn("Page extract: The full article body text.", message["content"])
 
+    # 日本語: 検索結果に記載がないことを反証と扱わないよう指示していることを検証します。
+    # English: Verify the context tells the model that silent sources are not disproof.
+    def test_build_system_message_states_missing_coverage_is_not_disproof(self):
+        result = web_search.WebSearchResult(
+            query="q",
+            searched_at="2026-05-27T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Title",
+                    hostname="example.com",
+                    age="",
+                    snippets=("snippet",),
+                    page_text="",
+                ),
+            ),
+        )
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertIn("do not disprove it", content)
+        self.assertIn("the sources do not cover it", content)
+        self.assertIn("label that part as inference", content)
+
     # 日本語: ビルドシステムmessageneutralizesinjectedコンテキストtagsことを検証します。
     # English: Verify that build system message neutralizes injected context tags.
     def test_build_system_message_neutralizes_injected_context_tags(self):
