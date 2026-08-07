@@ -171,6 +171,12 @@ export function useHomePageRoomActions({
   localeRef.current = locale;
   const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
   const accessChatInProgressRef = useRef(false);
+  // 削除処理は確認モーダルと通信を挟むため、コールバック生成時ではなく実行時の
+  // 表示状態を見る必要がある。
+  // Deletion awaits a confirm modal and a request, so it must read the view state
+  // at call time rather than the one captured when the callback was created.
+  const pageViewStateRef = useRef(pageViewState);
+  pageViewStateRef.current = pageViewState;
 
   const buildChatRoomsPageUrl = useCallback(() => {
     const params = new URLSearchParams({
@@ -183,14 +189,56 @@ export function useHomePageRoomActions({
     setChatMessageListResetKey((previous) => previous + 1);
   }, [setChatMessageListResetKey]);
 
+  const showSetupForm = useCallback(() => {
+    // 戻るボタンを含むチャット領域を隠す前にフォーカスを外す。
+    // Blur focus before hiding the chat container from assistive technologies.
+    moveFocusOutOfHiddenRegion(document.getElementById("chat-container"));
+    setPageViewState("setup");
+    closeOverlaySidebar();
+    setLaunchingTaskName(null);
+    setLaunchingTaskId(null);
+    setSetupInfo("");
+    // 未保存モードは一度の実行につき1回限りの指定にする。戻ってきたら
+    // チェックを外し、次回の送信を通常モードに戻す。
+    // Temporary mode is a one-shot toggle: clear it on return so the next
+    // send defaults back to normal mode.
+    setTemporaryModeEnabled(false);
+    closeShareModal();
+    scheduleSetupViewportFit();
+  }, [
+    closeOverlaySidebar,
+    closeShareModal,
+    setLaunchingTaskId,
+    setLaunchingTaskName,
+    setPageViewState,
+    setTemporaryModeEnabled,
+  ]);
+
   const clearCurrentRoomAfterDelete = useCallback(() => {
     resetChatMessageList();
     persistCurrentRoomId(null);
+    setCurrentRoomMode("normal");
     setMessages([]);
     setShareUrl("");
     setShareStatus({ message: localize("共有するチャットルームを選択してください。", "Select a chat to share."), error: false });
     closeShareModal();
-  }, [closeShareModal, persistCurrentRoomId, resetChatMessageList, setMessages, setShareStatus, setShareUrl]);
+    // 開いているルームを削除したら、そのチャット画面には留まれないのでトップページへ戻す。
+    // 既にトップページにいる場合は入力中の内容を消さないよう何もしない。
+    // Deleting the room that is currently open leaves nothing to show, so go back to
+    // the top page. When already there, stay put so a draft in the setup form survives.
+    if (pageViewStateRef.current !== "setup") {
+      showSetupForm();
+    }
+  }, [
+    closeShareModal,
+    persistCurrentRoomId,
+    resetChatMessageList,
+    setCurrentRoomMode,
+    setMessages,
+    setShareStatus,
+    setShareUrl,
+    showSetupForm,
+  ]);
 
   const cancelRoomSelection = useCallback(() => {
     setIsRoomSelectionMode(false);
@@ -347,31 +395,6 @@ export function useHomePageRoomActions({
       setPageViewState,
     ],
   );
-
-  const showSetupForm = useCallback(() => {
-    // 戻るボタンを含むチャット領域を隠す前にフォーカスを外す。
-    // Blur focus before hiding the chat container from assistive technologies.
-    moveFocusOutOfHiddenRegion(document.getElementById("chat-container"));
-    setPageViewState("setup");
-    closeOverlaySidebar();
-    setLaunchingTaskName(null);
-    setLaunchingTaskId(null);
-    setSetupInfo("");
-    // 未保存モードは一度の実行につき1回限りの指定にする。戻ってきたら
-    // チェックを外し、次回の送信を通常モードに戻す。
-    // Temporary mode is a one-shot toggle: clear it on return so the next
-    // send defaults back to normal mode.
-    setTemporaryModeEnabled(false);
-    closeShareModal();
-    scheduleSetupViewportFit();
-  }, [
-    closeOverlaySidebar,
-    closeShareModal,
-    setLaunchingTaskId,
-    setLaunchingTaskName,
-    setPageViewState,
-    setTemporaryModeEnabled,
-  ]);
 
   const handleAccessChat = useCallback(async () => {
     if (accessChatInProgressRef.current) return;
