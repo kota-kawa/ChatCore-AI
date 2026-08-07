@@ -35,9 +35,14 @@ import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
   DEFAULT_AVATAR_URL,
   PASSKEY_INITIAL_SUPPORT_TEXT,
-  PROFILE_SAVE_EFFECT_DURATION_MS,
-  SETTINGS_NAV_ITEMS
+  PROFILE_SAVE_EFFECT_DURATION_MS
 } from "../scripts/user/settings/constants";
+import {
+  SETTINGS_SECTION_QUERY_KEY,
+  buildSettingsSectionQuery,
+  parseSettingsSection,
+  shouldSyncSettingsSectionUrl
+} from "../scripts/user/settings/section_url";
 import {
   issueMcpOAuthClient,
   loadLocalePreference,
@@ -511,7 +516,7 @@ export default function UserSettingsPage() {
 
   // セクション切り替え時に必要なデータを遅延ロードする
   // Lazily load section-specific data when the user navigates to that section
-  const handleSectionSelect = useCallback((section: SettingsSection) => {
+  const applySection = useCallback((section: SettingsSection) => {
     setActiveSection(section);
 
     if (section === "prompts") {
@@ -529,15 +534,34 @@ export default function UserSettingsPage() {
     }
   }, [loadMcpOAuthClientList, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
 
-  // 共有URLやブラウザ再読み込みから目的の設定へ直接移動できるよう、section クエリを初回表示へ反映する
-  // Apply the section query on first load so shared URLs and reloads open the intended settings area directly
+  // 選択したセクションを URL のクエリにも書き戻す。再読み込みしても同じセクションが開くようにするため、
+  // 履歴を増やさない replace + shallow でページ全体の再取得は避ける。
+  // Mirror the selected section into the URL query so a reload reopens the same section.
+  // Use replace + shallow to avoid piling up history entries or refetching the page.
+  const handleSectionSelect = useCallback((section: SettingsSection) => {
+    applySection(section);
+
+    if (!shouldSyncSettingsSectionUrl(router.query, section)) return;
+    void router.replace(
+      { pathname: router.pathname, query: buildSettingsSectionQuery(router.query, section) },
+      undefined,
+      { shallow: true, scroll: false }
+    );
+  }, [applySection, router]);
+
+  // 共有URLやブラウザ再読み込みから目的の設定へ直接移動できるよう、section クエリを初回表示へ反映する。
+  // 以降はユーザー操作が唯一の切り替え手段なので、クエリの適用は初回の一度きりに限定する。
+  // Apply the section query on first load so shared URLs and reloads open the intended settings area directly.
+  // After that the user's clicks are the only source of truth, so apply the query just once.
+  const initialSectionAppliedRef = useRef(false);
   useEffect(() => {
-    const requestedSection = new URLSearchParams(window.location.search).get("section");
-    const isKnownSection = SETTINGS_NAV_ITEMS.some((item) => item.section === requestedSection);
-    if (isKnownSection) {
-      handleSectionSelect(requestedSection as SettingsSection);
+    if (initialSectionAppliedRef.current || !router.isReady) return;
+    initialSectionAppliedRef.current = true;
+    const requestedSection = parseSettingsSection(router.query[SETTINGS_SECTION_QUERY_KEY]);
+    if (requestedSection) {
+      applySection(requestedSection);
     }
-  }, [handleSectionSelect]);
+  }, [applySection, router.isReady, router.query]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
