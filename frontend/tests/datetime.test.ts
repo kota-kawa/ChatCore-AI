@@ -34,6 +34,30 @@ test("formatDateTime does not depend on the ambient time zone", () => {
   assert.match(tokyo, /2026\/08\/05 01:05/);
 });
 
+test("formatDateTime treats offset-less database timestamps as UTC", () => {
+  // PostgreSQL の TIMESTAMP はオフセットなしで直列化される。new Date() に直接渡すと
+  // サーバーとブラウザのローカルTZで解釈が変わり、共有ページの hydration が失敗する。
+  // PostgreSQL TIMESTAMP values are serialized without an offset. Passing one directly
+  // to new Date() changes its meaning with the runtime TZ and breaks shared-page hydration.
+  const value = "2026-08-04T16:05:00";
+  const utc = withTimeZone("UTC", () => formatDateTime(value));
+  const tokyo = withTimeZone("Asia/Tokyo", () => formatDateTime(value));
+  const newYork = withTimeZone("America/New_York", () => formatDateTime(value));
+
+  assert.equal(utc, tokyo);
+  assert.equal(utc, newYork);
+  assert.match(utc, /2026\/08\/05 01:05/);
+});
+
+test("formatDateTime preserves an explicit timestamp offset", () => {
+  const value = "2026-08-05T01:05:00+09:00";
+  const utc = withTimeZone("UTC", () => formatDateTime(value));
+  const newYork = withTimeZone("America/New_York", () => formatDateTime(value));
+
+  assert.equal(utc, newYork);
+  assert.match(utc, /2026\/08\/05 01:05/);
+});
+
 test("formatDate does not depend on the ambient time zone", () => {
   const value = "2026-08-04T16:05:00Z";
   const utc = withTimeZone("UTC", () => formatDate(value));
