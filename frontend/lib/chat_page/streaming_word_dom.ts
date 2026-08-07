@@ -1,13 +1,14 @@
 // 描画済みボットメッセージの末尾に、チャンクごとのフェードインを適用するDOM処理。
 // 「新しく現れたひとかたまり」だけがふわりと立ち上がるようにする。1文字ずつでは
 // 生成が速いときにタイプライターに見えるため、数語ぶんをまとめて1回で見せる。
-// メッセージはストリーミング中フレーム毎にHTMLごと差し替わるため、ここで付ける
-// spanも毎フレーム作り直される。負のanimation-delayで再生位置を引き継ぐ。
+// ストリーミング中は毎フレーム、clearStreamingWordRevealでspanを畳んでから差分
+// パッチを当て、そのあとここで付け直す。負のanimation-delayで再生位置を引き継ぐ。
 // DOM pass that fades in each newly revealed chunk at the tail of a rendered
 // bot message, so a few words rise together instead of one character at a time
-// (which reads as a typewriter when generation is fast). The message HTML is
-// replaced every frame while streaming, so these spans are rebuilt every frame
-// and resume mid-animation through a negative animation-delay.
+// (which reads as a typewriter when generation is fast). Every streaming frame
+// folds these spans away through clearStreamingWordReveal, patches the DOM and
+// applies them again here; they resume mid-animation via a negative
+// animation-delay.
 
 import type { RevealWord } from "./streaming_word_reveal";
 import {
@@ -159,6 +160,28 @@ function wrapChunksInTextNode(
     fragment.appendChild(document_.createTextNode(text.slice(cursor)));
   }
   entry.node.parentNode?.replaceChild(fragment, entry.node);
+}
+
+// 付与済みの単語spanを素のテキストへ戻し、隣接テキストノードを結合する。
+// 差分パッチはHTMLの形と実DOMの形が一致していることを前提にするため、
+// パッチ前にこの装飾を畳んでおく。再生位置はWordRevealTimelineが持っており、
+// パッチ後の再適用で負のdelayとして引き継がれる。
+// Unwrap the reveal spans back into plain text and merge adjacent text nodes.
+// The DOM patch assumes the live tree has the same shape as the incoming HTML,
+// so this decoration is folded away first. Playback position lives in the
+// WordRevealTimeline and is restored as a negative delay when reveal is applied
+// again after the patch.
+export function clearStreamingWordReveal(container: HTMLElement) {
+  const spans = Array.from(container.querySelectorAll<HTMLElement>(`span.${REVEAL_WORD_CLASS}`));
+  if (spans.length === 0) return;
+
+  spans.forEach((span) => {
+    const parent = span.parentNode;
+    const document_ = span.ownerDocument;
+    if (!parent || !document_) return;
+    parent.replaceChild(document_.createTextNode(span.textContent ?? ""), span);
+  });
+  container.normalize();
 }
 
 // 描画直後のコンテナへ単語フェードインを適用する。

@@ -6,6 +6,7 @@ import { sanitizeClassAttributeValue } from "../core/html";
 import { resilientFetch } from "../core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
+import { patchElementChildren } from "../../lib/chat_page/streaming_dom_patch";
 
 /**
  * HTML をサニタイズして挿入する
@@ -153,6 +154,29 @@ function renderSanitizedHTML(
     allowedTags: allowed,
     compactBotMessage: isBotMessage
   });
+}
+
+/**
+ * サニタイズ済み HTML を差分適用する（生成中の再描画向け）
+ * innerHTML の丸ごと差し替えと違い、既存ノードを使い回すため
+ * favicon の再読み込みによる点滅や、クリック中のノード消失が起きない。
+ * @param element   挿入先
+ * @param dirtyHtml サニタイズ前 HTML
+ * @param allowed   許可タグ（省略時はデフォルト）
+ */
+function patchSanitizedHTML(
+  element: HTMLElement,
+  dirtyHtml: string,
+  allowed: string[] = DEFAULT_ALLOWED_MESSAGE_TAGS
+) {
+  const isBotMessage = element.classList.contains("bot-message");
+  patchElementChildren(
+    element,
+    sanitizeMessageHtml(dirtyHtml, {
+      allowedTags: allowed,
+      compactBotMessage: isBotMessage
+    })
+  );
 }
 
 /**
@@ -384,6 +408,7 @@ function stripWebSearchSourcesHtml(text: string): string {
 export {
   sanitizeMessageHtml,
   renderSanitizedHTML,
+  patchSanitizedHTML,
   setTextWithLineBreaks,
   isChatViewportNearBottom,
   scrollMessageToBottom,
