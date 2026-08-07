@@ -6,13 +6,24 @@
 // to match the fixed Japanese format used here.
 const DISPLAY_TIME_ZONE = "Asia/Tokyo";
 
+// PostgreSQL の TIMESTAMP（タイムゾーンなし）は Python の isoformat() により
+// オフセットなしの ISO 文字列になる。JavaScript はその文字列を実行環境のローカル
+// 時刻として解釈するため、UTC の SSR と利用者ブラウザで別の瞬間になってしまう。
+// DB・サーバーで使っている UTC を明示し、どの環境でも同じ瞬間として解析する。
+// PostgreSQL TIMESTAMP values become offset-less ISO strings through Python's
+// isoformat(). JavaScript otherwise interprets them in the runtime's local zone,
+// so UTC SSR and a visitor's browser can resolve different instants. Make the
+// database/server UTC convention explicit before parsing.
+const OFFSET_LESS_ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+
 /**
  * 文字列の日付をDateオブジェクトに変換する
  * Parse a date string into a Date object
  */
 function parseDate(value?: string | null) {
   if (!value) return null;
-  const parsed = new Date(value);
+  const normalized = OFFSET_LESS_ISO_DATE_TIME.test(value) ? `${value}Z` : value;
+  const parsed = new Date(normalized);
   // 無効な日付の場合はnullを返す
   // Return null if the date is invalid
   if (Number.isNaN(parsed.getTime())) return null;
