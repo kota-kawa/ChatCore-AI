@@ -50,7 +50,7 @@ import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } 
 import { swrFetcher } from "../lib/data/swr_fetcher";
 import { createPersistentCacheProvider, loadPersistentCacheEntries } from "../lib/data/persistent_cache";
 import { LocaleProvider, useTranslation } from "../contexts/locale_context";
-import { DEFAULT_LOCALE, normalizeLocale, resolveRequestLocale, type Locale } from "../lib/i18n/config";
+import { DEFAULT_LOCALE, normalizeLocale, resolvePageLocale, type Locale } from "../lib/i18n/config";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -296,8 +296,13 @@ export default function App({ Component, pageProps }: AppProps<LocalizedPageProp
 App.getInitialProps = async (appContext: AppContext) => {
   const appProps = await NextApp.getInitialProps(appContext);
   const request = appContext.ctx.req;
-  const locale = request
-    ? resolveRequestLocale(request.headers.cookie, request.headers["accept-language"])
-    : DEFAULT_LOCALE;
+  // URLの言語をCookieやAccept-Languageより優先し、各正規URLの内容を安定させる。
+  // Prefer the route locale over cookies and Accept-Language so each canonical URL
+  // always serves one stable language.
+  const locale = resolvePageLocale(
+    appContext.ctx.locale,
+    request?.headers.cookie,
+    request?.headers["accept-language"]
+  );
   return { ...appProps, pageProps: { ...appProps.pageProps, __locale: locale } };
 };

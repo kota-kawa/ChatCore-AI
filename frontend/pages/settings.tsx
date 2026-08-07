@@ -1,6 +1,7 @@
 // ユーザー設定ページ全体のエントリポイント — プロフィール・外観・プロンプト・セキュリティを一画面で管理する
 // Entry point for the user settings page — manages profile, appearance, prompts, and security in a single view
 import { SeoHead } from "../components/SeoHead";
+import { useRouter } from "next/router";
 import {
   useCallback,
   useEffect,
@@ -84,6 +85,7 @@ type SettingsLoadOptions = { background?: boolean };
 
 export default function UserSettingsPage() {
   const { locale, setLocale, t } = useTranslation();
+  const router = useRouter();
   // 現在表示中のセクションを管理する
   // Track which section is currently displayed
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
@@ -259,6 +261,9 @@ export default function UserSettingsPage() {
       const savedLocale = await updateLocalePreference(nextLocale);
       if (localeRequestRef.current !== requestId) return;
       setLocale(savedLocale);
+      // 保存した言語に対応するURLへ切り替え、次回SSRでも同じ言語を維持する。
+      // Switch to the URL for the saved locale so the next SSR keeps the same language.
+      void router.replace(router.asPath, router.asPath, { locale: savedLocale });
       // このコールバックのクロージャが持つ`t`はクリック時点（切り替え前）のロケールに
       // 束縛されたままなので、トーストの文言はここでは切り替え後のロケールを明示して取得する。
       // This closure's `t` stays bound to the pre-switch locale, so fetch the toast copy
@@ -271,7 +276,7 @@ export default function UserSettingsPage() {
     } finally {
       if (localeRequestRef.current === requestId) setLocaleSaving(false);
     }
-  }, [locale, setLocale]);
+  }, [locale, router, setLocale]);
 
   // ユーザーが投稿したプロンプト一覧を取得する
   // Fetch the list of prompts authored by the current user

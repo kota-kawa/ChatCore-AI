@@ -1,3 +1,5 @@
+import type { Locale } from "./i18n/config";
+
 export const SITE_NAME = "Chat Core";
 
 export const DEFAULT_SEO_TITLE = "ChatCore-AI | AIチャット・プロンプト共有・メモ管理";
@@ -12,6 +14,23 @@ export const DEFAULT_OG_IMAGE_HEIGHT = 1070;
 export const TWITTER_SITE = process.env.NEXT_PUBLIC_TWITTER_SITE || "";
 
 const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
+
+// 検索エンジンへ公開する言語別URLでは、日本語を既定URL、英語を /en 配下に置く。
+// Public locale URLs keep Japanese at the default path and place English under /en.
+export function localizePublicPath(path: string, locale: Locale) {
+  const match = /^([^?#]*)([?#].*)?$/.exec(path);
+  const rawPathname = match?.[1] || "/";
+  const suffix = match?.[2] || "";
+  const pathname = rawPathname.startsWith("/") ? rawPathname : `/${rawPathname}`;
+  const unprefixedPath = pathname === "/en" || pathname === "/en/"
+    ? "/"
+    : pathname.startsWith("/en/")
+      ? pathname.slice(3)
+      : pathname;
+
+  if (locale === "ja") return `${unprefixedPath}${suffix}`;
+  return `${unprefixedPath === "/" ? "/en" : `/en${unprefixedPath}`}${suffix}`;
+}
 
 /**
  * サイトの公開URLを取得する
@@ -45,6 +64,22 @@ export function absoluteUrl(pathOrUrl: string, baseUrl = getPublicSiteUrl()) {
   // Prepend a slash if the path does not start with one
   const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
   return `${baseUrl}${normalizedPath}`;
+}
+
+/**
+ * 公開URLを指定言語の正規URLへ変換する
+ * Convert a public URL into the canonical URL for the requested locale
+ */
+export function localizedAbsoluteUrl(pathOrUrl: string, locale: Locale, baseUrl = getPublicSiteUrl()) {
+  if (!pathOrUrl) return "";
+
+  if (ABSOLUTE_URL_PATTERN.test(pathOrUrl)) {
+    const url = new URL(pathOrUrl);
+    url.pathname = localizePublicPath(url.pathname, locale);
+    return url.toString();
+  }
+
+  return absoluteUrl(localizePublicPath(pathOrUrl, locale), baseUrl);
 }
 
 /**

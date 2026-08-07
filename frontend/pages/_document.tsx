@@ -1,5 +1,5 @@
 import NextDocument, { Html, Head, Main, NextScript, type DocumentContext, type DocumentInitialProps } from "next/document";
-import { resolveRequestLocale, type Locale } from "../lib/i18n/config";
+import { resolvePageLocale, type Locale } from "../lib/i18n/config";
 
 // フラッシュを防ぐために<head>内で同期的にテーマを適用するインラインスクリプト
 // Inline script to synchronously apply the theme in <head> to prevent flash
@@ -13,7 +13,7 @@ const themeBootstrapScript = `(function(){try{var k='chatcore-theme';var v=local
 // <html> before hydration so CSS can prevent the setup view from flashing.
 // The flag is cleared by use_home_page_controller once the view is restored.
 // The key must match STORAGE_KEYS.homePageViewState in frontend/scripts/core/constants.ts.
-const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/')return;var shouldBootChat=localStorage.getItem('chatcore.home.viewState')==='chat';if(!shouldBootChat){try{var raw=localStorage.getItem('chatcore.chat.activeGeneration');var parsed=raw?JSON.parse(raw):null;var updatedAt=Number(parsed&&parsed.updatedAt);shouldBootChat=!!(parsed&&typeof parsed.roomId==='string'&&parsed.roomId.trim()&&isFinite(updatedAt)&&Date.now()-updatedAt<=1800000);}catch(_){}}if(shouldBootChat){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
+const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/'&&location.pathname!=='/en'&&location.pathname!=='/en/')return;var shouldBootChat=localStorage.getItem('chatcore.home.viewState')==='chat';if(!shouldBootChat){try{var raw=localStorage.getItem('chatcore.chat.activeGeneration');var parsed=raw?JSON.parse(raw):null;var updatedAt=Number(parsed&&parsed.updatedAt);shouldBootChat=!!(parsed&&typeof parsed.roomId==='string'&&parsed.roomId.trim()&&isFinite(updatedAt)&&Date.now()-updatedAt<=1800000);}catch(_){}}if(shouldBootChat){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
 
 // 直近の認証状態をハイドレーション前に <html> へ反映し、ログイン済みでも
 // 一瞬だけ未ログイン向けUIが描画される問題を防ぐ。CSS 側でゲスト専用要素を
@@ -77,6 +77,10 @@ Document.getInitialProps = async (ctx: DocumentContext): Promise<LocalizedDocume
   const initialProps = await NextDocument.getInitialProps(ctx);
   return {
     ...initialProps,
-    locale: resolveRequestLocale(ctx.req?.headers.cookie, ctx.req?.headers["accept-language"])
+    locale: resolvePageLocale(
+      ctx.locale,
+      ctx.req?.headers.cookie,
+      ctx.req?.headers["accept-language"]
+    )
   };
 };

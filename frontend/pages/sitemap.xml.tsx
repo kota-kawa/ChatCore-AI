@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from "next";
 import { buildPromptPath } from "../lib/promptSlug";
+import { localizePublicPath } from "../lib/seo";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 // Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
@@ -139,25 +140,33 @@ export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: re
     ...extraRoutes
   ];
   const urls = routes
-    .map((route) => {
-      const loc = normalizedOrigin ? `${normalizedOrigin}${route.path}` : route.path;
+    .flatMap((route) => (["ja", "en"] as const).map((locale) => {
+      const localizedPath = localizePublicPath(route.path, locale);
+      const loc = normalizedOrigin ? `${normalizedOrigin}${localizedPath}` : localizedPath;
+      const japanesePath = localizePublicPath(route.path, "ja");
+      const englishPath = localizePublicPath(route.path, "en");
+      const japaneseUrl = normalizedOrigin ? `${normalizedOrigin}${japanesePath}` : japanesePath;
+      const englishUrl = normalizedOrigin ? `${normalizedOrigin}${englishPath}` : englishPath;
       // 個別ルートにlastmodが指定されていればそれを優先する
       // Prefer a route-specific lastmod when provided
       const routeLastmod = ("lastmod" in route && route.lastmod) ? route.lastmod : lastmod;
       return [
         "  <url>",
         `    <loc>${xmlEscape(loc)}</loc>`,
+        `    <xhtml:link rel="alternate" hreflang="ja" href="${xmlEscape(japaneseUrl)}" />`,
+        `    <xhtml:link rel="alternate" hreflang="en" href="${xmlEscape(englishUrl)}" />`,
+        `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(japaneseUrl)}" />`,
         `    <lastmod>${xmlEscape(routeLastmod)}</lastmod>`,
         `    <changefreq>${route.changefreq}</changefreq>`,
         `    <priority>${route.priority}</priority>`,
         "  </url>"
       ].join("\n");
-    })
+    }))
     .join("\n");
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     urls,
     "</urlset>",
     ""

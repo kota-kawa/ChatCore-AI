@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { useTranslation } from "../../contexts/locale_context";
+
 // ヒーローの会話デモ（装飾用・支援技術には本文コピーで内容を伝える）
 // Hero conversation demo (decorative; the copy conveys the content to assistive tech)
 function LpHeroDemo() {
@@ -58,12 +61,12 @@ export function LpHero() {
             {locale === "en" ? "ChatCore-AI brings AI chat, reusable prompts, and organized notes into one free workspace. Research, write, and keep what matters without switching tools." : "ChatCore-AIは、AIチャット・プロンプト共有・メモ管理をひとつにまとめた、無料で使える日本語AIワークスペースです。調べる・書く・整理する日々の作業が、この画面ひとつで完結します。"}
           </p>
           <div className="lp-hero__cta">
-            <a href="/register" className="lp-btn lp-btn--primary lp-btn--large">
+            <Link href="/register" className="lp-btn lp-btn--primary lp-btn--large">
               {t("lp.start")}
-            </a>
-            <a href="/" className="lp-btn lp-btn--ghost lp-btn--large">
+            </Link>
+            <Link href="/" className="lp-btn lp-btn--ghost lp-btn--large">
               {locale === "en" ? "Try AI chat" : "チャットを試してみる"}
-            </a>
+            </Link>
           </div>
           <ul className="lp-hero__trust">
             <li>{locale === "en" ? "Free account" : "登録無料"}</li>
@@ -76,4 +79,3 @@ export function LpHero() {
     </section>
   );
 }
-import { useTranslation } from "../../contexts/locale_context";
