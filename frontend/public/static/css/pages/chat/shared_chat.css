@@ -192,7 +192,44 @@
   font-size: var(--text-xs, 0.8125rem);
 }
 
+/* 長い会話を読み終えた利用者が、上部へ戻らず続きの会話を始められるようにする */
+/* Lets readers continue a long conversation without returning to the page header. */
+.shared-chat-page .shared-chat-footer .shared-chat-continue {
+  align-items: flex-start;
+  margin-top: 0.85rem;
+}
+
+.shared-chat-page .shared-chat-footer :is(
+  .shared-chat-continue__hint,
+  .shared-chat-continue__error
+) {
+  text-align: left;
+}
+
 @media (max-width: 576px) {
+  /* 通常チャット用の .chat-page-shell は、モバイルでは固定高さかつ overflow: hidden
+     になる。共有ページは会話全体を読む通常の文書なので、その制約をここで解除する。
+     shared-chat-page はメッセージ共通スタイルを使うために chat-page-shell を併用している。 */
+  /* The regular chat's .chat-page-shell becomes fixed-height with overflow: hidden on
+     mobile. A shared chat is a document-like, read-only view, so it must retain normal
+     page scrolling. It still carries chat-page-shell to reuse message styles. */
+  .shared-chat-page.chat-page-shell {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    height: auto;
+    min-height: 100dvh;
+    padding: clamp(0.5rem, 2vw, 1.5rem);
+    align-items: flex-start;
+    justify-content: center;
+    overflow: visible;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y;
+    transition: none;
+  }
+
   .shared-chat-page .shared-chat-shell {
     border-radius: var(--radius-lg, 20px);
   }
