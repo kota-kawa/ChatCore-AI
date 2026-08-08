@@ -5,7 +5,8 @@ import { Marked } from "marked";
 
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
-import { copyTextToClipboard, sanitizeMessageHtml } from "./message_utils";
+import { sanitizeMessageHtml } from "./message_utils";
+import { initMessageCopyButtons } from "./message_copy_buttons";
 import { refreshChatShareState } from "./chat_share";
 
 type MarkedParseOptions = {
@@ -17,7 +18,6 @@ type MarkedParseOptions = {
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let memoMarkedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markdownEnhancementDisabled = false;
-const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
 const MARKED_HTML_CACHE_LIMIT = 160;
 const botMarkdownHtmlCache = new Map<string, string>();
 const userMarkdownHtmlCache = new Map<string, string>();
@@ -479,54 +479,6 @@ function formatMarkdownFallback(markdown: string) {
   return html;
 }
 
-function onCodeBlockCopyButtonClick(event: Event) {
-  const target = event.target as Element | null;
-  const button = target?.closest(CODE_COPY_BUTTON_SELECTOR) as HTMLButtonElement | null;
-  if (!button) return;
-
-  const codeElement = button.closest(".code-block-container")?.querySelector("code");
-  const code = codeElement ? codeElement.textContent || "" : "";
-  const icon = button.querySelector("i");
-  const textSpan = button.querySelector("span");
-  const defaultLabel = textSpan ? textSpan.dataset.defaultLabel || textSpan.textContent || "" : "";
-  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
-
-  const copyPromise = copyTextToClipboard(code);
-
-  copyPromise.then(() => {
-    if (icon) {
-      icon.classList.remove("bi-clipboard", "bi-x-lg");
-      icon.classList.add("bi-check-lg");
-      window.setTimeout(() => {
-        icon.classList.remove("bi-check-lg", "bi-x-lg");
-        icon.classList.add("bi-clipboard");
-      }, 2000);
-    }
-    if (textSpan) {
-      textSpan.textContent = "Copied!";
-      window.setTimeout(() => {
-        textSpan.textContent = defaultLabel;
-      }, 2000);
-    }
-  }).catch((error) => {
-    console.error("Failed to copy code block.", error);
-    if (icon) {
-      icon.classList.remove("bi-clipboard", "bi-check-lg");
-      icon.classList.add("bi-x-lg");
-      window.setTimeout(() => {
-        icon.classList.remove("bi-check-lg", "bi-x-lg");
-        icon.classList.add("bi-clipboard");
-      }, 2000);
-    }
-    if (textSpan) {
-      textSpan.textContent = "Failed";
-      window.setTimeout(() => {
-        textSpan.textContent = defaultLabel;
-      }, 2000);
-    }
-  });
-}
-
 function ensureMarkedParser() {
   if (markedParser) return Promise.resolve();
   if (markdownEnhancementDisabled) return Promise.resolve();
@@ -761,28 +713,17 @@ const initSidebarToggle = () => {
   window.addEventListener("resize", closeSidebar, { signal });
 };
 
-let codeBlockCopyButtonsInitialized = false;
-
-// コードブロックのコピーボタンは document 委譲で処理するため、ページごとに一度だけ登録する。
-// The code block copy buttons are handled via document delegation, so register the listener once per page.
-function initCodeBlockCopyButtons() {
-  if (codeBlockCopyButtonsInitialized) return;
-  codeBlockCopyButtonsInitialized = true;
-  document.addEventListener("click", onCodeBlockCopyButtonClick);
-}
-
 let chatUiInitialized = false;
 
 function initChatUi() {
   if (chatUiInitialized) return;
   chatUiInitialized = true;
   initSidebarToggle();
-  initCodeBlockCopyButtons();
+  initMessageCopyButtons();
 }
 
 export {
   initChatUi,
-  initCodeBlockCopyButtons,
   showChatInterface,
   showTypingIndicator,
   hideTypingIndicator,
