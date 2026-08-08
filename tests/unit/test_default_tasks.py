@@ -281,9 +281,9 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertEqual(rows[0][0], "task_0")
         self.assertEqual(rows[0][1], "Task A")
 
-    # 日本語: readyに対して、送信bodyへ、repositoryメールタスクusesコードblockことを検証します。
-    # English: Verify that repository email task uses code block for ready to send body.
-    def test_repository_email_task_uses_code_block_for_ready_to_send_body(self):
+    # 日本語: メールタスクが、そのまま送れる本文をコピー枠のフェンスで示すことを検証します。
+    # English: Verify that the repository email task puts the ready-to-send body in a copy card fence.
+    def test_repository_email_task_uses_copy_fence_for_ready_to_send_body(self):
         load_default_tasks.cache_clear()
         try:
             tasks = load_default_tasks()
@@ -291,15 +291,15 @@ class DefaultTasksTestCase(unittest.TestCase):
             load_default_tasks.cache_clear()
 
         email_task = next(task for task in tasks if task["name"] == "📧 メール作成")
-        self.assertIn("コードブロック", email_task["prompt_template"])
-        self.assertIn("コードブロック", email_task["response_rules"])
-        self.assertIn("```text", email_task["output_skeleton"])
+        self.assertIn("```chatcore-copy", email_task["prompt_template"])
+        self.assertIn("```chatcore-copy", email_task["response_rules"])
+        self.assertIn("```chatcore-copy", email_task["output_skeleton"])
         self.assertIn("新機能説明会", email_task["input_examples"])
-        self.assertIn("```text", email_task["output_examples"])
+        self.assertIn("```chatcore-copy", email_task["output_examples"])
 
-    # 日本語: readyに対して、送信repliesへ、repositoryreplyタスクusesコードブロックすることを検証します。
-    # English: Verify that repository reply task uses code blocks for ready to send replies.
-    def test_repository_reply_task_uses_code_blocks_for_ready_to_send_replies(self):
+    # 日本語: 返答タスクが、各返信案をコピー枠のフェンスで示すことを検証します。
+    # English: Verify that the repository reply task puts each reply in a copy card fence.
+    def test_repository_reply_task_uses_copy_fences_for_ready_to_send_replies(self):
         load_default_tasks.cache_clear()
         try:
             tasks = load_default_tasks()
@@ -307,9 +307,9 @@ class DefaultTasksTestCase(unittest.TestCase):
             load_default_tasks.cache_clear()
 
         reply_task = next(task for task in tasks if task["name"] == "📨 メッセージへの返答")
-        self.assertIn("コードブロック", reply_task["prompt_template"])
-        self.assertIn("コードブロック", reply_task["response_rules"])
-        self.assertIn("```text", reply_task["output_skeleton"])
+        self.assertIn("```chatcore-copy", reply_task["prompt_template"])
+        self.assertIn("```chatcore-copy", reply_task["response_rules"])
+        self.assertIn("```chatcore-copy", reply_task["output_skeleton"])
 
     # 日本語: またはformatsensitivetasksincludeexamples、repositoryテーブルことを検証します。
     # English: Verify that repository table or format sensitive tasks include examples.

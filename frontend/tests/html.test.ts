@@ -27,3 +27,12 @@ test("sanitizeClassAttributeValue preserves memo preview blank line spacer class
     "memo-preserved-blank-line"
   );
 });
+
+test("sanitizeClassAttributeValue preserves copy card classes", () => {
+  assert.equal(
+    sanitizeClassAttributeValue(
+      "copy-block-container copy-block-header copy-block-label copy-block-copy-btn copy-block-text unsafe-class",
+    ),
+    "copy-block-container copy-block-header copy-block-label copy-block-copy-btn copy-block-text",
+  );
+});

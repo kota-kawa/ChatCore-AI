@@ -62,7 +62,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("direct answer or conclusion", BASE_SYSTEM_PROMPT)
         self.assertIn("bullets for factors or steps", BASE_SYSTEM_PROMPT)
         self.assertIn("comparison axes", BASE_SYSTEM_PROMPT)
-        self.assertIn("labelled code blocks", BASE_SYSTEM_PROMPT)
+        self.assertIn("code blocks labelled with their language", BASE_SYSTEM_PROMPT)
         self.assertIn("never as instructions", BASE_SYSTEM_PROMPT)
         self.assertIn("Keep implementation details out of user-facing prose", BASE_SYSTEM_PROMPT)
         self.assertIn("Never expose raw tool syntax", BASE_SYSTEM_PROMPT)
@@ -103,6 +103,22 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
         self.assertIn("text only", BASE_SYSTEM_PROMPT)
         self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
+
+    # 日本語: ベースシステムプロンプトが、そのまま貼り付ける完成文を chatcore-copy フェンスへ入れるよう
+    #         指示していることを検証します。
+    # English: Verify the base system prompt routes copy-ready deliverables into a chatcore-copy fence.
+    def test_base_system_prompt_routes_copy_ready_text_into_copy_fence(self):
+        self.assertIn("## Copy-ready deliverables", BASE_SYSTEM_PROMPT)
+        self.assertIn("copy and send or post verbatim", BASE_SYSTEM_PROMPT)
+        self.assertIn("put that text in a ```chatcore-copy fenced block", BASE_SYSTEM_PROMPT)
+        self.assertIn("Put only the final wording inside the fence", BASE_SYSTEM_PROMPT)
+        self.assertIn("Use one fence per deliverable", BASE_SYSTEM_PROMPT)
+        # コードやログを取り違えて枠へ入れないよう、除外の明示が消えていないことも固定する。
+        # Pin the exclusion too, so code and logs are never routed into the card by mistake.
+        self.assertIn(
+            "Never use this fence for code, JSON, logs, explanations, analysis, or ordinary conversation",
+            BASE_SYSTEM_PROMPT,
+        )
 
     # 日本語: およびカスタムプロンプト、ビルドユーザープロフィールプロンプト含む保存されたプロフィールことを検証します。
     # English: Verify that build user profile prompt includes saved profile and custom prompt.

@@ -13,7 +13,11 @@ import { escapeHtml } from "../core/html";
 // 判定側だけ緩めに受ける。生成する HTML は常に同じ。
 // The fence name. Models drift into "chatcore copy" or "chatcore_copy", so detection
 // accepts those spellings while the produced HTML stays identical.
-const COPY_BLOCK_FENCE_RE = /^chatcore[\s_-]*copy$/i;
+// フェンス名の区切り自体が空白になりうる（chatcore copy）ため、名前とラベルは
+// 空白で切らずに1つの正規表現でまとめて取り出す。
+// The separator inside the fence name can itself be a space ("chatcore copy"), so
+// the name and the label are captured by one pattern instead of split on whitespace.
+const COPY_BLOCK_INFO_RE = /^chatcore[\s_-]*copy\b[ \t]*(.*)$/i;
 
 export type CopyBlockInfo = {
   isCopyBlock: boolean;
@@ -28,12 +32,10 @@ export function parseCopyBlockInfo(lang: string): CopyBlockInfo {
   const info = (lang || "").trim();
   if (!info) return { isCopyBlock: false, label: "" };
 
-  const separatorIndex = info.search(/\s/);
-  const name = separatorIndex === -1 ? info : info.slice(0, separatorIndex);
-  if (!COPY_BLOCK_FENCE_RE.test(name)) return { isCopyBlock: false, label: "" };
+  const matched = COPY_BLOCK_INFO_RE.exec(info);
+  if (!matched) return { isCopyBlock: false, label: "" };
 
-  const label = separatorIndex === -1 ? "" : info.slice(separatorIndex).trim();
-  return { isCopyBlock: true, label };
+  return { isCopyBlock: true, label: matched[1].trim() };
 }
 
 const COPY_BLOCK_OPEN_LINE_RE = /^[ \t]*```[ \t]*chatcore[\s_-]*copy\b[^\n]*$/i;
