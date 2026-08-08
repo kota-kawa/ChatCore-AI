@@ -1,8 +1,7 @@
-import { memo, useEffect } from "react";
+import { memo } from "react";
 
 import { decodeStoredMessage, normalizeSharedSender } from "../../lib/shared_chat/message_text";
 import type { SharedChatMessage } from "../../lib/shared_chat/types";
-import { initMessageCopyButtons } from "../../scripts/chat/message_copy_buttons";
 import { SharedChatMessageParts } from "./shared_chat_message_parts";
 import { SharedChatUserMessage } from "./shared_chat_user_message";
 
@@ -16,13 +15,9 @@ type SharedChatMessageListProps = {
 // 描画するため、chat_messages.css の見た目がそのまま適用される。
 // Read-only message list for shared chats. It reuses the exact class structure of the regular
 // chat message list, so chat_messages.css styles it identically without duplicated CSS.
+// 本文中のコピーボタンの初期化は BotMessageHtml が行うため、ここでは不要。
+// BotMessageHtml sets up the in-message copy buttons, so this list does not.
 function SharedChatMessageListComponent({ emptyLabel, messages }: SharedChatMessageListProps) {
-  // 本文中のコピーボタンは document 委譲で動くため、共有ページでも初期化する。
-  // The in-message copy buttons rely on a delegated document listener, so initialise it here too.
-  useEffect(() => {
-    initMessageCopyButtons();
-  }, []);
-
   if (messages.length === 0) {
     return <p className="shared-chat-empty">{emptyLabel}</p>;
   }

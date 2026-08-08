@@ -2,16 +2,16 @@ import { render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
-import { initMessageCopyButtons } from "../scripts/chat/message_copy_buttons";
 
 const EMAIL_BODY = ["開発チーム各位", "", "お疲れさまです。4月25日に説明会を実施します。"].join("\n");
 const COPY_FENCE = ["```chatcore-copy メール本文", EMAIL_BODY, "```"].join("\n");
 
+// 委譲の初期化はここでは行わない。BotMessageHtml 自身が用意することを検証したいので、
+// テスト側で先回りして initMessageCopyButtons を呼ぶと、その欠落を隠してしまう。
+// The delegation is deliberately not initialised here: calling initMessageCopyButtons up
+// front would hide whether BotMessageHtml sets it up, which is exactly what is under test.
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
-  // 委譲は document に一度だけ張られるので、テストファイル単位で先に初期化しておく。
-  // The delegation attaches to document once, so initialise it up front for the file.
-  initMessageCopyButtons();
 });
 
 describe("copy card rendering", () => {
