@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
+import { initMessageCopyButtons } from "../../scripts/chat/message_copy_buttons";
 import { patchSanitizedHTML } from "../../scripts/chat/message_utils";
 import { prefersReducedMotion } from "../../lib/chat_page/dom";
 import {
@@ -48,6 +49,14 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
     const container = containerRef.current;
     if (!container) return;
     return bindWebSearchSourcesInteractions(container);
+  }, []);
+
+  // コードブロックとコピー枠のコピーボタンは、この本文の中に描かれる。委譲先の
+  // document リスナーはページ側の初期化に任せず、ボタンを出す当人が用意する。
+  // The copy buttons of code blocks and copy cards are rendered inside this body, so the
+  // delegated document listener is set up by whoever renders them, not by page-level init.
+  useIsomorphicLayoutEffect(() => {
+    initMessageCopyButtons();
   }, []);
 
   // DOMへの書き込みはレイアウト計算前に行う必要があるためuseIsomorphicLayoutEffectを使用する
