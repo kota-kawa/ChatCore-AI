@@ -32,11 +32,11 @@
   {
     "system_task_key": "email_writing",
     "name": "📧 Write an email",
-    "prompt_template": "Write an email suited to the recipient, purpose, and context. Separate the subject and body. Put the ready-to-send body in a code block.",
-    "response_rules": "- Account for the relationship and purpose\n- Ask briefly for missing essential information instead of inventing it\n- Keep the wording natural and practical\n- Put the copy-ready body in a code block",
-    "output_skeleton": "## Subject\n- Subject line\n\n## Body\n```text\nGreeting\n\nIntroduction\n\nRequest or information\n\nClosing\n```\n\n## Notes\n- Optional adjustments",
+    "prompt_template": "Write an email suited to the recipient, purpose, and context. Separate the subject and body. Put the ready-to-send body in a ```chatcore-copy block.",
+    "response_rules": "- Account for the relationship and purpose\n- Ask briefly for missing essential information instead of inventing it\n- Keep the wording natural and practical\n- Put the copy-ready body in a ```chatcore-copy block, separated from the explanation",
+    "output_skeleton": "## Subject\n- Subject line\n\n## Body\n```chatcore-copy\nGreeting\n\nIntroduction\n\nRequest or information\n\nClosing\n```\n\n## Notes\n- Optional adjustments",
     "input_examples": "Invite the development team to a new-feature briefing at 3:00 PM on Friday, April 25, and mention that a recording will be shared.",
-    "output_examples": "## Subject\n- New feature briefing on Friday, April 25\n\n## Body\n```text\nHi team,\n\nWe will hold a 30-minute briefing on the new feature at 3:00 PM on Friday, April 25. We will cover its overview, expected use cases, and release schedule.\n\nIf you cannot attend, we will share a recording afterward.\n\nThank you.\n```",
+    "output_examples": "## Subject\n- New feature briefing on Friday, April 25\n\n## Body\n```chatcore-copy\nHi team,\n\nWe will hold a 30-minute briefing on the new feature at 3:00 PM on Friday, April 25. We will cover its overview, expected use cases, and release schedule.\n\nIf you cannot attend, we will share a recording afterward.\n\nThank you.\n```",
     "display_order": 3
   },
   {
@@ -92,11 +92,11 @@
   {
     "system_task_key": "reply_writing",
     "name": "📨 Draft a reply",
-    "prompt_template": "Draft several natural replies appropriate to the sender and situation. Vary the tone where useful and put each ready-to-send reply in a code block.",
-    "response_rules": "- Prioritize natural, ready-to-send wording\n- Make differences in tone clear\n- Put replies in code blocks\n- Briefly explain when to use each option",
-    "output_skeleton": "## Reply options\n### Formal\n```text\nReply\n```\n\n### Standard\n```text\nReply\n```\n\n### Casual\n```text\nReply\n```",
+    "prompt_template": "Draft several natural replies appropriate to the sender and situation. Vary the tone where useful and put each ready-to-send reply in a ```chatcore-copy block.",
+    "response_rules": "- Prioritize natural, ready-to-send wording\n- Make differences in tone clear\n- Put each reply in its own ```chatcore-copy block\n- Briefly explain when to use each option",
+    "output_skeleton": "## Reply options\n### Formal\n```chatcore-copy\nReply\n```\n\n### Standard\n```chatcore-copy\nReply\n```\n\n### Casual\n```chatcore-copy\nReply\n```",
     "input_examples": "Reply to a client asking to move today's meeting 30 minutes later.",
-    "output_examples": "## Reply options\n### Formal\n```text\nThank you for letting me know. Moving today's meeting back by 30 minutes works for me. I look forward to speaking with you then.\n```",
+    "output_examples": "## Reply options\n### Formal\n```chatcore-copy\nThank you for letting me know. Moving today's meeting back by 30 minutes works for me. I look forward to speaking with you then.\n```",
     "display_order": 9
   },
   {

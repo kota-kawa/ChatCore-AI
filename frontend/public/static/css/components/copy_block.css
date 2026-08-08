@@ -1,0 +1,115 @@
+/* コピー枠（```chatcore-copy フェンス）
+   メールや返信文のように、そのままコピーして外部へ送る完成文を入れる枠。
+   右上のコピーアイコンで枠の中身だけをコピーできる。
+   コードブロックと違って本文と同じフォント・明るい背景にするのは、
+   これが「読む文章」であって「読むコード」ではないため。
+   Copy card for the ```chatcore-copy fence. It holds finished text the reader
+   pastes verbatim — an email, a message reply — and the icon at the top right
+   copies just that text. Unlike a code block it uses the body font on a light
+   surface, because this is prose to read, not code to read. */
+
+.copy-block-container {
+  margin: 0.85rem 0;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-secondary, #f9fafb);
+  overflow: hidden;
+}
+
+.copy-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  /* ラベルが無いときもボタンが右上に残るよう、space-between と min-height で高さを保つ。
+     space-between plus a min height keeps the button pinned top right even with no label. */
+  min-height: 2.15rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.85rem;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+}
+
+.copy-block-label {
+  overflow: hidden;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-block-copy-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full, 999px);
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+.copy-block-copy-btn:hover {
+  background: var(--surface-tertiary, #f2f5f3);
+  color: var(--text-dark, #1a1a1a);
+}
+
+.copy-block-copy-btn:focus-visible {
+  outline: 2px solid var(--primary-color, #14b8a6);
+  outline-offset: 2px;
+}
+
+.copy-block-copy-btn i {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* コピー結果はアイコンの差し替えで伝える（message_copy_buttons.ts）。
+   色も変えて、成功と失敗をアイコンの形だけに頼らないようにする。
+   The outcome is shown by swapping the icon (message_copy_buttons.ts); the colour
+   changes too so success and failure do not rely on icon shape alone. */
+.copy-block-copy-btn .bi-check-lg {
+  color: var(--primary-color, #14b8a6);
+}
+
+.copy-block-copy-btn .bi-x-lg {
+  color: #dc2626;
+}
+
+/* chat_messages.css の `.bot-message pre`（等幅・padding・横スクロール）を上書きするため、
+   コンテナ込みのセレクタで詳細度を上げている。
+   Scoped through the container to outrank `.bot-message pre` in chat_messages.css,
+   which would otherwise impose monospace, its own padding, and horizontal scrolling. */
+.copy-block-container .copy-block-text {
+  margin: 0;
+  padding: 0.85rem;
+  border: none;
+  background: transparent;
+  color: var(--text-dark, #1a1a1a);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: var(--chat-font-body-leading, 1.7);
+  /* 改行はそのまま、長い行は折り返す。コピー結果と表示を一致させるための要。
+     Newlines are kept and long lines wrap, which is what keeps the rendered text
+     identical to what lands on the clipboard. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: visible;
+}
+
+@media (max-width: 768px) {
+  .copy-block-header {
+    padding-left: 0.65rem;
+  }
+
+  .copy-block-container .copy-block-text {
+    padding: 0.7rem 0.65rem;
+  }
+}

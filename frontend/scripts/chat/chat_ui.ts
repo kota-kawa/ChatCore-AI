@@ -5,7 +5,9 @@ import { Marked } from "marked";
 
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
-import { copyTextToClipboard, sanitizeMessageHtml } from "./message_utils";
+import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
+import { sanitizeMessageHtml } from "./message_utils";
+import { initMessageCopyButtons } from "./message_copy_buttons";
 import { refreshChatShareState } from "./chat_share";
 
 type MarkedParseOptions = {
@@ -17,7 +19,16 @@ type MarkedParseOptions = {
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let memoMarkedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markdownEnhancementDisabled = false;
-const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
+// フェンス区間は散文の整形（見出し昇格・key:value の箇条書き化）から外す。
+// 2つ目の選択肢は末尾の閉じていないフェンスで、生成中はこれが常に現れる。
+// 拾い損ねると、書き終わるまでメール本文が箇条書きへ作り替えられ、
+// 閉じフェンスが届いた瞬間に画面が組み替わってしまう。
+// Fenced spans are kept out of the prose normalization (heading promotion,
+// key:value bullets). The second alternative is a trailing unterminated fence,
+// which is what streaming shows for most of a block's lifetime. Without it the
+// email body is rebuilt as bullets until the closing fence lands, and the layout
+// visibly reshuffles at that moment.
+const FENCED_SEGMENT_PATTERN = /(```[\s\S]*?```|```[\s\S]*$)/;
 const MARKED_HTML_CACHE_LIMIT = 160;
 const botMarkdownHtmlCache = new Map<string, string>();
 const userMarkdownHtmlCache = new Map<string, string>();
@@ -320,8 +331,7 @@ function normalizeMarkdownSegmentForDisplay(segment: string, options: NormalizeM
 
 function normalizeLLMTextForDisplay(rawText: string) {
   const normalized = rawText.replace(/\r\n?/g, "\n");
-  const codeFencePattern = /(```[\s\S]*?```)/g;
-  const parts = normalized.split(codeFencePattern);
+  const parts = normalized.split(FENCED_SEGMENT_PATTERN);
   const formattedParts = parts
     .map((part, idx) => {
       if (!part) return "";
@@ -336,8 +346,7 @@ function normalizeLLMTextForDisplay(rawText: string) {
 
 function normalizeMemoTextForDisplay(rawText: string) {
   const normalized = rawText.replace(/\r\n?/g, "\n");
-  const codeFencePattern = /(```[\s\S]*?```)/g;
-  const parts = normalized.split(codeFencePattern);
+  const parts = normalized.split(FENCED_SEGMENT_PATTERN);
   const formattedParts = parts
     .map((part, idx) => {
       if (!part) return "";
@@ -479,54 +488,6 @@ function formatMarkdownFallback(markdown: string) {
   return html;
 }
 
-function onCodeBlockCopyButtonClick(event: Event) {
-  const target = event.target as Element | null;
-  const button = target?.closest(CODE_COPY_BUTTON_SELECTOR) as HTMLButtonElement | null;
-  if (!button) return;
-
-  const codeElement = button.closest(".code-block-container")?.querySelector("code");
-  const code = codeElement ? codeElement.textContent || "" : "";
-  const icon = button.querySelector("i");
-  const textSpan = button.querySelector("span");
-  const defaultLabel = textSpan ? textSpan.dataset.defaultLabel || textSpan.textContent || "" : "";
-  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
-
-  const copyPromise = copyTextToClipboard(code);
-
-  copyPromise.then(() => {
-    if (icon) {
-      icon.classList.remove("bi-clipboard", "bi-x-lg");
-      icon.classList.add("bi-check-lg");
-      window.setTimeout(() => {
-        icon.classList.remove("bi-check-lg", "bi-x-lg");
-        icon.classList.add("bi-clipboard");
-      }, 2000);
-    }
-    if (textSpan) {
-      textSpan.textContent = "Copied!";
-      window.setTimeout(() => {
-        textSpan.textContent = defaultLabel;
-      }, 2000);
-    }
-  }).catch((error) => {
-    console.error("Failed to copy code block.", error);
-    if (icon) {
-      icon.classList.remove("bi-clipboard", "bi-check-lg");
-      icon.classList.add("bi-x-lg");
-      window.setTimeout(() => {
-        icon.classList.remove("bi-check-lg", "bi-x-lg");
-        icon.classList.add("bi-clipboard");
-      }, 2000);
-    }
-    if (textSpan) {
-      textSpan.textContent = "Failed";
-      window.setTimeout(() => {
-        textSpan.textContent = defaultLabel;
-      }, 2000);
-    }
-  });
-}
-
 function ensureMarkedParser() {
   if (markedParser) return Promise.resolve();
   if (markdownEnhancementDisabled) return Promise.resolve();
@@ -534,6 +495,10 @@ function ensureMarkedParser() {
     const renderer = {
       code(token: unknown) {
         const { text, lang } = readMarkedCodeToken(token);
+        const copyBlock = parseCopyBlockInfo(lang);
+        if (copyBlock.isCopyBlock) {
+          return renderCopyBlockHtml(text, copyBlock.label, { withCopyButton: true });
+        }
         const language = lang.split(" ")[0] || "plaintext";
 
         let highlighted = text;
@@ -569,6 +534,14 @@ function ensureMarkedParser() {
     const memoRenderer = {
       code(token: unknown) {
         const { text, lang } = readMarkedCodeToken(token);
+        // メモにはコピーボタンの委譲ハンドラが無いため、枠だけを描いて
+        // フェンス名（chatcore-copy）が言語ラベルとして表に出るのを防ぐ。
+        // Memo previews have no delegated copy handler, so render the frame only and
+        // keep the internal fence name from surfacing as a language label.
+        const copyBlock = parseCopyBlockInfo(lang);
+        if (copyBlock.isCopyBlock) {
+          return renderCopyBlockHtml(text, copyBlock.label, { withCopyButton: false });
+        }
         const language = lang.split(" ")[0] || "plaintext";
 
         let highlighted = text;
@@ -761,28 +734,17 @@ const initSidebarToggle = () => {
   window.addEventListener("resize", closeSidebar, { signal });
 };
 
-let codeBlockCopyButtonsInitialized = false;
-
-// コードブロックのコピーボタンは document 委譲で処理するため、ページごとに一度だけ登録する。
-// The code block copy buttons are handled via document delegation, so register the listener once per page.
-function initCodeBlockCopyButtons() {
-  if (codeBlockCopyButtonsInitialized) return;
-  codeBlockCopyButtonsInitialized = true;
-  document.addEventListener("click", onCodeBlockCopyButtonClick);
-}
-
 let chatUiInitialized = false;
 
 function initChatUi() {
   if (chatUiInitialized) return;
   chatUiInitialized = true;
   initSidebarToggle();
-  initCodeBlockCopyButtons();
+  initMessageCopyButtons();
 }
 
 export {
   initChatUi,
-  initCodeBlockCopyButtons,
   showChatInterface,
   showTypingIndicator,
   hideTypingIndicator,
