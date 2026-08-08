@@ -6,6 +6,7 @@ const SAFE_CLASS_PATTERNS = [
   /^hljs(?:-[a-z0-9_-]+)?$/i,
   /^language-[a-z0-9_-]+$/i,
   /^code-block-(?:container|header|lang|copy-btn)$/i,
+  /^copy-block-(?:container|header|label|copy-btn|text)$/i,
   /^bi(?:-[a-z0-9_-]+)?$/i,
   /^web-search-sources(?:(?:__|--)[a-z0-9_-]+)?$/i,
   /^web-search-citation(?:__[a-z0-9_-]+(?:--[a-z0-9_-]+)?)?$/i,

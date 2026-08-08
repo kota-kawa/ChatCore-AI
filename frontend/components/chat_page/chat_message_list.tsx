@@ -16,6 +16,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { parseTaskLaunchMessage } from "../../lib/chat_page/task_utils";
 import type { NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import { stripCopyBlockFences } from "../../scripts/chat/copy_block_markdown";
 import { stripWebSearchSourcesHtml } from "../../scripts/chat/message_utils";
 import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
@@ -351,15 +352,18 @@ function ChatMessageRow({
           )}
           <CopyActionButton
             getText={() => {
-              return message.text;
+              // コピー枠のフェンスは表示用の内部マーカーなので、貼り付け結果には残さない。
+              // The copy card fence is an internal display marker, so it never reaches the clipboard.
+              return stripCopyBlockFences(message.text);
             }}
           />
           {!message.error && (
-            // メモ保存前に Web 検索ソースの HTML タグを除去してプレーンテキストにする。
-            // Strip web search source HTML before saving to memo for clean plain text.
+            // メモ保存前に Web 検索ソースの HTML タグとコピー枠のフェンスを除去して
+            // プレーンテキストにする。
+            // Strip web search source HTML and copy card fences before saving to memo.
             <MemoSaveActionButton
               getText={() => {
-                return stripWebSearchSourcesHtml(message.text);
+                return stripCopyBlockFences(stripWebSearchSourcesHtml(message.text));
               }}
             />
           )}
