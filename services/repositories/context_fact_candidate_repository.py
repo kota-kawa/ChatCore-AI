@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.context_vault_bm25 import filter_bm25_duplicates
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from services.error_messages import (
@@ -19,6 +20,7 @@ from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FAC
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 MAX_PENDING_CONTEXT_FACT_CANDIDATES = 100
+MAX_CONTEXT_DEDUPLICATION_DOCUMENTS = 500
 
 # Share the context-vault lock namespace so fact promotion and direct fact writes
 # cannot race past their respective per-user limits.
@@ -180,8 +182,38 @@ class ContextFactCandidateRepository:
             )
             pending_count = int((cursor.fetchone() or [0])[0])
             remaining = max(MAX_PENDING_CONTEXT_FACT_CANDIDATES - pending_count, 0)
+            if remaining == 0:
+                return 0
+            cursor.execute(
+                """
+                SELECT fact_type, title, content
+                  FROM (
+                        SELECT fact_type, title, content, updated_at,
+                               CASE status WHEN 'active' THEN 0 ELSE 1 END AS priority
+                          FROM context_facts
+                         WHERE user_id = %s
+                        UNION ALL
+                        SELECT fact_type, title, content, updated_at,
+                               CASE status WHEN 'pending' THEN 0 ELSE 2 END AS priority
+                          FROM context_fact_candidates
+                         WHERE user_id = %s AND status IN ('pending', 'rejected')
+                       ) AS existing_context
+                 ORDER BY priority, updated_at DESC
+                 LIMIT %s
+                """,
+                (user_id, user_id, MAX_CONTEXT_DEDUPLICATION_DOCUMENTS),
+            )
+            existing_documents = [
+                {
+                    "fact_type": str(row[0]),
+                    "title": str(row[1] or ""),
+                    "content": str(row[2] or ""),
+                }
+                for row in cursor.fetchall()
+            ]
+            unique_candidates = filter_bm25_duplicates(candidates, existing_documents)
             inserted = 0
-            for candidate in candidates:
+            for candidate in unique_candidates:
                 if inserted >= remaining:
                     break
                 cursor.execute(

@@ -13,7 +13,7 @@ from services.context_vault_extraction import (
 
 
 class ContextVaultExtractionTestCase(unittest.TestCase):
-    def test_extracts_only_high_confidence_non_secret_candidates_with_selected_model(self):
+    def test_extracts_only_high_value_high_confidence_non_secret_candidates_with_fixed_model(self):
         llm = Mock(
             return_value=json.dumps(
                 {
@@ -26,11 +26,11 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                             "confidence": 0.95,
                         },
                         {
-                            "fact_type": "profile",
-                            "title": "Possible location",
-                            "content": "The user may live in Tokyo.",
+                            "fact_type": "reference",
+                            "title": "Temporary research topic",
+                            "content": "The user asked about Google's job openings.",
                             "importance": 40,
-                            "confidence": 0.4,
+                            "confidence": 0.99,
                         },
                         {
                             "fact_type": "reference",
@@ -47,7 +47,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         candidates = extract_context_candidates(
             "I prefer Vim. My API key is secret.",
             "I will remember that you like Vim.",
-            "selected-model",
             llm_json_response=llm,
         )
 
@@ -64,7 +63,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             ],
         )
         messages, model = llm.call_args.args
-        self.assertEqual(model, "selected-model")
+        self.assertEqual(model, "openai/gpt-oss-120b")
         self.assertEqual(len(messages), 2)
         self.assertEqual(
             json.loads(messages[1]["content"])["user_message"],
@@ -74,10 +73,45 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             json.loads(messages[1]["content"])["assistant_response"],
             "I will remember that you like Vim.",
         )
-        self.assertIn("what the user themselves stated in user_message", EXTRACTION_SYSTEM_PROMPT)
+        self.assertIn("most chat turns must produce no candidates", EXTRACTION_SYSTEM_PROMPT)
         self.assertIn(
-            "do not extract information the AI newly presented, guessed, or recommended",
+            "Do not turn a single question, search, mention, or pasted text into a personal interest",
             EXTRACTION_SYSTEM_PROMPT,
+        )
+        self.assertIn("What are Google's current job openings?", EXTRACTION_SYSTEM_PROMPT)
+        self.assertIn("six months from now", EXTRACTION_SYSTEM_PROMPT)
+
+    def test_rejects_candidates_below_durability_or_confidence_thresholds(self):
+        llm = Mock(
+            return_value=json.dumps(
+                {
+                    "candidates": [
+                        {
+                            "fact_type": "profile",
+                            "title": "Possible location",
+                            "content": "The user may live in Tokyo.",
+                            "importance": 90,
+                            "confidence": 0.89,
+                        },
+                        {
+                            "fact_type": "reference",
+                            "title": "Temporary research topic",
+                            "content": "The user asked about Google's job openings.",
+                            "importance": 69,
+                            "confidence": 0.99,
+                        },
+                    ]
+                }
+            )
+        )
+
+        self.assertEqual(
+            extract_context_candidates(
+                "What are Google's current job openings?",
+                "Here are the current openings.",
+                llm_json_response=llm,
+            ),
+            [],
         )
 
     def test_bounds_source_text_before_calling_the_extraction_model(self):
@@ -86,7 +120,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         extract_context_candidates(
             "u" * (MAX_EXTRACTION_USER_MESSAGE_CHARS + 100),
             "a" * (MAX_EXTRACTION_ASSISTANT_RESPONSE_CHARS + 100),
-            "selected-model",
             llm_json_response=llm,
         )
 
@@ -142,7 +175,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     extract_context_candidates(
                         "user",
                         "assistant",
-                        "model",
                         llm_json_response=Mock(return_value=json.dumps(payload)),
                     ),
                     [],
@@ -174,7 +206,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 assistant_message_id=9,
                 user_message="We use FastAPI.",
                 assistant_response="Understood.",
-                model="same-model",
                 extractor=extractor,
                 store_candidates=store,
             )
@@ -185,7 +216,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
 
         submitted[0]()
 
-        extractor.assert_called_once_with("We use FastAPI.", "Understood.", "same-model")
+        extractor.assert_called_once_with("We use FastAPI.", "Understood.")
         store.assert_called_once_with(
             42,
             candidates=extractor.return_value,
@@ -208,7 +239,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 assistant_message_id=9,
                 user_message="message",
                 assistant_response="response",
-                model="model",
                 extractor=Mock(side_effect=RuntimeError("provider down")),
                 store_candidates=Mock(),
             )
@@ -231,7 +261,6 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 assistant_message_id=9,
                 user_message="message",
                 assistant_response="response",
-                model="model",
                 extractor=Mock(),
                 store_candidates=Mock(),
             )

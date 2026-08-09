@@ -124,7 +124,6 @@ class ChatPostUseCase:
         assistant_message_id: int | None,
         user_message: str,
         assistant_response: str,
-        model: str,
     ) -> None:
         """Schedule candidate extraction only for eligible, persisted normal-room turns."""
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
@@ -138,7 +137,6 @@ class ChatPostUseCase:
                 assistant_message_id=assistant_message_id,
                 user_message=user_message,
                 assistant_response=assistant_response,
-                model=model,
             )
         except Exception:
             self.deps.logger.warning(
@@ -156,7 +154,6 @@ class ChatPostUseCase:
         assistant_message_id: int | None,
         user_message: str,
         assistant_response: str,
-        model: str,
     ) -> None:
         """Run eligibility checking off the response path, then schedule extraction."""
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
@@ -170,7 +167,6 @@ class ChatPostUseCase:
                 assistant_message_id=assistant_message_id,
                 user_message=user_message,
                 assistant_response=assistant_response,
-                model=model,
             )
         except Exception:
             self.deps.logger.warning(
@@ -595,7 +591,6 @@ class ChatPostUseCase:
                         assistant_message_id=assistant_message_id,
                         user_message=user_message,
                         assistant_response=response,
-                        model=model,
                     )
                     # 初回応答を保存できた後にだけタイトルを自動生成する。
                     # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
@@ -860,7 +855,6 @@ class ChatPostUseCase:
                 assistant_message_id=saved_assistant_message_id,
                 user_message=user_message,
                 assistant_response=bot_reply,
-                model=model,
             )
             if should_auto_title_room:
                 title_candidates = build_initial_title_candidates(

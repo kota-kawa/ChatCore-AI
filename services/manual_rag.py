@@ -4,11 +4,12 @@ import hashlib
 import logging
 import os
 import re
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+
+from services.bm25 import tokenize_bm25
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +106,7 @@ def _tokenize(text: str) -> list[str]:
     # ASCII文字は単語で分割し、CJK文字はバイグラム＋ユニグラムに展開します。
     # Tokenize ASCII text into words and CJK text into bigrams and unigrams.
     """ASCII は単語分割、CJK 文字はバイグラム＋ユニグラムに展開する。"""
-    tokens: list[str] = []
-    text = text.lower()
-    tokens.extend(re.findall(r"[a-z0-9]+", text))
-    cjk_chars = [c for c in text if unicodedata.category(c) in ("Lo", "Ll") and ord(c) > 0x2E7F]
-    cjk_str = "".join(cjk_chars)
-    for i in range(len(cjk_str) - 1):
-        tokens.append(cjk_str[i:i + 2])
-    tokens.extend(cjk_chars)
-    return tokens
+    return tokenize_bm25(text)
 
 
 # ---------------------------------------------------------------------------
