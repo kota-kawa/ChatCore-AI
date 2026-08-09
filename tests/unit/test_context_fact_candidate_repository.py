@@ -110,11 +110,16 @@ def _make_repository(cursor):
     return repository, connection
 
 
-def _prepared_candidate(fingerprint):
+def _prepared_candidate(
+    fingerprint,
+    *,
+    title="Chat-Core",
+    content="Phase 2 candidate",
+):
     return {
         "fact_type": "project",
-        "title": "Chat-Core",
-        "content": "Phase 2 candidate",
+        "title": title,
+        "content": content,
         "source_kind": "chat",
         "source_ref": "room-123",
         "importance": 80,
@@ -132,8 +137,16 @@ class ContextFactCandidateRepositoryTestCase(unittest.TestCase):
             7,
             [
                 _prepared_candidate("a" * 64),
-                _prepared_candidate("b" * 64),
-                _prepared_candidate("c" * 64),
+                _prepared_candidate(
+                    "b" * 64,
+                    title="Big Tech career",
+                    content="Considering a long-term Big Tech career move",
+                ),
+                _prepared_candidate(
+                    "c" * 64,
+                    title="Rust compiler",
+                    content="Uses Rust for an ongoing compiler project",
+                ),
             ],
         )
 
@@ -143,6 +156,48 @@ class ContextFactCandidateRepositoryTestCase(unittest.TestCase):
         self.assertEqual(len(insert_statements), 3)
         self.assertTrue(all("WHERE NOT EXISTS" in sql for sql in insert_statements))
         self.assertTrue(all("fingerprint = %s" in sql for sql in insert_statements))
+        self.assertTrue(connection.committed)
+
+    def test_store_candidates_filters_bm25_duplicates_inside_user_lock(self):
+        cursor = FakeCursor(
+            fetchone_results=[(0,), (21,)],
+            fetchall_results=[
+                [
+                    (
+                        "project",
+                        "Chat-Core backend framework",
+                        "The Chat-Core backend is built with FastAPI.",
+                    )
+                ]
+            ],
+        )
+        repository, connection = _make_repository(cursor)
+
+        inserted = repository.store_candidates(
+            7,
+            [
+                _prepared_candidate(
+                    "a" * 64,
+                    title="Chat-Core backend",
+                    content="Chat-Core uses FastAPI for its backend.",
+                ),
+                _prepared_candidate(
+                    "b" * 64,
+                    title="Rust compiler",
+                    content="Uses Rust for an ongoing compiler project.",
+                ),
+            ],
+        )
+
+        self.assertEqual(inserted, 1)
+        self.assertIn("pg_advisory_xact_lock", cursor.executed[0][0])
+        self.assertIn("FROM context_facts", cursor.executed[2][0])
+        self.assertIn("context_fact_candidates", cursor.executed[2][0])
+        self.assertIn("status IN ('pending', 'rejected')", cursor.executed[2][0])
+        self.assertEqual(cursor.executed[2][1], (7, 7, 500))
+        insert_statements = [item for item in cursor.executed if item[0].startswith("INSERT")]
+        self.assertEqual(len(insert_statements), 1)
+        self.assertEqual(insert_statements[0][1][2], "Rust compiler")
         self.assertTrue(connection.committed)
 
     def test_store_candidates_does_not_insert_when_pending_queue_is_full(self):

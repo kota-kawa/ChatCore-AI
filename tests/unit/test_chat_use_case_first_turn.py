@@ -199,7 +199,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             assistant_message_id=2,
             user_message=user_message,
             assistant_response="assistant reply",
-            model="test-model",
         )
 
         # Each eligibility gate independently prevents an extraction LLM task.
@@ -212,7 +211,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             assistant_message_id=2,
             user_message=user_message,
             assistant_response="assistant reply",
-            model="test-model",
         )
         deps.schedule_context_extraction.assert_not_called()
 
@@ -229,7 +227,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                     chat_room_id="room-1",
                     user_message=user_message,
                     assistant_response="assistant reply",
-                    model="test-model",
                 )
         submitted_context_checks.assert_not_called()
         deps.schedule_context_extraction.assert_not_called()
@@ -242,7 +239,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             assistant_message_id=2,
             user_message=user_message,
             assistant_response="assistant reply",
-            model="test-model",
         )
         deps.logger.warning.assert_any_call(
             "Failed to schedule context extraction for chat room %s.",
@@ -260,7 +256,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             assistant_message_id=2,
             user_message=user_message,
             assistant_response="assistant reply",
-            model="test-model",
         )
         deps.logger.warning.assert_any_call(
             "Failed to schedule context extraction for chat room %s.",
