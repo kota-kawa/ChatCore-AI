@@ -77,6 +77,22 @@ function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   activeWebSearchSourceAnimations.delete(details);
 }
 
+// 高さアニメーションが残した「固定された高さ」を解除して、リストを内容なりの高さへ戻す。
+// fill: "both" のアニメーションは終了後も終了値を適用し続け、しかもアニメーション由来の
+// 値はインラインスタイルより強い。開いた瞬間の高さで固定されたままだと、あとから中の
+// 「参照したWebサイト」を開いても枠が伸びず、あふれた内容が下のメッセージへ重なる。
+// Release the height an earlier animation pinned onto the list so it can size to its
+// content again. A fill: "both" animation keeps applying its end value after it
+// finishes, and animated values beat inline styles, so the panel would stay frozen at
+// the height it had when it opened — later expanding a step's sources then overflowed
+// the panel and painted over the messages below it.
+function releaseWebSearchSourcesHeightLock(element: Element) {
+  if (typeof element.getAnimations !== "function") return;
+  element.getAnimations().forEach((animation) => {
+    animation.cancel();
+  });
+}
+
 // 展開したWebソースがスクローラー内に収まるようにスクロール位置を調整する
 // Adjust the scroll position so expanded web sources are visible within the scroller
 function revealWebSearchSources(details: HTMLElement) {
@@ -184,6 +200,12 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
   animation.onfinish = () => {
     if (activeWebSearchSourceAnimations.get(details) !== animation) return;
     activeWebSearchSourceAnimations.delete(details);
+    // 終了値を適用したままにせず必ず解除する。残すとリストの高さが固定され、
+    // 中のステップを開いたときに伸びずにあふれる。
+    // Always release the end value; leaving it pinned freezes the list height and
+    // makes a step expanded later overflow instead of growing the panel.
+    animation.onfinish = null;
+    animation.cancel();
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
     resetWebSearchSourcesListStyles(list);
@@ -241,6 +263,20 @@ export function bindWebSearchSourcesInteractions(container: HTMLElement) {
   const handleToggle = (event: Event) => {
     const target = event.target;
     if (!(target instanceof HTMLDetailsElement) || !target.matches(NESTED_DETAILS_SELECTOR)) return;
+    // ステップを開くと外側パネルの中身が伸びる。前回の開閉アニメーションが高さを
+    // 固定したままだと伸びられずあふれるため、開閉のたびに固定を解除する。
+    // Expanding a step grows the outer panel's content. Release any height an earlier
+    // open/close animation pinned, or the panel cannot grow and its content overflows.
+    const rootDetails = target.closest<HTMLDetailsElement>(ROOT_DETAILS_SELECTOR);
+    // 開閉アニメーションの実行中はそのアニメーションが高さを持っているので触らない。
+    // While an open/close animation is running it owns the height, so leave it alone.
+    if (rootDetails && !activeWebSearchSourceAnimations.has(rootDetails)) {
+      const rootList = getWebSearchSourcesList(rootDetails);
+      if (rootList) {
+        releaseWebSearchSourcesHeightLock(rootList);
+        resetWebSearchSourcesListStyles(rootList);
+      }
+    }
     updateWebSearchOverflowState(target);
     if (target.open) scheduleWebSearchSourcesReveal(target);
   };
