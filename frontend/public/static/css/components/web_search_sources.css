@@ -1,0 +1,800 @@
+/* ============================================================
+   Web検索まわりの表示（回答本文の出典チップ／「回答までのステップ」）
+
+   - .web-search-citation      : 回答本文に添えるコンパクトな出典チップ
+   - .web-search-sources       : 折りたたみの出典パネル
+   - .web-search-sources--trace: 「回答までのステップ」タイムライン
+
+   配色はコンポーネント先頭の CSS 変数に集約し、ダークモードは変数の
+   上書きだけで切り替える（各ルールを二重に書かない）。
+   ============================================================ */
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
+  --ws-surface: #ffffff;
+  --ws-surface-sunken: #f8fafc;
+  --ws-surface-hover: rgba(15, 118, 110, 0.06);
+  --ws-border: rgba(15, 23, 42, 0.1);
+  --ws-border-strong: rgba(15, 23, 42, 0.16);
+  --ws-text: var(--text-dark, #1a1a1a);
+  --ws-text-muted: #64748b;
+  --ws-accent: #0f766e;
+  --ws-accent-text: var(--primary-dark, #134e4a);
+  --ws-accent-soft: rgba(15, 118, 110, 0.1);
+  --ws-accent-border: rgba(15, 118, 110, 0.24);
+  --ws-rail: rgba(15, 118, 110, 0.24);
+  --ws-warning: #b45309;
+  --ws-warning-soft: rgba(180, 83, 9, 0.1);
+  --ws-warning-border: rgba(180, 83, 9, 0.24);
+  --ws-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --ws-shadow-card: 0 8px 22px rgba(15, 23, 42, 0.07);
+  --ws-chip-icon-bg: #e2e8f0;
+  --ws-chip-icon-text: #334155;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
+  --ws-surface: #0f172a;
+  --ws-surface-sunken: #1e293b;
+  --ws-surface-hover: rgba(45, 212, 191, 0.1);
+  --ws-border: rgba(148, 163, 184, 0.2);
+  --ws-border-strong: rgba(148, 163, 184, 0.3);
+  --ws-text: rgba(248, 250, 252, 0.92);
+  --ws-text-muted: rgba(203, 213, 225, 0.66);
+  --ws-accent: #2dd4bf;
+  --ws-accent-text: rgba(94, 234, 212, 0.96);
+  --ws-accent-soft: rgba(45, 212, 191, 0.14);
+  --ws-accent-border: rgba(45, 212, 191, 0.3);
+  --ws-rail: rgba(45, 212, 191, 0.28);
+  --ws-warning: #fbbf24;
+  --ws-warning-soft: rgba(251, 191, 36, 0.14);
+  --ws-warning-border: rgba(251, 191, 36, 0.3);
+  --ws-shadow-soft: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --ws-shadow-card: 0 12px 28px rgba(2, 6, 23, 0.32);
+  --ws-chip-icon-bg: #475569;
+  --ws-chip-icon-text: #f8fafc;
+}
+
+/* ─── 回答本文に添える、ChatGPT風のコンパクトなWeb出典チップ ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  max-width: min(100%, 13rem);
+  margin: 0 0.12rem;
+  padding: 0.16rem 0.48rem 0.16rem 0.22rem;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 999px;
+  background: var(--ws-surface-sunken);
+  box-shadow: var(--ws-shadow-soft);
+  color: var(--ws-text);
+  font-size: 0.78em;
+  font-weight: var(--chat-font-ui-weight, 500);
+  line-height: 1.2;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation:hover {
+  border-color: var(--ws-accent-border);
+  background: var(--ws-surface);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.12);
+  color: var(--ws-text);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+/* faviconアイコン。読み込み失敗時は頭文字のフォールバックが見える */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ws-chip-icon-bg);
+  color: var(--ws-chip-icon-text);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px var(--ws-border-strong);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__fallback {
+  position: relative;
+  z-index: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__favicon {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: #ffffff;
+  object-fit: cover;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__icon--fallback .web-search-citation__favicon {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── 折りたたみパネル本体 ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
+  position: relative;
+  margin-top: 1rem;
+  overflow: visible;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--ws-surface);
+  box-shadow: var(--ws-shadow-card);
+  color: var(--ws-text-muted);
+  font-size: 0.9rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+/* ─── パネルの見出し行 ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources > .web-search-sources__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3rem;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  color: var(--ws-text);
+  font-weight: var(--chat-font-ui-weight, 500);
+  list-style: none;
+  border-radius: var(--radius-md, 12px);
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources > .web-search-sources__summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources > .web-search-sources__summary::marker {
+  content: "";
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources > .web-search-sources__summary:hover {
+  background: var(--ws-surface-hover);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources > .web-search-sources__summary:focus-visible {
+  outline: 2px solid var(--ws-accent);
+  outline-offset: -2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[open] > .web-search-sources__summary {
+  border-bottom: 1px solid var(--ws-border);
+  border-radius: var(--radius-md, 12px) var(--radius-md, 12px) 0 0;
+  background: var(--ws-surface-hover);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__summary-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--ws-accent-border);
+  border-radius: var(--radius-s, 8px);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* トレース以外（出典一覧）はアイコン要素が空なので、CSSでリンク記号を描く */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources:not(.web-search-sources--trace) .web-search-sources__summary-icon::before,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources:not(.web-search-sources--trace) .web-search-sources__summary-icon::after {
+  position: absolute;
+  content: "";
+  width: 0.58rem;
+  height: 0.38rem;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  transform: rotate(-35deg);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources:not(.web-search-sources--trace) .web-search-sources__summary-icon::before {
+  top: 0.52rem;
+  left: 0.46rem;
+  border-right: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources:not(.web-search-sources--trace) .web-search-sources__summary-icon::after {
+  right: 0.46rem;
+  bottom: 0.52rem;
+  border-left: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__summary-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__label {
+  overflow: hidden;
+  color: var(--ws-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 畳んだままでも中身が想像できる補足行 */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__summary-detail {
+  overflow: hidden;
+  color: var(--ws-text-muted);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 400;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__count {
+  flex: 0 0 auto;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--ws-accent-border);
+  border-radius: var(--radius-full, 999px);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* 矢印はアイコンフォントの字形。要素の中央に置いた1文字を回すだけなので、
+   開閉で位置がぶれない（旧マークアップの空spanだけCSSで描画する）。 */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__chevron {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--ws-text-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__chevron:empty::before {
+  position: absolute;
+  top: 0.28rem;
+  left: 0.22rem;
+  width: 0.46rem;
+  height: 0.46rem;
+  content: "";
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[open] > .web-search-sources__summary > .web-search-sources__chevron {
+  transform: rotate(180deg);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message
+  .web-search-sources[data-web-search-sources-state="closing"]
+  > .web-search-sources__summary
+  > .web-search-sources__chevron {
+  transform: rotate(0deg);
+}
+
+/* ─── パネル本体（JSの高さアニメーション対象） ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.7rem 0.75rem 0.85rem;
+  list-style: none;
+  transform-origin: top;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[data-web-search-sources-state="closing"] .web-search-sources__list {
+  contain: layout paint;
+  will-change: height, opacity, transform;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__steps,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__links {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__links {
+  gap: 0.4rem;
+}
+
+/* ─── ステップのタイムライン ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__steps {
+  gap: 0.55rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.85rem minmax(0, 1fr);
+  column-gap: 0.7rem;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ステップ同士をつなぐ縦線。最後のステップからは伸ばさない */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step::before {
+  position: absolute;
+  top: 2.05rem;
+  bottom: -0.6rem;
+  left: calc(0.925rem - 1px);
+  width: 2px;
+  content: "";
+  border-radius: 999px;
+  background: var(--ws-rail);
+  pointer-events: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step:last-child::before {
+  content: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-marker {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--ws-accent-border);
+  border-radius: 999px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: 0.85rem;
+  line-height: 1;
+  box-shadow: 0 0 0 3px var(--ws-surface);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-marker--warning {
+  border-color: var(--ws-warning-border);
+  background: var(--ws-warning-soft);
+  color: var(--ws-warning);
+}
+
+/* 検索・回答は「主要な工程」として少し強調する */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-marker--search,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-marker--answer {
+  border-color: transparent;
+  background: var(--ws-accent);
+  color: var(--ws-surface);
+}
+
+/* ─── ステップの中身 ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-card,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.3rem 0.1rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 10px);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-main {
+  flex: 1 1 auto;
+}
+
+/* ソースを持つステップだけカード状にして、押せることを示す */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-details {
+  min-width: 0;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--ws-surface-sunken);
+  box-shadow: var(--ws-shadow-soft);
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-details:hover {
+  border-color: var(--ws-accent-border);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-details[open] {
+  border-color: var(--ws-accent-border);
+  background: var(--ws-surface);
+  box-shadow: var(--ws-shadow-card);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary {
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-sm, 10px);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary::marker {
+  content: "";
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary:focus-visible {
+  outline: 2px solid var(--ws-accent);
+  outline-offset: -2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-main {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+  justify-items: start;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: 1.25rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-title {
+  color: var(--ws-text);
+  font-size: 0.9rem;
+  /* 説明文（0.83rem / 400）との差でステップ見出しを立たせる */
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-badge {
+  padding: 0.08rem 0.42rem;
+  border: 1px solid var(--ws-accent-border);
+  border-radius: var(--radius-full, 999px);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: 0.72rem;
+  font-weight: var(--chat-font-label-weight, 500);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 実際に投げた検索クエリ。検索窓のような見た目で「何を調べたか」を即読み取れる */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-query {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.18rem 0.5rem;
+  border: 1px dashed var(--ws-accent-border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-query::before {
+  content: "\201C";
+  margin-right: 0.1rem;
+  opacity: 0.7;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-query::after {
+  content: "\201D";
+  margin-left: 0.1rem;
+  opacity: 0.7;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-detail {
+  color: var(--ws-text-muted);
+  font-size: 0.83rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-chip {
+  max-width: 12rem;
+  overflow: hidden;
+  padding: 0.06rem 0.4rem;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-full, 999px);
+  background: var(--ws-surface);
+  color: var(--ws-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 展開できることを明示するボタン風の行 */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: var(--radius-full, 999px);
+  background: var(--ws-surface);
+  color: var(--ws-text);
+  font-size: 0.78rem;
+  font-weight: var(--chat-font-label-weight, 500);
+  line-height: 1.3;
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary:hover .web-search-sources__step-toggle {
+  border-color: var(--ws-accent-border);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-toggle-count {
+  color: var(--ws-text-muted);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-chevron {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: currentColor;
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-chevron:empty::before {
+  position: absolute;
+  top: 0.22rem;
+  left: 0.18rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  content: "";
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-details[open] .web-search-sources__step-chevron,
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-details[open] .web-search-sources__step-chevron {
+  transform: rotate(180deg);
+}
+
+/* ─── ステップ内に展開される参照Webサイト ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-body {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0.65rem 0.65rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__item {
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--ws-surface);
+  color: var(--ws-text);
+  text-decoration: none;
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link:hover {
+  border-color: var(--ws-accent-border);
+  background: var(--ws-surface);
+  box-shadow: var(--ws-shadow-card);
+  color: var(--ws-accent-text);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link:focus-visible {
+  outline: 2px solid var(--ws-accent);
+  outline-offset: 1px;
+}
+
+/* 出典リストのfaviconは本文チップより一回り大きくする */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link .web-search-citation__icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.72rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__content {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__title {
+  overflow: hidden;
+  color: inherit;
+  font-weight: var(--chat-font-ui-weight, 500);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__hostname {
+  overflow: hidden;
+  color: var(--ws-text-muted);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__external {
+  color: var(--ws-text-muted);
+  font-size: 0.95rem;
+  font-weight: var(--chat-font-ui-weight, 500);
+  line-height: 1;
+  transition:
+    color var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link:hover .web-search-sources__external {
+  color: var(--ws-accent-text);
+  transform: translate(1px, -1px);
+}
+
+/* ─── 旧マークアップの互換スタイル ───
+   トレースHTMLは回答本文の一部としてDBに保存されるため、過去メッセージには
+   このリニューアル前のマークアップ（連番バッジ・独立した出典ブロック・
+   セクション見出し）が残っている。それらが崩れて見えないよう最低限を残す。 */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--ws-accent-border);
+  border-radius: 999px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  line-height: 1;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__section-title {
+  padding-top: 0.1rem;
+  color: var(--ws-text-muted);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-details {
+  min-width: 0;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--ws-surface-sunken);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  color: var(--ws-text);
+  list-style: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary::marker {
+  content: "";
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary:hover {
+  background: var(--ws-surface-hover);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-details[open] {
+  background: var(--ws-surface);
+  box-shadow: var(--ws-shadow-card);
+}
+
+/* ─── 狭い画面 ─── */
+@media (max-width: 600px) {
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step {
+    grid-template-columns: 1.55rem minmax(0, 1fr);
+    column-gap: 0.55rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step::before {
+    top: 1.75rem;
+    left: calc(0.775rem - 1px);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-marker {
+    width: 1.55rem;
+    height: 1.55rem;
+    font-size: 0.75rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__summary-detail {
+    display: none;
+  }
+}
+
+/* ─── モーション軽減 ─── */
+@media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link:hover,
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation:hover {
+    transform: none;
+  }
+}
