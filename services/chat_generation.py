@@ -33,7 +33,6 @@ from .llm import (
     is_retryable_llm_error,
 )
 from .web_search import (
-    build_web_search_trace_markdown,
     combine_web_search_results,
     get_web_search_tool_definition,
     inject_prior_web_search_context,
@@ -45,6 +44,17 @@ from .web_search import (
     with_web_search_citations,
     WebSearchQuotaExceeded,
     WebSearchResult,
+)
+from .web_search_trace import (
+    TraceStep,
+    answer_step,
+    build_web_search_trace_markdown,
+    context_added_step,
+    decision_step,
+    page_read_step,
+    review_step,
+    search_failed_step,
+    search_step,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,22 +245,6 @@ def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | st
         "tool_call_id": tool_call.get("id"),
         "name": tool_call.get("function", {}).get("name", ""),
         "content": content,
-    }
-
-
-# 精読できたWeb検索ソースの情報からトレースステップログ用のオブジェクトを生成する
-# Generate a trace step log object from successfully read Web search sources
-def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | None:
-    # 検索結果から重要なページ本文を取得できた場合に、回答ステップとして可視化する
-    # Surface a trace step when full page text was successfully read from result URLs.
-    if result is None:
-        return None
-    read_count = sum(1 for source in result.sources if source.page_text)
-    if not read_count:
-        return None
-    return {
-        "title": "重要なページを精読",
-        "detail": f"{read_count}件のページ本文を取得して回答に反映しました。",
     }
 
 
@@ -637,7 +631,7 @@ class ChatGenerationJob:
         last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
-        web_search_trace_steps: list[dict[str, str]] = []
+        web_search_trace_steps: list[TraceStep] = []
         streaming_citation_buffer = ""
         current_messages = [dict(m) for m in self._conversation_messages]
         # 過去ターンの検索結果を参照用コンテキストとして再注入する
@@ -661,23 +655,14 @@ class ChatGenerationJob:
             if augmentation.result is not None:
                 web_search_trace_steps.extend(
                     [
-                        {
-                            "title": "検索が必要か判断",
-                            "detail": "最新情報が必要な可能性を確認しました。",
-                        },
-                        {
-                            "title": f"Web検索: {augmentation.result.query}",
-                            "detail": f"{len(augmentation.result.sources)}件の候補を取得しました。",
-                        },
-                        {
-                            "title": "検索結果を確認",
-                            "detail": "取得した情報を回答用の文脈に追加しました。",
-                        },
+                        decision_step(augmentation.result),
+                        search_step(augmentation.result),
+                        context_added_step(augmentation.result),
                     ]
                 )
-                page_read_step = _page_read_trace_step(augmentation.result)
-                if page_read_step is not None:
-                    web_search_trace_steps.append(page_read_step)
+                read_step = page_read_step(augmentation.result)
+                if read_step is not None:
+                    web_search_trace_steps.append(read_step)
                 web_search_results.append(augmentation.result)
                 web_search_results_by_key[
                     _normalized_search_key(
@@ -688,12 +673,7 @@ class ChatGenerationJob:
                 step_count += 1
             elif augmentation.status in {"failed", "no_sources"}:
                 step_count += 1
-                web_search_trace_steps.append(
-                    {
-                        "title": "Web検索を試行",
-                        "detail": "検索結果を回答に使える形では取得できませんでした。",
-                    }
-                )
+                web_search_trace_steps.append(search_failed_step())
             suppress_next_generation_started = augmentation.status == "failed"
 
             if self._should_stop():
@@ -735,12 +715,7 @@ class ChatGenerationJob:
                     if not chunks:
                         combined_web_search_result = combine_web_search_results(web_search_results)
                         if web_search_trace_steps or combined_web_search_result is not None:
-                            web_search_trace_steps.append(
-                                {
-                                    "title": "回答を作成",
-                                    "detail": "検索結果と会話文脈を統合して回答しました。",
-                                }
-                            )
+                            web_search_trace_steps.append(answer_step(web_search_results))
                         trace_block = build_web_search_trace_markdown(
                             combined_web_search_result,
                             steps=web_search_trace_steps,
@@ -882,14 +857,8 @@ class ChatGenerationJob:
                     if cached_result is not None:
                         web_search_trace_steps.extend(
                             [
-                                {
-                                    "title": f"検索結果を再利用: {cached_result.query}",
-                                    "detail": "同じ検索条件の結果を再利用しました。",
-                                },
-                                {
-                                    "title": "検索結果を確認",
-                                    "detail": "再利用した情報で不足がないか確認しました。",
-                                },
+                                search_step(cached_result, cached=True),
+                                review_step(cached_result, reused=True),
                             ]
                         )
                         self._publish(
@@ -913,22 +882,15 @@ class ChatGenerationJob:
                     try:
                         result = search_brave_llm_context(query_text, freshness=freshness_text)
                         web_search_results_by_key[search_key] = result
-                        search_step_title = "追加検索" if web_search_results else "Web検索"
                         web_search_trace_steps.extend(
                             [
-                                {
-                                    "title": f"{search_step_title}: {result.query}",
-                                    "detail": f"{len(result.sources)}件の候補を取得しました。",
-                                },
-                                {
-                                    "title": "検索結果を確認",
-                                    "detail": "取得した情報で回答に足りるか確認しました。",
-                                },
+                                search_step(result, additional=bool(web_search_results)),
+                                review_step(result),
                             ]
                         )
-                        page_read_step = _page_read_trace_step(result)
-                        if page_read_step is not None:
-                            web_search_trace_steps.append(page_read_step)
+                        read_step = page_read_step(result)
+                        if read_step is not None:
+                            web_search_trace_steps.append(read_step)
                         if result.has_sources:
                             web_search_results.append(result)
                         self._publish(
@@ -953,10 +915,10 @@ class ChatGenerationJob:
                             "検索なしで回答を続けます。"
                         )
                         web_search_trace_steps.append(
-                            {
-                                "title": f"Web検索を試行: {query_text}",
-                                "detail": "月間上限に達したため検索結果を取得できませんでした。",
-                            }
+                            search_failed_step(
+                                query_text,
+                                reason="月間上限に達したため検索結果を取得できませんでした。",
+                            )
                         )
                         suppress_next_generation_started = True
                         self._publish(
@@ -982,10 +944,10 @@ class ChatGenerationJob:
                     except Exception:
                         logger.exception("Brave search via tool call failed.")
                         web_search_trace_steps.append(
-                            {
-                                "title": f"Web検索を試行: {query_text}",
-                                "detail": "検索リクエストに失敗したため、取得済み情報で回答を続けました。",
-                            }
+                            search_failed_step(
+                                query_text,
+                                reason="検索リクエストに失敗したため、取得済みの情報で回答を続けました。",
+                            )
                         )
                         suppress_next_generation_started = True
                         self._publish(
@@ -1093,12 +1055,7 @@ class ChatGenerationJob:
         if not chunks:
             combined_web_search_result = combine_web_search_results(web_search_results)
             if web_search_trace_steps or combined_web_search_result is not None:
-                web_search_trace_steps.append(
-                    {
-                        "title": "回答を作成",
-                        "detail": "検索結果と会話文脈を統合して回答しました。",
-                    }
-                )
+                web_search_trace_steps.append(answer_step(web_search_results))
             trace_block = build_web_search_trace_markdown(
                 combined_web_search_result,
                 steps=web_search_trace_steps,

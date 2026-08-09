@@ -28,7 +28,6 @@ from services.llm import (
 from services.request_models import ChatMessageRequest
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
-    build_web_search_trace_markdown,
     combine_web_search_results,
     deserialize_web_search_results,
     extract_prior_web_search_results,
@@ -37,6 +36,15 @@ from services.web_search import (
     resolve_web_search_citations,
     serialize_web_search_result,
     with_web_search_citations,
+)
+from services.web_search_trace import (
+    TraceStep,
+    answer_step,
+    build_web_search_trace_markdown,
+    context_added_step,
+    decision_step,
+    page_read_step,
+    search_step,
 )
 from services.chat_title import (
     build_initial_title_candidates,
@@ -720,28 +728,19 @@ class ChatPostUseCase:
                 status_code=502,
             )
 
-        web_search_trace_steps: list[dict[str, str]] = []
+        web_search_trace_steps: list[TraceStep] = []
         if augmentation.result is not None:
             web_search_trace_steps.extend(
                 [
-                    {
-                        "title": "検索が必要か判断",
-                        "detail": "最新情報が必要な可能性を確認しました。",
-                    },
-                    {
-                        "title": f"Web検索: {augmentation.result.query}",
-                        "detail": f"{len(augmentation.result.sources)}件の候補を取得しました。",
-                    },
-                    {
-                        "title": "検索結果を確認",
-                        "detail": "取得した情報を回答用の文脈に追加しました。",
-                    },
-                    {
-                        "title": "回答を作成",
-                        "detail": "検索結果と会話文脈を統合して回答しました。",
-                    },
+                    decision_step(augmentation.result),
+                    search_step(augmentation.result),
+                    context_added_step(augmentation.result),
                 ]
             )
+            read_step = page_read_step(augmentation.result)
+            if read_step is not None:
+                web_search_trace_steps.append(read_step)
+            web_search_trace_steps.append(answer_step([augmentation.result]))
         trace_block = build_web_search_trace_markdown(
             augmentation.result,
             steps=web_search_trace_steps,

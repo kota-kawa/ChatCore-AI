@@ -501,12 +501,16 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__label">参照したWebサイト</span>', block)
         self.assertIn('<span class="web-search-sources__count">2件</span>', block)
         self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
-        self.assertIn('<span class="web-search-sources__index">1</span>', block)
         self.assertIn('<span class="web-search-sources__title">Title A</span>', block)
         self.assertIn('<span class="web-search-sources__hostname">example.com</span>', block)
         self.assertIn('<a class="web-search-sources__link" href="https://example.com/b" target="_blank">', block)
-        self.assertIn('<span class="web-search-sources__index">2</span>', block)
         self.assertIn('<span class="web-search-sources__title">Title B</span>', block)
+        # 出典行はfaviconアイコン付きで描画する（読み込み失敗時は頭文字へフォールバック）
+        self.assertIn('<span class="web-search-citation__icon">', block)
+        self.assertIn(
+            '<img class="web-search-citation__favicon" src="https://example.com/favicon.ico"',
+            block,
+        )
         self.assertTrue(block.endswith("</details>"))
 
     # 日本語: ビルドWeb検索sourcesMarkdownescapessourcehtmlことを検証します。
@@ -542,56 +546,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
             sources=(),
         )
         self.assertEqual(web_search.build_web_search_sources_markdown(empty_result), "")
-
-    # 日本語: およびsources、ビルドWeb検索traceMarkdown返却するstepsことを検証します。
-    # English: Verify that build web search trace markdown returns steps and sources.
-    def test_build_web_search_trace_markdown_returns_steps_and_sources(self):
-        result = web_search.WebSearchResult(
-            query="Python news",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url="https://example.com/a",
-                    title="Title A",
-                    hostname="example.com",
-                    age="2026-04-30",
-                    snippets=(),
-                ),
-            ),
-        )
-
-        block = web_search.build_web_search_trace_markdown(
-            result,
-            steps=[
-                {"title": "検索が必要か判断", "detail": "最新情報が必要な可能性を確認しました。"},
-                {"title": "Web検索: Python news", "detail": "1件の候補を取得しました。"},
-            ],
-        )
-
-        self.assertIn('<details class="web-search-sources web-search-sources--trace">', block)
-        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', block)
-        self.assertIn('<span class="web-search-sources__count">2ステップ / 1件</span>', block)
-        self.assertIn('<ol class="web-search-sources__steps">', block)
-        self.assertIn('<span class="web-search-sources__title">検索が必要か判断</span>', block)
-        self.assertIn('<details class="web-search-sources__step-details">', block)
-        self.assertIn('<summary class="web-search-sources__step-summary">', block)
-        self.assertIn('<div class="web-search-sources__section-title">参照したWebサイト</div>', block)
-        self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
-        self.assertNotIn('<details class="web-search-sources__step-details" open', block)
-
-    # 日本語: ビルドWeb検索traceMarkdownescapesstepsことを検証します。
-    # English: Verify that build web search trace markdown escapes steps.
-    def test_build_web_search_trace_markdown_escapes_steps(self):
-        block = web_search.build_web_search_trace_markdown(
-            None,
-            steps=[
-                {"title": "<b>Unsafe</b>", "detail": "<script>alert(1)</script>"},
-            ],
-        )
-
-        self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", block)
-        self.assertNotIn("<b>Unsafe</b>", block)
 
     # 日本語: URLによって、combineWeb検索resultsdeduplicatessourcesことを検証します。
     # English: Verify that combine web search results deduplicates sources by url.

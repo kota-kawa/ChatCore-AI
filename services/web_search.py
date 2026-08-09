@@ -327,7 +327,7 @@ def _neutralize_context_delimiters(value: str) -> str:
     return _CONTEXT_DELIMITER_RE.sub("[removed]", value)
 
 
-def _normalize_text(value: Any, *, max_chars: int | None = None) -> str:
+def normalize_text(value: Any, *, max_chars: int | None = None) -> str:
     # 文字列の空白を正規化し、必要に応じて最大文字数で切り詰める
     # Normalize string whitespace and truncate to max characters if specified.
     text = value if isinstance(value, str) else str(value or "")
@@ -335,6 +335,11 @@ def _normalize_text(value: Any, *, max_chars: int | None = None) -> str:
     if max_chars is not None and len(text) > max_chars:
         return text[: max_chars - 3].rstrip() + "..."
     return text
+
+
+# モジュール内の既存呼び出し向けの別名（公開APIは normalize_text）。
+# Internal alias for existing call sites; normalize_text is the public name.
+_normalize_text = normalize_text
 
 
 def _looks_sensitive(value: str) -> bool:
@@ -1176,12 +1181,11 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
     return {"role": "system", "content": content}
 
 
-def _render_citation_chip(source: WebSearchSource) -> str:
-    # 回答本文の引用を、URLを露出しないコンパクトな出典チップとして描画する。
-    # Render answer citations as compact source chips without exposing raw URLs.
+def build_source_favicon_html(source: WebSearchSource) -> str:
+    # 出典のfaviconアイコン（読み込み失敗時は頭文字へフォールバック）を描画する。
+    # Render the source favicon icon, falling back to an initial when it fails to load.
     url = source.url.strip()
     label = source.title.strip() or source.hostname.strip() or url
-    title = source.title.strip() or source.hostname.strip() or url
     fallback_label = (source.hostname.strip() or label).removeprefix("www.")[:1].upper() or "?"
     favicon_url = source.favicon_url.strip()
     if not _is_safe_citation_url(favicon_url):
@@ -1190,13 +1194,24 @@ def _render_citation_chip(source: WebSearchSource) -> str:
             (parsed_source_url.scheme, parsed_source_url.netloc, "/favicon.ico", "", "")
         )
     return (
-        f'<a class="web-search-citation" href="{escape(url, quote=True)}" '
-        f'target="_blank" title="{escape(title, quote=True)}">'
         '<span class="web-search-citation__icon">'
         f'<span class="web-search-citation__fallback">{escape(fallback_label)}</span>'
         f'<img class="web-search-citation__favicon" src="{escape(favicon_url, quote=True)}" '
         'alt="" referrerpolicy="no-referrer">'
-        '</span>'
+        "</span>"
+    )
+
+
+def _render_citation_chip(source: WebSearchSource) -> str:
+    # 回答本文の引用を、URLを露出しないコンパクトな出典チップとして描画する。
+    # Render answer citations as compact source chips without exposing raw URLs.
+    url = source.url.strip()
+    label = source.title.strip() or source.hostname.strip() or url
+    title = source.title.strip() or source.hostname.strip() or url
+    return (
+        f'<a class="web-search-citation" href="{escape(url, quote=True)}" '
+        f'target="_blank" title="{escape(title, quote=True)}">'
+        f"{build_source_favicon_html(source)}"
         f'<span class="web-search-citation__label">{escape(label)}</span>'
         '</a>'
     )
@@ -1522,7 +1537,7 @@ def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]
     ]
 
 
-def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
+def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
     # 検索ソースのHTMLリンク表現をビルドする
     # Build HTML list item strings representing the search sources.
     if result is None:
@@ -1532,7 +1547,6 @@ def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
         url = source.url.strip()
         if not url:
             continue
-        source_index = len(sources_lines) + 1
         title = source.title.strip() or url
         hostname = source.hostname.strip()
         hostname_line = (
@@ -1544,7 +1558,7 @@ def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
             (
                 '<li class="web-search-sources__item">'
                 f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
-                f'<span class="web-search-sources__index">{source_index}</span>'
+                f"{build_source_favicon_html(source)}"
                 '<span class="web-search-sources__content">'
                 f'<span class="web-search-sources__title">{escape(title)}</span>'
                 f"{hostname_line}"
@@ -1562,7 +1576,7 @@ def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
 def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
     # 参照したソース一覧を表示するためのMarkdown/HTML要素を構築する
     # Build markdown/HTML element to display the list of referenced sources.
-    sources_lines = _build_web_search_source_lines(result)
+    sources_lines = build_web_search_source_items(result)
     if not sources_lines:
         return ""
 
@@ -1575,144 +1589,11 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
             '<span class="web-search-sources__label">参照したWebサイト</span>',
             "</span>",
             f'<span class="web-search-sources__count">{len(sources_lines)}件</span>',
-            '<span class="web-search-sources__chevron"></span>',
+            '<span class="web-search-sources__chevron"><i class="bi bi-chevron-down"></i></span>',
             "</summary>",
             '<ul class="web-search-sources__list">',
             *sources_lines,
             "</ul>",
-            "</details>",
-        ]
-    )
-
-
-def _is_source_reveal_step(title: str) -> bool:
-    # 実行トレースのステップ名がソース表示を伴うものか判定する
-    # Check if a trace step title indicates revealing source details.
-    return title.startswith(("Web検索:", "追加検索:", "検索結果を再利用:"))
-
-
-def _build_trace_source_body(sources_lines: list[str]) -> list[str]:
-    # トレース詳細内のソース一覧セクションのHTMLを構築する
-    # Build the HTML content body for sources section in the trace.
-    return [
-        '<div class="web-search-sources__section-title">参照したWebサイト</div>',
-        '<ul class="web-search-sources__links">',
-        *sources_lines,
-        "</ul>",
-    ]
-
-
-def _build_trace_source_fallback_details(
-    result: WebSearchResult | None,
-    sources_lines: list[str],
-) -> list[str]:
-    # トレースステップ内にソースが埋め込まれなかった場合の代替表示用HTML詳細要素を構築する
-    # Build fallback HTML details elements for sources if not embedded in a step.
-    query = (result.query if result is not None else "").strip()
-    summary_title = f"Web検索: {query}" if query else "Web検索結果"
-    return [
-        '<details class="web-search-sources__source-details">',
-        '<summary class="web-search-sources__source-summary">',
-        f'<span class="web-search-sources__title">{escape(summary_title)}</span>',
-        f'<span class="web-search-sources__count">{len(sources_lines)}件</span>',
-        '<span class="web-search-sources__step-chevron"></span>',
-        "</summary>",
-        '<div class="web-search-sources__step-body">',
-        *_build_trace_source_body(sources_lines),
-        "</div>",
-        "</details>",
-    ]
-
-
-def build_web_search_trace_markdown(
-    result: WebSearchResult | None,
-    *,
-    steps: list[dict[str, Any]] | None = None,
-) -> str:
-    # 回答生成プロセスのトレースと検索ソースを表示するMarkdown/HTMLを構築する
-    # Build markdown/HTML to display the response generation process trace and search sources.
-    sources_lines = _build_web_search_source_lines(result)
-    normalized_steps: list[tuple[str, str]] = []
-    for step in steps or []:
-        if not isinstance(step, dict):
-            continue
-        title = _normalize_text(step.get("title", ""), max_chars=180)
-        detail = _normalize_text(step.get("detail", ""), max_chars=260)
-        if title:
-            normalized_steps.append((title, detail))
-
-    if not normalized_steps and not sources_lines:
-        return ""
-
-    summary_count_parts: list[str] = []
-    if normalized_steps:
-        summary_count_parts.append(f"{len(normalized_steps)}ステップ")
-    if sources_lines:
-        summary_count_parts.append(f"{len(sources_lines)}件")
-    summary_count = " / ".join(summary_count_parts)
-
-    body_lines: list[str] = [
-        '<div class="web-search-sources__list">',
-    ]
-    sources_rendered = False
-    if normalized_steps:
-        body_lines.append('<ol class="web-search-sources__steps">')
-        for index, (title, detail) in enumerate(normalized_steps, start=1):
-            detail_line = (
-                f'<span class="web-search-sources__hostname">{escape(detail)}</span>'
-                if detail
-                else ""
-            )
-            if sources_lines and not sources_rendered and _is_source_reveal_step(title):
-                body_lines.append(
-                    (
-                        '<li class="web-search-sources__step web-search-sources__step--has-sources">'
-                        '<details class="web-search-sources__step-details">'
-                        '<summary class="web-search-sources__step-summary">'
-                        f'<span class="web-search-sources__index">{index}</span>'
-                        '<span class="web-search-sources__content">'
-                        f'<span class="web-search-sources__title">{escape(title)}</span>'
-                        f"{detail_line}"
-                        "</span>"
-                        '<span class="web-search-sources__step-chevron"></span>'
-                        "</summary>"
-                        '<div class="web-search-sources__step-body">'
-                        + "".join(_build_trace_source_body(sources_lines))
-                        + "</div>"
-                        "</details>"
-                        "</li>"
-                    )
-                )
-                sources_rendered = True
-            else:
-                body_lines.append(
-                    (
-                        '<li class="web-search-sources__step">'
-                        f'<span class="web-search-sources__index">{index}</span>'
-                        '<span class="web-search-sources__content">'
-                        f'<span class="web-search-sources__title">{escape(title)}</span>'
-                        f"{detail_line}"
-                        "</span>"
-                        "</li>"
-                    )
-                )
-        body_lines.append("</ol>")
-    if sources_lines and not sources_rendered:
-        body_lines.extend(_build_trace_source_fallback_details(result, sources_lines))
-    body_lines.append("</div>")
-
-    return "\n".join(
-        [
-            '<details class="web-search-sources web-search-sources--trace">',
-            '<summary class="web-search-sources__summary">',
-            '<span class="web-search-sources__summary-main">',
-            '<span class="web-search-sources__summary-icon"></span>',
-            '<span class="web-search-sources__label">回答までのステップ</span>',
-            "</span>",
-            f'<span class="web-search-sources__count">{escape(summary_count)}</span>',
-            '<span class="web-search-sources__chevron"></span>',
-            "</summary>",
-            *body_lines,
             "</details>",
         ]
     )

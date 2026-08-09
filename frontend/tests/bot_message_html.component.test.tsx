@@ -63,6 +63,106 @@ describe("BotMessageHtml web-search citations", () => {
   });
 });
 
+// services/web_search_trace.py が実際に生成するマークアップの抜粋。
+// サニタイズでアイコンやステップ種別のクラスが落ちると、タイムラインが
+// 無地の箇条書きに戻ってしまうため、ここで固定する。
+// An excerpt of the markup services/web_search_trace.py actually emits. If
+// sanitization dropped the icons or the step-kind classes, the timeline would
+// collapse back into a plain bullet list, so it is pinned here.
+const ANSWER_STEPS_HTML = [
+  '<details class="web-search-sources web-search-sources--trace">',
+  '<summary class="web-search-sources__summary">',
+  '<span class="web-search-sources__summary-main">',
+  '<span class="web-search-sources__summary-icon"><i class="bi bi-list-check"></i></span>',
+  '<span class="web-search-sources__summary-text">',
+  '<span class="web-search-sources__label">回答までのステップ</span>',
+  '<span class="web-search-sources__summary-detail">Web検索2回 · 参照サイト3件</span>',
+  "</span>",
+  "</span>",
+  '<span class="web-search-sources__count">2ステップ</span>',
+  '<span class="web-search-sources__chevron"><i class="bi bi-chevron-down"></i></span>',
+  "</summary>",
+  '<div class="web-search-sources__list">',
+  '<ol class="web-search-sources__steps">',
+  ...["Web検索", "追加検索"].map((title, index) =>
+    [
+      '<li class="web-search-sources__step web-search-sources__step--search web-search-sources__step--has-sources">',
+      '<span class="web-search-sources__step-marker web-search-sources__step-marker--search"><i class="bi bi-search"></i></span>',
+      '<details class="web-search-sources__step-details">',
+      '<summary class="web-search-sources__step-summary">',
+      '<span class="web-search-sources__step-main">',
+      '<span class="web-search-sources__step-head">',
+      `<span class="web-search-sources__step-title">${title}</span>`,
+      '<span class="web-search-sources__step-badge">1件</span>',
+      "</span>",
+      `<span class="web-search-sources__step-query">検索語${index + 1}</span>`,
+      '<span class="web-search-sources__step-detail">候補ページを取得しました。</span>',
+      '<span class="web-search-sources__step-chips"><span class="web-search-sources__step-chip">example.com</span></span>',
+      '<span class="web-search-sources__step-toggle">',
+      '<i class="bi bi-globe2"></i>',
+      '<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>',
+      '<span class="web-search-sources__step-toggle-count">1件</span>',
+      '<span class="web-search-sources__step-chevron"><i class="bi bi-chevron-down"></i></span>',
+      "</span>",
+      "</span>",
+      "</summary>",
+      '<div class="web-search-sources__step-body">',
+      '<ul class="web-search-sources__links">',
+      '<li class="web-search-sources__item">',
+      `<a class="web-search-sources__link" href="https://example.com/${index}" target="_blank">`,
+      '<span class="web-search-citation__icon"><span class="web-search-citation__fallback">E</span>',
+      '<img class="web-search-citation__favicon" src="https://example.com/favicon.ico" alt="" referrerpolicy="no-referrer"></span>',
+      '<span class="web-search-sources__content">',
+      `<span class="web-search-sources__title">記事${index + 1}</span>`,
+      '<span class="web-search-sources__hostname">example.com</span>',
+      "</span>",
+      '<span class="web-search-sources__external">↗</span>',
+      "</a></li></ul></div></details></li>",
+    ].join(""),
+  ),
+  "</ol>",
+  "</div>",
+  "</details>",
+].join("\n");
+
+describe("BotMessageHtml answer steps", () => {
+  it("keeps the step icons, kinds, and per-step source panels through sanitization", () => {
+    const { container } = render(<BotMessageHtml text={`${ANSWER_STEPS_HTML}\n\n回答本文。`} />);
+
+    const steps = container.querySelectorAll(".web-search-sources__step");
+    expect(steps).toHaveLength(2);
+    expect(container.querySelectorAll("i.bi.bi-search")).toHaveLength(2);
+    expect(container.querySelectorAll(".web-search-sources__step-marker--search")).toHaveLength(2);
+    expect(container.querySelector(".web-search-sources__summary-detail")).toHaveTextContent(
+      "Web検索2回",
+    );
+    expect(container.querySelector(".web-search-sources__step-query")).toHaveTextContent("検索語1");
+    expect(container.querySelector(".web-search-sources__step-chip")).toHaveTextContent(
+      "example.com",
+    );
+  });
+
+  // 1回目の検索も追加検索も、それぞれ独立して出典を開けること。
+  // The first search and the follow-up search each open their own source list.
+  it("opens the sources of the first and the follow-up search independently", () => {
+    const { container } = render(<BotMessageHtml text={ANSWER_STEPS_HTML} />);
+
+    const stepDetails = container.querySelectorAll<HTMLDetailsElement>(
+      "details.web-search-sources__step-details",
+    );
+    expect(stepDetails).toHaveLength(2);
+    stepDetails.forEach((details) => {
+      expect(details.querySelector(".web-search-sources__links")).not.toBeNull();
+      expect(details.open).toBe(false);
+    });
+
+    stepDetails[1].querySelector<HTMLElement>(".web-search-sources__step-summary")?.click();
+
+    expect(stepDetails[1].open).toBe(true);
+    expect(stepDetails[0].open).toBe(false);
+  });
+});
+
 describe("BotMessageHtml streaming reveal", () => {
   it("fades in the words of the part that is still generating", () => {
     const { container } = render(<BotMessageHtml text="流れるように出力します" streaming />);
