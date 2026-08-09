@@ -677,79 +677,6 @@
   }
 }
 
-/* Markdown可読性を上げつつ、要素間の余白を詰める */
-:where(body.chat-page, .chat-page-shell) .bot-message > * {
-  margin: 0.65rem 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message > :first-child {
-  margin-top: 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message > :last-child {
-  margin-bottom: 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message p {
-  margin: 0.6rem 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message p + p,
-:where(body.chat-page, .chat-page-shell) .bot-message ul + p,
-:where(body.chat-page, .chat-page-shell) .bot-message ol + p,
-:where(body.chat-page, .chat-page-shell) .bot-message p + ul,
-:where(body.chat-page, .chat-page-shell) .bot-message p + ol {
-  margin-top: 0.75rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message ul,
-:where(body.chat-page, .chat-page-shell) .bot-message ol {
-  margin: 0.65rem 0 0.65rem 1rem;
-  padding-left: 0.8rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message li + li {
-  margin-top: 0.3rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message h1,
-:where(body.chat-page, .chat-page-shell) .bot-message h2,
-:where(body.chat-page, .chat-page-shell) .bot-message h3,
-:where(body.chat-page, .chat-page-shell) .bot-message h4,
-:where(body.chat-page, .chat-page-shell) .bot-message h5,
-:where(body.chat-page, .chat-page-shell) .bot-message h6 {
-  margin: 1.25rem 0 0.5rem;
-  line-height: 1.35;
-  font-weight: var(--chat-font-heading-weight, 600);
-  color: var(--text-dark, #1a1a1a);
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message h1 {
-  font-size: 1.375rem;
-  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  padding-bottom: 0.35rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message h2 {
-  font-size: 1.125rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message h3 {
-  font-size: 1rem;
-  line-height: 1.45;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message blockquote {
-  margin: 0.75rem 0;
-  padding: 0.6rem 1rem;
-  border-left: 3px solid var(--primary-color, #0f766e);
-  background: var(--primary-subtle, rgba(15, 118, 110, 0.06));
-  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
-  color: var(--text-secondary, #6b7280);
-  font-style: italic;
-  line-height: var(--leading-normal, 1.5);
-}
-
 :where(body.chat-page, .chat-page-shell) .bot-message .math-display {
   display: block;
   margin: 0.75rem 0;
@@ -782,167 +709,6 @@
   font-size: 0.92em;
   line-height: 1.35;
   vertical-align: baseline;
-}
-
-/* Code Block Container */
-:where(body.chat-page, .chat-page-shell) .code-block-container {
-  margin: 0.85rem 0;
-  border-radius: var(--radius-sm, 8px);
-  overflow: hidden;
-  background: #1e1e2e;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-:where(body.chat-page, .chat-page-shell) .code-block-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 0.4rem 0.85rem;
-  color: rgba(255, 255, 255, 0.55);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: var(--chat-font-label-size, 0.8125rem);
-  letter-spacing: var(--chat-font-label-tracking, 0);
-}
-
-:where(body.chat-page, .chat-page-shell) .code-block-lang {
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-:where(body.chat-page, .chat-page-shell) .code-block-copy-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  padding: 0.2rem 0.45rem;
-  border-radius: 4px;
-  font-size: var(--chat-font-label-size, 0.8125rem);
-  transition:
-    background var(--transition-fast, 0.15s ease),
-    color var(--transition-fast, 0.15s ease);
-}
-
-:where(body.chat-page, .chat-page-shell) .code-block-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
-}
-
-:where(body.chat-page, .chat-page-shell) .code-block-copy-btn i {
-  font-size: 0.85rem;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message pre {
-  margin: 0;
-  padding: 1rem;
-  background: transparent !important;
-  border: none;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  line-height: var(--chat-font-code-leading, 1.6);
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: rgba(0, 0, 0, 0.06);
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  font-size: 0.88em;
-  color: #d63384;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message pre code {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  color: #cdd6f4;
-  font-size: var(--chat-font-code-size, 0.875rem);
-  line-height: var(--chat-font-code-leading, 1.6);
-}
-
-/* Atom One Dark Theme for highlight.js */
-:where(body.chat-page, .chat-page-shell) .hljs-comment,
-:where(body.chat-page, .chat-page-shell) .hljs-quote { color: #5c6370; font-style: italic; }
-:where(body.chat-page, .chat-page-shell) .hljs-doctag,
-:where(body.chat-page, .chat-page-shell) .hljs-keyword,
-:where(body.chat-page, .chat-page-shell) .hljs-formula { color: #c678dd; }
-:where(body.chat-page, .chat-page-shell) .hljs-section,
-:where(body.chat-page, .chat-page-shell) .hljs-name,
-:where(body.chat-page, .chat-page-shell) .hljs-selector-tag,
-:where(body.chat-page, .chat-page-shell) .hljs-deletion,
-:where(body.chat-page, .chat-page-shell) .hljs-subst { color: #e06c75; }
-:where(body.chat-page, .chat-page-shell) .hljs-literal { color: #56b6c2; }
-:where(body.chat-page, .chat-page-shell) .hljs-string,
-:where(body.chat-page, .chat-page-shell) .hljs-regexp,
-:where(body.chat-page, .chat-page-shell) .hljs-addition,
-:where(body.chat-page, .chat-page-shell) .hljs-attribute,
-:where(body.chat-page, .chat-page-shell) .hljs-meta .hljs-string { color: #98c379; }
-:where(body.chat-page, .chat-page-shell) .hljs-attr,
-:where(body.chat-page, .chat-page-shell) .hljs-variable,
-:where(body.chat-page, .chat-page-shell) .hljs-template-variable,
-:where(body.chat-page, .chat-page-shell) .hljs-type,
-:where(body.chat-page, .chat-page-shell) .hljs-selector-class,
-:where(body.chat-page, .chat-page-shell) .hljs-selector-attr,
-:where(body.chat-page, .chat-page-shell) .hljs-template-tag,
-:where(body.chat-page, .chat-page-shell) .hljs-number { color: #d19a66; }
-:where(body.chat-page, .chat-page-shell) .hljs-symbol,
-:where(body.chat-page, .chat-page-shell) .hljs-bullet,
-:where(body.chat-page, .chat-page-shell) .hljs-link,
-:where(body.chat-page, .chat-page-shell) .hljs-meta,
-:where(body.chat-page, .chat-page-shell) .hljs-selector-id,
-:where(body.chat-page, .chat-page-shell) .hljs-title { color: #61afef; }
-:where(body.chat-page, .chat-page-shell) .hljs-built_in,
-:where(body.chat-page, .chat-page-shell) .hljs-title.class_,
-:where(body.chat-page, .chat-page-shell) .hljs-class .hljs-title { color: #e6c07b; }
-:where(body.chat-page, .chat-page-shell) .hljs-emphasis { font-style: italic; }
-:where(body.chat-page, .chat-page-shell) .hljs-strong { font-weight: bold; }
-:where(body.chat-page, .chat-page-shell) .hljs-link { text-decoration: underline; }
-
-/* テーブルをモバイルで横スクロール対応 */
-:where(body.chat-page, .chat-page-shell) .bot-message table {
-  border-collapse: collapse;
-  margin: 0.65rem 0;
-  width: 100%;
-  font-size: var(--text-sm, 0.875rem);
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message th,
-:where(body.chat-page, .chat-page-shell) .bot-message td {
-  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.1));
-  padding: 0.45rem 0.6rem;
-  text-align: left;
-  white-space: nowrap;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message th {
-  background: var(--primary-subtle, rgba(15, 118, 110, 0.06));
-  font-weight: var(--chat-font-heading-weight, 600);
-  font-size: var(--chat-font-ui-size, 0.875rem);
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message hr {
-  border: 0;
-  border-top: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  margin: 0.85rem 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message a {
-  color: var(--primary-color, #0f766e);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color var(--transition-fast, 0.15s ease);
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message a:hover {
-  color: var(--primary-hover, #115e59);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 /* 回答本文に添える、ChatGPT風のコンパクトなWeb出典チップ */
@@ -1422,11 +1188,6 @@
   transform: translate(1px, -1px);
 }
 
-:where(body.chat-page, .chat-page-shell) .bot-message strong {
-  font-weight: var(--chat-font-heading-weight, 600);
-  color: var(--text-dark, #1a1a1a);
-}
-
 /* メッセージアクション（コピー / メモ保存） */
 :where(body.chat-page, .chat-page-shell) .message-actions {
   display: inline-flex;
@@ -1888,11 +1649,6 @@
 }
 
 /* ─── ダークモード ─── */
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message code {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f472b6;
-}
-
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation {
   border-color: rgba(148, 163, 184, 0.26);
   background: rgba(30, 41, 59, 0.9);
@@ -2267,62 +2023,6 @@
     font-size: var(--chat-font-body-size, 1rem);
     line-height: var(--chat-font-body-leading, 1.7);
     padding: 0.15rem 0;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message h1 {
-    font-size: 1.2rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message h2 {
-    font-size: 1.1rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message h3 {
-    font-size: 1rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message pre {
-    padding: 0.75rem;
-    font-size: var(--chat-font-code-size, 0.875rem);
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message pre code {
-    font-size: var(--chat-font-code-size, 0.875rem);
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message code {
-    font-size: 0.84em;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .code-block-container {
-    margin: 0.6rem -0.2rem;
-    border-radius: 6px;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .code-block-header {
-    padding: 0.35rem 0.7rem;
-    font-size: var(--chat-font-label-size, 0.8125rem);
-  }
-
-  :where(body.chat-page, .chat-page-shell) .code-block-copy-btn span {
-    display: none;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message blockquote {
-    padding: 0.45rem 0.75rem;
-    margin: 0.5rem 0;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message ul,
-:where(body.chat-page, .chat-page-shell) .bot-message ol {
-    margin-left: 0.5rem;
-    padding-left: 0.7rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .bot-message th,
-:where(body.chat-page, .chat-page-shell) .bot-message td {
-    padding: 0.35rem 0.45rem;
-    font-size: var(--text-xs, 0.8125rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .copy-btn {

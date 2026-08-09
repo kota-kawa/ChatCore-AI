@@ -1,0 +1,700 @@
+/* chat_markdown.css
+   回答本文（Markdown → HTML）の組版だけを担当する。
+   chat_messages.css は吹き出し・アクション・出典UIなど「メッセージの器」を持ち、
+   ここは器の中に流し込まれた文章の見た目（見出し・箇条書き・表・コード）を持つ。
+
+   Owns the typography of the answer body (Markdown → HTML) only.
+   chat_messages.css keeps the message shell — bubbles, actions, source UI — while
+   this file styles the prose poured into it: headings, lists, tables, code.
+
+   セレクタの原則: Markdown 由来の要素は class を持たない。出典UIやコピー枠など
+   アプリが組み立てた要素は class を持つため、`:not([class])` で本文だけに当てる。
+   Selector rule of thumb: elements produced by Markdown carry no class, while the
+   app-built blocks (source UI, copy cards) do — `:not([class])` keeps prose styling
+   from leaking into them.
+*/
+
+:where(body.chat-page, .chat-page-shell) .bot-message {
+  /* 本文の装飾トークン。テーマ切り替えは下の [data-theme="dark"] で値だけ差し替える。
+     色は必ず --primary-* から混ぜて作る。チャット画面は index.css で緑を差し替えて
+     いるため、生の rgba を書くと本文だけ別の緑になってしまう。 */
+  /* Prose tokens; the dark theme below swaps the values, not the rules.
+     Every tint is mixed from --primary-*: the chat page redefines its green in
+     index.css, so a hard-coded rgba would leave the answer body on another hue. */
+  --md-accent: var(--primary-color, #19c37d);
+  --md-accent-ink: var(--primary-dark, #0f7a51);
+  --md-accent-wash: color-mix(in srgb, var(--primary-color, #19c37d) 9%, transparent);
+  --md-accent-line: color-mix(in srgb, var(--primary-color, #19c37d) 24%, transparent);
+  --md-chip-bg: color-mix(in srgb, var(--primary-color, #19c37d) 16%, transparent);
+  --md-box-line: rgba(15, 23, 42, 0.22);
+  --md-rule: rgba(15, 23, 42, 0.1);
+  --md-rule-soft: rgba(15, 23, 42, 0.06);
+  --md-zebra: rgba(15, 23, 42, 0.022);
+  --md-code-ink: var(--primary-dark, #0f7a51);
+  --md-block-bg: #101724;
+  --md-block-border: rgba(148, 163, 184, 0.18);
+  --md-block-ink: #dbe3f0;
+  --md-block-muted: rgba(226, 232, 240, 0.55);
+}
+
+/* 選択範囲もブランド色にして、本文がサービスの一部に見えるようにする */
+/* Tint the selection so the answer reads as part of the product, not a raw document */
+:where(body.chat-page, .chat-page-shell) .bot-message ::selection {
+  background: var(--primary-alpha-22, rgba(25, 195, 125, 0.22));
+}
+
+/* ─── 縦のリズム ─── */
+/* Vertical rhythm */
+:where(body.chat-page, .chat-page-shell) .bot-message > * {
+  margin: 0.65rem 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message > :first-child,
+:where(body.chat-page, .chat-page-shell) .bot-message-part > :first-child {
+  margin-top: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message > :last-child,
+:where(body.chat-page, .chat-page-shell) .bot-message-part > :last-child {
+  margin-bottom: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message p {
+  margin: 0.8rem 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message p + p {
+  margin-top: 0.9rem;
+}
+
+/* ─── 見出し ─── */
+/* 3段の階層を「バー → ドット → 素」の記号で見分けられるようにする。
+   長い回答でも、拾い読みで章の粒度が分かることを狙う。 */
+/* Three levels marked by bar → dot → plain, so skimming a long answer still
+   reveals where each section starts and how deep it sits. */
+:where(body.chat-page, .chat-page-shell) .bot-message h1,
+:where(body.chat-page, .chat-page-shell) .bot-message h2,
+:where(body.chat-page, .chat-page-shell) .bot-message h3,
+:where(body.chat-page, .chat-page-shell) .bot-message h4,
+:where(body.chat-page, .chat-page-shell) .bot-message h5,
+:where(body.chat-page, .chat-page-shell) .bot-message h6 {
+  position: relative;
+  margin: 1.75rem 0 0.6rem;
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--text-dark, #1a1a1a);
+  letter-spacing: -0.005em;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message h1 {
+  margin-top: 1.4rem;
+  padding-top: 0.85rem;
+  font-size: 1.5rem;
+  letter-spacing: -0.015em;
+}
+
+/* h1 の上には罫線ではなく短いブランドバーを置く。文書の「表紙」だと分かる。 */
+/* A short brand bar instead of a full rule: it reads as the title of the answer. */
+:where(body.chat-page, .chat-page-shell) .bot-message h1::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.25rem;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--md-accent), var(--md-accent-line));
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message h2 {
+  padding-left: 0.85rem;
+  font-size: 1.1875rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message h2::before {
+  content: "";
+  position: absolute;
+  top: 0.22em;
+  bottom: 0.22em;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--md-accent), var(--md-accent-ink));
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message h3 {
+  margin-top: 1.35rem;
+  padding-left: 0.85rem;
+  font-size: 1.0625rem;
+}
+
+/* h3 は短い横棒。丸や四角にすると箇条書きの中黒と見分けが付かなくなる */
+/* A short dash for h3: a dot or square would be mistaken for a list bullet */
+:where(body.chat-page, .chat-page-shell) .bot-message h3::before {
+  content: "";
+  position: absolute;
+  top: 0.68em;
+  left: 0;
+  width: 0.6rem;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--md-accent);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message h4,
+:where(body.chat-page, .chat-page-shell) .bot-message h5,
+:where(body.chat-page, .chat-page-shell) .bot-message h6 {
+  margin-top: 1.2rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* ─── 箇条書き ─── */
+/* ブラウザ既定の disc/circle をやめ、四角と輪で階層を出す。 */
+/* Replaces the default disc/circle with a square and a ring to show nesting. */
+:where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]),
+:where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  list-style: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]) > li,
+:where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) > li {
+  position: relative;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message li + li {
+  margin-top: 0.35rem;
+}
+
+/* 入れ子のリストは親項目にぶら下がるので、上下の間隔を詰める */
+/* A nested list hangs off its parent item, so it keeps tighter spacing */
+:where(body.chat-page, .chat-page-shell) .bot-message li > ul:not([class]),
+:where(body.chat-page, .chat-page-shell) .bot-message li > ol:not([class]) {
+  margin: 0.35rem 0 0.1rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]) > li::before {
+  content: "";
+  position: absolute;
+  top: 0.66em;
+  left: -1.05rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--md-accent);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]) ul:not([class]) > li::before {
+  top: 0.63em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--md-accent);
+}
+
+/* 番号は丸チップにして、手順が何段あるかを一目で数えられるようにする */
+/* Numbers become round chips so the reader can count the steps at a glance */
+:where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) {
+  counter-reset: md-ordered;
+  padding-left: 2rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) > li {
+  counter-increment: md-ordered;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) > li::before {
+  content: counter(md-ordered);
+  position: absolute;
+  /* 1行目の行ボックス（本文 1rem × 行間 1.7）の中央にチップを合わせる。
+     em は擬似要素自身の文字サイズ基準になってしまうため rem で計算する。 */
+  /* Centre the chip on the first line box (1rem body × 1.7 leading). em would
+     resolve against the pseudo-element's own font size, so the maths uses rem. */
+  top: calc((1.7rem - 1.4rem) / 2);
+  left: -1.65rem;
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--md-chip-bg);
+  color: var(--md-accent-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ─── タスクリスト ─── */
+/* チェックボックス付きの項目は、マーカーの代わりにチェックボックス自体が印になる */
+/* An item with a checkbox uses the box itself as its marker */
+:where(body.chat-page, .chat-page-shell) .bot-message li:has(> input[type="checkbox"])::before {
+  content: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  top: 0.16em;
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0 0.45rem 0 -1.15rem;
+  border: 1.5px solid var(--md-box-line);
+  border-radius: 5px;
+  background: var(--surface-primary, #ffffff);
+  /* 読み取り専用の表示だが、既定の disabled 表現では薄すぎて内容が読めない */
+  /* Read-only, but the default disabled rendering is too faint to read */
+  opacity: 1;
+  cursor: default;
+  vertical-align: baseline;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"]:checked {
+  border-color: var(--md-accent);
+  background: var(--md-accent);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  top: 0.14em;
+  left: 0.32em;
+  width: 0.28em;
+  height: 0.55em;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(42deg);
+}
+
+/* ─── 引用 ─── */
+/* 日本語には本物のイタリックが無く、既定の斜体は合成されて読みにくいので使わない */
+/* Japanese has no true italic; the synthesized slant hurts legibility, so it is dropped */
+:where(body.chat-page, .chat-page-shell) .bot-message blockquote {
+  position: relative;
+  margin: 1rem 0;
+  padding: 0.85rem 1.1rem;
+  border: 0;
+  border-radius: 4px var(--radius-m, 12px) var(--radius-m, 12px) 4px;
+  background: var(--md-accent-wash);
+  color: var(--text-dark, #1a1a1a);
+  font-style: normal;
+  line-height: var(--chat-font-body-leading, 1.7);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message blockquote::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--md-accent), var(--md-accent-ink));
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message blockquote > :first-child {
+  margin-top: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ─── 区切り線 ─── */
+/* 端が消える罫線。本文の幅いっぱいに引く線より、話題の切れ目として静かに効く */
+/* A rule that fades at both ends reads as a topic break instead of a hard divider */
+:where(body.chat-page, .chat-page-shell) .bot-message hr {
+  height: 1px;
+  border: 0;
+  margin: 1.6rem 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--md-rule) 15%,
+    var(--md-rule) 85%,
+    transparent
+  );
+}
+
+/* ─── 強調とリンク ─── */
+:where(body.chat-page, .chat-page-shell) .bot-message strong {
+  font-weight: 700;
+  color: var(--text-dark, #1a1a1a);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message a:not([class]) {
+  color: var(--md-accent-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--md-accent-line);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  transition:
+    color var(--transition-fast, 0.15s ease),
+    text-decoration-color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message a:not([class]):hover {
+  color: var(--md-accent);
+  text-decoration-color: currentColor;
+}
+
+/* ─── 表 ─── */
+/* 縦罫を外して横罫だけにし、角丸の枠で囲む。桁の並びが読み取りやすくなる */
+/* Horizontal rules only inside a rounded frame; columns stay easy to follow */
+:where(body.chat-page, .chat-page-shell) .bot-message table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 1rem 0;
+  border: 1px solid var(--md-rule-soft);
+  border-radius: var(--radius-m, 12px);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message th,
+:where(body.chat-page, .chat-page-shell) .bot-message td {
+  border: 0;
+  padding: 0.55rem 0.9rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message thead th {
+  background: var(--md-accent-wash);
+  border-bottom: 1px solid var(--md-accent-line);
+  color: var(--text-dark, #1a1a1a);
+  font-weight: 700;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  letter-spacing: 0.02em;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message tbody tr + tr td,
+:where(body.chat-page, .chat-page-shell) .bot-message tbody tr + tr th {
+  border-top: 1px solid var(--md-rule-soft);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message tbody tr:nth-child(even) {
+  background: var(--md-zebra);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message tbody tr {
+  transition: background var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message tbody tr:hover {
+  background: var(--md-accent-wash);
+}
+
+/* ─── インラインコード ─── */
+/* class 付きの code はコードブロック側（hljs）なので、素の code だけを飾る */
+/* Classed <code> belongs to the highlighted block, so only bare inline code is chipped */
+:where(body.chat-page, .chat-page-shell) .bot-message code:not([class]) {
+  padding: 0.12em 0.4em;
+  border: 1px solid var(--md-accent-line);
+  border-radius: 6px;
+  background: var(--md-accent-wash);
+  color: var(--md-code-ink);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.86em;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* ─── コードブロック ─── */
+:where(body.chat-page, .chat-page-shell) .code-block-container {
+  margin: 1rem 0;
+  border: 1px solid var(--md-block-border);
+  border-radius: var(--radius-m, 12px);
+  background: var(--md-block-bg);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.55rem 0.45rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(148, 163, 184, 0.07);
+  color: var(--md-block-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.6875rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* 言語名の前のブランドドット。暗い枠の中でも、どのサービスの画面か分かる印になる */
+/* A brand dot ahead of the language keeps the dark block tied to the product */
+:where(body.chat-page, .chat-page-shell) .code-block-lang::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--md-accent);
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--md-block-muted);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn:hover {
+  border-color: color-mix(in srgb, var(--primary-color, #19c37d) 55%, transparent);
+  background: color-mix(in srgb, var(--primary-color, #19c37d) 16%, transparent);
+  color: color-mix(in srgb, var(--primary-color, #19c37d) 45%, #ffffff);
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn:focus-visible {
+  outline: 2px solid var(--md-accent);
+  outline-offset: 2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn i {
+  font-size: 0.8rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message pre {
+  margin: 0;
+  padding: 1rem 1.15rem;
+  background: transparent !important;
+  border: none;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  line-height: var(--chat-font-code-leading, 1.6);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--md-block-ink);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: var(--chat-font-code-size, 0.875rem);
+  font-weight: 400;
+  line-height: var(--chat-font-code-leading, 1.6);
+}
+
+/* ─── ハイライト配色 ─── */
+/* 暗い枠の上で緑（ブランド）を文字列に割り当て、青系・橙系で構文を分ける */
+/* On the dark block, strings take the brand green while blues and ambers split the syntax */
+:where(body.chat-page, .chat-page-shell) .hljs-comment,
+:where(body.chat-page, .chat-page-shell) .hljs-quote {
+  color: #64748b;
+  font-style: italic;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-doctag,
+:where(body.chat-page, .chat-page-shell) .hljs-keyword,
+:where(body.chat-page, .chat-page-shell) .hljs-formula {
+  color: #7dd3fc;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-section,
+:where(body.chat-page, .chat-page-shell) .hljs-name,
+:where(body.chat-page, .chat-page-shell) .hljs-selector-tag,
+:where(body.chat-page, .chat-page-shell) .hljs-deletion,
+:where(body.chat-page, .chat-page-shell) .hljs-subst {
+  color: #fca5a5;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-literal {
+  color: #67e8f9;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-string,
+:where(body.chat-page, .chat-page-shell) .hljs-regexp,
+:where(body.chat-page, .chat-page-shell) .hljs-addition,
+:where(body.chat-page, .chat-page-shell) .hljs-attribute,
+:where(body.chat-page, .chat-page-shell) .hljs-meta .hljs-string {
+  color: #4ade80;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-attr,
+:where(body.chat-page, .chat-page-shell) .hljs-variable,
+:where(body.chat-page, .chat-page-shell) .hljs-template-variable,
+:where(body.chat-page, .chat-page-shell) .hljs-type,
+:where(body.chat-page, .chat-page-shell) .hljs-selector-class,
+:where(body.chat-page, .chat-page-shell) .hljs-selector-attr,
+:where(body.chat-page, .chat-page-shell) .hljs-template-tag,
+:where(body.chat-page, .chat-page-shell) .hljs-number {
+  color: #fbbf24;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-symbol,
+:where(body.chat-page, .chat-page-shell) .hljs-bullet,
+:where(body.chat-page, .chat-page-shell) .hljs-link,
+:where(body.chat-page, .chat-page-shell) .hljs-meta,
+:where(body.chat-page, .chat-page-shell) .hljs-selector-id,
+:where(body.chat-page, .chat-page-shell) .hljs-title {
+  color: #93c5fd;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-built_in,
+:where(body.chat-page, .chat-page-shell) .hljs-title.class_,
+:where(body.chat-page, .chat-page-shell) .hljs-class .hljs-title {
+  color: #f0abfc;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-emphasis {
+  font-style: italic;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-strong {
+  font-weight: 700;
+}
+
+:where(body.chat-page, .chat-page-shell) .hljs-link {
+  text-decoration: underline;
+}
+
+/* ─── ダークテーマ ─── */
+/* 値だけを差し替える。ルールの重複を増やさないため、トークンで完結させる */
+/* Only the values change: everything is expressed through the tokens above */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message {
+  --md-accent-wash: color-mix(in srgb, var(--primary-color, #19c37d) 14%, transparent);
+  --md-accent-line: color-mix(in srgb, var(--primary-color, #19c37d) 32%, transparent);
+  --md-chip-bg: color-mix(in srgb, var(--primary-color, #19c37d) 22%, transparent);
+  --md-box-line: rgba(148, 163, 184, 0.45);
+  /* 暗い背景では原色のままだと沈むので、ブランド色を白へ寄せて読める明度にする */
+  /* The raw brand colour sinks into the dark surface, so it is lifted toward white */
+  --md-accent-ink: color-mix(in srgb, var(--primary-color, #19c37d) 62%, #ffffff);
+  --md-rule: rgba(148, 163, 184, 0.28);
+  --md-rule-soft: rgba(148, 163, 184, 0.16);
+  --md-zebra: rgba(148, 163, 184, 0.05);
+  --md-code-ink: color-mix(in srgb, var(--primary-color, #19c37d) 55%, #ffffff);
+  --md-block-bg: #0b1220;
+  --md-block-border: rgba(148, 163, 184, 0.24);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"] {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"]:checked {
+  background: var(--md-accent);
+}
+
+/* コードブロックの枠はダークでも本文と同じトークンから色を取る */
+/* The code block frame reads its colours from the same tokens in the dark theme */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .code-block-container {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: #0b1220;
+  box-shadow: 0 10px 26px rgba(2, 6, 23, 0.5);
+}
+
+/* ─── 狭い画面 ─── */
+/* chat_messages.css の狭幅ブレークポイントに合わせる。本文側の調整はこの1箇所に置き、
+   器（吹き出し・アクション）側の調整は chat_messages.css に残す。 */
+/* Matches the narrow breakpoint used by chat_messages.css. Prose adjustments live only
+   here; the shell adjustments (bubbles, actions) stay in chat_messages.css. */
+@media (max-width: 576px) {
+  :where(body.chat-page, .chat-page-shell) .bot-message h1 {
+    font-size: 1.3125rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message h2 {
+    font-size: 1.0625rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message h3 {
+    font-size: 1rem;
+  }
+
+  /* 画面が狭いほど本文の1行が短いので、マーカー分の字下げを詰める */
+  /* The narrower the screen, the shorter the line, so the marker indent tightens */
+  :where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]) {
+    padding-left: 1.25rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) {
+    padding-left: 1.75rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message ul:not([class]) > li::before {
+    left: -0.9rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message ol:not([class]) > li::before {
+    left: -1.5rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message li > input[type="checkbox"] {
+    margin-left: -1rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message blockquote {
+    padding: 0.7rem 0.85rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message th,
+  :where(body.chat-page, .chat-page-shell) .bot-message td {
+    padding: 0.45rem 0.6rem;
+    font-size: var(--text-xs, 0.8125rem);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message code:not([class]) {
+    font-size: 0.84em;
+  }
+
+  /* コードブロックは本文より少しだけ外へ出して、横スクロールの幅を稼ぐ */
+  /* The code block bleeds slightly past the text column to buy scrolling width */
+  :where(body.chat-page, .chat-page-shell) .code-block-container {
+    margin: 0.85rem -0.2rem;
+    border-radius: var(--radius-sm, 8px);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message pre {
+    padding: 0.85rem 0.9rem;
+  }
+
+  /* 狭い画面ではコピーボタンをアイコンだけにして、言語名の場所を確保する */
+  /* On narrow screens the copy button drops to its icon so the language keeps its room */
+  :where(body.chat-page, .chat-page-shell) .code-block-copy-btn span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .bot-message tbody tr,
+  :where(body.chat-page, .chat-page-shell) .bot-message a:not([class]),
+  :where(body.chat-page, .chat-page-shell) .code-block-copy-btn {
+    transition: none;
+  }
+}
