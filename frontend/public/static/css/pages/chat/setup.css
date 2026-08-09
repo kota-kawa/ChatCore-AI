@@ -1162,6 +1162,16 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
   }
 
+  /* Keep the setup actions outside the textarea's native scrolling layer.
+     On mobile Safari, absolutely positioned controls over a long, internally
+     scrolling textarea can be painted underneath that layer and disappear. */
+  :where(body.chat-page, .chat-page-shell) .setup-info-input-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px 48px;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
   :where(body.chat-page, .chat-page-shell) .setup-form textarea,
 :where(body.chat-page, .chat-page-shell) .setup-form select {
     border-radius: 18px;
@@ -1180,20 +1190,25 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   :where(body.chat-page, .chat-page-shell) #setup-info {
+    grid-column: 1 / -1;
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
-    padding-right: calc(1.6rem + 96px);
-    padding-bottom: 3.95rem;
+    padding-right: var(--setup-field-padding-x);
+    padding-bottom: var(--setup-field-padding-y);
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
-    right: 0.62rem;
-    bottom: 0.62rem;
+    position: relative;
+    right: auto;
+    bottom: auto;
+    grid-column: 3;
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
-    right: calc(0.62rem + 48px + 0.35rem);
-    bottom: 0.62rem;
+    position: relative;
+    right: auto;
+    bottom: auto;
+    grid-column: 2;
   }
 
   :where(body.chat-page, .chat-page-shell) .task-selection {
