@@ -188,8 +188,15 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         self.assertTrue(payload["response"].startswith('<details class="web-search-sources web-search-sources--trace">'))
         self.assertIn('<summary class="web-search-sources__summary">', payload["response"])
         self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', payload["response"])
-        self.assertIn('<span class="web-search-sources__count">4ステップ / 1件</span>', payload["response"])
-        self.assertIn('<div class="web-search-sources__section-title">参照したWebサイト</div>', payload["response"])
+        self.assertIn('<span class="web-search-sources__count">4ステップ</span>', payload["response"])
+        self.assertIn(
+            '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
+            payload["response"],
+        )
+        self.assertIn(
+            '<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>',
+            payload["response"],
+        )
         self.assertIn("https://example.com/openai-news", payload["response"])
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")

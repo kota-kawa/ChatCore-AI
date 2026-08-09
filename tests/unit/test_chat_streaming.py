@@ -668,12 +668,16 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("回答本文", body)
         self.assertIn('\\"web-search-sources__summary\\"', body)
         self.assertIn('\\"web-search-sources__label\\">回答までのステップ', body)
-        self.assertIn('\\"web-search-sources__count\\">4ステップ / 1件', body)
+        self.assertIn('\\"web-search-sources__count\\">4ステップ', body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertTrue(persisted_messages[0].startswith('<details class="web-search-sources web-search-sources--trace">'))
         self.assertIn('<summary class="web-search-sources__summary">', persisted_messages[0])
         self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">4ステップ / 1件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">4ステップ</span>', persisted_messages[0])
+        self.assertIn(
+            '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
+            persisted_messages[0],
+        )
         self.assertIn("回答本文", persisted_messages[0])
 
     # 日本語: Web検索回答の引用markerが実ソースへ解決され、根拠metadataとともに保存されることを検証します。
@@ -933,9 +937,16 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("検索結果を踏まえた回答", body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertIn("https://example.com/release", persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__title">Web検索: Python latest news</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__title">追加検索: Python release details</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">5ステップ / 2件</span>', persisted_messages[0])
+        # 1回目も追加検索も、それぞれ自分の検索語と参照Webサイトを展開できる
+        self.assertIn('<span class="web-search-sources__step-title">Web検索</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__step-query">Python latest news</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__step-title">追加検索</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__step-query">Python release details</span>', persisted_messages[0])
+        self.assertEqual(
+            persisted_messages[0].count('<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'),
+            2,
+        )
+        self.assertIn('<span class="web-search-sources__count">5ステップ</span>', persisted_messages[0])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
@@ -1000,8 +1011,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(stream_call_count, 3)
         mock_search.assert_called_once_with("OpenAI news", freshness="")
         self.assertIn('"cached": true', body)
-        self.assertIn('<span class="web-search-sources__title">検索結果を再利用: OpenAI news</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">5ステップ / 1件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__step-title">検索結果を再利用</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__step-query">OpenAI news</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">5ステップ</span>', persisted_messages[0])
 
     # 日本語: 生成ジョブのツール実行ループが、規定の最大ステップ数(CHAT_AGENT_MAX_STEPS)で正しく停止することを検証します。
     # English: Verify that the tool execution loop of the generation job stops at the maximum step count.
@@ -1069,7 +1081,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_count, 4)
         self.assertEqual(stream_tools, [True, True, True, True, False])
         self.assertIn("上限内で回答", body)
-        self.assertIn('<span class="web-search-sources__count">9ステップ / 4件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">9ステップ</span>', persisted_messages[0])
 
     # 日本語: バックグラウンド生成ジョブが、応答生成の開始状態などを正しくステータスとして報告することを検証します。
     # English: Verify that the background generation job correctly reports the response generation status.
