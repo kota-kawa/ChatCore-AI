@@ -43,8 +43,15 @@ type LocalizedDocumentProps = DocumentInitialProps & { locale: Locale };
 
 export default function Document({ locale }: LocalizedDocumentProps) {
   return (
-    <Html lang={locale} data-locale={locale}>
+    // ブラウザの自動翻訳は React がハイドレートする前のテキストノードを書き換え、
+    // サーバー HTML と初回クライアント描画を不一致にする。英語は /en で正式に
+    // 提供しているため、この文書は翻訳対象外として扱う。
+    // Browser auto-translation can rewrite text nodes before React hydrates them,
+    // making the server HTML differ from the first client render. English is served
+    // explicitly under /en, so keep this document out of automatic translation.
+    <Html lang={locale} data-locale={locale} className="notranslate" translate="no">
       <Head>
+        <meta name="google" content="notranslate" />
         {/* カラースキームとテーマカラーの設定 / Color scheme and theme color settings */}
         <meta name="color-scheme" content="light dark" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
