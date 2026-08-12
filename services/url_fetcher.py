@@ -13,6 +13,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 import urllib3.util.connection as _urllib3_conn
 
+from services.url_charset import decode_response_body
+
 # ロガーの設定
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -265,9 +267,18 @@ def fetch_url_content(url: str) -> str | None:
                             # Truncate large pages to keep memory usage and latency bounded.
                             break
 
-                    raw = b"".join(chunks).decode(
-                        response.apparent_encoding or "utf-8",
-                        errors="replace",
+                    # ここで response.apparent_encoding は使えない。内部で
+                    # response.content を参照するが、上の iter_content で
+                    # ストリームを読み切っているため RuntimeError になる。
+                    # 受信済みの bytes だけから文字コードを判定する。
+                    # response.apparent_encoding cannot be used here: it reads
+                    # response.content, which raises RuntimeError once the stream
+                    # above has been drained. Resolve the charset from the bytes
+                    # we already hold instead.
+                    raw = decode_response_body(
+                        b"".join(chunks),
+                        content_type=content_type,
+                        is_html=is_html,
                     )
                     text = _extract_text_from_html(raw) if is_html else raw
                     return text[:MAX_URL_TEXT_CHARS] or None
