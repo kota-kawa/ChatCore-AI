@@ -289,7 +289,9 @@
   color: var(--ws-text-muted);
   font-size: 0.8rem;
   line-height: 1;
-  transition: transform var(--transition-fast, 0.15s ease);
+  /* パネル本体の開閉（JS側で距離に応じて 200〜440ms）に近い時間で回す。
+     0.15s だと矢印だけ先に回り終わり、パネルが遅れているように見える。 */
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__chevron:empty::before {
@@ -322,13 +324,14 @@
   margin: 0;
   padding: 0.7rem 0.75rem 0.85rem;
   list-style: none;
-  transform-origin: top;
 }
 
+/* 開閉中だけ内側のレイアウト・描画を閉じ込め、外へ影響を広げない。
+   will-change は付けない: height は合成でまかなえないので効果が無いうえ、
+   開始と終了でレイヤーが作り直されて、かえって動き出しが引っかかる。 */
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[data-web-search-sources-state="closing"] .web-search-sources__list {
   contain: layout paint;
-  will-change: height, opacity, transform;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__steps,

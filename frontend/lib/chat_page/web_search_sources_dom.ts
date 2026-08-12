@@ -10,10 +10,23 @@
 
 import { prefersReducedMotion } from "./dom";
 
-// Webソース展開アニメーションの設定
-// Web source expand animation settings
-const WEB_SEARCH_SOURCES_ANIMATION_MS = 170;
-const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+// Webソース展開アニメーションの設定。
+// 所要時間は「開く高さ」に比例させる。固定時間だと、背の高いパネルほど1フレームの
+// 移動量が大きくなり、最初の数フレームで一気に開いてから残りが這うように見える。
+// イージングも、終端側へ極端に寄ったカーブ（easeOutQuint 相当）は初速が速すぎて
+// 同じ症状を強めるため、立ち上がりのある標準カーブにする。
+// Expand animation settings for the web source panel.
+// The duration scales with the distance travelled: a fixed duration makes taller
+// panels move further per frame, so they snap open over the first few frames and
+// then crawl. The easing is a standard curve for the same reason — a strongly
+// back-loaded curve (easeOutQuint-like) starts far too fast and amplifies that.
+const WEB_SEARCH_SOURCES_MIN_DURATION_MS = 200;
+const WEB_SEARCH_SOURCES_MAX_DURATION_MS = 440;
+const WEB_SEARCH_SOURCES_DURATION_PER_PX = 0.32;
+// 閉じる動きは開く動きよりわずかに速いほうが、操作に対する反応として自然に見える。
+// Closing slightly faster than opening reads as a more responsive reaction.
+const WEB_SEARCH_SOURCES_CLOSE_DURATION_RATIO = 0.82;
+const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
 // 実行中のWebソースアニメーションを追跡するWeakMap（GCに優しい）
 // WeakMap to track active web source animations (GC-friendly)
 const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animation>();
@@ -46,7 +59,15 @@ function resetWebSearchSourcesListStyles(list: HTMLElement) {
   list.style.height = "";
   list.style.overflow = "";
   list.style.opacity = "";
-  list.style.transform = "";
+}
+
+// 移動距離から所要時間を決める。1フレームあたりの移動量をおおよそ一定に保つのが狙い。
+// Derive the duration from the distance travelled so the per-frame movement stays
+// roughly constant regardless of how tall the panel is.
+function resolveWebSearchSourcesDuration(distancePx: number, shouldOpen: boolean) {
+  const scaled = WEB_SEARCH_SOURCES_MIN_DURATION_MS + Math.abs(distancePx) * WEB_SEARCH_SOURCES_DURATION_PER_PX;
+  const clamped = Math.min(scaled, WEB_SEARCH_SOURCES_MAX_DURATION_MS);
+  return shouldOpen ? clamped : clamped * WEB_SEARCH_SOURCES_CLOSE_DURATION_RATIO;
 }
 
 // 展開されたWebソースの詳細がビューポートに収まるようにオーバーフロー状態を更新する
@@ -93,8 +114,36 @@ function releaseWebSearchSourcesHeightLock(element: Element) {
   });
 }
 
-// 展開したWebソースがスクローラー内に収まるようにスクロール位置を調整する
-// Adjust the scroll position so expanded web sources are visible within the scroller
+// 展開後にスクロールをどれだけ動かすべきかを返す。動かす必要がなければ null。
+// Return the scrollTop the scroller should move to after expanding, or null when it
+// is already in view.
+function resolveWebSearchRevealScrollTop(details: HTMLElement, scroller: HTMLElement) {
+  const scrollerRect = scroller.getBoundingClientRect();
+  const detailsRect = details.getBoundingClientRect();
+  const availableHeight = scrollerRect.height - WEB_SEARCH_SOURCES_REVEAL_PADDING * 2;
+  const topGap = detailsRect.top - (scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING);
+  const bottomGap = detailsRect.bottom - (scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING);
+
+  // パネルが画面に収まるなら、はみ出した側だけを寄せる。
+  // While the panel fits, only nudge whichever edge is out of view.
+  if (detailsRect.height <= availableHeight) {
+    if (topGap < 0) return scroller.scrollTop + topGap;
+    if (bottomGap > 0) return scroller.scrollTop + bottomGap;
+    return null;
+  }
+
+  // 収まらない場合は先頭を見せる。
+  // When it cannot fit, show its top edge instead.
+  if (topGap < 0 || bottomGap > 0) return scroller.scrollTop + topGap;
+  return null;
+}
+
+// 展開したWebソースがスクローラー内に収まるようにスクロール位置を調整する。
+// 位置合わせは高さアニメーションの直後に起きるため、瞬間移動させると開き終わりに
+// 「カクッ」と跳ねて見える。スムーズスクロールで開く動きから繋げる。
+// Adjust the scroll position so expanded web sources are visible within the scroller.
+// This runs right after the height animation, so jumping scrollTop reads as a hitch
+// at the end of the expansion; scroll smoothly to carry the motion through instead.
 function revealWebSearchSources(details: HTMLElement) {
   const scroller = details.closest<HTMLElement>(".chat-messages");
   if (!scroller) {
@@ -102,28 +151,18 @@ function revealWebSearchSources(details: HTMLElement) {
     return;
   }
 
-  const scrollerRect = scroller.getBoundingClientRect();
-  const detailsRect = details.getBoundingClientRect();
-  const availableHeight = scrollerRect.height - WEB_SEARCH_SOURCES_REVEAL_PADDING * 2;
+  const target = resolveWebSearchRevealScrollTop(details, scroller);
+  if (target === null) return;
 
-  if (detailsRect.height <= availableHeight) {
-    if (detailsRect.top < scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING) {
-      scroller.scrollTop -= scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING - detailsRect.top;
-      return;
-    }
+  const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const clamped = Math.min(Math.max(target, 0), maxScrollTop);
+  if (Math.abs(clamped - scroller.scrollTop) < 1) return;
 
-    if (detailsRect.bottom > scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING) {
-      scroller.scrollTop += detailsRect.bottom - (scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING);
-    }
+  if (prefersReducedMotion() || typeof scroller.scrollTo !== "function") {
+    scroller.scrollTop = clamped;
     return;
   }
-
-  if (
-    detailsRect.top < scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING ||
-    detailsRect.bottom > scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING
-  ) {
-    scroller.scrollTop += detailsRect.top - (scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING);
-  }
+  scroller.scrollTo({ top: clamped, behavior: "smooth" });
 }
 
 // 次のアニメーションフレームでWebソースの表示位置を調整するリクエストをスケジュールする
@@ -157,7 +196,6 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
   list.style.height = `${startHeight}px`;
   list.style.overflow = "hidden";
   list.style.opacity = shouldOpen || startHeight > 0 ? "1" : "0";
-  list.style.transform = "translateY(0)";
 
   if (shouldOpen) {
     details.open = true;
@@ -176,21 +214,23 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     return;
   }
 
+  // 高さと一緒に中身も動かすと、伸びる動きと滑る動きが二重になって落ち着かない。
+  // 動かすのは高さだけにして、フェードは高さより先に終わらせる（閉じるときは先に
+  // 消える）。動きが一種類なら、フレームが落ちても「かくつき」として目立ちにくい。
+  // Moving the content as well as the height stacks two motions on top of each other
+  // and reads as unsettled. Animate the height only, and let the fade finish ahead of
+  // it (or start ahead of it when closing). A single motion hides dropped frames far
+  // better than two competing ones.
+  const startOpacity = shouldOpen && startHeight < 1 ? 0 : 1;
+  const endOpacity = shouldOpen ? 1 : 0;
   const animation = list.animate(
     [
-      {
-        height: `${startHeight}px`,
-        opacity: shouldOpen && startHeight < 1 ? 0 : 1,
-        transform: shouldOpen && startHeight < 1 ? "translateY(-4px)" : "translateY(0)"
-      },
-      {
-        height: `${endHeight}px`,
-        opacity: shouldOpen ? 1 : 0,
-        transform: shouldOpen ? "translateY(0)" : "translateY(-3px)"
-      }
+      { height: `${startHeight}px`, opacity: startOpacity, offset: 0 },
+      { opacity: endOpacity, offset: shouldOpen ? 0.5 : 0.7 },
+      { height: `${endHeight}px`, opacity: endOpacity, offset: 1 }
     ],
     {
-      duration: WEB_SEARCH_SOURCES_ANIMATION_MS,
+      duration: resolveWebSearchSourcesDuration(endHeight - startHeight, shouldOpen),
       easing: WEB_SEARCH_SOURCES_ANIMATION_EASING,
       fill: "both"
     }
