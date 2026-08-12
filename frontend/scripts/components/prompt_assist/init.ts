@@ -1,6 +1,6 @@
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
-import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";
+import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistImageMeta, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";
 import { localized } from "./strings";
 import { createPromptAssistMarkup } from "./markup";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
@@ -183,7 +183,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
 
     previewEl.hidden = false;
     setStatus(localized("内容を確認して「反映する」を押すと、フォームに入ります。", "Review the draft, then choose Apply to fill in the form."), "success");
-    previewEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    previewEl.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
   };
 
   const runPromptAssist = async () => {
@@ -195,7 +196,9 @@ export function initPromptAssist(config: PromptAssistConfig) {
 
     clearPreview();
     setLoading(true);
-    setStatus(localized("AIがプロンプトを作成しています…", "AI is drafting your prompt…"), "info");
+    // 読み上げは専用loading領域へ一本化し、同じ進行メッセージの二重通知を避ける。
+    // The dedicated loading region announces progress, avoiding duplicate live-region output.
+    setStatus("", "info");
 
     try {
       const { payload } = await fetchJsonOrThrow<PromptAssistResponse & { error?: string }>(
@@ -259,7 +262,16 @@ export function initPromptAssist(config: PromptAssistConfig) {
 
   const updateForPromptType = (promptType: string) => {
     if (target !== "shared_prompt_modal") return;
-    const meta = promptType === "skill" ? getPromptAssistSkillMeta() : getPromptAssistTargetMeta(target);
+    // 種別変更前の提案や通信結果を新しいフォームへ反映できないよう無効化する。
+    // Invalidate suggestions and pending responses from the previous post type.
+    invalidatePendingResponse();
+    clearPreview();
+    setStatus("", "info");
+    const meta = promptType === "skill"
+      ? getPromptAssistSkillMeta()
+      : promptType === "image"
+        ? getPromptAssistImageMeta()
+        : getPromptAssistTargetMeta(target);
     if (titleEl) titleEl.textContent = meta.title;
     if (leadEl) leadEl.textContent = meta.lead;
     if (briefLabelEl) briefLabelEl.textContent = meta.briefLabel;

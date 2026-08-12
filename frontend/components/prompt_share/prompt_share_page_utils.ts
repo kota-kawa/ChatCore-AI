@@ -41,6 +41,7 @@ export function getModalFocusableElements(modal: HTMLElement) {
     const style = window.getComputedStyle(element);
     return (
       !element.closest("[hidden]") &&
+      !element.matches(":disabled") &&
       style.display !== "none" &&
       style.visibility !== "hidden" &&
       element.getClientRects().length > 0

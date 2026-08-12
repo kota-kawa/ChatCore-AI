@@ -10,6 +10,7 @@ from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
 SHARED_PROMPT_SKILL_ALLOWED_FIELDS = ("title", "skill_markdown")
+SHARED_PROMPT_IMAGE_ALLOWED_FIELDS = ("title", "content")
 SHARED_PROMPT_CONTEXT_FIELDS = (
     "title",
     "category",
@@ -112,6 +113,12 @@ def _resolve_target_config(target: str, fields: dict[str, str]) -> dict[str, Any
     if target != "shared_prompt_modal":
         return target_config
     if fields.get("prompt_type") != "skill":
+        if fields.get("prompt_type") == "image":
+            return {
+                **target_config,
+                "allowed_fields": SHARED_PROMPT_IMAGE_ALLOWED_FIELDS,
+                "target_label": "the shared image-generation prompt submission modal",
+            }
         return target_config
     return {
         **target_config,
@@ -135,9 +142,12 @@ def _validate_prompt_assist_request(
     primary_field = target_config["primary_field"]
     primary_value = fields.get(primary_field, "")
     is_skill_prompt = target == "shared_prompt_modal" and fields.get("prompt_type") == "skill"
+    is_image_prompt = target == "shared_prompt_modal" and fields.get("prompt_type") == "image"
 
     if is_skill_prompt and action == "generate_examples":
         raise ValueError("SKILL投稿では入出力例の生成は利用できません。")
+    if is_image_prompt and action == "generate_examples":
+        raise ValueError("画像生成プロンプトではテキストの入出力例を利用できません。")
 
     if action in {"improve", "shorten", "expand"} and not primary_value:
         if is_skill_prompt:
@@ -199,6 +209,14 @@ def _build_prompt_assist_messages(
                 "Treat skill_markdown as the primary field, and structure it in Markdown so the purpose, usage, steps, and expected output come across.",
                 "Users register additional resources individually in the resource editor of the submission form, so do not include them in suggested_fields.",
                 "In shared_prompt_modal, use category, author, prompt_type, and ai_model as context only, and do not include them in suggested_fields.",
+            ]
+        )
+    elif target == "shared_prompt_modal" and fields.get("prompt_type") == "image":
+        rules.extend(
+            [
+                "For image-generation prompts, propose only title and content; do not propose input_examples or output_examples.",
+                "Structure content as a reusable image prompt covering the subject, composition, style, colors and lighting, aspect ratio when relevant, and elements to avoid.",
+                "Use category, prompt_type, and ai_model as context only, and do not include them in suggested_fields.",
             ]
         )
     else:

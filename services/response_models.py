@@ -101,6 +101,8 @@ class PromptRecordApi(ResponsePayloadModel):
     # Skill posts store their body in attributes.skill_markdown, so expose this
     # derived field explicitly for the settings list and preview modal.
     content_format: str | None = "prompt"
+    media_type: str | None = "text"
+    attributes: dict[str, str] = Field(default_factory=dict)
     skill_markdown: str | None = ""
 
 

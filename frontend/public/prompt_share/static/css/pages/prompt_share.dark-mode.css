@@ -1155,6 +1155,15 @@
   color: #94a3b8;
 }
 
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist {
+  border-color: rgba(105, 168, 245, 0.28);
+  background: rgba(23, 38, 57, 0.82);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist > summary {
+  color: #9bc7ff;
+}
+
 /* ── コンポーザー: ガードレールフィールド ── */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #guardrail-fields {
   background: rgba(17, 24, 39, 0.8);
@@ -1187,6 +1196,19 @@
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
   color: #64748b;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn {
+  border-color: rgba(111, 139, 173, 0.58);
+  background: rgba(30, 41, 59, 0.94);
+  color: #dbeafe;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:hover:not(:disabled),
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:focus-visible {
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.16);
 }
 [data-theme="dark"] .prompt-share-page .skill-resource-editor {
   border-top-color: rgba(111, 139, 173, 0.42);

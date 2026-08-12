@@ -52,3 +52,18 @@ export function getPromptAssistSkillMeta(): PromptAssistMeta {
     ),
   };
 }
+
+export function getPromptAssistImageMeta(): PromptAssistMeta {
+  return {
+    title: localized("AIに画像生成プロンプトを作ってもらう", "Have AI draft an image prompt"),
+    lead: localized(
+      "作りたい画像を説明すると、被写体・構図・スタイル・光を含む下書きを作ります。",
+      "Describe the image you want to create, and AI will draft a prompt covering subject, composition, style, and lighting."
+    ),
+    briefLabel: localized("どんな画像を生成したいか（任意）", "What image do you want to generate? (optional)"),
+    briefPlaceholder: localized(
+      "例: 雨上がりの東京を歩く猫。映画のような光、低い視点、横長の構図。",
+      "For example: a cat walking through Tokyo after rain, cinematic lighting, low angle, widescreen composition."
+    ),
+  };
+}

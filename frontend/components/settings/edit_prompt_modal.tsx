@@ -22,6 +22,8 @@ export function EditPromptModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { t, locale } = useTranslation();
+  const isSkill = formState.contentFormat === "skill";
+  const showExamples = !isSkill && formState.mediaType === "text";
   return (
     <div
       id="editModal"
@@ -93,7 +95,7 @@ export function EditPromptModal({
                   </div>
 
                   <div className="edit-prompt-modal__field">
-                    <label htmlFor="editCategory">{t("promptShare.category")} <span aria-hidden="true">*</span></label>
+                    <label htmlFor="editCategory">{t("promptShare.category")} <span>{t("common.optional")}</span></label>
                     <p className="edit-prompt-modal__field-help">{t("promptShare.categoryHelp")}</p>
                     <PromptCategorySelect
                       selectId="editCategory"
@@ -109,7 +111,11 @@ export function EditPromptModal({
                 <div className="edit-prompt-modal__section-heading">
                   <div>
                     <p className="edit-prompt-modal__section-kicker">{t("promptShare.body")}</p>
-                    <h3 id="editPromptContentTitle">{locale === "en" ? "Instructions for AI" : "AI に伝えたい内容"}</h3>
+                    <h3 id="editPromptContentTitle">
+                      {isSkill
+                        ? (locale === "en" ? "SKILL definition" : "SKILL 定義")
+                        : (locale === "en" ? "Instructions for AI" : "AI に伝えたい内容")}
+                    </h3>
                   </div>
                   <span className="edit-prompt-modal__required">{t("settings.required")}</span>
                 </div>
@@ -128,6 +134,7 @@ export function EditPromptModal({
                 </div>
               </section>
 
+              {showExamples ? (
               <section className="edit-prompt-modal__section edit-prompt-modal__section--examples" aria-labelledby="editPromptExamplesTitle">
                 <div className="edit-prompt-modal__section-heading">
                   <div>
@@ -164,6 +171,7 @@ export function EditPromptModal({
                   </div>
                 </div>
               </section>
+              ) : null}
             </div>
 
             <footer className="edit-prompt-modal__footer">

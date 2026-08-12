@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { LikedPromptCard, PromptCard } from "../components/settings/prompt_cards";
 import { PromptCategorySelect } from "../components/settings/prompt_category_select";
 import { PromptPreviewModal } from "../components/settings/prompt_preview_modal";
-import { parseMyPromptsResponse, type LikedPrompt, type PromptRecord } from "../scripts/user/settings/types";
+import {
+  buildPromptUpdatePayload,
+  parseMyPromptsResponse,
+  type LikedPrompt,
+  type PromptRecord,
+} from "../scripts/user/settings/types";
 
 const authoredPrompt: PromptRecord = {
   id: "prompt-1",
@@ -12,6 +17,8 @@ const authoredPrompt: PromptRecord = {
   category: "business",
   content: "会議メモを要点、決定事項、次のアクションに分けて要約してください。",
   contentFormat: "prompt",
+  mediaType: "text",
+  attributes: {},
   skillMarkdown: "",
   inputExamples: "会議メモの本文",
   outputExamples: "要点: ...",
@@ -27,6 +34,8 @@ const likedPrompt: LikedPrompt = {
   category: authoredPrompt.category,
   content: authoredPrompt.content,
   contentFormat: authoredPrompt.contentFormat,
+  mediaType: authoredPrompt.mediaType,
+  attributes: authoredPrompt.attributes,
   skillMarkdown: authoredPrompt.skillMarkdown,
   inputExamples: authoredPrompt.inputExamples,
   outputExamples: authoredPrompt.outputExamples,
@@ -61,6 +70,8 @@ describe("設定画面のプロンプトカード詳細", () => {
         category: "business",
         content: "",
         content_format: "skill",
+        media_type: "text",
+        attributes: { skill_markdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する" },
         skill_markdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する",
         input_examples: "",
         output_examples: "",
@@ -70,7 +81,64 @@ describe("設定画面のプロンプトカード詳細", () => {
 
     expect(skillPrompt).toMatchObject({
       contentFormat: "skill",
+      mediaType: "text",
       skillMarkdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する"
+    });
+  });
+
+  it("画像投稿のメディア種別と属性を編集用データに保持する", () => {
+    const [imagePrompt] = parseMyPromptsResponse({
+      prompts: [{
+        id: "image-1",
+        title: "雨上がりの東京",
+        category: "",
+        content: "cinematic Tokyo street after rain",
+        content_format: "prompt",
+        media_type: "image",
+        attributes: { aspect_ratio: "16:9" },
+      }],
+    });
+
+    expect(imagePrompt).toMatchObject({
+      contentFormat: "prompt",
+      mediaType: "image",
+      attributes: { aspect_ratio: "16:9" },
+    });
+  });
+
+  it("画像とSKILLの更新ペイロードに既存の投稿種別を保持する", () => {
+    expect(buildPromptUpdatePayload({
+      title: "画像",
+      category: "",
+      content: "image prompt",
+      contentFormat: "prompt",
+      mediaType: "image",
+      attributes: { aspect_ratio: "16:9" },
+      inputExamples: "送らない例",
+      outputExamples: "送らない例",
+    })).toMatchObject({
+      content: "image prompt",
+      content_format: "prompt",
+      media_type: "image",
+      attributes: { aspect_ratio: "16:9" },
+      input_examples: "",
+      output_examples: "",
+    });
+
+    expect(buildPromptUpdatePayload({
+      title: "SKILL",
+      category: "coding",
+      content: "# Updated SKILL",
+      contentFormat: "skill",
+      mediaType: "text",
+      attributes: { existing: "value" },
+      inputExamples: "",
+      outputExamples: "",
+    })).toMatchObject({
+      content: "",
+      content_format: "skill",
+      media_type: "text",
+      attributes: { existing: "value", skill_markdown: "# Updated SKILL" },
     });
   });
 

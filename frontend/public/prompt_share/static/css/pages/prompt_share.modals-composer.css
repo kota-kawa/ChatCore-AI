@@ -1434,6 +1434,20 @@
   margin-top: 1rem;
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .composer-form-fields {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-form-fields:disabled {
+  opacity: 0.72;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .composer-section {
   display: flex;
   flex-direction: column;
@@ -1620,6 +1634,10 @@
   gap: 0.6rem;
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .prompt-axis-toggle--post-types {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 /* 一目で選べるコンパクトな選択肢。アイコン＋短いラベルで文字量を抑える */
 /* Compact, at-a-glance options: icon + short label to keep text minimal */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-axis-option {
@@ -1658,6 +1676,12 @@
   box-shadow: 0 16px 30px rgba(78, 136, 196, 0.16);
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .prompt-axis-option:focus-within {
+  border-color: #1a73e8;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.18);
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .prompt-axis-option__icon {
   width: 2.2rem;
   height: 2.2rem;
@@ -1694,7 +1718,7 @@
 }
 
 @media (max-width: 640px) {
-  :where(body.prompt-share-page, .prompt-share-page) .composer-axis-grid {
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-axis-toggle--post-types {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1995,6 +2019,51 @@
   border-color: rgba(220, 38, 38, 0.16);
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist {
+  border: 1px solid rgba(125, 170, 222, 0.38);
+  border-radius: 16px;
+  background: rgba(244, 249, 255, 0.82);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist > summary {
+  display: flex;
+  min-height: 48px;
+  padding: 0.72rem 0.9rem;
+  align-items: center;
+  gap: 0.55rem;
+  color: #185abc;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist > summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist > summary::after {
+  margin-left: auto;
+  content: "+";
+  font-size: 1.1rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist[open] > summary::after {
+  content: "−";
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist > summary:focus-visible {
+  border-radius: 16px;
+  outline: 3px solid rgba(26, 115, 232, 0.2);
+  outline-offset: 2px;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist .prompt-assist {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-radius: 0 0 16px 16px;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .composer-toggle {
   display: flex;
   align-items: flex-start;
@@ -2058,7 +2127,21 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field input[type="file"] {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .image-upload-field:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.16);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__icon {
@@ -2186,10 +2269,19 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .composer-footer {
+  position: sticky;
+  bottom: -1.2rem;
+  z-index: 12;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 1rem 0 0.5rem;
+  gap: 0.7rem;
+  margin: 0 -0.35rem;
+  padding: 1rem 0.35rem 0.85rem;
+  border-top: 1px solid rgba(205, 220, 238, 0.82);
+  background: rgba(247, 251, 255, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
@@ -2198,6 +2290,72 @@
   color: #6a7f95;
   font-size: 0.8rem;
   line-height: 1.6;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback {
+  display: flex;
+  min-width: 0;
+  margin-right: auto;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback .composer-status {
+  margin: 0;
+  padding: 0.62rem 0.75rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-required,
+:where(body.prompt-share-page, .prompt-share-page) .composer-optional {
+  margin-left: 0.28rem;
+  color: #6a7f95;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-required {
+  color: #b42318;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-character-count {
+  align-self: flex-end;
+  color: #74879a;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn {
+  min-height: 52px;
+  padding: 0.72rem 1rem;
+  border: 1px solid rgba(174, 198, 225, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #40576d;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:hover:not(:disabled),
+:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:focus-visible {
+  border-color: #98bff0;
+  color: #185abc;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:disabled,
+:where(body.prompt-share-page, .prompt-share-page) .close-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .composer-ai-assist[aria-disabled="true"] > summary {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .prompt-share-page .submit-btn {

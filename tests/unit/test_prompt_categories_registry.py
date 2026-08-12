@@ -82,14 +82,23 @@ class PromptCategoryValidationTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             SharedPromptCreateRequest(title="t", category="架空のカテゴリ", content="c")
 
-    # 更新リクエストでカテゴリが正規化され、未設定・未知が拒否されることを検証します。
-    # Verify update normalizes the category and rejects both unset and unknown values.
-    def test_update_request_normalizes_and_requires_category(self):
+    # 更新リクエストでカテゴリが正規化され、未設定も許容されることを検証します。
+    # Verify update normalizes the category and accepts an unset value.
+    def test_update_request_normalizes_and_allows_unset_category(self):
         payload = PromptUpdateRequest(title="t", category="勉強", content="c")
         self.assertEqual(payload.category, "learning")
 
-        with self.assertRaises(ValidationError):
-            PromptUpdateRequest(title="t", category="未選択", content="c")
+        for category in ("", "   ", "未選択"):
+            with self.subTest(category=category):
+                payload = PromptUpdateRequest(title="t", category=category, content="c")
+                self.assertEqual(payload.category, CATEGORY_UNSET)
+
+        payload = PromptUpdateRequest(title="t", content="c")
+        self.assertEqual(payload.category, CATEGORY_UNSET)
+
+    # レジストリにないカテゴリが更新リクエストで拒否されることを検証します。
+    # Verify a category outside the registry is rejected on update.
+    def test_update_request_rejects_unknown_category(self):
         with self.assertRaises(ValidationError):
             PromptUpdateRequest(title="t", category="架空のカテゴリ", content="c")
 

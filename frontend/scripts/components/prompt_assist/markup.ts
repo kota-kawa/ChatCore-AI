@@ -32,7 +32,7 @@ export function createPromptAssistMarkup(target: PromptAssistTarget) {
         <span class="prompt-assist__spinner" aria-hidden="true"></span>
         <span>${localized("AIがプロンプトを作成しています…", "AI is drafting your prompt…")}</span>
       </div>
-      <p class="prompt-assist__status" data-assist-status hidden></p>
+      <p class="prompt-assist__status" data-assist-status hidden role="status" aria-live="polite" aria-atomic="true"></p>
       <section class="prompt-assist__preview" data-assist-preview hidden aria-live="polite">
         <p class="prompt-assist__summary" data-assist-summary></p>
         <ul class="prompt-assist__warnings" data-assist-warnings hidden></ul>

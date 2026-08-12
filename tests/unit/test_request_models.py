@@ -10,6 +10,7 @@ from services.request_models import (
     PromptAssistRequest,
     PromptLikeRequest,
     PromptTaskCreateRequest,
+    PromptUpdateRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
 )
@@ -125,6 +126,32 @@ class RequestModelsTestCase(unittest.TestCase):
                 "category": "",
                 "content": "content",
                 "author": "author",
+            },
+        )
+        self.assertEqual(result.category, "")
+
+    def test_image_prompt_discards_text_examples(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {
+                "title": "画像プロンプト",
+                "content": "映画のような光で猫を描く",
+                "media_type": "image",
+                "input_examples": "テキスト入力例",
+                "output_examples": "テキスト出力例",
+            },
+        )
+        self.assertEqual(result.input_examples, "")
+        self.assertEqual(result.output_examples, "")
+
+    # 共有プロンプト更新リクエストでもカテゴリ未設定が許容されることを検証します。
+    # Verify that shared prompt updates also accept an unset category.
+    def test_prompt_update_accepts_unset_category(self):
+        result = _validate(
+            PromptUpdateRequest,
+            {
+                "title": "title",
+                "content": "content",
             },
         )
         self.assertEqual(result.category, "")

@@ -13,6 +13,7 @@ import { asId } from "../../lib/utils";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { useTranslation } from "../../contexts/locale_context";
 import {
+  buildPromptUpdatePayload,
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
   type PromptRecord
@@ -25,6 +26,9 @@ type PromptEditFormState = {
   title: string;
   category: string;
   content: string;
+  contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
   inputExamples: string;
   outputExamples: string;
 };
@@ -53,11 +57,15 @@ function toDisplayDate(createdAt?: string): string {
 // PromptRecordからフォーム状態を初期化する
 // Initialize form state from a PromptRecord
 function createEditFormState(prompt: PromptRecord): PromptEditFormState {
+  const isSkill = prompt.contentFormat === "skill";
   return {
     id: asId(prompt.id),
     title: prompt.title,
     category: prompt.category,
-    content: prompt.content,
+    content: isSkill ? prompt.skillMarkdown : prompt.content,
+    contentFormat: prompt.contentFormat || "prompt",
+    mediaType: prompt.mediaType || "text",
+    attributes: prompt.attributes,
     inputExamples: prompt.inputExamples,
     outputExamples: prompt.outputExamples
   };
@@ -120,13 +128,14 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
   const truncatedTitle = truncateText(prompt.title, TITLE_CHAR_LIMIT);
-  const truncatedContent = truncateText(prompt.content, CONTENT_CHAR_LIMIT);
+  const displayContent = prompt.contentFormat === "skill" ? prompt.skillMarkdown : prompt.content;
+  const truncatedContent = truncateText(displayContent, CONTENT_CHAR_LIMIT);
 
   return (
     <article className="prompt-card cc-press" data-prompt-id={promptId}>
       <div className="prompt-card__main">
         <h3 title={prompt.title}>{truncatedTitle}</h3>
-        <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
+        <p className="prompt-card__content" title={displayContent}>{truncatedContent}</p>
         <div className="meta">
           <span>{t("promptShare.categoryValue", { category: getCategoryLabelOrFallback(prompt.category, t("promptShare.unset"), locale) })}</span>
           <br />
@@ -182,6 +191,7 @@ function PromptEditModal({
   onSubmit
 }: PromptEditModalProps) {
   const { t } = useTranslation();
+  const showExamples = formState.contentFormat === "prompt" && formState.mediaType === "text";
   return (
     <div
       id="editModal"
@@ -234,7 +244,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editCategory" className="form-label">
-                  {t("promptShare.category")}
+                  {t("promptShare.category")} <span>{t("common.optional")}</span>
                 </label>
                 {/* カテゴリはレジストリの選択肢に限定する（自由入力はサーバー側で拒否される） */}
                 {/* Categories are limited to the registry options; free text is rejected server-side */}
@@ -262,6 +272,7 @@ function PromptEditModal({
                 ></textarea>
               </div>
 
+              {showExamples ? (<>
               <div className="form-group">
                 <label htmlFor="editInputExamples" className="form-label">
                   {t("promptShare.inputExample")}
@@ -291,6 +302,7 @@ function PromptEditModal({
                   disabled={isSaving}
                 ></textarea>
               </div>
+              </>) : null}
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary w-100 cc-press" disabled={isSaving}>
@@ -450,7 +462,7 @@ export default function PromptManagePage() {
       return;
     }
 
-    if (!editFormState.id || !editFormState.title.trim() || !editFormState.category.trim() || !editFormState.content.trim()) {
+    if (!editFormState.id || !editFormState.title.trim() || !editFormState.content.trim()) {
       showToast(t("promptShare.formIncomplete"), { variant: "error" });
       return;
     }
@@ -465,13 +477,7 @@ export default function PromptManagePage() {
             "Content-Type": "application/json"
           },
           credentials: "same-origin",
-          body: JSON.stringify({
-            title: editFormState.title,
-            category: editFormState.category,
-            content: editFormState.content,
-            input_examples: editFormState.inputExamples,
-            output_examples: editFormState.outputExamples
-          })
+          body: JSON.stringify(buildPromptUpdatePayload(editFormState))
         },
         {
           defaultMessage: t("promptShare.updateFailed")

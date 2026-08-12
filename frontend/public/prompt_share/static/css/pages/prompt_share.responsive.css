@@ -173,17 +173,27 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .composer-footer {
-    position: static;
+    position: sticky;
+    bottom: -1.2rem;
     flex-direction: column;
     align-items: stretch;
-    padding: 0;
-    margin: 0;
-    background: transparent;
-    backdrop-filter: none;
+    padding: 0.8rem 0.35rem calc(0.8rem + env(safe-area-inset-bottom));
+    margin: 0 -0.35rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
     max-width: none;
+    margin-right: 0;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn,
+  :where(body.prompt-share-page, .prompt-share-page) .submit-btn {
+    width: 100%;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .post-modal-content {
