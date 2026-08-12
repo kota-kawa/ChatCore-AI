@@ -56,10 +56,41 @@ test("mobile setup composer lets text use the whole textarea under the density c
     assert.match(
       mobileSetupCss,
       new RegExp(
-        `#setup-container\\.${densityClass} #setup-info[^{]*\\{[^}]*?padding-right:\\s*var\\(--setup-field-padding-x\\)\\s*;[^}]*?padding-bottom:\\s*var\\(--setup-field-padding-y\\)\\s*;`,
+        `#setup-container\\.${densityClass} #setup-info[^{]*\\{[^}]*?padding:\\s*var\\(--setup-field-padding-y\\)\\s+0\\s*;`,
         "s",
       ),
       `the mobile layout must clear the ${densityClass} overlay padding, matching its specificity`,
+    );
+  }
+});
+
+// textarea 自身の枠を消してシェルの枠だけを見せることで、本文と操作ボタンの
+// 間の境界線をなくす。枠を消すとフォーカス表示も消えるため、シェルの
+// :focus-within で必ず補う（ダークテーマ側は後勝ちするので個別に必要）。
+// Hiding the textarea's own frame removes the seam between the text and the
+// action buttons, but it also removes the focus indicator, so the shell's
+// :focus-within has to restore it — including in dark mode, whose shell rule
+// comes later with the same specificity and would otherwise win.
+test("mobile setup composer shows one seamless field with a focus ring on the shell", () => {
+  assert.match(
+    mobileSetupCss,
+    /#setup-info\s*\{[^}]*?border-color:\s*transparent\s*;[^}]*?background:\s*transparent\s*;/,
+    "the textarea must not draw its own frame inside the composer shell",
+  );
+  assert.match(
+    mobileSetupCss,
+    /#setup-info:focus\s*\{[^}]*?border-color:\s*transparent\s*;/,
+    "focusing the textarea must not bring the inner frame back",
+  );
+
+  for (const [label, css] of [
+    ["light", mobileSetupCss.slice(0, mobileSetupCss.indexOf('[data-theme="dark"]'))],
+    ["dark", mobileSetupCss.slice(mobileSetupCss.indexOf('[data-theme="dark"]'))],
+  ] as const) {
+    assert.match(
+      css,
+      /\.setup-info-field-shell:focus-within\s*\{[^}]*?border-color:[^;]+;[^}]*?box-shadow:/,
+      `the ${label} theme must show the focus ring on the shell`,
     );
   }
 });
