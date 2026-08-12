@@ -60,10 +60,14 @@ services:
       - FASTAPI_ENV=${FASTAPI_ENV:-production}
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
+      - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
     ports:
       # ホスト側 nginx からのみアクセスするためループバックに限定する
       # Bind to loopback only; the host nginx is the sole external consumer.
       - "127.0.0.1:5004:5004"
+    volumes:
+      # Prompt-share uploads must outlive app container rebuilds and deployments.
+      - prompt_share_uploads:/app/data/uploads/prompt_share
     depends_on:
       db:
         condition: service_healthy
@@ -224,3 +228,5 @@ volumes:
   db_data_pg18:
     name: ${POSTGRES_18_VOLUME:-chatcore-ai_db_data_pg18}
   redis_data:
+  prompt_share_uploads:
+    name: ${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}

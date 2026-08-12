@@ -68,6 +68,43 @@ class DeployHardeningTest(unittest.TestCase):
                 with self.subTest(compose_file=compose_file.name, entry=entry):
                     self.assertIn(entry, compose_text)
 
+    # 日本語: 通常構成とBlue/Green構成が同じ明示名volumeをアプリへmountすることを確認します。
+    # English: Verify standard and blue/green apps mount the same explicitly named upload volume.
+    def test_compose_files_persist_prompt_share_uploads(self):
+        expected_entries = (
+            "PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share",
+            "prompt_share_uploads:/app/data/uploads/prompt_share",
+            "name: ${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}",
+        )
+
+        for compose_file in (COMPOSE_FILE, BLUE_GREEN_COMPOSE_FILE):
+            compose_text = compose_file.read_text()
+            for entry in expected_entries:
+                with self.subTest(compose_file=compose_file.name, entry=entry):
+                    self.assertIn(entry, compose_text)
+
+        blue_green_text = BLUE_GREEN_COMPOSE_FILE.read_text()
+        self.assertIn("app_blue: &app_service", blue_green_text)
+        self.assertRegex(blue_green_text, r"app_green:\s+<<: \*app_service")
+
+    # 日本語: 初回デプロイが旧コンテナ層の画像を新volumeへ非上書き移行してから停止することを確認します。
+    # English: Verify initial deploy copies legacy container uploads without overwrite before teardown.
+    def test_deploy_migrates_legacy_prompt_share_uploads_before_container_teardown(self):
+        script_text = DEPLOY_SCRIPT.read_text()
+
+        self.assertIn("migrate_legacy_prompt_share_uploads()", script_text)
+        self.assertIn("docker cp", script_text)
+        self.assertIn("cp -a -n /legacy/. /uploads/", script_text)
+        self.assertIn(".legacy_container_migration_complete", script_text)
+        self.assertIn(
+            '[[ ! "${volume_name}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]',
+            script_text,
+        )
+        self.assertLess(
+            script_text.index("migrate_legacy_prompt_share_uploads\nupgrade_postgres_if_required"),
+            script_text.index("start_core_services\n"),
+        )
+
     # 日本語: MCP有効時には暗号鍵を必須設定として検証することを確認します。
     # English: Verify that deployment requires the encryption key when MCP is enabled.
     def test_deploy_requires_mcp_encryption_key_when_enabled(self):

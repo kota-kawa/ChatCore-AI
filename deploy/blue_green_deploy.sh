@@ -11,6 +11,10 @@ NGINX_SITE_SOURCE="${NGINX_SITE_SOURCE:-deploy/chatcore-ai.conf}"
 NGINX_TEST_CMD="${NGINX_TEST_CMD:-}"
 NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-}"
 DEPLOY_TARGET_COLOR="${DEPLOY_TARGET_COLOR:-}"
+PROMPT_SHARE_UPLOAD_VOLUME="${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}"
+PROMPT_SHARE_LEGACY_UPLOAD_DIR="/app/frontend/public/static/uploads/prompt_share"
+PROMPT_SHARE_UPLOAD_MIGRATION_MARKER=".legacy_container_migration_complete"
+UPLOAD_MIGRATION_IMAGE="alpine:3.24.1"
 
 is_empty_or_unresolved() {
   local value="${1:-}"
@@ -536,6 +540,79 @@ stop_legacy_services() {
   legacy_compose rm -f app frontend >/dev/null 2>&1 || true
 }
 
+migrate_legacy_prompt_share_uploads() {
+  local volume_name="${PROMPT_SHARE_UPLOAD_VOLUME}"
+  local marker="${PROMPT_SHARE_UPLOAD_MIGRATION_MARKER}"
+  local migration_tmp candidate_id candidate_key
+  local -a candidate_ids=()
+  local -A seen_ids=()
+
+  if [[ ! "${volume_name}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+    echo "Invalid prompt-share upload volume name: ${volume_name}" >&2
+    return 1
+  fi
+
+  docker volume create "${volume_name}" >/dev/null
+  if docker run --rm \
+    --mount "type=volume,src=${volume_name},dst=/uploads" \
+    "${UPLOAD_MIGRATION_IMAGE}" \
+    test -f "/uploads/${marker}"; then
+    echo "Prompt-share upload volume migration already completed."
+    return 0
+  fi
+
+  # Check every app variant because the active release may be a legacy single
+  # service or either side of an earlier blue/green deployment.
+  for candidate_key in app_blue app_green; do
+    candidate_id="$(compose ps -a -q "${candidate_key}" 2>/dev/null || true)"
+    if [ -n "${candidate_id}" ] && [ -z "${seen_ids[${candidate_id}]:-}" ]; then
+      candidate_ids+=("${candidate_id}")
+      seen_ids["${candidate_id}"]=1
+    fi
+  done
+  if [ -f "${LEGACY_COMPOSE_FILE}" ]; then
+    candidate_id="$(legacy_compose ps -a -q app 2>/dev/null || true)"
+    if [ -n "${candidate_id}" ] && [ -z "${seen_ids[${candidate_id}]:-}" ]; then
+      candidate_ids+=("${candidate_id}")
+      seen_ids["${candidate_id}"]=1
+    fi
+  fi
+  for candidate_key in fastapi_app chatcore_app_blue chatcore_app_green; do
+    candidate_id="$(docker inspect --format='{{.Id}}' "${candidate_key}" 2>/dev/null || true)"
+    if [ -n "${candidate_id}" ] && [ -z "${seen_ids[${candidate_id}]:-}" ]; then
+      candidate_ids+=("${candidate_id}")
+      seen_ids["${candidate_id}"]=1
+    fi
+  done
+
+  migration_tmp="$(mktemp -d)"
+  for candidate_id in "${candidate_ids[@]}"; do
+    # docker cp can read a stopped container's writable layer. Copy each source
+    # into an isolated temp directory, then add only missing files to the volume.
+    if docker cp \
+      "${candidate_id}:${PROMPT_SHARE_LEGACY_UPLOAD_DIR}/." \
+      "${migration_tmp}/" >/dev/null 2>&1; then
+      if ! docker run --rm \
+          --mount "type=bind,src=${migration_tmp},dst=/legacy,readonly" \
+          --mount "type=volume,src=${volume_name},dst=/uploads" \
+          "${UPLOAD_MIGRATION_IMAGE}" \
+          sh -ceu 'cp -a -n /legacy/. /uploads/'; then
+        find "${migration_tmp}" -mindepth 1 -delete
+        rmdir "${migration_tmp}"
+        return 1
+      fi
+      find "${migration_tmp}" -mindepth 1 -delete
+    fi
+  done
+  rmdir "${migration_tmp}"
+
+  docker run --rm \
+    --mount "type=volume,src=${volume_name},dst=/uploads" \
+    "${UPLOAD_MIGRATION_IMAGE}" \
+    touch "/uploads/${marker}"
+  echo "Prompt-share legacy uploads were migrated without overwriting persistent files."
+}
+
 CURRENT_COLOR="$(detect_active_color)"
 TARGET_COLOR="${DEPLOY_TARGET_COLOR}"
 
@@ -577,6 +654,7 @@ if [ "${PREFLIGHT_COLOR}" = "none" ]; then
 fi
 preflight_nginx_config "${PREFLIGHT_COLOR}"
 
+migrate_legacy_prompt_share_uploads
 upgrade_postgres_if_required
 start_core_services
 resume_current_color_after_database_upgrade

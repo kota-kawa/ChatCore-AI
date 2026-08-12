@@ -91,7 +91,35 @@ class PromptTypesRegistryTestCase(unittest.TestCase):
         }
         image_out = serialize_axes(image_row)
         self.assertEqual(image_out["prompt_type"], "image")
-        self.assertEqual(image_out["reference_image_url"], "/static/uploads/prompt_share/x.png")
+        self.assertEqual(image_out["reference_image_url"], "/prompt_share/api/media/x.png")
+        self.assertEqual(
+            image_out["attachments"][0]["url"],
+            "/prompt_share/api/media/x.png",
+        )
+        self.assertEqual(
+            image_row["attachments"][0]["url"],
+            "/static/uploads/prompt_share/x.png",
+        )
+
+    def test_serialize_axes_preserves_external_attachment_url(self):
+        external_url = "https://cdn.example.com/static/uploads/prompt_share/x.png"
+        out = serialize_axes(
+            {
+                "content_format": "prompt",
+                "media_type": "image",
+                "attributes": {},
+                "attachments": [
+                    {
+                        "url": external_url,
+                        "role": "reference",
+                        "media_type": "image/png",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(out["reference_image_url"], external_url)
+        self.assertEqual(out["attachments"][0]["url"], external_url)
 
 
 if __name__ == "__main__":
