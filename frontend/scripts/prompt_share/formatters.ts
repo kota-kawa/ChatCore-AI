@@ -75,6 +75,25 @@ export function getPromptMediaIconClass(mediaType?: string) {
   return getMediaType(mediaType || "").icon;
 }
 
+// APIが返す明示的な参照画像URLを優先し、移行中のレスポンスではreference添付から補完する。
+// Prefer the API's explicit reference image URL and fall back to a reference attachment
+// for responses produced during the attachments migration.
+function resolveReferenceImageUrl(prompt: PromptData): string {
+  const explicitUrl = String(prompt.reference_image_url || "").trim();
+  const referenceAttachment = Array.isArray(prompt.attachments)
+    ? prompt.attachments.find(
+        (attachment) => attachment.role === "reference" && String(attachment.url || "").trim()
+      )
+    : undefined;
+  const attachmentUrl = String(referenceAttachment?.url || "").trim();
+  const url = explicitUrl || attachmentUrl;
+
+  if (!url || url.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(url)) {
+    return url;
+  }
+  return `/${url}`;
+}
+
 export function normalizePromptData(prompt: PromptData): PromptData {
   const contentFormat = normalizePromptContentFormat(String(prompt.content_format || ""));
   const mediaType = normalizePromptMediaType(String(prompt.media_type || ""));
@@ -86,7 +105,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     attachments: Array.isArray(prompt.attachments) ? prompt.attachments : [],
     resources: normalizeSkillResources(prompt.resources, prompt.skill_python_script || ""),
     prompt_type: normalizePromptType(prompt.prompt_type),
-    reference_image_url: prompt.reference_image_url || "",
+    reference_image_url: resolveReferenceImageUrl(prompt),
     skill_markdown: prompt.skill_markdown || "",
     skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),

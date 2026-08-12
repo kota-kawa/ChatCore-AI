@@ -10,6 +10,7 @@ from uuid import uuid4
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse
 from werkzeug.utils import secure_filename
 
 from services.async_utils import run_blocking
@@ -20,9 +21,20 @@ from services.db import get_db_connection
 from services.error_messages import (
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
+    ERROR_PROMPT_ATTACHMENT_EMPTY,
+    ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
+    ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
 )
 from services.i18n import get_request_locale
 from services.prompt_categories import normalize_category
+from services.prompt_attachment_storage import (
+    build_prompt_attachment_public_url,
+    get_prompt_attachment_upload_root,
+    prompt_attachment_content_type,
+    prompt_attachment_filename_from_url,
+    resolve_legacy_prompt_attachment_path,
+    resolve_prompt_attachment_path,
+)
 from services.prompt_types import (
     CONTENT_FORMATS,
     CONTENT_FORMAT_SKILL,
@@ -41,7 +53,6 @@ from services.request_models import (
 )
 from services.shared_prompt_service import create_shared_prompt
 from services.web import (
-    BASE_DIR,
     jsonify,
     jsonify_rate_limited,
     jsonify_service_error,
@@ -54,21 +65,6 @@ from services.web import (
 # Initialize FastAPI APIRouter for prompt sharing with CSRF protection.
 prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
-
-# プロンプトの添付ファイル保存先ディレクトリの設定 (メディア種別共通)
-# Directory path for prompt attachment uploads (shared across media types).
-PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
-    BASE_DIR,
-    "frontend",
-    "public",
-    "static",
-    "uploads",
-    "prompt_share",
-)
-
-# アップロードした添付を参照するためのURL接頭辞
-# URL prefix for accessing uploaded prompt attachments.
-PROMPT_IMAGE_URL_PREFIX = "/static/uploads/prompt_share"
 
 # コメント投稿制限用の設定値
 # Comment rate limit and cooldown settings.
@@ -350,13 +346,14 @@ def _delete_prompt_attachments(attachments: Any) -> None:
         return
     for attachment in attachments:
         url = attachment.get("url") if isinstance(attachment, dict) else None
-        if not url or not str(url).startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
+        filename = prompt_attachment_filename_from_url(url)
+        if filename is None:
             continue
-        filename = str(url).rsplit("/", 1)[-1].strip()
-        if not filename:
+        try:
+            filepath = resolve_prompt_attachment_path(filename)
+        except ValueError:
             continue
-        filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, filename)
-        if os.path.exists(filepath):
+        if os.path.isfile(filepath):
             os.remove(filepath)
 
 
@@ -388,12 +385,14 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
 
     # 保存ディレクトリを自動生成
     # Automatically create directory structure if not exists.
-    os.makedirs(PROMPT_IMAGE_UPLOAD_DIR, exist_ok=True)
+    upload_root = get_prompt_attachment_upload_root()
+    os.makedirs(upload_root, exist_ok=True)
     stored_filename = f"user_{user_id}_{uuid4().hex}{extension}"
-    filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, stored_filename)
+    filepath = resolve_prompt_attachment_path(stored_filename)
     file_obj = upload_file.file
     total_size = 0
     max_mb = rule.max_bytes // (1024 * 1024)
+    signature_prefix = b""
 
     try:
         if hasattr(file_obj, "seek"):
@@ -409,7 +408,13 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
                 total_size += len(chunk)
                 if total_size > rule.max_bytes:
                     raise ValueError(f"添付ファイルのサイズは{max_mb}MB以下にしてください。")
+                if len(signature_prefix) < 16:
+                    signature_prefix += chunk[: 16 - len(signature_prefix)]
                 out_f.write(chunk)
+        if total_size == 0:
+            raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
+        if not _prompt_attachment_signature_matches(extension, signature_prefix):
+            raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
     except Exception:
         # 途中での失敗時には作成途中の物理ファイルを削除
         # Delete broken file on failure.
@@ -424,10 +429,23 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
                 pass
 
     return {
-        "url": f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}",
+        "url": build_prompt_attachment_public_url(stored_filename),
         "role": rule.role,
-        "media_type": content_type or f"{media_type}/*",
+        "media_type": prompt_attachment_content_type(stored_filename),
     }
+
+
+def _prompt_attachment_signature_matches(extension: str, prefix: bytes) -> bool:
+    """Return whether the leading bytes match the declared supported image extension."""
+    if extension == ".png":
+        return prefix.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension in {".jpg", ".jpeg"}:
+        return prefix.startswith(b"\xff\xd8\xff")
+    if extension == ".gif":
+        return prefix.startswith((b"GIF87a", b"GIF89a"))
+    if extension == ".webp":
+        return len(prefix) >= 12 and prefix[:4] == b"RIFF" and prefix[8:12] == b"WEBP"
+    return False
 
 
 # 共有中プロンプトの一覧を、コメント数と利用状態を含めてDBから取得する関数
@@ -1655,6 +1673,35 @@ def _report_prompt_comment_for_user(
             cursor.close()
         if conn is not None:
             conn.close()
+
+
+# 投稿に添付された公開メディアを専用ストレージから配信するエンドポイント
+# Serve public prompt attachments from the dedicated runtime storage directory.
+@prompt_share_api_bp.get(
+    "/media/{filename}",
+    name="prompt_share_api.get_prompt_attachment_media",
+)
+async def get_prompt_attachment_media(filename: str):
+    try:
+        filepath = resolve_prompt_attachment_path(filename)
+        media_type = prompt_attachment_content_type(filename)
+    except ValueError:
+        return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
+    if not os.path.isfile(filepath):
+        try:
+            filepath = resolve_legacy_prompt_attachment_path(filename)
+        except ValueError:
+            return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
+        if not os.path.isfile(filepath):
+            return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
+    return FileResponse(
+        filepath,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # 公開プロンプトをカーソルページ単位で取得するエンドポイント

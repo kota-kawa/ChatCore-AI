@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from services.prompt_attachment_storage import normalize_prompt_attachment_public_url
+
 # 型固有テキスト属性 (skill_markdown 等) の最大文字数
 # Maximum length for a type-specific text attribute (e.g. skill_markdown).
 MAX_PROMPT_ATTRIBUTE_TEXT_LENGTH = 30000
@@ -247,7 +249,8 @@ def reference_attachment_url(attachments: object) -> str | None:
         return None
     for att in attachments:
         if isinstance(att, dict) and att.get("role") == ATTACHMENT_ROLE_REFERENCE and att.get("url"):
-            return str(att["url"])
+            raw_url = str(att["url"])
+            return normalize_prompt_attachment_public_url(raw_url) or raw_url
     return None
 
 
@@ -264,9 +267,18 @@ def serialize_axes(row: dict) -> dict[str, object]:
     attributes = row.get("attributes")
     if not isinstance(attributes, dict):
         attributes = {}
-    attachments = row.get("attachments")
-    if not isinstance(attachments, list):
-        attachments = []
+    raw_attachments = row.get("attachments")
+    attachments: list[object] = []
+    if isinstance(raw_attachments, list):
+        for attachment in raw_attachments:
+            if not isinstance(attachment, dict):
+                attachments.append(attachment)
+                continue
+            serialized_attachment = dict(attachment)
+            normalized_url = normalize_prompt_attachment_public_url(attachment.get("url"))
+            if normalized_url is not None:
+                serialized_attachment["url"] = normalized_url
+            attachments.append(serialized_attachment)
     return {
         "content_format": content_format,
         "media_type": media_type,
