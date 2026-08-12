@@ -137,12 +137,46 @@
   padding-right: 3.6rem;
 }
 
+/* 入力欄の枠はシェル側が持ち、textarea 本体は枠なしで内側いっぱいに広がる。
+   操作ボタンを textarea に重ねると、スクロール中の本文がボタンの下へ潜るため
+   右側に丸ごと余白を確保するしかなくなる。ボタンを本文の下の行へ出すことで、
+   textarea の幅を最後まで本文に使えるようにしている */
+/* The shell draws the field's frame so the textarea itself can span its full
+   width. Overlaying the buttons on the textarea forces a full-height gutter on
+   the right, because scrolled text otherwise slides underneath them; keeping the
+   buttons in a row below the text frees the whole width for typing. */
 :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
   position: relative;
+  padding: 0.6rem;
+  border: 1px solid #d7e8e5;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  transition:
+    border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease);
+}
+
+/* textarea 自身の枠を消しているため、フォーカス表示はシェルが担当する。
+   シェルの色はブレークポイントやテーマごとに後ろで上書きされるので、
+   #setup-container を含めて詳細度を上げ、フォーカス表示が必ず勝つようにする
+   （同じ詳細度だと後勝ちで消え、フォーカスが見えなくなる） */
+/* The textarea draws no frame, so the shell carries the focus indicator. Later
+   rules restyle the shell per breakpoint and per theme, so this selector adds
+   #setup-container: at equal specificity the last rule would win and the focus
+   ring would silently disappear. */
+:where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
+  background: #ffffff;
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 52px;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 /* 一時保存トグルが入力欄の左下へ移ったので、チップ列の右側を空ける必要はなくなった */
@@ -182,23 +216,49 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
-  padding-right: calc(1.84rem + 104px + env(safe-area-inset-right, 0px));
-  padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
+  grid-column: 1 / -1;
+  padding: var(--setup-field-padding-y) 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  /* 枠を消すと、ネイティブのリサイズハンドルが入力欄の途中に浮いて見えるため
+     無効化する（チャット側の #user-input と同じ扱い） */
+  /* Without a frame the native resize grabber floats in the middle of the field,
+     so it is disabled here, matching #user-input in the chat composer. */
+  resize: none;
   display: block;
 }
 
+:where(body.chat-page, .chat-page-shell) #setup-info:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* ドラッグ中の強調はシェルの枠で示す。chat_input.css は textarea 側を光らせるが、
+   枠を消した今は見えないうえ、内側に境界線が戻ってしまうので打ち消す */
+/* Show the drag highlight on the shell. chat_input.css lights up the textarea,
+   which is now frameless: that would be invisible and would bring the inner
+   border back, so it is overridden here with a higher specificity. */
+:where(body.chat-page, .chat-page-shell) .setup-info-field-shell.chat-attachment-dropzone--active {
+  border-color: rgba(13, 148, 136, 0.58);
+  box-shadow:
+    0 0 0 4px rgba(20, 184, 166, 0.13),
+    0 18px 42px rgba(13, 148, 136, 0.16);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-info-field-shell.chat-attachment-dropzone--active #setup-info {
+  border-color: transparent;
+  box-shadow: none;
+}
+
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
-  position: absolute;
-  right: calc(0.72rem + env(safe-area-inset-right, 0px));
-  bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
-  z-index: 2;
+  grid-column: 3;
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
-  position: absolute;
-  right: calc(0.72rem + 52px + 0.4rem + env(safe-area-inset-right, 0px));
-  bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
-  z-index: 2;
+  grid-column: 2;
   --chat-button-base: #059669;
   --chat-button-accent: #047857;
   --chat-button-shadow-color: rgba(5, 150, 105, 0.28);
@@ -310,14 +370,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   transform: translateY(-30%) rotate(-135deg);
 }
 
-/* 一時保存（未保存チャット）トグルは添付・送信ボタンと同じ操作行の左端に置く。
-   bottom 値を送信ボタンと共有し、3つのボタンの下端をそろえる */
+/* 一時保存（未保存チャット）トグルは添付・送信ボタンと同じ操作行の左端に置く */
 /* The temporary-chat toggle sits at the left end of the same action row as the
-   attach/send buttons, sharing their bottom offset so all three line up. */
+   attach/send buttons */
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area .chat-save-mode-control {
-  position: absolute;
-  left: calc(0.72rem + env(safe-area-inset-left, 0px));
-  bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
+  grid-column: 1;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -772,11 +832,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-info-min-height: 5rem;
 }
 
-:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #setup-info {
-  padding-right: calc(1.84rem + 104px);
-  padding-bottom: 3.9rem;
-}
-
 :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .form-label {
   font-size: var(--text-md, 1rem);
 }
@@ -814,11 +869,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-card-font-size: 1rem;
   --setup-toggle-size: 44px;
   --setup-info-min-height: 4.25rem;
-}
-
-:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #setup-info {
-  padding-right: calc(1.84rem + 104px);
-  padding-bottom: 3.7rem;
 }
 
 :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .form-label {
@@ -1164,112 +1214,39 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     padding-right: 0;
   }
 
+  /* シェルの枠まわりだけスマホ向けに調整する。構造（枠なし textarea + 操作行）は
+     全幅共通なので、ここでは寸法と色だけを上書きする */
+  /* Only the shell's dimensions and colours change on mobile; the structure
+     (frameless textarea plus an action row) is shared with every width. */
   :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
     padding: 0.52rem;
-    border: 1px solid rgba(212, 224, 218, 0.92);
+    border-color: rgba(212, 224, 218, 0.92);
     border-radius: 24px;
     background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
-    transition:
-      border var(--transition-normal, 0.2s ease),
-      box-shadow var(--transition-normal, 0.2s ease);
   }
 
-  /* textarea 自身の枠を消し、シェルの枠だけを入力欄の輪郭として見せることで、
-     本文と操作ボタンの間の境界線をなくす。フォーカス表示は textarea 側では
-     見えなくなるため、シェルの :focus-within へ移す */
-  /* Drop the textarea's own frame so the shell's outline is the only border,
-     removing the seam between the text and the action buttons. The focus ring
-     moves to the shell's :focus-within since the textarea no longer shows one. */
-  :where(body.chat-page, .chat-page-shell) .setup-info-field-shell:focus-within {
-    border-color: var(--primary-color);
-    box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
-  }
-
-  /* Keep the setup actions outside the textarea's native scrolling layer.
-     On mobile Safari, absolutely positioned controls over a long, internally
-     scrolling textarea can be painted underneath that layer and disappear. */
   :where(body.chat-page, .chat-page-shell) .setup-info-input-area {
-    display: grid;
     grid-template-columns: minmax(0, 1fr) 48px 48px;
-    align-items: center;
     gap: 0.35rem;
   }
 
-  :where(body.chat-page, .chat-page-shell) .setup-form textarea,
-:where(body.chat-page, .chat-page-shell) .setup-form select {
+  :where(body.chat-page, .chat-page-shell) .setup-form select {
     border-radius: 18px;
     border-color: rgba(207, 222, 215, 0.96);
     background: rgba(255, 255, 255, 0.98);
   }
 
-  /* スマホでも一時保存トグルは操作行に並べる。左端の 1 カラム目に置き、
-     添付・送信ボタンと同じ 48px の高さでそろえる */
-  /* On mobile the toggle joins the same action row: first grid column, and the
-     same 48px box as the attach/send buttons. */
-  :where(body.chat-page, .chat-page-shell) .setup-info-input-area .chat-save-mode-control {
-    position: relative;
-    left: auto;
-    bottom: auto;
-    justify-self: start;
-    min-width: 0;
-    max-width: 100%;
-    grid-column: 1;
-  }
-
+  /* 操作ボタンと同じ 48px でトグルの高さをそろえる */
+  /* Match the toggle to the 48px action buttons */
   :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
     width: 48px;
     height: 48px;
   }
 
   :where(body.chat-page, .chat-page-shell) #setup-info {
-    grid-column: 1 / -1;
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  :where(body.chat-page, .chat-page-shell) #setup-info:focus {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    outline: none;
-  }
-
-  /* 密度調整クラス（.setup-fit-compact / .setup-fit-tight）は、添付・送信ボタンが
-     textarea に重なるデスクトップ前提で右下に余白を確保する。スマホではボタンも
-     一時保存トグルも別のグリッド行にあるため、その余白は入力できない死に領域に
-     なるだけなので、同じ詳細度で打ち消して textarea 全体を入力に使えるようにする。
-     密度クラス側は #setup-container まで含む詳細度なので、こちらも同じ形で書く */
-  /* The density classes reserve room at the bottom-right of the textarea for the
-     attach/send buttons that overlay it on desktop. On mobile those buttons, and
-     the temporary-chat toggle, live in their own grid row, so that reserved space
-     is dead area the user cannot type into. These selectors match the density
-     rules' specificity (#setup-container + class) so the reset actually wins. */
-  /* 枠を消して1つの入力欄に見せるので、本文の左右はシェルの内側に合わせて
-     操作ボタンと同じ位置から始める */
-  /* With the frame gone, the text aligns to the shell's inner edge so it starts
-     at the same position as the action buttons. */
-  :where(body.chat-page, .chat-page-shell) #setup-container #setup-info,
-  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #setup-info,
-  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #setup-info {
-    padding: var(--setup-field-padding-y) 0;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
-    position: relative;
-    right: auto;
-    bottom: auto;
-    grid-column: 3;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
-    position: relative;
-    right: auto;
-    bottom: auto;
-    grid-column: 2;
   }
 
   :where(body.chat-page, .chat-page-shell) .task-selection {
@@ -1458,6 +1435,35 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form select:focus {
   background: rgba(17, 24, 39, 1);
   border-color: rgba(15, 118, 110, 0.52);
+}
+
+/* 入力欄の枠はシェルが描くので、ダークの配色もシェル側に持たせる */
+/* The shell draws the field's frame, so the dark palette lives on it too */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
+  background: rgba(17, 24, 39, 1);
+  border-color: rgba(15, 118, 110, 0.52);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell.chat-attachment-dropzone--active {
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow:
+    0 0 0 4px rgba(45, 212, 191, 0.12),
+    0 18px 42px rgba(2, 6, 23, 0.32);
+}
+
+/* ダーク側の強調指定も chat_input.css にあり、詳細度が並ぶと後勝ちで
+   textarea の枠が戻ってしまうため、テーマ付きで打ち消す */
+/* chat_input.css has a dark variant of the same highlight; at equal specificity
+   it would win and restore the textarea's border, so it is cleared per theme. */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell.chat-attachment-dropzone--active #setup-info {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* Model select trigger */
@@ -1674,16 +1680,5 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border-color: rgba(148, 163, 184, 0.2);
     background: rgba(17, 24, 39, 0.78);
     box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
-  }
-
-  /* ダークテーマのシェル指定は同じ詳細度で後から来るため、フォーカス表示も
-     ダーク側で書き直さないと打ち消されてしまう */
-  /* The dark shell rule above has the same specificity and comes later, so the
-     focus ring has to be restated here or it gets overwritten. */
-  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell:focus-within {
-    border-color: rgba(15, 118, 110, 0.52);
-    box-shadow:
-      var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2)),
-      0 14px 32px rgba(2, 6, 23, 0.32);
   }
 }
