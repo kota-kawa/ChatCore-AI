@@ -1170,6 +1170,20 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border-radius: 24px;
     background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+    transition:
+      border var(--transition-normal, 0.2s ease),
+      box-shadow var(--transition-normal, 0.2s ease);
+  }
+
+  /* textarea 自身の枠を消し、シェルの枠だけを入力欄の輪郭として見せることで、
+     本文と操作ボタンの間の境界線をなくす。フォーカス表示は textarea 側では
+     見えなくなるため、シェルの :focus-within へ移す */
+  /* Drop the textarea's own frame so the shell's outline is the only border,
+     removing the seam between the text and the action buttons. The focus ring
+     moves to the shell's :focus-within since the textarea no longer shows one. */
+  :where(body.chat-page, .chat-page-shell) .setup-info-field-shell:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   }
 
   /* Keep the setup actions outside the textarea's native scrolling layer.
@@ -1212,8 +1226,36 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     grid-column: 1 / -1;
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
-    padding-right: var(--setup-field-padding-x);
-    padding-bottom: var(--setup-field-padding-y);
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :where(body.chat-page, .chat-page-shell) #setup-info:focus {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+
+  /* 密度調整クラス（.setup-fit-compact / .setup-fit-tight）は、添付・送信ボタンが
+     textarea に重なるデスクトップ前提で右下に余白を確保する。スマホではボタンも
+     一時保存トグルも別のグリッド行にあるため、その余白は入力できない死に領域に
+     なるだけなので、同じ詳細度で打ち消して textarea 全体を入力に使えるようにする。
+     密度クラス側は #setup-container まで含む詳細度なので、こちらも同じ形で書く */
+  /* The density classes reserve room at the bottom-right of the textarea for the
+     attach/send buttons that overlay it on desktop. On mobile those buttons, and
+     the temporary-chat toggle, live in their own grid row, so that reserved space
+     is dead area the user cannot type into. These selectors match the density
+     rules' specificity (#setup-container + class) so the reset actually wins. */
+  /* 枠を消して1つの入力欄に見せるので、本文の左右はシェルの内側に合わせて
+     操作ボタンと同じ位置から始める */
+  /* With the frame gone, the text aligns to the shell's inner edge so it starts
+     at the same position as the action buttons. */
+  :where(body.chat-page, .chat-page-shell) #setup-container #setup-info,
+  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #setup-info,
+  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #setup-info {
+    padding: var(--setup-field-padding-y) 0;
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
@@ -1632,5 +1674,16 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border-color: rgba(148, 163, 184, 0.2);
     background: rgba(17, 24, 39, 0.78);
     box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
+  }
+
+  /* ダークテーマのシェル指定は同じ詳細度で後から来るため、フォーカス表示も
+     ダーク側で書き直さないと打ち消されてしまう */
+  /* The dark shell rule above has the same specificity and comes later, so the
+     focus ring has to be restated here or it gets overwritten. */
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell:focus-within {
+    border-color: rgba(15, 118, 110, 0.52);
+    box-shadow:
+      var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2)),
+      0 14px 32px rgba(2, 6, 23, 0.32);
   }
 }
