@@ -514,43 +514,6 @@ function SetupSectionComponent() {
               <span className="chat-attachment-drop-overlay__text">{t("home.dropFiles")}</span>
               <span className="chat-attachment-drop-overlay__hint">PDF / Office / {locale === "en" ? "Text" : "テキスト"}</span>
             </div>
-            {/* 未保存チャットモードのトグルとフィードバック表示 / Toggle for temporary chat mode with animated feedback label */}
-            <div className="chat-save-mode-control">
-              <button
-                id="temporary-chat-mode-btn"
-                type="button"
-                className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
-                aria-pressed={temporaryModeEnabled ? "true" : "false"}
-                aria-label={locale === "en" ? (temporaryModeEnabled ? "Turn temporary chat off" : "Turn temporary chat on") : (temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする")}
-                data-tooltip={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
-                data-tooltip-placement="top"
-                title={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
-                onClick={() => {
-                  finishPointerDrag();
-                  setTemporaryModeEnabled((previous) => !previous);
-                }}
-              >
-                <span className="chat-save-mode-toggle__icon" aria-hidden="true">
-                  <TemporaryChatIcon />
-                </span>
-                {temporaryModeEnabled && (
-                  <span className="chat-save-mode-toggle__check" aria-hidden="true">
-                    <TemporaryChatCheckIcon />
-                  </span>
-                )}
-              </button>
-
-              <span
-                className={`chat-save-mode-feedback ${saveModeFeedbackVisible ? "is-visible" : ""} ${
-                  temporaryModeEnabled ? "is-active" : ""
-                }`.trim()}
-                role="status"
-                aria-live="polite"
-              >
-                {temporaryModeEnabled ? t("home.temporary") : t("home.savedHistory")}
-              </span>
-            </div>
-
             {/* 添付ファイルのチップ一覧（ファイル名・サイズ・削除ボタン）/ Chips showing attached files with name, size, and remove button */}
             {attachedFiles.length > 0 && (
               <div className="setup-attached-files">
@@ -607,6 +570,44 @@ function SetupSectionComponent() {
                 }}
                 onKeyDown={handleSetupInfoKeyDown}
               ></textarea>
+
+              {/* 未保存チャットモードのトグルとフィードバック表示。添付・送信ボタンと同じ操作行の左端に置く */}
+              {/* Temporary chat toggle with animated feedback label, anchored to the left of the same action row as attach/send */}
+              <div className="chat-save-mode-control">
+                <button
+                  id="temporary-chat-mode-btn"
+                  type="button"
+                  className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
+                  aria-pressed={temporaryModeEnabled ? "true" : "false"}
+                  aria-label={locale === "en" ? (temporaryModeEnabled ? "Turn temporary chat off" : "Turn temporary chat on") : (temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする")}
+                  data-tooltip={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
+                  data-tooltip-placement="top"
+                  title={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
+                  onClick={() => {
+                    finishPointerDrag();
+                    setTemporaryModeEnabled((previous) => !previous);
+                  }}
+                >
+                  <span className="chat-save-mode-toggle__icon" aria-hidden="true">
+                    <TemporaryChatIcon />
+                  </span>
+                  {temporaryModeEnabled && (
+                    <span className="chat-save-mode-toggle__check" aria-hidden="true">
+                      <TemporaryChatCheckIcon />
+                    </span>
+                  )}
+                </button>
+
+                <span
+                  className={`chat-save-mode-feedback ${saveModeFeedbackVisible ? "is-visible" : ""} ${
+                    temporaryModeEnabled ? "is-active" : ""
+                  }`.trim()}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {temporaryModeEnabled ? t("home.temporary") : t("home.savedHistory")}
+                </span>
+              </div>
 
               <button
                 type="button"
