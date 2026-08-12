@@ -79,7 +79,7 @@ export const jaMessages = {
   "chat.modelDeepThinking": "深い思考",
   "chat.modelBalanced": "バランス型",
   "chat.modelCarefulWriting": "丁寧な文章",
-  "home.tasks": "実行したいタスクを選択（クリックで即実行）",
+  "home.tasks": "タスクをクリック",
   "home.reorderHint": "カードを長押しすると掴んで並び替えできます（そのままのスワイプはスクロール）",
   "chat.new": "新規チャット",
   "chat.search": "チャットを検索",

@@ -32,7 +32,7 @@ export const enMessages = {
   "home.viewPastChats": "View past chats", "home.taskDetailsFor": "Show details for {name}",
   "chat.modelFast": "fast responses", "chat.modelDeepThinking": "deep thinking",
   "chat.modelBalanced": "balanced", "chat.modelCarefulWriting": "careful writing",
-  "home.tasks": "Choose a task to run it now",
+  "home.tasks": "Click a task",
   "home.reorderHint": "Press and hold a card to pick it up and reorder (a plain swipe still scrolls)",
   "chat.new": "New chat", "chat.search": "Search chats", "chat.inputPlaceholder": "Type a message",
   "chat.inputPlaceholderTemporary": "Temporary mode",
