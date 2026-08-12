@@ -17,7 +17,7 @@ import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { parseTaskLaunchMessage } from "../../lib/chat_page/task_utils";
 import type { NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { stripCopyBlockFences } from "../../scripts/chat/copy_block_markdown";
-import { stripWebSearchSourcesHtml } from "../../scripts/chat/message_utils";
+import { stripWebSearchArtifacts } from "../../scripts/chat/memo_text";
 import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
@@ -358,12 +358,13 @@ function ChatMessageRow({
             }}
           />
           {!message.error && (
-            // メモ保存前に Web 検索ソースの HTML タグとコピー枠のフェンスを除去して
-            // プレーンテキストにする。
-            // Strip web search source HTML and copy card fences before saving to memo.
+            // メモ保存前に Web 検索の参照表示（ステップ一覧と本文中の出典チップ）と
+            // コピー枠のフェンスを除去して、本文だけを保存する。
+            // Strip web search references (the step list and the inline citation
+            // chips) plus copy card fences so only the answer body is saved.
             <MemoSaveActionButton
               getText={() => {
-                return stripCopyBlockFences(stripWebSearchSourcesHtml(message.text));
+                return stripCopyBlockFences(stripWebSearchArtifacts(message.text));
               }}
             />
           )}
