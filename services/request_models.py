@@ -25,6 +25,7 @@ from services.prompt_types import (
     CONTENT_FORMAT_SKILL,
     DEFAULT_CONTENT_FORMAT,
     DEFAULT_MEDIA_TYPE,
+    MEDIA_TYPE_IMAGE,
     SKILL_PYTHON_SCRIPT_KEY,
     normalize_content_format,
     normalize_media_type,
@@ -445,6 +446,9 @@ class SharedPromptCreateRequest(RequestPayloadModel):
         self.category = normalized_category
         self.content_format = normalize_content_format(self.content_format)
         self.media_type = normalize_media_type(self.media_type)
+        if self.content_format == CONTENT_FORMAT_SKILL or self.media_type == MEDIA_TYPE_IMAGE:
+            self.input_examples = ""
+            self.output_examples = ""
         self.attributes = sanitize_attributes(self.content_format, self.attributes)
         errors = validate_attributes(self.content_format, self.attributes)
         if errors:
@@ -488,7 +492,7 @@ class PromptCommentReportRequest(RequestPayloadModel):
 # English: Request payload for updating an already posted shared prompt.
 class PromptUpdateRequest(RequestPayloadModel):
     title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)]
-    category: NonEmptyStr
+    category: str = ""
     content: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
     content_format: str = DEFAULT_CONTENT_FORMAT
     media_type: str = DEFAULT_MEDIA_TYPE
@@ -503,14 +507,17 @@ class PromptUpdateRequest(RequestPayloadModel):
 
     @model_validator(mode="after")
     def validate_category(self) -> "PromptUpdateRequest":
-        # 日本語: カテゴリをレジストリで検証し、正準キーへ正規化します（更新では未設定を許さない）。
-        # English: Validate against the registry and store the canonical key; unset is not allowed on update.
+        # 日本語: カテゴリをレジストリで検証し、未設定を含む正準キーへ正規化します。
+        # English: Validate against the registry and normalize to a canonical key, including unset.
         normalized_category = normalize_category(self.category)
-        if not normalized_category:
+        if normalized_category is None:
             raise ValueError("カテゴリの指定が不正です。")
         self.category = normalized_category
         self.content_format = normalize_content_format(self.content_format)
         self.media_type = normalize_media_type(self.media_type)
+        if self.content_format == CONTENT_FORMAT_SKILL or self.media_type == MEDIA_TYPE_IMAGE:
+            self.input_examples = ""
+            self.output_examples = ""
         self.attributes = sanitize_attributes(self.content_format, self.attributes)
         errors = validate_attributes(self.content_format, self.attributes)
         if errors:

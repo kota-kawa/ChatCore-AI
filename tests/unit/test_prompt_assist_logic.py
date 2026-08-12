@@ -315,6 +315,46 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertNotIn("content", normalized["suggested_fields"])
         self.assertNotIn("input_examples", normalized["suggested_fields"])
 
+    def test_image_prompt_rejects_text_examples(self):
+        with self.assertRaises(ValueError) as context:
+            _validate_prompt_assist_request(
+                "shared_prompt_modal",
+                "generate_examples",
+                {"content": "雨の街を歩く猫", "prompt_type": "image"},
+            )
+        self.assertIn("画像生成プロンプト", str(context.exception))
+
+    def test_image_prompt_allows_only_title_and_content_suggestions(self):
+        current_fields = {
+            "title": "雨の街",
+            "content": "雨の街を歩く猫",
+            "prompt_type": "image",
+            "input_examples": "除外対象",
+            "output_examples": "除外対象",
+            "category": "creative",
+            "author": "",
+            "ai_model": "Midjourney",
+            "skill_markdown": "",
+        }
+        normalized = _normalize_prompt_assist_response(
+            "shared_prompt_modal",
+            {
+                "suggested_fields": {
+                    "title": "雨上がりの猫",
+                    "content": "低い視点、映画のような光、16:9",
+                    "input_examples": "含めない",
+                    "output_examples": "含めない",
+                },
+                "warnings": [],
+                "summary": "画像プロンプトを作成しました。",
+            },
+            current_fields,
+        )
+        self.assertEqual(
+            set(normalized["suggested_fields"]),
+            {"title", "content"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

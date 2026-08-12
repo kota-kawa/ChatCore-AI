@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { showToast } from "../../scripts/core/toast";
-import {
-  mediaAllowsAttachment,
-  validateAttachmentFile
-} from "../../scripts/prompt_share/prompt_type_registry";
+import { validateAttachmentFile } from "../../scripts/prompt_share/prompt_type_registry";
 import type { MediaType } from "../../scripts/prompt_share/types";
 
 // 投稿フォームの添付ファイル選択、プレビューURL、検証、解放処理をまとめて管理する
@@ -79,14 +76,6 @@ export function usePromptImageSelection(mediaType: MediaType) {
     },
     [clearPromptImageSelection, updatePromptImagePreview, validateReferenceImageFile]
   );
-
-  // 添付非対応のメディアへ切り替えた場合は添付の選択をクリアしてメモリを解放する
-  // Clears the attachment selection to free memory when switching to a media that disallows attachments
-  useEffect(() => {
-    if (!mediaAllowsAttachment(mediaType)) {
-      clearPromptImageSelection();
-    }
-  }, [clearPromptImageSelection, mediaType]);
 
   useEffect(() => {
     return () => {

@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { usePromptModalManager } from "../components/prompt_share/use_prompt_modal_manager";
+import { getModalFocusableElements } from "../components/prompt_share/prompt_share_page_utils";
 
 function PromptModalManagerHarness() {
   const postModalRef = useRef<HTMLDivElement | null>(null);
@@ -40,6 +41,21 @@ function PromptModalManagerHarness() {
 }
 
 describe("usePromptModalManager", () => {
+  it("送信中fieldsetから継承して無効な要素をフォーカス対象から除外する", () => {
+    const modal = document.createElement("div");
+    modal.innerHTML = `
+      <fieldset disabled><input id="disabled-child" /></fieldset>
+      <button id="available">閉じる</button>
+    `;
+    document.body.append(modal);
+    const getClientRects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1 } as DOMRectList);
+
+    expect(getModalFocusableElements(modal).map((element) => element.id)).toEqual(["available"]);
+
+    getClientRects.mockRestore();
+    modal.remove();
+  });
+
   it("restores focus before hiding a closed modal", () => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     render(<PromptModalManagerHarness />);

@@ -875,7 +875,9 @@ export default function PromptSharePage({
         return;
       }
 
-      const referenceImageError = validateReferenceImageFile(referenceImageFile);
+      const referenceImageError = mediaAllowsAttachment(mediaType)
+        ? validateReferenceImageFile(referenceImageFile)
+        : null;
       if (referenceImageError) {
         setPromptPostStatus(referenceImageError, "error");
         return;
@@ -884,7 +886,7 @@ export default function PromptSharePage({
       // 2軸とフォーマット固有の属性を選択的にFormDataへ追加する
       // Selectively append the two axes and format-specific attributes to FormData
       const isSkill = contentFormat === "skill";
-      const includeExamples = !isSkill && guardrailEnabled;
+      const includeExamples = !isSkill && mediaType === "text" && guardrailEnabled;
       // レジストリが宣言するキーのみを属性として送る (JSON文字列)。
       // Send only the keys the format declares, as a JSON string.
       const attributes = buildAttributes(contentFormat, {
@@ -1053,6 +1055,7 @@ export default function PromptSharePage({
     });
 
     promptAssistControllerRef.current = controller || null;
+    controller?.updateForPromptType(promptTypeRef.current);
     promptAssistInitializedRef.current = true;
 
     return () => {
@@ -1163,7 +1166,9 @@ export default function PromptSharePage({
           isPostSubmitting={isPostSubmitting}
           postModalRef={postModalRef}
           onClose={() => {
-            closeModal("post", { rotateTrigger: true });
+            if (!isPostSubmitting) {
+              closeModal("post", { rotateTrigger: true });
+            }
           }}
           onSubmit={handlePostSubmit}
           contentFormat={contentFormat}

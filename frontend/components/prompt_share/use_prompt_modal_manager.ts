@@ -168,6 +168,9 @@ export function usePromptModalManager({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
       const modalElement = getModalElement(activeModal);
       if (!modalElement) {
         return;

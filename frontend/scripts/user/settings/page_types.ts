@@ -62,6 +62,9 @@ export type EditPromptFormState = {
   title: string;
   category: string;
   content: string;
+  contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
   inputExamples: string;
   outputExamples: string;
 };

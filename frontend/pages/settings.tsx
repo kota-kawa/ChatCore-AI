@@ -66,6 +66,7 @@ import type {
   SettingsSection
 } from "../scripts/user/settings/page_types";
 import {
+  buildPromptUpdatePayload,
   parseLikedPromptsResponse,
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
@@ -844,11 +845,15 @@ export default function UserSettingsPage() {
   // 編集モーダルを開き、対象プロンプトの現在値をフォームに設定する
   // Open the edit modal and populate the form with the selected prompt's current values
   const handleOpenPromptEdit = useCallback((prompt: PromptRecord) => {
+    const isSkill = prompt.contentFormat === "skill";
     setEditPromptForm({
       id: asId(prompt.id),
       title: prompt.title,
       category: prompt.category,
-      content: prompt.content,
+      content: isSkill ? prompt.skillMarkdown : prompt.content,
+      contentFormat: prompt.contentFormat || "prompt",
+      mediaType: prompt.mediaType || "text",
+      attributes: prompt.attributes,
       inputExamples: prompt.inputExamples,
       outputExamples: prompt.outputExamples
     });
@@ -937,12 +942,9 @@ export default function UserSettingsPage() {
 
     // 必須フィールドが揃っていない場合はサーバーに送らず早期リターンする
     // Guard against empty required fields before sending the request
-    // カテゴリ未選択は空キーで表されるため、空判定だけで弾ける
-    // An unselected category is the empty key, so the emptiness check alone rejects it
     if (
       !editPromptForm.id ||
       !editPromptForm.title.trim() ||
-      !editPromptForm.category.trim() ||
       !editPromptForm.content.trim()
     ) {
       showToast(locale === "en" ? "Some required edit fields are missing." : "編集フォームの値が不足しています。", { variant: "error" });
@@ -953,9 +955,19 @@ export default function UserSettingsPage() {
     const optimisticPrompt = {
       title: editPromptForm.title,
       category: editPromptForm.category,
-      content: editPromptForm.content,
-      inputExamples: editPromptForm.inputExamples,
-      outputExamples: editPromptForm.outputExamples,
+      content: editPromptForm.contentFormat === "skill" ? "" : editPromptForm.content,
+      skillMarkdown: editPromptForm.contentFormat === "skill" ? editPromptForm.content : "",
+      contentFormat: editPromptForm.contentFormat,
+      mediaType: editPromptForm.mediaType,
+      attributes: editPromptForm.contentFormat === "skill"
+        ? { ...editPromptForm.attributes, skill_markdown: editPromptForm.content }
+        : editPromptForm.attributes,
+      inputExamples: editPromptForm.contentFormat === "prompt" && editPromptForm.mediaType === "text"
+        ? editPromptForm.inputExamples
+        : "",
+      outputExamples: editPromptForm.contentFormat === "prompt" && editPromptForm.mediaType === "text"
+        ? editPromptForm.outputExamples
+        : "",
     };
     setMyPrompts((current) =>
       current.map((prompt) =>
@@ -975,13 +987,7 @@ export default function UserSettingsPage() {
             "Content-Type": "application/json"
           },
           credentials: "same-origin",
-          body: JSON.stringify({
-            title: editPromptForm.title,
-            category: editPromptForm.category,
-            content: editPromptForm.content,
-            input_examples: editPromptForm.inputExamples,
-            output_examples: editPromptForm.outputExamples
-          })
+          body: JSON.stringify(buildPromptUpdatePayload(editPromptForm))
         },
         {
           defaultMessage: locale === "en" ? "Could not update the prompt." : "プロンプトの更新に失敗しました。"

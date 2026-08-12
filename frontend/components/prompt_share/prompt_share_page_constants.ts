@@ -62,9 +62,9 @@ export const PROMPT_MEDIA_TYPE_FILTERS: PromptAxisFilterOption<MediaTypeFilter>[
 ];
 
 // 投稿フォームのカテゴリセレクトに使う選択肢。value は保存用の安定キー、label は表示名。
-// 未選択は空文字列キーで表し、投稿時のバリデーションで弾く。
+// 未選択は空文字列キーで表し、任意カテゴリとして保存できる。
 // Category options for the composer form; value is the stable key persisted to the DB and
-// label is what the user sees. The unset state is the empty key, rejected at submit time.
+// label is what the user sees. The unset state is the empty key and is valid for optional categories.
 export const PROMPT_CATEGORY_OPTIONS: PromptCategoryOption[] = [
   { value: CATEGORY_UNSET, label: "未選択" },
   ...PROMPT_CATEGORY_REGISTRY.map((category) => ({

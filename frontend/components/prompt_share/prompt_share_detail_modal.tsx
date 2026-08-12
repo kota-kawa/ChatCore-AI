@@ -345,7 +345,7 @@ export function PromptShareDetailModal({
                   <div className="prompt-detail-section__header">
                     <div>
                       <span className="prompt-detail-section__label">{t("promptShare.exampleMedia")}</span>
-                      <span className="prompt-detail-section__meta">{t("promptShare.referenceImage")}</span>
+                      <span className="prompt-detail-section__meta">{t("promptShare.generatedExampleAttachment")}</span>
                     </div>
                   </div>
                   <div className="modal-reference-image">

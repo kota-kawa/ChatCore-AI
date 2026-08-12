@@ -36,6 +36,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
   title: string;
   content: string;
   contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
   skillMarkdown: string;
   category: string;
   inputExamples: string;
@@ -47,6 +49,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
     title: prompt.title,
     content: prompt.content,
     contentFormat: normalizeNullableString(prompt.content_format),
+    mediaType: normalizeNullableString(prompt.media_type) || "text",
+    attributes: prompt.attributes ?? {},
     skillMarkdown: normalizeNullableString(prompt.skill_markdown),
     category: normalizeNullableString(prompt.category),
     inputExamples: normalizeNullableString(prompt.input_examples),
@@ -64,6 +68,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     title: entry.title,
     content: entry.content,
     content_format: entry.content_format,
+    media_type: entry.media_type,
+    attributes: entry.attributes,
     skill_markdown: entry.skill_markdown,
     category: entry.category,
     input_examples: entry.input_examples,
@@ -78,6 +84,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     title: prompt.title,
     content: prompt.content,
     contentFormat: prompt.contentFormat,
+    mediaType: prompt.mediaType,
+    attributes: prompt.attributes,
     skillMarkdown: prompt.skillMarkdown,
     category: prompt.category,
     inputExamples: prompt.inputExamples,
@@ -91,6 +99,36 @@ export const LikedPromptSchema = LikedPromptApiSchema.transform(normalizeLikedPr
 export type LikedPrompt = z.infer<typeof LikedPromptSchema>;
 
 export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
+
+type PromptUpdateFormValues = {
+  title: string;
+  category: string;
+  content: string;
+  contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
+  inputExamples: string;
+  outputExamples: string;
+};
+
+// 編集対象の2軸と型固有属性を落とさず、更新APIのsnake_caseペイロードへ変換する。
+// Build the update API payload without losing the prompt axes or type-specific attributes.
+export function buildPromptUpdatePayload(form: PromptUpdateFormValues) {
+  const isSkill = form.contentFormat === "skill";
+  const includeExamples = !isSkill && form.mediaType === "text";
+  return {
+    title: form.title,
+    category: form.category,
+    content: isSkill ? "" : form.content,
+    content_format: form.contentFormat,
+    media_type: form.mediaType,
+    attributes: isSkill
+      ? { ...form.attributes, skill_markdown: form.content }
+      : form.attributes,
+    input_examples: includeExamples ? form.inputExamples : "",
+    output_examples: includeExamples ? form.outputExamples : "",
+  };
+}
 
 export function parseMyPromptsResponse(raw: unknown): PromptRecord[] {
   const response = parseWithSchema(
