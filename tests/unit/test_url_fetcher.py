@@ -1,7 +1,61 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import requests
 
 from services import url_fetcher
+
+
+# `stream=True` で取得した requests.Response の挙動を再現する疑似レスポンス。
+# 素の MagicMock だと `content` / `apparent_encoding` が何度でも読めてしまい、
+# 「ストリームを読み切った後に本文を参照すると RuntimeError になる」という
+# requests の実挙動を取りこぼす。実際にその参照でデコードが全滅していたため、
+# 回帰を検知できるようここで忠実に再現する。
+# Fake response reproducing how a `stream=True` requests.Response behaves.
+# A bare MagicMock lets `content` / `apparent_encoding` be read any number of
+# times, hiding the real behavior that reading the body after the stream has
+# been drained raises RuntimeError. That very access broke decoding for every
+# fetch, so it is reproduced faithfully here to catch the regression.
+class _StreamedResponse:
+    def __init__(
+        self,
+        body: bytes = b"",
+        content_type: str = "text/html; charset=utf-8",
+        status_code: int = 200,
+        headers: dict | None = None,
+    ) -> None:
+        self._body = body
+        self._consumed = False
+        self.status_code = status_code
+        self.headers = {"content-type": content_type}
+        if headers:
+            self.headers.update(headers)
+        self.closed = False
+
+    def iter_content(self, chunk_size: int = 1):
+        self._consumed = True
+        for start in range(0, len(self._body), max(1, chunk_size)):
+            yield self._body[start : start + max(1, chunk_size)]
+
+    @property
+    def content(self) -> bytes:
+        if self._consumed:
+            raise RuntimeError("The content for this response was already consumed")
+        return self._body
+
+    @property
+    def apparent_encoding(self) -> str:
+        # requests と同様に content を参照するため、読み切り後は RuntimeError になる。
+        # Mirrors requests by reading content, so it raises once the stream is drained.
+        _ = self.content
+        return "utf-8"
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code} Error")
+
+    def close(self) -> None:
+        self.closed = True
 
 
 # テキストメッセージからURLを抽出する関数の挙動（HTTP/HTTPSスキーム、重複排除、文字制限、末尾の記号削除など）をテストするクラス。
@@ -203,18 +257,13 @@ class FetchUrlContentTest(unittest.TestCase):
         content_type: str = "text/html; charset=utf-8",
         status_code: int = 200,
         headers: dict | None = None,
-    ) -> MagicMock:
-        resp = MagicMock()
-        resp.status_code = status_code
-        merged_headers = {"content-type": content_type}
-        if headers:
-            merged_headers.update(headers)
-        resp.headers = merged_headers
-        resp.apparent_encoding = "utf-8"
-        resp.iter_content.return_value = iter([content])
-        resp.raise_for_status = MagicMock()
-        resp.close = MagicMock()
-        return resp
+    ) -> _StreamedResponse:
+        return _StreamedResponse(
+            content,
+            content_type=content_type,
+            status_code=status_code,
+            headers=headers,
+        )
 
     # 正常なHTMLのURLからテキストコンテンツがフェッチされることを検証します。
     # Verify that text content is fetched successfully from a valid HTML page URL.
@@ -242,6 +291,54 @@ class FetchUrlContentTest(unittest.TestCase):
         assert result is not None
         self.assertIn("Plain text here.", result)
 
+    # ストリームを読み切った後のレスポンス本文を参照せずにデコードできることを検証します（本文参照はRuntimeErrorになるため）。
+    # Verify decoding never touches the drained response body, which would raise RuntimeError.
+    def test_decodes_without_touching_consumed_response_body(self):
+        resp = self._make_response(b"<html><body><p>Streamed body</p></body></html>")
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", return_value=resp),
+        ):
+            result = url_fetcher.fetch_url_content("https://example.com")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Streamed body", result)
+        # 疑似レスポンス自体が「読み切り後の本文参照」を拒否することを担保する
+        # Guard that the fake response itself rejects reading the drained body.
+        with self.assertRaises(RuntimeError):
+            _ = resp.content
+
+    # Content-Type ヘッダーで宣言された非UTF-8の文字コードが正しく解釈されることを検証します。
+    # Verify a non-UTF-8 charset declared in the Content-Type header is honored.
+    def test_decodes_non_utf8_body_declared_in_header(self):
+        body = "<html><body><p>日本語の本文</p></body></html>".encode("euc-jp")
+        resp = self._make_response(body, content_type="text/html; charset=euc-jp")
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", return_value=resp),
+        ):
+            result = url_fetcher.fetch_url_content("https://example.com")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("日本語の本文", result)
+
+    # ヘッダーに宣言が無い場合でも、HTML内のmetaタグの文字コード宣言が使われることを検証します。
+    # Verify the in-document meta charset is used when the header declares none.
+    def test_decodes_non_utf8_body_declared_in_html_meta(self):
+        body = (
+            "<html><head><meta charset=\"shift_jis\"></head>"
+            "<body><p>文字化けしない本文</p></body></html>"
+        ).encode("shift_jis")
+        resp = self._make_response(body, content_type="text/html")
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", return_value=resp),
+        ):
+            result = url_fetcher.fetch_url_content("https://example.com")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("文字化けしない本文", result)
+
     # 安全でないと判定されたホスト（localhostなど）からのフェッチ要求がNoneを返すことを検証します。
     # Verify that fetching from an unsafe host/IP resolves to None.
     def test_returns_none_for_unsafe_url(self):
@@ -263,8 +360,7 @@ class FetchUrlContentTest(unittest.TestCase):
     # HTTPレスポンスエラー（404等）が発生した際、例外を起こさずNoneが返却されることを検証します。
     # Verify that HTTP error responses (e.g. 404) result in returning None.
     def test_returns_none_on_http_error(self):
-        resp = self._make_response(b"", status_code=404)
-        resp.raise_for_status.side_effect = Exception("404 Not Found")
+        resp = self._make_response(b"Not Found", status_code=404)
         with (
             patch("socket.gethostbyname", return_value="93.184.216.34"),
             patch("requests.get", return_value=resp),
@@ -313,27 +409,18 @@ class FetchUrlContentTest(unittest.TestCase):
 class FetchUrlRedirectTest(unittest.TestCase):
     # テスト用の疑似リダイレクト応答オブジェクトを構築します。
     # Build a mock redirect HTTP response object.
-    def _redirect_response(self, location: str, status: int = 302) -> MagicMock:
-        resp = MagicMock()
-        resp.status_code = status
-        resp.headers = {"Location": location, "content-type": "text/html"}
-        resp.apparent_encoding = "utf-8"
-        resp.iter_content.return_value = iter([b""])
-        resp.raise_for_status = MagicMock()
-        resp.close = MagicMock()
-        return resp
+    def _redirect_response(self, location: str, status: int = 302) -> _StreamedResponse:
+        return _StreamedResponse(
+            b"",
+            content_type="text/html",
+            status_code=status,
+            headers={"Location": location},
+        )
 
     # テスト用の疑似正常応答オブジェクトを構築します。
     # Build a mock OK HTTP response object.
-    def _ok_response(self, body: bytes = b"<p>final</p>") -> MagicMock:
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.headers = {"content-type": "text/html; charset=utf-8"}
-        resp.apparent_encoding = "utf-8"
-        resp.iter_content.return_value = iter([body])
-        resp.raise_for_status = MagicMock()
-        resp.close = MagicMock()
-        return resp
+    def _ok_response(self, body: bytes = b"<p>final</p>") -> _StreamedResponse:
+        return _StreamedResponse(body)
 
     # リダイレクト先としてプライベートIP/リンクローカルIPなどの安全でないアドレスが指定された際、リクエストが中止されNoneが返ることを検証します。
     # Verify that redirects leading to unsafe/private IPs are blocked and return None.
@@ -401,14 +488,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
 
         def capture(*args, **kwargs):
             captured["kwargs"] = kwargs
-            resp = MagicMock()
-            resp.status_code = 200
-            resp.headers = {"content-type": "text/html"}
-            resp.apparent_encoding = "utf-8"
-            resp.iter_content.return_value = iter([b"<p>x</p>"])
-            resp.raise_for_status = MagicMock()
-            resp.close = MagicMock()
-            return resp
+            return _StreamedResponse(b"<p>x</p>", content_type="text/html")
 
         with (
             patch("socket.gethostbyname", return_value="93.184.216.34"),
