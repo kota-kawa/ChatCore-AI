@@ -6,6 +6,7 @@ import { Marked } from "marked";
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
 import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
+import { stripWebSearchArtifacts } from "./memo_text";
 import { sanitizeMessageHtml } from "./message_utils";
 import { initMessageCopyButtons } from "./message_copy_buttons";
 import { refreshChatShareState } from "./chat_share";
@@ -345,7 +346,11 @@ function normalizeLLMTextForDisplay(rawText: string) {
 }
 
 function normalizeMemoTextForDisplay(rawText: string) {
-  const normalized = rawText.replace(/\r\n?/g, "\n");
+  // 修正前に保存されたメモには Web 検索の参照表示が残っている。メモ側には
+  // そのスタイルが無く表示が崩れるため、描画前にも取り除く。
+  // Memos saved before the fix still carry web search references. Their styles
+  // do not exist on the memo side, so strip them before rendering too.
+  const normalized = stripWebSearchArtifacts(rawText).replace(/\r\n?/g, "\n");
   const parts = normalized.split(FENCED_SEGMENT_PATTERN);
   const formattedParts = parts
     .map((part, idx) => {
