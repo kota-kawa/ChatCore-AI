@@ -1212,6 +1212,21 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     grid-column: 1 / -1;
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
+  }
+
+  /* 密度調整クラス（.setup-fit-compact / .setup-fit-tight）は、添付・送信ボタンが
+     textarea に重なるデスクトップ前提で右下に余白を確保する。スマホではボタンも
+     一時保存トグルも別のグリッド行にあるため、その余白は入力できない死に領域に
+     なるだけなので、同じ詳細度で打ち消して textarea 全体を入力に使えるようにする。
+     密度クラス側は #setup-container まで含む詳細度なので、こちらも同じ形で書く */
+  /* The density classes reserve room at the bottom-right of the textarea for the
+     attach/send buttons that overlay it on desktop. On mobile those buttons, and
+     the temporary-chat toggle, live in their own grid row, so that reserved space
+     is dead area the user cannot type into. These selectors match the density
+     rules' specificity (#setup-container + class) so the reset actually wins. */
+  :where(body.chat-page, .chat-page-shell) #setup-container #setup-info,
+  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #setup-info,
+  :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #setup-info {
     padding-right: var(--setup-field-padding-x);
     padding-bottom: var(--setup-field-padding-y);
   }
