@@ -729,6 +729,35 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("the sources do not cover it", content)
         self.assertIn("label that part as inference", content)
 
+    # 日本語: 検索結果をそのまま反復せず、理解・比較・統合して回答するよう指示することを検証します。
+    # English: Verify the context tells the model to analyze and synthesize search evidence.
+    def test_build_system_message_requires_analysis_and_synthesis(self):
+        result = web_search.WebSearchResult(
+            query="q",
+            searched_at="2026-05-27T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Title",
+                    hostname="example.com",
+                    age="",
+                    snippets=("snippet",),
+                    page_text="",
+                ),
+            ),
+        )
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertIn("evidence to analyze, not as text to repeat", content)
+        self.assertIn("compare agreement and conflict", content)
+        self.assertIn("answer in your own words", content)
+        self.assertIn("source-by-source digest", content)
+        self.assertIn("Citations support the synthesized claims", content)
+        self.assertIn("Do not suppress or distort material evidence", content)
+        self.assertIn("socially preferred answer", content)
+        self.assertIn("population-level patterns", content)
+
     # 日本語: ビルドシステムmessageneutralizesinjectedコンテキストtagsことを検証します。
     # English: Verify that build system message neutralizes injected context tags.
     def test_build_system_message_neutralizes_injected_context_tags(self):

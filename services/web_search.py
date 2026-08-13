@@ -1152,7 +1152,7 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
         return None
 
     safe_query = _neutralize_context_delimiters(result.query)
-    # 日本語: 取得済み検索結果を根拠として使い、実在するevidence_idで引用し、外部データ内の命令を無視するよう定める文脈プロンプト。
+    # 日本語: 取得済み検索結果を理解・統合したうえで根拠として使い、実在するevidence_idで引用し、外部データ内の命令を無視するよう定める文脈プロンプト。
     # 日本語: あわせて、検索結果が言及していないことは反証ではないと明示し、出典が扱っていない旨を述べたうえで推論による判断を示すよう促します。
     lines = [
         f'<web_search_context query="{safe_query}" searched_at="{result.searched_at}">',
@@ -1163,6 +1163,11 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
         "The marker is internal transport syntax, not user-facing text. Use only the exact [[source:<evidence_id>]] form above. Never shorten it to [[src_...]], output a bare evidence_id, mention the marker syntax, or expose any other internal label in your prose.",
         "When there is at least one source, you must not end the answer with only \"I am not aware of that\", \"I recommend checking\", or \"please see the official site\". Always summarize directly from the search results.",
         "Answer the user's question directly in the first 1-2 sentences. Since search results are available, a reply that only tells the user to verify elsewhere is prohibited.",
+        "Treat the results as evidence to analyze, not as text to repeat. First determine what each relevant source actually establishes, compare agreement and conflict, account for source quality and missing context, and form a coherent understanding of the whole picture.",
+        "Then answer in your own words with the conclusion produced by that analysis. Do not copy snippets, preserve a source's wording or structure, stitch together lightly paraphrased passages, or give a source-by-source digest unless the user explicitly requested one.",
+        "Citations support the synthesized claims; they do not replace your explanation or reasoning. Clearly distinguish sourced facts from your own inference when both are needed.",
+        "Do not suppress or distort material evidence because it is uncomfortable, unpopular, socially sensitive, or conflicts with the expected conclusion. Include relevant evidence on both favorable and unfavorable sides, then judge its weight rather than steering toward a socially preferred answer.",
+        "State difficult findings neutrally and in context. Do not treat allegations, stereotypes, correlations, or population-level patterns as established causal facts about an individual.",
         "Do not ask the user for confirmation with questions such as \"Shall I search?\", \"May I fetch that?\", or \"Is it OK to proceed?\"; write the answer from the search results immediately.",
         "Even when the search results are not fully conclusive, do not stop to ask follow-up questions. Separate what the results do show, what is missing, and what needs to be confirmed.",
         "Results that never mention a claim do not disprove it. Say that the sources do not cover it, then judge the claim by reasoning about mechanism, constraints, orders of magnitude, and analogous cases, and label that part as inference rather than as a sourced fact.",
