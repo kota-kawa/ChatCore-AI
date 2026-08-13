@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from starlette.responses import JSONResponse
 
@@ -120,10 +120,10 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             )
         return deps.start_generation_job.call_args.kwargs[key]
 
-    # 日本語: 有効時は、ログイン中ユーザーのIDに束ねた検索関数がジョブへ渡ります。
-    # English: When enabled, the job receives a lookup bound to the signed-in user's id.
+    # 日本語: 有効時は生成前に必ず検索し、追加検索用の関数もユーザーIDに束ねてジョブへ渡します。
+    # English: When enabled, lookup runs before generation and the job also receives a user-bound retry.
     def test_enabled_request_passes_a_user_scoped_lookup(self):
-        search = Mock(return_value={"status": "no_results"})
+        search = Mock(return_value={"status": "ok", "memo_count": 1})
         deps = self._build_deps(search)
 
         lookup = self._run(
@@ -133,8 +133,15 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         )
 
         self.assertIsNotNone(lookup)
+        search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
         lookup("沖縄")
-        search.assert_called_once_with(42, "沖縄")
+        self.assertEqual(
+            search.call_args_list,
+            [
+                call(42, "去年の沖縄旅行の予算は？"),
+                call(42, "沖縄"),
+            ],
+        )
 
     # 日本語: 未指定なら検索関数は渡さず、従来どおりの生成になります。
     # English: Without the flag, no lookup is wired up and generation is unchanged.
@@ -159,7 +166,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
     # 日本語: 共有プロンプトは公開データなので、有効時はそのまま検索関数を渡します。
     # English: Shared prompts are public, so the lookup is passed straight through when enabled.
     def test_shared_prompt_flag_passes_the_public_lookup(self):
-        shared_search = Mock(return_value={"status": "no_results"})
+        shared_search = Mock(return_value={"status": "ok", "prompt_count": 1})
         deps = self._build_deps(Mock(), shared_search)
 
         lookup = self._run(
@@ -170,11 +177,12 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         )
 
         self.assertIs(lookup, shared_search)
+        shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
 
     # 日本語: 公開データなので、ゲストのリクエストでも共有プロンプト検索は使えます。
     # English: Being public data, the shared-prompt lookup is available to guests as well.
     def test_guest_request_can_search_shared_prompts(self):
-        shared_search = Mock(return_value={"status": "no_results"})
+        shared_search = Mock(return_value={"status": "ok", "prompt_count": 1})
         deps = self._build_deps(Mock(), shared_search)
 
         lookup = self._run(
@@ -185,6 +193,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         )
 
         self.assertIs(lookup, shared_search)
+        shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
 
     # 日本語: 未指定なら共有プロンプト検索は渡しません。
     # English: Without the flag, no shared-prompt lookup is wired up.
@@ -194,6 +203,68 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         lookup = self._run(deps, body_extra={}, session={"user_id": 42}, key="shared_prompt_search")
 
         self.assertIsNone(lookup)
+
+    # 日本語: ツール呼び出しを使わないモデルでも、選択した参照元を事前検索して回答へ渡します。
+    # English: Non-streaming models also receive prefetched selected references without tool calls.
+    def test_non_streaming_request_prefetches_selected_references(self):
+        personal_search = Mock(
+            return_value={
+                "status": "ok",
+                "memo_count": 1,
+                "context_fact_count": 0,
+                "memos": [{"title": "沖縄旅行", "content": "予算は10万円"}],
+                "context_facts": [],
+            }
+        )
+        shared_search = Mock(
+            return_value={
+                "status": "ok",
+                "prompt_count": 1,
+                "prompts": [{"title": "旅行計画テンプレ"}],
+            }
+        )
+        deps = self._build_deps(personal_search, shared_search)
+        deps.is_streaming_model.return_value = False
+        request = build_request(
+            method="POST",
+            path="/api/chat",
+            json_body={
+                "message": "去年の沖縄旅行の予算は？",
+                "chat_room_id": "room-1",
+                "model": "test-model",
+                "use_personal_knowledge": True,
+                "use_shared_prompts": True,
+            },
+            session={"user_id": 42},
+        )
+
+        with (
+            patch(
+                "services.chat_use_case.maybe_augment_messages_with_web_search",
+                side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
+            ),
+            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
+        ):
+            asyncio.run(
+                ChatPostUseCase(deps, default_model="test-model").execute(
+                    request,
+                    auth_limit_service=object(),
+                    llm_daily_limit_service=object(),
+                    chat_generation_service=object(),
+                )
+            )
+
+        personal_search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
+        shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
+        response_messages = deps.get_llm_response.call_args.args[0]
+        selected_context = next(
+            message["content"]
+            for message in response_messages
+            if "<selected_reference_context>" in str(message.get("content") or "")
+        )
+        self.assertIn("沖縄旅行", selected_context)
+        self.assertIn("旅行計画テンプレ", selected_context)
+        deps.start_generation_job.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ from services.chat_service import (
 )
 from services.chat_context import build_context_messages
 from services.personal_knowledge import search_personal_knowledge_for_tool
+from services.selected_reference_context import augment_messages_with_selected_references
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.web_search import (
     deserialize_web_search_results,
@@ -1275,6 +1276,14 @@ async def chat_regenerate(
         all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
 
     normalized_all_messages = _normalize_messages_for_llm(all_messages)
+    selected_reference_query = next(
+        (
+            str(message.get("content") or "")
+            for message in reversed(normalized_all_messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
     normalized_all_messages = _prepend_attached_files_to_user_messages(
         normalized_all_messages
     )
@@ -1354,6 +1363,22 @@ async def chat_regenerate(
             retry_after=get_seconds_until_daily_reset(),
         )
 
+    personal_knowledge_search = (
+        partial(search_personal_knowledge_for_tool, user_id)
+        if use_personal_knowledge and user_id is not None
+        else None
+    )
+    shared_prompt_search = search_shared_prompts_for_tool if use_shared_prompts else None
+    conversation_messages = await run_blocking(
+        partial(
+            augment_messages_with_selected_references,
+            query=selected_reference_query,
+            personal_knowledge_search=personal_knowledge_search,
+            shared_prompt_search=shared_prompt_search,
+        ),
+        conversation_messages,
+    )
+
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
@@ -1407,14 +1432,8 @@ async def chat_regenerate(
                 # clean up; running the cleanup would delete an existing message.
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
-                personal_knowledge_search=(
-                    partial(search_personal_knowledge_for_tool, user_id)
-                    if use_personal_knowledge and user_id is not None
-                    else None
-                ),
-                shared_prompt_search=(
-                    search_shared_prompts_for_tool if use_shared_prompts else None
-                ),
+                personal_knowledge_search=personal_knowledge_search,
+                shared_prompt_search=shared_prompt_search,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1769,6 +1788,22 @@ async def chat_edit_and_regenerate(
             retry_after=get_seconds_until_daily_reset(),
         )
 
+    personal_knowledge_search = (
+        partial(search_personal_knowledge_for_tool, user_id)
+        if use_personal_knowledge and user_id is not None
+        else None
+    )
+    shared_prompt_search = search_shared_prompts_for_tool if use_shared_prompts else None
+    conversation_messages = await run_blocking(
+        partial(
+            augment_messages_with_selected_references,
+            query=new_message,
+            personal_knowledge_search=personal_knowledge_search,
+            shared_prompt_search=shared_prompt_search,
+        ),
+        conversation_messages,
+    )
+
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
@@ -1824,14 +1859,8 @@ async def chat_edit_and_regenerate(
                 ),
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
-                personal_knowledge_search=(
-                    partial(search_personal_knowledge_for_tool, user_id)
-                    if use_personal_knowledge and user_id is not None
-                    else None
-                ),
-                shared_prompt_search=(
-                    search_shared_prompts_for_tool if use_shared_prompts else None
-                ),
+                personal_knowledge_search=personal_knowledge_search,
+                shared_prompt_search=shared_prompt_search,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(

@@ -1401,7 +1401,12 @@ class ChatStreamingTestCase(unittest.TestCase):
         request = build_request(
             method="POST",
             path="/api/chat_regenerate",
-            json_body={"chat_room_id": "room-1", "model": "claude-haiku-4-5-20251001"},
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+                "use_personal_knowledge": True,
+                "use_shared_prompts": True,
+            },
             session={"user_id": 42},
         )
 
@@ -1434,6 +1439,24 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch(
+                "blueprints.chat.messages.search_personal_knowledge_for_tool",
+                return_value={
+                    "status": "ok",
+                    "memo_count": 1,
+                    "context_fact_count": 0,
+                    "memos": [{"title": "要約方針", "content": "結論を先に書く"}],
+                    "context_facts": [],
+                },
+            ) as personal_search,
+            patch(
+                "blueprints.chat.messages.search_shared_prompts_for_tool",
+                return_value={
+                    "status": "ok",
+                    "prompt_count": 1,
+                    "prompts": [{"title": "要約テンプレ"}],
+                },
+            ) as shared_search,
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
             patch("blueprints.chat.messages.save_message_to_db", return_value=12),
         ):
@@ -1444,6 +1467,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertFalse(any("old answer" in content for content in contents))
+        self.assertTrue(any("要約方針" in content and "要約テンプレ" in content for content in contents))
+        personal_search.assert_called_once_with(42, "要約して")
+        shared_search.assert_called_once_with("要約して")
 
     # 日本語: メッセージを編集して再生成する際、元の添付ファイル内容が正しく引き継がれることを検証します。
     # English: Verify that editing a message and regenerating it preserves the original attachment contents.
@@ -1458,6 +1484,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 "new_message": "この資料を短く要約して",
                 "trailing_user_count": 0,
                 "model": "claude-haiku-4-5-20251001",
+                "use_personal_knowledge": True,
             },
             session={"user_id": 42},
         )
@@ -1495,6 +1522,16 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch(
+                "blueprints.chat.messages.search_personal_knowledge_for_tool",
+                return_value={
+                    "status": "ok",
+                    "memo_count": 1,
+                    "context_fact_count": 0,
+                    "memos": [{"title": "文章方針", "content": "短くまとめる"}],
+                    "context_facts": [],
+                },
+            ) as personal_search,
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
             patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
         ):
@@ -1504,6 +1541,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(payload["response"], "edited answer")
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
+        self.assertTrue(any("文章方針" in content for content in contents))
+        personal_search.assert_called_once_with(42, "この資料を短く要約して")
         user_save_args, user_save_kwargs = saved_messages[0]
         self.assertEqual(user_save_args[3], ["sample.pdf"])
         self.assertIn("attached_file_contents", user_save_kwargs)
