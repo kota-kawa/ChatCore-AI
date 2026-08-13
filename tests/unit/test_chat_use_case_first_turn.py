@@ -199,6 +199,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             assistant_message_id=2,
             user_message=user_message,
             assistant_response="assistant reply",
+            locale="ja",
         )
 
         # Each eligibility gate independently prevents an extraction LLM task.
