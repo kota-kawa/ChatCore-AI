@@ -756,14 +756,21 @@ export function useHomePageRoomActions({
     [isGenerating, switchBranch],
   );
 
+  // Enterキーは送信専用にし、生成中は何もしない。handleSendMessage は生成中に
+  // 停止として振る舞うため、Enterを二回連打すると2回目が回答生成の停止になってしまう。
+  // 停止操作は送信ボタン（停止ボタン）だけに限定する。
+  // Enter only ever sends and is ignored while a response is streaming. handleSendMessage
+  // doubles as "stop" during generation, so a rapid second Enter would otherwise abort the
+  // answer. Stopping stays exclusive to the send/stop button.
   const handleChatInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
       if (event.key !== "Enter" || event.shiftKey) return;
       event.preventDefault();
+      if (isGenerating) return;
       handleSendMessage();
     },
-    [handleSendMessage],
+    [handleSendMessage, isGenerating],
   );
 
   const handleDeleteRoom = useCallback(
