@@ -96,6 +96,14 @@ export function useHomePageUiState() {
   const [pageViewState, setRawPageViewState] = useState<HomePageViewState>(readInitialPageViewState);
   const [setupInfo, setSetupInfo] = useState("");
   const [temporaryModeEnabled, setTemporaryModeEnabled] = useState(false);
+  // メモ/マイコンテキスト参照モード。回答の根拠が変わる設定なので、再読み込み後に
+  // 気づかないまま有効なままにならないよう、あえて永続化しない。
+  // Memo / My Context lookup mode. It changes what the answer is grounded in, so it is
+  // deliberately not persisted: a reload must never leave it silently switched on.
+  const [personalKnowledgeEnabled, setPersonalKnowledgeEnabled] = useState(false);
+  // 共有プロンプト参照モード。メモ参照と同じ理由で永続化しない。
+  // Shared-prompt lookup mode, left unpersisted for the same reason as the memo mode.
+  const [sharedPromptsEnabled, setSharedPromptsEnabled] = useState(false);
   const [storedSetupStateLoaded, setStoredSetupStateLoaded] = useState(false);
 
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -216,6 +224,10 @@ export function useHomePageUiState() {
     setSetupInfo,
     temporaryModeEnabled,
     setTemporaryModeEnabled,
+    personalKnowledgeEnabled,
+    setPersonalKnowledgeEnabled,
+    sharedPromptsEnabled,
+    setSharedPromptsEnabled,
     storedSetupStateLoaded,
     modelMenuOpen,
     setModelMenuOpen,

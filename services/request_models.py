@@ -248,6 +248,12 @@ class ChatMessageRequest(RequestPayloadModel):
     chat_room_id: ChatRoomIdStr = "default"
     model: ModelNameStr | None = None
     attached_files: list[AttachedFileItem] = Field(default_factory=list, max_length=MAX_ATTACHED_FILES)
+    # 日本語: 回答の途中で自分のメモ・マイコンテキストを検索してよいか。ログイン中のみ有効。
+    # English: Whether the answer may search the sender's own memos and My Context (login only).
+    use_personal_knowledge: bool = False
+    # 日本語: 回答の途中で公開された共有プロンプトを検索してよいか。公開データなので誰でも利用可。
+    # English: Whether the answer may search public shared prompts (public data, available to anyone).
+    use_shared_prompts: bool = False
 
 
 # 日本語: 定型タスクの並び順（IDリスト）を更新するリクエストペイロード。

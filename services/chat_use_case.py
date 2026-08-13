@@ -94,6 +94,8 @@ class ChatPostUseCaseDependencies:
     cleanup_unanswered_user_messages: Callable[..., Any]
     get_seconds_until_daily_reset: Callable[[], int]
     is_streaming_model: Callable[[str], bool]
+    search_personal_knowledge: Callable[..., Any]
+    search_shared_prompts: Callable[..., Any]
     start_generation_job: Callable[..., Any]
     build_llm_stream_response: Callable[..., Any]
     iter_llm_stream_events: Callable[..., Any]
@@ -215,6 +217,8 @@ class ChatPostUseCase:
         chat_room_id = payload.chat_room_id
         model = payload.model or self.default_model
         attached_files = payload.attached_files or []
+        use_personal_knowledge = bool(payload.use_personal_knowledge)
+        use_shared_prompts = bool(payload.use_shared_prompts)
 
         # モデル名の検証
         # Validate the requested model name
@@ -638,6 +642,18 @@ class ChatPostUseCase:
                     "assistant",
                 )
 
+            # メモ/マイコンテキストは本人のデータなので、ログイン中のリクエストにだけ渡す。
+            # Memos and My Context belong to the signed-in owner, so the lookup is only
+            # wired up for authenticated requests.
+            personal_knowledge_search = (
+                partial(deps.search_personal_knowledge, user_id)
+                if use_personal_knowledge and user_id is not None
+                else None
+            )
+            # 共有プロンプトは公開データなので、ゲストのリクエストでも検索できる。
+            # Shared prompts are public, so guest requests can search them too.
+            shared_prompt_search = deps.search_shared_prompts if use_shared_prompts else None
+
             try:
                 job = deps.start_generation_job(
                     generation_key,
@@ -653,6 +669,8 @@ class ChatPostUseCase:
                     ),
                     service=chat_generation_service,
                     prior_web_search_results=prior_web_search_results,
+                    personal_knowledge_search=personal_knowledge_search,
+                    shared_prompt_search=shared_prompt_search,
                 )
             except ChatGenerationAlreadyRunningError:
                 return deps.jsonify(

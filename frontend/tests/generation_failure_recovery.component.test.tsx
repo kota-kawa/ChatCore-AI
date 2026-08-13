@@ -109,6 +109,8 @@ function useGenerationHarness() {
     historyHasMore: false,
     historyNextBeforeId: null,
     isLoadingOlder: false,
+    personalKnowledgeEnabled: false,
+    sharedPromptsEnabled: false,
     localStorageWarningShownRef,
     messageSeqRef,
     pendingAutoScrollRef,

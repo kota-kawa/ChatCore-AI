@@ -22,6 +22,15 @@ from services.generative_ui import (
     normalize_response_with_artifacts,
 )
 
+from .personal_knowledge import (
+    PERSONAL_KNOWLEDGE_TOOL_NAME,
+    get_personal_knowledge_tool_definition,
+)
+from .shared_prompt_lookup import (
+    SHARED_PROMPT_TOOL_NAME,
+    get_shared_prompt_tool_definition,
+)
+
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -320,10 +329,20 @@ class ChatGenerationJob:
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
         is_cancel_requested: Callable[[], bool] | None = None,
+        personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
+        shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
         self._prior_web_search_results = list(prior_web_search_results or [])
+        # メモ/マイコンテキスト検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
+        # ジョブ自身はセッションもDBも知らないままでいられる。None のときは機能そのものが無効。
+        # Memo / My Context lookup. The caller passes a closure already bound to a user id, so the
+        # job stays free of session and database concerns. None means the feature is off.
+        self._personal_knowledge_search = personal_knowledge_search
+        # 公開プロンプト検索。公開データなので未ログインでも渡せる。None のときは無効。
+        # Public prompt lookup. The data is public, so guests can have it too; None means off.
+        self._shared_prompt_search = shared_prompt_search
         self._persist_response = persist_response
         self._on_finished = on_finished
         self._on_finished_called = False
@@ -624,6 +643,108 @@ class ChatGenerationJob:
 
     # バックグラウンドスレッドで実行されるチャット応答生成のメインループ
     # The main loop for chat response generation executed in the background thread
+    # 検索系ツールの呼び出しを1件実行し、更新後のステップ数を返す。
+    # メモ検索と共有プロンプト検索は進行管理が同じなので、1つの実行部を共有する。
+    # Execute one lookup tool call and return the updated step count. The memo and shared
+    # prompt tools share this runner because their step handling is identical.
+    def _run_lookup_tool_call(
+        self,
+        tool_call: dict[str, Any],
+        *,
+        tool_name: str,
+        search: Callable[[str], dict[str, Any]] | None,
+        event_prefix: str,
+        result_counts: tuple[str, ...],
+        failure_log_message: str,
+        failure_tool_message: str,
+        current_messages: list[dict[str, Any]],
+        step_count: int,
+        max_steps: int,
+    ) -> int:
+        if search is None:
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "unsupported_tool",
+                        "message": f"Unsupported tool: {tool_name}",
+                    },
+                )
+            )
+            return step_count
+
+        args_raw = tool_call.get("function", {}).get("arguments", "{}")
+        try:
+            args = json.loads(args_raw)
+        except Exception:
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+
+        query = str(args.get("query") or "").strip()
+        if not query:
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "invalid_arguments",
+                        "message": "Search query is empty.",
+                    },
+                )
+            )
+            return step_count
+
+        if max_steps - step_count <= 1:
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "step_limit_reached",
+                        "message": (
+                            "The lookup step limit has been reached. "
+                            "Answer using the information already available."
+                        ),
+                    },
+                )
+            )
+            return step_count
+
+        step_count += 1
+        self._publish(
+            f"{event_prefix}_started",
+            {"query": query, "step": step_count, "max_steps": max_steps},
+        )
+        try:
+            payload = search(query)
+        except Exception:
+            logger.exception(failure_log_message)
+            self._publish(
+                f"{event_prefix}_failed",
+                {"query": query, "step": step_count, "max_steps": max_steps},
+            )
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "failed",
+                        "message": failure_tool_message,
+                    },
+                )
+            )
+            return step_count
+
+        self._publish(
+            f"{event_prefix}_completed",
+            {
+                "query": query,
+                **{key: int(payload.get(key) or 0) for key in result_counts},
+                "step": step_count,
+                "max_steps": max_steps,
+            },
+        )
+        current_messages.append(_tool_result_message(tool_call, payload))
+        return step_count
+
     def _run(self) -> None:
         # キャンセル時に保存できるよう、インスタンス側のチャンクリストへ蓄積する。
         # Accumulate into the instance chunk list so a cancel can persist the partial text.
@@ -680,6 +801,16 @@ class ChatGenerationJob:
                 return
 
             web_search_tool = get_web_search_tool_definition()
+            personal_knowledge_tool = (
+                get_personal_knowledge_tool_definition()
+                if self._personal_knowledge_search is not None
+                else None
+            )
+            shared_prompt_tool = (
+                get_shared_prompt_tool_definition()
+                if self._shared_prompt_search is not None
+                else None
+            )
 
             # 生成ループ（エージェントステップ）
             # Generation loop (agent steps)
@@ -688,8 +819,19 @@ class ChatGenerationJob:
                     return
 
                 remaining_steps = max_steps - step_count
-                allow_tools = remaining_steps >= 3 and is_web_search_enabled()
-                tools = [web_search_tool] if allow_tools else None
+                # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
+                # Memo lookup does not depend on the web search settings, so either tool alone
+                # is still offered to the model.
+                available_tools: list[dict[str, Any]] = []
+                if remaining_steps >= 3:
+                    if is_web_search_enabled():
+                        available_tools.append(web_search_tool)
+                    if personal_knowledge_tool is not None:
+                        available_tools.append(personal_knowledge_tool)
+                    if shared_prompt_tool is not None:
+                        available_tools.append(shared_prompt_tool)
+                allow_tools = bool(available_tools)
+                tools = available_tools if allow_tools else None
                 llm_step = step_count + 1
 
                 if not suppress_next_generation_started:
@@ -789,6 +931,42 @@ class ChatGenerationJob:
                     # ツールごとの実行と結果の追加
                     # Execute each tool and append results
                     func_name = tc.get("function", {}).get("name")
+                    if (
+                        func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
+                        and self._personal_knowledge_search is not None
+                    ):
+                        step_count = self._run_lookup_tool_call(
+                            tc,
+                            tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
+                            search=self._personal_knowledge_search,
+                            event_prefix="personal_knowledge_search",
+                            result_counts=("memo_count", "context_fact_count"),
+                            failure_log_message="Memo / context search via tool call failed.",
+                            failure_tool_message="Memo and My Context search failed.",
+                            current_messages=current_messages,
+                            step_count=step_count,
+                            max_steps=max_steps,
+                        )
+                        continue
+
+                    if (
+                        func_name == SHARED_PROMPT_TOOL_NAME
+                        and self._shared_prompt_search is not None
+                    ):
+                        step_count = self._run_lookup_tool_call(
+                            tc,
+                            tool_name=SHARED_PROMPT_TOOL_NAME,
+                            search=self._shared_prompt_search,
+                            event_prefix="shared_prompt_search",
+                            result_counts=("prompt_count",),
+                            failure_log_message="Shared prompt search via tool call failed.",
+                            failure_tool_message="Shared prompt search failed.",
+                            current_messages=current_messages,
+                            step_count=step_count,
+                            max_steps=max_steps,
+                        )
+                        continue
+
                     if func_name != "web_search":
                         current_messages.append(
                             _tool_result_message(
@@ -1780,6 +1958,8 @@ return 0
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
+        personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
+        shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -1811,6 +1991,8 @@ return 0
                 on_error=on_error,
                 prior_web_search_results=prior_web_search_results,
                 is_cancel_requested=lambda: self._is_remote_cancel_requested(job_key),
+                personal_knowledge_search=personal_knowledge_search,
+                shared_prompt_search=shared_prompt_search,
             )
             self._jobs[job_key] = job
 
@@ -1958,6 +2140,8 @@ def start_generation_job(
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
     prior_web_search_results: list[WebSearchResult] | None = None,
+    personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
+    shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -1972,4 +2156,6 @@ def start_generation_job(
         on_finished=on_finished,
         on_error=on_error,
         prior_web_search_results=prior_web_search_results,
+        personal_knowledge_search=personal_knowledge_search,
+        shared_prompt_search=shared_prompt_search,
     )

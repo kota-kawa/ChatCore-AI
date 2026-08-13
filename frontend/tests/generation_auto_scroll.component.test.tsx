@@ -140,6 +140,8 @@ function useGenerationHarness(scrollRef: { current: boolean }, messagesRef: { cu
     historyHasMore: false,
     historyNextBeforeId: null,
     isLoadingOlder: false,
+    personalKnowledgeEnabled: false,
+    sharedPromptsEnabled: false,
     localStorageWarningShownRef,
     messageSeqRef,
     pendingAutoScrollRef: scrollRef,

@@ -88,6 +88,8 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             cleanup_unanswered_user_messages=Mock(),
             get_seconds_until_daily_reset=Mock(return_value=60),
             is_streaming_model=Mock(return_value=False),
+            search_personal_knowledge=Mock(return_value={"status": "no_results"}),
+            search_shared_prompts=Mock(return_value={"status": "no_results"}),
             start_generation_job=Mock(),
             build_llm_stream_response=Mock(),
             iter_llm_stream_events=Mock(),
