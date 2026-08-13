@@ -4,9 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from services.context_vault_extraction import (
-    EXTRACTION_SYSTEM_PROMPT,
     MAX_EXTRACTION_ASSISTANT_RESPONSE_CHARS,
     MAX_EXTRACTION_USER_MESSAGE_CHARS,
+    build_extraction_system_prompt,
     extract_context_candidates,
     schedule_context_extraction,
 )
@@ -22,13 +22,15 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                             "fact_type": "preference",
                             "title": "Preferred editor",
                             "content": "The user prefers Vim.",
-                            "importance": 70,
+                            "evidence": "I always use Vim",
+                            "importance": 80,
                             "confidence": 0.95,
                         },
                         {
                             "fact_type": "reference",
                             "title": "Temporary research topic",
                             "content": "The user asked about Google's job openings.",
+                            "evidence": "I always use Vim",
                             "importance": 40,
                             "confidence": 0.99,
                         },
@@ -36,6 +38,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                             "fact_type": "reference",
                             "title": "API credential",
                             "content": "API key: sk-1234567890abcdefghijklmnop",
+                            "evidence": "My API key is secret.",
                             "importance": 100,
                             "confidence": 0.99,
                         },
@@ -45,7 +48,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         )
 
         candidates = extract_context_candidates(
-            "I prefer Vim. My API key is secret.",
+            "I always use Vim. My API key is secret.",
             "I will remember that you like Vim.",
             llm_json_response=llm,
         )
@@ -57,7 +60,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     "fact_type": "preference",
                     "title": "Preferred editor",
                     "content": "The user prefers Vim.",
-                    "importance": 70,
+                    "importance": 80,
                     "confidence": 0.95,
                 }
             ],
@@ -67,19 +70,46 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         self.assertEqual(len(messages), 2)
         self.assertEqual(
             json.loads(messages[1]["content"])["user_message"],
-            "I prefer Vim. My API key is secret.",
+            "I always use Vim. My API key is secret.",
         )
         self.assertEqual(
             json.loads(messages[1]["content"])["assistant_response"],
             "I will remember that you like Vim.",
         )
-        self.assertIn("most chat turns must produce no candidates", EXTRACTION_SYSTEM_PROMPT)
+        prompt = build_extraction_system_prompt("ja")
+        self.assertIn("majority of chat turns must produce no candidates", prompt)
         self.assertIn(
             "Do not turn a single question, search, mention, or pasted text into a personal interest",
-            EXTRACTION_SYSTEM_PROMPT,
+            prompt,
         )
-        self.assertIn("What are Google's current job openings?", EXTRACTION_SYSTEM_PROMPT)
-        self.assertIn("six months from now", EXTRACTION_SYSTEM_PROMPT)
+        self.assertIn("What are Google's current job openings?", prompt)
+        self.assertIn("six months from now", prompt)
+
+    def test_prompt_requires_conversation_language_and_rejects_momentary_curiosity(self):
+        for locale in ("ja", "en"):
+            with self.subTest(locale=locale):
+                prompt = build_extraction_system_prompt(locale)
+                self.assertIn("Match the reply to the language of the user's input text", prompt)
+                self.assertIn(
+                    "Never default to English because these instructions are in English.",
+                    prompt,
+                )
+                self.assertIn("Momentary curiosity is not personal context.", prompt)
+                self.assertIn("気になって", prompt)
+                self.assertIn("at most 300 characters", prompt)
+                self.assertNotIn("{language_policy}", prompt)
+                self.assertNotIn("{evidence_quote_chars}", prompt)
+
+        self.assertIn("Japanese", build_extraction_system_prompt("ja"))
+        self.assertIn("English", build_extraction_system_prompt("en"))
+
+    def test_locale_reaches_the_extraction_prompt(self):
+        llm = Mock(return_value='{"candidates": []}')
+
+        extract_context_candidates("message", "response", locale="en", llm_json_response=llm)
+
+        system_prompt = llm.call_args.args[0][0]["content"]
+        self.assertEqual(system_prompt, build_extraction_system_prompt("en"))
 
     def test_rejects_candidates_below_durability_or_confidence_thresholds(self):
         llm = Mock(
@@ -90,6 +120,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                             "fact_type": "profile",
                             "title": "Possible location",
                             "content": "The user may live in Tokyo.",
+                            "evidence": "What are Google's current job openings?",
                             "importance": 90,
                             "confidence": 0.89,
                         },
@@ -97,7 +128,8 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                             "fact_type": "reference",
                             "title": "Temporary research topic",
                             "content": "The user asked about Google's job openings.",
-                            "importance": 69,
+                            "evidence": "What are Google's current job openings?",
+                            "importance": 79,
                             "confidence": 0.99,
                         },
                     ]
@@ -113,6 +145,52 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             ),
             [],
         )
+
+    def test_rejects_candidates_without_a_verbatim_span_of_the_user_message(self):
+        def candidate_with(evidence):
+            return json.dumps(
+                {
+                    "candidates": [
+                        {
+                            "fact_type": "preference",
+                            "title": "深海魚への関心",
+                            "content": "ユーザーは深海魚に関心がある。",
+                            "evidence": evidence,
+                            "importance": 90,
+                            "confidence": 0.95,
+                        }
+                    ]
+                }
+            )
+
+        user_message = "深海魚って気になるんだけど、\nどんな種類がいるの？"
+        unsupported = (
+            "",
+            "ユーザーは深海魚が好きだ",
+            "深海魚が趣味です",
+            "深海魚って気になる…どんな種類",
+        )
+        for evidence in unsupported:
+            with self.subTest(evidence=evidence):
+                self.assertEqual(
+                    extract_context_candidates(
+                        user_message,
+                        "深海魚には多くの種類があります。",
+                        llm_json_response=Mock(return_value=candidate_with(evidence)),
+                    ),
+                    [],
+                )
+
+        # 改行や全角半角の違いを跨いでも、本文中の実在する一節なら通過する。
+        supported = extract_context_candidates(
+            user_message,
+            "深海魚には多くの種類があります。",
+            llm_json_response=Mock(
+                return_value=candidate_with("深海魚って気になるんだけど、 どんな種類がいるの？")
+            ),
+        )
+        self.assertEqual(len(supported), 1)
+        self.assertNotIn("evidence", supported[0])
 
     def test_bounds_source_text_before_calling_the_extraction_model(self):
         llm = Mock(return_value='{"candidates": []}')
@@ -206,6 +284,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 assistant_message_id=9,
                 user_message="We use FastAPI.",
                 assistant_response="Understood.",
+                locale="en",
                 extractor=extractor,
                 store_candidates=store,
             )
@@ -216,7 +295,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
 
         submitted[0]()
 
-        extractor.assert_called_once_with("We use FastAPI.", "Understood.")
+        extractor.assert_called_once_with("We use FastAPI.", "Understood.", locale="en")
         store.assert_called_once_with(
             42,
             candidates=extractor.return_value,
