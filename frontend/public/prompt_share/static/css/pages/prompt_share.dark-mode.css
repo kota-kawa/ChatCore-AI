@@ -846,6 +846,16 @@
   border-color: rgba(148, 163, 184, 0.18);
 }
 
+/* 詳細モーダルの作例画像は枠を持たせず、画像そのものを面として見せる
+   In the detail modal the example image carries itself: no frame, no fill behind it */
+[data-theme="dark"]
+  :where(body.prompt-share-page, .prompt-share-page)
+  .prompt-detail-media
+  .modal-reference-image {
+  background: none;
+  border: 0;
+}
+
 /* ── 閉じるボタン (詳細・共有モーダル共通) ── */
 [data-theme="dark"] .prompt-share-page .close-btn {
   background: rgba(30, 41, 59, 0.92);

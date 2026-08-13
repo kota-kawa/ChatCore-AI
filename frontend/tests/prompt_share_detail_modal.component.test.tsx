@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -97,5 +97,49 @@ describe("プロンプト詳細モーダルのMarkdown整形", () => {
     await Promise.resolve();
 
     expect(writeText).toHaveBeenCalledWith("# 出力形式\n\n**箇条書き**でまとめてください。");
+  });
+});
+
+describe("プロンプト詳細モーダルの作例画像", () => {
+  const imageUrl = "https://example.com/sample.png";
+  const expandedViewerName = `${basePrompt.title} の作例画像`;
+
+  function renderWithImage() {
+    return renderDetailModal({ ...basePrompt, reference_image_url: imageUrl });
+  }
+
+  it("作例画像はそのまま拡大表示を開くボタンになる", () => {
+    renderWithImage();
+
+    const trigger = screen.getByRole("button", { name: "作例画像を拡大表示する" });
+    expect(trigger.querySelector("img")?.getAttribute("src")).toBe(imageUrl);
+    // 拡大表示は開くまでDOMに出さない / the viewer is absent until it is opened
+    expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
+  });
+
+  it("クリックで拡大表示を開き、閉じるボタンで元に戻る", () => {
+    renderWithImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
+    const viewer = screen.getByRole("dialog", { name: expandedViewerName });
+    expect(viewer.querySelector("img")?.getAttribute("src")).toBe(imageUrl);
+
+    fireEvent.click(screen.getByRole("button", { name: "拡大表示を閉じる" }));
+    expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
+  });
+
+  it("拡大表示中のEscapeは拡大だけを閉じ、詳細モーダル側へは伝えない", () => {
+    renderWithImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
+    const viewer = screen.getByRole("dialog", { name: expandedViewerName });
+
+    // fireEventはpreventDefaultされるとfalseを返す。詳細モーダルのEscape処理は
+    // defaultPreventedを見て中断するため、モーダルごと閉じてしまうことはない
+    // fireEvent returns false when preventDefault ran; the modal's Escape handler bails on
+    // defaultPrevented, so the whole modal does not close behind the viewer
+    const notPrevented = fireEvent.keyDown(viewer, { key: "Escape" });
+    expect(notPrevented).toBe(false);
+    expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
   });
 });
