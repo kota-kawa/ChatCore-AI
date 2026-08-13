@@ -145,6 +145,7 @@ class ChatPostUseCase:
                 assistant_message_id=assistant_message_id,
                 user_message=user_message,
                 assistant_response=assistant_response,
+                locale=self.locale,
             )
         except Exception:
             self.deps.logger.warning(
