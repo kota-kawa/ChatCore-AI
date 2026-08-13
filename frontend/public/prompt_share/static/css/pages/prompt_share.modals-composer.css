@@ -735,23 +735,108 @@
   line-height: 1.7;
 }
 
-/* 作例メディアは本文の上に置くため、高さを抑えて本文の開始位置を押し下げない。
+/* 作例メディアは「見て確かめる」ための面なので、シートの縦幅を大きく使って表示する。
    画像は実寸比のまま中央に置き、余白を letterbox で埋めない
-   Reference media sits above the body with a capped height so it does not push the
-   body down; the image keeps its aspect ratio and is centred rather than letterboxed */
+   Reference media is meant to be looked at, so it claims a generous share of the sheet
+   height; the image keeps its aspect ratio and is centred rather than letterboxed */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-media .modal-reference-image {
+  position: relative;
   display: flex;
+  width: 100%;
   justify-content: center;
+  padding: 0;
   border: 0;
+  border-radius: 12px;
   background: none;
+  cursor: zoom-in;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-media .modal-reference-image img {
   width: auto;
   max-width: 100%;
-  max-height: clamp(140px, 18vh, 220px);
+  max-height: clamp(220px, 50vh, 620px);
   border-radius: 12px;
   object-fit: contain;
+}
+
+/* 拡大できることを示すバッジ。ホバー・フォーカス時だけ濃くする
+   The badge hints the image is expandable; it only firms up on hover and focus */
+:where(body.prompt-share-page, .prompt-share-page) .modal-reference-image__zoom {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #ffffff;
+  font-size: 0.85rem;
+  opacity: 0.72;
+  transition: opacity 0.18s ease, background 0.18s ease;
+  pointer-events: none;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .modal-reference-image:hover .modal-reference-image__zoom,
+:where(body.prompt-share-page, .prompt-share-page)
+  .modal-reference-image:focus-visible
+  .modal-reference-image__zoom {
+  background: rgba(15, 23, 42, 0.78);
+  opacity: 1;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .modal-reference-image:focus-visible {
+  outline: 2px solid var(--pd-accent, #1a73e8);
+  outline-offset: 3px;
+}
+
+/* 拡大表示。詳細シート（transform を持つ .post-modal-content）が包含ブロックになるため、
+   シート全面を覆う。スクロール領域の overflow には切り取られない
+   The viewer covers the whole detail sheet: .post-modal-content carries a transform and
+   therefore acts as the containing block, so the scroller's overflow does not clip it */
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2.4rem);
+  background: rgba(12, 18, 28, 0.86);
+  cursor: zoom-out;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer__image {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  object-fit: contain;
+  cursor: default;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer__close {
+  position: absolute;
+  top: clamp(0.6rem, 1.6vw, 1.1rem);
+  right: clamp(0.6rem, 1.6vw, 1.1rem);
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer__close:hover,
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer__close:focus-visible {
+  background: rgba(15, 23, 42, 0.95);
 }
 
 /* 入出力例は1枚のパネルにまとめ、中を2列カードに割る

@@ -40,3 +40,23 @@ test("author names do not gain an underline on hover in cards or the detail moda
     /\.prompt-detail-author:hover span\s*\{[\s\S]*?text-decoration:\s*none;/,
   );
 });
+
+// 作例画像は「見て確かめる」ための面なので、シートの縦幅を大きく使えるようにしておく。
+// The example image is meant to be looked at, so it must keep a generous share of the sheet height.
+test("the detail modal's example image keeps a large display height", () => {
+  const imageRule = promptShareModalCss.match(
+    /\.prompt-detail-media \.modal-reference-image img\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(imageRule, "the detail modal must style its example image");
+
+  const maxHeight = imageRule[1].match(/max-height:\s*clamp\(\s*(\d+)px\s*,\s*(\d+)vh\s*,\s*(\d+)px\s*\)/);
+  assert.ok(maxHeight, "the example image height must be a clamp() so it scales with the viewport");
+  assert.ok(
+    Number(maxHeight[1]) >= 200,
+    "the smallest example image height must stay readable",
+  );
+  assert.ok(
+    Number(maxHeight[2]) >= 40,
+    "the example image must claim a large share of the viewport height",
+  );
+});

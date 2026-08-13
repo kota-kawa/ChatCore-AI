@@ -20,6 +20,7 @@ import {
   normalizeSkillResources
 } from "../../scripts/prompt_share/skill_resources";
 import type { PromptRecord } from "./prompt_card";
+import { PromptShareDetailImage } from "./prompt_share_detail_image";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -341,21 +342,12 @@ export function PromptShareDetailModal({
               {/* 作例メディアはURLが存在するプロンプトにのみ表示する（現状は画像プレビュー対応） */}
               {/* Reference media is only rendered when the prompt has a URL (currently image preview) */}
               {detailPrompt?.reference_image_url ? (
-                <aside id="modalReferenceImageGroup" className="prompt-detail-media" aria-label={t("promptShare.exampleMedia")}>
-                  <div className="prompt-detail-section__header">
-                    <div>
-                      <span className="prompt-detail-section__label">{t("promptShare.exampleMedia")}</span>
-                      <span className="prompt-detail-section__meta">{t("promptShare.generatedExampleAttachment")}</span>
-                    </div>
-                  </div>
-                  <div className="modal-reference-image">
-                    <img
-                      id="modalReferenceImage"
-                      src={detailPrompt.reference_image_url}
-                      alt={t("promptShare.exampleImageAlt", { title: detailPrompt.title })}
-                    />
-                  </div>
-                </aside>
+                <PromptShareDetailImage
+                  imageUrl={detailPrompt.reference_image_url}
+                  title={detailPrompt.title}
+                  mediaLabel={t("promptShare.exampleMedia")}
+                  mediaHelperText={t("promptShare.generatedExampleAttachment")}
+                />
               ) : null}
 
               <article

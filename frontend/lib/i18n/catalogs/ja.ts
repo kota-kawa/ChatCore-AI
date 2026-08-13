@@ -633,6 +633,8 @@ export const jaMessages = {
   "promptShare.mute": "ミュート",
   "promptShare.report": "報告する",
   "promptShare.exampleImageAlt": "{title} の作例画像",
+  "promptShare.expandImage": "作例画像を拡大表示する",
+  "promptShare.closeExpandedImage": "拡大表示を閉じる",
   "promptShare.commentTooltip": "コメントを見る・投稿する",
   "promptShare.likeTooltip": "このプロンプトにいいね",
   "promptShare.removeFromChat": "チャットで使う設定を解除",
