@@ -26,6 +26,7 @@ from services.llm import (
     LlmServiceError,
 )
 from services.request_models import ChatMessageRequest
+from services.selected_reference_context import augment_messages_with_selected_references
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
     combine_web_search_results,
@@ -570,6 +571,27 @@ class ChatPostUseCase:
                 retry_after=deps.get_seconds_until_daily_reset(),
             )
 
+        # 選択されたメモ／共有プロンプトは、モデルがツールを呼ぶかどうかに任せず、
+        # 生成開始前に必ず検索して参照文脈へ入れる。ツール自体も追加検索用に残す。
+        # Always load user-selected memo/shared-prompt sources before generation instead
+        # of relying on the model to decide whether to call their tools. Keep the tools
+        # available as well so the model can retry with narrower keywords when needed.
+        personal_knowledge_search = (
+            partial(deps.search_personal_knowledge, user_id)
+            if use_personal_knowledge and user_id is not None
+            else None
+        )
+        shared_prompt_search = deps.search_shared_prompts if use_shared_prompts else None
+        conversation_messages = await run_blocking(
+            partial(
+                augment_messages_with_selected_references,
+                query=user_message,
+                personal_knowledge_search=personal_knowledge_search,
+                shared_prompt_search=shared_prompt_search,
+            ),
+            conversation_messages,
+        )
+
         # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
         # Start a background generation job if the model supports streaming
         if deps.is_streaming_model(model):
@@ -641,18 +663,6 @@ class ChatPostUseCase:
                     chat_room_id,
                     "assistant",
                 )
-
-            # メモ/マイコンテキストは本人のデータなので、ログイン中のリクエストにだけ渡す。
-            # Memos and My Context belong to the signed-in owner, so the lookup is only
-            # wired up for authenticated requests.
-            personal_knowledge_search = (
-                partial(deps.search_personal_knowledge, user_id)
-                if use_personal_knowledge and user_id is not None
-                else None
-            )
-            # 共有プロンプトは公開データなので、ゲストのリクエストでも検索できる。
-            # Shared prompts are public, so guest requests can search them too.
-            shared_prompt_search = deps.search_shared_prompts if use_shared_prompts else None
 
             try:
                 job = deps.start_generation_job(
