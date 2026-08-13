@@ -204,6 +204,9 @@ class BuildMemoEditMessagesTestCase(unittest.TestCase):
         self.assertIn("the part that states the user's request or instruction", system_content)
         self.assertIn("larger share", system_content)
         self.assertIn("saved interface language (English)", system_content)
+        self.assertIn("the top-level description, the step description, a new title", system_content)
+        self.assertIn("newly written memo content", system_content)
+        self.assertIn("Keep existing memo text in its original language", system_content)
 
 
 if __name__ == "__main__":
