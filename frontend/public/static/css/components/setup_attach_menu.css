@@ -1,0 +1,200 @@
+/* 入力欄のクリップボタンから開く追加メニュー（メモ／共有プロンプト／ファイル添付） */
+/* Add menu opened from the composer's paperclip button (memo / shared prompt / file attach) */
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__list {
+  position: absolute;
+  /* 入力欄は画面下寄りなので上方向へ開く / The composer sits low on the page, so the menu opens upward */
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 184px;
+  max-width: min(280px, calc(100vw - 32px));
+  display: none;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  transform-origin: bottom right;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__list.is-open {
+  display: flex;
+  animation: setupAttachMenuOpen 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes setupAttachMenuOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .setup-attach-menu__list.is-open {
+    animation: none;
+  }
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 38px;
+  padding: 0.5rem 0.85rem;
+  border: none;
+  background: transparent;
+  color: #1c1c1e;
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:not(:first-child) {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:hover:not(:disabled),
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:focus-visible {
+  outline: 2px solid rgba(25, 195, 125, 0.7);
+  outline-offset: -2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__icon {
+  flex-shrink: 0;
+  font-size: 0.95em;
+  color: #0f766e;
+}
+
+/* ダークテーマ / Dark theme */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__list {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(17, 24, 39, 0.98);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(2, 6, 23, 0.46),
+    0 0 0 0.5px rgba(148, 163, 184, 0.1);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:not(:first-child) {
+  border-top-color: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:hover:not(:disabled),
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__icon {
+  color: #5eead4;
+}
+
+/* 参照モードが有効な項目 / The entry whose lookup mode is switched on */
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item.is-active {
+  color: #0f766e;
+  font-weight: 600;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__check {
+  margin-left: auto;
+  font-size: 0.95em;
+  color: #0f766e;
+}
+
+/* 入力欄の中に出す「メモ参照中」チップ / The "using memos" chip shown inside the composer */
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.28rem 0.5rem 0.28rem 0.6rem;
+  border: 1px solid rgba(13, 148, 136, 0.28);
+  border-radius: var(--radius-full, 999px);
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__icon {
+  flex-shrink: 0;
+  font-size: 0.9em;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__remove:hover,
+:where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__remove:focus-visible {
+  background: rgba(13, 148, 136, 0.18);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item.is-active,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__check {
+  color: #5eead4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-knowledge-chip {
+  border-color: rgba(94, 234, 212, 0.32);
+  background: rgba(45, 212, 191, 0.14);
+  color: #5eead4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__remove:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-knowledge-chip__remove:focus-visible {
+  background: rgba(94, 234, 212, 0.22);
+}

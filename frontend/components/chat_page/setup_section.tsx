@@ -16,6 +16,7 @@ import {
   MAX_ATTACHED_FILES,
   getAttachmentIconClass,
 } from "../../lib/chat_page/file_attachments";
+import { SetupAttachMenu } from "./setup_attach_menu";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useTaskReorderDrag } from "../../hooks/chat_page/use_task_reorder_drag";
 import type { NormalizedTask } from "../../lib/chat_page/types";
@@ -192,6 +193,10 @@ function SetupSectionComponent() {
     loggedIn,
     setupInfo,
     temporaryModeEnabled,
+    personalKnowledgeEnabled,
+    setPersonalKnowledgeEnabled,
+    sharedPromptsEnabled,
+    setSharedPromptsEnabled,
     storedSetupStateLoaded,
     selectedModel,
     modelMenuOpen,
@@ -545,6 +550,41 @@ function SetupSectionComponent() {
               </div>
             )}
 
+            {/* メモ参照モードが有効なことを入力欄の中で示し、その場で解除できるようにする */}
+            {/* Show the memo lookup mode inside the composer, with a way to switch it off there */}
+            {(personalKnowledgeEnabled || sharedPromptsEnabled) && (
+              <div className="setup-knowledge-chip-row">
+                {personalKnowledgeEnabled && (
+                  <span className="setup-knowledge-chip">
+                    <i className="bi bi-journal-text setup-knowledge-chip__icon" aria-hidden="true"></i>
+                    <span className="setup-knowledge-chip__label">{t("home.attachMenu.memoActive")}</span>
+                    <button
+                      type="button"
+                      className="setup-knowledge-chip__remove"
+                      aria-label={t("home.attachMenu.memoTurnOff")}
+                      onClick={() => setPersonalKnowledgeEnabled(false)}
+                    >
+                      <i className="bi bi-x" aria-hidden="true"></i>
+                    </button>
+                  </span>
+                )}
+                {sharedPromptsEnabled && (
+                  <span className="setup-knowledge-chip">
+                    <i className="bi bi-chat-square-quote setup-knowledge-chip__icon" aria-hidden="true"></i>
+                    <span className="setup-knowledge-chip__label">{t("home.attachMenu.sharedPromptActive")}</span>
+                    <button
+                      type="button"
+                      className="setup-knowledge-chip__remove"
+                      aria-label={t("home.attachMenu.sharedPromptTurnOff")}
+                      onClick={() => setSharedPromptsEnabled(false)}
+                    >
+                      <i className="bi bi-x" aria-hidden="true"></i>
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="setup-info-input-area">
               {/* 非表示のfile inputをボタン経由でプログラム的に開く / Hidden file input triggered programmatically via the attach button */}
               <input
@@ -609,17 +649,18 @@ function SetupSectionComponent() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                className="setup-attach-btn"
-                aria-label={t("home.attach")}
-                data-tooltip={t("home.attach")}
-                data-tooltip-placement="top"
-                disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <i className="bi bi-paperclip" aria-hidden="true"></i>
-              </button>
+              {/* クリップボタンは即座にファイル選択を開かず、追加メニューを開く */}
+              {/* The paperclip opens the add menu instead of jumping straight to the file picker */}
+              <SetupAttachMenu
+                disabled={isChatLaunching}
+                fileItemDisabled={attachedFiles.length >= MAX_ATTACHED_FILES}
+                memoLookupEnabled={personalKnowledgeEnabled}
+                memoItemDisabled={!loggedIn}
+                sharedPromptLookupEnabled={sharedPromptsEnabled}
+                onToggleMemoLookup={() => setPersonalKnowledgeEnabled((previous) => !previous)}
+                onToggleSharedPromptLookup={() => setSharedPromptsEnabled((previous) => !previous)}
+                onSelectFile={() => fileInputRef.current?.click()}
+              />
 
               <button
                 type="button"

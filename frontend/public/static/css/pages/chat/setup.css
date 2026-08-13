@@ -257,8 +257,17 @@
   grid-column: 3;
 }
 
-:where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
+/* クリップボタンはメニューのラッパー越しに配置されるので、グリッド位置はラッパーが持つ */
+/* The paperclip now sits inside the menu wrapper, so the wrapper owns the grid slot */
+:where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-menu {
   grid-column: 2;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   --chat-button-base: #059669;
   --chat-button-accent: #047857;
   --chat-button-shadow-color: rgba(5, 150, 105, 0.28);

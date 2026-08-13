@@ -179,6 +179,8 @@ type UseHomePageGenerationActionsParams = {
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
   isLoadingOlder: boolean;
+  personalKnowledgeEnabled: boolean;
+  sharedPromptsEnabled: boolean;
   localStorageWarningShownRef: MutableRefObject<boolean>;
   messageSeqRef: MutableRefObject<number>;
   pendingAutoScrollRef: MutableRefObject<boolean>;
@@ -204,6 +206,8 @@ export function useHomePageGenerationActions({
   historyHasMore,
   historyNextBeforeId,
   isLoadingOlder,
+  personalKnowledgeEnabled,
+  sharedPromptsEnabled,
   localStorageWarningShownRef,
   messageSeqRef,
   pendingAutoScrollRef,
@@ -861,6 +865,62 @@ export function useHomePageGenerationActions({
               };
             });
           });
+          return;
+        }
+
+        if (parsed.event === "shared_prompt_search_started") {
+          updateThinkingStatus(
+            localize("共有プロンプトを検索しています", "Searching shared prompts"),
+            "web-search",
+          );
+          return;
+        }
+
+        if (parsed.event === "shared_prompt_search_completed") {
+          const promptCount = typeof parsed.data.prompt_count === "number" ? parsed.data.prompt_count : 0;
+          updateThinkingStatus(
+            promptCount > 0
+              ? localize("見つかった共有プロンプトを読み込んでいます", "Reading the shared prompts that matched")
+              : localize("該当する共有プロンプトはありませんでした。回答を作成しています", "No shared prompt matched. Preparing an answer"),
+            promptCount > 0 ? "web-search" : "generating",
+          );
+          return;
+        }
+
+        if (parsed.event === "shared_prompt_search_failed") {
+          updateThinkingStatus(
+            localize("共有プロンプトの検索に失敗しました。回答を作成しています", "Shared prompt search failed. Preparing an answer"),
+            "generating",
+          );
+          return;
+        }
+
+        if (parsed.event === "personal_knowledge_search_started") {
+          updateThinkingStatus(
+            localize("メモとマイコンテキストを検索しています", "Searching your memos and My Context"),
+            "web-search",
+          );
+          return;
+        }
+
+        if (parsed.event === "personal_knowledge_search_completed") {
+          const memoCount = typeof parsed.data.memo_count === "number" ? parsed.data.memo_count : 0;
+          const factCount =
+            typeof parsed.data.context_fact_count === "number" ? parsed.data.context_fact_count : 0;
+          updateThinkingStatus(
+            memoCount + factCount > 0
+              ? localize("見つかったメモを読み込んでいます", "Reading the notes that matched")
+              : localize("該当するメモはありませんでした。回答を作成しています", "No notes matched. Preparing an answer"),
+            memoCount + factCount > 0 ? "web-search" : "generating",
+          );
+          return;
+        }
+
+        if (parsed.event === "personal_knowledge_search_failed") {
+          updateThinkingStatus(
+            localize("メモの検索に失敗しました。回答を作成しています", "Note search failed. Preparing an answer"),
+            "generating",
+          );
           return;
         }
 
@@ -1525,6 +1585,8 @@ export function useHomePageGenerationActions({
               message,
               chat_room_id: roomId,
               model,
+              use_personal_knowledge: personalKnowledgeEnabled,
+              use_shared_prompts: sharedPromptsEnabled,
               attached_files:
                 attachedFiles?.map((f) => ({
                   name: f.name,
@@ -1645,6 +1707,8 @@ export function useHomePageGenerationActions({
       currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      personalKnowledgeEnabled,
+      sharedPromptsEnabled,
       recoverInitialGenerationStream,
       refreshActivePath,
       releaseGeneration,
@@ -1753,6 +1817,8 @@ export function useHomePageGenerationActions({
               new_message: newMessage,
               trailing_user_count: trailingUserCount,
               model,
+              use_personal_knowledge: personalKnowledgeEnabled,
+              use_shared_prompts: sharedPromptsEnabled,
             }),
             signal: generation.abortController.signal,
           },
@@ -1820,6 +1886,8 @@ export function useHomePageGenerationActions({
       currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      personalKnowledgeEnabled,
+      sharedPromptsEnabled,
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
@@ -1887,7 +1955,12 @@ export function useHomePageGenerationActions({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
-            body: JSON.stringify({ chat_room_id: roomId, model }),
+            body: JSON.stringify({
+              chat_room_id: roomId,
+              model,
+              use_personal_knowledge: personalKnowledgeEnabled,
+              use_shared_prompts: sharedPromptsEnabled,
+            }),
             signal: generation.abortController.signal,
           },
           { timeoutMs: 0 }
@@ -1963,6 +2036,8 @@ export function useHomePageGenerationActions({
       currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      personalKnowledgeEnabled,
+      sharedPromptsEnabled,
       refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,

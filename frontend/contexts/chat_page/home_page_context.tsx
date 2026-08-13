@@ -12,6 +12,8 @@ type HomePageUiContextValue = Pick<
   | "isChatLaunching"
   | "setupInfo"
   | "temporaryModeEnabled"
+  | "personalKnowledgeEnabled"
+  | "sharedPromptsEnabled"
   | "storedSetupStateLoaded"
   | "selectedModel"
   | "modelMenuOpen"
@@ -22,6 +24,8 @@ type HomePageUiContextValue = Pick<
   | "chatHeaderModelSelectRef"
   | "setSetupInfo"
   | "setTemporaryModeEnabled"
+  | "setPersonalKnowledgeEnabled"
+  | "setSharedPromptsEnabled"
   | "setSelectedModel"
   | "setModelMenuOpen"
   | "setChatHeaderModelMenuOpen"
@@ -155,6 +159,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       isChatLaunching: controller.isChatLaunching,
       setupInfo: controller.setupInfo,
       temporaryModeEnabled: controller.temporaryModeEnabled,
+      personalKnowledgeEnabled: controller.personalKnowledgeEnabled,
+      sharedPromptsEnabled: controller.sharedPromptsEnabled,
       storedSetupStateLoaded: controller.storedSetupStateLoaded,
       selectedModel: controller.selectedModel,
       modelMenuOpen: controller.modelMenuOpen,
@@ -165,6 +171,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       chatHeaderModelSelectRef: controller.chatHeaderModelSelectRef,
       setSetupInfo: controller.setSetupInfo,
       setTemporaryModeEnabled: controller.setTemporaryModeEnabled,
+      setPersonalKnowledgeEnabled: controller.setPersonalKnowledgeEnabled,
+      setSharedPromptsEnabled: controller.setSharedPromptsEnabled,
       setSelectedModel: controller.setSelectedModel,
       setModelMenuOpen: controller.setModelMenuOpen,
       setChatHeaderModelMenuOpen: controller.setChatHeaderModelMenuOpen,
@@ -178,6 +186,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.isChatLaunching,
       controller.setupInfo,
       controller.temporaryModeEnabled,
+      controller.personalKnowledgeEnabled,
+      controller.sharedPromptsEnabled,
       controller.storedSetupStateLoaded,
       controller.selectedModel,
       controller.modelMenuOpen,
@@ -188,6 +198,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.chatHeaderModelSelectRef,
       controller.setSetupInfo,
       controller.setTemporaryModeEnabled,
+      controller.setPersonalKnowledgeEnabled,
+      controller.setSharedPromptsEnabled,
       controller.setSelectedModel,
       controller.setModelMenuOpen,
       controller.setChatHeaderModelMenuOpen,

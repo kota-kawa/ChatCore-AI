@@ -46,10 +46,12 @@ test("setup composer keeps its actions in a row below the text, not on top of it
     /\.setup-info-input-area \.setup-send-btn\s*\{[^}]*?grid-column:\s*3\s*;/,
     "the send button belongs in the action row",
   );
+  // クリップボタンは追加メニューのラッパーに包まれているため、列を占めるのはラッパー側。
+  // The paperclip is wrapped by the add menu, so the wrapper is what occupies the column.
   assert.match(
     baseSetupCss,
-    /\.setup-info-input-area \.setup-attach-btn\s*\{[^}]*?grid-column:\s*2\s*;/,
-    "the attachment button belongs in the action row",
+    /\.setup-info-input-area \.setup-attach-menu\s*\{[^}]*?grid-column:\s*2\s*;/,
+    "the attachment menu belongs in the action row",
   );
   assert.match(
     baseSetupCss,
@@ -59,7 +61,7 @@ test("setup composer keeps its actions in a row below the text, not on top of it
 
   for (const [name, css] of [
     ["send", baseSetupCss.match(/\.setup-info-input-area \.setup-send-btn\s*\{[^}]*\}/)?.[0]],
-    ["attach", baseSetupCss.match(/\.setup-info-input-area \.setup-attach-btn\s*\{[^}]*\}/)?.[0]],
+    ["attach", baseSetupCss.match(/\.setup-info-input-area \.setup-attach-menu\s*\{[^}]*\}/)?.[0]],
     [
       "toggle",
       baseSetupCss.match(/\.setup-info-input-area \.chat-save-mode-control\s*\{[^}]*\}/)?.[0],
