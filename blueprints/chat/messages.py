@@ -32,6 +32,8 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.chat_context import build_context_messages
+from services.personal_knowledge import search_personal_knowledge_for_tool
+from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.web_search import (
     deserialize_web_search_results,
     extract_prior_web_search_results,
@@ -1130,6 +1132,8 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             cleanup_unanswered_user_messages=_cleanup_unanswered_user_messages,
             get_seconds_until_daily_reset=get_seconds_until_daily_reset,
             is_streaming_model=is_streaming_model,
+            search_personal_knowledge=search_personal_knowledge_for_tool,
+            search_shared_prompts=search_shared_prompts_for_tool,
             start_generation_job=start_generation_job,
             build_llm_stream_response=_build_llm_stream_response,
             iter_llm_stream_events=_iter_llm_stream_events,
@@ -1199,6 +1203,10 @@ async def chat_regenerate(
 
     chat_room_id_raw = data.get("chat_room_id")
     model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
+    # 再生成でも、送信時と同じようにメモ/マイコンテキストを参照できるようにする。
+    # Regeneration consults memos and My Context on the same terms as the original send.
+    use_personal_knowledge = bool(data.get("use_personal_knowledge"))
+    use_shared_prompts = bool(data.get("use_shared_prompts"))
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
@@ -1399,6 +1407,14 @@ async def chat_regenerate(
                 # clean up; running the cleanup would delete an existing message.
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
+                personal_knowledge_search=(
+                    partial(search_personal_knowledge_for_tool, user_id)
+                    if use_personal_knowledge and user_id is not None
+                    else None
+                ),
+                shared_prompt_search=(
+                    search_shared_prompts_for_tool if use_shared_prompts else None
+                ),
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1498,6 +1514,10 @@ async def chat_edit_and_regenerate(
     new_message_raw = data.get("new_message")
     model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
     trailing_user_count_raw = data.get("trailing_user_count")
+    # 編集して再生成する場合も、送信時と同じようにメモ/マイコンテキストを参照できるようにする。
+    # Editing and regenerating consults memos and My Context on the same terms as the original send.
+    use_personal_knowledge = bool(data.get("use_personal_knowledge"))
+    use_shared_prompts = bool(data.get("use_shared_prompts"))
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
@@ -1804,6 +1824,14 @@ async def chat_edit_and_regenerate(
                 ),
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
+                personal_knowledge_search=(
+                    partial(search_personal_knowledge_for_tool, user_id)
+                    if use_personal_knowledge and user_id is not None
+                    else None
+                ),
+                shared_prompt_search=(
+                    search_shared_prompts_for_tool if use_shared_prompts else None
+                ),
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
