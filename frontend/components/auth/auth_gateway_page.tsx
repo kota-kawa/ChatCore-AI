@@ -1,4 +1,4 @@
-import { Outfit } from "next/font/google";
+import localFont from "next/font/local";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 import { ensureCsrfProtection } from "../../scripts/core/csrf";
@@ -23,11 +23,12 @@ import type { AuthStep, EmailAuthFlow, PasskeySetupProvider } from "./auth_gatew
 import { useTranslation } from "../../contexts/locale_context";
 import { buildGoogleLoginUrl, getPostAuthRedirectPath, getSearchParams } from "./auth_gateway_modules/url_utils";
 
-// 認証ページで使用するフォントの設定（Google Fonts）
-// Font configuration for the auth page (Google Fonts)
-const authHeadingFont = Outfit({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// 認証ページで使用するフォントの設定（Outfit をセルフホストし、ビルド時の外部フェッチを避ける）
+// Font configuration for the auth page (self-hosted Outfit to avoid build-time external fetches)
+const authHeadingFont = localFont({
+  src: "../../assets/fonts/outfit-latin-400-700.woff2",
+  weight: "400 700",
+  style: "normal",
   display: "swap"
 });
 
