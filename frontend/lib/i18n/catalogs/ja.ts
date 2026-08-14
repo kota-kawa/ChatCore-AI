@@ -817,6 +817,12 @@ export const jaMessages = {
   "lp.description": "AIチャット・プロンプト共有・メモ管理をひとつにまとめた無料のAIワークスペースです。",
   "lp.start": "無料で始める",
   "lp.learnMore": "詳しく見る",
+  "chatLp.title": "AIチャットとは | タスクボタン・生成UI・3Dビューで使うChatCore-AI",
+  "chatLp.description":
+    "ChatCore-AIのAIチャットは、よく使う指示をタスクボタンとして残し、回答をその場で動くUIや3Dビューとして受け取れます。ブラウザだけで使えて、登録もモデルの切り替えも無料です。",
+  "memoLp.title": "メモとは | ChatCore-AIのMarkdownメモ・履歴・共有",
+  "memoLp.description":
+    "ChatCore-AIのメモは、AIの回答をそのままMarkdownで残し、検索・整理・共有できるノートです。チャットから1操作で保存でき、あとから見返せます。",
   "promptShareLp.title": "プロンプト共有とは | ChatCore-AIの公開プロンプト・SKILLライブラリ",
   "promptShareLp.description":
     "ChatCore-AIのプロンプト共有は、公開されたプロンプトとSKILLをカテゴリ・形式・生成対象で絞り込んで探せるライブラリです。閲覧はアカウント不要、投稿・保存・「チャットで使う」は無料アカウントで利用できます。",
