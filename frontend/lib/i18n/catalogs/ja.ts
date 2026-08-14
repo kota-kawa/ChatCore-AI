@@ -817,6 +817,9 @@ export const jaMessages = {
   "lp.description": "AIチャット・プロンプト共有・メモ管理をひとつにまとめた無料のAIワークスペースです。",
   "lp.start": "無料で始める",
   "lp.learnMore": "詳しく見る",
+  "promptShareLp.title": "プロンプト共有とは | ChatCore-AIの公開プロンプト・SKILLライブラリ",
+  "promptShareLp.description":
+    "ChatCore-AIのプロンプト共有は、公開されたプロンプトとSKILLをカテゴリ・形式・生成対象で絞り込んで探せるライブラリです。閲覧はアカウント不要、投稿・保存・「チャットで使う」は無料アカウントで利用できます。",
   "help.title": "ヘルプセンター | ChatCore-AI",
   "help.description": "ChatCore-AIの使い方とよくある質問をまとめたヘルプセンターです。",
   "help.heading": "ヘルプセンター",

@@ -260,6 +260,8 @@ export const enMessages = {
   "shared.unavailable": "This shared content is unavailable.",
   "lp.title": "About ChatCore-AI | AI chat, prompts, and notes", "lp.description": "A free AI workspace that brings chat, reusable prompts, and notes together.",
   "lp.start": "Get started for free", "lp.learnMore": "Learn more",
+  "promptShareLp.title": "About the prompt library | ChatCore-AI shared prompts and SKILLs",
+  "promptShareLp.description": "Browse public prompts and SKILLs on ChatCore-AI, filtered by category, format, and output type. Reading needs no account; posting, saving, and using a prompt in chat are free with one.",
   "help.title": "Help Center | ChatCore-AI", "help.description": "Guides and answers to frequently asked questions about ChatCore-AI.",
   "help.heading": "Help Center", "help.quickStart": "Get started",
   "legal.toc": "Contents", "legal.japanesePrevails": "If the English translation differs from the Japanese version, the Japanese version prevails.",

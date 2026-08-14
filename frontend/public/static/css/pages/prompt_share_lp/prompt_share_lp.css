@@ -1,0 +1,378 @@
+/* prompt_share_lp.css
+   プロンプト共有の紹介ページ（/prompt_share/lp）のページエントリーポイント。
+   共通のLPシェル（ヘッダー・ボタン・FAQ・フッター）は lp.css を再利用し、
+   このファイルはこのページ固有のセクションだけを持つ。トークンは .pslp-page にスコープする。
+   Page entry point for the prompt sharing landing page (/prompt_share/lp).
+   The shared LP shell (header, buttons, FAQ, footer) is reused from lp.css; this file only
+   holds the sections unique to this page. Tokens stay scoped to .pslp-page. */
+
+.pslp-page {
+  /* 索引カードの見立て：紙の面と罫線、緑はLP共通のアクセントを引き継ぐ
+     Index-card metaphor: paper surfaces and rules, with the shared green accent */
+  --pslp-rule: rgba(24, 45, 30, 0.16);
+  --pslp-chip-bg: rgba(24, 45, 30, 0.05);
+  --pslp-mono: "SFMono-Regular", "Menlo", "Consolas", "Noto Sans Mono CJK JP", monospace;
+}
+
+:root[data-theme="dark"] .pslp-page {
+  --pslp-rule: rgba(226, 236, 228, 0.2);
+  --pslp-chip-bg: rgba(226, 236, 228, 0.07);
+}
+
+/* ---- ブランドマーク（画像を使わずCSSで描く）
+       Brand mark drawn in CSS instead of an image ---- */
+
+.pslp-page .pslp-mark {
+  background: var(--lp-green-deep);
+  border-radius: var(--radius-sm);
+  color: #ffffff;
+  font-family: var(--lp-font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  width: 30px;
+}
+
+:root[data-theme="dark"] .pslp-page .pslp-mark {
+  color: #0b1610;
+}
+
+/* ---- ヒーロー / Hero ---- */
+
+.pslp-hero {
+  background: var(--lp-paper);
+  border-bottom: 1px solid var(--lp-line);
+  padding-block: clamp(3.5rem, 8vw, 6rem);
+}
+
+.pslp-hero__inner {
+  align-items: center;
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 4rem);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+}
+
+.pslp-hero__title {
+  font-family: var(--lp-font-display);
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  margin-bottom: var(--space-5);
+}
+
+.pslp-hero__lead {
+  color: var(--lp-muted);
+  font-size: clamp(1rem, 1.6vw, 1.0625rem);
+  margin-bottom: var(--space-8);
+  max-width: 36em;
+}
+
+.pslp-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* ---- 投稿カードの見本（実際のカードと同じ情報の並びを文字だけで再現）
+       Sample prompt card: the real card's information order, rendered with text only ---- */
+
+.pslp-cardmock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pslp-cardmock__card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--lp-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: clamp(1.1rem, 2.4vw, 1.4rem);
+}
+
+.pslp-cardmock__card--secondary {
+  box-shadow: none;
+  margin-inline: clamp(0.5rem, 2vw, 1.75rem);
+  opacity: 0.9;
+}
+
+.pslp-cardmock__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pslp-cardmock__tag {
+  background: var(--pslp-chip-bg);
+  border-radius: var(--radius-full);
+  color: var(--lp-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  padding: 0.2rem 0.7rem;
+}
+
+.pslp-cardmock__tag--format {
+  background: var(--lp-green-soft);
+  color: var(--lp-green-deep);
+}
+
+.pslp-cardmock__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+}
+
+.pslp-cardmock__body {
+  border-left: 2px solid var(--lp-green-soft);
+  color: var(--lp-muted);
+  font-family: var(--pslp-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  padding-left: var(--space-3);
+  white-space: pre-line;
+}
+
+.pslp-cardmock__meta {
+  border-top: 1px solid var(--pslp-rule);
+  color: var(--lp-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-2xs);
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-3);
+}
+
+.pslp-cardmock__meta span {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.pslp-cardmock__use {
+  color: var(--lp-green-deep);
+  font-weight: 700;
+  margin-left: auto;
+}
+
+/* ---- できること / What you can do ---- */
+
+.pslp-value__grid {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pslp-value__item {
+  border-top: 2px solid var(--lp-green);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+}
+
+.pslp-value__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.pslp-value__description {
+  color: var(--lp-muted);
+  font-size: var(--text-sm);
+}
+
+.pslp-value__points {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.pslp-value__points li {
+  padding-left: 1.3em;
+  position: relative;
+}
+
+.pslp-value__points li::before {
+  color: var(--lp-green);
+  content: "―";
+  left: 0;
+  position: absolute;
+}
+
+/* ---- 対応範囲 / Scope ---- */
+
+.pslp-scope {
+  background: var(--lp-paper-tint);
+}
+
+.pslp-scope__axes {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.pslp-axis {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.25rem, 2.8vw, 1.75rem);
+}
+
+.pslp-axis__name {
+  color: var(--lp-green-deep);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: var(--space-4);
+}
+
+.pslp-axis__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.pslp-axis__item {
+  border-top: 1px solid var(--pslp-rule);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.pslp-axis__item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.pslp-axis__label {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.pslp-axis__note {
+  color: var(--lp-muted);
+  font-size: var(--text-sm);
+}
+
+.pslp-scope__categories-title,
+.pslp-scope__limits-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.pslp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.pslp-chips li {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  padding: 0.35rem 0.9rem;
+}
+
+/* 対象外を先に見せるための注記リスト / Up-front list of what is out of scope */
+.pslp-limits {
+  border-left: 3px solid var(--lp-green);
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  list-style: none;
+  padding-left: var(--space-4);
+}
+
+/* ---- 使い方・運用の2カラム / How it works and moderation, in two columns ---- */
+
+.pslp-split {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 利用フローの下に置く2カラム / Two columns placed under the flow steps */
+.pslp-split--spaced {
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+}
+
+.pslp-panel {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+.pslp-panel__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.pslp-panel__list {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.pslp-panel__list dt {
+  color: var(--lp-text);
+  font-weight: 700;
+}
+
+.pslp-panel__row {
+  border-top: 1px solid var(--pslp-rule);
+  padding-top: var(--space-3);
+}
+
+.pslp-panel__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* ---- レスポンシブ / Responsive ---- */
+
+@media (max-width: 992px) {
+  .pslp-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pslp-cardmock {
+    margin-inline: auto;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .pslp-value__grid,
+  .pslp-scope__axes,
+  .pslp-split {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pslp-hero__cta .lp-btn {
+    flex-grow: 1;
+  }
+}
