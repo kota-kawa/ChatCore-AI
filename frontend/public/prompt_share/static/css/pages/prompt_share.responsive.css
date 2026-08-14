@@ -172,26 +172,11 @@
     justify-content: center;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-footer {
-    position: sticky;
-    bottom: -1.2rem;
+  :where(body.prompt-share-page, .prompt-share-page) .composer-actions {
     flex-direction: column;
     align-items: stretch;
-    padding: 0.8rem 0.35rem calc(0.8rem + env(safe-area-inset-bottom));
-    margin: 0 -0.35rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
-    max-width: none;
-    margin-right: 0;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn,
   :where(body.prompt-share-page, .prompt-share-page) .submit-btn {
     width: 100%;
   }

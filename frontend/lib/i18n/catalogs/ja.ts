@@ -739,7 +739,6 @@ export const jaMessages = {
   "promptShare.inputPlaceholder": "例: 夏休みの思い出をテーマにした短いエッセイを書いてください。",
   "promptShare.outputPlaceholder": "例: 夏休みのある日、私は家族と一緒に海辺へ出かけました。",
   "promptShare.preparingPost": "投稿を準備中…",
-  "promptShare.draftPreserved": "閉じても入力中の下書きはこのページ内で保持されます。",
   "promptShare.resourceOptional": "追加リソース（任意）",
   "promptShare.resourceHelp": "スクリプト、参照資料、設定ファイルなどを複数追加できます。",
   "promptShare.resourceLimit": "上限 {count}件",

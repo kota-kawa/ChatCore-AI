@@ -192,6 +192,21 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(status).toHaveAttribute("aria-atomic", "true");
   });
 
+  it("下部固定のバーを持たず、投稿ボタンを入力欄の一番下に置く", () => {
+    render(<ComposerHarness />);
+
+    const form = document.getElementById("postForm");
+    expect(form).not.toBeNull();
+    expect(form?.querySelector(".composer-footer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "閉じる" })).toBeNull();
+
+    const actions = form?.lastElementChild;
+    expect(actions).toHaveClass("composer-actions");
+    expect(actions?.querySelector("button[type='submit']")).toBe(
+      screen.getByRole("button", { name: "投稿する" })
+    );
+  });
+
   it("画像アップロードをキーボードから到達できるファイル入力として提供する", async () => {
     const user = userEvent.setup();
     render(<ComposerHarness initialType="image" />);
