@@ -42,7 +42,11 @@ from .llm import (
     is_retryable_llm_error,
 )
 from .web_search import (
+    WEB_SEARCH_MAX_CONTEXT_CHARS,
+    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
     combine_web_search_results,
+    create_web_evidence_context_budget,
+    create_web_page_fetch_budget,
     get_web_search_tool_definition,
     inject_prior_web_search_context,
     is_web_search_enabled,
@@ -52,6 +56,7 @@ from .web_search import (
     serialize_web_search_result,
     with_web_search_citations,
     WebSearchQuotaExceeded,
+    WebEvidenceContextBudget,
     WebSearchResult,
 )
 from .web_search_trace import (
@@ -263,26 +268,106 @@ def _web_search_result_tool_payload(
     result: WebSearchResult,
     *,
     cached: bool = False,
+    max_chars: int = WEB_SEARCH_MAX_CONTEXT_CHARS,
 ) -> dict[str, Any]:
-    return {
+    max_chars = max(1, min(int(max_chars), WEB_SEARCH_MAX_CONTEXT_CHARS))
+    sources: list[dict[str, Any]] = []
+    for source in result.sources:
+        item: dict[str, Any] = {
+            "evidence_id": source.evidence_id,
+            "url": source.url[:320],
+            "title": source.title[:160],
+            "hostname": source.hostname[:120],
+            "age": source.age[:80],
+            "snippets": [],
+        }
+        if source.link_depth:
+            item["link_depth"] = source.link_depth
+        if source.linked_from_url:
+            item["linked_from_url"] = source.linked_from_url[:160]
+        sources.append(item)
+
+    payload: dict[str, Any] = {
         "status": "completed",
         "cached": cached,
-        "query": result.query,
-        "searched_at": result.searched_at,
+        "query": result.query[:240],
+        "searched_at": result.searched_at[:80],
         "source_count": len(result.sources),
-        "sources": [
-            {
-                "evidence_id": source.evidence_id,
-                "url": source.url,
-                "title": source.title,
-                "hostname": source.hostname,
-                "age": source.age,
-                "snippets": list(source.snippets),
-                **({"page_text": source.page_text} if source.page_text else {}),
-            }
-            for source in result.sources
-        ],
+        "sources": sources,
     }
+    detailed_count = sum(
+        1 for source in result.sources if source.snippets or source.page_text
+    )
+    base_length = len(json.dumps(payload, ensure_ascii=False))
+    per_source_budget = max(
+        0,
+        (max_chars - base_length) // max(1, detailed_count) - 32,
+    )
+    for item, source in zip(sources, result.sources):
+        remaining = per_source_budget
+        if source.snippets and remaining > 0:
+            snippet = source.snippets[0][: min(400, remaining)]
+            item["snippets"] = [snippet]
+            remaining -= len(snippet)
+        if source.page_text and remaining > 0:
+            item["page_text"] = source.page_text[:remaining]
+
+    # JSON escaping adds a small amount of overhead. Trim details, never source IDs,
+    # until the serialized tool result is within the same context budget.
+    while len(json.dumps(payload, ensure_ascii=False)) > max_chars:
+        overflow = len(json.dumps(payload, ensure_ascii=False)) - max_chars
+        changed = False
+        for item in reversed(sources):
+            page_text = item.get("page_text")
+            if isinstance(page_text, str) and page_text:
+                item["page_text"] = page_text[: max(0, len(page_text) - overflow - 8)]
+                changed = True
+                break
+            snippets = item.get("snippets")
+            if isinstance(snippets, list) and snippets:
+                item["snippets"] = []
+                changed = True
+                break
+        if not changed:
+            break
+    # Adversarial metadata can expand substantially when JSON-escaped. Remove optional
+    # fields in a stable order while preserving every server-issued evidence ID.
+    optional_fields = (
+        "linked_from_url",
+        "age",
+        "url",
+        "hostname",
+        "title",
+        "link_depth",
+        "snippets",
+    )
+    for field in optional_fields:
+        if len(json.dumps(payload, ensure_ascii=False)) <= max_chars:
+            break
+        for item in reversed(sources):
+            item.pop(field, None)
+            if len(json.dumps(payload, ensure_ascii=False)) <= max_chars:
+                break
+    if len(json.dumps(payload, ensure_ascii=False)) > max_chars:
+        payload["query"] = ""
+        payload["searched_at"] = ""
+    return payload
+
+
+def _budgeted_web_search_result_tool_payload(
+    result: WebSearchResult,
+    budget: WebEvidenceContextBudget,
+    *,
+    cached: bool = False,
+) -> dict[str, Any]:
+    limit = budget.message_limit(WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS)
+    payload = _web_search_result_tool_payload(
+        result,
+        cached=cached,
+        max_chars=limit,
+    )
+    budget.consume(len(json.dumps(payload, ensure_ascii=False)))
+    return payload
 
 
 # 同一の部屋・ユーザーで既に生成ジョブが実行中である場合に投げられる例外クラス
@@ -763,6 +848,8 @@ class ChatGenerationJob:
         suppress_next_generation_started = False
         max_steps = _get_chat_agent_max_steps()
         step_count = 0
+        page_fetch_budget = create_web_page_fetch_budget()
+        evidence_context_budget = create_web_evidence_context_budget()
 
         try:
             # ウェブ検索によるコンテキスト拡張の判定
@@ -771,6 +858,8 @@ class ChatGenerationJob:
                 current_messages,
                 self._model,
                 publish_event=self._publish,
+                page_fetch_budget=page_fetch_budget,
+                evidence_context_budget=evidence_context_budget,
             )
             current_messages = augmentation.messages
             if augmentation.result is not None:
@@ -1052,13 +1141,21 @@ class ChatGenerationJob:
                         current_messages.append(
                             _tool_result_message(
                                 tc,
-                                _web_search_result_tool_payload(cached_result, cached=True),
+                                _budgeted_web_search_result_tool_payload(
+                                    cached_result,
+                                    evidence_context_budget,
+                                    cached=True,
+                                ),
                             )
                         )
                         continue
 
                     try:
-                        result = search_brave_llm_context(query_text, freshness=freshness_text)
+                        result = search_brave_llm_context(
+                            query_text,
+                            freshness=freshness_text,
+                            page_fetch_budget=page_fetch_budget,
+                        )
                         web_search_results_by_key[search_key] = result
                         web_search_trace_steps.extend(
                             [
@@ -1084,7 +1181,10 @@ class ChatGenerationJob:
                         current_messages.append(
                             _tool_result_message(
                                 tc,
-                                _web_search_result_tool_payload(result),
+                                _budgeted_web_search_result_tool_payload(
+                                    result,
+                                    evidence_context_budget,
+                                ),
                             )
                         )
                     except WebSearchQuotaExceeded as exc:

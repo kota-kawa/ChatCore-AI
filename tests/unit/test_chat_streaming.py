@@ -19,6 +19,8 @@ from blueprints.chat.messages import (
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
+    _budgeted_web_search_result_tool_payload,
+    _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
     build_generation_key,
@@ -27,7 +29,13 @@ from services.chat_generation import (
     start_generation_job,
 )
 from services.llm import LlmConfigurationError, LlmTimeoutError
-from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearchSource
+from services.web_search import (
+    build_web_search_system_message,
+    WebEvidenceContextBudget,
+    WebSearchAugmentation,
+    WebSearchResult,
+    WebSearchSource,
+)
 from tests.helpers.request_helpers import build_request
 
 
@@ -627,6 +635,72 @@ class ChatStreamingTestCase(unittest.TestCase):
 
     # 日本語: Web検索拡張を行った際、バックグラウンド生成ジョブが検索ソース情報を応答文末に追加することを検証します。
     # English: Verify that the background generation job appends web search sources to the end of the reply.
+    def test_web_search_tool_payload_keeps_followed_sources_within_context_budget(self):
+        sources = tuple(
+            WebSearchSource(
+                url=f"https://example.com/{index}?q={'x' * 900}",
+                title="title " * 80,
+                hostname="example.com",
+                age="2026-08-14",
+                snippets=("snippet " * 300,),
+                page_text="page evidence " * 1000,
+                link_depth=min(index, 3),
+                linked_from_url=f"https://parent.example.com/{'p' * 900}",
+            )
+            for index in range(14)
+        )
+        result = WebSearchResult(
+            query="q" * 1000,
+            searched_at="s" * 1000,
+            sources=sources,
+        )
+
+        payload = _web_search_result_tool_payload(result)
+
+        self.assertLessEqual(
+            len(json.dumps(payload, ensure_ascii=False)),
+            24000,
+        )
+        self.assertEqual(payload["source_count"], 14)
+        self.assertEqual(
+            [item["evidence_id"] for item in payload["sources"]],
+            [source.evidence_id for source in sources],
+        )
+        self.assertTrue(all(item.get("page_text") for item in payload["sources"]))
+
+    def test_web_evidence_context_budget_is_shared_across_initial_and_extra_searches(self):
+        sources = tuple(
+            WebSearchSource(
+                url=f"https://example.com/{index}?q=" + "&" * 900,
+                title='\\"' * 220,
+                hostname="example.com",
+                age="2026-08-14",
+                snippets=("snippet " * 300,),
+                page_text="page evidence " * 1000,
+                link_depth=1,
+                linked_from_url="https://parent.example.com/" + "\\" * 900,
+            )
+            for index in range(14)
+        )
+        result = WebSearchResult(query="&" * 1000, searched_at="\\" * 1000, sources=sources)
+        budget = WebEvidenceContextBudget()
+
+        initial = build_web_search_system_message(
+            result,
+            max_chars=budget.message_limit(8000),
+        )["content"]
+        budget.consume(len(initial))
+        serialized_messages = [initial]
+        for _ in range(4):
+            payload = _budgeted_web_search_result_tool_payload(result, budget)
+            serialized_messages.append(json.dumps(payload, ensure_ascii=False))
+
+        self.assertLessEqual(sum(map(len, serialized_messages)), 24000)
+        self.assertEqual(budget.consumed, sum(map(len, serialized_messages)))
+        for evidence_id in (source.evidence_id for source in sources):
+            self.assertIn(evidence_id, initial)
+            self.assertTrue(all(evidence_id in message for message in serialized_messages[1:]))
+
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
         persisted_messages = []
         search_result = WebSearchResult(
@@ -694,6 +768,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                     hostname="example.com",
                     age="2026-08-02",
                     snippets=("A release fact",),
+                    page_text="Full release evidence followed from the index.",
+                    link_depth=1,
+                    linked_from_url="https://example.com/python-index",
                 ),
             ),
         )
@@ -756,6 +833,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(
             context[0]["sources"][0]["evidence_id"],
             search_result.sources[0].evidence_id,
+        )
+        self.assertEqual(context[0]["sources"][0]["link_depth"], 1)
+        self.assertEqual(
+            context[0]["sources"][0]["linked_from_url"],
+            "https://example.com/python-index",
         )
         self.assertEqual(
             context[0]["citations"][0]["evidence_id"],
@@ -856,6 +938,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                         hostname="example.com",
                         age="2026-04-30",
                         snippets=("Release detail",),
+                        page_text="Full release page",
+                        link_depth=1,
+                        linked_from_url="https://example.com/python",
                     ),
                 ),
             ),
@@ -905,6 +990,12 @@ class ChatStreamingTestCase(unittest.TestCase):
                     search_results["Python release details"].sources[0].evidence_id,
                 ],
             )
+            self.assertEqual(tool_payloads[1]["sources"][0]["page_text"], "Full release page")
+            self.assertEqual(tool_payloads[1]["sources"][0]["link_depth"], 1)
+            self.assertEqual(
+                tool_payloads[1]["sources"][0]["linked_from_url"],
+                "https://example.com/python",
+            )
             yield "検索結果を踏まえた回答"
 
         with (
@@ -917,7 +1008,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
-                side_effect=lambda query, freshness="": search_results[query],
+                side_effect=lambda query, freshness="", **_kwargs: search_results[query],
             ) as mock_search,
         ):
             job = start_generation_job(
@@ -934,6 +1025,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             [call.args[0] for call in mock_search.call_args_list],
             ["Python latest news", "Python release details"],
         )
+        self.assertIs(
+            mock_search.call_args_list[0].kwargs["page_fetch_budget"],
+            mock_search.call_args_list[1].kwargs["page_fetch_budget"],
+        )
         self.assertIn("検索結果を踏まえた回答", body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertIn("https://example.com/release", persisted_messages[0])
@@ -946,7 +1041,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages[0].count('<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'),
             2,
         )
-        self.assertIn('<span class="web-search-sources__count">5ステップ</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">6ステップ</span>', persisted_messages[0])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
@@ -1009,7 +1104,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertEqual(stream_call_count, 3)
-        mock_search.assert_called_once_with("OpenAI news", freshness="")
+        self.assertEqual(mock_search.call_args.args, ("OpenAI news",))
+        self.assertEqual(mock_search.call_args.kwargs["freshness"], "")
+        self.assertEqual(mock_search.call_args.kwargs["page_fetch_budget"].max_attempts, 10)
         self.assertIn('"cached": true', body)
         self.assertIn('<span class="web-search-sources__step-title">検索結果を再利用</span>', persisted_messages[0])
         self.assertIn('<span class="web-search-sources__step-query">OpenAI news</span>', persisted_messages[0])
@@ -1041,7 +1138,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 return
             yield "上限内で回答"
 
-        def search_side_effect(query, freshness=""):
+        def search_side_effect(query, freshness="", **_kwargs):
             nonlocal search_index
             search_index += 1
             return WebSearchResult(
@@ -1113,7 +1210,14 @@ class ChatStreamingTestCase(unittest.TestCase):
     # 日本語: Web検索失敗時、最初の応答チャンクが出力されるまで検索失敗ステータスが維持されることを検証します。
     # English: Verify that the web search failure status is kept until the first response chunk is output.
     def test_background_generation_job_keeps_web_search_failure_status_until_chunk(self):
-        def failed_augment(messages, _model, *, publish_event=None):
+        def failed_augment(
+            messages,
+            _model,
+            *,
+            publish_event=None,
+            page_fetch_budget=None,
+            evidence_context_budget=None,
+        ):
             if publish_event is not None:
                 publish_event("web_search_planning_started", {})
                 publish_event(
