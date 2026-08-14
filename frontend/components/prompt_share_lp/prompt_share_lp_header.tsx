@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 
-// プロンプト共有紹介ページのヘッダー。画像を使わないため、ブランドマークはCSSで描く
-// Header for the prompt sharing landing page; the brand mark is drawn in CSS since the page uses no images
+// プロンプト共有紹介ページのヘッダー。ブランドマークはサービス本体と同じアイコンを使う
+// Header for the prompt sharing landing page, using the same icon as the service itself
 export function PromptShareLpHeader() {
   const { locale, t } = useTranslation();
   return (
@@ -13,8 +13,10 @@ export function PromptShareLpHeader() {
           className="lp-header__brand"
           aria-label={locale === "en" ? "ChatCore-AI prompt library" : "ChatCore-AI プロンプト共有"}
         >
-          <span className="pslp-mark" aria-hidden="true">
-            P
+          <span className="lp-header__brand-mark" aria-hidden="true">
+            {/* プロンプト共有ページ本体（prompt_share_page_layout）と同じアイコン
+                The same icon the prompt sharing page itself uses */}
+            <img src="/static/chatcore-share.png" alt="" />
           </span>
           <span className="lp-header__brand-name">{locale === "en" ? "Prompt Library" : "プロンプト共有"}</span>
         </Link>

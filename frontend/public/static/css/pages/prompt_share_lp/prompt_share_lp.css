@@ -7,36 +7,70 @@
    holds the sections unique to this page. Tokens stay scoped to .pslp-page. */
 
 .pslp-page {
-  /* 索引カードの見立て：紙の面と罫線、緑はLP共通のアクセントを引き継ぐ
-     Index-card metaphor: paper surfaces and rules, with the shared green accent */
-  --pslp-rule: rgba(24, 45, 30, 0.16);
-  --pslp-chip-bg: rgba(24, 45, 30, 0.05);
+  /* 共通シェル(lp.css)のパレット変数を、プロンプト共有サービス本体と同じ青系へ差し替える。
+     変数名の "green" はシェル側の命名なのでそのまま使い、値だけを青にする。
+     色は frontend/public/prompt_share/static/css/ の実配色（#3c7fcc / #174ea6 / #dce7f3）に合わせる。
+     Repaint the shared shell palette (lp.css) in the prompt sharing service's own blues.
+     The "green" variable names belong to the shell, so only the values change here. */
+  --lp-green: #3c7fcc;
+  --lp-green-deep: #174ea6;
+  --lp-green-soft: #dce7f3;
+  --lp-ink: #163c66;
+  --lp-paper: #f8fafc;
+  --lp-paper-tint: #eef3f9;
+  --lp-text: #1f2b3a;
+  --lp-muted: #56657a;
+  --lp-line: rgba(22, 60, 102, 0.14);
+  --lp-card: #ffffff;
+  --lp-header-bg: rgba(248, 250, 252, 0.88);
+  --lp-shadow-card: 0 16px 40px rgba(22, 60, 102, 0.12);
+
+  /* 索引カードの見立て：紙の面と罫線 / Index-card metaphor: paper surfaces and rules */
+  --pslp-rule: rgba(22, 60, 102, 0.18);
+  --pslp-chip-bg: rgba(22, 60, 102, 0.06);
   --pslp-mono: "SFMono-Regular", "Menlo", "Consolas", "Noto Sans Mono CJK JP", monospace;
 }
 
 :root[data-theme="dark"] .pslp-page {
-  --pslp-rule: rgba(226, 236, 228, 0.2);
-  --pslp-chip-bg: rgba(226, 236, 228, 0.07);
+  --lp-green: #5c9ee0;
+  --lp-green-deep: #8dc0f2;
+  --lp-green-soft: rgba(92, 158, 224, 0.18);
+  --lp-ink: #0a1420;
+  --lp-paper: #0f1b28;
+  --lp-paper-tint: #14212f;
+  --lp-text: #e2eaf3;
+  --lp-muted: #9fb0c4;
+  --lp-line: rgba(226, 234, 243, 0.16);
+  --lp-card: #14212f;
+  --lp-header-bg: rgba(15, 27, 40, 0.88);
+  --lp-shadow-card: 0 16px 40px rgba(0, 0, 0, 0.4);
+
+  --pslp-rule: rgba(226, 234, 243, 0.2);
+  --pslp-chip-bg: rgba(226, 234, 243, 0.07);
 }
 
-/* ---- ブランドマーク（画像を使わずCSSで描く）
-       Brand mark drawn in CSS instead of an image ---- */
+/* シェル側が緑で固定している箇所だけ、このページの青で上書きする
+   Override the few spots where the shell hard-codes its green */
 
-.pslp-page .pslp-mark {
-  background: var(--lp-green-deep);
-  border-radius: var(--radius-sm);
-  color: #ffffff;
-  font-family: var(--lp-font-display);
-  font-size: var(--text-base);
-  font-weight: 700;
-  height: 30px;
-  line-height: 30px;
-  text-align: center;
-  width: 30px;
+.pslp-page .lp-btn--primary {
+  box-shadow: 0 10px 24px rgba(23, 78, 166, 0.28);
 }
 
-:root[data-theme="dark"] .pslp-page .pslp-mark {
-  color: #0b1610;
+:root[data-theme="dark"] .pslp-page .lp-btn--primary {
+  color: #0a1420;
+}
+
+.pslp-page .lp-final-cta {
+  color: #eef3f9;
+}
+
+.pslp-page .lp-final-cta__note {
+  color: rgba(238, 243, 249, 0.74);
+}
+
+.pslp-page .lp-btn--inverse {
+  background: #f8fafc;
+  color: #163c66;
 }
 
 /* ---- ヒーロー / Hero ---- */
