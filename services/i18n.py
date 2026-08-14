@@ -159,21 +159,17 @@ def build_response_language_policy(locale: Any = None) -> str:
     fallback_language = "English" if resolved_locale == "en" else "Japanese"
     return "\n".join(
         [
-            "Match the reply to the language of the user's input text: write the whole reply in "
-            "the language of the user's latest substantive message.",
-            "An explicit language request from the user takes priority over everything else, even "
-            "when that request is written in another language.",
-            "When a single message mixes languages (Japanese and English, for example), decide the "
-            "reply language in this order:",
-            "1. Use the language of the part that states the user's request or instruction - what "
-            "they are asking you to do. It outweighs quoted text, pasted logs, code, error "
-            "messages, file contents, and proper nouns.",
-            "2. If the request itself is mixed, use the language that accounts for the larger share "
-            "of the text the user wrote.",
-            "3. If it is still ambiguous, follow the language the user used earlier in this "
-            f"conversation, and only then fall back to the saved interface language ({fallback_language}).",
-            "Keep one language throughout a single reply. Technical terms, product names, and code "
-            "identifiers may stay in their original form and do not count as a language switch.",
+            "Write the whole reply in the language of the user's latest substantive message; this "
+            "is the language of the user's input text.",
+            "An explicit language request from the user takes priority, even when written in another language.",
+            "When a message mixes languages, decide in this order:",
+            "1. Use the language of the part that states the user's request or instruction; ignore "
+            "quoted text, pasted logs, code, error messages, file contents, and proper nouns.",
+            "2. If the request itself is mixed, use the language with the larger share of user-written text.",
+            "3. If still ambiguous, use the earlier conversation language, then the saved interface "
+            f"language ({fallback_language}).",
+            "Keep one language throughout a single reply; technical terms, product names, and code "
+            "identifiers may remain in their original form.",
             "Do not translate user-authored content unless the user asks you to.",
         ]
     )

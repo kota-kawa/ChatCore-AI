@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from services import llm
-from services.chat_context import GENERATIVE_UI_EXECUTION_CONTRACT
+from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
 
 
 def _mock_openai_response(text):
