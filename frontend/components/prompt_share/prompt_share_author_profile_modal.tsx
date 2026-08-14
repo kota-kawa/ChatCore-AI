@@ -10,8 +10,7 @@ import {
   getPromptMediaLabel,
   normalizePromptContentFormat,
   normalizePromptMediaType,
-  truncateContent,
-  truncateTitle
+  truncateContent
 } from "../../scripts/prompt_share/formatters";
 import type { PromptAuthorProfile } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
@@ -91,7 +90,9 @@ function AuthorPromptRow({
             {getPromptMediaLabel(mediaTypeValue, locale)}
           </span>
         </div>
-        <h4 className="author-profile-prompt__title">{truncateTitle(prompt.title)}</h4>
+        {/* 文字数で切らず、CSSの2行クランプに任せて幅いっぱいまで見せる */}
+        {/* No character cap here: the CSS two-line clamp lets the title use the full width */}
+        <h4 className="author-profile-prompt__title">{prompt.title}</h4>
         <p className="author-profile-prompt__content">{preview}</p>
         <div className="author-profile-prompt__meta">
           <span>

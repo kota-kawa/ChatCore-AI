@@ -35,7 +35,6 @@ type PromptEditFormState = {
 
 // 一覧カードに表示するタイトル・本文の最大文字数
 // Maximum character counts for title and content shown in list cards
-const TITLE_CHAR_LIMIT = 17;
 const CONTENT_CHAR_LIMIT = 160;
 
 // テキストを指定文字数で切り詰めてサロゲートペアを考慮する
@@ -127,14 +126,15 @@ type PromptCardProps = {
 function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
-  const truncatedTitle = truncateText(prompt.title, TITLE_CHAR_LIMIT);
   const displayContent = prompt.contentFormat === "skill" ? prompt.skillMarkdown : prompt.content;
   const truncatedContent = truncateText(displayContent, CONTENT_CHAR_LIMIT);
 
   return (
     <article className="prompt-card cc-press" data-prompt-id={promptId}>
       <div className="prompt-card__main">
-        <h3 title={prompt.title}>{truncatedTitle}</h3>
+        {/* 文字数で切らず、CSSの省略表示に任せてカード幅いっぱいまで見せる */}
+        {/* No character cap here: the CSS ellipsis lets the title use the card's full width */}
+        <h3 title={prompt.title}>{prompt.title}</h3>
         <p className="prompt-card__content" title={displayContent}>{truncatedContent}</p>
         <div className="meta">
           <span>{t("promptShare.categoryValue", { category: getCategoryLabelOrFallback(prompt.category, t("promptShare.unset"), locale) })}</span>
