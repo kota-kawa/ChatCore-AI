@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from services import http_client
+from services.chat_prompt import insert_after_leading_system_messages
 from services.llm import (
     LIGHTWEIGHT_TASK_MODEL,
     LlmServiceError,
@@ -1505,27 +1506,7 @@ def inject_prior_web_search_context(
     context_message = build_prior_web_search_system_message(prior_results)
     if context_message is None:
         return conversation_messages
-    return _insert_system_context(conversation_messages, context_message)
-
-
-def _insert_system_context(
-    conversation_messages: list[dict[str, str]],
-    context_message: dict[str, str],
-) -> list[dict[str, str]]:
-    # 既存のシステムメッセージ群の直後に検索文脈メッセージを挿入する
-    # Insert search context message right after existing system messages.
-    insert_at = 0
-    # 既存の system prompt 群の直後に検索文脈を入れる。
-    # 最初の user message より後ろに入れると、モデルによっては通常会話として扱われやすい。
-    while insert_at < len(conversation_messages):
-        if conversation_messages[insert_at].get("role") != "system":
-            break
-        insert_at += 1
-    return [
-        *conversation_messages[:insert_at],
-        context_message,
-        *conversation_messages[insert_at:],
-    ]
+    return insert_after_leading_system_messages(conversation_messages, context_message)
 
 
 def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]]:
@@ -1665,7 +1646,7 @@ def maybe_augment_messages_with_web_search(
                 },
             )
         return WebSearchAugmentation(
-            messages=_insert_system_context(
+            messages=insert_after_leading_system_messages(
                 conversation_messages,
                 {
                     "role": "system",
@@ -1709,7 +1690,7 @@ def maybe_augment_messages_with_web_search(
                 },
             )
         return WebSearchAugmentation(
-            messages=_insert_system_context(
+            messages=insert_after_leading_system_messages(
                 conversation_messages,
                 {
                     "role": "system",
@@ -1736,7 +1717,7 @@ def maybe_augment_messages_with_web_search(
                 },
             )
         return WebSearchAugmentation(
-            messages=_insert_system_context(
+            messages=insert_after_leading_system_messages(
                 conversation_messages,
                 {
                     "role": "system",
@@ -1766,7 +1747,7 @@ def maybe_augment_messages_with_web_search(
     context_message = build_web_search_system_message(result)
     if context_message is None:
         return WebSearchAugmentation(
-            messages=_insert_system_context(
+            messages=insert_after_leading_system_messages(
                 conversation_messages,
                 {
                     "role": "system",
@@ -1784,7 +1765,7 @@ def maybe_augment_messages_with_web_search(
             status="no_sources",
         )
     return WebSearchAugmentation(
-        messages=_insert_system_context(conversation_messages, context_message),
+        messages=insert_after_leading_system_messages(conversation_messages, context_message),
         result=result,
         status="completed",
     )

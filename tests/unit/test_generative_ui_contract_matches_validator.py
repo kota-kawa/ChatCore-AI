@@ -1,6 +1,6 @@
 import unittest
 
-from services.chat_context import GENERATIVE_UI_EXECUTION_CONTRACT
+from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.generative_ui import (
     MAX_ARTIFACT_CSS_CHARS,
     MAX_ARTIFACT_HEIGHT,
@@ -64,6 +64,23 @@ class GenerativeUiContractTestCase(unittest.TestCase):
         ):
             with self.subTest(limit=limit):
                 self.assertIn(str(limit), GENERATIVE_UI_EXECUTION_CONTRACT)
+
+    # 日本語: ベースプロンプトから移した3D実装要件が、最終契約にすべて保持されていることを検証します。
+    # English: Verify that every 3D implementation requirement moved from the base prompt remains in the final contract.
+    def test_contract_keeps_required_three_implementation_details(self):
+        for requirement in (
+            '"libraries":["three"]',
+            "app.clientWidth || 560",
+            "fixed visible height",
+            'document.getElementById("app")',
+            "scene, camera, light, and visible geometry",
+            "OrbitControls",
+            "loaders",
+            "URL textures",
+            "URL models",
+        ):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, GENERATIVE_UI_EXECUTION_CONTRACT)
 
     # 日本語: 禁止APIを使うと Artifact が丸ごと失われることを検証します（プロンプトで警告する理由）。
     # English: Verify a banned API costs the user the whole Artifact, which is why

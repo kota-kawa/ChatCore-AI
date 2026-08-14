@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from blueprints.chat.messages import BASE_SYSTEM_PROMPT
+from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,

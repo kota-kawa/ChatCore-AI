@@ -4,6 +4,8 @@ import html
 import math
 import re
 
+from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
+
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
 # 以前は全ての空白を1つに潰していたため、貼り付けられた Python/YAML や
@@ -61,46 +63,6 @@ ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_RECENT_TOKEN_BUDGET = RECENT_HISTORY_TOKEN_BUDGET
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 260
-
-# 小型モデルでも生成UIの要否判定と構造化出力を最後まで実行できるよう、
-# 可変コンテキストの後ろに置く短い最終契約。詳細仕様と few-shot はベース
-# プロンプトに残し、ここでは実行条件と完了条件だけを再提示する。
-# Compact final contract placed after variable system context so smaller models
-# reliably make the UI decision and finish the structured output. Detailed rules
-# and few-shot examples remain in the base prompt; this repeats only execution
-# and completion criteria.
-# 日本語: 生成UIの出力要否、Artifact形式、完了条件だけを最終出力前に再確認させる実行契約プロンプト。
-GENERATIVE_UI_EXECUTION_CONTRACT = """
-<generative_ui_execution_contract>
-This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
-
-Decision order:
-1. NONE by default, including comparisons, flows, hierarchies, calculations, procedures, and explanations.
-2. NONE when the user asked for "text only", "no UI", or "no diagrams".
-3. 3D when the latest user request explicitly asks for 3D / ３D, Three.js, a solid shape, a spatial model, an orbit, rotation, or a 3D graph.
-4. 2D when the latest user request explicitly asks for generative UI, a visualization, a diagram, a chart, a flow, a timeline, or an interactive demo. Japanese requests such as "生成UI", "可視化", "図解", "グラフ", and "フローチャート" are explicit 2D requests.
-
-When UI_MODE is 2D or 3D:
-- Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
-- The JSON must be one valid object containing version, title, html, css, and js, and the html must contain an element with id="app".
-- Do not output separate HTML, CSS, JavaScript, or JSON code blocks. The fenced Artifact is the requested deliverable.
-- Make the first render complete and purpose-built: clear visual hierarchy, deliberate spacing and typography, responsive layout, accessible contrast, and meaningful content. Reject your own draft and simplify or revise it before output if it is an empty shell, a prose card, a barely styled table, placeholder controls, or decoration unrelated to the user's subject.
-- For 3D, always include "libraries":["three"]. Use the available global THREE without imports: append a renderer canvas to `document.getElementById("app")`, and create a scene, camera, light, and visible geometry with core features only.
-- Do not explain the HTML, CSS, and JavaScript in separate code blocks instead of producing an Artifact.
-- Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, that newlines and quotes inside JSON strings are escaped correctly, and that the Artifact is compact enough to finish.
-
-The Artifact runs in an isolated sandbox with no network and no access to the page around it. An Artifact that breaks these limits is rejected and the user receives no UI at all, so treat them as hard requirements:
-- No network of any kind: fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, dynamic import(), and importScripts are all unavailable. Build the data you need directly into the code.
-- No storage or ambient state: localStorage, sessionStorage, indexedDB, caches, and document.cookie are unavailable.
-- No code from strings: eval, new Function, and setTimeout or setInterval called with a string are unavailable.
-- No access to the surrounding page: window.parent, top, opener, postMessage, and any assignment to location are unavailable.
-- No external resources: every image, font, and stylesheet must be inline, a data: URI, or an inline SVG. External URLs are stripped, and @import is removed.
-- No script, iframe, object, embed, link, meta, or base tags in html. Put JavaScript in js and CSS in css, never inside html.
-- Keep html and css within 12000 characters each and js within 18000, with roughly 36000 in total. Prefer well under those limits and narrow long data to representative examples.
-- height must be between 160 and 900.
-</generative_ui_execution_contract>
-""".strip()
-
 
 # テキストのトークン数を概算（簡易見積もり）する
 # Roughly estimate the token count of a given text

@@ -8,6 +8,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from services.chat_prompt import insert_after_leading_system_messages
+
 logger = logging.getLogger(__name__)
 
 MAX_SELECTED_REFERENCE_QUERY_CHARS = 500
@@ -126,16 +128,6 @@ def _run_lookup(
     }
 
 
-def _insert_after_system_messages(
-    messages: list[dict[str, Any]],
-    context_message: dict[str, str],
-) -> list[dict[str, Any]]:
-    insert_at = 0
-    while insert_at < len(messages) and messages[insert_at].get("role") == "system":
-        insert_at += 1
-    return [*messages[:insert_at], context_message, *messages[insert_at:]]
-
-
 def augment_messages_with_selected_references(
     messages: list[dict[str, Any]],
     *,
@@ -195,7 +187,7 @@ def augment_messages_with_selected_references(
             "</selected_reference_context>",
         ]
     )
-    return _insert_after_system_messages(
+    return insert_after_leading_system_messages(
         messages,
         {"role": "system", "content": context},
     )

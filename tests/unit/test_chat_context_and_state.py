@@ -1,15 +1,17 @@
 import unittest
 
-from blueprints.chat.messages import _build_base_system_prompt
 from services.chat_context import (
     CONTEXT_TOKEN_BUDGET,
-    GENERATIVE_UI_EXECUTION_CONTRACT,
     build_context_messages,
     build_room_summary,
     estimate_token_count,
     normalize_message_text,
     select_recent_messages,
     trim_text_to_token_budget,
+)
+from services.chat_prompt import (
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    build_base_system_prompt as _build_base_system_prompt,
 )
 
 
@@ -34,8 +36,8 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertIn("<conversation_summary>", summary)
         self.assertIn("message-0", summary)
 
-    # 日本語: build_context_messages が、システムプロンプト・要約・記憶・最新メッセージを正しい順序で組み立てることを検証します。
-    # English: Verify that build_context_messages correctly assembles system prompts, summary, memory, and recent messages in order.
+    # 日本語: build_context_messages が、すべてのシステム文脈と最新メッセージを正しい順序で組み立てることを検証します。
+    # English: Verify that build_context_messages assembles every system context and recent message in order.
     def test_build_context_messages_includes_summary_memory_and_recent_messages(self):
         context_messages = build_context_messages(
             base_system_prompt="base",
@@ -48,23 +50,25 @@ class ChatContextAndStateTestCase(unittest.TestCase):
                 {"role": "assistant", "content": "second"},
                 {"role": "user", "content": "third"},
             ],
+            project_instructions="project",
         )
 
-        # 日本語: メッセージリストの順序が正しいことを確認（ベース→プロフィール→タスク→要約→記憶→生成UI最終契約→最新）
-        # English: Confirm the message order is correct (base -> profile -> task -> summary -> memory -> final UI contract -> recent)
+        # 日本語: 順序がベース→プロフィール→プロジェクト→タスク→要約→記憶→生成UI契約→最新であることを確認します。
+        # English: Confirm base -> profile -> project -> task -> summary -> memory -> UI contract -> recent.
         self.assertEqual(context_messages[0]["content"], "base")
         self.assertEqual(context_messages[1]["content"], "profile")
-        self.assertEqual(context_messages[2]["content"], "task")
-        self.assertIn("summary text", context_messages[3]["content"])
-        self.assertIn("Kota", context_messages[4]["content"])
-        self.assertEqual(context_messages[5]["role"], "system")
+        self.assertIn("project", context_messages[2]["content"])
+        self.assertEqual(context_messages[3]["content"], "task")
+        self.assertIn("summary text", context_messages[4]["content"])
+        self.assertIn("Kota", context_messages[5]["content"])
+        self.assertEqual(context_messages[6]["role"], "system")
         self.assertEqual(
-            context_messages[5]["content"],
+            context_messages[6]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
         )
         self.assertIn(
             "An answer that ends with explanation alone is incomplete",
-            context_messages[5]["content"],
+            context_messages[6]["content"],
         )
         self.assertEqual(context_messages[-1]["content"], "third")
 

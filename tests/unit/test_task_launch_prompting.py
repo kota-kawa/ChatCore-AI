@@ -5,13 +5,13 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from blueprints.chat.messages import (
+from blueprints.chat.messages import chat
+from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
-    _build_base_system_prompt,
-    _build_user_profile_prompt,
-    chat,
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    build_base_system_prompt as _build_base_system_prompt,
+    build_user_profile_prompt as _build_user_profile_prompt,
 )
-from services.chat_context import GENERATIVE_UI_EXECUTION_CONTRACT
 from tests.helpers.request_helpers import build_request
 
 
@@ -103,17 +103,37 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Treat them as reasoning problems", BASE_SYSTEM_PROMPT)
         self.assertIn("plain confidence signal", BASE_SYSTEM_PROMPT)
 
-    # 日本語: 検索文脈が無い場合でも推論で答えるよう実行時コンテキストが促すことを検証します。
-    # English: Verify the runtime context asks for reasoning when no search context exists.
-    def test_runtime_context_prefers_reasoning_over_refusing_without_sources(self):
+    # 日本語: 検索文脈が無い場合の推論と再検索の原則が、ベースプロンプトへ一元化されていることを検証します。
+    # English: Verify that reasoning without search context and retry rules are centralized in the base prompt.
+    def test_base_prompt_centralizes_thin_evidence_search_rules(self):
+        self.assertIn("Reason from stable background", BASE_SYSTEM_PROMPT)
+        self.assertIn("only when the answer truly depends on that fact", BASE_SYSTEM_PROMPT)
+        self.assertIn(
+            "Search results that do not mention a claim do not disprove it",
+            BASE_SYSTEM_PROMPT,
+        )
+        self.assertIn("label that judgment as inference", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not stop after one weak or empty search result", BASE_SYSTEM_PROMPT)
+        self.assertIn(
+            "at least one materially different query or search angle",
+            BASE_SYSTEM_PROMPT,
+        )
+
+    # 日本語: 実行時コンテキストが検索機能固有の制約だけを補足し、判断規則を重複させないことを検証します。
+    # English: Verify that runtime context adds only capability constraints without duplicating judgment rules.
+    def test_runtime_context_keeps_web_search_capability_rules_compact(self):
         prompt = _build_base_system_prompt(locale="ja")
 
-        self.assertIn("Reason from stable background", prompt)
-        self.assertIn("only when the answer truly depends on that fact", prompt)
-        self.assertIn("Search results that do not mention a claim do not disprove it", prompt)
-        self.assertIn("label that judgment as inference", prompt)
-        self.assertIn("Do not stop after one weak or empty search result", prompt)
-        self.assertIn("at least one materially different query or search angle", prompt)
+        self.assertIn("real-time web search powered by Brave", prompt)
+        self.assertIn("search-and-review loop allows at most 10 steps", prompt)
+        self.assertIn("Never ask permission to search or fetch", prompt)
+        self.assertIn("never announce a future search or estimated", prompt)
+        self.assertIn("Without that context, do not claim current facts were verified", prompt)
+        self.assertEqual(prompt.count("Do not stop after one weak or empty search result"), 1)
+        self.assertEqual(
+            prompt.count("Search results that do not mention a claim do not disprove it"),
+            1,
+        )
 
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.
@@ -377,7 +397,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
                                             return_value="ok",
                                         ) as mock_llm:
                                             with patch("blueprints.chat.messages.logger.exception") as mock_log:
-                                                with patch("blueprints.chat.messages.datetime") as mock_dt:
+                                                with patch("services.chat_prompt.datetime") as mock_dt:
                                                     mock_dt.now.return_value.astimezone.return_value = fixed_time
                                                     response = asyncio.run(chat(request))
 
