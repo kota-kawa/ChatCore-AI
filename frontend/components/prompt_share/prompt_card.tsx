@@ -3,6 +3,7 @@ import { memo, useState, type MouseEvent } from "react";
 import MarkdownContent from "../MarkdownContent";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -83,6 +84,10 @@ function PromptCardComponent({
   // Normalize server values and set safe fallbacks for missing fields
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
   const mediaTypeValue = normalizePromptMediaType(String(prompt.media_type || ""));
+  // 既定の組み合わせ（プロンプト×テキスト）はカードから読み取れる情報なので、バッジを省いてカテゴリ名に幅を譲る
+  // The default combination (prompt x text) is already obvious from the card, so hide those badges and give the width to the category
+  const isDefaultFormat = contentFormatValue === DEFAULT_CONTENT_FORMAT;
+  const isDefaultMedia = mediaTypeValue === DEFAULT_MEDIA_TYPE;
   const promptId = prompt.clientId;
   const safeCategory = getCategoryLabelOrFallback(prompt.category, undefined, locale);
   const safeCreatedAt = formatPromptDate(prompt.created_at) || t("promptShare.dateUnavailable");
@@ -114,18 +119,22 @@ function PromptCardComponent({
             <i className="bi bi-hash"></i>
             <span>{safeCategory}</span>
           </span>
-          {/* フォーマット軸をCSSクラスに反映し、アイコンとラベルをレジストリから決定する */}
-          {/* Apply content-format class and resolve icon/label from the registry */}
-          <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${contentFormatValue}`}>
-            <i className={`bi ${getPromptFormatIconClass(contentFormatValue)}`}></i>
-            <span>{getPromptFormatLabel(contentFormatValue, locale)}</span>
-          </span>
+          {/* 既定値のバッジ（プロンプト / テキスト）は情報量がなく、狭い画面でカテゴリ名を潰すだけなので出さない */}
+          {/* Skip the default badges (prompt / text): they add no information and squeeze the category name on narrow screens */}
+          {isDefaultFormat ? null : (
+            <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${contentFormatValue}`}>
+              <i className={`bi ${getPromptFormatIconClass(contentFormatValue)}`}></i>
+              <span>{getPromptFormatLabel(contentFormatValue, locale)}</span>
+            </span>
+          )}
           {/* メディア軸を独立したバッジとして表示し、画像を生成対象として扱う */}
           {/* Render media as an independent badge, so image is a generation target rather than a post type */}
-          <span className={`prompt-card__type-pill prompt-card__type-pill--media prompt-card__type-pill--${mediaTypeValue}`}>
-            <i className={`bi ${getPromptMediaIconClass(mediaTypeValue)}`}></i>
-            <span>{getPromptMediaLabel(mediaTypeValue, locale)}</span>
-          </span>
+          {isDefaultMedia ? null : (
+            <span className={`prompt-card__type-pill prompt-card__type-pill--media prompt-card__type-pill--${mediaTypeValue}`}>
+              <i className={`bi ${getPromptMediaIconClass(mediaTypeValue)}`}></i>
+              <span>{getPromptMediaLabel(mediaTypeValue, locale)}</span>
+            </span>
+          )}
         </div>
         <span className="prompt-card__created-at">
           <i className="bi bi-calendar3"></i>
