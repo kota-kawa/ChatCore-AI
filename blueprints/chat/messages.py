@@ -32,7 +32,7 @@ from services.chat_service import (
 )
 from services.chat_context import build_context_messages
 from services.chat_prompt import (
-    BASE_SYSTEM_PROMPT,
+    BASE_SYSTEM_PROMPT as BASE_SYSTEM_PROMPT,
     build_base_system_prompt as _build_base_system_prompt,
     build_task_prompt as _build_task_prompt,
     build_user_profile_prompt as _build_user_profile_prompt,

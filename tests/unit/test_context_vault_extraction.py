@@ -89,7 +89,10 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         for locale in ("ja", "en"):
             with self.subTest(locale=locale):
                 prompt = build_extraction_system_prompt(locale)
-                self.assertIn("Match the reply to the language of the user's input text", prompt)
+                self.assertIn(
+                    "Write the whole reply in the language of the user's latest substantive message",
+                    prompt,
+                )
                 self.assertIn(
                     "Never default to English because these instructions are in English.",
                     prompt,
