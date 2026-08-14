@@ -820,7 +820,7 @@ export const jaMessages = {
   "chatLp.title": "AIチャットとは | タスクボタン・生成UI・3Dビューで使うChatCore-AI",
   "chatLp.description":
     "ChatCore-AIのAIチャットは、よく使う指示をタスクボタンとして残し、回答をその場で動くUIや3Dビューとして受け取れます。ブラウザだけで使えて、登録もモデルの切り替えも無料です。",
-  "memoLp.title": "メモとは | ChatCore-AIのMarkdownメモ・履歴・共有",
+  "memoLp.title": "メモとは | ChatCore-AIのMarkdownメモ・検索・共有",
   "memoLp.description":
     "ChatCore-AIのメモは、AIの回答をそのままMarkdownで残し、検索・整理・共有できるノートです。チャットから1操作で保存でき、あとから見返せます。",
   "promptShareLp.title": "プロンプト共有とは | ChatCore-AIの公開プロンプト・SKILLライブラリ",

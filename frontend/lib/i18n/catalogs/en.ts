@@ -262,7 +262,7 @@ export const enMessages = {
   "lp.start": "Get started for free", "lp.learnMore": "Learn more",
   "chatLp.title": "About AI chat | Task buttons, generated UI, and 3D views in ChatCore-AI",
   "chatLp.description": "ChatCore-AI chat keeps the instructions you repeat as task buttons and can answer with a working UI or a 3D view instead of plain text. It runs in the browser, and switching models is free.",
-  "memoLp.title": "About memos | Markdown notes, history, and sharing in ChatCore-AI",
+  "memoLp.title": "About memos | Markdown notes, search, and sharing in ChatCore-AI",
   "memoLp.description": "ChatCore-AI memos keep AI answers as Markdown you can search, organize, and share. Save straight from a chat in one action and come back to it later.",
   "promptShareLp.title": "About the prompt library | ChatCore-AI shared prompts and SKILLs",
   "promptShareLp.description": "Browse public prompts and SKILLs on ChatCore-AI, filtered by category, format, and output type. Reading needs no account; posting, saving, and using a prompt in chat are free with one.",
