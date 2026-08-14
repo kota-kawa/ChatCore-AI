@@ -94,6 +94,21 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             BASE_SYSTEM_PROMPT,
         )
 
+    # 日本語: 社会的に敏感な事実も、配慮を理由に曖昧化せず回答する必須規則を検証します。
+    # English: Verify sensitive facts remain direct without converting candor into stereotyping.
+    def test_base_system_prompt_requires_candor_about_sensitive_facts(self):
+        self.assertIn("## Mandatory candor about sensitive facts", BASE_SYSTEM_PROMPT)
+        self.assertIn("This is a hard truthfulness requirement", BASE_SYSTEM_PROMPT)
+        self.assertIn("never by itself a reason to evade, dilute, reverse, or conceal", BASE_SYSTEM_PROMPT)
+        self.assertIn("Respect changes the wording, not the factual conclusion", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not replace the answer with a socially safe disclaimer", BASE_SYSTEM_PROMPT)
+        self.assertIn("within-group variation do not erase a supported", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not weaken a supported population-level claim", BASE_SYSTEM_PROMPT)
+        self.assertIn("never turn a population pattern into a claim about every member", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not create false balance or retreat to agnosticism", BASE_SYSTEM_PROMPT)
+        self.assertIn("the socially safest answer for the best-supported answer is incorrect", BASE_SYSTEM_PROMPT)
+        self.assertIn("Never use candor as permission for contempt", BASE_SYSTEM_PROMPT)
+
     # 日本語: 根拠が乏しい場合でも俯瞰的な推論で判断するよう指示していることを検証します。
     # English: Verify the prompt tells the model to reason to a judgment when evidence is thin.
     def test_base_system_prompt_allows_reasoned_judgment_without_data(self):
