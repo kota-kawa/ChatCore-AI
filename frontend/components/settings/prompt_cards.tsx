@@ -11,6 +11,7 @@ import {
   getCategoryLabel,
   getCategoryLabelOrFallback
 } from "../../scripts/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT } from "../../scripts/prompt_share/prompt_type_registry";
 import type { LikedPrompt, PromptRecord } from "../../scripts/user/settings/types";
 import { normalizePreviewText, toDisplayDate, truncateTitle } from "../../scripts/user/settings/utils";
 import type { PromptPreview } from "./prompt_preview_modal";
@@ -72,12 +73,14 @@ function SettingsPromptCard({
                 <span>{categoryLabel}</span>
               </span>
             ) : null}
-            {/* フォーマット軸をCSSクラスに反映し、アイコンとラベルをレジストリから決定する */}
-            {/* Apply content-format class and resolve icon/label from the registry */}
-            <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${formatValue}`}>
-              <i className={`bi ${getPromptFormatIconClass(formatValue)}`} aria-hidden="true"></i>
-              <span>{getPromptFormatLabel(formatValue, locale)}</span>
-            </span>
+            {/* 共有ページのカードと同じく、既定値のバッジ（プロンプト）は出さずカテゴリ名に幅を譲る */}
+            {/* Like the share page card, the default badge (prompt) is omitted so the category name keeps its width */}
+            {formatValue === DEFAULT_CONTENT_FORMAT ? null : (
+              <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${formatValue}`}>
+                <i className={`bi ${getPromptFormatIconClass(formatValue)}`} aria-hidden="true"></i>
+                <span>{getPromptFormatLabel(formatValue, locale)}</span>
+              </span>
+            )}
           </div>
           <time className="prompt-card__created-at" dateTime={dateTime}>
             <i className="bi bi-calendar3" aria-hidden="true"></i>

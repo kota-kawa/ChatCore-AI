@@ -1384,13 +1384,14 @@
   gap: 0.54rem;
 }
 
+/* バッジは折り返しを許可する。横一列に詰め込むとカテゴリ名が「#」だけまで削られるため
+   Let badges wrap: forcing them onto one line shrinks the category name down to just the "#" */
 :where(body.settings-page, .user-settings-page) .prompt-card__badges {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.38rem;
   min-width: 0;
-  overflow: hidden;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card__created-at {
@@ -1418,7 +1419,7 @@
   align-items: center;
   gap: 0.3rem;
   min-width: 0;
-  max-width: min(48%, 11rem);
+  max-width: 100%;
   padding: 0.22rem 0.65rem;
   border-radius: 999px;
   border: 1px solid rgba(25, 195, 125, 0.26);

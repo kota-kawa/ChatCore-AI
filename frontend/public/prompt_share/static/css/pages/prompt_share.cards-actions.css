@@ -136,14 +136,15 @@
   color: #8aa0b8;
 }
 
+/* バッジは折り返しを許可する。横一列に詰め込むとカテゴリ名が「#」だけまで削られるため
+   Let badges wrap: forcing them onto one line shrinks the category name down to just the "#" */
 .prompt-share-page .prompt-card__badges {
   grid-area: badges;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.38rem;
   min-width: 0;
-  overflow: hidden;
   padding-left: 0;
 }
 
@@ -221,7 +222,7 @@
   padding: 0.22rem 0.65rem;
   line-height: 1.2;
   min-width: 0;
-  max-width: min(48%, 11rem);
+  max-width: 100%;
   white-space: nowrap;
 }
 

@@ -178,12 +178,27 @@ describe("設定画面のプロンプトカード詳細", () => {
     );
 
     expect(container.querySelector(".prompt-card__category-pill")?.textContent).toContain("仕事・ビジネス");
-    expect(container.querySelector(".prompt-card__type-pill--format")?.textContent).toContain("プロンプト");
+    // 既定のプロンプト形式ではバッジを出さず、カテゴリ名の表示幅を確保する
+    // The default prompt format shows no badge so the category name keeps its width
+    expect(container.querySelector(".prompt-card__type-pill--format")).toBeNull();
     expect(container.querySelector(".prompt-card__created-at")?.textContent).toBeTruthy();
     // 共有ページのカードと同じく、本文プレビューだけを見せて入出力例はモーダルへ委ねる
     // Like the share page card, only the content preview is shown; examples stay in the modal
     expect(container.querySelector(".prompt-card__content")?.textContent).toContain("会議メモを要点");
     expect(container.querySelector(".prompt-card__preview-sections")).toBeNull();
+  });
+
+  it("SKILL形式のカードにはフォーマットバッジを表示する", () => {
+    const { container } = render(
+      <PromptCard
+        prompt={{ ...authoredPrompt, contentFormat: "skill", skillMarkdown: "# 議事録整形 SKILL" }}
+        onPreview={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".prompt-card__type-pill--skill")?.textContent).toContain("SKILL");
   });
 
   it("いいねしたプロンプトのカードには「いいね済み」バッジを表示しない", () => {
