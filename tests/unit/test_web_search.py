@@ -801,6 +801,102 @@ class WebSearchServiceTestCase(unittest.TestCase):
         followed = [source for source in enriched.sources if source.link_depth == 1]
         self.assertEqual(len(followed), 3)
         self.assertTrue(all(source.linked_from_url for source in followed))
+        self.assertEqual(max(source.link_depth for source in enriched.sources), 1)
+
+    def test_link_following_stops_when_planner_fails(self):
+        result = self._result_with_sources(
+            ("https://example.com/root", ("snippet",)),
+        )
+
+        def document_for(url):
+            depth = url.count("/child-")
+            links = tuple(
+                FetchedLink(f"{url}/child-{index}", f"Depth {depth + 1} option {index}")
+                for index in range(3)
+            ) if depth < 3 else ()
+            return _fetched_document(url, f"body {url}", title=url, links=links)
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(
+                web_search,
+                "get_llm_json_response",
+                side_effect=RuntimeError("planner unavailable"),
+            ),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(max(source.link_depth for source in enriched.sources), 0)
+
+    def test_link_following_stops_when_planner_is_immediately_satisfied(self):
+        result = self._result_with_sources(
+            ("https://example.com/root", ("snippet",)),
+        )
+
+        def document_for(url):
+            depth = url.count("/child-")
+            links = tuple(
+                FetchedLink(f"{url}/child-{index}", f"Depth {depth + 1} option {index}")
+                for index in range(3)
+            ) if depth < 3 else ()
+            return _fetched_document(url, f"body {url}", title=url, links=links)
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(
+                web_search,
+                "get_llm_json_response",
+                return_value='{"sufficient": true, "selected_link_ids": []}',
+            ) as mock_planner,
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(mock_planner.call_count, 1)
+        self.assertEqual(max(source.link_depth for source in enriched.sources), 0)
+
+    def test_sufficient_decision_follows_only_one_explicitly_valuable_link(self):
+        result = self._result_with_sources(
+            ("https://example.com/root", ("snippet",)),
+        )
+
+        def document_for(url):
+            links = ()
+            if url.endswith("/root"):
+                links = tuple(
+                    FetchedLink(
+                        f"https://example.com/official-{index}",
+                        f"Official source {index}",
+                    )
+                    for index in range(3)
+                )
+            return _fetched_document(url, f"body {url}", title=url, links=links)
+
+        def select_valuable_links(messages, _model):
+            payload = json.loads(messages[1]["content"])
+            return json.dumps(
+                {
+                    "sufficient": True,
+                    "selected_link_ids": [
+                        item["id"] for item in payload["link_candidates"]
+                    ],
+                }
+            )
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(
+                web_search,
+                "get_llm_json_response",
+                side_effect=select_valuable_links,
+            ),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 2)
+        self.assertEqual(mock_fetch.call_args_list[-1].args[0], "https://example.com/official-0")
+        self.assertEqual(sum(source.link_depth == 1 for source in enriched.sources), 1)
 
     def test_link_following_can_be_disabled_without_disabling_root_page_fetch(self):
         result = self._result_with_sources(
@@ -982,6 +1078,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         captured = {}
 
         def planner(messages, _model):
+            captured["system"] = messages[0]["content"]
             captured["payload"] = messages[1]["content"]
             return '{"sufficient": true, "selected_link_ids": []}'
 
@@ -1005,6 +1102,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
             json.loads(captured["payload"])["link_candidates"][0]["id"],
             "link_1_1",
         )
+        self.assertIn("clear material value", captured["system"])
+        self.assertIn("hard maximum, not a target", captured["system"])
 
         executor = MagicMock()
         future = MagicMock()
@@ -1052,6 +1151,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
             enriched = web_search.enrich_sources_with_page_content(result)
 
         self.assertEqual(mock_fetch.call_count, 2)
+        self.assertFalse(
+            any("169.254.169.254" in call.args[0] for call in mock_fetch.call_args_list)
+        )
         self.assertEqual(len(enriched.sources), 2)
 
     def test_link_follow_selection_limits_each_parent_to_three_links(self):
