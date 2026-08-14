@@ -5,8 +5,9 @@ import { useTranslation } from "../../contexts/locale_context";
 type PromptShareDetailImageProps = {
   imageUrl: string;
   title: string;
+  // 見出しは描画せず、スクリーンリーダー向けの領域名としてのみ使う
+  // Not rendered as a heading; used only as the accessible name of the region
   mediaLabel: string;
-  mediaHelperText: string;
 };
 
 // 詳細モーダルの作例画像。既定で大きく表示し、クリックでシート全面の拡大表示へ切り替える
@@ -14,8 +15,7 @@ type PromptShareDetailImageProps = {
 export function PromptShareDetailImage({
   imageUrl,
   title,
-  mediaLabel,
-  mediaHelperText
+  mediaLabel
 }: PromptShareDetailImageProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -59,14 +59,10 @@ export function PromptShareDetailImage({
     }
   };
 
+  // 見出しと補足文は画像を見れば分かる情報なので描画せず、領域名としてのラベルはaria-labelにだけ残す
+  // The heading and helper text just restate what the image shows, so only the accessible region name remains
   return (
     <aside id="modalReferenceImageGroup" className="prompt-detail-media" aria-label={mediaLabel}>
-      <div className="prompt-detail-section__header">
-        <div>
-          <span className="prompt-detail-section__label">{mediaLabel}</span>
-          <span className="prompt-detail-section__meta">{mediaHelperText}</span>
-        </div>
-      </div>
       {/* 画像そのものを拡大トリガーにする。枠は画像の実寸比に追従させ、余白で埋めない
           The image itself is the trigger; the frame follows the image ratio instead of letterboxing */}
       <button

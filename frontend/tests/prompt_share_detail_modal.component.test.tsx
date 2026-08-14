@@ -143,3 +143,34 @@ describe("プロンプト詳細モーダルの作例画像", () => {
     expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
   });
 });
+
+// カードと同じく、既定値のチップと作例画像の見出しは出さない方針を固定する
+// Locks in the rule that default chips and the reference-image heading are not rendered, like on the card
+describe("プロンプト詳細モーダルのメタ表示", () => {
+  it("既定のプロンプト×テキストではフォーマット・メディアのチップを表示しない", () => {
+    const { container } = renderDetailModal(basePrompt);
+
+    expect(container.querySelector("#modalPromptFormat")).toBeNull();
+    expect(container.querySelector("#modalPromptMediaType")).toBeNull();
+    expect(container.querySelector("#modalPromptCategory")?.textContent).toContain("仕事・ビジネス");
+  });
+
+  it("SKILL形式・画像メディアのときだけチップを表示する", () => {
+    const { container } = renderDetailModal({
+      ...basePrompt,
+      content_format: "skill",
+      skill_markdown: "# SKILL",
+      media_type: "image"
+    });
+
+    expect(container.querySelector("#modalPromptFormat")?.textContent).toContain("SKILL");
+    expect(container.querySelector("#modalPromptMediaType")?.textContent).toContain("画像");
+  });
+
+  it("作例画像の見出しと補足文は表示しない", () => {
+    renderDetailModal({ ...basePrompt, reference_image_url: "/static/uploads/example.png" });
+
+    expect(screen.queryByText("作例メディア")).not.toBeInTheDocument();
+    expect(screen.queryByText("生成結果の作例画像（任意・1点）")).not.toBeInTheDocument();
+  });
+});
