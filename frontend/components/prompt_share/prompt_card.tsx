@@ -233,6 +233,10 @@ function PromptCardComponent({
         </button>
       </div>
 
+      {/* 何の投稿かを最初に読ませるため、タイトルは作例画像より前に置く */}
+      {/* The title comes before the reference image so the reader sees what the post is first */}
+      <h3>{truncateTitle(prompt.title)}</h3>
+
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
       {prompt.reference_image_url ? (
@@ -246,7 +250,6 @@ function PromptCardComponent({
         </div>
       ) : null}
 
-      <h3>{truncateTitle(prompt.title)}</h3>
       {/* カード内の本文プレビューも詳細モーダルと同じ安全なMarkdownレンダラーで整形する */}
       {/* Render the card preview through the same safe Markdown renderer as the detail modal */}
       <MarkdownContent text={cardPreview} className="prompt-card__content" />

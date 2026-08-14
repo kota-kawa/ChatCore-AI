@@ -104,14 +104,16 @@
   box-shadow: 0 6px 18px rgba(65, 111, 158, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+/* SNSの投稿と同じく投稿者を先頭に置き、カテゴリなどのバッジは本文に近い2行目へ置く
+   Author comes first like an SNS post; badges sit on the second row, closer to the body */
 .prompt-share-page .prompt-card__header {
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    "badges menu"
-    "author date";
+    "author menu"
+    "badges date";
   align-items: center;
   gap: 0.42rem 0.54rem;
   min-height: 3rem;

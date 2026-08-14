@@ -64,12 +64,17 @@ function PromptCardSkeletonGrid() {
     <>
       {Array.from({ length: 8 }).map((_, index) => (
         <div key={index} className="prompt-card prompt-card--skeleton" role="status" aria-label={t("promptShare.loading")}>
+          {/* 実カードと同じ並び（1行目: 投稿者 + メニュー / 2行目: バッジ）でスケルトンを組む */}
+          {/* Mirror the real card order: author + menu on the first row, badges on the second */}
           <div className="prompt-card__header">
-            <div className="prompt-card__badges">
-              <Skeleton variant="text" width={82} height="1.45rem" />
-              <Skeleton variant="text" width={104} height="1.45rem" />
+            <div className="prompt-card__author prompt-card__author--static">
+              <Skeleton variant="circle" width={26} height={26} />
+              <Skeleton variant="text" width={92} height="1rem" />
             </div>
             <Skeleton variant="circle" width={32} height={32} />
+            <div className="prompt-card__badges">
+              <Skeleton variant="text" width={104} height="1.45rem" />
+            </div>
           </div>
           <Skeleton variant="text" width={index % 2 === 0 ? "70%" : "84%"} height="1.25rem" />
           <SkeletonText lines={3} />

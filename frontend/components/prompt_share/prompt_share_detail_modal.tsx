@@ -5,6 +5,7 @@ import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { showToast } from "../../scripts/core/toast";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -161,6 +162,10 @@ export function PromptShareDetailModal({
     ? normalizePromptMediaType(String(detailPrompt.media_type || ""))
     : "text";
   const isSkillFormat = detailContentFormat === "skill";
+  // 既定の組み合わせ（プロンプト×テキスト）のチップは情報量がないので出さない
+  // The default combination (prompt x text) carries no information, so those chips are hidden
+  const isDefaultFormat = detailContentFormat === DEFAULT_CONTENT_FORMAT;
+  const isDefaultMedia = detailMediaType === DEFAULT_MEDIA_TYPE;
   const promptBody = isSkillFormat
     ? detailPrompt?.skill_markdown || ""
     : detailPrompt?.content || "";
@@ -248,24 +253,30 @@ export function PromptShareDetailModal({
                   <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
 
                   <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
-                    <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-                      <dt>
-                        <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
-                        <span className="sr-only">{t("promptShare.format")}</span>
-                      </dt>
-                      <dd id="modalPromptFormat">
-                        {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
-                      </dd>
-                    </div>
-                    <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-                      <dt>
-                        <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
-                        <span className="sr-only">{t("promptShare.media")}</span>
-                      </dt>
-                      <dd id="modalPromptMediaType">
-                        {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
-                      </dd>
-                    </div>
+                    {/* カードと同じく、既定値（プロンプト / テキスト）のチップは並べずに情報のあるものだけ残す */}
+                    {/* Like the card, the default chips (prompt / text) are dropped so only informative ones remain */}
+                    {isDefaultFormat ? null : (
+                      <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                        <dt>
+                          <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
+                          <span className="sr-only">{t("promptShare.format")}</span>
+                        </dt>
+                        <dd id="modalPromptFormat">
+                          {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
+                        </dd>
+                      </div>
+                    )}
+                    {isDefaultMedia ? null : (
+                      <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                        <dt>
+                          <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
+                          <span className="sr-only">{t("promptShare.media")}</span>
+                        </dt>
+                        <dd id="modalPromptMediaType">
+                          {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
+                        </dd>
+                      </div>
+                    )}
                     <DetailMetaItem
                       iconClass="bi-hash"
                       label={t("promptShare.category")}
@@ -346,7 +357,6 @@ export function PromptShareDetailModal({
                   imageUrl={detailPrompt.reference_image_url}
                   title={detailPrompt.title}
                   mediaLabel={t("promptShare.exampleMedia")}
-                  mediaHelperText={t("promptShare.generatedExampleAttachment")}
                 />
               ) : null}
 
