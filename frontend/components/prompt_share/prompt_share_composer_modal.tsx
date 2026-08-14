@@ -985,24 +985,20 @@ export function PromptShareComposerModal({
             </section>
             </fieldset>
 
-            <div className="composer-footer">
-              <div className="composer-footer__feedback">
-                <p
-                  id="promptPostStatus"
-                  className="composer-status"
-                  hidden={!promptPostStatus.message}
-                  data-variant={promptPostStatus.variant}
-                  role={promptPostStatus.variant === "error" ? "alert" : "status"}
-                  aria-live={promptPostStatus.variant === "error" ? "assertive" : "polite"}
-                  aria-atomic="true"
-                >
-                  {promptPostStatus.message}
-                </p>
-                <p className="composer-footer__note">{t("promptShare.draftPreserved")}</p>
-              </div>
-              <button type="button" className="composer-cancel-btn" onClick={onClose} disabled={isPostSubmitting}>
-                {t("common.close")}
-              </button>
+            {/* --- 送信アクション: 画面下部に固定せず、入力欄の末尾にそのまま並べる --- */}
+            {/* --- Submit action: not pinned to the viewport; it flows at the end of the inputs --- */}
+            <div className="composer-actions">
+              <p
+                id="promptPostStatus"
+                className="composer-status"
+                hidden={!promptPostStatus.message}
+                data-variant={promptPostStatus.variant}
+                role={promptPostStatus.variant === "error" ? "alert" : "status"}
+                aria-live={promptPostStatus.variant === "error" ? "assertive" : "polite"}
+                aria-atomic="true"
+              >
+                {promptPostStatus.message}
+              </p>
               {/* 送信中はボタンをdisabledにして重複送信を防ぐ */}
               {/* Disable submit button during submission to prevent duplicate requests */}
               <button type="submit" className="submit-btn" disabled={isPostSubmitting}>

@@ -14,6 +14,10 @@ const promptShareModalCss = readFileSync(
   new URL("../public/prompt_share/static/css/pages/prompt_share.modals-composer.css", import.meta.url),
   "utf8",
 );
+const promptShareResponsiveCss = readFileSync(
+  new URL("../public/prompt_share/static/css/pages/prompt_share.responsive.css", import.meta.url),
+  "utf8",
+);
 
 // プロフィールモーダルは共通の背景操作ロックから除外し、モーダル自身は操作可能なままにする。
 // The profile modal must be excluded from the page interaction lock and remain interactive itself.
@@ -58,5 +62,28 @@ test("the detail modal's example image keeps a large display height", () => {
   assert.ok(
     Number(maxHeight[2]) >= 40,
     "the example image must claim a large share of the viewport height",
+  );
+});
+
+// 投稿モーダルの下端に貼り付くバーは廃止した。送信アクションは入力欄の続きとして流す。
+// The composer no longer pins a bar to the bottom: the submit action flows after the inputs.
+test("the composer's submit action is not pinned to the bottom of the modal", () => {
+  assert.doesNotMatch(
+    promptShareModalCss,
+    /\.composer-footer\b/,
+    "the sticky composer footer must be gone from the composer styles",
+  );
+  assert.doesNotMatch(
+    promptShareResponsiveCss,
+    /\.composer-footer\b/,
+    "the sticky composer footer must be gone from the responsive styles",
+  );
+
+  const actionsRule = promptShareModalCss.match(/\.composer-actions\s*\{([\s\S]*?)\}/);
+  assert.ok(actionsRule, "the composer must style its submit action row");
+  assert.doesNotMatch(
+    actionsRule[1],
+    /position:\s*(sticky|fixed)/,
+    "the submit action row must scroll with the form instead of sticking",
   );
 });

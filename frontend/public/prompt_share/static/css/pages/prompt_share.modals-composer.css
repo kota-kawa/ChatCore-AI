@@ -2353,41 +2353,19 @@
   padding: 0.98rem;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .composer-footer {
-  position: sticky;
-  bottom: -1.2rem;
-  z-index: 12;
+/* 送信アクションは固定バーにせず、入力欄の続きとしてそのまま流す
+   The submit action is not a pinned bar: it flows right after the inputs */
+:where(body.prompt-share-page, .prompt-share-page) .composer-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-end;
   gap: 0.7rem;
-  margin: 0 -0.35rem;
-  padding: 1rem 0.35rem 0.85rem;
-  border-top: 1px solid rgba(205, 220, 238, 0.82);
-  background: rgba(247, 251, 255, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
+:where(body.prompt-share-page, .prompt-share-page) .composer-actions .composer-status {
   margin: 0;
-  max-width: 46ch;
-  color: #6a7f95;
-  font-size: 0.8rem;
-  line-height: 1.6;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback {
-  display: flex;
   min-width: 0;
-  margin-right: auto;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .composer-footer__feedback .composer-status {
-  margin: 0;
   padding: 0.62rem 0.75rem;
 }
 
@@ -2410,28 +2388,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn {
-  min-height: 52px;
-  padding: 0.72rem 1rem;
-  border: 1px solid rgba(174, 198, 225, 0.9);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #40576d;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:hover:not(:disabled),
-:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:focus-visible {
-  border-color: #98bff0;
-  color: #185abc;
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .composer-cancel-btn:disabled,
 :where(body.prompt-share-page, .prompt-share-page) .close-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
