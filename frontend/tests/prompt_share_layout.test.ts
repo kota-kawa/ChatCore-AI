@@ -219,10 +219,14 @@ test("prompt share detail modal keeps the settings-style shell", () => {
     })
   );
 
-  // 閉じる操作はヘッダーの角ボタンのみ。冗長なフッターの「閉じる」は持たない
-  // Closing is reachable only from the header corner button; no redundant footer close
-  assert.match(html, /class="prompt-detail-close"/);
+  // 閉じる操作は他のモーダルと同じ丸ボタン1つだけ。冗長なフッターの「閉じる」は持たない
+  // Closing is reachable only from the same round button the other modals use; no footer close
+  assert.match(html, /<button type="button" class="close-btn" id="closePromptDetailModal"/);
+  assert.doesNotMatch(html, /prompt-detail-close/);
   assert.doesNotMatch(html, /prompt-detail-footer/);
+  // ヘッダーは上に固定せず、本文と同じスクロール領域の中に置く
+  // The header is not pinned: it lives inside the same scroller as the body
+  assert.ok(html.indexOf("prompt-detail-scroll") < html.indexOf("prompt-detail-header"));
   // 入出力例は1枚のパネルにまとめ、中を2枚のカードに割る
   // The examples share one panel that holds two cards
   assert.match(html, /prompt-detail-examples__grid/);
