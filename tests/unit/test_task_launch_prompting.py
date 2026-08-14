@@ -79,6 +79,21 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("explain the resulting understanding in your own words", BASE_SYSTEM_PROMPT)
         self.assertIn("Synthesize the evidence with reasoning", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 判断を求める回答の冒頭と末尾で、同じ明確な結論を必須としていることを検証します。
+    # English: Verify judgments require the same clear verdict at both the opening and closing.
+    def test_base_system_prompt_requires_decisive_opening_and_closing(self):
+        self.assertIn("## Mandatory decisive-answer structure", BASE_SYSTEM_PROMPT)
+        self.assertIn("This is a hard output requirement", BASE_SYSTEM_PROMPT)
+        self.assertIn("The first sentence must state one unmistakable answer", BASE_SYSTEM_PROMPT)
+        self.assertIn("The final sentence must briefly restate the same answer", BASE_SYSTEM_PROMPT)
+        self.assertIn("lacks either the opening verdict or the closing verdict is incomplete", BASE_SYSTEM_PROMPT)
+        self.assertIn("must not replace the decision with ambiguity", BASE_SYSTEM_PROMPT)
+        self.assertIn("Otherwise assume the most likely case and decide", BASE_SYSTEM_PROMPT)
+        self.assertIn(
+            "follow the mandatory opening-and-closing verdict structure above",
+            BASE_SYSTEM_PROMPT,
+        )
+
     # 日本語: 根拠が乏しい場合でも俯瞰的な推論で判断するよう指示していることを検証します。
     # English: Verify the prompt tells the model to reason to a judgment when evidence is thin.
     def test_base_system_prompt_allows_reasoned_judgment_without_data(self):
