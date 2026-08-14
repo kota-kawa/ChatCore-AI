@@ -245,6 +245,72 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     def test_empty_html_returns_empty_string(self):
         self.assertEqual(url_fetcher._extract_text_from_html(""), "")
 
+    def test_extract_document_normalizes_relevant_links(self):
+        html = """
+        <html><head><title>Research report</title></head><body>
+          <p>Primary evidence <a href="/report#section">Full report</a></p>
+          <a href="https://EXAMPLE.com:443/report">Duplicate report</a>
+          <a href="//other.example.org/details">External details</a>
+          <a href="mailto:test@example.com">Email</a>
+          <a href="javascript:alert(1)">Script</a>
+          <a href="https://user:pass@example.com/private">Credentials</a>
+          <nav><a href="/menu">Menu</a></nav>
+        </body></html>
+        """
+
+        document = url_fetcher._extract_document_from_html(
+            html,
+            requested_url="https://example.com/start",
+            final_url="https://example.com/articles/index.html",
+        )
+
+        self.assertEqual(document.title, "Research report")
+        self.assertEqual(
+            [link.url for link in document.links],
+            [
+                "https://example.com/report",
+                "https://other.example.org/details",
+            ],
+        )
+        self.assertEqual(document.links[0].text, "Full report")
+        self.assertIn("Primary evidence", document.links[0].context)
+
+    def test_extract_document_limits_link_candidates(self):
+        html = "".join(
+            f'<a href="/page-{index}">Page {index}</a>'
+            for index in range(url_fetcher.MAX_LINKS_PER_DOCUMENT + 5)
+        )
+
+        document = url_fetcher._extract_document_from_html(
+            html,
+            requested_url="https://example.com/",
+            final_url="https://example.com/",
+        )
+
+        self.assertEqual(len(document.links), url_fetcher.MAX_LINKS_PER_DOCUMENT)
+
+    def test_extract_document_uses_base_href_and_accessible_link_labels(self):
+        html = """
+        <html><head><base href="https://cdn.example.com/docs/"></head><body>
+          <a href="chapter" aria-label="Chapter from ARIA"></a>
+          <a href="diagram"><img src="diagram.png" alt="Architecture diagram"></a>
+        </body></html>
+        """
+
+        document = url_fetcher._extract_document_from_html(
+            html,
+            requested_url="https://example.com/start",
+            final_url="https://example.com/guide/index.html",
+        )
+
+        self.assertEqual(
+            [(link.url, link.text) for link in document.links],
+            [
+                ("https://cdn.example.com/docs/chapter", "Chapter from ARIA"),
+                ("https://cdn.example.com/docs/diagram", "Architecture diagram"),
+            ],
+        )
+
 
 # 単一のURLからコンテンツをフェッチする機能（正常取得、例外処理、不正なコンテンツタイプの拒否、文字数制限等）をテストするクラス。
 # Test class for fetching content from a single URL (handling exceptions, content-type checks, and truncating size).
@@ -277,6 +343,35 @@ class FetchUrlContentTest(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("Hello world", result)
+
+    def test_fetch_url_document_returns_final_url_title_and_links(self):
+        responses = iter(
+            [
+                self._make_response(
+                    b"",
+                    status_code=302,
+                    headers={"Location": "https://docs.example.com/guide/"},
+                ),
+                self._make_response(
+                    b"<html><head><title>Guide</title></head>"
+                    b"<body><p>Read <a href='chapter-1'>chapter one</a>.</p></body></html>"
+                ),
+            ]
+        )
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", side_effect=lambda *a, **k: next(responses)),
+        ):
+            document = url_fetcher.fetch_url_document("https://example.com/start")
+
+        self.assertIsNotNone(document)
+        assert document is not None
+        self.assertEqual(document.final_url, "https://docs.example.com/guide/")
+        self.assertEqual(document.title, "Guide")
+        self.assertEqual(
+            [link.url for link in document.links],
+            ["https://docs.example.com/guide/chapter-1"],
+        )
 
     # プレーンテキストのURLからテキストコンテンツがそのままフェッチされることを検証します。
     # Verify that plain text content is fetched successfully from a text file URL.
@@ -444,7 +539,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
         # The metadata service must never have been contacted.
         self.assertEqual(mock_get.call_count, 1)
         called_url = mock_get.call_args_list[0].args[0]
-        self.assertEqual(called_url, "https://example.com")
+        self.assertEqual(called_url, "https://example.com/")
 
     # 安全なリダイレクト先への遷移である場合、チェーンを正しく追従して最終応答が得られることを検証します。
     # Verify that a safe redirect chain is successfully traversed to fetch the final content.
@@ -465,6 +560,23 @@ class FetchUrlRedirectTest(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("done", result)
+
+    def test_rejects_redirect_with_embedded_credentials_before_request(self):
+        responses = iter(
+            [
+                self._redirect_response("https://user:pass@example.com/private"),
+                self._ok_response(b"<p>must not be fetched</p>"),
+            ]
+        )
+
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", side_effect=lambda *a, **k: next(responses)) as mock_get,
+        ):
+            result = url_fetcher.fetch_url_document("https://example.com/start")
+
+        self.assertIsNone(result)
+        self.assertEqual(mock_get.call_count, 1)
 
     # リダイレクトループが発生している場合、最大制限ホップ数を超えたところで自動的に中断しNoneを返すことを検証します。
     # Verify that redirect loops are aborted after reaching the maximum redirect limit, returning None.

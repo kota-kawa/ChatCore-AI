@@ -6,9 +6,10 @@ import re
 import socket
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Iterator
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
 import urllib3.util.connection as _urllib3_conn
@@ -26,6 +27,10 @@ MAX_URL_RESPONSE_BYTES = 300_000   # 300 KB raw cap before decoding
 MAX_URL_TEXT_CHARS = 30_000        # chars of plain text kept per URL
 URL_FETCH_TIMEOUT = 10             # seconds
 MAX_REDIRECT_HOPS = 5
+MAX_LINKS_PER_DOCUMENT = 40
+MAX_LINK_URL_CHARS = 1_000
+MAX_LINK_TEXT_CHARS = 240
+MAX_LINK_CONTEXT_CHARS = 320
 
 # URL抽出用の正規表現
 # Regular expression to extract URLs
@@ -55,6 +60,26 @@ _FETCH_HEADERS = {
     "Accept": "text/html,text/plain,application/xhtml+xml;q=0.9,*/*;q=0.5",
     "Accept-Language": "ja,en;q=0.9",
 }
+
+
+@dataclass(frozen=True)
+class FetchedLink:
+    """A normalized link discovered in a fetched HTML document."""
+
+    url: str
+    text: str
+    context: str = ""
+
+
+@dataclass(frozen=True)
+class FetchedUrlDocument:
+    """Readable content and safe follow-up candidates from one URL fetch."""
+
+    requested_url: str
+    final_url: str
+    title: str
+    text: str
+    links: tuple[FetchedLink, ...] = ()
 
 
 # --- DNS pinning to defeat DNS-rebinding-style SSRF -------------------------
@@ -115,16 +140,48 @@ class _TextExtractor(HTMLParser):
         super().__init__(convert_charrefs=True)
         self._skip_depth = 0
         self._parts: list[str] = []
+        self._title_parts: list[str] = []
+        self._inside_title = False
+        self._base_href = ""
+        self._active_link: dict[str, object] | None = None
+        self._raw_links: list[tuple[str, str, str]] = []
 
-    def handle_starttag(self, tag: str, _attrs: list) -> None:  # type: ignore[override]
+    def handle_starttag(self, tag: str, attrs: list) -> None:  # type: ignore[override]
         # 無視対象のタグの開始時の処理
         # Handle the start of skip tags
+        tag = tag.lower()
+        attributes = {str(name).lower(): str(value or "") for name, value in attrs}
+        if tag == "title":
+            self._inside_title = True
+        if tag == "base" and not self._base_href:
+            self._base_href = attributes.get("href", "").strip()
+        if tag == "a" and self._skip_depth == 0:
+            href = attributes.get("href", "").strip()
+            if href:
+                preceding_text = "".join(self._parts[-3:])[-MAX_LINK_CONTEXT_CHARS:]
+                self._active_link = {
+                    "href": href,
+                    "title": attributes.get("title") or attributes.get("aria-label", ""),
+                    "parts": [],
+                    "context": preceding_text,
+                }
+        if tag == "img" and self._active_link is not None and self._skip_depth == 0:
+            fallback_text = attributes.get("alt") or attributes.get("title", "")
+            if fallback_text.strip():
+                parts = self._active_link["parts"]
+                assert isinstance(parts, list)
+                parts.append(fallback_text)
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
 
     def handle_endtag(self, tag: str) -> None:  # type: ignore[override]
         # タグ終了時の処理。ブロック要素の場合は改行を挿入する
         # Handle the end of tags; insert newlines for block tags
+        tag = tag.lower()
+        if tag == "a":
+            self._finish_active_link()
+        if tag == "title":
+            self._inside_title = False
         if tag in self._SKIP_TAGS:
             self._skip_depth = max(0, self._skip_depth - 1)
         elif tag in self._BLOCK_TAGS:
@@ -133,8 +190,31 @@ class _TextExtractor(HTMLParser):
     def handle_data(self, data: str) -> None:  # type: ignore[override]
         # テキストデータをパーツに追加する処理（スキップ対象外の場合）
         # Add text data to parts if not inside skip tags
+        if self._inside_title and data.strip():
+            self._title_parts.append(data)
+        if self._active_link is not None and self._skip_depth == 0 and data.strip():
+            parts = self._active_link["parts"]
+            assert isinstance(parts, list)
+            parts.append(data)
         if self._skip_depth == 0 and data.strip():
             self._parts.append(data)
+
+    def _finish_active_link(self) -> None:
+        if self._active_link is None:
+            return
+        parts = self._active_link["parts"]
+        assert isinstance(parts, list)
+        text = " ".join("".join(parts).split())
+        title = " ".join(str(self._active_link["title"]).split())
+        context = " ".join(str(self._active_link["context"]).split())
+        self._raw_links.append(
+            (
+                str(self._active_link["href"]),
+                text or title,
+                context,
+            )
+        )
+        self._active_link = None
 
     def get_text(self) -> str:
         # 抽出されたテキストを結合して余分な空白や改行をクリーンアップする
@@ -144,6 +224,16 @@ class _TextExtractor(HTMLParser):
         raw = re.sub(r"\n{3,}", "\n\n", raw)
         return raw.strip()
 
+    def get_title(self) -> str:
+        return " ".join("".join(self._title_parts).split())[:MAX_LINK_TEXT_CHARS]
+
+    def get_raw_links(self) -> list[tuple[str, str, str]]:
+        self._finish_active_link()
+        return list(self._raw_links)
+
+    def get_base_href(self) -> str:
+        return self._base_href
+
 
 def _extract_text_from_html(raw_html: str) -> str:
     # HTML文字列からプレーンテキストを抽出する
@@ -151,6 +241,72 @@ def _extract_text_from_html(raw_html: str) -> str:
     extractor = _TextExtractor()
     extractor.feed(raw_html)
     return extractor.get_text()
+
+
+def canonicalize_url(url: str) -> str | None:
+    """Return a fragment-free canonical HTTP(S) URL, or ``None`` if invalid."""
+    try:
+        parsed = urlsplit(str(url or "").strip())
+        scheme = parsed.scheme.lower()
+        if scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+        if parsed.username is not None or parsed.password is not None:
+            return None
+        hostname = parsed.hostname.lower()
+        display_hostname = f"[{hostname}]" if ":" in hostname else hostname
+        port = parsed.port
+        if port is None or (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+            netloc = display_hostname
+        else:
+            netloc = f"{display_hostname}:{port}"
+        normalized = urlunsplit((scheme, netloc, parsed.path or "/", parsed.query, ""))
+        return normalized if len(normalized) <= MAX_LINK_URL_CHARS else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_document_from_html(
+    raw_html: str,
+    *,
+    requested_url: str,
+    final_url: str,
+) -> FetchedUrlDocument:
+    extractor = _TextExtractor()
+    extractor.feed(raw_html)
+    normalized_final_url = canonicalize_url(final_url)
+    if normalized_final_url is None:
+        raise ValueError("Fetched document has an invalid final URL.")
+    link_base_url = (
+        canonicalize_url(urljoin(normalized_final_url, extractor.get_base_href()))
+        if extractor.get_base_href()
+        else normalized_final_url
+    ) or normalized_final_url
+    seen: set[str] = {normalized_final_url}
+    links: list[FetchedLink] = []
+    for href, text, context in extractor.get_raw_links():
+        normalized_url = canonicalize_url(urljoin(link_base_url, href))
+        if normalized_url is None or normalized_url in seen:
+            continue
+        seen.add(normalized_url)
+        normalized_text = " ".join(text.split())[:MAX_LINK_TEXT_CHARS]
+        if not normalized_text:
+            continue
+        links.append(
+            FetchedLink(
+                url=normalized_url,
+                text=normalized_text,
+                context=" ".join(context.split())[-MAX_LINK_CONTEXT_CHARS:],
+            )
+        )
+        if len(links) >= MAX_LINKS_PER_DOCUMENT:
+            break
+    return FetchedUrlDocument(
+        requested_url=requested_url,
+        final_url=normalized_final_url,
+        title=extractor.get_title(),
+        text=extractor.get_text()[:MAX_URL_TEXT_CHARS],
+        links=tuple(links),
+    )
 
 
 def extract_urls_from_text(text: str) -> list[str]:
@@ -181,9 +337,10 @@ def _resolve_safe_ip(url: str) -> str | None:
     attack cannot redirect the TCP connection to a different address.
     """
     try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
+        normalized_url = canonicalize_url(url)
+        if normalized_url is None:
             return None
+        parsed = urlparse(normalized_url)
         hostname = parsed.hostname
         if not hostname:
             return None
@@ -206,10 +363,10 @@ def _is_safe_url(url: str) -> bool:
     return _resolve_safe_ip(url) is not None
 
 
-def fetch_url_content(url: str) -> str | None:
-    """単一のURLを取得し、その可読なプレーンテキストコンテンツを返す。
+def fetch_url_document(url: str) -> FetchedUrlDocument | None:
+    """単一のURLを取得し、本文・最終URL・追跡可能リンクを返す。
 
-    Fetch a single URL and return its readable plain-text content.
+    Fetch a single URL and return readable content plus discovered links.
 
     Redirects are followed manually (up to MAX_REDIRECT_HOPS) and every hop
     is re-validated against the SSRF deny list so an attacker-controlled
@@ -221,6 +378,10 @@ def fetch_url_content(url: str) -> str | None:
     host_to_ip: dict[str, str] = {}
 
     for _hop in range(MAX_REDIRECT_HOPS + 1):
+        normalized_current_url = canonicalize_url(current_url)
+        if normalized_current_url is None:
+            return None
+        current_url = normalized_current_url
         ip = _resolve_safe_ip(current_url)
         if ip is None:
             return None
@@ -280,8 +441,22 @@ def fetch_url_content(url: str) -> str | None:
                         content_type=content_type,
                         is_html=is_html,
                     )
-                    text = _extract_text_from_html(raw) if is_html else raw
-                    return text[:MAX_URL_TEXT_CHARS] or None
+                    if is_html:
+                        document = _extract_document_from_html(
+                            raw,
+                            requested_url=url,
+                            final_url=current_url,
+                        )
+                        return document if document.text else None
+                    text = raw[:MAX_URL_TEXT_CHARS]
+                    if not text:
+                        return None
+                    return FetchedUrlDocument(
+                        requested_url=url,
+                        final_url=current_url,
+                        title="",
+                        text=text,
+                    )
                 finally:
                     response.close()
         except Exception:
@@ -289,6 +464,15 @@ def fetch_url_content(url: str) -> str | None:
             return None
 
     return None
+
+
+def fetch_url_content(url: str) -> str | None:
+    """単一URLの本文だけを返す、既存呼び出し向けの互換ラッパー。
+
+    Compatibility wrapper returning only the readable text for one URL.
+    """
+    document = fetch_url_document(url)
+    return document.text if document is not None else None
 
 
 def fetch_urls_content(urls: list[str]) -> dict[str, str]:

@@ -1,10 +1,28 @@
+import json
 import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from services import web_search
+from services import url_fetcher, web_search
 from services.llm import LIGHTWEIGHT_TASK_MODEL
+from services.url_fetcher import FetchedLink
+
+
+def _fetched_document(
+    url: str,
+    text: str,
+    *,
+    title: str = "",
+    links: tuple = (),
+):
+    return web_search.FetchedUrlDocument(
+        requested_url=url,
+        final_url=url,
+        title=title,
+        text=text,
+        links=links,
+    )
 
 
 # 日本語: Web Search Serviceの機能や仕様を検証するテストクラスです。
@@ -12,6 +30,20 @@ from services.llm import LIGHTWEIGHT_TASK_MODEL
 class WebSearchServiceTestCase(unittest.TestCase):
     def setUp(self):
         web_search._search_cache.clear()
+        env_patcher = patch.dict(
+            os.environ,
+            {
+                "CHAT_WEB_SEARCH_FETCH_PAGES": "1",
+                "CHAT_WEB_SEARCH_FOLLOW_LINKS": "1",
+                "WEB_SEARCH_FETCH_TOP_N": "2",
+                "WEB_SEARCH_LINK_FOLLOW_MAX_PAGES": "10",
+                "WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH": "3",
+                "WEB_SEARCH_LINK_FOLLOW_TARGET_PAGES": "5",
+            },
+            clear=False,
+        )
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
 
     # 日本語: decideWeb検索usesllmjsondecisionことを検証します。
     # English: Verify that decide web search uses llm json decision.
@@ -275,13 +307,22 @@ class WebSearchServiceTestCase(unittest.TestCase):
         with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
             with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
                 with patch.object(
-                    web_search, "fetch_url_content", return_value="Full article body"
+                    web_search,
+                    "fetch_url_document",
+                    return_value=_fetched_document(
+                        "https://example.com/a",
+                        "Full article body",
+                    ),
                 ) as mock_fetch:
                     result = web_search.search_brave_llm_context(
                         "example query", freshness="pw"
                     )
+                    cached_result = web_search.search_brave_llm_context(
+                        "example query", freshness="pw"
+                    )
 
         self.assertEqual(result.query, "example query")
+        self.assertIs(cached_result, result)
         self.assertEqual(len(result.sources), 1)
         self.assertEqual(result.sources[0].hostname, "example.com")
         self.assertEqual(result.sources[0].favicon_url, "https://cdn.example.com/favicon.ico")
@@ -293,6 +334,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # Important result pages are read and attached as page_text.
         self.assertEqual(result.sources[0].page_text, "Full article body")
         mock_fetch.assert_called_once_with("https://example.com/a")
+        mock_get.assert_called_once()
         self.assertEqual(mock_get.call_args.args[0], web_search.BRAVE_LLM_CONTEXT_URL)
         self.assertEqual(mock_get.call_args.kwargs["headers"]["X-Subscription-Token"], "test-key")
         self.assertEqual(mock_get.call_args.kwargs["params"]["freshness"], "pw")
@@ -591,6 +633,42 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(combined.searched_at, "2026-04-30T00:01:00+00:00")
         self.assertEqual([source.url for source in combined.sources], ["https://example.com/a", "https://example.com/b"])
 
+    def test_combine_web_search_results_prefers_richer_exact_duplicate(self):
+        thin = web_search.WebSearchResult(
+            query="first",
+            searched_at="2026-08-14T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/shared",
+                    title="Shared",
+                    hostname="example.com",
+                    age="",
+                    snippets=("snippet",),
+                ),
+            ),
+        )
+        rich_source = web_search.WebSearchSource(
+            url="https://example.com/shared",
+            title="Shared detail",
+            hostname="example.com",
+            age="",
+            snippets=(),
+            page_text="Full linked evidence",
+            link_depth=1,
+            linked_from_url="https://example.com/root",
+        )
+        rich = web_search.WebSearchResult(
+            query="second",
+            searched_at="2026-08-14T00:01:00+00:00",
+            sources=(rich_source,),
+        )
+
+        combined = web_search.combine_web_search_results([thin, rich])
+
+        self.assertEqual(len(combined.sources), 1)
+        self.assertEqual(combined.sources[0].page_text, "Full linked evidence")
+        self.assertEqual(combined.sources[0].evidence_id, rich_source.evidence_id)
+
 
     def _result_with_sources(self, *urls_with_snippets):
         return web_search.WebSearchResult(
@@ -621,8 +699,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         with patch.dict(os.environ, {"WEB_SEARCH_FETCH_TOP_N": "2"}, clear=False):
             with patch.object(
                 web_search,
-                "fetch_url_content",
-                side_effect=lambda url: f"body of {url}",
+                "fetch_url_document",
+                side_effect=lambda url: _fetched_document(url, f"body of {url}"),
             ) as mock_fetch:
                 enriched = web_search.enrich_sources_with_page_content(result)
 
@@ -642,7 +720,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict(os.environ, {"WEB_SEARCH_FETCH_TOP_N": "1"}, clear=False):
             with patch.object(
-                web_search, "fetch_url_content", return_value="body"
+                web_search,
+                "fetch_url_document",
+                side_effect=lambda url: _fetched_document(url, "body"),
             ) as mock_fetch:
                 enriched = web_search.enrich_sources_with_page_content(result)
 
@@ -661,7 +741,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         with patch.dict(
             os.environ, {"CHAT_WEB_SEARCH_FETCH_PAGES": "0"}, clear=False
         ):
-            with patch.object(web_search, "fetch_url_content") as mock_fetch:
+            with patch.object(web_search, "fetch_url_document") as mock_fetch:
                 enriched = web_search.enrich_sources_with_page_content(result)
 
         mock_fetch.assert_not_called()
@@ -675,12 +755,537 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch.object(
-            web_search, "fetch_url_content", side_effect=RuntimeError("boom")
+            web_search, "fetch_url_document", side_effect=RuntimeError("boom")
         ):
             enriched = web_search.enrich_sources_with_page_content(result)
 
         # A failed fetch must not break search; the original result is returned.
         self.assertIs(enriched, result)
+
+    def test_link_following_stops_at_normal_target_when_evidence_is_sufficient(self):
+        result = self._result_with_sources(
+            ("https://example.com/root-a", ("snippet",)),
+            ("https://example.com/root-b", ("snippet",)),
+        )
+
+        def document_for(url):
+            if "/root-" in url:
+                links = tuple(
+                    FetchedLink(f"{url}/child-{index}", f"Child {index}")
+                    for index in range(3)
+                )
+            else:
+                links = (FetchedLink(f"{url}/next", "Next evidence"),)
+            return _fetched_document(url, f"body {url}", title=url, links=links)
+
+        planner_calls = 0
+
+        def planner(messages, _model):
+            nonlocal planner_calls
+            planner_calls += 1
+            payload = json.loads(messages[1]["content"])
+            if payload["attempted_pages"] >= 5:
+                return '{"sufficient": true, "selected_link_ids": []}'
+            ids = [item["id"] for item in payload["link_candidates"]]
+            return json.dumps({"sufficient": False, "selected_link_ids": ids})
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response", side_effect=planner),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 5)
+        self.assertEqual(planner_calls, 2)
+        self.assertEqual(sum(bool(source.page_text) for source in enriched.sources), 5)
+        followed = [source for source in enriched.sources if source.link_depth == 1]
+        self.assertEqual(len(followed), 3)
+        self.assertTrue(all(source.linked_from_url for source in followed))
+
+    def test_link_following_can_be_disabled_without_disabling_root_page_fetch(self):
+        result = self._result_with_sources(
+            ("https://example.com/root", ("snippet",)),
+        )
+        document = _fetched_document(
+            "https://example.com/root",
+            "root body",
+            links=(FetchedLink("https://example.com/detail", "Detail"),),
+        )
+
+        with (
+            patch.dict(os.environ, {"CHAT_WEB_SEARCH_FOLLOW_LINKS": "0"}, clear=False),
+            patch.object(web_search, "fetch_url_document", return_value=document) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response") as mock_planner,
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        mock_fetch.assert_called_once_with("https://example.com/root")
+        mock_planner.assert_not_called()
+        self.assertEqual(enriched.sources[0].page_text, "root body")
+        self.assertEqual(len(enriched.sources), 1)
+
+    def test_link_following_deduplicates_fragment_variants_across_parents(self):
+        result = self._result_with_sources(
+            ("https://example.com/root-a", ("snippet",)),
+            ("https://example.com/root-b", ("snippet",)),
+        )
+
+        def document_for(url):
+            links = ()
+            if url.endswith("root-a"):
+                links = (FetchedLink("https://example.com/shared#first", "Shared A"),)
+            elif url.endswith("root-b"):
+                links = (FetchedLink("https://example.com/shared#second", "Shared B"),)
+            return _fetched_document(url, f"body {url}", links=links)
+
+        def select_all(messages, _model):
+            payload = json.loads(messages[1]["content"])
+            return json.dumps(
+                {
+                    "sufficient": False,
+                    "selected_link_ids": [
+                        item["id"] for item in payload["link_candidates"]
+                    ],
+                }
+            )
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response", side_effect=select_all),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        fetched_urls = [call.args[0] for call in mock_fetch.call_args_list]
+        self.assertEqual(len(fetched_urls), 3)
+        self.assertEqual(
+            sum(url.startswith("https://example.com/shared") for url in fetched_urls),
+            1,
+        )
+        self.assertEqual(sum(source.link_depth == 1 for source in enriched.sources), 1)
+
+    def test_link_following_enforces_depth_three_and_total_page_limit(self):
+        result = self._result_with_sources(
+            ("https://example.com/root-a", ("snippet",)),
+            ("https://example.com/root-b", ("snippet",)),
+        )
+
+        def document_for(url):
+            depth = url.count("/child-")
+            links = tuple(
+                FetchedLink(f"{url}/child-{index}", f"Depth {depth + 1} child {index}")
+                for index in range(5)
+            )
+            return _fetched_document(url, f"body {url}", title=url, links=links)
+
+        def always_continue(messages, _model):
+            payload = json.loads(messages[1]["content"])
+            ids = [item["id"] for item in payload["link_candidates"]]
+            return json.dumps({"sufficient": False, "selected_link_ids": ids})
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "WEB_SEARCH_LINK_FOLLOW_MAX_PAGES": "999",
+                    "WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH": "999",
+                },
+                clear=False,
+            ),
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response", side_effect=always_continue),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 10)
+        self.assertEqual(max(source.link_depth for source in enriched.sources), 3)
+        self.assertFalse(any("/child-0/child-0/child-0/child-" in call.args[0] for call in mock_fetch.call_args_list))
+
+    def test_page_fetch_budget_is_shared_across_multiple_searches_in_one_answer(self):
+        budget = web_search.WebPageFetchBudget(max_attempts=10, timeout_seconds=30)
+
+        def make_result(suffix):
+            return self._result_with_sources(
+                (f"https://example.com/{suffix}/root-a", ("snippet",)),
+                (f"https://example.com/{suffix}/root-b", ("snippet",)),
+            )
+
+        def document_for(url):
+            links = tuple(
+                FetchedLink(f"{url}/child-{index}", f"Child {index}")
+                for index in range(3)
+            )
+            return _fetched_document(url, f"body {url}", links=links)
+
+        def select_all(messages, _model):
+            payload = json.loads(messages[1]["content"])
+            return json.dumps(
+                {
+                    "sufficient": False,
+                    "selected_link_ids": [
+                        item["id"] for item in payload["link_candidates"]
+                    ],
+                }
+            )
+
+        with (
+            patch.dict(
+                os.environ,
+                {"WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH": "1"},
+                clear=False,
+            ),
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response", side_effect=select_all),
+        ):
+            web_search.enrich_sources_with_page_content(
+                make_result("first"),
+                page_fetch_budget=budget,
+            )
+            web_search.enrich_sources_with_page_content(
+                make_result("second"),
+                page_fetch_budget=budget,
+            )
+            web_search.enrich_sources_with_page_content(
+                make_result("third"),
+                page_fetch_budget=budget,
+            )
+
+        self.assertEqual(mock_fetch.call_count, 10)
+        self.assertEqual(budget.attempted, 10)
+        self.assertEqual(budget.remaining_attempts, 0)
+
+    def test_link_follow_planner_payload_and_wait_respect_budgets(self):
+        sources = tuple(
+            web_search.WebSearchSource(
+                url=f"https://example.com/{index}?q={'x' * 900}",
+                title="title " * 80,
+                hostname="example.com",
+                age="",
+                snippets=(),
+                page_text="evidence " * 1000,
+            )
+            for index in range(10)
+        )
+        result = web_search.WebSearchResult(
+            query="q" * 1000,
+            searched_at="2026-08-14T00:00:00+00:00",
+            sources=sources,
+        )
+        candidate = web_search._LinkFollowCandidate(
+            candidate_id="link_1_1",
+            parent_url="https://example.com/root",
+            parent_title="Root",
+            url=f"https://example.com/detail?q={'y' * 900}",
+            text="Detail",
+            context="context " * 100,
+            depth=1,
+        )
+        captured = {}
+
+        def planner(messages, _model):
+            captured["payload"] = messages[1]["content"]
+            return '{"sufficient": true, "selected_link_ids": []}'
+
+        with patch.object(web_search, "get_llm_json_response", side_effect=planner):
+            decision = web_search._choose_links_for_followup(
+                result.query,
+                result,
+                [candidate],
+                attempted_pages=2,
+                target_pages=5,
+                remaining_pages=8,
+                timeout_seconds=0.25,
+            )
+
+        self.assertTrue(decision.sufficient)
+        self.assertLessEqual(
+            len(captured["payload"]),
+            web_search.WEB_SEARCH_LINK_FOLLOW_PLANNER_CONTEXT_CHARS,
+        )
+        self.assertEqual(
+            json.loads(captured["payload"])["link_candidates"][0]["id"],
+            "link_1_1",
+        )
+
+        executor = MagicMock()
+        future = MagicMock()
+        future.result.side_effect = web_search.FuturesTimeoutError()
+        executor.submit.return_value = future
+        with patch.object(web_search, "ThreadPoolExecutor", return_value=executor):
+            timed_out = web_search._choose_links_for_followup(
+                "q",
+                result,
+                [candidate],
+                attempted_pages=2,
+                target_pages=5,
+                remaining_pages=8,
+                timeout_seconds=0.25,
+            )
+
+        self.assertIsNone(timed_out)
+        future.result.assert_called_once_with(timeout=0.25)
+        executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+
+    def test_link_following_rejects_ids_outside_discovered_allowlist(self):
+        result = self._result_with_sources(
+            ("https://example.com/root-a", ("snippet",)),
+            ("https://example.com/root-b", ("snippet",)),
+        )
+
+        def document_for(url):
+            return _fetched_document(
+                url,
+                f"body {url}",
+                links=(FetchedLink("https://example.com/allowed", "Allowed"),),
+            )
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=document_for) as mock_fetch,
+            patch.object(
+                web_search,
+                "get_llm_json_response",
+                return_value=(
+                    '{"sufficient": false, "selected_link_ids": '
+                    '["link_999", "https://169.254.169.254/latest/meta-data"]}'
+                ),
+            ),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 2)
+        self.assertEqual(len(enriched.sources), 2)
+
+    def test_link_follow_selection_limits_each_parent_to_three_links(self):
+        candidates = [
+            web_search._LinkFollowCandidate(
+                candidate_id=f"link_a_{index}",
+                parent_url="https://example.com/root-a",
+                parent_title="Root A",
+                url=f"https://example.com/detail-{index}",
+                text=f"Detail {index}",
+                context="",
+                depth=1,
+            )
+            for index in range(4)
+        ] + [
+            web_search._LinkFollowCandidate(
+                candidate_id=f"link_b_{index}",
+                parent_url="https://example.com/root-b",
+                parent_title="Root B",
+                url=f"https://example.com/other-{index}",
+                text=f"Other {index}",
+                context="",
+                depth=1,
+            )
+            for index in range(2)
+        ]
+        decision = web_search._LinkFollowDecision(
+            sufficient=False,
+            selected_ids=tuple(candidate.candidate_id for candidate in candidates),
+        )
+
+        with patch.object(web_search, "WEB_SEARCH_LINK_FOLLOW_MAX_PER_WAVE", 6):
+            selected = web_search._validated_selected_candidates(
+                decision,
+                candidates,
+                limit=10,
+            )
+
+        self.assertEqual(len(selected), 5)
+        self.assertEqual(
+            sum(candidate.parent_url.endswith("root-a") for candidate in selected),
+            3,
+        )
+        self.assertEqual(
+            sum(candidate.parent_url.endswith("root-b") for candidate in selected),
+            2,
+        )
+
+    def test_link_follow_selection_limits_each_wave_to_three_links(self):
+        candidates = [
+            web_search._LinkFollowCandidate(
+                candidate_id=f"link_{index}",
+                parent_url=f"https://example.com/root-{index}",
+                parent_title=f"Root {index}",
+                url=f"https://example.com/detail-{index}",
+                text=f"Detail {index}",
+                context="",
+                depth=1,
+            )
+            for index in range(5)
+        ]
+        decision = web_search._LinkFollowDecision(
+            sufficient=False,
+            selected_ids=tuple(candidate.candidate_id for candidate in candidates),
+        )
+
+        selected = web_search._validated_selected_candidates(decision, candidates, limit=10)
+
+        self.assertEqual(len(selected), 3)
+
+    def test_expired_shared_deadline_blocks_fetches_and_planning_in_later_search(self):
+        budget = web_search.WebPageFetchBudget(max_attempts=10, timeout_seconds=30)
+        self.assertEqual(budget.reserve(2), 2)
+        budget._deadline = 0.0
+        result = self._result_with_sources(
+            ("https://example.com/later-root", ("snippet",)),
+        )
+
+        with (
+            patch.object(web_search, "fetch_url_document") as mock_fetch,
+            patch.object(web_search, "get_llm_json_response") as mock_planner,
+        ):
+            enriched = web_search.enrich_sources_with_page_content(
+                result,
+                page_fetch_budget=budget,
+            )
+
+        self.assertIs(enriched, result)
+        self.assertEqual(budget.attempted, 2)
+        mock_fetch.assert_not_called()
+        mock_planner.assert_not_called()
+
+    def test_selected_private_link_is_blocked_before_http_request(self):
+        result = self._result_with_sources(
+            ("https://example.com/root", ("snippet",)),
+        )
+        root_document = _fetched_document(
+            "https://example.com/root",
+            "root body",
+            links=(
+                FetchedLink(
+                    "http://169.254.169.254/latest/meta-data",
+                    "Metadata",
+                ),
+            ),
+        )
+
+        def fetch_document(url):
+            if url == "https://example.com/root":
+                return root_document
+            return url_fetcher.fetch_url_document(url)
+
+        def select_candidate(messages, _model):
+            payload = json.loads(messages[1]["content"])
+            return json.dumps(
+                {
+                    "sufficient": False,
+                    "selected_link_ids": [payload["link_candidates"][0]["id"]],
+                }
+            )
+
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=fetch_document),
+            patch.object(web_search, "get_llm_json_response", side_effect=select_candidate),
+            patch("socket.gethostbyname", return_value="169.254.169.254"),
+            patch("requests.get") as mock_get,
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        mock_get.assert_not_called()
+        self.assertEqual(len(enriched.sources), 1)
+        self.assertEqual(enriched.sources[0].page_text, "root body")
+
+    def test_link_following_planner_failure_keeps_root_page_evidence(self):
+        result = self._result_with_sources(
+            ("https://example.com/root-a", ("snippet",)),
+        )
+        document = _fetched_document(
+            "https://example.com/root-a",
+            "root body",
+            links=(FetchedLink("https://example.com/detail", "Detail"),),
+        )
+
+        with (
+            patch.object(web_search, "fetch_url_document", return_value=document) as mock_fetch,
+            patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")),
+        ):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(enriched.sources[0].page_text, "root body")
+
+    def test_link_followed_sources_round_trip_with_independent_evidence(self):
+        source = web_search.WebSearchSource(
+            url="https://example.com/detail",
+            title="Detail",
+            hostname="example.com",
+            age="",
+            snippets=(),
+            page_text="Detailed primary evidence.",
+            link_depth=2,
+            linked_from_url="https://example.com/index",
+        )
+        result = web_search.WebSearchResult(
+            query="q",
+            searched_at="2026-08-14T00:00:00+00:00",
+            sources=(source,),
+        )
+
+        restored = web_search.deserialize_web_search_result(
+            web_search.serialize_web_search_result(result)
+        )
+
+        self.assertIsNotNone(restored)
+        assert restored is not None
+        self.assertEqual(restored.sources[0].link_depth, 2)
+        self.assertEqual(
+            restored.sources[0].linked_from_url,
+            "https://example.com/index",
+        )
+        self.assertEqual(restored.sources[0].evidence_id, source.evidence_id)
+
+    def test_system_message_keeps_complete_sources_within_context_budget(self):
+        sources = tuple(
+            web_search.WebSearchSource(
+                url=f"https://example.com/page-{index}?q={'x' * 900}",
+                title=f"Page {index} {'title ' * 40}",
+                hostname="example.com",
+                age="",
+                snippets=("snippet " * 200,),
+                page_text=(f"evidence-{index} " * 1000),
+                link_depth=min(index, 3),
+                linked_from_url=f"https://parent.example.com/{'p' * 900}",
+            )
+            for index in range(14)
+        )
+        result = web_search.WebSearchResult(
+            query="q" * 30000,
+            searched_at="s" * 1000,
+            sources=sources,
+        )
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertLessEqual(len(content), web_search.WEB_SEARCH_MAX_CONTEXT_CHARS)
+        self.assertTrue(content.endswith("</web_search_context>"))
+        self.assertEqual(content.count("\n<source id="), content.count("\n</source>"))
+        for source in sources:
+            self.assertIn(source.evidence_id, content)
+
+    def test_system_message_counts_escaped_metadata_against_context_budget(self):
+        sources = tuple(
+            web_search.WebSearchSource(
+                url=f"https://example.com/{index}?q=" + "&" * 900,
+                title='\\"' * 220,
+                hostname="example.com",
+                age="",
+                snippets=("snippet " * 100,),
+                page_text="evidence " * 1000,
+            )
+            for index in range(14)
+        )
+        result = web_search.WebSearchResult(
+            query="&" * 1000,
+            searched_at='\\"' * 1000,
+            sources=sources,
+        )
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertLessEqual(len(content), web_search.WEB_SEARCH_MAX_CONTEXT_CHARS)
+        self.assertEqual(content.count("\n<source id="), 14)
+        for source in sources:
+            self.assertIn(source.evidence_id, content)
 
     # 日本語: ビルドシステムmessage含むpagetextことを検証します。
     # English: Verify that build system message includes page text.
@@ -1140,6 +1745,23 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         # 最新の検索(q4)は含まれ、最古(q0)は予算超過で落ちる
         self.assertIn("q4", content)
         self.assertNotIn('query="q0"', content)
+
+    def test_build_prior_message_never_splits_source_tags_at_small_budget(self):
+        result = _sample_result(page_text="x" * 10000)
+
+        self.assertIsNone(
+            web_search.build_prior_web_search_system_message([result], max_chars=500)
+        )
+        message = web_search.build_prior_web_search_system_message(
+            [result],
+            max_chars=2500,
+        )
+
+        self.assertIsNotNone(message)
+        content = message["content"]
+        self.assertLessEqual(len(content), 2500)
+        self.assertEqual(content.count("\n<source id="), content.count("\n</source>"))
+        self.assertTrue(content.endswith("</web_search_context>"))
 
     def test_inject_prior_context_after_system_messages(self):
         messages = [
