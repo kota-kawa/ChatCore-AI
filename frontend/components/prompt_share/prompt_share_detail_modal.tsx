@@ -218,117 +218,117 @@ export function PromptShareDetailModal({
       }}
     >
       <div className="post-modal-content post-modal-content--detail" tabIndex={-1}>
-        {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
-        {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
-        <header className="prompt-detail-header">
-          {/* タブと閉じるボタンを見出し行に同居させ、ヘッダーを2段に収めて本文の高さを稼ぐ */}
-          {/* Tabs and the close button share the title row, keeping the header to two lines */}
-          <div className="prompt-detail-header__bar">
-            <div className="prompt-detail-heading">
-              <span className="prompt-detail-heading__icon" aria-hidden="true">
-                <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`}></i>
-              </span>
-              <div className="prompt-detail-heading__text">
-                <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
-
-                <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
-                  <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-                    <dt>
-                      <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
-                      <span className="sr-only">{t("promptShare.format")}</span>
-                    </dt>
-                    <dd id="modalPromptFormat">
-                      {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
-                    </dd>
-                  </div>
-                  <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-                    <dt>
-                      <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
-                      <span className="sr-only">{t("promptShare.media")}</span>
-                    </dt>
-                    <dd id="modalPromptMediaType">
-                      {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
-                    </dd>
-                  </div>
-                  <DetailMetaItem
-                    iconClass="bi-hash"
-                    label={t("promptShare.category")}
-                    value={categoryLabel}
-                    id="modalPromptCategory"
-                  />
-                  <AuthorMetaItem
-                    name={authorLabel}
-                    avatarUrl={authorAvatarUrl}
-                    authorUserId={authorUserId}
-                    onOpenProfile={onOpenAuthorProfile}
-                  />
-                  <DetailMetaItem
-                    iconClass="bi-calendar3"
-                    label={t("promptShare.publishedAt")}
-                    value={formattedDate}
-                  />
-                  {detailPrompt?.ai_model ? (
-                    <DetailMetaItem
-                      iconClass="bi-cpu"
-                      label={t("promptShare.aiModel")}
-                      value={detailPrompt.ai_model}
-                      id="modalAiModel"
-                    />
-                  ) : null}
-                </dl>
-              </div>
-            </div>
-
-            {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
-            {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
-            <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
-              <button
-                type="button"
-                role="tab"
-                id="promptDetailTab"
-                aria-selected={activeView === "detail" ? "true" : "false"}
-                aria-controls="promptDetailPanel"
-                className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
-                onClick={() => {
-                  onActiveViewChange("detail");
-                }}
-              >
-                {t("promptShare.details")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="promptCommentsTab"
-                aria-selected={activeView === "comments" ? "true" : "false"}
-                aria-controls="promptCommentsPanel"
-                className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
-                onClick={() => {
-                  onActiveViewChange("comments");
-                }}
-              >
-                {t("promptShare.comments")}
-                <span>{Number(detailPrompt?.comment_count || 0)}</span>
-              </button>
-            </div>
-
-            {/* 閉じるボタンは浮かせず見出し行の右端に置き、設定画面の閲覧モーダルと同じ組みにする */}
-            {/* The close button sits at the right of the title row instead of floating */}
-            <button
-              type="button"
-              className="prompt-detail-close"
-              id="closePromptDetailModal"
-              aria-label={t("promptShare.closeModal")}
-              ref={promptDetailCloseButtonRef}
-              onClick={onClose}
-            >
-              <i className="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </div>
-        </header>
+        {/* 閉じるボタンは他のモーダルと同じ丸ボタンで、スクロールしない右上の定位置に置く */}
+        {/* The close button is the same round button as the other modals, parked at the top right */}
+        <button
+          type="button"
+          className="close-btn"
+          id="closePromptDetailModal"
+          aria-label={t("promptShare.closeModal")}
+          ref={promptDetailCloseButtonRef}
+          onClick={onClose}
+        >
+          &times;
+        </button>
 
         {/* モーダル内のスクロールはこの1箇所だけに集約し、本文の入れ子スクロールをなくす */}
         {/* The single scroll container in the modal, so the body no longer scrolls inside a scroller */}
         <div className="modal-content-body prompt-detail-scroll">
+          {/* 見出し・署名・タブは上に固定せず、本文と一緒にスクロールさせて本文の縦幅を確保する */}
+          {/* The title, byline, and tabs scroll with the body instead of being pinned to the top */}
+          <header className="prompt-detail-header">
+            {/* タイトルとタブを2段に収め、閉じるボタンの分だけ右側を空ける */}
+            {/* Title and tabs stack into two rows, with the right edge kept clear of the close button */}
+            <div className="prompt-detail-header__bar">
+              <div className="prompt-detail-heading">
+                <span className="prompt-detail-heading__icon" aria-hidden="true">
+                  <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`}></i>
+                </span>
+                <div className="prompt-detail-heading__text">
+                  <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
+
+                  <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
+                    <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                      <dt>
+                        <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
+                        <span className="sr-only">{t("promptShare.format")}</span>
+                      </dt>
+                      <dd id="modalPromptFormat">
+                        {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
+                      </dd>
+                    </div>
+                    <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                      <dt>
+                        <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
+                        <span className="sr-only">{t("promptShare.media")}</span>
+                      </dt>
+                      <dd id="modalPromptMediaType">
+                        {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
+                      </dd>
+                    </div>
+                    <DetailMetaItem
+                      iconClass="bi-hash"
+                      label={t("promptShare.category")}
+                      value={categoryLabel}
+                      id="modalPromptCategory"
+                    />
+                    <AuthorMetaItem
+                      name={authorLabel}
+                      avatarUrl={authorAvatarUrl}
+                      authorUserId={authorUserId}
+                      onOpenProfile={onOpenAuthorProfile}
+                    />
+                    <DetailMetaItem
+                      iconClass="bi-calendar3"
+                      label={t("promptShare.publishedAt")}
+                      value={formattedDate}
+                    />
+                    {detailPrompt?.ai_model ? (
+                      <DetailMetaItem
+                        iconClass="bi-cpu"
+                        label={t("promptShare.aiModel")}
+                        value={detailPrompt.ai_model}
+                        id="modalAiModel"
+                      />
+                    ) : null}
+                  </dl>
+                </div>
+              </div>
+
+              {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
+              {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
+              <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
+                <button
+                  type="button"
+                  role="tab"
+                  id="promptDetailTab"
+                  aria-selected={activeView === "detail" ? "true" : "false"}
+                  aria-controls="promptDetailPanel"
+                  className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
+                  onClick={() => {
+                    onActiveViewChange("detail");
+                  }}
+                >
+                  {t("promptShare.details")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="promptCommentsTab"
+                  aria-selected={activeView === "comments" ? "true" : "false"}
+                  aria-controls="promptCommentsPanel"
+                  className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
+                  onClick={() => {
+                    onActiveViewChange("comments");
+                  }}
+                >
+                  {t("promptShare.comments")}
+                  <span>{Number(detailPrompt?.comment_count || 0)}</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
           {/* 詳細パネル: hidden属性でDOM上は残しつつ非表示にする */}
           {/* Detail panel: kept in DOM via hidden attribute for fast tab switching */}
           <section

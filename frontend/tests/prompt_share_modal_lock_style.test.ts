@@ -87,3 +87,51 @@ test("the composer's submit action is not pinned to the bottom of the modal", ()
     "the submit action row must scroll with the form instead of sticking",
   );
 });
+
+// 詳細モーダルのヘッダーは上に貼り付けない。特にスマホでは本文の縦幅を削ってしまうため。
+// The detail modal's header must not be pinned: on phones it eats the body's height.
+test("the detail modal's header scrolls with the body instead of sticking", () => {
+  const headerRule = promptShareModalCss.match(
+    /#promptDetailModal \.prompt-detail-header\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(headerRule, "the detail modal must style its header");
+  assert.doesNotMatch(
+    headerRule[1],
+    /position:\s*(sticky|fixed)/,
+    "the header must not be pinned to the top of the modal",
+  );
+
+  // 上端の色帯はスクロールしないシート側へ移し、ヘッダーが流れても起点が残るようにする
+  // The accent rule moved to the sheet so it stays put while the header scrolls away
+  assert.match(
+    promptShareModalCss,
+    /#promptDetailModal \.post-modal-content--detail::before\s*\{[\s\S]*?height:\s*4px;/,
+  );
+});
+
+// 閉じるボタンは他のモーダルと同じ丸ボタンを使う（詳細モーダル専用の角丸ボタンは持たない）
+// The close button reuses the other modals' round button; no detail-only variant remains
+test("the detail modal reuses the round close button shared with the other modals", () => {
+  assert.doesNotMatch(promptShareModalCss, /\.prompt-detail-close\b/);
+  assert.doesNotMatch(promptShareResponsiveCss, /\.prompt-detail-close\b/);
+  assert.match(
+    promptShareModalCss,
+    /\.prompt-share-page \.close-btn\s*\{[\s\S]*?border-radius:\s*50%;/,
+  );
+});
+
+// 固定されたコピー行が、右上の閉じるボタンの下へ潜り込まないだけの逃げを持つこと
+// The stuck copy row must keep enough clearance to never sit under the close button
+test("the sticky body header keeps clear of the close button", () => {
+  const stickyRule = promptShareModalCss.match(
+    /\.prompt-detail-section__header--sticky\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(stickyRule, "the body section must style its sticky header");
+
+  const padding = stickyRule[1].match(/padding:\s*[\d.]+rem\s+([\d.]+)rem/);
+  assert.ok(padding, "the sticky header must declare its horizontal padding");
+  assert.ok(
+    Number(padding[1]) >= 2.5,
+    "the right padding must clear the 2.45rem close button",
+  );
+});
