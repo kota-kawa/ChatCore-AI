@@ -13,7 +13,6 @@ import {
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent,
-  truncateTitle,
 } from "../../scripts/prompt_share/formatters";
 import type { PromptData } from "../../scripts/prompt_share/types";
 import { useTranslation } from "../../contexts/locale_context";
@@ -235,7 +234,9 @@ function PromptCardComponent({
 
       {/* 何の投稿かを最初に読ませるため、タイトルは作例画像より前に置く */}
       {/* The title comes before the reference image so the reader sees what the post is first */}
-      <h3>{truncateTitle(prompt.title)}</h3>
+      {/* 文字数で切らず、CSSの2行クランプに任せてカード幅いっぱいまで見せる */}
+      {/* No character cap here: the CSS two-line clamp lets the title use the card's full width */}
+      <h3>{prompt.title}</h3>
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
@@ -243,7 +244,7 @@ function PromptCardComponent({
         <div className="prompt-card__image">
           <img
             src={prompt.reference_image_url}
-            alt={t("promptShare.exampleImageAlt", { title: truncateTitle(prompt.title) })}
+            alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
             loading="lazy"
             decoding="async"
           />

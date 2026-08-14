@@ -253,6 +253,20 @@ export function PromptShareDetailModal({
                   <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
 
                   <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
+                    {/* カードと同じ読み順に合わせ、投稿者を先頭に置いてタグをその後ろに並べる */}
+                    {/* Matching the card's reading order: the author comes first, the tags follow */}
+                    <AuthorMetaItem
+                      name={authorLabel}
+                      avatarUrl={authorAvatarUrl}
+                      authorUserId={authorUserId}
+                      onOpenProfile={onOpenAuthorProfile}
+                    />
+                    <DetailMetaItem
+                      iconClass="bi-hash"
+                      label={t("promptShare.category")}
+                      value={categoryLabel}
+                      id="modalPromptCategory"
+                    />
                     {/* カードと同じく、既定値（プロンプト / テキスト）のチップは並べずに情報のあるものだけ残す */}
                     {/* Like the card, the default chips (prompt / text) are dropped so only informative ones remain */}
                     {isDefaultFormat ? null : (
@@ -277,23 +291,6 @@ export function PromptShareDetailModal({
                         </dd>
                       </div>
                     )}
-                    <DetailMetaItem
-                      iconClass="bi-hash"
-                      label={t("promptShare.category")}
-                      value={categoryLabel}
-                      id="modalPromptCategory"
-                    />
-                    <AuthorMetaItem
-                      name={authorLabel}
-                      avatarUrl={authorAvatarUrl}
-                      authorUserId={authorUserId}
-                      onOpenProfile={onOpenAuthorProfile}
-                    />
-                    <DetailMetaItem
-                      iconClass="bi-calendar3"
-                      label={t("promptShare.publishedAt")}
-                      value={formattedDate}
-                    />
                     {detailPrompt?.ai_model ? (
                       <DetailMetaItem
                         iconClass="bi-cpu"
@@ -306,36 +303,45 @@ export function PromptShareDetailModal({
                 </div>
               </div>
 
-              {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
-              {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
-              <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
-                <button
-                  type="button"
-                  role="tab"
-                  id="promptDetailTab"
-                  aria-selected={activeView === "detail" ? "true" : "false"}
-                  aria-controls="promptDetailPanel"
-                  className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
-                  onClick={() => {
-                    onActiveViewChange("detail");
-                  }}
-                >
-                  {t("promptShare.details")}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  id="promptCommentsTab"
-                  aria-selected={activeView === "comments" ? "true" : "false"}
-                  aria-controls="promptCommentsPanel"
-                  className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
-                  onClick={() => {
-                    onActiveViewChange("comments");
-                  }}
-                >
-                  {t("promptShare.comments")}
-                  <span>{Number(detailPrompt?.comment_count || 0)}</span>
-                </button>
+              {/* ヘッダー最終行はタブと公開日で分け合い、日付は右端へ寄せる */}
+              {/* The header's last row splits between the tabs and the publish date, which sits at the right edge */}
+              <div className="prompt-detail-header__bottom">
+                {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
+                {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
+                <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="promptDetailTab"
+                    aria-selected={activeView === "detail" ? "true" : "false"}
+                    aria-controls="promptDetailPanel"
+                    className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
+                    onClick={() => {
+                      onActiveViewChange("detail");
+                    }}
+                  >
+                    {t("promptShare.details")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="promptCommentsTab"
+                    aria-selected={activeView === "comments" ? "true" : "false"}
+                    aria-controls="promptCommentsPanel"
+                    className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
+                    onClick={() => {
+                      onActiveViewChange("comments");
+                    }}
+                  >
+                    {t("promptShare.comments")}
+                    <span>{Number(detailPrompt?.comment_count || 0)}</span>
+                  </button>
+                </div>
+                <p className="prompt-detail-header__date">
+                  <i className="bi bi-calendar3" aria-hidden="true"></i>
+                  <span className="sr-only">{t("promptShare.publishedAt")}</span>
+                  {formattedDate}
+                </p>
               </div>
             </div>
           </header>

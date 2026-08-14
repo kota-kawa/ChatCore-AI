@@ -6,11 +6,6 @@ import type { Locale } from "../../../lib/i18n/config";
 
 export { escapeHtml } from "../../core/html";
 
-export function truncateTitle(title: string) {
-  const chars = Array.from(title);
-  return chars.length > 17 ? chars.slice(0, 17).join("") + "..." : title;
-}
-
 // 生の日付文字列を人間が読みやすい形式に変換する — 空値は空文字を返す
 // Converts a raw date string to a human-readable format; returns empty string for falsy input
 export function toDisplayDate(rawDate?: string): string {

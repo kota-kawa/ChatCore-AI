@@ -342,7 +342,8 @@
   --pd-surface-quiet: rgba(15, 23, 42, 0.72);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-meta__item dt i {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-meta__item dt i,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__date i {
   color: #7d90a8;
 }
 

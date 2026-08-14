@@ -205,9 +205,36 @@
    A grid stacking title and tabs; wide screens pull the tabs beside the title */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__bar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem 0.9rem;
+}
+
+/* ヘッダー最終行。タブは左、公開日は右下に置き、両者の高さを揃える
+   The header's last row: tabs on the left, publish date at the bottom right, sharing one baseline */
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.9rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  margin: 0 0 0 auto;
+  color: var(--pd-ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__date i {
+  color: #8ba3bc;
+  font-size: 0.84rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading {

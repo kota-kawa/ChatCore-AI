@@ -1,5 +1,5 @@
 import type { ContentFormat, MediaType, PromptData, PromptType } from "./types";
-import { CONTENT_CHAR_LIMIT, TITLE_CHAR_LIMIT } from "./constants";
+import { CONTENT_CHAR_LIMIT } from "./constants";
 import { escapeHtml } from "../core/html";
 import { formatDate } from "../../lib/datetime";
 import {
@@ -16,10 +16,6 @@ export function truncateText(text: string, limit: number) {
   const safeText = text || "";
   const chars = Array.from(safeText);
   return chars.length > limit ? chars.slice(0, limit).join("") + "..." : safeText;
-}
-
-export function truncateTitle(title: string) {
-  return truncateText(title, TITLE_CHAR_LIMIT);
 }
 
 export function truncateContent(content: string) {
