@@ -198,8 +198,14 @@ def _endless_stream(messages, model, tools=None):
 
 # 日本語: Web検索による文脈拡張を行わないダミーの拡張結果を返します。
 # English: Return a no-op augmentation so web search does not run in tests.
-def _skip_web_search(messages, model, publish_event=None):
-    del model, publish_event
+def _skip_web_search(
+    messages,
+    model,
+    publish_event=None,
+    page_fetch_budget=None,
+    evidence_context_budget=None,
+):
+    del model, publish_event, page_fetch_budget, evidence_context_budget
     return WebSearchAugmentation(messages=messages, result=None)
 
 
