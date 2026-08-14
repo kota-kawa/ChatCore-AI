@@ -34,8 +34,11 @@ function xmlEscape(value: string) {
 export const PUBLIC_SITEMAP_ROUTES = [
   { path: "/", changefreq: "daily", priority: "1.0" },
   { path: "/lp", changefreq: "weekly", priority: "0.8" },
+  { path: "/chat/lp", changefreq: "weekly", priority: "0.7" },
   { path: "/prompt_share", changefreq: "daily", priority: "0.9" },
+  { path: "/prompt_share/lp", changefreq: "weekly", priority: "0.7" },
   { path: "/memo", changefreq: "weekly", priority: "0.5" },
+  { path: "/memo/lp", changefreq: "weekly", priority: "0.7" },
   { path: "/help", changefreq: "monthly", priority: "0.6" },
   { path: "/terms", changefreq: "yearly", priority: "0.3" },
   { path: "/privacy", changefreq: "yearly", priority: "0.3" }

@@ -1,0 +1,578 @@
+/* memo_lp.css
+   メモ機能の紹介ページ（/memo/lp）のページエントリーポイント。
+   共通のLPシェル（ヘッダー・ボタン・FAQ・フッター）は lp.css を再利用し、
+   このファイルはこのページ固有のセクションだけを持つ。トークンは .mslp-page にスコープする。
+   Page entry point for the memo landing page (/memo/lp).
+   The shared LP shell (header, buttons, FAQ, footer) is reused from lp.css; this file only
+   holds the sections unique to this page. Tokens stay scoped to .mslp-page. */
+
+.mslp-page {
+  /* メモ機能自身のアンバー系パレット（frontend/public/memo/static/css/memo_form.css と
+     frontend/public/static/css/pages/shared_memo.css の実際の値に合わせる）。
+     変数名の "green" は共通シェル lp.css 側の命名なので改名せず、値だけアンバーに差し替える。
+     --lp-green-deep は共通シェルの主ボタンで白文字の背景になるため、#d97706（白文字で約3.2:1）
+     ではなく #b45309（白文字で約5.0:1）を採用している。
+     The memo feature's own amber palette, taken from the real values in memo_form.css and
+     shared_memo.css. The "green" names belong to the shared lp.css shell, so they keep their
+     names and only their values change. --lp-green-deep paints white text in the shell's primary
+     button, so it is #b45309 (about 5.0:1 on white) rather than #d97706 (only about 3.2:1). */
+  --lp-ink: #1c1009;
+  --lp-paper: #fffbf5;
+  --lp-paper-tint: #fef6e7;
+  --lp-green: #d97706;
+  --lp-green-deep: #b45309;
+  --lp-green-soft: rgba(217, 119, 6, 0.12);
+  --lp-text: #1c1009;
+  /* メモ画面の #78716c を紙面上で 4.5:1 を確実に超えるところまで濃くしたもの
+     The memo screen's #78716c, darkened until it clears 4.5:1 against the paper */
+  --lp-muted: #6d635a;
+  --lp-line: rgba(28, 16, 9, 0.14);
+  --lp-card: #ffffff;
+  --lp-header-bg: rgba(255, 251, 245, 0.9);
+  --lp-shadow-card: 0 16px 40px rgba(120, 72, 12, 0.14);
+
+  /* このページ固有のトークン / Tokens unique to this page */
+  --mslp-rule: rgba(28, 16, 9, 0.14);
+  --mslp-chip-bg: rgba(28, 16, 9, 0.05);
+  --mslp-mono: "SFMono-Regular", "Menlo", "Consolas", "Noto Sans Mono CJK JP", monospace;
+  --mslp-cta-text: #fdf3e4;
+}
+
+:root[data-theme="dark"] .mslp-page {
+  /* 暗所ではメモ画面のダークアクセント #fbbf24 を主役にする
+     In the dark theme the memo screen's dark accent #fbbf24 takes the lead */
+  --lp-ink: #14100b;
+  --lp-paper: #181310;
+  --lp-paper-tint: #211a13;
+  --lp-green: #f59e0b;
+  --lp-green-deep: #fbbf24;
+  --lp-green-soft: rgba(251, 191, 36, 0.16);
+  --lp-text: #f3e7d8;
+  --lp-muted: #b8a894;
+  --lp-line: rgba(243, 231, 216, 0.16);
+  --lp-card: #211a13;
+  --lp-header-bg: rgba(24, 19, 16, 0.9);
+  --lp-shadow-card: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  --mslp-rule: rgba(243, 231, 216, 0.2);
+  --mslp-chip-bg: rgba(243, 231, 216, 0.07);
+}
+
+/* 共通シェルは緑寄りの固定色を数か所に持つため、このページだけ暖色へ寄せる
+   The shared shell hardcodes a few green-leaning colours; warm them up for this page only */
+:root[data-theme="dark"] .mslp-page .lp-btn--primary,
+:root[data-theme="dark"] .mslp-page .lp-demo__msg--user {
+  color: #1c1009;
+}
+
+.mslp-page .lp-final-cta {
+  color: var(--mslp-cta-text);
+}
+
+.mslp-page .lp-final-cta__note {
+  color: rgba(253, 243, 228, 0.76);
+}
+
+.mslp-page .lp-btn--inverse {
+  background: #fffbf5;
+  color: #1c1009;
+}
+
+/* 本文相当のテキストは 1rem 以上を保つ（共通シェルの既定は 0.875rem）
+   Keep body-level text at 1rem or more; the shared shell defaults to 0.875rem */
+.mslp-page .lp-flow__description,
+.mslp-page .lp-faq__answer,
+.mslp-page .lp-hero__trust {
+  font-size: var(--text-md);
+}
+
+/* ---- ヒーロー / Hero ---- */
+
+.mslp-hero {
+  background:
+    radial-gradient(70% 90% at 88% 6%, rgba(217, 119, 6, 0.1), transparent 68%),
+    var(--lp-paper);
+  border-bottom: 1px solid var(--lp-line);
+  padding-block: clamp(3.5rem, 8vw, 6rem);
+}
+
+.mslp-hero__inner {
+  align-items: center;
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 4rem);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+}
+
+.mslp-hero__title {
+  font-family: var(--lp-font-display);
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  margin-bottom: var(--space-5);
+}
+
+.mslp-hero__lead {
+  color: var(--lp-muted);
+  font-size: clamp(1rem, 1.6vw, 1.0625rem);
+  margin-bottom: var(--space-8);
+  max-width: 36em;
+}
+
+.mslp-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* ---- メモ画面の見本（画像を使わず文字とCSSで組む）
+       Sample of the memo screen, assembled from text and CSS instead of an image ---- */
+
+.mslp-mock__window {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--lp-shadow-card);
+  overflow: hidden;
+}
+
+.mslp-mock__titlebar {
+  align-items: center;
+  background: var(--lp-paper-tint);
+  border-bottom: 1px solid var(--lp-line);
+  display: flex;
+  gap: 6px;
+  padding: 0.7rem 1rem;
+}
+
+.mslp-mock__dot {
+  background: var(--lp-line);
+  border-radius: 50%;
+  height: 9px;
+  width: 9px;
+}
+
+.mslp-mock__titletext {
+  color: var(--lp-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-left: var(--space-2);
+}
+
+.mslp-mock__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: clamp(1rem, 2.5vw, 1.4rem);
+}
+
+.mslp-mock__search {
+  align-items: center;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-full);
+  color: var(--lp-muted);
+  display: flex;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  padding: 0.5rem 0.9rem;
+}
+
+.mslp-mock__card {
+  background: var(--lp-paper);
+  border: 1px solid var(--lp-line);
+  /* メモ一覧のカードが持つ背景色アクセントを、左端の帯として表す
+     The list card's background-colour accent, shown here as a stripe on the leading edge */
+  border-left: 4px solid var(--lp-green);
+  border-radius: var(--radius-m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: clamp(0.9rem, 2vw, 1.15rem);
+}
+
+.mslp-mock__card-head {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mslp-mock__pin {
+  color: var(--lp-green-deep);
+  font-size: var(--text-sm);
+}
+
+.mslp-mock__card-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+}
+
+.mslp-mock__card-body {
+  color: var(--lp-muted);
+  font-family: var(--mslp-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  white-space: pre-line;
+}
+
+.mslp-mock__card-meta {
+  border-top: 1px solid var(--mslp-rule);
+  color: var(--lp-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-2xs);
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-2);
+}
+
+.mslp-mock__card-meta span {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.mslp-mock__collection-dot {
+  background: var(--lp-green);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.mslp-mock__editor {
+  align-items: center;
+  border-top: 1px solid var(--mslp-rule);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+
+.mslp-mock__tabs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.mslp-mock__tab {
+  align-items: center;
+  border-radius: var(--radius-full);
+  color: var(--lp-muted);
+  display: inline-flex;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  gap: var(--space-1);
+  padding: 0.3rem 0.75rem;
+}
+
+.mslp-mock__tab--active {
+  background: var(--lp-green-soft);
+  color: var(--lp-green-deep);
+}
+
+.mslp-mock__autosave {
+  align-items: center;
+  color: var(--lp-green-deep);
+  display: inline-flex;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.mslp-mock__caption {
+  color: var(--lp-muted);
+  font-size: var(--text-sm);
+  margin-top: var(--space-3);
+  text-align: center;
+}
+
+/* 見本の登場アニメーション（reduced-motion時は無効）
+   Mock entrance animation (disabled under reduced motion) */
+@media (prefers-reduced-motion: no-preference) {
+  .mslp-hero__copy {
+    animation: mslp-rise 0.7s ease-out both;
+  }
+
+  .mslp-mock__window {
+    animation: mslp-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.15s;
+  }
+
+  .mslp-mock__caption {
+    animation: mslp-rise 0.7s ease-out both;
+    animation-delay: 0.5s;
+  }
+}
+
+@keyframes mslp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- できること / What you can do ---- */
+
+.mslp-value__grid {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mslp-value__item {
+  border-top: 2px solid var(--lp-green);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+}
+
+.mslp-value__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.mslp-value__description {
+  color: var(--lp-muted);
+  font-size: var(--text-md);
+}
+
+.mslp-value__points {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.mslp-value__points li {
+  padding-left: 1.3em;
+  position: relative;
+}
+
+.mslp-value__points li::before {
+  color: var(--lp-green);
+  content: "―";
+  left: 0;
+  position: absolute;
+}
+
+/* ---- 対応範囲・前提 / Scope and prerequisites ---- */
+
+.mslp-scope {
+  background: var(--lp-paper-tint);
+}
+
+.mslp-scope__axes {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.mslp-axis {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.25rem, 2.8vw, 1.75rem);
+}
+
+.mslp-axis__name {
+  color: var(--lp-green-deep);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: var(--space-4);
+}
+
+.mslp-axis__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.mslp-axis__item {
+  border-top: 1px solid var(--mslp-rule);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.mslp-axis__item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.mslp-axis__label {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.mslp-axis__note {
+  color: var(--lp-muted);
+  font-size: var(--text-md);
+}
+
+.mslp-scope__subtitle {
+  font-size: var(--text-md);
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.mslp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.mslp-chips li {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-full);
+  font-size: var(--text-md);
+  padding: 0.35rem 0.9rem;
+}
+
+/* 書き出し形式は並び順と別のまとまりだと分かるようにする
+   Export formats are visually separated from the sort options */
+.mslp-chips li.mslp-chips__format {
+  background: var(--lp-green-soft);
+  border-color: transparent;
+  color: var(--lp-green-deep);
+  font-family: var(--mslp-mono);
+  font-weight: 600;
+}
+
+/* 共有で出るもの・出ないもの / What sharing does and does not expose */
+.mslp-privacy {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+  padding: clamp(1.25rem, 2.8vw, 1.75rem);
+}
+
+.mslp-privacy__row {
+  border-top: 1px solid var(--mslp-rule);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.mslp-privacy__row + .mslp-privacy__row {
+  margin-top: var(--space-3);
+}
+
+.mslp-privacy__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.mslp-privacy dt {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.mslp-privacy dd {
+  color: var(--lp-muted);
+  font-size: var(--text-md);
+  margin: 0;
+}
+
+/* 制限を先に見せるための注記リスト / Up-front list of what is missing or capped */
+.mslp-limits {
+  border-left: 3px solid var(--lp-green);
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-2);
+  list-style: none;
+  padding-left: var(--space-4);
+}
+
+/* ---- 使い方の下に置く2カラム / Two columns placed under the flow steps ---- */
+
+.mslp-split {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mslp-split--spaced {
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+}
+
+.mslp-panel {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+.mslp-panel__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.mslp-panel__list {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.mslp-panel__list dt {
+  color: var(--lp-text);
+  font-weight: 700;
+}
+
+.mslp-panel__row {
+  border-top: 1px solid var(--mslp-rule);
+  padding-top: var(--space-3);
+}
+
+.mslp-panel__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* ---- レスポンシブ / Responsive ---- */
+
+@media (max-width: 992px) {
+  .mslp-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mslp-mock {
+    margin-inline: auto;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .mslp-value__grid,
+  .mslp-scope__axes,
+  .mslp-split {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 768px) {
+  .mslp-hero__cta .lp-btn {
+    flex-grow: 1;
+  }
+}

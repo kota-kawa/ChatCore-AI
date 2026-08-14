@@ -1,0 +1,556 @@
+/* chat_lp.css
+   AIチャットの紹介ページ（/chat/lp）のページエントリーポイント。
+   共通のLPシェル（ヘッダー・ボタン・フロー・FAQ・フッター）は lp.css を再利用し、
+   このファイルはこのページ固有のセクションとチャットの緑（ティール）への差し替えだけを持つ。
+   トークンは .cslp-page にスコープする。
+   Page entry point for the AI chat landing page (/chat/lp).
+   The shared LP shell (header, buttons, flow, FAQ, footer) is reused from lp.css; this file only
+   holds this page's own sections and swaps the palette to the chat service's teal green.
+   Tokens stay scoped to .cslp-page. */
+
+.cslp-page {
+  /* チャット画面と同じティールグリーン（#0f766e / #115e59 / #134e4a）を基調にする
+     Anchored to the chat screen's own teal greens (#0f766e / #115e59 / #134e4a) */
+  --lp-ink: #0c2b28;
+  --lp-paper: #f7fbfa;
+  --lp-paper-tint: #e8f4f1;
+  --lp-green: #0f766e;
+  --lp-green-deep: #115e59;
+  --lp-green-soft: #d5ede8;
+  --lp-text: #1c3a37;
+  --lp-muted: #52706c;
+  --lp-line: rgba(12, 43, 40, 0.13);
+  --lp-card: #ffffff;
+  --lp-header-bg: rgba(247, 251, 250, 0.88);
+  --lp-shadow-card: 0 16px 40px rgba(12, 43, 40, 0.1);
+
+  --cslp-rule: rgba(12, 43, 40, 0.16);
+  --cslp-chip-bg: rgba(12, 43, 40, 0.05);
+  --cslp-accent: #0f766e;
+  --cslp-mono: "SFMono-Regular", "Menlo", "Consolas", "Noto Sans Mono CJK JP", monospace;
+}
+
+:root[data-theme="dark"] .cslp-page {
+  /* 暗所ではチャット画面の明るいティール（#2dd4bf / #99f6e4）側へ寄せる
+     In the dark theme the palette leans on the chat screen's bright teals */
+  --lp-ink: #06201d;
+  --lp-paper: #0a1a18;
+  --lp-paper-tint: #102623;
+  --lp-green: #2dd4bf;
+  --lp-green-deep: #5eead4;
+  --lp-green-soft: rgba(45, 212, 191, 0.16);
+  --lp-text: #dceeeb;
+  --lp-muted: #92b3ae;
+  --lp-line: rgba(220, 238, 235, 0.16);
+  --lp-card: #102623;
+  --lp-header-bg: rgba(10, 26, 24, 0.88);
+  --lp-shadow-card: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  --cslp-rule: rgba(220, 238, 235, 0.2);
+  --cslp-chip-bg: rgba(220, 238, 235, 0.07);
+  --cslp-accent: #99f6e4;
+}
+
+/* lp.css の影と反転ボタンは既定の緑を前提にしているので、ティールへ置き換える
+   The shell's shadow and inverse button assume the default green, so retint them here */
+.cslp-page .lp-btn--primary {
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.28);
+}
+
+:root[data-theme="dark"] .cslp-page .lp-btn--primary,
+:root[data-theme="dark"] .cslp-page .lp-btn--primary:hover {
+  color: #06201d;
+}
+
+.cslp-page .lp-btn--inverse {
+  background: #f7fbfa;
+  color: #0c2b28;
+}
+
+/* 本文は16px相当を下限にする（シェル側の小さめ指定をこのページだけ引き上げる）
+   Keep body copy at 16px or larger, raising the shell's smaller sizes for this page only */
+.cslp-page .lp-flow__description,
+.cslp-page .lp-faq__answer,
+.cslp-page .lp-hero__trust {
+  font-size: var(--text-md);
+}
+
+/* ---- ヒーロー / Hero ---- */
+
+.cslp-hero {
+  background:
+    radial-gradient(62% 78% at 88% 8%, rgba(15, 118, 110, 0.12), transparent 70%),
+    var(--lp-paper);
+  border-bottom: 1px solid var(--lp-line);
+  overflow: hidden;
+  padding-block: clamp(3.5rem, 8vw, 6rem);
+}
+
+.cslp-hero__inner {
+  align-items: center;
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 4rem);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+}
+
+.cslp-hero__title {
+  font-family: var(--lp-font-display);
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  margin-bottom: var(--space-5);
+}
+
+.cslp-hero__lead {
+  color: var(--lp-muted);
+  font-size: clamp(1rem, 1.6vw, 1.0625rem);
+  margin-bottom: var(--space-8);
+  max-width: 36em;
+}
+
+.cslp-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* ---- チャット画面の見本（実際の画面と同じ文言を文字とCSSだけで再現）
+       Mock of the real chat screen, rebuilt from its own wording with text and CSS only ---- */
+
+.cslp-mock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cslp-mock__card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--lp-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: clamp(1.1rem, 2.4vw, 1.4rem);
+}
+
+.cslp-mock__card--artifact {
+  box-shadow: none;
+  margin-inline: clamp(0.5rem, 2vw, 1.75rem);
+}
+
+.cslp-mock__label {
+  color: var(--lp-muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.cslp-mock__tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cslp-mock__task {
+  background: var(--lp-green-soft);
+  border-radius: var(--radius-full);
+  color: var(--lp-green-deep);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+}
+
+.cslp-mock__task--add {
+  background: transparent;
+  border: 1px dashed var(--lp-green);
+}
+
+.cslp-mock__composer {
+  align-items: center;
+  border: 1px solid var(--cslp-rule);
+  border-radius: var(--radius-m);
+  display: flex;
+  gap: var(--space-3);
+  padding: 0.65rem 0.85rem;
+}
+
+.cslp-mock__composer-text {
+  color: var(--lp-muted);
+  flex-grow: 1;
+  font-size: var(--text-sm);
+}
+
+.cslp-mock__composer-actions {
+  color: var(--lp-muted);
+  display: inline-flex;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+}
+
+.cslp-mock__send {
+  color: var(--lp-green-deep);
+}
+
+.cslp-mock__model {
+  align-items: center;
+  color: var(--lp-muted);
+  display: flex;
+  font-size: var(--text-2xs);
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.cslp-mock__model-value {
+  align-items: center;
+  color: var(--lp-text);
+  display: inline-flex;
+  font-weight: 600;
+  gap: var(--space-1);
+}
+
+.cslp-mock__artifact-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.cslp-mock__artifact-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+/* 生成UIの枠に付く実際のバッジ（Generated UI / Generated 3D）と同じ見立て
+   Mirrors the badge the real generated UI frame carries (Generated UI / Generated 3D) */
+.cslp-mock__badge {
+  align-items: center;
+  background: var(--lp-green-soft);
+  border-radius: var(--radius-full);
+  color: var(--lp-green-deep);
+  display: inline-flex;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  gap: var(--space-1);
+  padding: 0.2rem 0.65rem;
+}
+
+.cslp-mock__badge-dot {
+  background: var(--lp-green);
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+/* サンドボックスの枠。中身は模式的な棒グラフで、数値は書かない
+   The sandbox frame; the bars inside are schematic and carry no numbers */
+.cslp-mock__frame {
+  align-items: flex-end;
+  background:
+    linear-gradient(var(--cslp-chip-bg), var(--cslp-chip-bg));
+  border: 1px solid var(--cslp-rule);
+  border-radius: var(--radius-m);
+  display: flex;
+  gap: clamp(0.5rem, 2vw, 0.9rem);
+  height: 132px;
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+.cslp-mock__bar {
+  background: linear-gradient(180deg, var(--lp-green), var(--lp-green-deep));
+  border-radius: 3px 3px 0 0;
+  width: clamp(14px, 5vw, 26px);
+}
+
+.cslp-mock__bar--1 { height: 38%; }
+.cslp-mock__bar--2 { height: 64%; }
+.cslp-mock__bar--3 { height: 88%; }
+.cslp-mock__bar--4 { height: 52%; }
+.cslp-mock__bar--5 { height: 72%; }
+
+.cslp-mock__note {
+  align-items: center;
+  color: var(--lp-muted);
+  display: flex;
+  font-size: var(--text-2xs);
+  gap: var(--space-1);
+}
+
+/* 見本の登場アニメーション（reduced-motion時は無効）
+   Mock entrance animation (disabled under reduced motion) */
+@media (prefers-reduced-motion: no-preference) {
+  .cslp-mock__card {
+    animation: cslp-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .cslp-mock__card--artifact {
+    animation-delay: 0.5s;
+  }
+
+  .cslp-mock__bar {
+    animation: cslp-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.9s;
+    transform-origin: bottom;
+  }
+
+  .cslp-mock__bar--2 { animation-delay: 1s; }
+  .cslp-mock__bar--3 { animation-delay: 1.1s; }
+  .cslp-mock__bar--4 { animation-delay: 1.2s; }
+  .cslp-mock__bar--5 { animation-delay: 1.3s; }
+}
+
+@keyframes cslp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cslp-grow {
+  from {
+    transform: scaleY(0.1);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* ---- できること / What you can do ---- */
+
+.cslp-value__grid {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cslp-value__item {
+  border-top: 2px solid var(--lp-green);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+}
+
+.cslp-value__icon {
+  align-items: center;
+  background: var(--lp-green-soft);
+  border-radius: var(--radius-m);
+  color: var(--lp-green-deep);
+  display: inline-flex;
+  font-size: var(--icon-size-md);
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.cslp-value__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.cslp-value__description {
+  color: var(--lp-muted);
+  font-size: var(--text-md);
+}
+
+.cslp-value__points {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.cslp-value__points li {
+  padding-left: 1.3em;
+  position: relative;
+}
+
+.cslp-value__points li::before {
+  color: var(--lp-green);
+  content: "―";
+  left: 0;
+  position: absolute;
+}
+
+/* ---- 対応範囲・仕組み / Scope ---- */
+
+.cslp-scope {
+  background: var(--lp-paper-tint);
+}
+
+.cslp-scope__axes {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.cslp-axis {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.25rem, 2.8vw, 1.75rem);
+}
+
+.cslp-axis__name {
+  color: var(--lp-green-deep);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: var(--space-4);
+}
+
+.cslp-axis__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.cslp-axis__item {
+  border-top: 1px solid var(--cslp-rule);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.cslp-axis__item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cslp-axis__label {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.cslp-axis__note {
+  color: var(--lp-muted);
+  font-size: var(--text-md);
+}
+
+.cslp-scope__subtitle {
+  font-size: var(--text-md);
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+.cslp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.cslp-chips li {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-full);
+  font-size: var(--text-md);
+  padding: 0.35rem 0.9rem;
+}
+
+/* 制限を先に見せるための注記リスト / Up-front list of the limits */
+.cslp-limits {
+  border-left: 3px solid var(--lp-green);
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-2);
+  list-style: none;
+  padding-left: var(--space-4);
+}
+
+/* ---- 使い方の下に置く2カラム / Two columns placed under the flow steps ---- */
+
+.cslp-split {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cslp-split--spaced {
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+}
+
+.cslp-panel {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--radius-l);
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+.cslp-panel__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.cslp-panel__list {
+  color: var(--lp-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-md);
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.cslp-panel__list dt {
+  color: var(--lp-text);
+  font-weight: 700;
+}
+
+.cslp-panel__row {
+  border-top: 1px solid var(--cslp-rule);
+  padding-top: var(--space-3);
+}
+
+.cslp-panel__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* ---- レスポンシブ / Responsive ---- */
+
+@media (max-width: 992px) {
+  .cslp-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cslp-mock {
+    margin-inline: auto;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .cslp-value__grid,
+  .cslp-scope__axes,
+  .cslp-split {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cslp-hero__cta .lp-btn {
+    flex-grow: 1;
+  }
+
+  .cslp-mock__card--artifact {
+    margin-inline: 0;
+  }
+}
