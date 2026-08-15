@@ -260,8 +260,8 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         # デフォルトの上限値が定数と一致することを検証
         # Assert that the limit matches the DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT constant
         self.assertTrue(allowed)
-        self.assertEqual(limit, DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT)
-        self.assertEqual(remaining, DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT - 1)
+        self.assertEqual(limit, llm_daily_limit.DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT)
+        self.assertEqual(remaining, llm_daily_limit.DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT - 1)
 
 
 if __name__ == "__main__":
