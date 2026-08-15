@@ -578,6 +578,72 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
         self.assertIn("&lt;host&gt;", block)
 
+    # 日本語: 検索結果ページには深さ表示を出さず、たどったページにだけ出すことを検証します。
+    # English: Verify only followed pages carry a depth marker, never result pages.
+    def test_source_items_mark_only_followed_pages_with_depth(self):
+        result = web_search.WebSearchResult(
+            query="x",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://root.example/a",
+                    title="Root",
+                    hostname="root.example",
+                    age="",
+                    snippets=(),
+                ),
+                web_search.WebSearchSource(
+                    url="https://child.example/b",
+                    title="Child",
+                    hostname="child.example",
+                    age="",
+                    snippets=(),
+                    link_depth=2,
+                    linked_from_url="https://www.root.example/a",
+                ),
+            ),
+        )
+
+        items = web_search.build_web_search_source_items(result)
+
+        self.assertNotIn("web-search-sources__depth", items[0])
+        self.assertNotIn("web-search-sources__item--followed", items[0])
+        self.assertIn(
+            '<li class="web-search-sources__item web-search-sources__item--followed">',
+            items[1],
+        )
+        self.assertIn(
+            '<span class="web-search-sources__depth">root.example から2階層先</span>',
+            items[1],
+        )
+
+    # 日本語: 辿り元が不明でも深さだけを表示し、HTMLをエスケープすることを検証します。
+    # English: Verify an unknown origin still shows the depth, with the origin escaped.
+    def test_source_items_depth_marker_handles_unknown_and_unsafe_origin(self):
+        def item_for(linked_from_url):
+            result = web_search.WebSearchResult(
+                query="x",
+                searched_at="2026-04-30T00:00:00+00:00",
+                sources=(
+                    web_search.WebSearchSource(
+                        url="https://child.example/b",
+                        title="Child",
+                        hostname="child.example",
+                        age="",
+                        snippets=(),
+                        link_depth=1,
+                        linked_from_url=linked_from_url,
+                    ),
+                ),
+            )
+            return web_search.build_web_search_source_items(result)[0]
+
+        self.assertIn(
+            '<span class="web-search-sources__depth">1階層先</span>',
+            item_for(""),
+        )
+        self.assertIn("&lt;script&gt;.example から1階層先", item_for("https://<script>.example/a"))
+
     # 日本語: なしsourcesのとき、ビルドWeb検索sourcesMarkdown返却する空ことを検証します。
     # English: Verify that build web search sources markdown returns empty when no sources.
     def test_build_web_search_sources_markdown_returns_empty_when_no_sources(self):
