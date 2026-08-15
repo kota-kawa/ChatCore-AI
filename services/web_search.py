@@ -2187,6 +2187,38 @@ def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]
     ]
 
 
+def source_hostname_label(url: str) -> str:
+    # URLから表示用のホスト名（先頭の www. を除いたもの）を取り出す
+    # Extract a display hostname from a URL, dropping a leading "www.".
+    if not url.strip():
+        return ""
+    try:
+        hostname = urlsplit(url.strip()).hostname or ""
+    except ValueError:
+        return ""
+    return hostname.removeprefix("www.")
+
+
+def build_source_depth_html(source: WebSearchSource) -> str:
+    # 検索結果からリンクをたどって取得したページに、深さと辿り元を示す行を付ける。
+    # 検索結果ページ自体（depth 0）には何も表示しない。
+    # Mark pages reached by following links with their depth and the page they came from.
+    # Search-result pages themselves (depth 0) get no marker.
+    if source.link_depth < 1:
+        return ""
+    parent_hostname = source_hostname_label(source.linked_from_url)
+    origin = f"{parent_hostname} から" if parent_hostname else ""
+    # 先頭の矢印はCSSの擬似要素で描く。メッセージHTMLのサニタイザは class しか
+    # 通さないため、aria-hidden を付けた装飾用spanは残らない。
+    # The leading arrow comes from a CSS pseudo-element: the message sanitizer keeps
+    # class but not aria-hidden, so a decorative span could not be hidden from readers.
+    return (
+        '<span class="web-search-sources__depth">'
+        f"{escape(origin)}{source.link_depth}階層先"
+        "</span>"
+    )
+
+
 def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
     # 検索ソースのHTMLリンク表現をビルドする
     # Build HTML list item strings representing the search sources.
@@ -2204,14 +2236,18 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
             if hostname
             else ""
         )
+        item_classes = "web-search-sources__item"
+        if source.link_depth >= 1:
+            item_classes += " web-search-sources__item--followed"
         sources_lines.append(
             (
-                '<li class="web-search-sources__item">'
+                f'<li class="{item_classes}">'
                 f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
                 f"{build_source_favicon_html(source)}"
                 '<span class="web-search-sources__content">'
                 f'<span class="web-search-sources__title">{escape(title)}</span>'
                 f"{hostname_line}"
+                f"{build_source_depth_html(source)}"
                 "</span>"
                 '<span class="web-search-sources__external">↗</span>'
                 "</a></li>"

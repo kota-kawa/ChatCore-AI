@@ -7,14 +7,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html import escape
 from typing import Any, Iterable, Sequence
 
 from .web_search import (
     WebSearchResult,
+    WebSearchSource,
     build_web_search_source_items,
     normalize_text,
+    source_hostname_label,
 )
 
 # ステップ見出し・説明文の最大文字数
@@ -30,6 +32,7 @@ _STEP_ICONS: dict[str, str] = {
     "search": "bi-search",
     "reuse": "bi-arrow-repeat",
     "read": "bi-file-earmark-text",
+    "follow": "bi-signpost-split",
     "review": "bi-check2-circle",
     "answer": "bi-stars",
     "warning": "bi-exclamation-triangle",
@@ -46,6 +49,7 @@ _TITLE_KIND_PREFIXES: tuple[tuple[str, str], ...] = (
     ("追加検索", "search"),
     ("Web検索", "search"),
     ("重要なページ", "read"),
+    ("リンクをたどって", "follow"),
     ("検索結果を確認", "review"),
     ("回答を作成", "answer"),
 )
@@ -156,13 +160,33 @@ def search_step(
     )
 
 
-def page_read_step(result: WebSearchResult | None) -> TraceStep | None:
-    # 検索結果から本文まで読み込めたページがある場合のステップ
-    # The step emitted when full page text could be read from the results.
+def _read_sources(result: WebSearchResult | None, *, followed: bool) -> list[WebSearchSource]:
+    # 本文を読み込めたソースを、検索結果ページ（depth 0）と
+    # リンクをたどって到達したページ（depth 1以上）に振り分ける。
+    # Split sources whose body was read into search-result pages (depth 0)
+    # and pages reached by following links (depth 1+).
     if result is None:
-        return None
-    read_sources = [source for source in result.sources if source.page_text]
-    if not read_sources:
+        return []
+    return [
+        source
+        for source in result.sources
+        if source.page_text and (source.link_depth >= 1) == followed
+    ]
+
+
+def _sources_only(result: WebSearchResult, sources: Sequence[WebSearchSource]) -> WebSearchResult:
+    # 対象ソースだけを持つ結果を作り、ステップの「参照したWebサイト」を絞り込む
+    # Build a result carrying only the given sources so a step's panel lists just those.
+    return replace(result, sources=tuple(sources))
+
+
+def page_read_step(result: WebSearchResult | None) -> TraceStep | None:
+    # 検索結果ページの本文まで読み込めた場合のステップ。
+    # リンクをたどって到達したページは deep_read_step が受け持つ。
+    # The step for search-result pages whose body was read.
+    # Pages reached by following links belong to deep_read_step instead.
+    read_sources = _read_sources(result, followed=False)
+    if result is None or not read_sources:
         return None
     hostnames = [
         source.hostname.strip().removeprefix("www.") for source in read_sources if source.hostname
@@ -176,7 +200,45 @@ def page_read_step(result: WebSearchResult | None) -> TraceStep | None:
         ),
         kind="read",
         badge=f"{len(read_sources)}件",
+        chips=_domain_chips(_sources_only(result, read_sources)),
+        sources=_sources_only(result, read_sources),
     )
+
+
+def deep_read_step(result: WebSearchResult | None) -> TraceStep | None:
+    # 検索結果ページからリンクをたどって深掘りした場合のステップ。
+    # 検索結果には出てこなかったページなので、精読ステップとは分けて示す。
+    # The step for pages reached by following links out of the search results.
+    # They never appeared in the results themselves, so they get their own step.
+    followed_sources = _read_sources(result, followed=True)
+    if result is None or not followed_sources:
+        return None
+    max_depth = max(source.link_depth for source in followed_sources)
+    origins: list[str] = []
+    for source in followed_sources:
+        origin = source_hostname_label(source.linked_from_url)
+        if origin and origin not in origins:
+            origins.append(origin)
+    lead = f"「{origins[0]}」など検索結果のページから" if origins else "検索結果のページから"
+    return TraceStep(
+        title="リンクをたどって深掘り",
+        detail=(
+            f"{lead}参照先のリンクをたどり、最大{max_depth}階層先までの{len(followed_sources)}件を"
+            "追加で読み込んで根拠にしました。"
+        ),
+        kind="follow",
+        badge=f"{len(followed_sources)}件・最大{max_depth}階層",
+        chips=_domain_chips(_sources_only(result, followed_sources)),
+        sources=_sources_only(result, followed_sources),
+    )
+
+
+def page_reading_steps(result: WebSearchResult | None) -> list[TraceStep]:
+    # ページ本文の取得に関するステップを、実際に起きた順（精読 → リンク深掘り）で返す。
+    # 該当するページが無い段階はステップを出さない。
+    # Return the page-reading steps in the order they happened: read the result
+    # pages, then follow their links. Stages without any page emit no step.
+    return [step for step in (page_read_step(result), deep_read_step(result)) if step is not None]
 
 
 def review_step(result: WebSearchResult | None, *, reused: bool = False) -> TraceStep:
@@ -405,6 +467,7 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
     # A one-line summary that hints at the content while collapsed.
     search_count = sum(1 for step in steps if step.kind in {"search", "reuse"})
     read_count = sum(1 for step in steps if step.kind == "read")
+    follow_count = sum(1 for step in steps if step.kind == "follow")
     parts: list[str] = []
     if search_count:
         parts.append(f"Web検索{search_count}回")
@@ -412,7 +475,30 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
         parts.append(f"参照サイト{source_total}件")
     if read_count:
         parts.append("本文精読あり")
+    if follow_count:
+        parts.append("リンク深掘りあり")
     return " · ".join(parts)
+
+
+def _unique_source_total(
+    rendered_steps: Sequence[tuple[TraceStep, list[str]]],
+    fallback_result: WebSearchResult | None,
+    fallback_items: Sequence[str],
+) -> int:
+    # 同じソースが複数ステップの一覧に出るため、URLで重複を除いて数える
+    # The same source appears under several steps, so count distinct URLs.
+    urls: set[str] = set()
+    results = [step.sources for step, source_items in rendered_steps if source_items]
+    if fallback_items:
+        results.append(fallback_result)
+    for result in results:
+        if result is None:
+            continue
+        for source in result.sources:
+            url = source.url.strip()
+            if url:
+                urls.add(url)
+    return len(urls)
 
 
 def build_web_search_trace_markdown(
@@ -438,8 +524,7 @@ def build_web_search_trace_markdown(
     if fallback_items:
         step_html.append(_render_fallback_source_step(result, fallback_items))
 
-    source_total = sum(len(source_items) for _, source_items in rendered_steps)
-    source_total += len(fallback_items)
+    source_total = _unique_source_total(rendered_steps, result, fallback_items)
     summary_detail = _summary_detail(normalized_steps, source_total)
     # Markdown上でHTMLブロックが途切れないよう、空行になる要素は差し込まない。
     # Never emit an empty line: a blank line would end the HTML block in Markdown.

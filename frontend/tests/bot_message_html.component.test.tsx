@@ -161,7 +161,60 @@ describe("BotMessageHtml answer steps", () => {
     expect(stepDetails[1].open).toBe(true);
     expect(stepDetails[0].open).toBe(false);
   });
+
+  // リンクをたどって到達したページの深さ表示が、サニタイズ後も残ること。
+  // The depth marker on a page reached by following links survives sanitization.
+  it("keeps the depth marker of a followed page", () => {
+    const { container } = render(<BotMessageHtml text={DEEP_LINK_STEP_HTML} />);
+
+    const step = container.querySelector(".web-search-sources__step--follow");
+    const followed = container.querySelector(".web-search-sources__item--followed");
+
+    expect(step).not.toBeNull();
+    expect(step?.querySelector("i.bi.bi-signpost-split")).not.toBeNull();
+    expect(step?.querySelector(".web-search-sources__step-badge")).toHaveTextContent(
+      "1件・最大2階層",
+    );
+    expect(followed?.querySelector(".web-search-sources__depth")).toHaveTextContent(
+      "root.example から2階層先",
+    );
+  });
 });
+
+const DEEP_LINK_STEP_HTML = [
+  '<details class="web-search-sources web-search-sources--trace">',
+  '<summary class="web-search-sources__summary">',
+  '<span class="web-search-sources__label">回答までのステップ</span>',
+  "</summary>",
+  '<div class="web-search-sources__list">',
+  '<ol class="web-search-sources__steps">',
+  '<li class="web-search-sources__step web-search-sources__step--follow web-search-sources__step--has-sources">',
+  '<span class="web-search-sources__step-marker web-search-sources__step-marker--follow">',
+  '<i class="bi bi-signpost-split"></i>',
+  "</span>",
+  '<details class="web-search-sources__step-details">',
+  '<summary class="web-search-sources__step-summary">',
+  '<span class="web-search-sources__step-main">',
+  '<span class="web-search-sources__step-head">',
+  '<span class="web-search-sources__step-title">リンクをたどって深掘り</span>',
+  '<span class="web-search-sources__step-badge">1件・最大2階層</span>',
+  "</span>",
+  "</span>",
+  "</summary>",
+  '<div class="web-search-sources__step-body">',
+  '<ul class="web-search-sources__links">',
+  '<li class="web-search-sources__item web-search-sources__item--followed">',
+  '<a class="web-search-sources__link" href="https://child.example/a" target="_blank">',
+  '<span class="web-search-sources__content">',
+  '<span class="web-search-sources__title">たどった記事</span>',
+  '<span class="web-search-sources__hostname">child.example</span>',
+  '<span class="web-search-sources__depth">root.example から2階層先</span>',
+  "</span>",
+  "</a></li></ul></div></details></li>",
+  "</ol>",
+  "</div>",
+  "</details>",
+].join("\n");
 
 describe("BotMessageHtml streaming reveal", () => {
   it("fades in the words of the part that is still generating", () => {
