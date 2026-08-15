@@ -65,7 +65,7 @@ from .web_search_trace import (
     build_web_search_trace_markdown,
     context_added_step,
     decision_step,
-    page_read_step,
+    page_reading_steps,
     review_step,
     search_failed_step,
     search_step,
@@ -867,12 +867,10 @@ class ChatGenerationJob:
                     [
                         decision_step(augmentation.result),
                         search_step(augmentation.result),
+                        *page_reading_steps(augmentation.result),
                         context_added_step(augmentation.result),
                     ]
                 )
-                read_step = page_read_step(augmentation.result)
-                if read_step is not None:
-                    web_search_trace_steps.append(read_step)
                 web_search_results.append(augmentation.result)
                 web_search_results_by_key[
                     _normalized_search_key(
@@ -1160,12 +1158,10 @@ class ChatGenerationJob:
                         web_search_trace_steps.extend(
                             [
                                 search_step(result, additional=bool(web_search_results)),
+                                *page_reading_steps(result),
                                 review_step(result),
                             ]
                         )
-                        read_step = page_read_step(result)
-                        if read_step is not None:
-                            web_search_trace_steps.append(read_step)
                         if result.has_sources:
                             web_search_results.append(result)
                         self._publish(

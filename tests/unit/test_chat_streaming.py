@@ -1037,11 +1037,31 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__step-query">Python latest news</span>', persisted_messages[0])
         self.assertIn('<span class="web-search-sources__step-title">追加検索</span>', persisted_messages[0])
         self.assertIn('<span class="web-search-sources__step-query">Python release details</span>', persisted_messages[0])
+        # 1回目・追加検索の2ステップに加えて、リンクをたどって読んだページも展開できる
         self.assertEqual(
             persisted_messages[0].count('<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'),
-            2,
+            3,
         )
         self.assertIn('<span class="web-search-sources__count">6ステップ</span>', persisted_messages[0])
+        # リンクをたどったことが専用ステップとして「回答までのステップ」に出る
+        self.assertIn(
+            '<span class="web-search-sources__step-title">リンクをたどって深掘り</span>',
+            persisted_messages[0],
+        )
+        self.assertIn(
+            '<span class="web-search-sources__step-badge">1件・最大1階層</span>',
+            persisted_messages[0],
+        )
+        self.assertIn(
+            '<span class="web-search-sources__depth">example.com から1階層先</span>',
+            persisted_messages[0],
+        )
+        self.assertIn("リンク深掘りあり", persisted_messages[0])
+        # 深掘りステップは、それを行った追加検索の直後・その結果の確認より前に置く
+        trace = persisted_messages[0]
+        deep_index = trace.index("リンクをたどって深掘り")
+        self.assertLess(trace.index("追加検索"), deep_index)
+        self.assertLess(deep_index, trace.index("検索結果を確認", deep_index))
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.

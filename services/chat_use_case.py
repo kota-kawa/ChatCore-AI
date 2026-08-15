@@ -44,7 +44,7 @@ from services.web_search_trace import (
     build_web_search_trace_markdown,
     context_added_step,
     decision_step,
-    page_read_step,
+    page_reading_steps,
     search_step,
 )
 from services.chat_title import (
@@ -763,12 +763,10 @@ class ChatPostUseCase:
                 [
                     decision_step(augmentation.result),
                     search_step(augmentation.result),
+                    *page_reading_steps(augmentation.result),
                     context_added_step(augmentation.result),
                 ]
             )
-            read_step = page_read_step(augmentation.result)
-            if read_step is not None:
-                web_search_trace_steps.append(read_step)
             web_search_trace_steps.append(answer_step([augmentation.result]))
         trace_block = build_web_search_trace_markdown(
             augmentation.result,
