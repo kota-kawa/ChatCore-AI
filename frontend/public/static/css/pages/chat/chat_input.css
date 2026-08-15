@@ -192,6 +192,14 @@
   pointer-events: none;
 }
 
+/* 戻るボタンはヘッダー左上、角丸で overflow: hidden な #chat-container の
+   境界にすぐ近い位置にある。送信ボタンと共通の外側ドロップシャドウ
+   （0 14px 24px）を残すと、コンテナの角でシャドウが不自然に切れて見える
+   ため、戻るボタンだけ外側の影を持たせない */
+:where(body.chat-page, .chat-page-shell) .chat-back-btn::before {
+  box-shadow: var(--chat-button-edge-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.24));
+}
+
 :where(body.chat-page, .chat-page-shell) #send-btn:active,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn:active,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn:active,
