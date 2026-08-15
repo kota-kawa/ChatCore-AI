@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from services import llm_daily_limit
+from services.llm_daily_limit import DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT
 
 
 class LlmDailyLimitTestCase(unittest.TestCase):
@@ -241,10 +242,11 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(b1, (True, 1, 2))
         self.assertEqual(b2, (True, 0, 2))
 
-    def test_brave_web_search_monthly_limit_defaults_to_500(self):
+    def test_brave_web_search_monthly_limit_defaults_to_expected(self):
         """
-        Brave Web検索の月間制限環境変数が未設定の場合、デフォルトの上限値 500 に設定されることを検証します。
-        Verify that Brave web search monthly limit defaults to 500 when the environment variable is not set.
+        Brave Web検索の月間制限環境変数が未設定の場合、デフォルトの上限値に設定されることを検証します。
+        Verify that Brave web search monthly limit defaults to DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT
+        when the environment variable is not set.
         """
         # 環境変数を削除
         # Pop the environment variable to test default behavior
@@ -255,11 +257,11 @@ class LlmDailyLimitTestCase(unittest.TestCase):
                 current_month="2026-02"
             )
 
-        # デフォルトの上限値が500であることを検証
-        # Assert that the limit defaults to 500
+        # デフォルトの上限値が定数と一致することを検証
+        # Assert that the limit matches the DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT constant
         self.assertTrue(allowed)
-        self.assertEqual(limit, 500)
-        self.assertEqual(remaining, 499)
+        self.assertEqual(limit, DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT)
+        self.assertEqual(remaining, DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT - 1)
 
 
 if __name__ == "__main__":
