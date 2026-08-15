@@ -302,15 +302,16 @@ function ChatMainSectionComponent() {
       <div className="chat-header">
         <div className="header-left">
           <button
+            type="button"
             id="back-to-setup"
-            className="icon-button cc-press"
+            className="chat-back-btn cc-press"
             data-tooltip={english ? "Back to tasks" : "タスク選択に戻る"}
             data-tooltip-placement="bottom"
             onClick={() => {
               showSetupForm();
             }}
           >
-            <i className="bi bi-arrow-left"></i>
+            <i className="bi bi-arrow-left" aria-hidden="true"></i>
           </button>
           {/* 未保存モードの表示はヘッダーではなく入力欄側で行う（狭い画面では
               戻るボタンや会話面に浮かぶサイドバー開閉ボタンと場所を取り合うため）。 */}

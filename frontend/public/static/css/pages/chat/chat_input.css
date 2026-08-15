@@ -137,7 +137,8 @@
 :where(body.chat-page, .chat-page-shell) #send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn {
   --send-btn-visual-inset: 4px;
   flex: 0 0 52px;
   width: 52px;
@@ -169,7 +170,8 @@
 :where(body.chat-page, .chat-page-shell) #send-btn::before,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn::before,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn::before,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn::before {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn::before,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn::before {
   content: "";
   position: absolute;
   inset: var(--send-btn-visual-inset);
@@ -193,14 +195,16 @@
 :where(body.chat-page, .chat-page-shell) #send-btn:active,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn:active,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn:active,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn:active {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn:active,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn:active {
   transform: scale(0.92);
 }
 
 :where(body.chat-page, .chat-page-shell) #send-btn i,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn i,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn i,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn i {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn i,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn i {
   position: relative;
   z-index: 1;
   font-size: var(--text-base, 0.9375rem);
@@ -231,7 +235,8 @@
 :where(body.chat-page, .chat-page-shell) #send-btn:disabled,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn:disabled,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn:disabled,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn:disabled {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn:disabled,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn:disabled {
   cursor: default;
   opacity: 0.54;
 }
@@ -367,7 +372,8 @@
   :where(body.chat-page, .chat-page-shell) #send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn {
     --send-btn-visual-inset: 5px;
     flex-basis: 48px;
     width: 48px;
@@ -379,7 +385,8 @@
   :where(body.chat-page, .chat-page-shell) #send-btn i,
 :where(body.chat-page, .chat-page-shell) .setup-send-btn i,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn i,
-:where(body.chat-page, .chat-page-shell) .chat-attach-btn i {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn i,
+:where(body.chat-page, .chat-page-shell) .chat-back-btn i {
     font-size: var(--text-sm, 0.875rem);
   }
 
