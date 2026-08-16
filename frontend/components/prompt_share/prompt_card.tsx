@@ -1,4 +1,5 @@
 import { memo, useState, type MouseEvent } from "react";
+import Image from "next/image";
 
 import MarkdownContent from "../MarkdownContent";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
@@ -29,6 +30,7 @@ export type PromptRecord = PromptData & {
 // All action handlers and UI state props passed into the card component
 type PromptCardProps = {
   prompt: PromptRecord;
+  isPriorityImage?: boolean;
   isDropdownOpen: boolean;
   isLikePending: boolean;
   isLikeEffectActive: boolean;
@@ -64,6 +66,7 @@ function AuthorAvatarImage({ src, alt }: { src: string; alt: string }) {
 
 function PromptCardComponent({
   prompt,
+  isPriorityImage = false,
   isDropdownOpen,
   isLikePending,
   isLikeEffectActive,
@@ -96,6 +99,12 @@ function PromptCardComponent({
   const authorName = prompt.author || t("promptShare.authorMissing");
   const authorUserId = Number(prompt.author_user_id || 0);
   const hasAuthorProfile = authorUserId > 0;
+  const referenceImageUrl = prompt.reference_image_url || "";
+  // 管理対象の相対URLだけNext Imageの最適化対象にする。
+  // Keep external/legacy URLs on a native img for backwards compatibility.
+  const canOptimizeReferenceImage =
+    referenceImageUrl.startsWith("/prompt_share/api/media/") ||
+    referenceImageUrl.startsWith("/static/uploads/prompt_share/");
 
   // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
@@ -240,14 +249,28 @@ function PromptCardComponent({
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
-      {prompt.reference_image_url ? (
+      {referenceImageUrl ? (
         <div className="prompt-card__image">
-          <img
-            src={prompt.reference_image_url}
-            alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
-            loading="lazy"
-            decoding="async"
-          />
+          {canOptimizeReferenceImage ? (
+            <Image
+              src={referenceImageUrl}
+              alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
+              fill
+              sizes="(max-width: 700px) calc(100vw - 2rem), (max-width: 1100px) 45vw, 360px"
+              quality={75}
+              preload={isPriorityImage}
+              fetchPriority={isPriorityImage ? "high" : "auto"}
+              loading={isPriorityImage ? "eager" : "lazy"}
+            />
+          ) : (
+            <img
+              src={referenceImageUrl}
+              alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
+              loading={isPriorityImage ? "eager" : "lazy"}
+              fetchPriority={isPriorityImage ? "high" : "auto"}
+              decoding="async"
+            />
+          )}
         </div>
       ) : null}
 

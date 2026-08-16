@@ -22,6 +22,14 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["marked"],
+  images: {
+    // Prompt-share images are served through the backend rewrite and can be
+    // optimized by Next.js/sharp before reaching the browser.
+    localPatterns: [
+      { pathname: "/prompt_share/api/media/**" },
+      { pathname: "/static/uploads/prompt_share/**" }
+    ]
+  },
   // 日本語は従来URL、英語は /en 配下の独立URLとして公開する。
   // Keep Japanese on the existing URLs and publish English under /en.
   i18n: {
