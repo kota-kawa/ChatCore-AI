@@ -23,10 +23,14 @@ const basePrompt: PromptRecord = {
   created_at: "2026-06-01T00:00:00Z"
 };
 
-function renderCard(overrides: Partial<PromptRecord> = {}) {
+function renderCard(
+  overrides: Partial<PromptRecord> = {},
+  options: { isPriorityImage?: boolean } = {}
+) {
   const view = render(
     <PromptCard
       prompt={{ ...basePrompt, ...overrides }}
+      isPriorityImage={options.isPriorityImage}
       isDropdownOpen={false}
       isLikePending={false}
       isLikeEffectActive={false}
@@ -67,5 +71,29 @@ describe("prompt_share card badges", () => {
 
     expect(container.querySelector(".prompt-card__type-pill--image")).toBeInTheDocument();
     expect(container.querySelector(".prompt-card__type-pill--format")).not.toBeInTheDocument();
+  });
+
+  it("管理対象の作例画像はNext Imageで遅延・サイズ最適化される", () => {
+    const container = renderCard({
+      reference_image_url: "/prompt_share/api/media/example.png",
+      media_type: "image",
+      prompt_type: "image"
+    });
+
+    const image = container.querySelector(".prompt-card__image img");
+    expect(image).toHaveAttribute("data-nimg", "fill");
+    expect(image).toHaveAttribute("loading", "lazy");
+    expect(image?.getAttribute("src")).toContain("/_next/image");
+  });
+
+  it("先頭の作例画像だけを優先読み込みできる", () => {
+    const container = renderCard(
+      { reference_image_url: "/prompt_share/api/media/example.png" },
+      { isPriorityImage: true }
+    );
+
+    const image = container.querySelector(".prompt-card__image img");
+    expect(image).toHaveAttribute("fetchpriority", "high");
+    expect(image).toHaveAttribute("loading", "eager");
   });
 });

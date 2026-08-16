@@ -143,6 +143,9 @@ export function PromptSharePageLayout({
   const getMediaTypeLabel = (value: MediaTypeFilter) => value === "all"
     ? t("promptShare.all")
     : getPromptMediaLabel(value, locale);
+  const firstImageIndex = visiblePrompts.findIndex(
+    (candidate) => Boolean(candidate.reference_image_url)
+  );
   return (
     <div className="prompt-share-page cc-page-rise">
       {/* カスタム要素：グローバルなアクションメニューWebComponent */}
@@ -357,7 +360,7 @@ export function PromptSharePageLayout({
               </p>
             ) : null}
 
-            {visiblePrompts.map((prompt) => {
+            {visiblePrompts.map((prompt, index) => {
               const promptId = prompt.clientId;
               return (
                 // 各カードに必要な状態とハンドラをSetから引いて渡す
@@ -365,6 +368,7 @@ export function PromptSharePageLayout({
                 <PromptCard
                   key={promptId}
                   prompt={prompt}
+                  isPriorityImage={index === firstImageIndex}
                   isDropdownOpen={openDropdownPromptId === promptId}
                   isLikePending={likePendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
