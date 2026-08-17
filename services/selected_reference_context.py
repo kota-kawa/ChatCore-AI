@@ -93,6 +93,7 @@ _JAPANESE_STOP_WORDS = {
 }
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
+PERSONAL_OVERVIEW_TAG = "personal_overview_result"
 SHARED_PROMPT_SOURCE = "shared_prompt_search"
 _SOURCE_LABELS = {
     PERSONAL_KNOWLEDGE_SOURCE: "memo and My Context",
@@ -283,10 +284,58 @@ def _run_lookups(
         return [future.result() for future in futures]
 
 
+def _load_overview_if_unmatched(
+    lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
+    payloads: Sequence[dict[str, Any]],
+    personal_overview: Callable[[], dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Load the inventory only when the memo lookup ran and matched nothing.
+
+    A miss is not the same as having nothing saved. Without this the model is told the
+    search found nothing and answers from the conversation alone, even though the user
+    turned the source on precisely so their own notes would inform the answer.
+    """
+    if personal_overview is None:
+        return None
+    statuses = [
+        payload.get("status")
+        for (source, _), payload in zip(lookups, payloads)
+        if source == PERSONAL_KNOWLEDGE_SOURCE
+    ]
+    if statuses != ["no_results"]:
+        return None
+
+    try:
+        overview = personal_overview()
+    except Exception:
+        logger.warning("Failed to load the personal overview after a no-match lookup.", exc_info=True)
+        return None
+    if not isinstance(overview, dict):
+        return None
+    if not overview.get("recent_memos") and not overview.get("context_facts"):
+        # 保存済みのメモも事実も無いなら、渡すものが無いので何も足さない。
+        # Nothing saved means nothing to hand over.
+        return None
+    return overview
+
+
+def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Wrap the query-independent inventory for injection as data."""
+    payload = {"status": "overview", **overview}
+    return (
+        f'<{PERSONAL_OVERVIEW_TAG} encoding="json">'
+        f"{_safe_json(payload)}"
+        f"</{PERSONAL_OVERVIEW_TAG}>",
+        payload,
+    )
+
+
 def _build_context(
     result_blocks: list[str],
     selected_sources: list[str],
     unavailable_sources: Sequence[str],
+    *,
+    has_overview: bool = False,
 ) -> str:
     lines = ["<selected_reference_context>"]
     if selected_sources:
@@ -315,6 +364,20 @@ def _build_context(
                 "Tell the user plainly that the source was unavailable, and never answer as if it had been consulted.",
             ]
         )
+    if has_overview:
+        # 一致0件でも「保存済みの内容そのもの」は渡す。指示はJSONの外（system側）に置く。
+        # A zero-match lookup still hands over what the user has saved. The rules for it live
+        # here, outside the JSON, because the JSON itself is untrusted data.
+        lines.extend(
+            [
+                f"Nothing matched the query, so a <{PERSONAL_OVERVIEW_TAG}> block is included: an inventory of",
+                "the user's most recently updated memo titles and a digest of their My Context facts. These are",
+                "NOT search matches. Use them when the question is broad enough that the user's own notes should",
+                "shape the answer (plans, priorities, what to work on next), state plainly that nothing matched",
+                "the specific wording, and never present an inventory entry as a match. To read one of those memos,",
+                "search that source again using words from its title.",
+            ]
+        )
     if result_blocks:
         lines.extend(
             [
@@ -333,6 +396,7 @@ def augment_messages_with_selected_references(
     query: str,
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
+    personal_overview: Callable[[], dict[str, Any]] | None = None,
     unavailable_sources: Sequence[str] = (),
     trace_results: list[SelectedReferenceLookupTrace] | None = None,
 ) -> list[dict[str, Any]]:
@@ -376,10 +440,25 @@ def augment_messages_with_selected_references(
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads)
     ]
+
+    overview_payload = _load_overview_if_unmatched(lookups, payloads, personal_overview)
+    if overview_payload is not None:
+        overview_block, overview_json = _build_overview_block(overview_payload)
+        result_blocks.append(overview_block)
+        if trace_results is not None:
+            trace_results.append(
+                SelectedReferenceLookupTrace(
+                    source=PERSONAL_KNOWLEDGE_SOURCE,
+                    query=normalized_query,
+                    payload=overview_json,
+                )
+            )
+
     context = _build_context(
         result_blocks,
         [source for source, _ in lookups],
         unavailable_sources,
+        has_overview=overview_payload is not None,
     )
     return insert_after_leading_system_messages(
         messages,

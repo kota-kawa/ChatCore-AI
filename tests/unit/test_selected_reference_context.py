@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from services.selected_reference_context import (
     MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS,
     PERSONAL_KNOWLEDGE_SOURCE,
+    PERSONAL_OVERVIEW_TAG,
     SHARED_PROMPT_SOURCE,
     augment_messages_with_selected_references,
 )
@@ -50,6 +51,99 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertIn("旅行計画テンプレ", context)
         self.assertIn("Do not ignore or replace a successful selected-source", context)
         self.assertEqual(augmented[2], messages[1])
+
+    # 日本語: 一致0件でも、保存済みの内容そのものは棚卸しとして渡します。
+    # English: A zero-match lookup still hands over an inventory of what the user saved.
+    def test_no_match_hands_over_the_saved_inventory(self):
+        overview = Mock(
+            return_value={
+                "recent_memos": [{"id": 3, "title": "8月の目標"}],
+                "context_facts": [{"id": 9, "title": "進行中の案件", "content": "Chat-Core"}],
+                "recent_memo_count": 1,
+                "context_fact_count": 1,
+            }
+        )
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=overview,
+        )
+
+        overview.assert_called_once_with()
+        context = augmented[0]["content"]
+        self.assertIn(PERSONAL_OVERVIEW_TAG, context)
+        self.assertIn("8月の目標", context)
+        self.assertIn("NOT search matches", context)
+
+    # 日本語: 一致した場合は棚卸しを行いません（無関係な内容で文脈を埋めないため）。
+    # English: A successful match must not also pull in the inventory.
+    def test_successful_lookup_skips_the_inventory(self):
+        overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "沖縄旅行"}],
+            query="沖縄旅行",
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 1,
+                "memos": [{"title": "沖縄旅行"}],
+            },
+            personal_overview=overview,
+        )
+
+        overview.assert_not_called()
+        self.assertNotIn(PERSONAL_OVERVIEW_TAG, augmented[0]["content"])
+
+    # 日本語: 検索自体が失敗したときは棚卸しへ流れません（0件と障害は別物）。
+    # English: A failed lookup is not a zero-match, so the inventory must not stand in for it.
+    def test_failed_lookup_skips_the_inventory(self):
+        overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "沖縄旅行"}],
+            query="沖縄旅行",
+            personal_knowledge_search=lambda _query: {"status": "failed", "query": _query},
+            personal_overview=overview,
+        )
+
+        overview.assert_not_called()
+
+    # 日本語: 保存済みの内容が無ければ、空の棚卸しは渡しません。
+    # English: Nothing saved means nothing to hand over.
+    def test_empty_inventory_is_not_injected(self):
+        overview = Mock(return_value={"recent_memos": [], "context_facts": []})
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=overview,
+        )
+
+        self.assertNotIn(PERSONAL_OVERVIEW_TAG, augmented[0]["content"])
+
+    # 日本語: 棚卸しは「回答までのステップ」にも1ステップとして出します。
+    # English: The inventory shows up as its own step in the answer trace.
+    def test_inventory_is_reported_in_the_answer_trace(self):
+        traces = []
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=lambda: {
+                "recent_memos": [{"id": 3, "title": "8月の目標"}],
+                "context_facts": [],
+                "recent_memo_count": 1,
+                "context_fact_count": 0,
+            },
+            trace_results=traces,
+        )
+
+        self.assertEqual([trace.payload["status"] for trace in traces], ["no_results", "overview"])
+        self.assertEqual(traces[-1].source, PERSONAL_KNOWLEDGE_SOURCE)
 
     def test_collects_lookup_results_for_the_answer_trace(self):
         traces = []

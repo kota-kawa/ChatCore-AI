@@ -66,6 +66,7 @@ class BuildSelectedReferenceSearchersTestCase(unittest.TestCase):
             "use_shared_prompts": False,
             "search_personal_knowledge": Mock(return_value={"status": "ok"}),
             "search_shared_prompts": Mock(return_value={"status": "ok"}),
+            "personal_overview": Mock(return_value={"recent_memos": []}),
         }
         return build_selected_reference_searchers(**{**defaults, **kwargs})
 
@@ -76,6 +77,7 @@ class BuildSelectedReferenceSearchersTestCase(unittest.TestCase):
 
         self.assertIsNone(searchers.personal_knowledge)
         self.assertIsNone(searchers.shared_prompt)
+        self.assertIsNone(searchers.personal_overview)
         self.assertEqual(searchers.unavailable_sources, ())
 
     # 日本語: メモ参照はユーザーIDに束ねて渡します。
@@ -95,7 +97,18 @@ class BuildSelectedReferenceSearchersTestCase(unittest.TestCase):
         searchers = self._build(user_id=None, use_personal_knowledge=True)
 
         self.assertIsNone(searchers.personal_knowledge)
+        self.assertIsNone(searchers.personal_overview)
         self.assertEqual(searchers.unavailable_sources, ("personal_knowledge_search",))
+
+    # 日本語: 一致0件のときに使う棚卸しも、同じユーザーIDに束ねます。
+    # English: The no-match inventory is bound to the same user id.
+    def test_personal_overview_is_bound_to_the_user(self):
+        overview = Mock(return_value={"recent_memos": []})
+
+        searchers = self._build(use_personal_knowledge=True, personal_overview=overview)
+        searchers.personal_overview()
+
+        overview.assert_called_once_with(42)
 
     # 日本語: 共有プロンプトは公開データなので、ゲストでも利用できます。
     # English: Shared prompts are public, so guests keep the lookup.

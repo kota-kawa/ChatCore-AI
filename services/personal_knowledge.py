@@ -11,8 +11,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from services.context_vault_service import search_facts
-from services.mcp_memo_service import get_memo, search_memos
+from services.context_vault_service import build_digest, search_facts
+from services.mcp_memo_service import get_memo, list_memos, search_memos
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,15 @@ FACT_RESULT_LIMIT = 5
 FULL_CONTENT_MEMO_LIMIT = 3
 MAX_MEMO_CONTENT_CHARS = 1_200
 MAX_FACT_CONTENT_CHARS = 600
+
+# 「今月は何をしたらいいか」のような広い問いは、語の一致する対象が存在しない。
+# 検索が空振りしたときに渡す棚卸し（直近メモの見出しとマイコンテキストの要約）の上限。
+# A broad question like "what should I do this month?" has nothing to match on lexically.
+# These bound the inventory handed over when a search comes back empty: recent memo titles
+# plus a digest of the user's context facts.
+OVERVIEW_MEMO_LIMIT = 12
+OVERVIEW_DIGEST_LIMIT_PER_TYPE = 5
+OVERVIEW_DIGEST_MAX_CHARS = 4_000
 
 
 @dataclass(frozen=True)
@@ -133,6 +142,59 @@ def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[str, Any
         }
         for fact in result.facts
     ]
+
+
+# 検索が空振りしたときに渡す棚卸し。クエリに依存しないので、広い問いでも必ず中身がある
+# The inventory handed over when a search finds nothing. It does not depend on the query, so
+# even a broad question gets something concrete to answer from.
+def build_personal_overview(
+    user_id: int,
+    *,
+    memo_limit: int = OVERVIEW_MEMO_LIMIT,
+) -> dict[str, Any]:
+    """Summarise what the user has saved, without matching anything against a query."""
+    memos: list[dict[str, Any]] = []
+    facts: list[dict[str, Any]] = []
+    try:
+        listing = list_memos(user_id, limit=memo_limit, sort="updated")
+        memos = [
+            {
+                "id": memo.id,
+                "title": memo.title,
+                "updated_at": memo.updated_at,
+                "collection": memo.collection_name,
+            }
+            for memo in listing.memos
+        ]
+    except Exception:
+        logger.warning("Failed to list recent memos for the personal overview.", exc_info=True)
+
+    try:
+        digest = build_digest(
+            user_id,
+            limit_per_type=OVERVIEW_DIGEST_LIMIT_PER_TYPE,
+            max_chars=OVERVIEW_DIGEST_MAX_CHARS,
+        )
+        facts = [
+            {
+                "id": fact.id,
+                "type": fact.fact_type,
+                "title": fact.title,
+                "content": _trim(fact.content, MAX_FACT_CONTENT_CHARS),
+                "importance": fact.importance,
+            }
+            for group in digest.groups
+            for fact in group.facts
+        ]
+    except Exception:
+        logger.warning("Failed to build the context digest for the personal overview.", exc_info=True)
+
+    return {
+        "recent_memos": memos,
+        "context_facts": facts,
+        "recent_memo_count": len(memos),
+        "context_fact_count": len(facts),
+    }
 
 
 # メモとマイコンテキストを同じクエリで検索する。片方が失敗しても、もう片方の結果は返す

@@ -7,6 +7,7 @@ from services.personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     PersonalKnowledgeResult,
     build_personal_knowledge_tool_payload,
+    build_personal_overview,
     search_personal_knowledge,
 )
 
@@ -179,6 +180,64 @@ class PersonalKnowledgeSearchTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "no_results")
         self.assertEqual(payload["memos"], [])
         self.assertEqual(payload["context_facts"], [])
+
+
+class PersonalOverviewTestCase(unittest.TestCase):
+    class _FakeListing:
+        def __init__(self, memos):
+            self.memos = memos
+
+    class _FakeDigestFact:
+        def __init__(self, fact_id, title, content):
+            self.id = fact_id
+            self.fact_type = "project"
+            self.title = title
+            self.content = content
+            self.importance = 80
+
+    class _FakeDigestGroup:
+        def __init__(self, facts):
+            self.facts = facts
+
+    class _FakeDigest:
+        def __init__(self, groups):
+            self.groups = groups
+
+    # 日本語: 棚卸しは直近のメモとマイコンテキストのダイジェストをまとめて返します。
+    # English: The overview combines recent memo titles with the My Context digest.
+    def test_combines_recent_memos_and_the_context_digest(self):
+        listing = self._FakeListing([_FakeMemo(3, "8月の目標", "")])
+        digest = self._FakeDigest(
+            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
+        )
+
+        with patch(
+            "services.personal_knowledge.list_memos", return_value=listing
+        ) as list_call, patch(
+            "services.personal_knowledge.build_digest", return_value=digest
+        ):
+            overview = build_personal_overview(7)
+
+        self.assertEqual(list_call.call_args.kwargs["sort"], "updated")
+        self.assertEqual([memo["title"] for memo in overview["recent_memos"]], ["8月の目標"])
+        self.assertEqual([fact["title"] for fact in overview["context_facts"]], ["進行中の案件"])
+        self.assertEqual(overview["recent_memo_count"], 1)
+        self.assertEqual(overview["context_fact_count"], 1)
+
+    # 日本語: 片方が落ちても、もう片方の棚卸しは返します。
+    # English: One failing side still returns the other.
+    def test_one_failing_side_still_returns_the_other(self):
+        digest = self._FakeDigest(
+            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
+        )
+
+        with patch(
+            "services.personal_knowledge.list_memos", side_effect=RuntimeError("db down")
+        ), patch("services.personal_knowledge.build_digest", return_value=digest):
+            overview = build_personal_overview(7)
+
+        self.assertEqual(overview["recent_memos"], [])
+        self.assertEqual(overview["context_fact_count"], 1)
 
 
 class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
