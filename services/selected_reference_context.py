@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from services.chat_prompt import insert_after_leading_system_messages
+from services.reference_query_rewrite import rewrite_reference_query
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +188,58 @@ def _candidate_queries(query: str, previous_query: str) -> list[str]:
     return unique[:MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS]
 
 
+class CandidateQueryPlan:
+    """The queries to try, with the LLM rewrite deferred until the first one misses.
+
+    The turn as typed is tried first so a hit costs nothing extra. Only when that finds
+    nothing is a small model asked for better keywords — and because every selected source
+    shares one plan, that happens once per turn no matter how many sources are enabled.
+    """
+
+    def __init__(
+        self,
+        query: str,
+        previous_query: str = "",
+        *,
+        rewrite: Callable[..., list[str]] | None = None,
+    ) -> None:
+        self._base = _candidate_queries(query, previous_query)
+        self._query = query
+        self._previous_query = previous_query
+        self._rewrite = rewrite
+        self._lock = Lock()
+        self._rewritten: list[str] | None = None
+
+    def _rewritten_queries(self) -> list[str]:
+        with self._lock:
+            if self._rewritten is None:
+                # 差し替え可能にしておくため、既定はモジュール属性から都度解決する。
+                # Resolved from the module attribute each time so it stays substitutable.
+                rewrite = self._rewrite or rewrite_reference_query
+                self._rewritten = rewrite(self._query, previous_query=self._previous_query)
+            return self._rewritten
+
+    def __iter__(self) -> Iterator[str]:
+        seen: set[str] = set()
+        emitted = 0
+        first = self._base[0] if self._base else self._query
+        ordered = [[first], self._rewritten_queries, self._base[1:]]
+        for group in ordered:
+            if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
+                return
+            # 言い換えは、最初の候補が空振りしたときにだけ生成する（＝ここで初めて呼ぶ）。
+            # The rewrite is only produced once the first candidate has missed.
+            candidates = group() if callable(group) else group
+            for candidate in candidates:
+                if not candidate or candidate in seen:
+                    continue
+                seen.add(candidate)
+                emitted += 1
+                yield candidate
+                if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
+                    return
+
+
 def _safe_json(payload: dict[str, Any]) -> str:
     # System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
     return (
@@ -223,7 +277,7 @@ def _run_lookup_once(
 
 def _run_lookup(
     search: Callable[[str], dict[str, Any]],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
     source_label: str,
@@ -255,7 +309,7 @@ def _run_lookup(
 
 def _run_lookups(
     lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
 ) -> list[dict[str, Any]]:
@@ -413,7 +467,7 @@ def augment_messages_with_selected_references(
     if not normalized_query:
         return messages
 
-    candidates = _candidate_queries(normalized_query, previous_user_message(messages))
+    candidates = CandidateQueryPlan(normalized_query, previous_user_message(messages))
     payloads = _run_lookups(lookups, candidates, query=normalized_query) if lookups else []
 
     if trace_results is not None:
