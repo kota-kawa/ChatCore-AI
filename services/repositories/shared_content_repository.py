@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from services.db import get_db_connection
+from services.search_terms import build_like_pattern, split_search_terms
 
 
 # 一覧では全文をDBから運ばず、serviceで短いsnippetへ整形するための十分な先頭部分だけを取得する。
@@ -48,10 +49,14 @@ class SharedContentRepository:
             conditions.append("p.media_type = %s")
             filter_params.append(media_type)
         if query:
-            escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            like_query = f"%{escaped_query}%"
-            conditions.append(
-                """(
+            # 語ごとに絞り込む。クエリ全体を1つの部分一致にすると、「メール 返信 丁寧」のような
+            # 複数語の検索が、その並びをそのまま含む投稿しか拾えない。
+            # Narrow term by term: as one substring, a multi-word query like "メール 返信 丁寧"
+            # only ever matches a post containing that exact sequence.
+            for term in split_search_terms(query):
+                like_term = build_like_pattern(term)
+                conditions.append(
+                    """(
                     p.title ILIKE %s ESCAPE '\\'
                     OR p.content ILIKE %s ESCAPE '\\'
                     OR p.category ILIKE %s ESCAPE '\\'
@@ -63,18 +68,18 @@ class SharedContentRepository:
                         AND COALESCE(p.attributes->>'skill_markdown', '') ILIKE %s ESCAPE '\\'
                     )
                 )"""
-            )
-            filter_params.extend(
-                [
-                    like_query,
-                    like_query,
-                    like_query,
-                    matching_category_keys or [],
-                    like_query,
-                    like_query,
-                    like_query,
-                ]
-            )
+                )
+                filter_params.extend(
+                    [
+                        like_term,
+                        like_term,
+                        like_term,
+                        matching_category_keys or [],
+                        like_term,
+                        like_term,
+                        like_term,
+                    ]
+                )
         if cursor is not None:
             conditions.append("(p.created_at, p.id) < (%s, %s)")
             filter_params.extend(cursor)

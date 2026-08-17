@@ -16,7 +16,9 @@ import re
 # Separators for search terms: whitespace (including full-width) and common punctuation.
 # Particles are deliberately not split on — without a morphological analyzer that mangles
 # more queries than it helps, and callers already pass space-separated keywords.
-_TERM_SEPARATOR_PATTERN = re.compile(r"[\s、。，．,.;:!?！？「」『』（）()\[\]【】〈〉<>\"'|/\\]+")
+# `/` と `\` は URL やパスの一部として語の中に現れるため、区切りには含めない。
+# `/` and `\` are left out: they appear inside terms such as URLs and file paths.
+_TERM_SEPARATOR_PATTERN = re.compile(r"[\s、。，．,.;:!?！？「」『』（）()\[\]【】〈〉<>\"'|]+")
 
 # 語数の上限。1語につき ILIKE 条件が2つ増えるため、際限なく増やさない。
 # Each term adds two ILIKE conditions, so cap how many a single query may contribute.

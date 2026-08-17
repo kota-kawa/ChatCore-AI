@@ -109,6 +109,19 @@ class SharedContentRepositoryTestCase(unittest.TestCase):
         self.assertIn("ESCAPE", sql)
         self.assertEqual(params[1], r"%100\%\_done\\now%")
 
+    def test_multi_word_search_requires_every_term(self):
+        """複数語のクエリが、その並びをそのまま含む投稿に限定されないことを検証する。"""
+        cursor = FakeCursor(rows=[])
+        connection = FakeConnection(cursor)
+        repository = SharedContentRepository(connection_getter=lambda: connection)
+
+        repository.list_public_content(limit=20, query="メール 返信")
+
+        sql, params = cursor.executed[0]
+        self.assertEqual(sql.count("p.title ILIKE %s"), 2)
+        self.assertEqual(params[1:8], ("%メール%",) * 3 + ([],) + ("%メール%",) * 3)
+        self.assertEqual(params[8:15], ("%返信%",) * 3 + ([],) + ("%返信%",) * 3)
+
     def test_detail_is_parameterized_and_restricted_to_visible_content(self):
         row = {"id": 12, "title": "detail"}
         cursor = FakeCursor(row=row)
