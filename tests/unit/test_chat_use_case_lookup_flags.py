@@ -161,10 +161,24 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         self.assertIsNone(lookup)
 
+    # 日本語: 未ログインで無効化されたメモ参照は、黙って落とさずモデルへ伝えます。
+    # English: A memo lookup dropped for a signed-out session is reported, not silently ignored.
+    def test_guest_request_is_told_the_memo_lookup_was_unavailable(self):
+        deps = self._build_deps(Mock())
+
+        self._run(deps, body_extra={"use_personal_knowledge": True}, session={})
+
+        messages = deps.start_generation_job.call_args.kwargs["conversation_messages"]
+        context = "\n".join(
+            message["content"] for message in messages if message["role"] == "system"
+        )
+        self.assertIn("could not be used this turn", context)
+        self.assertIn("signed out", context)
 
 
-    # 日本語: 共有プロンプトは公開データなので、有効時はそのまま検索関数を渡します。
-    # English: Shared prompts are public, so the lookup is passed straight through when enabled.
+
+    # 日本語: 共有プロンプトは公開データなので、有効時は公開検索へ委譲する関数を渡します。
+    # English: Shared prompts are public, so an enabled turn gets a lookup delegating to the public search.
     def test_shared_prompt_flag_passes_the_public_lookup(self):
         shared_search = Mock(return_value={"status": "ok", "prompt_count": 1})
         deps = self._build_deps(Mock(), shared_search)
@@ -176,8 +190,13 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             key="shared_prompt_search",
         )
 
-        self.assertIs(lookup, shared_search)
+        self.assertIsNotNone(lookup)
         shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
+        lookup("議事録テンプレ")
+        self.assertEqual(
+            [item.args[0] for item in shared_search.call_args_list],
+            ["去年の沖縄旅行の予算は？", "議事録テンプレ"],
+        )
 
     # 日本語: 公開データなので、ゲストのリクエストでも共有プロンプト検索は使えます。
     # English: Being public data, the shared-prompt lookup is available to guests as well.
@@ -192,8 +211,33 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             key="shared_prompt_search",
         )
 
-        self.assertIs(lookup, shared_search)
+        self.assertIsNotNone(lookup)
         shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
+
+    # 日本語: 事前検索済みのクエリをモデルが再度ツールで引いても、同じ本文は二度入りません。
+    # English: A tool call repeating an already prefetched query does not re-inject the same bodies.
+    def test_repeated_tool_query_is_not_searched_twice(self):
+        shared_search = Mock(
+            return_value={
+                "status": "ok",
+                "prompt_count": 1,
+                "prompts": [{"title": "旅行計画テンプレ", "content": "予算を項目別に整理する"}],
+            }
+        )
+        deps = self._build_deps(Mock(), shared_search)
+
+        lookup = self._run(
+            deps,
+            body_extra={"use_shared_prompts": True},
+            session={"user_id": 42},
+            key="shared_prompt_search",
+        )
+
+        payload = lookup("去年の沖縄旅行の予算は？")
+
+        shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
+        self.assertEqual(payload["status"], "already_searched")
+        self.assertNotIn("prompts", payload)
 
     # 日本語: 未指定なら共有プロンプト検索は渡しません。
     # English: Without the flag, no shared-prompt lookup is wired up.

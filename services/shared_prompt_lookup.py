@@ -32,6 +32,9 @@ class SharedPromptResult:
 
     query: str
     prompts: list[dict[str, Any]] = field(default_factory=list)
+    # 検索自体が実行できなかったか。0件と障害を混同しないために持つ。
+    # Whether the search itself could not run. Kept so a failure is never reported as "no match".
+    failed: bool = False
 
     @property
     def has_hits(self) -> bool:
@@ -103,7 +106,7 @@ def search_shared_prompts(
         )
     except Exception:
         logger.warning("Shared prompt search failed.", exc_info=True)
-        return SharedPromptResult(query=normalized_query)
+        return SharedPromptResult(query=normalized_query, failed=True)
 
     prompts: list[dict[str, Any]] = []
     for index, item in enumerate(page.items):
@@ -135,6 +138,18 @@ def search_shared_prompts(
 # ツール実行結果としてLLMへ返すペイロードを組み立てる
 # Build the payload returned to the LLM as the tool result
 def build_shared_prompt_tool_payload(result: SharedPromptResult) -> dict[str, Any]:
+    # 検索基盤の障害を "該当なし" として返すと、モデルが誤って断言してしまう。
+    # A backend outage reported as "no match" would make the model assert something false.
+    if not result.has_hits and result.failed:
+        return {
+            "status": "failed",
+            "query": result.query,
+            "message": (
+                "The shared prompt lookup could not run, so it is unknown whether a match exists. "
+                "Do not say no shared prompt matched: tell the user the lookup failed."
+            ),
+            "prompts": [],
+        }
     if not result.has_hits:
         return {
             "status": "no_results",

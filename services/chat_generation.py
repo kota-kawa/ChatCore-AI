@@ -793,10 +793,25 @@ class ChatGenerationJob:
             )
             return step_count
 
+        # 参照元が「検索できなかった」と返した場合も障害として扱う。0件として通すと、
+        # UI もモデルも「該当なし」と伝えてしまう。
+        # A source reporting that it could not search is a failure too. Passing it through as a
+        # zero-hit result would make both the UI and the model claim that nothing matched.
+        status = str(payload.get("status") or "")
+        if status == "failed":
+            logger.warning("%s (status=failed)", failure_log_message)
+            self._publish(
+                f"{event_prefix}_failed",
+                {"query": query, "step": step_count, "max_steps": max_steps},
+            )
+            current_messages.append(_tool_result_message(tool_call, payload))
+            return step_count
+
         self._publish(
             f"{event_prefix}_completed",
             {
                 "query": query,
+                "status": status,
                 **{key: int(payload.get(key) or 0) for key in result_counts},
                 "step": step_count,
                 "max_steps": max_steps,

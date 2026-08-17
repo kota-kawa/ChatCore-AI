@@ -27,6 +27,7 @@ from services.llm import (
 )
 from services.request_models import ChatMessageRequest
 from services.selected_reference_context import augment_messages_with_selected_references
+from services.selected_reference_sources import build_selected_reference_searchers
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
     combine_web_search_results,
@@ -576,18 +577,22 @@ class ChatPostUseCase:
         # Always load user-selected memo/shared-prompt sources before generation instead
         # of relying on the model to decide whether to call their tools. Keep the tools
         # available as well so the model can retry with narrower keywords when needed.
-        personal_knowledge_search = (
-            partial(deps.search_personal_knowledge, user_id)
-            if use_personal_knowledge and user_id is not None
-            else None
+        selected_references = build_selected_reference_searchers(
+            user_id=user_id,
+            use_personal_knowledge=use_personal_knowledge,
+            use_shared_prompts=use_shared_prompts,
+            search_personal_knowledge=deps.search_personal_knowledge,
+            search_shared_prompts=deps.search_shared_prompts,
         )
-        shared_prompt_search = deps.search_shared_prompts if use_shared_prompts else None
+        personal_knowledge_search = selected_references.personal_knowledge
+        shared_prompt_search = selected_references.shared_prompt
         conversation_messages = await run_blocking(
             partial(
                 augment_messages_with_selected_references,
                 query=user_message,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                unavailable_sources=selected_references.unavailable_sources,
             ),
             conversation_messages,
         )
