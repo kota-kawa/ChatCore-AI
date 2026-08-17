@@ -17,7 +17,7 @@ from blueprints.memo.repository import (
     update_memo as update_memo_record,
 )
 from services.api_errors import ApiServiceError
-from services.memo_ai import embeddings_available, generate_embedding
+from services.embeddings import embeddings_available, generate_embedding
 from services.request_models import (
     MAX_MEMO_STORED_CONTENT_LENGTH,
     McpMemoAppendRequest,

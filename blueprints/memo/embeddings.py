@@ -6,11 +6,8 @@ import sys
 
 from services.background_executor import get_background_executor
 from services.db import get_db_connection as default_get_db_connection
-from services.memo_ai import (
-    build_memo_embedding_text,
-    embeddings_available,
-    generate_embedding,
-)
+from services.embeddings import embeddings_available, generate_embedding
+from services.memo_ai import build_memo_embedding_text
 
 logger = logging.getLogger("blueprints.memo")
 
