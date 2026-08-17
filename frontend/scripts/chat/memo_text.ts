@@ -24,6 +24,8 @@ const WEB_SEARCH_SOURCES_BLOCK_PATTERN =
 // safe. Leading spaces/tabs are consumed as well so no dangling gap is left.
 const WEB_SEARCH_CITATION_PATTERN =
   /[ \t]*<a\b[^>]*class\s*=\s*(["'])[^"']*web-search-citation[^"']*\1[^>]*>[\s\S]*?<\/a>/gi;
+const SELECTED_REFERENCE_MARKER_PATTERN =
+  /[ \t]*【(?:personal_knowledge_result|shared_prompt_result)】/g;
 
 function tidyBlankLines(text: string): string {
   return text
@@ -60,12 +62,21 @@ function stripWebSearchCitationsHtml(text: string): string {
   return tidyBlankLines(text.replace(WEB_SEARCH_CITATION_PATTERN, ""));
 }
 
+function stripSelectedReferenceMarkers(text: string): string {
+  if (!text.includes("personal_knowledge_result") && !text.includes("shared_prompt_result")) {
+    return text;
+  }
+  return tidyBlankLines(text.replace(SELECTED_REFERENCE_MARKER_PATTERN, ""));
+}
+
 /**
  * メモへ持ち込む前に、Web 検索の参照表示をすべて取り除く。
  * Strip every web search reference before the text reaches a memo.
  */
 function stripWebSearchArtifacts(text: string): string {
-  return stripWebSearchCitationsHtml(stripWebSearchSourcesHtml(text));
+  return stripSelectedReferenceMarkers(
+    stripWebSearchCitationsHtml(stripWebSearchSourcesHtml(text)),
+  );
 }
 
 export { stripWebSearchArtifacts, stripWebSearchCitationsHtml, stripWebSearchSourcesHtml };

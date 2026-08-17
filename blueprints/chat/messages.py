@@ -38,13 +38,21 @@ from services.chat_prompt import (
     build_user_profile_prompt as _build_user_profile_prompt,
 )
 from services.personal_knowledge import search_personal_knowledge_for_tool
-from services.selected_reference_context import augment_messages_with_selected_references
+from services.selected_reference_context import (
+    SelectedReferenceLookupTrace,
+    augment_messages_with_selected_references,
+)
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.web_search import (
     deserialize_web_search_results,
     extract_prior_web_search_results,
     inject_prior_web_search_context,
+)
+from services.web_search_trace import (
+    answer_step,
+    build_web_search_trace_markdown,
+    selected_reference_steps,
 )
 from services.project_service import get_project_context
 from services.generative_ui import (
@@ -1004,6 +1012,7 @@ async def chat_regenerate(
     )
     personal_knowledge_search = selected_references.personal_knowledge
     shared_prompt_search = selected_references.shared_prompt
+    selected_reference_trace: list[SelectedReferenceLookupTrace] = []
     conversation_messages = await run_blocking(
         partial(
             augment_messages_with_selected_references,
@@ -1011,6 +1020,7 @@ async def chat_regenerate(
             personal_knowledge_search=personal_knowledge_search,
             shared_prompt_search=shared_prompt_search,
             unavailable_sources=selected_references.unavailable_sources,
+            trace_results=selected_reference_trace,
         ),
         conversation_messages,
     )
@@ -1070,6 +1080,7 @@ async def chat_regenerate(
                 prior_web_search_results=prior_web_search_results,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                selected_reference_trace=selected_reference_trace,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1089,6 +1100,13 @@ async def chat_regenerate(
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
+
+    selected_steps = selected_reference_steps(selected_reference_trace)
+    if selected_steps:
+        trace_block = build_web_search_trace_markdown(
+            steps=[*selected_steps, answer_step([])],
+        )
+        bot_reply = f"{trace_block}\n\n{bot_reply}" if bot_reply else trace_block
 
     latest_user_message = next(
         (
@@ -1433,6 +1451,7 @@ async def chat_edit_and_regenerate(
     )
     personal_knowledge_search = selected_references.personal_knowledge
     shared_prompt_search = selected_references.shared_prompt
+    selected_reference_trace: list[SelectedReferenceLookupTrace] = []
     conversation_messages = await run_blocking(
         partial(
             augment_messages_with_selected_references,
@@ -1440,6 +1459,7 @@ async def chat_edit_and_regenerate(
             personal_knowledge_search=personal_knowledge_search,
             shared_prompt_search=shared_prompt_search,
             unavailable_sources=selected_references.unavailable_sources,
+            trace_results=selected_reference_trace,
         ),
         conversation_messages,
     )
@@ -1501,6 +1521,7 @@ async def chat_edit_and_regenerate(
                 prior_web_search_results=prior_web_search_results,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                selected_reference_trace=selected_reference_trace,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1520,6 +1541,13 @@ async def chat_edit_and_regenerate(
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
+
+    selected_steps = selected_reference_steps(selected_reference_trace)
+    if selected_steps:
+        trace_block = build_web_search_trace_markdown(
+            steps=[*selected_steps, answer_step([])],
+        )
+        bot_reply = f"{trace_block}\n\n{bot_reply}" if bot_reply else trace_block
 
     latest_user_message = next(
         (

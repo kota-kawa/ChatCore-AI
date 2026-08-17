@@ -4,6 +4,8 @@ from unittest.mock import Mock
 
 from services.selected_reference_context import (
     MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS,
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
     augment_messages_with_selected_references,
 )
 
@@ -48,6 +50,32 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertIn("旅行計画テンプレ", context)
         self.assertIn("Do not ignore or replace a successful selected-source", context)
         self.assertEqual(augmented[2], messages[1])
+
+    def test_collects_lookup_results_for_the_answer_trace(self):
+        traces = []
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "旅行計画"}],
+            query="旅行計画",
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 1,
+                "context_fact_count": 2,
+            },
+            shared_prompt_search=lambda _query: {
+                "status": "ok",
+                "prompt_count": 3,
+            },
+            trace_results=traces,
+        )
+
+        self.assertEqual(
+            [trace.source for trace in traces],
+            [PERSONAL_KNOWLEDGE_SOURCE, SHARED_PROMPT_SOURCE],
+        )
+        self.assertEqual(traces[0].query, "旅行計画")
+        self.assertEqual(traces[0].payload["context_fact_count"], 2)
+        self.assertEqual(traces[1].payload["prompt_count"], 3)
 
     # 日本語: メモ本文が制御タグを含んでも、システム文脈の区切りを偽装できません。
     # English: Memo content cannot forge the system-context delimiters.

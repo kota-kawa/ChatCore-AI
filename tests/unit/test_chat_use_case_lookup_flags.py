@@ -134,6 +134,9 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         self.assertIsNotNone(lookup)
         search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
+        trace = deps.start_generation_job.call_args.kwargs["selected_reference_trace"]
+        self.assertEqual(len(trace), 1)
+        self.assertEqual(trace[0].payload["memo_count"], 1)
         lookup("沖縄")
         self.assertEqual(
             search.call_args_list,

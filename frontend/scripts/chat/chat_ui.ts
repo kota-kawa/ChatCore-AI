@@ -30,6 +30,10 @@ let markdownEnhancementDisabled = false;
 // email body is rebuilt as bullets until the closing fence lands, and the layout
 // visibly reshuffles at that moment.
 const FENCED_SEGMENT_PATTERN = /(```[\s\S]*?```|```[\s\S]*$)/;
+const SELECTED_REFERENCE_MARKERS = {
+  "【personal_knowledge_result】": "\uE100",
+  "【shared_prompt_result】": "\uE101",
+} as const;
 const MARKED_HTML_CACHE_LIMIT = 160;
 const botMarkdownHtmlCache = new Map<string, string>();
 const userMarkdownHtmlCache = new Map<string, string>();
@@ -65,6 +69,37 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function protectSelectedReferenceMarkers(text: string) {
+  return text
+    .split(FENCED_SEGMENT_PATTERN)
+    .map((part, index) => {
+      if (!part || index % 2 === 1) return part;
+      return Object.entries(SELECTED_REFERENCE_MARKERS).reduce(
+        (current, [marker, token]) => current.replaceAll(marker, token),
+        part,
+      );
+    })
+    .join("");
+}
+
+function renderSelectedReferenceMarkers(html: string) {
+  const personalKnowledgePill = [
+    '<span class="selected-reference-citation selected-reference-citation--personal" title="メモ・マイコンテキスト">',
+    '<span class="web-search-citation__icon"><i class="bi bi-journal-text"></i></span>',
+    '<span class="web-search-citation__label">メモ・マイコンテキスト</span>',
+    "</span>",
+  ].join("");
+  const sharedPromptPill = [
+    '<span class="selected-reference-citation selected-reference-citation--shared-prompt" title="共有プロンプト">',
+    '<span class="web-search-citation__icon"><i class="bi bi-card-text"></i></span>',
+    '<span class="web-search-citation__label">共有プロンプト</span>',
+    "</span>",
+  ].join("");
+  return html
+    .replaceAll(SELECTED_REFERENCE_MARKERS["【personal_knowledge_result】"], personalKnowledgePill)
+    .replaceAll(SELECTED_REFERENCE_MARKERS["【shared_prompt_result】"], sharedPromptPill);
 }
 
 function isStandaloneLabelLine(line: string) {
@@ -605,14 +640,14 @@ function hideTypingIndicator() {
 
 /* LLM 出力の Markdown を HTML に変換 */
 function formatLLMOutput(text: string) {
-  const normalized = normalizeLLMTextForDisplay(text);
+  const normalized = normalizeLLMTextForDisplay(protectSelectedReferenceMarkers(text));
   // ensureMarkedParser() は markedParser を同期的に設定するため、初回呼び出しでも
   // フォールバック（HTML をエスケープしてしまう）に落ちないよう初期化後に再判定する。
   if (!markedParser && !markdownEnhancementDisabled) {
     void ensureMarkedParser();
   }
   if (!markedParser) {
-    return formatMarkdownFallback(normalized);
+    return renderSelectedReferenceMarkers(formatMarkdownFallback(normalized));
   }
 
   const cached = botMarkdownHtmlCache.get(normalized);
@@ -623,7 +658,7 @@ function formatLLMOutput(text: string) {
     gfm: true,
     breaks: true
   });
-  const html = typeof parsed === "string" ? parsed : normalized;
+  const html = renderSelectedReferenceMarkers(typeof parsed === "string" ? parsed : normalized);
   rememberMarkdownHtml(botMarkdownHtmlCache, normalized, html);
   return html;
 }

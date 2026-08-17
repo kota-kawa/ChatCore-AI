@@ -117,6 +117,12 @@ test("keeps markdown links the answer wrote itself", () => {
   assert.equal(stripWebSearchArtifacts(text), text);
 });
 
+test("removes selected-reference markers from memo text", () => {
+  const text = "自然を感じられるカフェで休憩します 【personal_knowledge_result】。";
+
+  assert.equal(stripWebSearchArtifacts(text), "自然を感じられるカフェで休憩します。");
+});
+
 test("strips both the trace block and the citation chips for a memo", () => {
   const text = [
     '<details class="web-search-sources web-search-sources--trace">',

@@ -7,6 +7,7 @@ import logging
 import re
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 from services.chat_prompt import insert_after_leading_system_messages
@@ -108,6 +109,15 @@ UNAVAILABLE_SOURCE_REASONS = {
         "memo and My Context (the user is signed out, and memos are readable only in a signed-in session)"
     ),
 }
+
+
+@dataclass(frozen=True)
+class SelectedReferenceLookupTrace:
+    """A completed pre-generation lookup retained for the answer-step UI."""
+
+    source: str
+    query: str
+    payload: dict[str, Any]
 
 
 def _normalize_query(query: str, limit: int = MAX_SELECTED_REFERENCE_QUERY_CHARS) -> str:
@@ -324,6 +334,7 @@ def augment_messages_with_selected_references(
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     unavailable_sources: Sequence[str] = (),
+    trace_results: list[SelectedReferenceLookupTrace] | None = None,
 ) -> list[dict[str, Any]]:
     """Load every enabled source before generation and inject it as required evidence."""
     lookups: list[tuple[str, Callable[[str], dict[str, Any]]]] = []
@@ -340,6 +351,24 @@ def augment_messages_with_selected_references(
 
     candidates = _candidate_queries(normalized_query, previous_user_message(messages))
     payloads = _run_lookups(lookups, candidates, query=normalized_query) if lookups else []
+
+    if trace_results is not None:
+        trace_results.extend(
+            SelectedReferenceLookupTrace(
+                source=source,
+                query=normalized_query,
+                payload=dict(payload),
+            )
+            for (source, _), payload in zip(lookups, payloads)
+        )
+        trace_results.extend(
+            SelectedReferenceLookupTrace(
+                source=source,
+                query=normalized_query,
+                payload={"status": "unavailable"},
+            )
+            for source in unavailable_sources
+        )
 
     result_blocks = [
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'

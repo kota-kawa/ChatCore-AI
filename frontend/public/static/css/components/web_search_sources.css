@@ -1,7 +1,8 @@
 /* ============================================================
    Web検索まわりの表示（回答本文の出典チップ／「回答までのステップ」）
 
-   - .web-search-citation      : 回答本文に添えるコンパクトな出典チップ
+   - .web-search-citation      : 回答本文に添えるコンパクトなWeb出典チップ
+   - .selected-reference-citation: メモ／共有プロンプトの参照チップ
    - .web-search-sources       : 折りたたみの出典パネル
    - .web-search-sources--trace: 「回答までのステップ」タイムライン
 
@@ -10,6 +11,7 @@
    ============================================================ */
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
+:where(body.chat-page, .chat-page-shell) .bot-message .selected-reference-citation,
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
   --ws-surface: #ffffff;
   --ws-surface-sunken: #f8fafc;
@@ -33,6 +35,7 @@
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .selected-reference-citation,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources {
   --ws-surface: #0f172a;
   --ws-surface-sunken: #1e293b;
@@ -56,7 +59,8 @@
 }
 
 /* ─── 回答本文に添える、ChatGPT風のコンパクトなWeb出典チップ ─── */
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation {
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
+:where(body.chat-page, .chat-page-shell) .bot-message .selected-reference-citation {
   display: inline-flex;
   align-items: center;
   gap: 0.32rem;
@@ -79,6 +83,10 @@
     border-color var(--transition-fast, 0.15s ease),
     box-shadow var(--transition-fast, 0.15s ease),
     transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .bot-message .selected-reference-citation {
+  cursor: default;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation:hover {

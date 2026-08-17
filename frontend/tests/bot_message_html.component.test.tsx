@@ -181,6 +181,19 @@ describe("BotMessageHtml answer steps", () => {
   });
 });
 
+describe("BotMessageHtml selected-reference citations", () => {
+  it("keeps the personal-knowledge pill through sanitization", () => {
+    const { container } = render(
+      <BotMessageHtml text="カフェで休憩します【personal_knowledge_result】。" />,
+    );
+
+    const pill = container.querySelector(".selected-reference-citation--personal");
+    expect(pill).toHaveTextContent("メモ・マイコンテキスト");
+    expect(pill?.querySelector("i.bi.bi-journal-text")).not.toBeNull();
+    expect(container).not.toHaveTextContent("personal_knowledge_result");
+  });
+});
+
 const DEEP_LINK_STEP_HTML = [
   '<details class="web-search-sources web-search-sources--trace">',
   '<summary class="web-search-sources__summary">',

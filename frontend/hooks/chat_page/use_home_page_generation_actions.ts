@@ -33,6 +33,7 @@ import {
   isGenerativeUiPending,
   updateStreamingTextPart,
 } from "../../lib/chat_page/generative_ui_stream";
+import { getInitialThinkingState } from "../../lib/chat_page/thinking_status";
 import {
   appendStoredHistory,
   clearStoredGenerationState,
@@ -1559,11 +1560,15 @@ export function useHomePageGenerationActions({
         text: message,
         attachedFileNames: attachedFiles?.length ? attachedFiles.map((f) => f.name) : undefined,
       };
+      const initialThinkingState = getInitialThinkingState(
+        personalKnowledgeEnabled,
+        sharedPromptsEnabled,
+        localeRef.current,
+      );
       const thinkingMessage: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
-        text: localize("AIが応答を準備しています", "AI is preparing a response"),
-        generationPhase: "preparing",
+        ...initialThinkingState,
       };
 
       setMessages((previous) => {
@@ -1790,11 +1795,15 @@ export function useHomePageGenerationActions({
         sender: "user",
         text: newMessage,
       };
+      const initialThinkingState = getInitialThinkingState(
+        personalKnowledgeEnabled,
+        sharedPromptsEnabled,
+        localeRef.current,
+      );
       const thinkingMsg: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
-        text: localize("AIが応答を準備しています", "AI is preparing a response"),
-        generationPhase: "preparing",
+        ...initialThinkingState,
       };
 
       setMessages((previous) => {
@@ -1944,6 +1953,11 @@ export function useHomePageGenerationActions({
       if (!generation) return;
 
       const thinkingId = nextMessageId("thinking", messageSeqRef);
+      const initialThinkingState = getInitialThinkingState(
+        personalKnowledgeEnabled,
+        sharedPromptsEnabled,
+        localeRef.current,
+      );
       setMessages((previous) => {
         if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
         return [
@@ -1951,8 +1965,7 @@ export function useHomePageGenerationActions({
           {
             id: thinkingId,
             sender: "thinking",
-            text: localize("AIが応答を準備しています", "AI is preparing a response"),
-            generationPhase: "preparing",
+            ...initialThinkingState,
           },
         ];
       });
