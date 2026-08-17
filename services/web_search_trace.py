@@ -13,7 +13,6 @@ from typing import Any, Iterable, Sequence
 
 from .selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
-    SHARED_PROMPT_SOURCE,
     SelectedReferenceLookupTrace,
 )
 from .web_search import (
