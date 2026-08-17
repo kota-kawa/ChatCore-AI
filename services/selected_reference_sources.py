@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
+from services.personal_knowledge import build_personal_overview
 from services.selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ class SelectedReferenceSearchers:
 
     personal_knowledge: Callable[[str], dict[str, Any]] | None = None
     shared_prompt: Callable[[str], dict[str, Any]] | None = None
+    # 検索が空振りしたときに使う、クエリ非依存の棚卸し。
+    # Query-independent inventory used when a search comes back empty.
+    personal_overview: Callable[[], dict[str, Any]] | None = None
     unavailable_sources: tuple[str, ...] = ()
 
 
@@ -89,9 +93,11 @@ def build_selected_reference_searchers(
     use_shared_prompts: bool,
     search_personal_knowledge: Callable[..., dict[str, Any]],
     search_shared_prompts: Callable[..., dict[str, Any]],
+    personal_overview: Callable[..., dict[str, Any]] = build_personal_overview,
 ) -> SelectedReferenceSearchers:
     """Resolve the request flags into the lookups this turn is actually allowed to run."""
     personal_knowledge: Callable[[str], dict[str, Any]] | None = None
+    overview: Callable[[], dict[str, Any]] | None = None
     unavailable: list[str] = []
     if use_personal_knowledge:
         if user_id is None:
@@ -107,6 +113,7 @@ def build_selected_reference_searchers(
                 partial(search_personal_knowledge, user_id),
                 source_label="memo and My Context",
             )
+            overview = partial(personal_overview, user_id)
 
     shared_prompt: Callable[[str], dict[str, Any]] | None = None
     if use_shared_prompts:
@@ -117,5 +124,6 @@ def build_selected_reference_searchers(
     return SelectedReferenceSearchers(
         personal_knowledge=personal_knowledge,
         shared_prompt=shared_prompt,
+        personal_overview=overview,
         unavailable_sources=tuple(unavailable),
     )

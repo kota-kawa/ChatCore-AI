@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
-from services.memo_ai import embeddings_available, generate_embedding
+from services.embeddings import embeddings_available, generate_embedding
 from services.repositories.context_fact_repository import ContextFactRepository
 from services.request_models import (
     ContextFactStatus,

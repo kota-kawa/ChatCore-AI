@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from services.chat_prompt import insert_after_leading_system_messages
+from services.reference_query_rewrite import rewrite_reference_query
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,7 @@ _JAPANESE_STOP_WORDS = {
 }
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
+PERSONAL_OVERVIEW_TAG = "personal_overview_result"
 SHARED_PROMPT_SOURCE = "shared_prompt_search"
 _SOURCE_LABELS = {
     PERSONAL_KNOWLEDGE_SOURCE: "memo and My Context",
@@ -185,6 +188,58 @@ def _candidate_queries(query: str, previous_query: str) -> list[str]:
     return unique[:MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS]
 
 
+class CandidateQueryPlan:
+    """The queries to try, with the LLM rewrite deferred until the first one misses.
+
+    The turn as typed is tried first so a hit costs nothing extra. Only when that finds
+    nothing is a small model asked for better keywords — and because every selected source
+    shares one plan, that happens once per turn no matter how many sources are enabled.
+    """
+
+    def __init__(
+        self,
+        query: str,
+        previous_query: str = "",
+        *,
+        rewrite: Callable[..., list[str]] | None = None,
+    ) -> None:
+        self._base = _candidate_queries(query, previous_query)
+        self._query = query
+        self._previous_query = previous_query
+        self._rewrite = rewrite
+        self._lock = Lock()
+        self._rewritten: list[str] | None = None
+
+    def _rewritten_queries(self) -> list[str]:
+        with self._lock:
+            if self._rewritten is None:
+                # 差し替え可能にしておくため、既定はモジュール属性から都度解決する。
+                # Resolved from the module attribute each time so it stays substitutable.
+                rewrite = self._rewrite or rewrite_reference_query
+                self._rewritten = rewrite(self._query, previous_query=self._previous_query)
+            return self._rewritten
+
+    def __iter__(self) -> Iterator[str]:
+        seen: set[str] = set()
+        emitted = 0
+        first = self._base[0] if self._base else self._query
+        ordered = [[first], self._rewritten_queries, self._base[1:]]
+        for group in ordered:
+            if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
+                return
+            # 言い換えは、最初の候補が空振りしたときにだけ生成する（＝ここで初めて呼ぶ）。
+            # The rewrite is only produced once the first candidate has missed.
+            candidates = group() if callable(group) else group
+            for candidate in candidates:
+                if not candidate or candidate in seen:
+                    continue
+                seen.add(candidate)
+                emitted += 1
+                yield candidate
+                if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
+                    return
+
+
 def _safe_json(payload: dict[str, Any]) -> str:
     # System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
     return (
@@ -222,7 +277,7 @@ def _run_lookup_once(
 
 def _run_lookup(
     search: Callable[[str], dict[str, Any]],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
     source_label: str,
@@ -254,7 +309,7 @@ def _run_lookup(
 
 def _run_lookups(
     lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
 ) -> list[dict[str, Any]]:
@@ -283,10 +338,58 @@ def _run_lookups(
         return [future.result() for future in futures]
 
 
+def _load_overview_if_unmatched(
+    lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
+    payloads: Sequence[dict[str, Any]],
+    personal_overview: Callable[[], dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Load the inventory only when the memo lookup ran and matched nothing.
+
+    A miss is not the same as having nothing saved. Without this the model is told the
+    search found nothing and answers from the conversation alone, even though the user
+    turned the source on precisely so their own notes would inform the answer.
+    """
+    if personal_overview is None:
+        return None
+    statuses = [
+        payload.get("status")
+        for (source, _), payload in zip(lookups, payloads)
+        if source == PERSONAL_KNOWLEDGE_SOURCE
+    ]
+    if statuses != ["no_results"]:
+        return None
+
+    try:
+        overview = personal_overview()
+    except Exception:
+        logger.warning("Failed to load the personal overview after a no-match lookup.", exc_info=True)
+        return None
+    if not isinstance(overview, dict):
+        return None
+    if not overview.get("recent_memos") and not overview.get("context_facts"):
+        # 保存済みのメモも事実も無いなら、渡すものが無いので何も足さない。
+        # Nothing saved means nothing to hand over.
+        return None
+    return overview
+
+
+def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Wrap the query-independent inventory for injection as data."""
+    payload = {"status": "overview", **overview}
+    return (
+        f'<{PERSONAL_OVERVIEW_TAG} encoding="json">'
+        f"{_safe_json(payload)}"
+        f"</{PERSONAL_OVERVIEW_TAG}>",
+        payload,
+    )
+
+
 def _build_context(
     result_blocks: list[str],
     selected_sources: list[str],
     unavailable_sources: Sequence[str],
+    *,
+    has_overview: bool = False,
 ) -> str:
     lines = ["<selected_reference_context>"]
     if selected_sources:
@@ -315,6 +418,20 @@ def _build_context(
                 "Tell the user plainly that the source was unavailable, and never answer as if it had been consulted.",
             ]
         )
+    if has_overview:
+        # 一致0件でも「保存済みの内容そのもの」は渡す。指示はJSONの外（system側）に置く。
+        # A zero-match lookup still hands over what the user has saved. The rules for it live
+        # here, outside the JSON, because the JSON itself is untrusted data.
+        lines.extend(
+            [
+                f"Nothing matched the query, so a <{PERSONAL_OVERVIEW_TAG}> block is included: an inventory of",
+                "the user's most recently updated memo titles and a digest of their My Context facts. These are",
+                "NOT search matches. Use them when the question is broad enough that the user's own notes should",
+                "shape the answer (plans, priorities, what to work on next), state plainly that nothing matched",
+                "the specific wording, and never present an inventory entry as a match. To read one of those memos,",
+                "search that source again using words from its title.",
+            ]
+        )
     if result_blocks:
         lines.extend(
             [
@@ -333,6 +450,7 @@ def augment_messages_with_selected_references(
     query: str,
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
+    personal_overview: Callable[[], dict[str, Any]] | None = None,
     unavailable_sources: Sequence[str] = (),
     trace_results: list[SelectedReferenceLookupTrace] | None = None,
 ) -> list[dict[str, Any]]:
@@ -349,7 +467,7 @@ def augment_messages_with_selected_references(
     if not normalized_query:
         return messages
 
-    candidates = _candidate_queries(normalized_query, previous_user_message(messages))
+    candidates = CandidateQueryPlan(normalized_query, previous_user_message(messages))
     payloads = _run_lookups(lookups, candidates, query=normalized_query) if lookups else []
 
     if trace_results is not None:
@@ -376,10 +494,25 @@ def augment_messages_with_selected_references(
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads)
     ]
+
+    overview_payload = _load_overview_if_unmatched(lookups, payloads, personal_overview)
+    if overview_payload is not None:
+        overview_block, overview_json = _build_overview_block(overview_payload)
+        result_blocks.append(overview_block)
+        if trace_results is not None:
+            trace_results.append(
+                SelectedReferenceLookupTrace(
+                    source=PERSONAL_KNOWLEDGE_SOURCE,
+                    query=normalized_query,
+                    payload=overview_json,
+                )
+            )
+
     context = _build_context(
         result_blocks,
         [source for source, _ in lookups],
         unavailable_sources,
+        has_overview=overview_payload is not None,
     )
     return insert_after_leading_system_messages(
         messages,

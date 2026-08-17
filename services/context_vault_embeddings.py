@@ -1,7 +1,7 @@
 """Background embedding generation for personal context vault facts.
 
 Mirrors ``blueprints/memo/embeddings.py`` but targets the ``context_facts`` table,
-reusing the table-agnostic embedding helpers in ``services/memo_ai.py``.
+reusing the table-agnostic embedding helpers in ``services/embeddings.py``.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from services.background_executor import get_background_executor
-from services.memo_ai import EMBEDDING_MAX_INPUT_CHARS, embeddings_available, generate_embedding
+from services.embeddings import EMBEDDING_MAX_INPUT_CHARS, embeddings_available, generate_embedding
 from services.repositories.context_fact_repository import ContextFactRepository
 
 logger = logging.getLogger("blueprints.context_vault")

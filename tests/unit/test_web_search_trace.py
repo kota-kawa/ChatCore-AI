@@ -369,5 +369,25 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertEqual(trace.build_web_search_trace_markdown(None, steps=[{"title": "  "}]), "")
 
 
+class SelectedReferenceOverviewStepTestCase(unittest.TestCase):
+    # 日本語: 棚卸しのステップは「該当なし」ではなく、渡した件数を示します。
+    # English: The inventory step reports what was handed over, not "no match".
+    def test_overview_step_reports_the_inventory_counts(self):
+        step = trace.selected_reference_step(
+            PERSONAL_KNOWLEDGE_SOURCE,
+            {
+                "status": "overview",
+                "recent_memo_count": 4,
+                "context_fact_count": 2,
+            },
+            query="今月は何をしたらいいかな？",
+        )
+
+        self.assertEqual(step.title, "保存済みのメモとマイコンテキストを確認")
+        self.assertEqual(step.badge, "6件")
+        self.assertEqual(step.chips, ("最近のメモ 4件", "マイコンテキスト 2件"))
+        self.assertIn("回答の材料", step.detail)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@ from typing import Any
 
 from services.cache import get_redis_client, is_redis_configured
 from services.db import get_db_connection
+from services.embeddings import get_embedding_health
 
 
 # サービスの生存（Liveness）状態を示すステータスを返します。基本的に常に "ok" を返します。
@@ -61,6 +62,15 @@ def get_readiness_status() -> tuple[dict[str, Any], int]:
             "status": "disabled",
             "required": False,
         }
+
+    # 埋め込みが落ちるとメモ／マイコンテキスト検索が黙って部分一致へ劣化するため、
+    # 必須ではないがreadinessに出して気付けるようにする。
+    # A broken embedding provider silently degrades memo / My Context search to substring
+    # matching, so surface it here even though it is not a required component.
+    embedding_component = get_embedding_health()
+    components["embeddings"] = embedding_component
+    if embedding_component["status"] in {"degraded", "error"}:
+        degraded = True
 
     if overall_ok:
         if degraded:

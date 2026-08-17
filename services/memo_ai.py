@@ -1,5 +1,7 @@
-# AIによるメモ支援機能：埋め込みベクトルを用いたセマンティック検索と、タイトルの提案機能を提供します。
-# AI-powered memo assistance: title suggestion and semantic search via embeddings.
+# AIによるメモ支援機能：タイトルの提案と、埋め込み対象テキストの組み立てを提供します。
+# AI-powered memo assistance: title suggestion and embedding input assembly.
+# 埋め込みの生成そのものは services/embeddings.py が担います。
+# Embedding generation itself lives in services/embeddings.py.
 
 from __future__ import annotations
 
@@ -9,12 +11,9 @@ import re
 from typing import Any
 
 from .i18n import build_response_language_policy
-from .llm import LIGHTWEIGHT_TASK_MODEL, LlmProviderError, groq_client, get_llm_response
+from .llm import LIGHTWEIGHT_TASK_MODEL, LlmProviderError, get_llm_response
 
 MEMO_SUGGEST_MODEL = LIGHTWEIGHT_TASK_MODEL
-EMBEDDING_MODEL = "nomic-embed-text-v1_5"
-EMBEDDING_DIMENSIONS = 768
-EMBEDDING_MAX_INPUT_CHARS = 8000
 EMBEDDING_RESPONSE_SAMPLE_CHARS = 2000
 SUGGEST_RESPONSE_SAMPLE_CHARS = 1500
 SUGGEST_TITLE_MAX_LEN = 255
@@ -103,47 +102,6 @@ def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
     except Exception:
         logger.warning("Memo AI suggestion failed; using fallback.", exc_info=True)
         return _fallback_suggest(ai_response)
-
-
-# 埋め込みベクトルの生成機能（Groqクライアント）が有効かどうかを返します。
-# Return whether the embedding generation capability is configured and available.
-def embeddings_available() -> bool:
-    # 埋め込みベクトルの生成機能（Groqクライアント）が有効かどうかを返します。
-    # Return True when the Groq client is configured and can generate embeddings.
-    """Return True when the Groq client is configured and can generate embeddings."""
-    return groq_client is not None
-
-
-# 与えられたテキストから、Groq APIを使用して埋め込みベクトル(1次元配列)を生成します。
-# Generate a dense embedding vector for the text using the Groq API.
-def generate_embedding(text: str) -> list[float] | None:
-    # 与えられたテキストから、Groq APIを使用して埋め込みベクトル(1次元配列)を生成します。
-    # Generate a dense embedding vector for the text using the Groq API.
-    """Generate a dense embedding vector for the given text via Groq."""
-    if not embeddings_available():
-        return None
-
-    normalized = text.strip()[:EMBEDDING_MAX_INPUT_CHARS]
-    if not normalized:
-        return None
-
-    try:
-        response = groq_client.embeddings.create(  # type: ignore[union-attr]
-            model=EMBEDDING_MODEL,
-            input=normalized,
-        )
-        embedding = list(response.data[0].embedding)
-        if len(embedding) != EMBEDDING_DIMENSIONS:
-            logger.warning(
-                "Embedding model returned %s dimensions; expected %s.",
-                len(embedding),
-                EMBEDDING_DIMENSIONS,
-            )
-            return None
-        return embedding
-    except Exception:
-        logger.warning("Embedding generation failed.", exc_info=True)
-        return None
 
 
 # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。

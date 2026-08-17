@@ -7,6 +7,7 @@ from services.personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     PersonalKnowledgeResult,
     build_personal_knowledge_tool_payload,
+    build_personal_overview,
     search_personal_knowledge,
 )
 
@@ -65,6 +66,55 @@ class PersonalKnowledgeSearchTestCase(unittest.TestCase):
         # Top hits carry the full body, not just the excerpt.
         self.assertEqual(result.memos[0]["content"], "本文全体")
         self.assertEqual([fact["title"] for fact in result.facts], ["移動手段"])
+
+    # 日本語: 意味的に届かなかったときは、語そのものを含むメモをキーワード検索で拾います。
+    # English: A semantic miss falls back to keyword search so a literal match is not lost.
+    def test_memo_search_falls_back_to_keyword_when_semantic_finds_nothing(self):
+        results = {
+            "semantic": _FakeMemoSearchResult([]),
+            "keyword": _FakeMemoSearchResult([_FakeMemo(4, "沖縄旅行", "予算は10万円")]),
+        }
+        modes: list[str] = []
+
+        def fake_search_memos(_user_id, _query, *, mode, limit):
+            del limit
+            modes.append(mode)
+            return results[mode]
+
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
+        ), patch(
+            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+        ), patch(
+            "services.personal_knowledge.search_facts",
+            return_value=_FakeFactSearchResult([]),
+        ):
+            result = search_personal_knowledge(7, "沖縄")
+
+        self.assertEqual(modes, ["semantic", "keyword"])
+        self.assertEqual([memo["title"] for memo in result.memos], ["沖縄旅行"])
+
+    # 日本語: 意味検索が当たった場合は、余計なキーワード検索を行いません。
+    # English: A semantic hit must not spend an extra keyword query.
+    def test_memo_search_skips_the_keyword_pass_when_semantic_hits(self):
+        modes: list[str] = []
+
+        def fake_search_memos(_user_id, _query, *, mode, limit):
+            del limit
+            modes.append(mode)
+            return _FakeMemoSearchResult([_FakeMemo(1, "沖縄旅行", "予算")])
+
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
+        ), patch(
+            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+        ), patch(
+            "services.personal_knowledge.search_facts",
+            return_value=_FakeFactSearchResult([]),
+        ):
+            search_personal_knowledge(7, "沖縄")
+
+        self.assertEqual(modes, ["semantic"])
 
     # 日本語: 片方の検索が落ちても、もう片方の結果で回答できるようにします。
     # English: One failing source must not discard the other source's hits.
@@ -130,6 +180,64 @@ class PersonalKnowledgeSearchTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "no_results")
         self.assertEqual(payload["memos"], [])
         self.assertEqual(payload["context_facts"], [])
+
+
+class PersonalOverviewTestCase(unittest.TestCase):
+    class _FakeListing:
+        def __init__(self, memos):
+            self.memos = memos
+
+    class _FakeDigestFact:
+        def __init__(self, fact_id, title, content):
+            self.id = fact_id
+            self.fact_type = "project"
+            self.title = title
+            self.content = content
+            self.importance = 80
+
+    class _FakeDigestGroup:
+        def __init__(self, facts):
+            self.facts = facts
+
+    class _FakeDigest:
+        def __init__(self, groups):
+            self.groups = groups
+
+    # 日本語: 棚卸しは直近のメモとマイコンテキストのダイジェストをまとめて返します。
+    # English: The overview combines recent memo titles with the My Context digest.
+    def test_combines_recent_memos_and_the_context_digest(self):
+        listing = self._FakeListing([_FakeMemo(3, "8月の目標", "")])
+        digest = self._FakeDigest(
+            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
+        )
+
+        with patch(
+            "services.personal_knowledge.list_memos", return_value=listing
+        ) as list_call, patch(
+            "services.personal_knowledge.build_digest", return_value=digest
+        ):
+            overview = build_personal_overview(7)
+
+        self.assertEqual(list_call.call_args.kwargs["sort"], "updated")
+        self.assertEqual([memo["title"] for memo in overview["recent_memos"]], ["8月の目標"])
+        self.assertEqual([fact["title"] for fact in overview["context_facts"]], ["進行中の案件"])
+        self.assertEqual(overview["recent_memo_count"], 1)
+        self.assertEqual(overview["context_fact_count"], 1)
+
+    # 日本語: 片方が落ちても、もう片方の棚卸しは返します。
+    # English: One failing side still returns the other.
+    def test_one_failing_side_still_returns_the_other(self):
+        digest = self._FakeDigest(
+            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
+        )
+
+        with patch(
+            "services.personal_knowledge.list_memos", side_effect=RuntimeError("db down")
+        ), patch("services.personal_knowledge.build_digest", return_value=digest):
+            overview = build_personal_overview(7)
+
+        self.assertEqual(overview["recent_memos"], [])
+        self.assertEqual(overview["context_fact_count"], 1)
 
 
 class PersonalKnowledgeToolCallTestCase(unittest.TestCase):

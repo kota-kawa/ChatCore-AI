@@ -118,6 +118,34 @@ class HealthServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "degraded")
         self.assertEqual(payload["components"]["redis"]["status"], "degraded")
 
+    def test_readiness_is_degraded_when_embeddings_are_failing(self):
+        """
+        埋め込み生成が失敗し続けているとき、Readinessがdegradedになることを検証します。
+        Verify that readiness degrades while embedding generation keeps failing.
+        """
+        # 埋め込みプロバイダが継続的に失敗している状況をモック
+        # Mock a persistently failing embedding provider
+        failing_embeddings = {
+            "status": "error",
+            "required": False,
+            "model": "text-embedding-3-small",
+            "dimensions": 768,
+            "consecutive_failures": 3,
+        }
+        with patch("services.health.get_db_connection", return_value=DummyConnection()):
+            with patch("services.health.is_redis_configured", return_value=False):
+                with patch(
+                    "services.health.get_embedding_health",
+                    return_value=failing_embeddings,
+                ):
+                    payload, status_code = get_readiness_status()
+
+        # 検索が黙って劣化していることを運用側が検知できることを検証
+        # Assert that a silently degraded search surface is visible to operators
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["components"]["embeddings"]["status"], "error")
+
     def test_readiness_is_error_when_database_is_unavailable(self):
         """
         必須であるデータベースが利用不可なとき、Readinessがerror(503)を返すことを検証します。

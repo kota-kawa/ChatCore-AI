@@ -1,16 +1,27 @@
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from services.selected_reference_context import (
     MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS,
+    CandidateQueryPlan,
     PERSONAL_KNOWLEDGE_SOURCE,
+    PERSONAL_OVERVIEW_TAG,
     SHARED_PROMPT_SOURCE,
     augment_messages_with_selected_references,
 )
 
 
 class SelectedReferenceContextTestCase(unittest.TestCase):
+    def setUp(self):
+        # 既定の言い換えはLLMを呼ぶため、明示的に差し替えないテストでは無効化する。
+        # The default rewrite calls an LLM, so tests that do not exercise it stub it out.
+        patcher = patch(
+            "services.selected_reference_context.rewrite_reference_query", return_value=[]
+        )
+        self.rewrite = patcher.start()
+        self.addCleanup(patcher.stop)
+
     # 日本語: 選択された参照元は生成前に必ず検索され、システム文脈へ入ります。
     # English: Every selected source is searched before generation and inserted into system context.
     def test_prefetches_all_selected_sources_and_inserts_results_before_user_message(self):
@@ -50,6 +61,115 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertIn("旅行計画テンプレ", context)
         self.assertIn("Do not ignore or replace a successful selected-source", context)
         self.assertEqual(augmented[2], messages[1])
+
+    # 日本語: 0件のときは、言い換えたキーワードで引き直します。
+    # English: A zero-hit lookup is retried with the rewritten keywords.
+    def test_zero_hit_is_retried_with_rewritten_keywords(self):
+        self.rewrite.return_value = ["2026年8月 8月 目標"]
+        search = Mock(return_value={"status": "no_results", "query": "x"})
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=search,
+        )
+
+        attempted = [call.args[0] for call in search.call_args_list]
+        self.assertEqual(attempted[0], "今月は何をしたらいいかな？")
+        self.assertIn("2026年8月 8月 目標", attempted)
+
+    # 日本語: 一致0件でも、保存済みの内容そのものは棚卸しとして渡します。
+    # English: A zero-match lookup still hands over an inventory of what the user saved.
+    def test_no_match_hands_over_the_saved_inventory(self):
+        overview = Mock(
+            return_value={
+                "recent_memos": [{"id": 3, "title": "8月の目標"}],
+                "context_facts": [{"id": 9, "title": "進行中の案件", "content": "Chat-Core"}],
+                "recent_memo_count": 1,
+                "context_fact_count": 1,
+            }
+        )
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=overview,
+        )
+
+        overview.assert_called_once_with()
+        context = augmented[0]["content"]
+        self.assertIn(PERSONAL_OVERVIEW_TAG, context)
+        self.assertIn("8月の目標", context)
+        self.assertIn("NOT search matches", context)
+
+    # 日本語: 一致した場合は棚卸しを行いません（無関係な内容で文脈を埋めないため）。
+    # English: A successful match must not also pull in the inventory.
+    def test_successful_lookup_skips_the_inventory(self):
+        overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "沖縄旅行"}],
+            query="沖縄旅行",
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 1,
+                "memos": [{"title": "沖縄旅行"}],
+            },
+            personal_overview=overview,
+        )
+
+        overview.assert_not_called()
+        self.assertNotIn(PERSONAL_OVERVIEW_TAG, augmented[0]["content"])
+
+    # 日本語: 検索自体が失敗したときは棚卸しへ流れません（0件と障害は別物）。
+    # English: A failed lookup is not a zero-match, so the inventory must not stand in for it.
+    def test_failed_lookup_skips_the_inventory(self):
+        overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "沖縄旅行"}],
+            query="沖縄旅行",
+            personal_knowledge_search=lambda _query: {"status": "failed", "query": _query},
+            personal_overview=overview,
+        )
+
+        overview.assert_not_called()
+
+    # 日本語: 保存済みの内容が無ければ、空の棚卸しは渡しません。
+    # English: Nothing saved means nothing to hand over.
+    def test_empty_inventory_is_not_injected(self):
+        overview = Mock(return_value={"recent_memos": [], "context_facts": []})
+
+        augmented = augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=overview,
+        )
+
+        self.assertNotIn(PERSONAL_OVERVIEW_TAG, augmented[0]["content"])
+
+    # 日本語: 棚卸しは「回答までのステップ」にも1ステップとして出します。
+    # English: The inventory shows up as its own step in the answer trace.
+    def test_inventory_is_reported_in_the_answer_trace(self):
+        traces = []
+
+        augment_messages_with_selected_references(
+            [{"role": "user", "content": "今月は何をしたらいいかな？"}],
+            query="今月は何をしたらいいかな？",
+            personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
+            personal_overview=lambda: {
+                "recent_memos": [{"id": 3, "title": "8月の目標"}],
+                "context_facts": [],
+                "recent_memo_count": 1,
+                "context_fact_count": 0,
+            },
+            trace_results=traces,
+        )
+
+        self.assertEqual([trace.payload["status"] for trace in traces], ["no_results", "overview"])
+        self.assertEqual(traces[-1].source, PERSONAL_KNOWLEDGE_SOURCE)
 
     def test_collects_lookup_results_for_the_answer_trace(self):
         traces = []
@@ -291,6 +411,68 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertLess(
             context.index("personal_knowledge_result"), context.index("shared_prompt_result")
         )
+
+
+class CandidateQueryPlanTestCase(unittest.TestCase):
+    # 日本語: 最初の候補で当たる限り、言い換え用のLLMは呼びません。
+    # English: While the first candidate is enough, the rewrite model is never called.
+    def test_rewrite_is_not_requested_until_the_first_candidate_misses(self):
+        rewrite = Mock(return_value=["8月 目標"])
+        plan = CandidateQueryPlan("今月は何をしたらいいかな？", rewrite=rewrite)
+
+        iterator = iter(plan)
+        first = next(iterator)
+
+        self.assertEqual(first, "今月は何をしたらいいかな？")
+        rewrite.assert_not_called()
+
+        self.assertEqual(next(iterator), "8月 目標")
+        rewrite.assert_called_once()
+
+    # 日本語: 参照元が複数あっても、言い換えは1ターンに1回だけです。
+    # English: One rewrite per turn, however many sources share the plan.
+    def test_parallel_consumers_share_a_single_rewrite(self):
+        rewrite = Mock(return_value=["8月 目標"])
+        plan = CandidateQueryPlan("今月は何をしたらいいかな？", rewrite=rewrite)
+
+        for _ in range(2):
+            self.assertEqual(list(plan)[:2], ["今月は何をしたらいいかな？", "8月 目標"])
+
+        rewrite.assert_called_once()
+
+    # 日本語: 言い換えが使えなくても、従来の絞り込み候補で検索を続けます。
+    # English: An unusable rewrite still leaves the mechanical candidates to try.
+    def test_falls_back_to_mechanical_candidates_without_a_rewrite(self):
+        plan = CandidateQueryPlan("沖縄旅行の予算を教えて", rewrite=lambda *_args, **_kwargs: [])
+
+        candidates = list(plan)
+
+        self.assertEqual(candidates[0], "沖縄旅行の予算を教えて")
+        self.assertGreater(len(candidates), 1)
+
+    # 日本語: 試行回数の上限は言い換えを足しても変わりません。
+    # English: Adding the rewrite must not raise the attempt cap.
+    def test_total_attempts_stay_capped(self):
+        plan = CandidateQueryPlan(
+            "沖縄旅行の予算を教えて",
+            rewrite=lambda *_args, **_kwargs: ["沖縄 予算", "旅行 費用"],
+        )
+
+        candidates = list(plan)
+
+        self.assertEqual(len(candidates), MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS)
+        self.assertEqual(len(set(candidates)), len(candidates))
+
+    # 日本語: 追従発話では、前ターンと繋いだ候補が先頭のままです。
+    # English: A follow-up still leads with the previous turn joined in.
+    def test_follow_up_still_leads_with_the_previous_turn(self):
+        plan = CandidateQueryPlan(
+            "それを詳しく",
+            "沖縄旅行の予算",
+            rewrite=lambda *_args, **_kwargs: [],
+        )
+
+        self.assertEqual(next(iter(plan)), "沖縄旅行の予算 それを詳しく")
 
 
 if __name__ == "__main__":

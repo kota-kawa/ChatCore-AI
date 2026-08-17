@@ -597,6 +597,7 @@ class ChatPostUseCase:
                 query=user_message,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                personal_overview=selected_references.personal_overview,
                 unavailable_sources=selected_references.unavailable_sources,
                 trace_results=selected_reference_trace,
             ),

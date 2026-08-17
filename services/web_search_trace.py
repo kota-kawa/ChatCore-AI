@@ -301,6 +301,31 @@ def selected_reference_step(
     status = str(payload.get("status") or "")
     resolved_query = str(payload.get("query") or query)
 
+    if source == PERSONAL_KNOWLEDGE_SOURCE and status == "overview":
+        # 一致0件のあと、保存済みの内容そのものを棚卸しとして渡したステップ。
+        # The step where a zero-match lookup handed over an inventory of what is saved.
+        memo_count = int(payload.get("recent_memo_count") or 0)
+        fact_count = int(payload.get("context_fact_count") or 0)
+        total = memo_count + fact_count
+        return TraceStep(
+            title="保存済みのメモとマイコンテキストを確認",
+            detail=(
+                "検索条件に一致するものは無かったため、最近のメモとマイコンテキストの内容を"
+                f"{total}件読み込み、回答の材料にしました。"
+            ),
+            kind="knowledge",
+            query=resolved_query,
+            badge=f"{total}件",
+            chips=tuple(
+                label
+                for count, label in (
+                    (memo_count, f"最近のメモ {memo_count}件"),
+                    (fact_count, f"マイコンテキスト {fact_count}件"),
+                )
+                if count
+            ),
+        )
+
     if source == PERSONAL_KNOWLEDGE_SOURCE:
         memo_count = int(payload.get("memo_count") or 0)
         fact_count = int(payload.get("context_fact_count") or 0)

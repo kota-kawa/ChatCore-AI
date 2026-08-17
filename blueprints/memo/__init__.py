@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from services.db import get_db_connection
-from services.memo_ai import embeddings_available, generate_embedding, suggest_title
+from services.embeddings import embeddings_available, generate_embedding
+from services.memo_ai import suggest_title
 from services.memo_share import (
     create_or_get_shared_memo_token,
     get_memo_share_state,
