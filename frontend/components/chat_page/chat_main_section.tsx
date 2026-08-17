@@ -10,6 +10,7 @@ import {
   MAX_ATTACHED_FILES,
   getAttachmentIconClass,
 } from "../../lib/chat_page/file_attachments";
+import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
 import { isNearBottom } from "../../lib/chat_page/dom";
@@ -27,7 +28,12 @@ function ChatMainSectionComponent() {
     pageViewState,
     isChatVisible,
     isChatLaunching,
+    loggedIn,
     setupInfo,
+    personalKnowledgeEnabled,
+    setPersonalKnowledgeEnabled,
+    sharedPromptsEnabled,
+    setSharedPromptsEnabled,
     chatHeaderModelMenuOpen,
     selectedModel,
     selectedModelShortLabel,
@@ -794,7 +800,13 @@ function ChatMainSectionComponent() {
                 ))}
               </div>
             )}
-            <div className="input-wrapper">
+            <KnowledgeLookupChips
+              memoLookupEnabled={personalKnowledgeEnabled}
+              sharedPromptLookupEnabled={sharedPromptsEnabled}
+              onToggleMemoLookup={() => setPersonalKnowledgeEnabled(false)}
+              onToggleSharedPromptLookup={() => setSharedPromptsEnabled(false)}
+            />
+            <div className="input-wrapper chat-input-wrapper--with-attach-menu">
               {/* 実際のファイル選択 input は非表示にし、クリップアイコンボタン経由で開く。 */}
               {/* Hidden file input triggered programmatically by the paperclip button. */}
               <input
@@ -807,17 +819,17 @@ function ChatMainSectionComponent() {
                 tabIndex={-1}
                 onChange={handleFileInputChange}
               />
-              <button
-                type="button"
-                className="chat-attach-btn cc-press"
-                aria-label={t("home.attach")}
-                data-tooltip={t("home.attach")}
-                data-tooltip-placement="top"
-                disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <i className="bi bi-paperclip" aria-hidden="true"></i>
-              </button>
+              <SetupAttachMenu
+                triggerClassName="chat-attach-btn cc-press"
+                disabled={isChatLaunching}
+                fileItemDisabled={attachedFiles.length >= MAX_ATTACHED_FILES}
+                memoLookupEnabled={personalKnowledgeEnabled}
+                memoItemDisabled={!loggedIn}
+                sharedPromptLookupEnabled={sharedPromptsEnabled}
+                onToggleMemoLookup={() => setPersonalKnowledgeEnabled((previous) => !previous)}
+                onToggleSharedPromptLookup={() => setSharedPromptsEnabled((previous) => !previous)}
+                onSelectFile={() => fileInputRef.current?.click()}
+              />
               <textarea
                 ref={chatInputRef}
                 id="user-input"

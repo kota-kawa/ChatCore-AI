@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -13,12 +13,19 @@ type SetupAttachMenuProps = {
   memoItemDisabled: boolean;
   // 共有プロンプト参照が有効か / Whether the shared-prompt lookup is on
   sharedPromptLookupEnabled: boolean;
+  // 画面ごとのボタンスタイル。既定値はセットアップ画面用 / Per-surface trigger style; setup is the default
+  triggerClassName?: string;
   onToggleMemoLookup: () => void;
   onToggleSharedPromptLookup: () => void;
   onSelectFile: () => void;
 };
 
-const MENU_ID = "setup-attach-menu";
+type KnowledgeLookupChipsProps = {
+  memoLookupEnabled: boolean;
+  sharedPromptLookupEnabled: boolean;
+  onToggleMemoLookup: () => void;
+  onToggleSharedPromptLookup: () => void;
+};
 
 // 入力欄のクリップボタンから開く添付メニュー。メモ・共有プロンプト・ファイル添付を並べる。
 // Attachment menu opened from the composer's paperclip button, listing memo, shared prompt, and file entries.
@@ -28,12 +35,14 @@ export function SetupAttachMenu({
   memoLookupEnabled,
   memoItemDisabled,
   sharedPromptLookupEnabled,
+  triggerClassName = "setup-attach-btn",
   onToggleMemoLookup,
   onToggleSharedPromptLookup,
   onSelectFile,
 }: SetupAttachMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const menuId = `setup-attach-menu-${useId().replace(/:/g, "")}`;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -76,11 +85,11 @@ export function SetupAttachMenu({
       <button
         ref={triggerRef}
         type="button"
-        className="setup-attach-btn"
+        className={triggerClassName}
         aria-label={t("home.attachMenu.open")}
         aria-haspopup="menu"
         aria-expanded={isOpen ? "true" : "false"}
-        aria-controls={MENU_ID}
+        aria-controls={menuId}
         data-tooltip={t("home.attachMenu.open")}
         data-tooltip-placement="top"
         disabled={disabled}
@@ -92,7 +101,7 @@ export function SetupAttachMenu({
       </button>
 
       <div
-        id={MENU_ID}
+        id={menuId}
         className={`setup-attach-menu__list ${isOpen ? "is-open" : ""}`.trim()}
         role="menu"
         aria-hidden={isOpen ? "false" : "true"}
@@ -154,6 +163,52 @@ export function SetupAttachMenu({
           <span>{t("home.attachMenu.file")}</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+// メモ・共有プロンプトの参照中状態を入力欄内に表示するチップ。
+// Chips showing which memo and shared-prompt lookups are active in the composer.
+export function KnowledgeLookupChips({
+  memoLookupEnabled,
+  sharedPromptLookupEnabled,
+  onToggleMemoLookup,
+  onToggleSharedPromptLookup,
+}: KnowledgeLookupChipsProps) {
+  const { t } = useTranslation();
+
+  if (!memoLookupEnabled && !sharedPromptLookupEnabled) return null;
+
+  return (
+    <div className="setup-knowledge-chip-row">
+      {memoLookupEnabled && (
+        <span className="setup-knowledge-chip">
+          <i className="bi bi-journal-text setup-knowledge-chip__icon" aria-hidden="true"></i>
+          <span className="setup-knowledge-chip__label">{t("home.attachMenu.memoActive")}</span>
+          <button
+            type="button"
+            className="setup-knowledge-chip__remove"
+            aria-label={t("home.attachMenu.memoTurnOff")}
+            onClick={onToggleMemoLookup}
+          >
+            <i className="bi bi-x" aria-hidden="true"></i>
+          </button>
+        </span>
+      )}
+      {sharedPromptLookupEnabled && (
+        <span className="setup-knowledge-chip">
+          <i className="bi bi-chat-square-quote setup-knowledge-chip__icon" aria-hidden="true"></i>
+          <span className="setup-knowledge-chip__label">{t("home.attachMenu.sharedPromptActive")}</span>
+          <button
+            type="button"
+            className="setup-knowledge-chip__remove"
+            aria-label={t("home.attachMenu.sharedPromptTurnOff")}
+            onClick={onToggleSharedPromptLookup}
+          >
+            <i className="bi bi-x" aria-hidden="true"></i>
+          </button>
+        </span>
+      )}
     </div>
   );
 }

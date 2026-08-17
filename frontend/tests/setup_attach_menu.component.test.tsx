@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { SetupAttachMenu } from "../components/chat_page/setup_attach_menu";
+import { KnowledgeLookupChips, SetupAttachMenu } from "../components/chat_page/setup_attach_menu";
 
 function renderMenu(overrides: Partial<Parameters<typeof SetupAttachMenu>[0]> = {}) {
   const onSelectFile = vi.fn();
@@ -136,6 +136,34 @@ describe("SetupAttachMenu", () => {
       "aria-checked",
       "true",
     );
+  });
+
+  it("supports the chat input trigger style", () => {
+    const { trigger } = renderMenu({ triggerClassName: "chat-attach-btn cc-press" });
+
+    expect(trigger).toHaveClass("chat-attach-btn", "cc-press");
+  });
+
+  it("shows active lookup chips and lets each chip turn its lookup off", () => {
+    const onToggleMemoLookup = vi.fn();
+    const onToggleSharedPromptLookup = vi.fn();
+
+    render(
+      <KnowledgeLookupChips
+        memoLookupEnabled
+        sharedPromptLookupEnabled
+        onToggleMemoLookup={onToggleMemoLookup}
+        onToggleSharedPromptLookup={onToggleSharedPromptLookup}
+      />,
+    );
+
+    expect(screen.getByText("メモ・マイコンテキストを参照")).toBeInTheDocument();
+    expect(screen.getByText("共有プロンプトを参照")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "メモの参照をやめる" }));
+    fireEvent.click(screen.getByRole("button", { name: "共有プロンプトの参照をやめる" }));
+
+    expect(onToggleMemoLookup).toHaveBeenCalledTimes(1);
+    expect(onToggleSharedPromptLookup).toHaveBeenCalledTimes(1);
   });
 
   // 自分のメモはログイン中しか読めないので、未ログインでは選べないようにする。

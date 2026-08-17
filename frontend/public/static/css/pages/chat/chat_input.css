@@ -50,6 +50,20 @@
     background var(--transition-normal, 0.2s ease);
 }
 
+/* 追加メニューは入力欄の上へ展開するため、角丸コンテナで切らない。 */
+/* The add menu opens above the composer, so do not clip it at the rounded wrapper. */
+:where(body.chat-page, .chat-page-shell) .chat-input-wrapper--with-attach-menu {
+  overflow: visible;
+}
+
+:where(body.chat-page, .chat-page-shell) .chat-input-wrapper--with-attach-menu > .setup-attach-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 :where(body.chat-page, .chat-page-shell) .input-wrapper:focus-within {
   border-color: rgba(15, 118, 110, 0.42);
   box-shadow:
