@@ -1649,6 +1649,8 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertIn("[[source:<evidence_id>]]", content)
         self.assertIn("Use only evidence_id values that actually appear below", content)
         self.assertIn("Never shorten it to [[src_...]]", content)
+        self.assertIn("full-width citation brackets such as 【src_...】", content)
+        self.assertIn("ordinary Markdown citations or links", content)
         self.assertIn("not user-facing text", content)
         self.assertIn("compact source chips", content)
 
@@ -1710,6 +1712,62 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertEqual(resolved.text, "前  後")
         self.assertEqual(resolved.citations, ())
         self.assertEqual(resolved.invalid_markers, (marker,))
+
+    def test_resolve_citations_converts_fullwidth_short_source_marker(self):
+        result = self._result()
+        marker = f"【{result.sources[0].evidence_id}】"
+
+        resolved = web_search.resolve_web_search_citations(
+            f"前 {marker} 後", result
+        )
+
+        self.assertEqual(len(resolved.citations), 1)
+        self.assertIn('<a class="web-search-citation"', resolved.text)
+        self.assertIn('href="https://example.com/a"', resolved.text)
+        self.assertNotIn(marker, resolved.text)
+        self.assertEqual(resolved.invalid_markers, ())
+
+    def test_resolve_citations_removes_unknown_fullwidth_source_marker(self):
+        result = self._result()
+        marker = "【src_00000000000000000000】"
+
+        resolved = web_search.resolve_web_search_citations(
+            f"前 {marker} 後", result
+        )
+
+        self.assertEqual(resolved.text, "前  後")
+        self.assertEqual(resolved.citations, ())
+        self.assertEqual(resolved.invalid_markers, (marker,))
+
+    def test_resolve_citations_removes_unclosed_fullwidth_source_marker(self):
+        result = self._result()
+        marker = f"【{result.sources[0].evidence_id}"
+
+        resolved = web_search.resolve_web_search_citations(
+            f"前 {marker} 後", result
+        )
+
+        self.assertEqual(resolved.text, "前  後")
+        self.assertEqual(resolved.citations, ())
+        self.assertEqual(resolved.invalid_markers, (marker,))
+
+    def test_split_stream_text_holds_fullwidth_citation_until_closed(self):
+        result = self._result()
+        marker_without_closing = f"【{result.sources[0].evidence_id}"
+
+        complete, pending = web_search.split_web_search_citation_stream_text(
+            f"前 {marker_without_closing}"
+        )
+
+        self.assertEqual(complete, "前 ")
+        self.assertEqual(pending, marker_without_closing)
+
+        complete, pending = web_search.split_web_search_citation_stream_text(
+            f"前 {marker_without_closing}】 後"
+        )
+
+        self.assertEqual(complete, f"前 {marker_without_closing}】 後")
+        self.assertEqual(pending, "")
 
     def test_resolve_citations_does_not_render_non_http_source_url(self):
         result = web_search.WebSearchResult(
@@ -1875,6 +1933,8 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         self.assertIn("already run in earlier turns of this conversation", content)
         self.assertIn("https://example.com/python", content)
         self.assertIn("<prior_search", content)
+        self.assertIn("full-width citation brackets such as 【src_...】", content)
+        self.assertIn("ordinary Markdown citations or links", content)
 
     def test_build_prior_message_returns_none_without_sources(self):
         empty = web_search.WebSearchResult(query="x", searched_at="t", sources=())

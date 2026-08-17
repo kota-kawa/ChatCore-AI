@@ -854,6 +854,136 @@ class ChatStreamingTestCase(unittest.TestCase):
             '<span class="web-search-citation__label">Python Release</span></a>',
         )
 
+    # 日本語: 全角括弧の引用markerがチャンク境界をまたいでもchip化されることを検証します。
+    # English: Verify that a split full-width citation marker resolves to a source chip.
+    def test_background_generation_job_resolves_split_fullwidth_source_marker(self):
+        persisted_records = []
+        search_result = WebSearchResult(
+            query="Komeda coffee",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/komeda",
+                    title="Komeda Kasukabe",
+                    hostname="example.com",
+                    age="2026-08-02",
+                    snippets=("Free Wi-Fi and power outlets",),
+                ),
+            ),
+        )
+        evidence_id = search_result.sources[0].evidence_id
+        marker = f"【{evidence_id}】"
+
+        def persist_response(
+            response,
+            *,
+            message_parts=None,
+            web_search_context=None,
+        ):
+            persisted_records.append(
+                {
+                    "response": response,
+                    "message_parts": message_parts,
+                    "web_search_context": web_search_context,
+                }
+            )
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "春日部でWi-Fiのあるカフェ"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(
+                    [
+                        "利用できます。",
+                        f"【{evidence_id}",
+                        "】。",
+                    ]
+                ),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-fullwidth-citation:default",
+                conversation_messages=[
+                    {"role": "user", "content": "春日部でWi-Fiのあるカフェ"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted_records), 1)
+        self.assertNotIn(marker, body)
+        self.assertNotIn(marker, persisted_records[0]["response"])
+        self.assertIn('class=\\"web-search-citation\\"', body)
+        self.assertIn('<a class="web-search-citation"', persisted_records[0]["response"])
+        self.assertEqual(
+            persisted_records[0]["web_search_context"][0]["citations"][0]["evidence_id"],
+            evidence_id,
+        )
+
+    # 日本語: 閉じ括弧のない全角markerが最後まで漏れずに除去されることを検証します。
+    # English: Verify that an unclosed full-width marker never leaks into the stream or storage.
+    def test_background_generation_job_removes_unclosed_fullwidth_source_marker(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="Komeda coffee",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/komeda",
+                    title="Komeda Kasukabe",
+                    hostname="example.com",
+                    age="2026-08-02",
+                    snippets=("Free Wi-Fi and power outlets",),
+                ),
+            ),
+        )
+        evidence_id = search_result.sources[0].evidence_id
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "春日部でWi-Fiのあるカフェ"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(
+                    [
+                        "利用できます。",
+                        f"【{evidence_id}",
+                        " 詳細です。",
+                    ]
+                ),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-unclosed-fullwidth-citation:default",
+                conversation_messages=[
+                    {"role": "user", "content": "春日部でWi-Fiのあるカフェ"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted_messages), 1)
+        self.assertNotIn("【", body)
+        self.assertNotIn("【", persisted_messages[0])
+        self.assertNotIn(evidence_id, body)
+        self.assertNotIn(evidence_id, persisted_messages[0])
+        self.assertIn("利用できます。 詳細です。", persisted_messages[0])
+
     # 日本語: 省略された内部引用markerが分割配信されても画面表示や保存内容に漏れないことを検証します。
     # English: Verify that a split shortened internal citation marker never leaks into streamed or persisted text.
     def test_background_generation_job_removes_split_shortened_source_marker(self):

@@ -69,6 +69,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Keep implementation details out of user-facing prose", BASE_SYSTEM_PROMPT)
         self.assertIn("Never expose raw tool syntax", BASE_SYSTEM_PROMPT)
         self.assertIn("internal citation labels such as `[[src_...]]`", BASE_SYSTEM_PROMPT)
+        self.assertIn("full-width citations such as `【src_...】`", BASE_SYSTEM_PROMPT)
+        self.assertIn("ordinary Markdown citations/links", BASE_SYSTEM_PROMPT)
         self.assertIn("exact `[[source:<evidence_id>]]` form", BASE_SYSTEM_PROMPT)
         self.assertIn("Never create clickable URLs", BASE_SYSTEM_PROMPT)
         self.assertIn("full URL verbatim in inline code", BASE_SYSTEM_PROMPT)

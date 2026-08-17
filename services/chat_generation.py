@@ -53,6 +53,7 @@ from .web_search import (
     maybe_augment_messages_with_web_search,
     resolve_web_search_citations,
     search_brave_llm_context,
+    split_web_search_citation_stream_text,
     serialize_web_search_result,
     with_web_search_citations,
     WebSearchQuotaExceeded,
@@ -97,7 +98,6 @@ _CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
-_WEB_SEARCH_CITATION_PREFIXES = ("[[source:", "[[src_")
 
 
 def _decode_redis_text(raw: Any) -> str | None:
@@ -119,31 +119,6 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
             content = message.get("content")
             return content if isinstance(content, str) else str(content or "")
     return ""
-
-
-def _split_complete_streaming_citation_text(text: str) -> tuple[str, str]:
-    """Hold a trailing partial citation marker until a later stream chunk."""
-    lowered = text.lower()
-    marker_start = max(
-        lowered.rfind(prefix) for prefix in _WEB_SEARCH_CITATION_PREFIXES
-    )
-    if marker_start >= 0 and "]]" not in text[marker_start:]:
-        return text[:marker_start], text[marker_start:]
-
-    # A provider can split even the marker prefix across token chunks (for
-    # example, "[[sou" + "rce:..."). Keep the longest possible prefix suffix.
-    partial_prefix_length = max(
-        (
-            prefix_length
-            for prefix in _WEB_SEARCH_CITATION_PREFIXES
-            for prefix_length in range(1, min(len(text), len(prefix) - 1) + 1)
-            if lowered.endswith(prefix[:prefix_length])
-        ),
-        default=0,
-    )
-    if partial_prefix_length:
-        return text[:-partial_prefix_length], text[-partial_prefix_length:]
-    return text, ""
 
 
 # ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
@@ -961,7 +936,7 @@ class ChatGenerationJob:
                         streaming_citation_buffer = ""
                     else:
                         complete_stream_text, streaming_citation_buffer = (
-                            _split_complete_streaming_citation_text(
+                            split_web_search_citation_stream_text(
                                 f"{streaming_citation_buffer}{chunk}"
                             )
                         )
