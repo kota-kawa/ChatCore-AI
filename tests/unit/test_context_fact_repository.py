@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.error_messages import (
@@ -211,6 +212,22 @@ class ContextFactRepositoryTestCase(unittest.TestCase):
             "ORDER BY importance DESC, updated_at DESC, id DESC",
             cursor.executed[0][0],
         )
+
+    def test_semantic_search_applies_a_distance_threshold(self):
+        """埋め込みが遠いファクトを「一致」として返さないことを検証する。"""
+        cursor = FakeCursor(fetchall_results=[[_fact_row()]])
+        repository, _ = _make_repo(cursor)
+
+        with patch(
+            "services.repositories.context_fact_repository.get_semantic_max_distance",
+            return_value=0.4,
+        ):
+            facts = repository.semantic_search(7, [0.1, 0.2, 0.3], limit=5)
+
+        self.assertEqual(len(facts), 1)
+        query, params = cursor.executed[0]
+        self.assertIn("embedding_vector <=> %s::vector <= %s", query)
+        self.assertEqual(params, (7, "active", "[0.1,0.2,0.3]", 0.4, "[0.1,0.2,0.3]", 5))
 
     def test_reactivation_locks_before_reading_status_and_count(self):
         row = _fact_row()

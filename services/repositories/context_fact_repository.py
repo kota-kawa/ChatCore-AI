@@ -8,6 +8,7 @@ from typing import Any
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from services.embeddings import get_semantic_max_distance
 from services.error_messages import (
     ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
     ERROR_CONTEXT_FACT_LIMIT_REACHED,
@@ -333,10 +334,18 @@ class ContextFactRepository:
                      WHERE user_id = %s
                        AND status = %s
                        AND embedding_vector IS NOT NULL
+                       AND embedding_vector <=> %s::vector <= %s
                      ORDER BY embedding_vector <=> %s::vector
                      LIMIT %s
                     """,
-                    (user_id, status, vector_literal, limit),
+                    (
+                        user_id,
+                        status,
+                        vector_literal,
+                        get_semantic_max_distance(),
+                        vector_literal,
+                        limit,
+                    ),
                 )
                 return [self._serialize_row(row) for row in cursor.fetchall()]
             finally:

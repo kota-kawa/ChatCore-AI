@@ -94,6 +94,42 @@ class MemoSearchRepositoryTestCase(unittest.TestCase):
         self.assertTrue(cursor.closed)
         self.assertTrue(connection.closed)
 
+    def test_semantic_search_applies_a_distance_threshold(self):
+        """遠すぎる近傍を「一致」として返さないことを検証する。"""
+        cursor = FakeCursor()
+        connection = FakeConnection(cursor)
+
+        with patch(
+            "blueprints.memo.repository._get_db_connection",
+            return_value=connection,
+        ), patch(
+            "blueprints.memo.repository.get_semantic_max_distance",
+            return_value=0.4,
+        ):
+            fetch_memo_summaries(
+                7,
+                limit=5,
+                offset=0,
+                query="architecture",
+                date_from="",
+                date_to="",
+                sort="recent",
+                include_archived=False,
+                only_archived=False,
+                pinned_first=False,
+                collection_id=None,
+                semantic_query_embedding=[0.1, 0.2, 0.3],
+            )
+
+        count_query, count_params = cursor.executed[0]
+        semantic_query, semantic_params = cursor.executed[1]
+        # 件数も検索結果も、同じしきい値で絞られていること。
+        # Both the count and the rows are bounded by the same threshold.
+        self.assertIn("embedding_vector <=> %s::vector <= %s", count_query)
+        self.assertIn("embedding_vector <=> %s::vector <= %s", semantic_query)
+        self.assertEqual(count_params, (7, "[0.1,0.2,0.3]", 0.4))
+        self.assertEqual(semantic_params, (7, "[0.1,0.2,0.3]", 0.4, "[0.1,0.2,0.3]", 5, 0))
+
 
 if __name__ == "__main__":
     unittest.main()

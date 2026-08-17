@@ -7,6 +7,7 @@ from typing import Any
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import get_db_connection as default_get_db_connection
+from services.embeddings import get_semantic_max_distance
 from .constants import (
     COLLECTION_NOT_FOUND_ERROR,
     MEMO_NOT_FOUND_ERROR,
@@ -124,15 +125,22 @@ def fetch_memo_summaries(
         # セマンティック検索は pgvector の距離演算と HNSW インデックスで DB 側に委譲する。
         # Perform semantic ranking in PostgreSQL with pgvector rather than transferring and sorting candidates in Python.
         if semantic_query_embedding is not None:
+            semantic_vector = _serialize_vector(semantic_query_embedding)
+            max_distance = get_semantic_max_distance()
             where_clauses_sem = list(where_clauses)
             where_clauses_sem.append("me.embedding_vector IS NOT NULL")
+            # 類似度の下限を設けないと、無関係な質問にも常に LIMIT 件が返り、
+            # 呼び出し側は「見つかった」と扱ってしまう。
+            # Without a similarity floor an unrelated question still returns LIMIT rows and
+            # the caller treats them as hits.
+            where_clauses_sem.append("me.embedding_vector <=> %s::vector <= %s")
             where_sem_sql = " AND ".join(where_clauses_sem)
-            semantic_vector = _serialize_vector(semantic_query_embedding)
+            semantic_filter_params = [*filter_params, semantic_vector, max_distance]
 
-            # 検索可能な埋め込みを持つメモだけを件数に含める。
-            # Count only entries eligible for semantic ranking.
+            # 距離のしきい値を満たしたメモだけを件数に含める。
+            # Count only entries close enough to be treated as matches.
             count_sql = f"SELECT COUNT(*) AS total_count FROM memo_entries me WHERE {where_sem_sql}"
-            cursor.execute(count_sql, tuple(filter_params))
+            cursor.execute(count_sql, tuple(semantic_filter_params))
             count_row = cursor.fetchone() or {}
             total_count = int(count_row.get("total_count") or 0)
 
@@ -156,7 +164,10 @@ def fetch_memo_summaries(
                 LIMIT %s
                 OFFSET %s
             """
-            cursor.execute(sem_sql, tuple([*filter_params, semantic_vector, limit, offset]))
+            cursor.execute(
+                sem_sql,
+                tuple([*semantic_filter_params, semantic_vector, limit, offset]),
+            )
             rows = list(cursor.fetchall())
             return {
                 "total": total_count,
