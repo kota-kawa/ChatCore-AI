@@ -15,6 +15,7 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_NOT_FOUND,
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
 )
+from services.search_terms import build_like_pattern, split_search_terms
 
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
@@ -359,7 +360,19 @@ class ContextFactRepository:
         limit: int = 20,
         status: str = "active",
     ) -> list[dict[str, Any]]:
-        like_term = f"%{query}%"
+        # 語ごとの絞り込み。クエリ全体の部分一致では、複数語の検索が成立しない。
+        # Narrow term by term; one whole-query substring match never satisfies a
+        # multi-word query.
+        terms = split_search_terms(query)
+        term_clauses = " AND ".join(
+            "(title ILIKE %s ESCAPE '\\' OR content ILIKE %s ESCAPE '\\')" for _ in terms
+        )
+        params: list[Any] = [user_id, status]
+        for term in terms:
+            pattern = build_like_pattern(term)
+            params.extend([pattern, pattern])
+        params.append(limit)
+        where_terms = f" AND {term_clauses}" if term_clauses else ""
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -368,12 +381,11 @@ class ContextFactRepository:
                     SELECT {_SELECT_COLUMNS}
                       FROM context_facts
                      WHERE user_id = %s
-                       AND status = %s
-                       AND (title ILIKE %s OR content ILIKE %s)
+                       AND status = %s{where_terms}
                      ORDER BY updated_at DESC, id DESC
                      LIMIT %s
                     """,
-                    (user_id, status, like_term, like_term, limit),
+                    tuple(params),
                 )
                 return [self._serialize_row(row) for row in cursor.fetchall()]
             finally:

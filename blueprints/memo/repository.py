@@ -8,6 +8,7 @@ from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import get_db_connection as default_get_db_connection
 from services.embeddings import get_semantic_max_distance
+from services.search_terms import build_like_pattern, split_search_terms
 from .constants import (
     COLLECTION_NOT_FOUND_ERROR,
     MEMO_NOT_FOUND_ERROR,
@@ -96,11 +97,16 @@ def fetch_memo_summaries(
         # Text-based keyword search (when not using semantic search).
         normalized_query = query.strip()
         if normalized_query and not semantic_query_embedding:
-            query_like = f"%{normalized_query}%"
-            where_clauses.append(
-                "(me.title ILIKE %s OR me.ai_response ILIKE %s)"
-            )
-            filter_params.extend([query_like, query_like])
+            # 語ごとに絞り込む。クエリ全体を1つの部分一致にすると、複数語の検索は
+            # その並びをそのまま含むメモしか拾えない。
+            # Narrow term by term: matching the whole query as one substring only ever finds
+            # a memo that contains that exact sequence.
+            for term in split_search_terms(normalized_query):
+                where_clauses.append(
+                    "(me.title ILIKE %s ESCAPE '\\' OR me.ai_response ILIKE %s ESCAPE '\\')"
+                )
+                pattern = build_like_pattern(term)
+                filter_params.extend([pattern, pattern])
 
         # 作成日時による範囲指定フィルタリング
         # Filter by created_at datetime range.

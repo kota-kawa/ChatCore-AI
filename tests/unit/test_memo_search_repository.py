@@ -131,5 +131,65 @@ class MemoSearchRepositoryTestCase(unittest.TestCase):
         self.assertEqual(semantic_params, (7, "[0.1,0.2,0.3]", 0.4, "[0.1,0.2,0.3]", 5, 0))
 
 
+    def test_keyword_search_requires_every_term(self):
+        """複数語のクエリが、語の並びをそのまま含むメモに限定されないことを検証する。"""
+        cursor = FakeCursor()
+        connection = FakeConnection(cursor)
+
+        with patch(
+            "blueprints.memo.repository._get_db_connection",
+            return_value=connection,
+        ):
+            fetch_memo_summaries(
+                7,
+                limit=10,
+                offset=0,
+                query="沖縄旅行 予算",
+                date_from="",
+                date_to="",
+                sort="recent",
+                include_archived=False,
+                only_archived=False,
+                pinned_first=False,
+                collection_id=None,
+                semantic_query_embedding=None,
+            )
+
+        count_query, count_params = cursor.executed[0]
+        self.assertEqual(count_query.count("me.title ILIKE %s"), 2)
+        self.assertIn("ESCAPE", count_query)
+        self.assertEqual(
+            count_params,
+            (7, "%沖縄旅行%", "%沖縄旅行%", "%予算%", "%予算%"),
+        )
+
+    def test_keyword_search_escapes_like_wildcards(self):
+        """`%` を含む検索語が全件一致に化けないことを検証する。"""
+        cursor = FakeCursor()
+        connection = FakeConnection(cursor)
+
+        with patch(
+            "blueprints.memo.repository._get_db_connection",
+            return_value=connection,
+        ):
+            fetch_memo_summaries(
+                7,
+                limit=10,
+                offset=0,
+                query="100%",
+                date_from="",
+                date_to="",
+                sort="recent",
+                include_archived=False,
+                only_archived=False,
+                pinned_first=False,
+                collection_id=None,
+                semantic_query_embedding=None,
+            )
+
+        _, count_params = cursor.executed[0]
+        self.assertEqual(count_params, (7, "%100\%%", "%100\%%"))
+
+
 if __name__ == "__main__":
     unittest.main()

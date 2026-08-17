@@ -66,6 +66,55 @@ class PersonalKnowledgeSearchTestCase(unittest.TestCase):
         self.assertEqual(result.memos[0]["content"], "本文全体")
         self.assertEqual([fact["title"] for fact in result.facts], ["移動手段"])
 
+    # 日本語: 意味的に届かなかったときは、語そのものを含むメモをキーワード検索で拾います。
+    # English: A semantic miss falls back to keyword search so a literal match is not lost.
+    def test_memo_search_falls_back_to_keyword_when_semantic_finds_nothing(self):
+        results = {
+            "semantic": _FakeMemoSearchResult([]),
+            "keyword": _FakeMemoSearchResult([_FakeMemo(4, "沖縄旅行", "予算は10万円")]),
+        }
+        modes: list[str] = []
+
+        def fake_search_memos(_user_id, _query, *, mode, limit):
+            del limit
+            modes.append(mode)
+            return results[mode]
+
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
+        ), patch(
+            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+        ), patch(
+            "services.personal_knowledge.search_facts",
+            return_value=_FakeFactSearchResult([]),
+        ):
+            result = search_personal_knowledge(7, "沖縄")
+
+        self.assertEqual(modes, ["semantic", "keyword"])
+        self.assertEqual([memo["title"] for memo in result.memos], ["沖縄旅行"])
+
+    # 日本語: 意味検索が当たった場合は、余計なキーワード検索を行いません。
+    # English: A semantic hit must not spend an extra keyword query.
+    def test_memo_search_skips_the_keyword_pass_when_semantic_hits(self):
+        modes: list[str] = []
+
+        def fake_search_memos(_user_id, _query, *, mode, limit):
+            del limit
+            modes.append(mode)
+            return _FakeMemoSearchResult([_FakeMemo(1, "沖縄旅行", "予算")])
+
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
+        ), patch(
+            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+        ), patch(
+            "services.personal_knowledge.search_facts",
+            return_value=_FakeFactSearchResult([]),
+        ):
+            search_personal_knowledge(7, "沖縄")
+
+        self.assertEqual(modes, ["semantic"])
+
     # 日本語: 片方の検索が落ちても、もう片方の結果で回答できるようにします。
     # English: One failing source must not discard the other source's hits.
     def test_returns_context_hits_when_memo_search_fails(self):

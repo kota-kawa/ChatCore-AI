@@ -94,6 +94,12 @@ def _trim(text: str, limit: int) -> str:
 # Pick the search mode; both services fall back to keyword search when embeddings are unavailable
 def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
     result = search_memos(user_id, query, mode="semantic", limit=limit)
+    if not result.memos:
+        # 類似度が届かなかった場合でも、語そのものを含むメモは拾えることがある。
+        # マイコンテキスト側（search_facts）と同じ二段構えに揃える。
+        # A query can miss on similarity yet still match memos containing the words. This
+        # mirrors the two-stage lookup the My Context side (search_facts) already does.
+        result = search_memos(user_id, query, mode="keyword", limit=limit)
     memos: list[dict[str, Any]] = []
     for index, memo in enumerate(result.memos):
         entry: dict[str, Any] = {
