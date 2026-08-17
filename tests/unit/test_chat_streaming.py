@@ -29,6 +29,11 @@ from services.chat_generation import (
     start_generation_job,
 )
 from services.llm import LlmConfigurationError, LlmTimeoutError
+from services.selected_reference_context import (
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
+    SelectedReferenceLookupTrace,
+)
 from services.web_search import (
     build_web_search_system_message,
     WebEvidenceContextBudget,
@@ -753,6 +758,51 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages[0],
         )
         self.assertIn("回答本文", persisted_messages[0])
+
+    def test_background_generation_job_appends_selected_reference_steps(self):
+        persisted_messages = []
+        selected_trace = [
+            SelectedReferenceLookupTrace(
+                source=PERSONAL_KNOWLEDGE_SOURCE,
+                query="好みのカフェ",
+                payload={"status": "ok", "memo_count": 1, "context_fact_count": 1},
+            ),
+            SelectedReferenceLookupTrace(
+                source=SHARED_PROMPT_SOURCE,
+                query="休憩プラン",
+                payload={"status": "ok", "prompt_count": 2},
+            ),
+        ]
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "休憩を提案して"}],
+                    result=None,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["回答本文"]),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-selected-reference:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+                selected_reference_trace=selected_trace,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("メモとマイコンテキストを検索", body)
+        self.assertIn("共有プロンプトを検索", persisted_messages[0])
+        self.assertIn(
+            '<span class="web-search-sources__count">3ステップ</span>',
+            persisted_messages[0],
+        )
 
     # 日本語: Web検索回答の引用markerが実ソースへ解決され、根拠metadataとともに保存されることを検証します。
     # English: Verify that a web-search citation marker resolves to its source and is persisted with evidence metadata.
@@ -1717,7 +1767,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             response = asyncio.run(chat_regenerate(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["response"], "new answer")
+        self.assertTrue(payload["response"].endswith("new answer"))
+        self.assertIn("メモとマイコンテキストを検索", payload["response"])
+        self.assertIn("共有プロンプトを検索", payload["response"])
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertFalse(any("old answer" in content for content in contents))
@@ -1792,7 +1844,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             response = asyncio.run(chat_edit_and_regenerate(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["response"], "edited answer")
+        self.assertTrue(payload["response"].endswith("edited answer"))
+        self.assertIn("メモとマイコンテキストを検索", payload["response"])
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertTrue(any("文章方針" in content for content in contents))

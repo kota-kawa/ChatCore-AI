@@ -55,6 +55,27 @@ test("formatLLMOutput keeps a leading web-search trace and renders source citati
   assert.ok(html.indexOf("</details>") < html.indexOf("確認できた内容です。"));
 });
 
+test("formatLLMOutput renders selected-reference markers as readable pills", () => {
+  const html = formatLLMOutput(
+    "カフェで休憩します【personal_knowledge_result】。テンプレートも使います【shared_prompt_result】。",
+  );
+
+  assert.match(html, /selected-reference-citation--personal/);
+  assert.match(html, /bi-journal-text/);
+  assert.match(html, />メモ・マイコンテキスト</);
+  assert.match(html, /selected-reference-citation--shared-prompt/);
+  assert.match(html, />共有プロンプト</);
+  assert.doesNotMatch(html, /personal_knowledge_result/);
+  assert.doesNotMatch(html, /shared_prompt_result/);
+});
+
+test("formatLLMOutput leaves selected-reference marker examples inside code fences untouched", () => {
+  const html = formatLLMOutput(["```text", "【personal_knowledge_result】", "```"].join("\n"));
+
+  assert.match(html, /【personal_knowledge_result】/);
+  assert.doesNotMatch(html, /selected-reference-citation/);
+});
+
 test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", () => {
   const response = [
     "結論",

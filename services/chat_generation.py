@@ -30,6 +30,11 @@ from .shared_prompt_lookup import (
     SHARED_PROMPT_TOOL_NAME,
     get_shared_prompt_tool_definition,
 )
+from .selected_reference_context import (
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
+    SelectedReferenceLookupTrace,
+)
 
 from .llm import (
     LlmAuthenticationError,
@@ -70,6 +75,8 @@ from .web_search_trace import (
     review_step,
     search_failed_step,
     search_step,
+    selected_reference_step,
+    selected_reference_steps,
 )
 
 logger = logging.getLogger(__name__)
@@ -391,6 +398,7 @@ class ChatGenerationJob:
         is_cancel_requested: Callable[[], bool] | None = None,
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
+        selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -403,6 +411,7 @@ class ChatGenerationJob:
         # 公開プロンプト検索。公開データなので未ログインでも渡せる。None のときは無効。
         # Public prompt lookup. The data is public, so guests can have it too; None means off.
         self._shared_prompt_search = shared_prompt_search
+        self._selected_reference_trace = list(selected_reference_trace or [])
         self._persist_response = persist_response
         self._on_finished = on_finished
         self._on_finished_called = False
@@ -720,6 +729,7 @@ class ChatGenerationJob:
         current_messages: list[dict[str, Any]],
         step_count: int,
         max_steps: int,
+        trace_steps: list[TraceStep] | None = None,
     ) -> int:
         if search is None:
             current_messages.append(
@@ -791,6 +801,18 @@ class ChatGenerationJob:
                     },
                 )
             )
+            if trace_steps is not None:
+                trace_steps.append(
+                    selected_reference_step(
+                        (
+                            PERSONAL_KNOWLEDGE_SOURCE
+                            if event_prefix == "personal_knowledge_search"
+                            else SHARED_PROMPT_SOURCE
+                        ),
+                        {"status": "failed"},
+                        query=query,
+                    )
+                )
             return step_count
 
         # 参照元が「検索できなかった」と返した場合も障害として扱う。0件として通すと、
@@ -805,6 +827,18 @@ class ChatGenerationJob:
                 {"query": query, "step": step_count, "max_steps": max_steps},
             )
             current_messages.append(_tool_result_message(tool_call, payload))
+            if trace_steps is not None:
+                trace_steps.append(
+                    selected_reference_step(
+                        (
+                            PERSONAL_KNOWLEDGE_SOURCE
+                            if event_prefix == "personal_knowledge_search"
+                            else SHARED_PROMPT_SOURCE
+                        ),
+                        payload,
+                        query=query,
+                    )
+                )
             return step_count
 
         self._publish(
@@ -818,6 +852,20 @@ class ChatGenerationJob:
             },
         )
         current_messages.append(_tool_result_message(tool_call, payload))
+        # 事前検索と同じクエリは既にトレースへ記録済みなので、重複行を追加しない。
+        # A query satisfied by the prefetch is already present in the trace.
+        if trace_steps is not None and status != "already_searched":
+            trace_steps.append(
+                selected_reference_step(
+                    (
+                        PERSONAL_KNOWLEDGE_SOURCE
+                        if event_prefix == "personal_knowledge_search"
+                        else SHARED_PROMPT_SOURCE
+                    ),
+                    payload,
+                    query=query,
+                )
+            )
         return step_count
 
     def _run(self) -> None:
@@ -827,7 +875,9 @@ class ChatGenerationJob:
         last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
-        web_search_trace_steps: list[TraceStep] = []
+        web_search_trace_steps: list[TraceStep] = selected_reference_steps(
+            self._selected_reference_trace
+        )
         streaming_citation_buffer = ""
         current_messages = [dict(m) for m in self._conversation_messages]
         # 過去ターンの検索結果を参照用コンテキストとして再注入する
@@ -1023,6 +1073,7 @@ class ChatGenerationJob:
                             current_messages=current_messages,
                             step_count=step_count,
                             max_steps=max_steps,
+                            trace_steps=web_search_trace_steps,
                         )
                         continue
 
@@ -1041,6 +1092,7 @@ class ChatGenerationJob:
                             current_messages=current_messages,
                             step_count=step_count,
                             max_steps=max_steps,
+                            trace_steps=web_search_trace_steps,
                         )
                         continue
 
@@ -2046,6 +2098,7 @@ return 0
         prior_web_search_results: list[WebSearchResult] | None = None,
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
+        selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -2079,6 +2132,7 @@ return 0
                 is_cancel_requested=lambda: self._is_remote_cancel_requested(job_key),
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                selected_reference_trace=selected_reference_trace,
             )
             self._jobs[job_key] = job
 
@@ -2228,6 +2282,7 @@ def start_generation_job(
     prior_web_search_results: list[WebSearchResult] | None = None,
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
+    selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -2244,4 +2299,5 @@ def start_generation_job(
         prior_web_search_results=prior_web_search_results,
         personal_knowledge_search=personal_knowledge_search,
         shared_prompt_search=shared_prompt_search,
+        selected_reference_trace=selected_reference_trace,
     )

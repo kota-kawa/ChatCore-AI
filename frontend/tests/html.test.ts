@@ -21,6 +21,15 @@ test("sanitizeClassAttributeValue preserves inline web search citation classes",
   );
 });
 
+test("sanitizeClassAttributeValue preserves selected-reference citation classes", () => {
+  assert.equal(
+    sanitizeClassAttributeValue(
+      "selected-reference-citation selected-reference-citation--personal unsafe-class",
+    ),
+    "selected-reference-citation selected-reference-citation--personal",
+  );
+});
+
 test("sanitizeClassAttributeValue preserves memo preview blank line spacer class", () => {
   assert.equal(
     sanitizeClassAttributeValue("memo-preserved-blank-line unsafe-class"),

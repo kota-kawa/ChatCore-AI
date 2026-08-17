@@ -26,7 +26,10 @@ from services.llm import (
     LlmServiceError,
 )
 from services.request_models import ChatMessageRequest
-from services.selected_reference_context import augment_messages_with_selected_references
+from services.selected_reference_context import (
+    SelectedReferenceLookupTrace,
+    augment_messages_with_selected_references,
+)
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
@@ -47,6 +50,7 @@ from services.web_search_trace import (
     decision_step,
     page_reading_steps,
     search_step,
+    selected_reference_steps,
 )
 from services.chat_title import (
     build_initial_title_candidates,
@@ -586,6 +590,7 @@ class ChatPostUseCase:
         )
         personal_knowledge_search = selected_references.personal_knowledge
         shared_prompt_search = selected_references.shared_prompt
+        selected_reference_trace: list[SelectedReferenceLookupTrace] = []
         conversation_messages = await run_blocking(
             partial(
                 augment_messages_with_selected_references,
@@ -593,6 +598,7 @@ class ChatPostUseCase:
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 unavailable_sources=selected_references.unavailable_sources,
+                trace_results=selected_reference_trace,
             ),
             conversation_messages,
         )
@@ -686,6 +692,7 @@ class ChatPostUseCase:
                     prior_web_search_results=prior_web_search_results,
                     personal_knowledge_search=personal_knowledge_search,
                     shared_prompt_search=shared_prompt_search,
+                    selected_reference_trace=selected_reference_trace,
                 )
             except ChatGenerationAlreadyRunningError:
                 return deps.jsonify(
@@ -762,7 +769,9 @@ class ChatPostUseCase:
                 status_code=502,
             )
 
-        web_search_trace_steps: list[TraceStep] = []
+        web_search_trace_steps: list[TraceStep] = selected_reference_steps(
+            selected_reference_trace
+        )
         if augmentation.result is not None:
             web_search_trace_steps.extend(
                 [
@@ -772,7 +781,10 @@ class ChatPostUseCase:
                     context_added_step(augmentation.result),
                 ]
             )
-            web_search_trace_steps.append(answer_step([augmentation.result]))
+        if web_search_trace_steps or augmentation.result is not None:
+            web_search_trace_steps.append(
+                answer_step([augmentation.result] if augmentation.result is not None else [])
+            )
         trace_block = build_web_search_trace_markdown(
             augmentation.result,
             steps=web_search_trace_steps,

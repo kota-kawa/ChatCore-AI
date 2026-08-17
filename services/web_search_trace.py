@@ -11,6 +11,11 @@ from dataclasses import dataclass, replace
 from html import escape
 from typing import Any, Iterable, Sequence
 
+from .selected_reference_context import (
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
+    SelectedReferenceLookupTrace,
+)
 from .web_search import (
     WebSearchResult,
     WebSearchSource,
@@ -36,6 +41,8 @@ _STEP_ICONS: dict[str, str] = {
     "review": "bi-check2-circle",
     "answer": "bi-stars",
     "warning": "bi-exclamation-triangle",
+    "knowledge": "bi-journal-text",
+    "prompt": "bi-card-text",
     "info": "bi-record-circle",
 }
 _DEFAULT_STEP_KIND = "info"
@@ -43,6 +50,8 @@ _DEFAULT_STEP_KIND = "info"
 # 旧形式（title/detailのみ）のステップから種別を推定するための接頭辞。
 # Prefixes used to infer a kind from legacy steps that only carry title/detail.
 _TITLE_KIND_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("メモとマイコンテキスト", "knowledge"),
+    ("共有プロンプト", "prompt"),
     ("検索が必要", "decide"),
     ("検索結果を再利用", "reuse"),
     ("Web検索を試行", "warning"),
@@ -283,6 +292,77 @@ def search_failed_step(query: str = "", *, reason: str = "") -> TraceStep:
     )
 
 
+def selected_reference_step(
+    source: str,
+    payload: dict[str, Any],
+    *,
+    query: str = "",
+) -> TraceStep:
+    """Build a trace step for memo/My Context or shared-prompt lookup."""
+    status = str(payload.get("status") or "")
+    resolved_query = str(payload.get("query") or query)
+
+    if source == PERSONAL_KNOWLEDGE_SOURCE:
+        memo_count = int(payload.get("memo_count") or 0)
+        fact_count = int(payload.get("context_fact_count") or 0)
+        total = memo_count + fact_count
+        title = "メモとマイコンテキストを検索"
+        kind = "knowledge"
+        chips = tuple(
+            label
+            for count, label in (
+                (memo_count, f"メモ {memo_count}件"),
+                (fact_count, f"マイコンテキスト {fact_count}件"),
+            )
+            if count
+        )
+        success_detail = (
+            f"保存済みのメモとマイコンテキストから、回答に関連する情報を{total}件読み込みました。"
+            if total
+            else "保存済みのメモとマイコンテキストを検索しましたが、該当する情報はありませんでした。"
+        )
+    else:
+        total = int(payload.get("prompt_count") or 0)
+        title = "共有プロンプトを検索"
+        kind = "prompt"
+        chips = (f"共有プロンプト {total}件",) if total else ()
+        success_detail = (
+            f"公開されている共有プロンプトから、回答に関連するものを{total}件読み込みました。"
+            if total
+            else "共有プロンプトを検索しましたが、該当するものはありませんでした。"
+        )
+
+    if status in {"failed", "unavailable"}:
+        return TraceStep(
+            title=title,
+            detail=(
+                "参照元を利用できなかったため、検索結果を回答へ追加できませんでした。"
+                if status == "unavailable"
+                else "検索に失敗したため、取得済みの情報で回答を続けました。"
+            ),
+            kind="warning",
+            query=resolved_query,
+        )
+
+    return TraceStep(
+        title=title,
+        detail=success_detail,
+        kind=kind,
+        query=resolved_query,
+        badge=f"{total}件",
+        chips=chips,
+    )
+
+
+def selected_reference_steps(
+    traces: Sequence[SelectedReferenceLookupTrace] | None,
+) -> list[TraceStep]:
+    return [
+        selected_reference_step(trace.source, trace.payload, query=trace.query)
+        for trace in traces or ()
+    ]
+
+
 def answer_step(results: Sequence[WebSearchResult] | None = None) -> TraceStep:
     # 収集した情報をまとめて回答を書いたステップ
     # The step that composed the answer from everything gathered.
@@ -468,6 +548,8 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
     search_count = sum(1 for step in steps if step.kind in {"search", "reuse"})
     read_count = sum(1 for step in steps if step.kind == "read")
     follow_count = sum(1 for step in steps if step.kind == "follow")
+    knowledge_count = sum(1 for step in steps if step.kind == "knowledge")
+    prompt_count = sum(1 for step in steps if step.kind == "prompt")
     parts: list[str] = []
     if search_count:
         parts.append(f"Web検索{search_count}回")
@@ -477,6 +559,10 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
         parts.append("本文精読あり")
     if follow_count:
         parts.append("リンク深掘りあり")
+    if knowledge_count:
+        parts.append("メモ検索あり")
+    if prompt_count:
+        parts.append("共有プロンプト検索あり")
     return " · ".join(parts)
 
 

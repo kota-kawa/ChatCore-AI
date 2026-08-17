@@ -10,6 +10,7 @@ const SAFE_CLASS_PATTERNS = [
   /^bi(?:-[a-z0-9_-]+)?$/i,
   /^web-search-sources(?:(?:__|--)[a-z0-9_-]+)?$/i,
   /^web-search-citation(?:__[a-z0-9_-]+(?:--[a-z0-9_-]+)?)?$/i,
+  /^selected-reference-citation(?:--[a-z0-9_-]+)?$/i,
   /^math-(?:display|line|inline)$/i,
   /^memo-preserved-blank-line$/i,
 ];

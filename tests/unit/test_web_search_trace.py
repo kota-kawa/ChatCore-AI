@@ -1,6 +1,10 @@
 import unittest
 
 from services import web_search_trace as trace
+from services.selected_reference_context import (
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
+)
 from services.web_search import WebSearchResult, WebSearchSource
 
 
@@ -257,6 +261,45 @@ class WebSearchTraceTestCase(unittest.TestCase):
 
         self.assertIn("web-search-sources__step-marker--warning", block)
         self.assertIn("上限に達しました。", block)
+
+    def test_selected_reference_steps_show_counts_and_search_types(self):
+        block = trace.build_web_search_trace_markdown(
+            steps=[
+                trace.selected_reference_step(
+                    PERSONAL_KNOWLEDGE_SOURCE,
+                    {"status": "ok", "memo_count": 2, "context_fact_count": 1},
+                    query="好みのカフェ",
+                ),
+                trace.selected_reference_step(
+                    SHARED_PROMPT_SOURCE,
+                    {"status": "ok", "prompt_count": 3},
+                    query="集中力 回復",
+                ),
+            ]
+        )
+
+        self.assertIn("web-search-sources__step--knowledge", block)
+        self.assertIn('<i class="bi bi-journal-text"></i>', block)
+        self.assertIn("メモとマイコンテキストを検索", block)
+        self.assertIn("メモ 2件", block)
+        self.assertIn("マイコンテキスト 1件", block)
+        self.assertIn("web-search-sources__step--prompt", block)
+        self.assertIn('<i class="bi bi-card-text"></i>', block)
+        self.assertIn("共有プロンプトを検索", block)
+        self.assertIn(
+            "メモ検索あり · 共有プロンプト検索あり",
+            block,
+        )
+
+    def test_failed_selected_reference_lookup_uses_warning_kind(self):
+        step = trace.selected_reference_step(
+            PERSONAL_KNOWLEDGE_SOURCE,
+            {"status": "failed"},
+            query="旅行",
+        )
+
+        self.assertEqual(step.kind, "warning")
+        self.assertIn("検索に失敗", step.detail)
 
     # 日本語: dict形式の旧ステップも受け付け、種別を推定することを検証します。
     # English: Verify legacy dict steps are accepted and their kind inferred.
