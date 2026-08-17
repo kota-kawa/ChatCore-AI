@@ -64,6 +64,8 @@ function useRoomDeleteHarness(initialRooms: ChatRoom[], openRoomId: string | nul
     setupInfo: "",
     selectedModel: "model",
     temporaryModeEnabled: false,
+    personalKnowledgeEnabled: false,
+    sharedPromptsEnabled: false,
     attachedFiles: [],
     taskLaunchInProgressRef: { current: false },
     pendingProjectIdRef: { current: null },
@@ -94,6 +96,8 @@ function useRoomDeleteHarness(initialRooms: ChatRoom[], openRoomId: string | nul
     setShareStatus: vi.fn(),
     setShareUrl: vi.fn(),
     setTemporaryModeEnabled: vi.fn(),
+    setPersonalKnowledgeEnabled: vi.fn(),
+    setSharedPromptsEnabled: vi.fn(),
   });
 
   return {

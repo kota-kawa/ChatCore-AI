@@ -72,6 +72,8 @@ function useChatInputHarness(initialInput: string) {
     setupInfo: "",
     selectedModel: "model",
     temporaryModeEnabled: false,
+    personalKnowledgeEnabled: false,
+    sharedPromptsEnabled: false,
     attachedFiles: [],
     taskLaunchInProgressRef: { current: false },
     pendingProjectIdRef: { current: null },
@@ -102,6 +104,8 @@ function useChatInputHarness(initialInput: string) {
     setShareStatus: vi.fn(),
     setShareUrl: vi.fn(),
     setTemporaryModeEnabled: vi.fn(),
+    setPersonalKnowledgeEnabled: vi.fn(),
+    setSharedPromptsEnabled: vi.fn(),
   });
 
   return { chatInput, isGenerating, generateResponse, stopGeneration, ...actions };

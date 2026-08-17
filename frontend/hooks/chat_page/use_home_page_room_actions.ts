@@ -82,6 +82,10 @@ type UseHomePageRoomActionsParams = {
   taskLaunchInProgressRef: MutableRefObject<boolean>;
   temporaryModeEnabled: boolean;
   setTemporaryModeEnabled: Dispatch<SetStateAction<boolean>>;
+  personalKnowledgeEnabled: boolean;
+  setPersonalKnowledgeEnabled: Dispatch<SetStateAction<boolean>>;
+  sharedPromptsEnabled: boolean;
+  setSharedPromptsEnabled: Dispatch<SetStateAction<boolean>>;
   selectedRoomIds: Set<string>;
   setChatInput: Dispatch<SetStateAction<string>>;
   setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
@@ -141,6 +145,10 @@ export function useHomePageRoomActions({
   taskLaunchInProgressRef,
   temporaryModeEnabled,
   setTemporaryModeEnabled,
+  personalKnowledgeEnabled,
+  setPersonalKnowledgeEnabled,
+  sharedPromptsEnabled,
+  setSharedPromptsEnabled,
   selectedRoomIds,
   setChatInput,
   setChatRooms,
@@ -178,6 +186,42 @@ export function useHomePageRoomActions({
   const pageViewStateRef = useRef(pageViewState);
   pageViewStateRef.current = pageViewState;
 
+  // メモ／共有プロンプト参照は「そのルームを作った時点のON/OFF」をルームIDごとに
+  // 覚えておくための対応表。会話中に変更するUIが無いため、作成時の値がそのルーム
+  // の値であり続ける。永続化はしない（temporaryModeEnabled と同じ理由）ので、
+  // リロードすれば全ルームぶん消える。
+  // A per-room record of "on/off at the moment this room was created" for the memo
+  // and shared-prompt lookups. There is no UI to change either toggle once inside a
+  // room's conversation, so the value at creation time is the room's value for good.
+  // Not persisted, for the same reason as temporaryModeEnabled: a reload clears it
+  // for every room.
+  const roomReferenceTogglesRef = useRef<Map<string, { personalKnowledge: boolean; sharedPrompts: boolean }>>(
+    new Map(),
+  );
+
+  const rememberRoomReferenceToggles = useCallback(
+    (roomId: string) => {
+      roomReferenceTogglesRef.current.set(roomId, {
+        personalKnowledge: personalKnowledgeEnabled,
+        sharedPrompts: sharedPromptsEnabled,
+      });
+    },
+    [personalKnowledgeEnabled, sharedPromptsEnabled],
+  );
+
+  const restoreRoomReferenceToggles = useCallback(
+    (roomId: string | null) => {
+      const saved = roomId ? roomReferenceTogglesRef.current.get(roomId) : undefined;
+      setPersonalKnowledgeEnabled(saved?.personalKnowledge ?? false);
+      setSharedPromptsEnabled(saved?.sharedPrompts ?? false);
+    },
+    [setPersonalKnowledgeEnabled, setSharedPromptsEnabled],
+  );
+
+  const forgetRoomReferenceToggles = useCallback((roomId: string) => {
+    roomReferenceTogglesRef.current.delete(roomId);
+  }, []);
+
   const buildChatRoomsPageUrl = useCallback(() => {
     const params = new URLSearchParams({
       limit: String(CHAT_ROOMS_PAGE_SIZE),
@@ -203,6 +247,12 @@ export function useHomePageRoomActions({
     // Temporary mode is a one-shot toggle: clear it on return so the next
     // send defaults back to normal mode.
     setTemporaryModeEnabled(false);
+    // メモ／共有プロンプト参照も同じ理由でセットアップ画面に戻るたびOFFへ戻す。
+    // 次に送る発話は新しいルームになるため、前のルームの設定を引き継がせない。
+    // The memo / shared-prompt toggles reset for the same reason: the next message
+    // starts a new room, so the previous room's setting must not carry over to it.
+    setPersonalKnowledgeEnabled(false);
+    setSharedPromptsEnabled(false);
     closeShareModal();
     scheduleSetupViewportFit();
   }, [
@@ -211,6 +261,8 @@ export function useHomePageRoomActions({
     setLaunchingTaskId,
     setLaunchingTaskName,
     setPageViewState,
+    setPersonalKnowledgeEnabled,
+    setSharedPromptsEnabled,
     setTemporaryModeEnabled,
   ]);
 
@@ -373,6 +425,11 @@ export function useHomePageRoomActions({
       if (currentRoomIdRef.current !== roomId) {
         persistCurrentRoomId(roomId, roomMode ?? nextRoom?.mode);
       }
+      // このルームが作られた時点のメモ／共有プロンプト参照設定を復元する。
+      // 記録が無い（この機能導入前に作られた等の）ルームはOFFから始める。
+      // Restore the memo / shared-prompt settings this room was created with.
+      // A room with no record (created before this feature, for example) starts OFF.
+      restoreRoomReferenceToggles(roomId);
       setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
       setPageViewState("chat");
       closeOverlaySidebar();
@@ -392,6 +449,7 @@ export function useHomePageRoomActions({
       persistCurrentRoomId,
       prepareChatViewTransition,
       resetChatMessageList,
+      restoreRoomReferenceToggles,
       setPageViewState,
     ],
   );
@@ -503,6 +561,9 @@ export function useHomePageRoomActions({
     // 消えて見える原因になる。既存ルームへの切替時のみ switchChatRoom 側で
     // remount する。
     persistCurrentRoomId(roomId, roomMode);
+    // 今の（セットアップ画面で選んだ）参照設定を、この新しいルームの値として記録する。
+    // Record the reference toggles as currently set on the setup screen as this new room's value.
+    rememberRoomReferenceToggles(roomId);
     setCurrentRoomMode(roomMode);
     setMessages([]);
     setChatInput("");
@@ -515,7 +576,13 @@ export function useHomePageRoomActions({
     closeOverlaySidebar();
     prepareChatViewTransition();
     setPageViewState("launching");
-  }, [closeOverlaySidebar, persistCurrentRoomId, prepareChatViewTransition, setPageViewState]);
+  }, [
+    closeOverlaySidebar,
+    persistCurrentRoomId,
+    prepareChatViewTransition,
+    rememberRoomReferenceToggles,
+    setPageViewState,
+  ]);
 
   const handleTaskCardLaunch = useCallback(
     async (task: NormalizedTask) => {
@@ -808,6 +875,7 @@ export function useHomePageRoomActions({
         if (roomId === currentRoomIdRef.current) {
           clearCurrentRoomAfterDelete();
         }
+        forgetRoomReferenceToggles(roomId);
 
         void mutateChatRooms();
       } catch (error) {
@@ -825,7 +893,15 @@ export function useHomePageRoomActions({
         showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [chatRooms, clearCurrentRoomAfterDelete, currentRoomIdRef, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
+    [
+      chatRooms,
+      clearCurrentRoomAfterDelete,
+      currentRoomIdRef,
+      forgetRoomReferenceToggles,
+      mutateChatRooms,
+      setChatRooms,
+      setOpenRoomActionsFor,
+    ],
   );
 
   const handleBulkDeleteRooms = useCallback(async () => {
@@ -865,6 +941,7 @@ export function useHomePageRoomActions({
       if (currentRoomIdRef.current && selectedRoomIds.has(currentRoomIdRef.current)) {
         clearCurrentRoomAfterDelete();
       }
+      roomIds.forEach(forgetRoomReferenceToggles);
 
       cancelRoomSelection();
       void mutateChatRooms();
@@ -890,6 +967,7 @@ export function useHomePageRoomActions({
     chatRooms,
     clearCurrentRoomAfterDelete,
     currentRoomIdRef,
+    forgetRoomReferenceToggles,
     mutateChatRooms,
     selectedRoomIds,
     setChatRooms,
