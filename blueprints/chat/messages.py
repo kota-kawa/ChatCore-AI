@@ -39,6 +39,7 @@ from services.chat_prompt import (
 )
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.selected_reference_context import augment_messages_with_selected_references
+from services.selected_reference_sources import build_selected_reference_searchers
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.web_search import (
     deserialize_web_search_results,
@@ -994,18 +995,22 @@ async def chat_regenerate(
             retry_after=get_seconds_until_daily_reset(),
         )
 
-    personal_knowledge_search = (
-        partial(search_personal_knowledge_for_tool, user_id)
-        if use_personal_knowledge and user_id is not None
-        else None
+    selected_references = build_selected_reference_searchers(
+        user_id=user_id,
+        use_personal_knowledge=use_personal_knowledge,
+        use_shared_prompts=use_shared_prompts,
+        search_personal_knowledge=search_personal_knowledge_for_tool,
+        search_shared_prompts=search_shared_prompts_for_tool,
     )
-    shared_prompt_search = search_shared_prompts_for_tool if use_shared_prompts else None
+    personal_knowledge_search = selected_references.personal_knowledge
+    shared_prompt_search = selected_references.shared_prompt
     conversation_messages = await run_blocking(
         partial(
             augment_messages_with_selected_references,
             query=selected_reference_query,
             personal_knowledge_search=personal_knowledge_search,
             shared_prompt_search=shared_prompt_search,
+            unavailable_sources=selected_references.unavailable_sources,
         ),
         conversation_messages,
     )
@@ -1419,18 +1424,22 @@ async def chat_edit_and_regenerate(
             retry_after=get_seconds_until_daily_reset(),
         )
 
-    personal_knowledge_search = (
-        partial(search_personal_knowledge_for_tool, user_id)
-        if use_personal_knowledge and user_id is not None
-        else None
+    selected_references = build_selected_reference_searchers(
+        user_id=user_id,
+        use_personal_knowledge=use_personal_knowledge,
+        use_shared_prompts=use_shared_prompts,
+        search_personal_knowledge=search_personal_knowledge_for_tool,
+        search_shared_prompts=search_shared_prompts_for_tool,
     )
-    shared_prompt_search = search_shared_prompts_for_tool if use_shared_prompts else None
+    personal_knowledge_search = selected_references.personal_knowledge
+    shared_prompt_search = selected_references.shared_prompt
     conversation_messages = await run_blocking(
         partial(
             augment_messages_with_selected_references,
             query=new_message,
             personal_knowledge_search=personal_knowledge_search,
             shared_prompt_search=shared_prompt_search,
+            unavailable_sources=selected_references.unavailable_sources,
         ),
         conversation_messages,
     )

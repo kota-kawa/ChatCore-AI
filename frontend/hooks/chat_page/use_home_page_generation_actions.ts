@@ -877,6 +877,15 @@ export function useHomePageGenerationActions({
         }
 
         if (parsed.event === "shared_prompt_search_completed") {
+          // 事前検索済みのクエリは再検索していないので、0件として扱わない
+          // An already prefetched query was not searched again, so it must not read as zero hits
+          if (parsed.data.status === "already_searched") {
+            updateThinkingStatus(
+              localize("取得済みの共有プロンプトを読み込んでいます", "Reading the shared prompts already retrieved"),
+              "web-search",
+            );
+            return;
+          }
           const promptCount = typeof parsed.data.prompt_count === "number" ? parsed.data.prompt_count : 0;
           updateThinkingStatus(
             promptCount > 0
@@ -904,6 +913,15 @@ export function useHomePageGenerationActions({
         }
 
         if (parsed.event === "personal_knowledge_search_completed") {
+          // 事前検索済みのクエリは再検索していないので、0件として扱わない
+          // An already prefetched query was not searched again, so it must not read as zero hits
+          if (parsed.data.status === "already_searched") {
+            updateThinkingStatus(
+              localize("取得済みのメモを読み込んでいます", "Reading the notes already retrieved"),
+              "web-search",
+            );
+            return;
+          }
           const memoCount = typeof parsed.data.memo_count === "number" ? parsed.data.memo_count : 0;
           const factCount =
             typeof parsed.data.context_fact_count === "number" ? parsed.data.context_fact_count : 0;
