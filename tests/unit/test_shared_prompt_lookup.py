@@ -89,13 +89,23 @@ class SharedPromptSearchTestCase(unittest.TestCase):
         self.assertEqual(result.prompts[0]["title"], "議事録テンプレ")
         self.assertNotIn("content", result.prompts[0])
 
-    # 日本語: 検索自体が落ちても例外を投げず、ヒット0件として回答を続けさせます。
-    # English: A failing search returns no hits instead of raising, so the answer continues.
+    # 日本語: 検索自体が落ちても例外を投げず、失敗として記録したうえで回答を続けさせます。
+    # English: A failing search returns no hits instead of raising, but records that it failed.
     def test_failed_search_returns_no_hits(self):
         with patch("services.shared_prompt_lookup._service", side_effect=RuntimeError("boom")):
             result = search_shared_prompts("メール")
 
         self.assertFalse(result.has_hits)
+        self.assertTrue(result.failed)
+
+    # 日本語: 障害を「該当なし」と返すと、モデルが「共有プロンプトは無い」と断言してしまいます。
+    # English: An outage reported as "no match" would make the model assert no shared prompt exists.
+    def test_failed_lookup_is_reported_as_failed_not_as_no_results(self):
+        payload = build_shared_prompt_tool_payload(SharedPromptResult(query="メール", failed=True))
+
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["prompts"], [])
+        self.assertIn("Do not say no shared prompt matched", payload["message"])
 
     # 日本語: 空クエリでは検索そのものを行いません。
     # English: An empty query performs no lookup at all.
@@ -197,6 +207,42 @@ class SharedPromptToolCallTestCase(unittest.TestCase):
             [name for name, _ in events],
             ["shared_prompt_search_started", "shared_prompt_search_failed"],
         )
+
+    # 日本語: 例外ではなく failed ペイロードで返る障害も、0件ではなく失敗として通知します。
+    # English: A failure returned as a payload, not an exception, is still reported as a failure.
+    def test_failed_payload_is_not_reported_as_zero_hits(self):
+        job, events = self._build_job(lambda query: {"status": "failed", "prompts": []})
+        messages = []
+
+        self._run(
+            job,
+            self._tool_call({"query": "メール"}),
+            current_messages=messages,
+            step_count=1,
+            max_steps=8,
+        )
+
+        self.assertEqual(
+            [name for name, _ in events],
+            ["shared_prompt_search_started", "shared_prompt_search_failed"],
+        )
+
+    # 日本語: 事前検索済みのクエリは、再検索していないことがイベントにも表れます。
+    # English: An already prefetched query is surfaced as such in the completion event.
+    def test_already_searched_payload_keeps_its_status_in_the_event(self):
+        job, events = self._build_job(lambda query: {"status": "already_searched"})
+        messages = []
+
+        self._run(
+            job,
+            self._tool_call({"query": "メール"}),
+            current_messages=messages,
+            step_count=1,
+            max_steps=8,
+        )
+
+        self.assertEqual(events[1][0], "shared_prompt_search_completed")
+        self.assertEqual(events[1][1]["status"], "already_searched")
 
 
 if __name__ == "__main__":

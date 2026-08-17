@@ -78,6 +78,37 @@ class PersonalKnowledgeSearchTestCase(unittest.TestCase):
 
         self.assertEqual(result.memos, [])
         self.assertEqual([fact["title"] for fact in result.facts], ["口調"])
+        # 落ちた側は結果に記録し、網羅した検索だと誤認させない。
+        # The failing side is recorded so the hit set is not mistaken for a complete search.
+        self.assertEqual(result.failed_sources, ("memo",))
+
+    # 日本語: 検索が落ちたときに「該当なし」と返すと、モデルが「メモは無い」と断言してしまいます。
+    # English: Reporting a failed lookup as "no match" would make the model assert the memo does not exist.
+    def test_failed_lookup_is_reported_as_failed_not_as_no_results(self):
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=RuntimeError("db down")
+        ), patch("services.personal_knowledge.search_facts", side_effect=RuntimeError("db down")):
+            result = search_personal_knowledge(7, "沖縄")
+
+        payload = build_personal_knowledge_tool_payload(result)
+
+        self.assertTrue(result.failed)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["failed_sources"], ["memo", "context_fact"])
+        self.assertIn("Do not say the user has nothing saved", payload["message"])
+
+    # 日本語: 片側だけ落ちた場合は結果を返しつつ、網羅していないことを明示します。
+    # English: A half-failed lookup still returns hits, but flags that the coverage is incomplete.
+    def test_partial_failure_is_flagged_alongside_the_hits(self):
+        facts = _FakeFactSearchResult([_FakeFact(3, "口調", "結論から簡潔に")])
+
+        with patch(
+            "services.personal_knowledge.search_memos", side_effect=RuntimeError("db down")
+        ), patch("services.personal_knowledge.search_facts", return_value=facts):
+            payload = build_personal_knowledge_tool_payload(search_personal_knowledge(7, "口調"))
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["partial_failure_sources"], ["memo"])
 
     # 日本語: 空クエリでは検索そのものを行いません。
     # English: An empty query performs no lookup at all.
