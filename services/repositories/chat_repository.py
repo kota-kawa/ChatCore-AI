@@ -811,6 +811,7 @@ class ChatRepository:
                             """
                             SELECT id AS task_id,
                                    system_task_key,
+                                   system_task_revision,
                                    is_system_task_customized,
                                    name,
                                    prompt_template,
@@ -831,6 +832,7 @@ class ChatRepository:
                             """
                             SELECT id AS task_id,
                                    system_task_key,
+                                   system_task_revision,
                                    is_system_task_customized,
                                    name,
                                    prompt_template,
@@ -858,6 +860,7 @@ class ChatRepository:
                     query = """
                         SELECT id AS task_id,
                                system_task_key,
+                               system_task_revision,
                                is_system_task_customized,
                                name,
                                prompt_template,
@@ -877,6 +880,7 @@ class ChatRepository:
                     query = """
                         SELECT id AS task_id,
                                system_task_key,
+                               system_task_revision,
                                is_system_task_customized,
                                name,
                                prompt_template,

@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.default_tasks import load_default_tasks
 from services.repositories.chat_repository import ChatRepository
 from blueprints.chat.messages import _load_task_prompt_data, _parse_task_launch_message
 from blueprints.chat.tasks import (
@@ -184,6 +185,54 @@ class TaskIdentityOperationsTestCase(unittest.TestCase):
         self.assertIn("AND user_id = %s", query)
         self.assertEqual(params, (42, 7))
         self.assertEqual(result["prompt_template"], "owned prompt")
+
+    def test_repository_keeps_existing_user_on_legacy_system_task_revision(self):
+        row = {
+            "task_id": 42,
+            "system_task_key": "information",
+            "system_task_revision": 1,
+            "is_system_task_customized": False,
+            "name": "stored name",
+            "prompt_template": "stored prompt",
+            "response_rules": "",
+            "output_skeleton": "",
+            "input_examples": "",
+            "output_examples": "",
+        }
+        cursor = ScriptedCursor(fetchone_results=[row])
+        connection = ScriptedConnection([cursor])
+        repository = ChatRepository(connection_getter=lambda: connection)
+        legacy = load_default_tasks("ja", 1)[0]
+
+        with patch("services.repositories.chat_repository.get_current_locale", return_value="ja"):
+            result = repository.get_task_prompt_data("ℹ️ 情報提供", 7, 42)
+
+        self.assertEqual(result["name"], legacy["name"])
+        self.assertEqual(result["prompt_template"], legacy["prompt_template"])
+
+    def test_repository_uses_current_revision_for_guest_system_task(self):
+        row = {
+            "task_id": 84,
+            "system_task_key": "information",
+            "system_task_revision": 2,
+            "is_system_task_customized": False,
+            "name": "stored name",
+            "prompt_template": "stored prompt",
+            "response_rules": "",
+            "output_skeleton": "",
+            "input_examples": "",
+            "output_examples": "",
+        }
+        cursor = ScriptedCursor(fetchone_results=[row])
+        connection = ScriptedConnection([cursor])
+        repository = ChatRepository(connection_getter=lambda: connection)
+        current = load_default_tasks("ja", 2)[0]
+
+        with patch("services.repositories.chat_repository.get_current_locale", return_value="ja"):
+            result = repository.get_task_prompt_data("🔍 わかりやすく説明", None, 84)
+
+        self.assertEqual(result["name"], current["name"])
+        self.assertEqual(result["prompt_template"], current["prompt_template"])
 
 
 if __name__ == "__main__":

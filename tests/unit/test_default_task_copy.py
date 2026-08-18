@@ -6,6 +6,7 @@ from services.users import copy_default_tasks_for_user
 
 DEFAULT_ROW = (
     "information",
+    2,
     "Information",
     "Explain the topic",
     "",
@@ -57,7 +58,9 @@ class DefaultTaskCopyTestCase(unittest.TestCase):
         cursor = FakeCursor(existing=True)
         connection = FakeConnection(cursor)
 
-        with patch("services.users.get_db_connection", return_value=connection):
+        with patch("services.users.get_db_connection", return_value=connection), patch(
+            "services.users.default_task_rows", return_value=[DEFAULT_ROW]
+        ):
             copy_default_tasks_for_user(7)
 
         existence_query = next(
@@ -74,13 +77,17 @@ class DefaultTaskCopyTestCase(unittest.TestCase):
         cursor = FakeCursor(existing=False)
         connection = FakeConnection(cursor)
 
-        with patch("services.users.get_db_connection", return_value=connection):
+        with patch("services.users.get_db_connection", return_value=connection), patch(
+            "services.users.default_task_rows", return_value=[DEFAULT_ROW]
+        ):
             copy_default_tasks_for_user(7)
 
         queries = [query for query, _ in cursor.executed]
         self.assertTrue(any("SELECT pg_advisory_xact_lock(%s)" in q for q in queries))
         insert_query = next(q for q in queries if "INSERT INTO task_with_examples" in q)
+        self.assertIn("system_task_revision", insert_query)
         self.assertIn("ON CONFLICT DO NOTHING", insert_query)
+        self.assertFalse(any("WHERE user_id IS NULL" in q for q in queries))
         self.assertTrue(connection.committed)
 
 

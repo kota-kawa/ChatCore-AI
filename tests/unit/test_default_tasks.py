@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from services.default_tasks import (
+    CURRENT_SYSTEM_TASK_REVISION,
     default_task_payloads,
     default_task_rows,
     ensure_default_tasks_seeded,
@@ -41,7 +42,7 @@ class FakeCursor:
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.
         if "INSERT INTO task_with_examples" in normalized:
-            key, name = params[:2]
+            key, _revision, name = params[:3]
             if key:
                 self.existing_keys.add(key)
             self.inserted_names.append(name)
@@ -199,20 +200,20 @@ class DefaultTasksTestCase(unittest.TestCase):
     # English: Verify that repository default tasks include full seed set.
     def test_repository_default_tasks_include_full_seed_set(self):
         expected_names = {
-            "📧 メール作成",
-            "💡 アイデア発想",
-            "📄 要約",
-            "🛠️ 問題解決",
-            "📋 問題へ回答",
-            "ℹ️ 情報提供",
-            "🌐 翻訳",
-            "🔄 比較・検討",
-            "✏️ 文章の添削・校正",
-            "✈️ 旅行計画",
-            "💬 悩み相談",
-            "📨 メッセージへの返答",
-            "📝 文章作成",
-            "📊 議事録・メモ整理",
+            "🔍 わかりやすく説明",
+            "💡 アイデアを出す",
+            "🛠️ 解決策を考える",
+            "📧 メールを書く",
+            "🌐 翻訳する",
+            "📄 要点をまとめる",
+            "⚖️ 選択肢を比べる",
+            "📋 問題を解く",
+            "✏️ 文章を直す",
+            "📨 返信を考える",
+            "📝 文章を書く",
+            "🗒️ メモを整理する",
+            "💬 悩みを相談する",
+            "🗓️ 予定を立てる",
         }
 
         load_default_tasks.cache_clear()
@@ -237,8 +238,46 @@ class DefaultTasksTestCase(unittest.TestCase):
             [task["system_task_key"] for task in japanese],
             [task["system_task_key"] for task in english],
         )
-        self.assertEqual(english[0]["name"], "ℹ️ Explain a topic")
+        self.assertEqual(english[0]["system_task_revision"], CURRENT_SYSTEM_TASK_REVISION)
+        self.assertNotEqual(english[0]["name"], "ℹ️ Explain a topic")
         self.assertTrue(all(task["system_task_key"] for task in english))
+
+    def test_current_and_legacy_catalogs_share_stable_keys(self):
+        current = load_default_tasks("ja", 2)
+        legacy = load_default_tasks("ja", 1)
+        legacy_english = load_default_tasks("en", 1)
+
+        self.assertEqual(
+            [task["system_task_key"] for task in current],
+            [task["system_task_key"] for task in legacy],
+        )
+        self.assertEqual(
+            [task["system_task_key"] for task in legacy],
+            [task["system_task_key"] for task in legacy_english],
+        )
+        self.assertTrue(all(task["system_task_revision"] == 1 for task in legacy))
+        self.assertTrue(all(task["system_task_revision"] == 2 for task in current))
+
+    def test_current_japanese_labels_fit_task_buttons(self):
+        for task in load_default_tasks("ja"):
+            _icon, label = task["name"].split(" ", 1)
+            self.assertLessEqual(len(label), 10, task["name"])
+
+    def test_localizes_system_task_by_stored_revision(self):
+        task = {
+            "system_task_key": "information",
+            "system_task_revision": 1,
+            "name": "stored name",
+            "prompt_template": "stored prompt",
+            "is_system_task_customized": False,
+        }
+
+        legacy = localize_system_task(task, "ja")
+        current = localize_system_task({**task, "system_task_revision": 2}, "ja")
+
+        self.assertEqual(legacy["name"], "ℹ️ 情報提供")
+        self.assertEqual(current["name"], "🔍 わかりやすく説明")
+        self.assertNotEqual(legacy["prompt_template"], current["prompt_template"])
 
     def test_localizes_only_rows_with_a_stable_system_key(self):
         localized = localize_system_task(
@@ -260,7 +299,7 @@ class DefaultTasksTestCase(unittest.TestCase):
             "en",
         )
 
-        self.assertEqual(localized["name"], "ℹ️ Explain a topic")
+        self.assertEqual(localized["name"], load_default_tasks("en")[0]["name"])
         self.assertNotEqual(localized["prompt_template"], "Japanese prompt")
         self.assertEqual(custom["name"], "ℹ️ 情報提供")
         self.assertEqual(custom["prompt_template"], "User-edited prompt")
@@ -269,6 +308,7 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertEqual(resolve_system_task_key("information"), "information")
         self.assertEqual(resolve_system_task_key("ℹ️ 情報提供"), "information")
         self.assertEqual(resolve_system_task_key("ℹ️ Explain a topic"), "information")
+        self.assertEqual(resolve_system_task_key("🔍 わかりやすく説明"), "information")
         self.assertIsNone(resolve_system_task_key("My custom task"))
 
     def test_payloads_and_optional_rows_expose_stable_key(self):
@@ -279,7 +319,8 @@ class DefaultTasksTestCase(unittest.TestCase):
 
         self.assertEqual(payloads[0]["system_task_key"], "task_0")
         self.assertEqual(rows[0][0], "task_0")
-        self.assertEqual(rows[0][1], "Task A")
+        self.assertEqual(rows[0][1], CURRENT_SYSTEM_TASK_REVISION)
+        self.assertEqual(rows[0][2], "Task A")
 
     # 日本語: メールタスクが、そのまま送れる本文をコピー枠のフェンスで示すことを検証します。
     # English: Verify that the repository email task puts the ready-to-send body in a copy card fence.
@@ -290,11 +331,11 @@ class DefaultTasksTestCase(unittest.TestCase):
         finally:
             load_default_tasks.cache_clear()
 
-        email_task = next(task for task in tasks if task["name"] == "📧 メール作成")
+        email_task = next(task for task in tasks if task["name"] == "📧 メールを書く")
         self.assertIn("```chatcore-copy", email_task["prompt_template"])
         self.assertIn("```chatcore-copy", email_task["response_rules"])
         self.assertIn("```chatcore-copy", email_task["output_skeleton"])
-        self.assertIn("新機能説明会", email_task["input_examples"])
+        self.assertIn("町内会", email_task["input_examples"])
         self.assertIn("```chatcore-copy", email_task["output_examples"])
 
     # 日本語: 返答タスクが、各返信案をコピー枠のフェンスで示すことを検証します。
@@ -306,7 +347,7 @@ class DefaultTasksTestCase(unittest.TestCase):
         finally:
             load_default_tasks.cache_clear()
 
-        reply_task = next(task for task in tasks if task["name"] == "📨 メッセージへの返答")
+        reply_task = next(task for task in tasks if task["name"] == "📨 返信を考える")
         self.assertIn("```chatcore-copy", reply_task["prompt_template"])
         self.assertIn("```chatcore-copy", reply_task["response_rules"])
         self.assertIn("```chatcore-copy", reply_task["output_skeleton"])
@@ -320,13 +361,13 @@ class DefaultTasksTestCase(unittest.TestCase):
         finally:
             load_default_tasks.cache_clear()
 
-        comparison_task = next(task for task in tasks if task["name"] == "🔄 比較・検討")
-        meeting_task = next(task for task in tasks if task["name"] == "📊 議事録・メモ整理")
+        comparison_task = next(task for task in tasks if task["name"] == "⚖️ 選択肢を比べる")
+        meeting_task = next(task for task in tasks if task["name"] == "🗒️ メモを整理する")
 
         self.assertTrue(comparison_task["input_examples"])
-        self.assertIn("| 観点 |", comparison_task["output_examples"])
+        self.assertIn("| 候補 |", comparison_task["output_examples"])
         self.assertTrue(meeting_task["input_examples"])
-        self.assertIn("| 担当 | 内容 | 期限 |", meeting_task["output_examples"])
+        self.assertIn("## やること", meeting_task["output_examples"])
 
     # 日本語: repositoryproblemsolvingタスクrequestsconciserationaleonlyことを検証します。
     # English: Verify that repository problem solving task requests concise rationale only.
@@ -337,10 +378,10 @@ class DefaultTasksTestCase(unittest.TestCase):
         finally:
             load_default_tasks.cache_clear()
 
-        answer_task = next(task for task in tasks if task["name"] == "📋 問題へ回答")
-        self.assertIn("簡潔", answer_task["prompt_template"])
-        self.assertIn("必要な範囲", answer_task["response_rules"])
-        self.assertIn("根拠・手順", answer_task["output_skeleton"])
+        answer_task = next(task for task in tasks if task["name"] == "📋 問題を解く")
+        self.assertIn("必要な手順", answer_task["prompt_template"])
+        self.assertIn("簡単な問題", answer_task["response_rules"])
+        self.assertIn("考え方や計算", answer_task["output_skeleton"])
         self.assertNotIn("途中の考え方", answer_task["prompt_template"])
 
 

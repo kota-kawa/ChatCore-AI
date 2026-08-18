@@ -89,21 +89,21 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                 "SELECT pg_advisory_xact_lock(%s)",
                 (user_id,),
             )
-            cursor.execute(
-                """
-                SELECT system_task_key, name, prompt_template, response_rules,
-                       output_skeleton, input_examples,
-                       output_examples, display_order
-                  FROM task_with_examples
-                 WHERE user_id IS NULL
-                   AND deleted_at IS NULL
-                """,
-            )
-            defaults = cursor.fetchall()
-            if not defaults:
-                defaults = default_task_rows(include_key=True)
+            # The bundled catalog is the source of truth for new accounts. Reading
+            # every shared DB row here could copy historical duplicates or retired tasks.
+            defaults = default_task_rows(include_key=True)
 
-            for system_task_key, name, tmpl, response_rules, output_skeleton, inp, out, disp in defaults:
+            for (
+                system_task_key,
+                system_task_revision,
+                name,
+                tmpl,
+                response_rules,
+                output_skeleton,
+                inp,
+                out,
+                disp,
+            ) in defaults:
                 # Deleted rows are deliberate user choices and must continue to
                 # suppress the corresponding built-in task. The legacy-name arm
                 # also prevents a keyed catalog row from duplicating pre-key data.
@@ -124,15 +124,17 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                 cursor.execute(
                     """
                     INSERT INTO task_with_examples
-                          (user_id, system_task_key, name, prompt_template,
+                          (user_id, system_task_key, system_task_revision,
+                           name, prompt_template,
                            response_rules, output_skeleton,
                            input_examples, output_examples, display_order)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
                     """,
                     (
                         user_id,
                         system_task_key,
+                        system_task_revision,
                         name,
                         tmpl,
                         response_rules,
