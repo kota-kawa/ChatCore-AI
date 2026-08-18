@@ -11,50 +11,6 @@
     "display_order": 0
   },
   {
-    "system_task_key": "ideation",
-    "system_task_revision": 2,
-    "name": "💡 Generate ideas",
-    "prompt_template": "Suggest several ideas from different angles that fit the user's goal and conditions. Add a short explanation that makes each idea easy to imagine. If an important condition is missing, ask only about what would materially change the suggestions, or state a reasonable assumption.",
-    "response_rules": "- Include genuinely different directions instead of near-duplicates\n- When useful, mix ideas that are easy to try with ideas that require more effort\n- Favor relevant ideas over a large number of ideas\n- You may identify an easy idea to try first",
-    "output_skeleton": "Ideas:\n1. Idea and short explanation\n2. Idea and short explanation\n3. Idea and short explanation\n\nOptionally, suggest an easy starting point",
-    "input_examples": "Suggest inexpensive ways for a family of four to have fun at home on a rainy day.",
-    "output_examples": "1. Home cooking challenge\nSplit into teams and make a snack from ingredients already in the kitchen.\n\n2. Family photo quiz\nShow old photos and guess where they were taken or what happened that day.\n\n3. Indoor treasure hunt\nWrite clues on paper and hide them around the home.\n\nThe family photo quiz is the easiest to start because it needs no special supplies.",
-    "display_order": 1
-  },
-  {
-    "system_task_key": "problem_solving",
-    "system_task_revision": 2,
-    "name": "🛠️ Find a solution",
-    "prompt_template": "Clarify the problem and suggest realistic solutions the user can try. If there may be several causes, explain the likely possibilities and how to check them. Start with the easiest useful action, and use long steps or tables only when needed.",
-    "response_rules": "- Distinguish the situation from the actual problem\n- Start with actions the user can try now\n- When useful, explain what to try next if the first action does not help\n- Clearly flag risks or situations that call for professional help",
-    "output_skeleton": "Try first:\n1. Action\n2. Action\n\nIf that does not help:\n- Next thing to check\n\nCaution, if needed",
-    "input_examples": "I struggle to wake up and end up rushing every morning. Help me find ways to improve this.",
-    "output_examples": "Start by setting a consistent time to get ready for bed, not just a time to wake up.\n\n1. Put your phone out of reach 30 minutes before bed.\n2. Prepare your clothes and bag the night before.\n3. Place your alarm away from the bed.\n\nIf severe tiredness continues after a week of getting enough sleep, track your sleep and consider discussing it with a healthcare professional.",
-    "display_order": 2
-  },
-  {
-    "system_task_key": "email_writing",
-    "system_task_revision": 2,
-    "name": "📧 Write an email",
-    "prompt_template": "Write an email that fits the recipient, purpose, and message. Provide a subject and a ready-to-send body. Put the body in a ```chatcore-copy block. Ask briefly only when essential information is missing; otherwise, use and state a natural assumption.",
-    "response_rules": "- Use a level of formality that fits the relationship\n- Make the purpose clear with concise, natural wording\n- Do not invent dates, places, or other facts\n- Always put the body in a ```chatcore-copy block",
-    "output_skeleton": "Subject: Suggested subject\n\n```chatcore-copy\nGreeting\n\nMessage\n\nClosing\n```\n\nOptional short note",
-    "input_examples": "Write a polite email telling the neighborhood cleanup coordinator that I cannot attend because of a family commitment.",
-    "output_examples": "Subject: Unable to attend the neighborhood cleanup\n\n```chatcore-copy\nDear Cleanup Coordinator,\n\nThank you for organizing the neighborhood cleanup. Unfortunately, I will not be able to attend because of a family commitment.\n\nI apologize for any inconvenience and appreciate your understanding.\n\nBest regards,\n```",
-    "display_order": 3
-  },
-  {
-    "system_task_key": "translation",
-    "system_task_revision": 2,
-    "name": "🌐 Translate",
-    "prompt_template": "Translate the input into the requested language while preserving its meaning and tone in natural phrasing. If no target language is given, translate Japanese into English and other languages into Japanese. Add an explanation only when it is useful.",
-    "response_rules": "- Preserve the meaning and tone of the original\n- Use phrasing that sounds natural to the reader\n- Do not change names, product names, or other proper nouns without reason\n- Briefly explain only important wording choices that may be ambiguous",
-    "output_skeleton": "Translated text\n\nOptional short note about a wording choice",
-    "input_examples": "Translate into Japanese: “We'll meet at 9:00 a.m. tomorrow. Please take care on your way here.”",
-    "output_examples": "明日の集合時間は午前9時です。気をつけて来てください。",
-    "display_order": 4
-  },
-  {
     "system_task_key": "summarization",
     "system_task_revision": 2,
     "name": "📄 Summarize key points",
@@ -63,51 +19,7 @@
     "output_skeleton": "Summary\n\nWhen useful:\n- Key points\n- Dates or deadlines\n- Items to confirm",
     "input_examples": "Summarize this notice in three lines: Saturday's sports day will move to Sunday if it rains. It will still start at 9:00 a.m. The school app will announce any postponement by 6:00 a.m. that day.",
     "output_examples": "- Saturday's sports day will move to Sunday if it rains.\n- It will start at 9:00 a.m. on either day.\n- Any postponement will be announced in the school app by 6:00 a.m. that day.",
-    "display_order": 5
-  },
-  {
-    "system_task_key": "comparison",
-    "system_task_revision": 2,
-    "name": "⚖️ Compare options",
-    "prompt_template": "Compare every option the user provides according to what matters to them. Apply the same criteria to each option and show its advantages, drawbacks, and best use cases. Handle any number of options and use a table only when it improves clarity. Do not fill missing facts with guesses.",
-    "response_rules": "- Identify what matters most in the decision\n- Compare all options fairly using the same criteria\n- Adapt the format to the number of options\n- If there is no single winner, recommend options for different priorities",
-    "output_skeleton": "Comparison priorities\n\nDifferences for each option (adapt to the number of options):\n- Advantages\n- Drawbacks\n- Best fit\n\nHow to choose",
-    "input_examples": "Compare a small apartment near the station, a larger apartment farther away, and an older low-rent apartment by rent, commute, and comfort.",
-    "output_examples": "| Option | Rent | Commute | Comfort |\n| :--- | :--- | :--- | :--- |\n| Small, near the station | Often higher | Short | Convenient, but storage may be limited |\n| Larger, farther away | Varies | Long | More room to relax at home |\n| Older, low-rent | Lower | Depends on location | Check insulation and equipment |\n\nChoose the nearby apartment to reduce commuting, the larger one for more space at home, or the older one to prioritize savings. Actual rents and walking times would make the comparison more precise.",
-    "display_order": 6
-  },
-  {
-    "system_task_key": "question_answering",
-    "system_task_revision": 2,
-    "name": "📋 Solve a question",
-    "prompt_template": "Read the question or exercise carefully and give a clear answer. When calculation or reasoning is needed, show only the steps necessary to understand the answer. If the given conditions are not enough to determine an answer, say what is missing.",
-    "response_rules": "- Give the answer first\n- Show enough calculation or reasoning to support it\n- Keep simple answers short\n- Do not guess when information is missing",
-    "output_skeleton": "Answer\n\nWhen needed:\n1. Reasoning or calculation\n2. Check",
-    "input_examples": "Five oranges cost $1.20 each. If I pay $10, how much change should I receive?",
-    "output_examples": "You should receive $4.00 in change.\n\n$1.20 × 5 = $6.00\n$10.00 − $6.00 = $4.00",
-    "display_order": 7
-  },
-  {
-    "system_task_key": "proofreading",
-    "system_task_revision": 2,
-    "name": "✏️ Improve writing",
-    "prompt_template": "Correct errors and awkward wording in the provided text so it is easy to understand. Preserve the writer's meaning and voice as much as possible. Briefly explain only substantial changes.",
-    "response_rules": "- Preserve the original meaning and voice\n- Avoid unnecessary rewriting\n- Show the complete revised text first\n- Follow any requested tone or intended use",
-    "output_skeleton": "Revised text\n\nOptional explanation of important changes",
-    "input_examples": "Make this sound natural for a message to a friend: “About meeting tomorrow, I think would 10 at the station be okay?”",
-    "output_examples": "Would meeting at the station at 10 tomorrow work for you?\n\nI corrected the word order and made the question sound natural and friendly.",
-    "display_order": 8
-  },
-  {
-    "system_task_key": "reply_writing",
-    "system_task_revision": 2,
-    "name": "📨 Draft a reply",
-    "prompt_template": "Write a natural reply that fits the received message and the user's relationship with the sender. Provide different tones only when they are useful. Put every ready-to-send reply in a ```chatcore-copy block.",
-    "response_rules": "- Respond to the sender's question or request\n- Use natural language that fits the relationship\n- Do not force multiple options when one is enough\n- Always put each reply in a ```chatcore-copy block",
-    "output_skeleton": "```chatcore-copy\nReply\n```\n\nOptional alternative tone and short usage note",
-    "input_examples": "A friend wrote, “Would you like to have lunch together this Sunday?” I want to go, but I need to ask where.",
-    "output_examples": "```chatcore-copy\nThat sounds great—I’d love to! What area or restaurant did you have in mind?\n```",
-    "display_order": 9
+    "display_order": 1
   },
   {
     "system_task_key": "longform_writing",
@@ -118,7 +30,84 @@
     "output_skeleton": "Title, when useful\n\nText in a structure that fits the purpose and length",
     "input_examples": "Write a notice of about 80 words for a community board inviting families to an autumn festival that starts at 10:00 a.m. on October 12.",
     "output_examples": "Autumn Festival\n\nJoin us for our community autumn festival starting at 10:00 a.m. on October 12. We are preparing activities that family members of all ages can enjoy. Bring your family, invite your neighbors, and spend a cheerful fall morning with the community. Everyone is welcome, and we look forward to seeing you there!",
-    "display_order": 10
+    "display_order": 2
+  },
+  {
+    "system_task_key": "proofreading",
+    "system_task_revision": 2,
+    "name": "✏️ Improve writing",
+    "prompt_template": "Correct errors and awkward wording in the provided text so it is easy to understand. Preserve the writer's meaning and voice as much as possible. Briefly explain only substantial changes.",
+    "response_rules": "- Preserve the original meaning and voice\n- Avoid unnecessary rewriting\n- Show the complete revised text first\n- Follow any requested tone or intended use",
+    "output_skeleton": "Revised text\n\nOptional explanation of important changes",
+    "input_examples": "Make this sound natural for a message to a friend: “About meeting tomorrow, I think would 10 at the station be okay?”",
+    "output_examples": "Would meeting at the station at 10 tomorrow work for you?\n\nI corrected the word order and made the question sound natural and friendly.",
+    "display_order": 3
+  },
+  {
+    "system_task_key": "email_writing",
+    "system_task_revision": 2,
+    "name": "📧 Write an email",
+    "prompt_template": "Write an email that fits the recipient, purpose, and message. Provide a subject and a ready-to-send body. Put the body in a ```chatcore-copy block. Ask briefly only when essential information is missing; otherwise, use and state a natural assumption.",
+    "response_rules": "- Use a level of formality that fits the relationship\n- Make the purpose clear with concise, natural wording\n- Do not invent dates, places, or other facts\n- Always put the body in a ```chatcore-copy block",
+    "output_skeleton": "Subject: Suggested subject\n\n```chatcore-copy\nGreeting\n\nMessage\n\nClosing\n```\n\nOptional short note",
+    "input_examples": "Write a polite email telling the neighborhood cleanup coordinator that I cannot attend because of a family commitment.",
+    "output_examples": "Subject: Unable to attend the neighborhood cleanup\n\n```chatcore-copy\nDear Cleanup Coordinator,\n\nThank you for organizing the neighborhood cleanup. Unfortunately, I will not be able to attend because of a family commitment.\n\nI apologize for any inconvenience and appreciate your understanding.\n\nBest regards,\n```",
+    "display_order": 4
+  },
+  {
+    "system_task_key": "reply_writing",
+    "system_task_revision": 2,
+    "name": "📨 Draft a reply",
+    "prompt_template": "Write a natural reply that fits the received message and the user's relationship with the sender. Provide different tones only when they are useful. Put every ready-to-send reply in a ```chatcore-copy block.",
+    "response_rules": "- Respond to the sender's question or request\n- Use natural language that fits the relationship\n- Do not force multiple options when one is enough\n- Always put each reply in a ```chatcore-copy block",
+    "output_skeleton": "```chatcore-copy\nReply\n```\n\nOptional alternative tone and short usage note",
+    "input_examples": "A friend wrote, “Would you like to have lunch together this Sunday?” I want to go, but I need to ask where.",
+    "output_examples": "```chatcore-copy\nThat sounds great—I’d love to! What area or restaurant did you have in mind?\n```",
+    "display_order": 5
+  },
+  {
+    "system_task_key": "translation",
+    "system_task_revision": 2,
+    "name": "🌐 Translate",
+    "prompt_template": "Translate the input into the requested language while preserving its meaning and tone in natural phrasing. If no target language is given, translate Japanese into English and other languages into Japanese. Add an explanation only when it is useful.",
+    "response_rules": "- Preserve the meaning and tone of the original\n- Use phrasing that sounds natural to the reader\n- Do not change names, product names, or other proper nouns without reason\n- Briefly explain only important wording choices that may be ambiguous",
+    "output_skeleton": "Translated text\n\nOptional short note about a wording choice",
+    "input_examples": "Translate into Japanese: “We'll meet at 9:00 a.m. tomorrow. Please take care on your way here.”",
+    "output_examples": "明日の集合時間は午前9時です。気をつけて来てください。",
+    "display_order": 6
+  },
+  {
+    "system_task_key": "ideation",
+    "system_task_revision": 2,
+    "name": "💡 Generate ideas",
+    "prompt_template": "Suggest several ideas from different angles that fit the user's goal and conditions. Add a short explanation that makes each idea easy to imagine. If an important condition is missing, ask only about what would materially change the suggestions, or state a reasonable assumption.",
+    "response_rules": "- Include genuinely different directions instead of near-duplicates\n- When useful, mix ideas that are easy to try with ideas that require more effort\n- Favor relevant ideas over a large number of ideas\n- You may identify an easy idea to try first",
+    "output_skeleton": "Ideas:\n1. Idea and short explanation\n2. Idea and short explanation\n3. Idea and short explanation\n\nOptionally, suggest an easy starting point",
+    "input_examples": "Suggest inexpensive ways for a family of four to have fun at home on a rainy day.",
+    "output_examples": "1. Home cooking challenge\nSplit into teams and make a snack from ingredients already in the kitchen.\n\n2. Family photo quiz\nShow old photos and guess where they were taken or what happened that day.\n\n3. Indoor treasure hunt\nWrite clues on paper and hide them around the home.\n\nThe family photo quiz is the easiest to start because it needs no special supplies.",
+    "display_order": 7
+  },
+  {
+    "system_task_key": "comparison",
+    "system_task_revision": 2,
+    "name": "⚖️ Compare options",
+    "prompt_template": "Compare every option the user provides according to what matters to them. Apply the same criteria to each option and show its advantages, drawbacks, and best use cases. Handle any number of options and use a table only when it improves clarity. Do not fill missing facts with guesses.",
+    "response_rules": "- Identify what matters most in the decision\n- Compare all options fairly using the same criteria\n- Adapt the format to the number of options\n- If there is no single winner, recommend options for different priorities",
+    "output_skeleton": "Comparison priorities\n\nDifferences for each option (adapt to the number of options):\n- Advantages\n- Drawbacks\n- Best fit\n\nHow to choose",
+    "input_examples": "Compare a small apartment near the station, a larger apartment farther away, and an older low-rent apartment by rent, commute, and comfort.",
+    "output_examples": "| Option | Rent | Commute | Comfort |\n| :--- | :--- | :--- | :--- |\n| Small, near the station | Often higher | Short | Convenient, but storage may be limited |\n| Larger, farther away | Varies | Long | More room to relax at home |\n| Older, low-rent | Lower | Depends on location | Check insulation and equipment |\n\nChoose the nearby apartment to reduce commuting, the larger one for more space at home, or the older one to prioritize savings. Actual rents and walking times would make the comparison more precise.",
+    "display_order": 8
+  },
+  {
+    "system_task_key": "problem_solving",
+    "system_task_revision": 2,
+    "name": "🛠️ Find a solution",
+    "prompt_template": "Clarify the problem and suggest realistic solutions the user can try. If there may be several causes, explain the likely possibilities and how to check them. Start with the easiest useful action, and use long steps or tables only when needed.",
+    "response_rules": "- Distinguish the situation from the actual problem\n- Start with actions the user can try now\n- When useful, explain what to try next if the first action does not help\n- Clearly flag risks or situations that call for professional help",
+    "output_skeleton": "Try first:\n1. Action\n2. Action\n\nIf that does not help:\n- Next thing to check\n\nCaution, if needed",
+    "input_examples": "I struggle to wake up and end up rushing every morning. Help me find ways to improve this.",
+    "output_examples": "Start by setting a consistent time to get ready for bed, not just a time to wake up.\n\n1. Put your phone out of reach 30 minutes before bed.\n2. Prepare your clothes and bag the night before.\n3. Place your alarm away from the bed.\n\nIf severe tiredness continues after a week of getting enough sleep, track your sleep and consider discussing it with a healthcare professional.",
+    "display_order": 9
   },
   {
     "system_task_key": "meeting_notes",
@@ -129,18 +118,18 @@
     "output_skeleton": "Use only relevant sections:\n- Summary\n- Decisions\n- Tasks (owner and deadline)\n- Items to confirm",
     "input_examples": "Organize these family trip notes: Destination is Kyoto. Dad will book the train. No hotel yet. Mom will find three hotel options by Friday. Keep the schedule easy for Grandma to walk.",
     "output_examples": "## Decisions\n- Destination: Kyoto\n- Keep the schedule relaxed and easy for Grandma to walk\n\n## Tasks\n- Dad: Book the train\n- Mom: Find three hotel options by Friday\n\n## Open item\n- Choose a hotel",
-    "display_order": 11
+    "display_order": 10
   },
   {
-    "system_task_key": "personal_advice",
+    "system_task_key": "question_answering",
     "system_task_revision": 2,
-    "name": "💬 Talk through a concern",
-    "prompt_template": "Acknowledge the user's feelings and situation without judgment, and help them organize their thoughts. Do not impose a single answer; offer realistic options or a small next step when useful. If there may be immediate danger, prioritize safety and appropriate support.",
-    "response_rules": "- Acknowledge the person's feelings and situation first\n- Avoid assumptions, lectures, or pressure\n- Present manageable options clearly\n- When needed, ask one helpful question at a time",
-    "output_skeleton": "Supportive response\n\nWhen useful:\n- Situation in clearer terms\n- Possible options\n- One small next step",
-    "input_examples": "I want to start a new class, but I am afraid I will not keep going, so I cannot bring myself to sign up.",
-    "output_examples": "It makes sense to hesitate when you are unsure whether you will keep going. You do not have to promise yourself that you will do it forever.\n\nYou could start with a trial lesson or a class that allows single visits, and treat the first month as a chance to see whether you enjoy it. You can decide whether to continue afterward.",
-    "display_order": 12
+    "name": "📋 Solve a question",
+    "prompt_template": "Read the question or exercise carefully and give a clear answer. When calculation or reasoning is needed, show only the steps necessary to understand the answer. If the given conditions are not enough to determine an answer, say what is missing.",
+    "response_rules": "- Give the answer first\n- Show enough calculation or reasoning to support it\n- Keep simple answers short\n- Do not guess when information is missing",
+    "output_skeleton": "Answer\n\nWhen needed:\n1. Reasoning or calculation\n2. Check",
+    "input_examples": "Five oranges cost $1.20 each. If I pay $10, how much change should I receive?",
+    "output_examples": "You should receive $4.00 in change.\n\n$1.20 × 5 = $6.00\n$10.00 − $6.00 = $4.00",
+    "display_order": 11
   },
   {
     "system_task_key": "travel_planning",
@@ -151,6 +140,17 @@
     "output_skeleton": "Goal and conditions\n\nSchedule by time or day:\n- Time: activity\n\nOptional preparation or cautions",
     "input_examples": "Plan my Sunday morning from 9:00 to noon so I can clean my room, shop for the week, and prepare lunch.",
     "output_examples": "- 9:00–9:45: Tidy and clean the room\n- 9:45–10:00: Take a break and check the shopping list\n- 10:00–11:00: Shop for the week\n- 11:00–11:15: Put groceries away\n- 11:15–12:00: Prepare lunch\n\nIf the trip to the store takes longer, shorten cleaning to 30 minutes to keep some breathing room.",
+    "display_order": 12
+  },
+  {
+    "system_task_key": "personal_advice",
+    "system_task_revision": 2,
+    "name": "💬 Talk through a concern",
+    "prompt_template": "Acknowledge the user's feelings and situation without judgment, and help them organize their thoughts. Do not impose a single answer; offer realistic options or a small next step when useful. If there may be immediate danger, prioritize safety and appropriate support.",
+    "response_rules": "- Acknowledge the person's feelings and situation first\n- Avoid assumptions, lectures, or pressure\n- Present manageable options clearly\n- When needed, ask one helpful question at a time",
+    "output_skeleton": "Supportive response\n\nWhen useful:\n- Situation in clearer terms\n- Possible options\n- One small next step",
+    "input_examples": "I want to start a new class, but I am afraid I will not keep going, so I cannot bring myself to sign up.",
+    "output_examples": "It makes sense to hesitate when you are unsure whether you will keep going. You do not have to promise yourself that you will do it forever.\n\nYou could start with a trial lesson or a class that allows single visits, and treat the first month as a chance to see whether you enjoy it. You can decide whether to continue afterward.",
     "display_order": 13
   }
 ]

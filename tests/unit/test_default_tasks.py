@@ -242,14 +242,14 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertNotEqual(english[0]["name"], "ℹ️ Explain a topic")
         self.assertTrue(all(task["system_task_key"] for task in english))
 
-    def test_current_and_legacy_catalogs_share_stable_keys(self):
+    def test_current_and_legacy_catalogs_share_stable_key_sets(self):
         current = load_default_tasks("ja", 2)
         legacy = load_default_tasks("ja", 1)
         legacy_english = load_default_tasks("en", 1)
 
         self.assertEqual(
-            [task["system_task_key"] for task in current],
-            [task["system_task_key"] for task in legacy],
+            {task["system_task_key"] for task in current},
+            {task["system_task_key"] for task in legacy},
         )
         self.assertEqual(
             [task["system_task_key"] for task in legacy],
@@ -262,6 +262,30 @@ class DefaultTasksTestCase(unittest.TestCase):
         for task in load_default_tasks("ja"):
             _icon, label = task["name"].split(" ", 1)
             self.assertLessEqual(len(label), 10, task["name"])
+
+    def test_current_catalog_orders_common_tasks_first(self):
+        tasks = load_default_tasks("ja")
+
+        self.assertEqual(
+            [task["system_task_key"] for task in tasks],
+            [
+                "information",
+                "summarization",
+                "longform_writing",
+                "proofreading",
+                "email_writing",
+                "reply_writing",
+                "translation",
+                "ideation",
+                "comparison",
+                "problem_solving",
+                "meeting_notes",
+                "question_answering",
+                "travel_planning",
+                "personal_advice",
+            ],
+        )
+        self.assertEqual([task["display_order"] for task in tasks], list(range(14)))
 
     def test_localizes_system_task_by_stored_revision(self):
         task = {
