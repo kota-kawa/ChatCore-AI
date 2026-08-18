@@ -1,0 +1,156 @@
+[
+  {
+    "system_task_key": "information",
+    "system_task_revision": 1,
+    "name": "ℹ️ Explain a topic",
+    "prompt_template": "Explain the requested topic clearly, separating the overview, key points, and cautions. Identify uncertainty instead of presenting it as fact.",
+    "response_rules": "- Separate the overview from details\n- Note information that may be outdated or uncertain\n- Include cautions that could affect practical decisions",
+    "output_skeleton": "## Overview\n- Big picture\n\n## Key points\n- Point 1\n- Point 2\n- Point 3\n\n## Cautions\n- Items to verify",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 0
+  },
+  {
+    "system_task_key": "ideation",
+    "system_task_revision": 1,
+    "name": "💡 Generate ideas",
+    "prompt_template": "Suggest several varied, practical ideas for the stated goal or problem. Organize them with Markdown headings and bullets.",
+    "response_rules": "- Include ideas from different angles\n- Briefly state the purpose and implementation of each idea\n- State assumptions when requirements are unclear",
+    "output_skeleton": "## Framing\n- How to view the problem\n\n## Ideas\n### 1. Idea title\n- Goal\n- How it could work\n\n## First choice\n- Best idea to try first",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 1
+  },
+  {
+    "system_task_key": "problem_solving",
+    "system_task_revision": 1,
+    "name": "🛠️ Solve a problem",
+    "prompt_template": "Propose realistic, step-by-step solutions to the described problem. Use a checklist or table when it improves clarity.",
+    "response_rules": "- Separate diagnosis from remedies\n- Distinguish immediate and longer-term actions\n- State risks and cautions",
+    "output_skeleton": "## Problem\n- Current situation\n- Main issues\n\n## Steps\n### Step 1\n- Action\n\n### Step 2\n- Action\n\n## Cautions\n- Risks",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 2
+  },
+  {
+    "system_task_key": "email_writing",
+    "system_task_revision": 1,
+    "name": "📧 Write an email",
+    "prompt_template": "Write an email suited to the recipient, purpose, and context. Separate the subject and body. Put the ready-to-send body in a ```chatcore-copy block.",
+    "response_rules": "- Account for the relationship and purpose\n- Ask briefly for missing essential information instead of inventing it\n- Keep the wording natural and practical\n- Put the copy-ready body in a ```chatcore-copy block, separated from the explanation",
+    "output_skeleton": "## Subject\n- Subject line\n\n## Body\n```chatcore-copy\nGreeting\n\nIntroduction\n\nRequest or information\n\nClosing\n```\n\n## Notes\n- Optional adjustments",
+    "input_examples": "Invite the development team to a new-feature briefing at 3:00 PM on Friday, April 25, and mention that a recording will be shared.",
+    "output_examples": "## Subject\n- New feature briefing on Friday, April 25\n\n## Body\n```chatcore-copy\nHi team,\n\nWe will hold a 30-minute briefing on the new feature at 3:00 PM on Friday, April 25. We will cover its overview, expected use cases, and release schedule.\n\nIf you cannot attend, we will share a recording afterward.\n\nThank you.\n```",
+    "display_order": 3
+  },
+  {
+    "system_task_key": "translation",
+    "system_task_revision": 1,
+    "name": "🌐 Translate",
+    "prompt_template": "Translate the input into the requested language, preserving meaning while producing natural phrasing. If no target language is specified, translate English into Japanese and other languages into English.",
+    "response_rules": "- Preserve nuance and intent\n- Avoid awkward literal translation\n- Keep specialist terms or proper nouns in the original where useful",
+    "output_skeleton": "## Translation\n- Translated text\n\n## Notes\n- Terminology choices or cautions",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 4
+  },
+  {
+    "system_task_key": "summarization",
+    "system_task_revision": 1,
+    "name": "📄 Summarize",
+    "prompt_template": "Summarize the input concisely without omitting important points. Use bullets or short quotations when helpful.",
+    "response_rules": "- Lead with the most important information\n- Separate facts from interpretation\n- Match the length to the information density",
+    "output_skeleton": "## Summary\n- Overall summary\n\n## Key points\n- Point 1\n- Point 2\n- Point 3\n\n## Notes\n- Assumptions or cautions",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 5
+  },
+  {
+    "system_task_key": "comparison",
+    "system_task_revision": 1,
+    "name": "🔄 Compare options",
+    "prompt_template": "Compare the provided options from multiple perspectives. Clearly state advantages, disadvantages, and decision criteria.",
+    "response_rules": "- Use explicit, fair comparison criteria\n- Include drawbacks and risks\n- Recommend an option when priorities make that possible",
+    "output_skeleton": "## Assumptions\n- Conditions and criteria\n\n## Comparison\n| Criterion | Option A | Option B |\n| :--- | :--- | :--- |\n|  |  |  |\n\n## Conclusion\n- Recommendation and rationale",
+    "input_examples": "Compare laptops A and B by price, weight, battery life, and suitability for software development.",
+    "output_examples": "## Comparison\n| Criterion | Option A | Option B |\n| :--- | :--- | :--- |\n| Price | $800 | $1,100 |\n| Weight | 1.1 kg | 1.4 kg |\n\n## Conclusion\n- Choose A for portability or B for heavier workloads.",
+    "display_order": 6
+  },
+  {
+    "system_task_key": "question_answering",
+    "system_task_revision": 1,
+    "name": "📋 Answer a question",
+    "prompt_template": "Answer the question clearly while organizing the relevant assumptions. Include only the reasoning or calculations needed to support the conclusion.",
+    "response_rules": "- State the answer first\n- Supply necessary assumptions and definitions\n- Keep supporting reasoning concise",
+    "output_skeleton": "## Answer\n- Conclusion\n\n## Reasoning\n- Assumptions\n- Explanation or calculation\n\n## Notes\n- Cautions or alternatives",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 7
+  },
+  {
+    "system_task_key": "proofreading",
+    "system_task_revision": 1,
+    "name": "✏️ Proofread and edit",
+    "prompt_template": "Correct spelling, grammar, and awkward phrasing while preserving the author's intent and voice. Explain material edits.",
+    "response_rules": "- Preserve the original tone and avoid unnecessary rewriting\n- Explain what changed and why\n- Offer alternatives when several phrasings are valid",
+    "output_skeleton": "## Revised text\n- Full text\n\n## Changes\n- Change 1 and reason\n- Change 2 and reason\n\n## Notes\n- Overall suggestions",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 8
+  },
+  {
+    "system_task_key": "reply_writing",
+    "system_task_revision": 1,
+    "name": "📨 Draft a reply",
+    "prompt_template": "Draft several natural replies appropriate to the sender and situation. Vary the tone where useful and put each ready-to-send reply in a ```chatcore-copy block.",
+    "response_rules": "- Prioritize natural, ready-to-send wording\n- Make differences in tone clear\n- Put each reply in its own ```chatcore-copy block\n- Briefly explain when to use each option",
+    "output_skeleton": "## Reply options\n### Formal\n```chatcore-copy\nReply\n```\n\n### Standard\n```chatcore-copy\nReply\n```\n\n### Casual\n```chatcore-copy\nReply\n```",
+    "input_examples": "Reply to a client asking to move today's meeting 30 minutes later.",
+    "output_examples": "## Reply options\n### Formal\n```chatcore-copy\nThank you for letting me know. Moving today's meeting back by 30 minutes works for me. I look forward to speaking with you then.\n```",
+    "display_order": 9
+  },
+  {
+    "system_task_key": "longform_writing",
+    "system_task_revision": 1,
+    "name": "📝 Write a document",
+    "prompt_template": "Write a well-structured document for the stated purpose and constraints, using an appropriate tone for a report, proposal, article, or other requested format.",
+    "response_rules": "- Use a tone suited to the purpose\n- Organize the content logically\n- State assumptions when requirements are incomplete",
+    "output_skeleton": "## Title\n- Suggested title\n\n## Draft\n### Introduction\n- Opening\n\n### Main section\n- Content\n\n### Conclusion\n- Closing\n\n## Notes\n- Possible adjustments",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 10
+  },
+  {
+    "system_task_key": "meeting_notes",
+    "system_task_revision": 1,
+    "name": "📊 Organize meeting notes",
+    "prompt_template": "Turn rough meeting notes into structured minutes. Clearly separate decisions, action items, discussion points, and unresolved questions.",
+    "response_rules": "- Extract decisions and action items first\n- Summarize discussion concisely\n- Include unresolved items",
+    "output_skeleton": "## Meeting overview\n- Date, attendees, topic\n\n## Decisions\n- Decision 1\n\n## Action items\n| Owner | Action | Due |\n| :--- | :--- | :--- |\n|  |  |  |\n\n## Open questions\n- Item",
+    "input_examples": "Meeting notes for a feature launching next month: Alex owns design revisions, Taylor drafts the announcement, and final review is due May 10.",
+    "output_examples": "## Action items\n| Owner | Action | Due |\n| :--- | :--- | :--- |\n| Alex | Revise design | May 7 |\n| Taylor | Draft announcement | May 8 |\n| Team | Final review | May 10 |",
+    "display_order": 11
+  },
+  {
+    "system_task_key": "personal_advice",
+    "system_task_revision": 1,
+    "name": "💬 Talk through a concern",
+    "prompt_template": "Help the user sort through their feelings without judgment, then offer realistic options and a small next step when appropriate.",
+    "response_rules": "- Acknowledge feelings first\n- Offer practical choices instead of only general advice\n- Avoid certainty or pressure",
+    "output_skeleton": "## What you are dealing with\n- Acknowledgment\n\n## Options\n- Option 1\n- Option 2\n\n## A small next step\n- Action",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 12
+  },
+  {
+    "system_task_key": "travel_planning",
+    "system_task_revision": 1,
+    "name": "✈️ Plan a trip",
+    "prompt_template": "Propose a trip plan that fits the constraints, including a day-by-day outline, sensible transportation, and packing or safety notes.",
+    "response_rules": "- Prefer realistic travel and rest times\n- Adjust the pace to the duration, budget, and purpose\n- State assumptions when details are missing",
+    "output_skeleton": "## Approach\n- Goal and assumptions\n\n## Itinerary\n### Day 1\n- Plan\n\n### Day 2\n- Plan\n\n## Transportation\n- Notes\n\n## Packing and cautions\n- Items and advice",
+    "input_examples": "",
+    "output_examples": "",
+    "display_order": 13
+  }
+]

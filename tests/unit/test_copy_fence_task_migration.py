@@ -11,7 +11,7 @@ MIGRATION_PATH = (
     / "versions"
     / "20260809_01_use_copy_fence_in_shipped_tasks.py"
 )
-TASKS_PATH = REPO_ROOT / "frontend" / "data" / "default_tasks.json"
+TASKS_PATH = REPO_ROOT / "frontend" / "data" / "default_tasks.v1.json"
 UPDATED_KEYS = {"email_writing", "reply_writing"}
 
 
@@ -47,7 +47,7 @@ class CopyFenceTaskMigrationTestCase(unittest.TestCase):
     # DB を配布時の本文へ合わせるためのマイグレーションなので、"updated" 側が
     # 現在同梱している JSON と一字一句同じでなければ意味がない。
     # The migration exists to bring the database in line with the shipped wording, so the
-    # "updated" side has to match the JSON that ships today, character for character.
+    # "updated" side has to match the frozen revision-1 JSON character for character.
     def test_updated_wording_matches_the_shipped_tasks(self):
         module = _load_migration_module()
         shipped = _shipped_tasks_by_key()

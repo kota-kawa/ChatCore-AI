@@ -67,6 +67,39 @@ test("tablet and desktop keep the two-column task layout", () => {
   );
 });
 
+test("task buttons do not cast a shadow in any visual state", () => {
+  const promptCardRule = setupCss.match(
+    /:where\(body\.chat-page, \.chat-page-shell\) \.prompt-card \{([^}]*)\}/,
+  );
+  const promptCardHoverRule = setupCss.match(
+    /:where\(body\.chat-page, \.chat-page-shell\) \.prompt-card:hover \{([^}]*)\}/,
+  );
+  const darkPromptCardRule = setupCss.match(
+    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.prompt-card \{([^}]*)\}/,
+  );
+  const darkPromptCardHoverRule = setupCss.match(
+    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.prompt-card:hover \{([^}]*)\}/,
+  );
+  const taskDetailToggleRule = setupCss.match(
+    /:where\(body\.chat-page, \.chat-page-shell\) \.task-detail-toggle \{([^}]*)\}/,
+  );
+  const darkTaskDetailToggleRule = setupCss.match(
+    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.task-detail-toggle \{([^}]*)\}/,
+  );
+
+  for (const rule of [
+    promptCardRule,
+    promptCardHoverRule,
+    darkPromptCardRule,
+    darkPromptCardHoverRule,
+    taskDetailToggleRule,
+    darkTaskDetailToggleRule,
+  ]) {
+    assert.ok(rule, "task button shadow rule must be present");
+    assert.match(rule[1] ?? "", /box-shadow:\s*none(?:\s*!important)?\s*;/);
+  }
+});
+
 test("phones collapse the task list to three cards to keep the setup screen on one viewport", () => {
   const mobileLimit = taskStateSource.match(/const MOBILE_TASK_COLLAPSE_LIMIT = (\d+);/);
 

@@ -12,7 +12,18 @@ DEFAULT_TASKS_JSON = (
 DEFAULT_TASKS_EN_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.en.json"
 )
-DEFAULT_TASK_CATALOGS = {"ja": DEFAULT_TASKS_JSON, "en": DEFAULT_TASKS_EN_JSON}
+DEFAULT_TASKS_V1_JSON = (
+    Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.v1.json"
+)
+DEFAULT_TASKS_V1_EN_JSON = (
+    Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.v1.en.json"
+)
+CURRENT_SYSTEM_TASK_REVISION = 2
+DEFAULT_TASK_CATALOG_PATHS = {
+    1: {"ja": DEFAULT_TASKS_V1_JSON, "en": DEFAULT_TASKS_V1_EN_JSON},
+    CURRENT_SYSTEM_TASK_REVISION: {"ja": DEFAULT_TASKS_JSON, "en": DEFAULT_TASKS_EN_JSON},
+}
+DEFAULT_TASK_CATALOGS = DEFAULT_TASK_CATALOG_PATHS[CURRENT_SYSTEM_TASK_REVISION]
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 DEFAULT_TASK_SEED_ADVISORY_LOCK_ID = 743_241_901
@@ -20,12 +31,18 @@ DEFAULT_TASK_SEED_ADVISORY_LOCK_ID = 743_241_901
 
 # JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
 # Load, cache, and normalize default task definitions from the JSON file.
-@lru_cache(maxsize=2)
-def load_default_tasks(locale: str = "ja") -> list[dict]:
+@lru_cache(maxsize=4)
+def load_default_tasks(
+    locale: str = "ja",
+    revision: int = CURRENT_SYSTEM_TASK_REVISION,
+) -> list[dict]:
     # JSON からデフォルトタスクを読み込み、型とキーを正規化する
     # Load default tasks from JSON and normalize schema/types.
     normalized_locale = str(locale or "ja").lower().replace("_", "-").split("-", 1)[0]
-    catalog_path = DEFAULT_TASK_CATALOGS.get(normalized_locale, DEFAULT_TASKS_JSON)
+    revision_catalogs = DEFAULT_TASK_CATALOG_PATHS.get(revision)
+    if revision_catalogs is None:
+        raise ValueError(f"Unknown system task revision: {revision}")
+    catalog_path = revision_catalogs.get(normalized_locale, revision_catalogs["ja"])
     with catalog_path.open(encoding="utf-8") as fp:
         tasks = json.load(fp)
 
@@ -40,6 +57,7 @@ def load_default_tasks(locale: str = "ja") -> list[dict]:
         normalized.append(
             {
                 "system_task_key": str(task.get("system_task_key") or f"legacy:{index}"),
+                "system_task_revision": int(task.get("system_task_revision", revision)),
                 "name": str(task["name"]),
                 "prompt_template": str(task["prompt_template"]),
                 "response_rules": str(task.get("response_rules", "")),
@@ -74,12 +92,15 @@ def default_task_payloads(locale: str = "ja") -> list[dict]:
     return payloads
 
 
-@lru_cache(maxsize=2)
-def default_tasks_by_key(locale: str = "ja") -> dict[str, dict[str, Any]]:
+@lru_cache(maxsize=4)
+def default_tasks_by_key(
+    locale: str = "ja",
+    revision: int = CURRENT_SYSTEM_TASK_REVISION,
+) -> dict[str, dict[str, Any]]:
     """Return the localized system task catalog indexed by its stable key."""
     return {
         str(task["system_task_key"]): task
-        for task in load_default_tasks(locale)
+        for task in load_default_tasks(locale, revision)
         if task.get("system_task_key")
     }
 
@@ -90,13 +111,14 @@ def resolve_system_task_key(identifier: Any) -> str | None:
     if not normalized:
         return None
 
-    for locale in DEFAULT_TASK_CATALOGS:
-        catalog = default_tasks_by_key(locale)
-        if normalized in catalog:
-            return normalized
-        for system_task_key, task in catalog.items():
-            if normalized == task["name"]:
-                return system_task_key
+    for revision in DEFAULT_TASK_CATALOG_PATHS:
+        for locale in DEFAULT_TASK_CATALOGS:
+            catalog = default_tasks_by_key(locale, revision)
+            if normalized in catalog:
+                return normalized
+            for system_task_key, task in catalog.items():
+                if normalized == task["name"]:
+                    return system_task_key
     return None
 
 
@@ -109,7 +131,18 @@ def localize_system_task(
         return dict(task)
 
     system_task_key = str(task.get("system_task_key") or "").strip()
-    localized = default_tasks_by_key(locale).get(system_task_key)
+    try:
+        revision = int(
+            task.get("system_task_revision") or CURRENT_SYSTEM_TASK_REVISION
+        )
+    except (TypeError, ValueError):
+        return dict(task)
+
+    revision_catalogs = DEFAULT_TASK_CATALOG_PATHS.get(revision)
+    if revision_catalogs is None:
+        return dict(task)
+
+    localized = default_tasks_by_key(locale, revision).get(system_task_key)
     if localized is None:
         return dict(task)
 
@@ -124,6 +157,7 @@ def localize_system_task(
     ):
         result[field] = localized[field]
     result["system_task_key"] = system_task_key
+    result["system_task_revision"] = revision
     return result
 
 
@@ -143,7 +177,15 @@ def default_task_rows(locale: str = "ja", *, include_key: bool = False) -> list[
                 task["output_examples"],
                 task["display_order"],
         )
-        rows.append((task.get("system_task_key"), *row) if include_key else row)
+        rows.append(
+            (
+                task.get("system_task_key"),
+                task.get("system_task_revision", CURRENT_SYSTEM_TASK_REVISION),
+                *row,
+            )
+            if include_key
+            else row
+        )
     return rows
 
 
@@ -205,6 +247,7 @@ def ensure_default_tasks_seeded() -> int:
                 inserted = 0
                 for (
                     system_task_key,
+                    system_task_revision,
                     name,
                     template,
                     response_rules,
@@ -228,6 +271,7 @@ def ensure_default_tasks_seeded() -> int:
                               (
                                   user_id,
                                   system_task_key,
+                                  system_task_revision,
                                   name,
                                   prompt_template,
                                   response_rules,
@@ -236,11 +280,12 @@ def ensure_default_tasks_seeded() -> int:
                                   output_examples,
                                   display_order
                               )
-                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT DO NOTHING
                         """,
                         (
                             system_task_key,
+                            system_task_revision,
                             name,
                             template,
                             response_rules,

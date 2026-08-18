@@ -92,7 +92,7 @@ python3 -m pip install -r requirements.txt
 alembic upgrade head
 ```
 
-- Default task definitions are centralized in `frontend/data/default_tasks.json` and seeded on startup.
+- Current default task definitions are centralized in `frontend/data/default_tasks.json` and seeded on startup; frozen revision catalogs preserve existing users' localized tasks.
 - `alembic/versions/` contains incremental migration history.
 - `db/performance_indexes.sql` is kept as a direct SQL fallback for index-only updates.
 - API schema single source: backend Pydantic models (`services/request_models.py`, `services/response_models.py`) are converted into frontend Zod schemas at `frontend/types/generated/api_schemas.ts` via `python3 scripts/generate_frontend_zod_schemas.py` (or `npm --prefix frontend run generate:api-schemas`).
@@ -282,7 +282,7 @@ python3 -m pip install -r requirements.txt
 alembic upgrade head
 ```
 
-- 既定タスク定義は `frontend/data/default_tasks.json` を単一ソースとして起動時に投入
+- 現行の既定タスク定義は `frontend/data/default_tasks.json` を単一ソースとして起動時に投入し、既存ユーザー向けのローカライズは凍結した旧版カタログで維持
 - `alembic/versions/`: 段階的な変更履歴
 - `db/performance_indexes.sql`: インデックスのみを直接適用するフォールバックSQL
 - APIスキーマの単一ソース: バックエンドPydantic（`services/request_models.py`, `services/response_models.py`）を `python3 scripts/generate_frontend_zod_schemas.py`（または `npm --prefix frontend run generate:api-schemas`）でフロントエンドZod（`frontend/types/generated/api_schemas.ts`）へ生成
