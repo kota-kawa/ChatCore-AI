@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   appendStoredHistory,
   clearStoredGenerationState,
+  removeStoredHistory,
   readStoredActiveChatRoom,
   readActiveStoredGenerationState,
   readRestorableHomePageViewState,
@@ -14,12 +15,14 @@ import {
   writeStoredGenerationState,
   writeStoredHistory,
 } from "../lib/chat_page/storage";
+import { __test__ as historyCacheTestConstants } from "../lib/chat_page/history_cache";
 import type { StoredHistoryEntry } from "../lib/chat_page/types";
 import { STORAGE_KEYS } from "../scripts/core/constants";
 
 class FakeLocalStorage implements Storage {
   private readonly values = new Map<string, string>();
   quotaLimit: number | null = null;
+  totalQuotaLimit: number | null = null;
   alwaysThrow = false;
 
   get length() {
@@ -43,10 +46,22 @@ class FakeLocalStorage implements Storage {
   }
 
   setItem(key: string, value: string) {
-    if (this.alwaysThrow || (this.quotaLimit !== null && value.length > this.quotaLimit)) {
+    const totalLength = Array.from(this.values.entries()).reduce(
+      (total, [storedKey, storedValue]) => total + (storedKey === key ? 0 : storedValue.length),
+      value.length,
+    );
+    if (
+      this.alwaysThrow
+      || (this.quotaLimit !== null && value.length > this.quotaLimit)
+      || (this.totalQuotaLimit !== null && totalLength > this.totalQuotaLimit)
+    ) {
       throw new DOMException("Storage quota exceeded", "QuotaExceededError");
     }
     this.values.set(key, value);
+  }
+
+  get totalLength() {
+    return Array.from(this.values.values()).reduce((total, value) => total + value.length, 0);
   }
 }
 
@@ -92,6 +107,54 @@ test("writeStoredHistory reports quota truncation and keeps newest messages", ()
   assert.equal(result.droppedEntries, entries.length - retained.length);
   assert.ok(retained.length < entries.length);
   assert.equal(retained[retained.length - 1]?.text, "message-7");
+});
+
+test("writeStoredHistory silently bounds an oversized room cache", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  const entries: StoredHistoryEntry[] = Array.from({ length: 12 }, (_, index) => ({
+    text: `${index}-${"x".repeat(60_000)}`,
+    sender: index % 2 === 0 ? "user" : "bot",
+  }));
+
+  const result = writeStoredHistory("room-large", entries);
+  const retained = readStoredHistory("room-large");
+
+  assert.equal(result.stored, true);
+  assert.equal(result.truncated, true);
+  assert.equal(result.reason, "cache_limit");
+  assert.ok(storage.getItem("chatHistory_room-large")!.length * 2 <= historyCacheTestConstants.MAX_HISTORY_ROOM_BYTES);
+  assert.equal(retained.at(-1)?.text, entries.at(-1)?.text);
+});
+
+test("writeStoredHistory evicts the oldest rooms beyond the cache count", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  for (let index = 0; index <= historyCacheTestConstants.MAX_CACHED_HISTORY_ROOMS; index += 1) {
+    writeStoredHistory(`room-${index}`, [{ text: `message-${index}`, sender: "user" }]);
+  }
+
+  assert.equal(storage.getItem("chatHistory_room-0"), null);
+  assert.notEqual(
+    storage.getItem(`chatHistory_room-${historyCacheTestConstants.MAX_CACHED_HISTORY_ROOMS}`),
+    null,
+  );
+});
+
+test("writeStoredHistory evicts another room before truncating on total quota", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  writeStoredHistory("room-old", [{ text: "x".repeat(2_000), sender: "user" }]);
+  storage.setItem("unrelated-cache", "y".repeat(2_000));
+  storage.totalQuotaLimit = storage.totalLength;
+
+  const result = writeStoredHistory("room-new", [{ text: "latest", sender: "user" }]);
+
+  assert.equal(result.stored, true);
+  assert.equal(result.truncated, false);
+  assert.equal(storage.getItem("chatHistory_room-old"), null);
+  assert.notEqual(storage.getItem("chatHistory_room-new"), null);
 });
 
 test("appendStoredHistory reports an unpersisted quota failure", () => {
@@ -144,6 +207,25 @@ test("clearing stored generation state removes active generation pointer", () =>
   clearStoredGenerationState("room-clear");
 
   assert.equal(readStoredGenerationState("room-clear"), null);
+  assert.equal(readActiveStoredGenerationState(), null);
+});
+
+test("removing stored history clears the room history and generation state", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  writeStoredHistory("room-delete", [{ text: "cached", sender: "user" }]);
+  writeStoredGenerationState({
+    roomId: "room-delete",
+    roomMode: "normal",
+    lastEventId: 3,
+    streamedText: "partial",
+    updatedAt: Date.now(),
+  });
+
+  removeStoredHistory("room-delete");
+
+  assert.equal(storage.getItem("chatHistory_room-delete"), null);
+  assert.equal(readStoredGenerationState("room-delete"), null);
   assert.equal(readActiveStoredGenerationState(), null);
 });
 
