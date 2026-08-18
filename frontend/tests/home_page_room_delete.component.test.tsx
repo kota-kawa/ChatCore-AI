@@ -40,6 +40,7 @@ function useRoomDeleteHarness(initialRooms: ChatRoom[], openRoomId: string | nul
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
   const currentRoomIdRef = useRef<string | null>(openRoomId);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(openRoomId);
+  const removeStoredHistoryRef = useRef(vi.fn());
 
   const persistCurrentRoomId = useCallback((roomId: string | null) => {
     currentRoomIdRef.current = roomId;
@@ -69,6 +70,7 @@ function useRoomDeleteHarness(initialRooms: ChatRoom[], openRoomId: string | nul
     attachedFiles: [],
     taskLaunchInProgressRef: { current: false },
     pendingProjectIdRef: { current: null },
+    removeStoredHistory: removeStoredHistoryRef.current,
   } as unknown as RoomActionsParams;
 
   const actions = useHomePageRoomActions({
@@ -104,6 +106,7 @@ function useRoomDeleteHarness(initialRooms: ChatRoom[], openRoomId: string | nul
     chatRooms,
     currentRoomId,
     pageViewState,
+    removeStoredHistory: removeStoredHistoryRef.current,
     selectRooms: setSelectedRoomIds,
     ...actions,
   };
@@ -125,6 +128,7 @@ describe("チャットルーム削除後の画面遷移 / view state after delet
     expect(result.current.pageViewState).toBe("setup");
     expect(result.current.currentRoomId).toBeNull();
     expect(result.current.chatRooms.map((room) => room.id)).toEqual(["b"]);
+    expect(result.current.removeStoredHistory).toHaveBeenCalledWith("a");
   });
 
   it("開いていないルームを削除したときはチャット画面に留まる", async () => {
@@ -137,6 +141,7 @@ describe("チャットルーム削除後の画面遷移 / view state after delet
     expect(result.current.pageViewState).toBe("chat");
     expect(result.current.currentRoomId).toBe("a");
     expect(result.current.chatRooms.map((room) => room.id)).toEqual(["a"]);
+    expect(result.current.removeStoredHistory).toHaveBeenCalledWith("b");
   });
 
   it("一括削除に開いているルームが含まれる場合もトップページへ戻る", async () => {
@@ -153,6 +158,9 @@ describe("チャットルーム削除後の画面遷移 / view state after delet
     expect(result.current.pageViewState).toBe("setup");
     expect(result.current.currentRoomId).toBeNull();
     expect(result.current.chatRooms).toEqual([]);
+    expect(result.current.removeStoredHistory).toHaveBeenCalledTimes(2);
+    expect(result.current.removeStoredHistory).toHaveBeenCalledWith("a");
+    expect(result.current.removeStoredHistory).toHaveBeenCalledWith("b");
   });
 
   it("削除に失敗したときはチャット画面のまま復元する", async () => {
@@ -166,5 +174,6 @@ describe("チャットルーム削除後の画面遷移 / view state after delet
     expect(result.current.pageViewState).toBe("chat");
     expect(result.current.currentRoomId).toBe("a");
     expect(result.current.chatRooms.map((room) => room.id)).toEqual(["a", "b"]);
+    expect(result.current.removeStoredHistory).not.toHaveBeenCalled();
   });
 });

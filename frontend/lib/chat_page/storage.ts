@@ -1,5 +1,11 @@
 import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
+import {
+  readCachedHistory,
+  removeCachedHistory,
+  writeCachedHistory,
+  type HistoryCacheWriteResult,
+} from "./history_cache";
 import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
 
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
@@ -12,23 +18,8 @@ export type StoredActiveChatRoom = {
   roomMode: ChatRoomMode;
 };
 
-function getStoredHistoryKey(roomId: string) {
-  return `chatHistory_${roomId}`;
-}
-
 function getStoredGenerationKey(roomId: string) {
   return `chatGeneration_${roomId}`;
-}
-
-function isQuotaExceededError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-
-  const { name, code } = error as { name?: unknown; code?: unknown };
-  return name === "QuotaExceededError" || code === 22 || code === 1014;
-}
-
-function persistStoredHistory(key: string, entries: StoredHistoryEntry[]) {
-  localStorage.setItem(key, JSON.stringify(entries));
 }
 
 function normalizeStoredRoomMode(rawMode: unknown): ChatRoomMode {
@@ -113,39 +104,11 @@ export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomM
   }
 }
 
-export type StoredHistoryWriteResult = {
-  stored: boolean;
-  truncated: boolean;
-  retainedEntries: number;
-  droppedEntries: number;
-  reason?: "quota_exceeded" | "storage_error";
-};
-
-function storedHistoryWriteSuccess(entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
-  return {
-    stored: true,
-    truncated: false,
-    retainedEntries: entries.length,
-    droppedEntries: 0,
-  };
-}
-
-function storedHistoryWriteFailure(
-  entries: StoredHistoryEntry[],
-  reason: StoredHistoryWriteResult["reason"],
-): StoredHistoryWriteResult {
-  return {
-    stored: false,
-    truncated: false,
-    retainedEntries: 0,
-    droppedEntries: entries.length,
-    reason,
-  };
-}
+export type StoredHistoryWriteResult = HistoryCacheWriteResult;
 
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
-    const raw = localStorage.getItem(getStoredHistoryKey(roomId));
+    const raw = readCachedHistory(roomId);
     const parsed = raw ? parseJsonText(raw) : [];
     if (!Array.isArray(parsed)) return [];
 
@@ -167,42 +130,7 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
 }
 
 export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
-  const storageKey = getStoredHistoryKey(roomId);
-  try {
-    persistStoredHistory(storageKey, entries);
-    return storedHistoryWriteSuccess(entries);
-  } catch (error) {
-    if (!isQuotaExceededError(error) || entries.length <= 1) {
-      return storedHistoryWriteFailure(entries, isQuotaExceededError(error) ? "quota_exceeded" : "storage_error");
-    }
-
-    // Preserve the newest messages when storage is near quota.
-    let retainedEntries = entries;
-    while (retainedEntries.length > 1) {
-      const nextLength = Math.max(1, Math.floor(retainedEntries.length * 0.75));
-      retainedEntries =
-        nextLength === retainedEntries.length
-          ? retainedEntries.slice(1)
-          : retainedEntries.slice(retainedEntries.length - nextLength);
-
-      try {
-        persistStoredHistory(storageKey, retainedEntries);
-        return {
-          stored: true,
-          truncated: true,
-          retainedEntries: retainedEntries.length,
-          droppedEntries: entries.length - retainedEntries.length,
-          reason: "quota_exceeded",
-        };
-      } catch (retryError) {
-        if (!isQuotaExceededError(retryError)) {
-          return storedHistoryWriteFailure(entries, "storage_error");
-        }
-      }
-    }
-  }
-
-  return storedHistoryWriteFailure(entries, "quota_exceeded");
+  return writeCachedHistory(roomId, entries);
 }
 
 export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry): StoredHistoryWriteResult {
@@ -230,11 +158,8 @@ export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry
 }
 
 export function removeStoredHistory(roomId: string) {
-  try {
-    localStorage.removeItem(getStoredHistoryKey(roomId));
-  } catch {
-    // ignore localStorage failures
-  }
+  removeCachedHistory(roomId);
+  clearStoredGenerationState(roomId);
 }
 
 function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | null {

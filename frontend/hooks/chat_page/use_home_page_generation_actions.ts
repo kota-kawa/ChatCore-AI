@@ -376,6 +376,7 @@ export function useHomePageGenerationActions({
 
   const notifyStoredHistoryWriteIssue = useCallback((result: StoredHistoryWriteResult) => {
     if (result.stored && !result.truncated) return;
+    if (result.stored && result.reason === "cache_limit") return;
     if (localStorageWarningShownRef.current) return;
 
     localStorageWarningShownRef.current = true;

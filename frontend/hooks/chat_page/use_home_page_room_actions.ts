@@ -875,6 +875,7 @@ export function useHomePageRoomActions({
         if (roomId === currentRoomIdRef.current) {
           clearCurrentRoomAfterDelete();
         }
+        removeStoredHistory(roomId);
         forgetRoomReferenceToggles(roomId);
 
         void mutateChatRooms();
@@ -899,6 +900,7 @@ export function useHomePageRoomActions({
       currentRoomIdRef,
       forgetRoomReferenceToggles,
       mutateChatRooms,
+      removeStoredHistory,
       setChatRooms,
       setOpenRoomActionsFor,
     ],
@@ -941,7 +943,10 @@ export function useHomePageRoomActions({
       if (currentRoomIdRef.current && selectedRoomIds.has(currentRoomIdRef.current)) {
         clearCurrentRoomAfterDelete();
       }
-      roomIds.forEach(forgetRoomReferenceToggles);
+      roomIds.forEach((roomId) => {
+        removeStoredHistory(roomId);
+        forgetRoomReferenceToggles(roomId);
+      });
 
       cancelRoomSelection();
       void mutateChatRooms();
@@ -969,6 +974,7 @@ export function useHomePageRoomActions({
     currentRoomIdRef,
     forgetRoomReferenceToggles,
     mutateChatRooms,
+    removeStoredHistory,
     selectedRoomIds,
     setChatRooms,
     setIsBulkDeletingRooms,
