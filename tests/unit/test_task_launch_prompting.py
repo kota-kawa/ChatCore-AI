@@ -84,13 +84,9 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # 日本語: 短い追質問を直前の会話への異議・補足として解釈する規則を検証します。
     # English: Verify short follow-ups inherit context and can challenge the previous answer.
     def test_base_system_prompt_preserves_follow_up_context(self):
-        self.assertIn("## Conversation continuity and follow-up questions", BASE_SYSTEM_PROMPT)
-        self.assertIn("continuation of the current conversation by default", BASE_SYSTEM_PROMPT)
-        self.assertIn("silently reconstruct an incomplete follow-up", BASE_SYSTEM_PROMPT)
-        self.assertIn("challenges, qualifies, or corrects the previous answer", BASE_SYSTEM_PROMPT)
-        self.assertIn("request to reassess that answer", BASE_SYSTEM_PROMPT)
-        self.assertIn("instead of restarting with a generic standalone explanation", BASE_SYSTEM_PROMPT)
-        self.assertIn("multiple plausible interpretations would materially change", BASE_SYSTEM_PROMPT)
+        self.assertIn("## Conversation continuity", BASE_SYSTEM_PROMPT)
+        self.assertIn("resolve omitted subjects and comparison targets", BASE_SYSTEM_PROMPT)
+        self.assertIn("reassess it and address that point", BASE_SYSTEM_PROMPT)
 
     # 日本語: 判断を求める回答の冒頭と末尾で、同じ明確な結論を必須としていることを検証します。
     # English: Verify judgments require the same clear verdict at both the opening and closing.
