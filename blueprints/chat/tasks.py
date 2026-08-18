@@ -22,7 +22,6 @@ from services.api_errors import (
 )
 from services.async_utils import run_blocking
 from services.agent_capabilities import build_capability_context
-from services.cache import cache_get_json, cache_set_json
 from services.db import Error, get_db_connection
 from services.default_tasks import (
     default_task_payloads,
@@ -83,12 +82,6 @@ from . import chat_bp, get_session_id
 
 logger = logging.getLogger(__name__)
 
-# ゲスト共通のデフォルトタスク一覧キャッシュキーとTTL（秒）。
-# 全ゲストで共有され、変更は管理者操作/シードのみのため短いTTLでDB読み取りを肩代わりさせる。
-# Cache key/TTL (seconds) for the shared guest default-task list. It is identical for every
-# guest and only changes via admin edits/seeding, so a short TTL safely offloads DB reads.
-GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v3"
-GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS = 30
 TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307  # "TASK"
 UNIQUE_VIOLATION_PGCODE = "23505"
 
@@ -381,17 +374,16 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
 # Fetch the list of tasks from the database (user-specific when authenticated, generic otherwise).
 def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[str, Any]]:
     """
-    DBからタスク定義の一覧を取得します。ログインユーザーならその個別定義、ゲストならuser_id IS NULLのデフォルト定義を取得します。
-    Fetches the list of task descriptions from the DB, scoped by user ownership.
+    ログインユーザーはDBの個別定義、ゲストは同梱された最新の公式定義を取得します。
+    Fetch user-owned tasks from the DB or the current bundled catalog for guests.
     """
-    # ログイン時はユーザー個別タスク、未ログイン時は共通タスクを取得する
-    # Fetch user-specific tasks when logged in, otherwise shared default tasks.
-    # ゲスト共通のデフォルトタスクは全員同一なので、まずキャッシュを参照してDB負荷を下げる。
-    # The shared guest default-task list is identical for everyone, so check the cache first.
+    # ゲストには現在の公式カタログだけを返す。共有DBに残る旧行や重複行を表示しない。
+    # Guests receive only the current bundled catalog, excluding stale or duplicate shared rows.
     if not user_id:
-        cached = cache_get_json(f"{GUEST_DEFAULT_TASKS_CACHE_KEY}:{locale}")
-        if isinstance(cached, list):
-            return cached
+        tasks = default_task_payloads(locale)
+        for task in tasks:
+            task["task_id"] = None
+        return tasks
 
     conn = None
     cursor = None
@@ -399,13 +391,13 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        if user_id:
-            # ログインユーザーのタスク一覧を取得
-            # Query custom tasks for authenticated user sorted by display order
-            cursor.execute(
-                """
+        # ログインユーザーのタスク一覧を取得
+        # Query custom tasks for authenticated user sorted by display order
+        cursor.execute(
+            """
               SELECT id AS task_id,
                      system_task_key,
+                     system_task_revision,
                      is_system_task_customized,
                      name,
                      prompt_template,
@@ -420,41 +412,11 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
                ORDER BY COALESCE(display_order, 99999),
                          id
             """,
-                (user_id,),
-            )
-        else:
-            # ゲストユーザー用のグローバルデフォルトタスク一覧を取得
-            # Query shared system tasks
-            cursor.execute(
-                """
-              SELECT id AS task_id,
-                     system_task_key,
-                     is_system_task_customized,
-                     name,
-                     prompt_template,
-                     response_rules,
-                     output_skeleton,
-                     input_examples,
-                     output_examples,
-                     TRUE AS is_default
-                FROM task_with_examples
-               WHERE user_id IS NULL
-                 AND deleted_at IS NULL
-               ORDER BY COALESCE(display_order, 99999), id
-            """
-            )
+            (user_id,),
+        )
 
         rows = cursor.fetchall()
-        # RealDictRow を素の dict に正規化し、ゲスト共通分のみキャッシュへ書き込む。
-        # Normalize RealDictRow to plain dicts and cache only the shared guest list.
-        tasks = [localize_system_task(dict(row), locale) for row in rows]
-        if not user_id:
-            cache_set_json(
-                f"{GUEST_DEFAULT_TASKS_CACHE_KEY}:{locale}",
-                tasks,
-                GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS,
-            )
-        return tasks
+        return [localize_system_task(dict(row), locale) for row in rows]
     finally:
         if cursor is not None:
             cursor.close()
