@@ -1931,6 +1931,8 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         content = message["content"]
         self.assertIn('kind="prior"', content)
         self.assertIn("already run in earlier turns of this conversation", content)
+        self.assertIn("refers to it implicitly through a short follow-up", content)
+        self.assertIn("objection, comparison, correction, or omitted subject", content)
         self.assertIn("https://example.com/python", content)
         self.assertIn("<prior_search", content)
         self.assertIn("full-width citation brackets such as 【src_...】", content)
