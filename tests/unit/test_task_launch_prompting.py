@@ -81,6 +81,13 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("explain the resulting understanding in your own words", BASE_SYSTEM_PROMPT)
         self.assertIn("Synthesize the evidence with reasoning", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 短い追質問を直前の会話への異議・補足として解釈する規則を検証します。
+    # English: Verify short follow-ups inherit context and can challenge the previous answer.
+    def test_base_system_prompt_preserves_follow_up_context(self):
+        self.assertIn("## Conversation continuity", BASE_SYSTEM_PROMPT)
+        self.assertIn("resolve omitted subjects and comparison targets", BASE_SYSTEM_PROMPT)
+        self.assertIn("reassess it and address that point", BASE_SYSTEM_PROMPT)
+
     # 日本語: 判断を求める回答の冒頭と末尾で、同じ明確な結論を必須としていることを検証します。
     # English: Verify judgments require the same clear verdict at both the opening and closing.
     def test_base_system_prompt_requires_decisive_opening_and_closing(self):

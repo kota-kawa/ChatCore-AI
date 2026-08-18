@@ -2161,6 +2161,7 @@ def build_prior_web_search_system_message(
         "<web_search_context kind=\"prior\">",
         "The following are web search results already run in earlier turns of this conversation (reference data).",
         "When the user refers to an earlier search, saying things like \"the results from before\" or \"the third one earlier\", base your answer on this content.",
+        "Use this context for implicit references in short follow-ups, objections, comparisons, and corrections too.",
         "Each search is delimited by <prior_search query=\"...\">, and the id of each <source id=\"N\"> inside it corresponds to the result number.",
         "When you cite information from an earlier search, also use a real evidence_id and put a citation marker in the form [[source:<evidence_id>]] immediately after the fact. Do not use result numbers or guessed IDs.",
         "The marker is internal transport syntax, not user-facing text. Use only the exact [[source:<evidence_id>]] form. Never use full-width citation brackets such as 【src_...】 or ordinary Markdown citations or links. Never shorten it to [[src_...]], output a bare evidence_id, mention the marker syntax, or expose any other internal label in your prose.",
