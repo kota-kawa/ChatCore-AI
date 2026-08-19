@@ -71,10 +71,18 @@ export type InteractiveButtonsV1 = {
   options?: string[];
 };
 
+export type WebSearchImageV1 = {
+  url: string;
+  alt: string;
+  sourceUrl: string;
+  sourceTitle?: string;
+};
+
 export type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
-  | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 };
+  | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 }
+  | { type: "web_search_image"; image: WebSearchImageV1 };
 
 export type AttachedFile = {
   id: string;

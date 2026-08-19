@@ -180,7 +180,16 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                             "blueprints.chat.messages.get_llm_response",
                                             return_value="最新ニュースです。",
                                         ) as mock_llm:
-                                            response = asyncio.run(chat(request))
+                                            with patch(
+                                                "services.chat_use_case.choose_web_search_image",
+                                                return_value={
+                                                    "url": "https://cdn.example.com/news.jpg",
+                                                    "alt": "ニュースの関連画像",
+                                                    "source_url": "https://example.com/openai-news",
+                                                    "source_title": "OpenAI News",
+                                                },
+                                            ) as mock_image:
+                                                response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
@@ -198,8 +207,12 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             payload["response"],
         )
         self.assertIn("https://example.com/openai-news", payload["response"])
+        self.assertEqual(payload["parts"][0]["type"], "text")
+        self.assertEqual(payload["parts"][1]["type"], "web_search_image")
+        self.assertEqual(payload["parts"][1]["image"]["url"], "https://cdn.example.com/news.jpg")
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
+        mock_image.assert_called_once()
 
     # 日本語: プロンプト管理APIにおける日付オブジェクトが、ISO-8601形式（YYYY-MM-DDTHH:MM:SS）で一貫してシリアライズされることを検証します。
     # English: Verify that datetime objects in prompt management API payloads are consistently serialized to ISO-8601 format.

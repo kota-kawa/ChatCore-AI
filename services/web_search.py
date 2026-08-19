@@ -36,6 +36,7 @@ from services.url_fetcher import (
     canonicalize_url,
     fetch_url_document,
 )
+from services.web_search_images import WebSearchImageCandidate
 
 # ロガーの設定
 # Configure logger
@@ -213,6 +214,9 @@ class WebSearchSource:
     # Search-result pages are depth 0; followed pages are depth 1-3.
     link_depth: int = 0
     linked_from_url: str = ""
+    # 取得ページから抽出した画像候補。表示するか・どれを使うかは回答前にLLMが決める。
+    # Image candidates extracted from the fetched page; the LLM decides whether and which to show.
+    image_candidates: tuple[WebSearchImageCandidate, ...] = ()
 
     def __post_init__(self) -> None:
         expected_evidence_id = build_web_search_evidence_id(self.url)
@@ -1452,7 +1456,22 @@ def enrich_sources_with_page_content(
                 max_chars=max_chars,
             )
             if page_text:
-                updated_sources.append(replace(source, page_text=page_text))
+                image_candidates = tuple(
+                    WebSearchImageCandidate(
+                        url=image.url,
+                        alt=image.alt,
+                        title=image.title,
+                        kind=image.kind,
+                    )
+                    for image in document.images
+                )
+                updated_sources.append(
+                    replace(
+                        source,
+                        page_text=page_text,
+                        image_candidates=image_candidates,
+                    )
+                )
                 current_documents.append((document, 0, source.title))
                 changed = True
                 continue
@@ -1574,6 +1593,15 @@ def enrich_sources_with_page_content(
                         page_text=page_text,
                         link_depth=candidate.depth,
                         linked_from_url=candidate.parent_url,
+                        image_candidates=tuple(
+                            WebSearchImageCandidate(
+                                url=image.url,
+                                alt=image.alt,
+                                title=image.title,
+                                kind=image.kind,
+                            )
+                            for image in document.images
+                        ),
                     )
                 )
             else:
@@ -1583,6 +1611,15 @@ def enrich_sources_with_page_content(
                     page_text=page_text,
                     link_depth=candidate.depth,
                     linked_from_url=candidate.parent_url,
+                    image_candidates=tuple(
+                        WebSearchImageCandidate(
+                            url=image.url,
+                            alt=image.alt,
+                            title=image.title,
+                            kind=image.kind,
+                        )
+                        for image in document.images
+                    ),
                 )
             next_documents.append((document, candidate.depth, title))
 
@@ -1695,8 +1732,15 @@ def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResul
             existing_index = source_indexes.get(url)
             if existing_index is not None:
                 existing = combined_sources[existing_index]
-                if source.page_text and not existing.page_text:
-                    combined_sources[existing_index] = source
+                if (
+                    (source.page_text and not existing.page_text)
+                    or (source.image_candidates and not existing.image_candidates)
+                ):
+                    combined_sources[existing_index] = replace(
+                        existing,
+                        page_text=source.page_text or existing.page_text,
+                        image_candidates=source.image_candidates or existing.image_candidates,
+                    )
                 continue
             source_indexes[url] = len(combined_sources)
             combined_sources.append(source)
@@ -2026,6 +2070,15 @@ def serialize_web_search_result(result: WebSearchResult) -> dict[str, Any]:
                 "evidence_id": source.evidence_id,
                 "link_depth": source.link_depth,
                 "linked_from_url": source.linked_from_url,
+                "image_candidates": [
+                    {
+                        "url": candidate.url,
+                        "alt": candidate.alt,
+                        "title": candidate.title,
+                        "kind": candidate.kind,
+                    }
+                    for candidate in source.image_candidates
+                ],
             }
             for source in result.sources
         ],
@@ -2064,6 +2117,17 @@ def deserialize_web_search_result(data: Any) -> WebSearchResult | None:
             for item in (raw_snippets if isinstance(raw_snippets, list) else [])
             if item
         )
+        raw_images = raw.get("image_candidates")
+        image_candidates = tuple(
+            WebSearchImageCandidate(
+                url=str(item.get("url") or ""),
+                alt=str(item.get("alt") or ""),
+                title=str(item.get("title") or ""),
+                kind=str(item.get("kind") or "image"),
+            )
+            for item in (raw_images if isinstance(raw_images, list) else [])
+            if isinstance(item, dict) and item.get("url")
+        )
         sources.append(
             WebSearchSource(
                 url=url,
@@ -2076,6 +2140,7 @@ def deserialize_web_search_result(data: Any) -> WebSearchResult | None:
                 evidence_id=str(raw.get("evidence_id") or ""),
                 link_depth=_coerce_link_depth(raw.get("link_depth")),
                 linked_from_url=str(raw.get("linked_from_url") or ""),
+                image_candidates=image_candidates,
             )
         )
     if not sources:

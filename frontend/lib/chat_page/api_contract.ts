@@ -9,6 +9,7 @@ import type {
   ChatRoomsPagination,
   GenerativeUiArtifactV1,
   InteractiveButtonsV1,
+  WebSearchImageV1,
   GenerationStatusPayload,
 } from "./types";
 
@@ -88,6 +89,28 @@ function normalizeInteractiveButtons(rawButtons: unknown): InteractiveButtonsV1 
   };
 }
 
+function normalizeWebSearchImage(rawImage: unknown): WebSearchImageV1 | undefined {
+  const record = asRecord(rawImage);
+  const url = optionalString(record.url);
+  const alt = optionalString(record.alt);
+  const sourceUrl = optionalString(record.source_url);
+  if (!url || !alt || !sourceUrl) return undefined;
+  try {
+    const imageUrl = new URL(url);
+    const pageUrl = new URL(sourceUrl);
+    if (!/^https?:$/.test(imageUrl.protocol) || !/^https?:$/.test(pageUrl.protocol)) return undefined;
+  } catch {
+    return undefined;
+  }
+  const sourceTitle = optionalString(record.source_title);
+  return {
+    url,
+    alt,
+    sourceUrl,
+    ...(sourceTitle ? { sourceTitle } : {}),
+  };
+}
+
 function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined {
   if (!Array.isArray(rawParts)) return undefined;
   const parts: ChatMessagePart[] = [];
@@ -106,6 +129,11 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
     if (part.type === "interactive_buttons") {
       const buttons = normalizeInteractiveButtons(part.buttons);
       if (buttons) parts.push({ type: "interactive_buttons", buttons });
+      return;
+    }
+    if (part.type === "web_search_image") {
+      const image = normalizeWebSearchImage(part.image);
+      if (image) parts.push({ type: "web_search_image", image });
       return;
     }
   });

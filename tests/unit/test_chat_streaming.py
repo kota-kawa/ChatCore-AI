@@ -41,6 +41,7 @@ from services.web_search import (
     WebSearchResult,
     WebSearchSource,
 )
+from services.web_search_images import WebSearchImageCandidate
 from tests.helpers.request_helpers import build_request
 
 
@@ -758,6 +759,76 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages[0],
         )
         self.assertIn("回答本文", persisted_messages[0])
+
+    def test_background_generation_job_publishes_llm_selected_web_search_image(self):
+        persisted_records = []
+        search_result = WebSearchResult(
+            query="京都の紅葉",
+            searched_at="2026-08-19T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/kyoto",
+                    title="京都の紅葉ガイド",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                    image_candidates=(
+                        WebSearchImageCandidate(
+                            url="https://cdn.example.com/maple.jpg",
+                            alt="紅葉の写真",
+                            kind="og:image",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted_records.append(
+                {
+                    "response": response,
+                    "message_parts": message_parts,
+                    "web_search_context": web_search_context,
+                }
+            )
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "京都の紅葉を教えて"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["京都の紅葉名所です。"]),
+            ),
+            patch(
+                "services.chat_generation.choose_web_search_image",
+                return_value={
+                    "url": "https://cdn.example.com/maple.jpg",
+                    "alt": "京都の紅葉の写真",
+                    "source_url": "https://example.com/kyoto",
+                    "source_title": "京都の紅葉ガイド",
+                },
+            ) as mock_image,
+        ):
+            job = start_generation_job(
+                "guest:sid-image:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉を教えて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted_records), 1)
+        self.assertIn("web_search_image", body)
+        self.assertIn("https://cdn.example.com/maple.jpg", body)
+        self.assertEqual(persisted_records[0]["message_parts"][0]["type"], "text")
+        self.assertEqual(persisted_records[0]["message_parts"][1]["type"], "web_search_image")
+        mock_image.assert_called_once()
 
     def test_background_generation_job_appends_selected_reference_steps(self):
         persisted_messages = []

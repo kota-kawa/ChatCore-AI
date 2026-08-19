@@ -4,6 +4,7 @@ import { useTranslation } from "../../contexts/locale_context";
 import type { ChatMessagePart, InteractiveButtonsV1 } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "../chat_page/bot_message_html";
 import { SandboxArtifactFrame } from "../chat_page/sandbox_artifact_frame";
+import { WebSearchImagePart } from "../chat_page/web_search_image_part";
 
 // 共有ページ用のアシスタントメッセージ本体。通常チャットの BotMessageParts と
 // 同じクラス構成・同じレンダラーを使い、送信を伴う対話型ボタンだけ無効化する。
@@ -68,6 +69,13 @@ function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMess
                   {english ? "Interactive buttons are unavailable in shared views." : "対話型ボタンは共有画面では動作しません。"}
                 </p>
               </div>
+            </div>
+          );
+        }
+        if (part.type === "web_search_image") {
+          return (
+            <div key={`web-search-image-${index}`} className="bot-message-part bot-message-part--web-search-image">
+              <WebSearchImagePart image={part.image} />
             </div>
           );
         }

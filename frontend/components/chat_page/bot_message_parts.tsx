@@ -4,6 +4,7 @@ import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
+import { WebSearchImagePart } from "./web_search_image_part";
 
 // ボットメッセージのパーツ表示コンポーネントのprops型定義
 // Props type definition for the bot message parts display component
@@ -49,6 +50,13 @@ function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: Bo
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
               <InteractiveButtons buttons={part.buttons} messageId={`btn-${index}`} />
+            </div>
+          );
+        }
+        if (part.type === "web_search_image") {
+          return (
+            <div key={`web-search-image-${index}`} className="bot-message-part bot-message-part--web-search-image">
+              <WebSearchImagePart image={part.image} />
             </div>
           );
         }

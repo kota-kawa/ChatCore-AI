@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from services import url_fetcher, web_search
 from services.llm import LIGHTWEIGHT_TASK_MODEL
-from services.url_fetcher import FetchedLink
+from services.url_fetcher import FetchedImage, FetchedLink
 
 
 def _fetched_document(
@@ -15,6 +15,7 @@ def _fetched_document(
     *,
     title: str = "",
     links: tuple = (),
+    images: tuple = (),
 ):
     return web_search.FetchedUrlDocument(
         requested_url=url,
@@ -22,6 +23,7 @@ def _fetched_document(
         title=title,
         text=text,
         links=links,
+        images=images,
     )
 
 
@@ -773,6 +775,29 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(mock_fetch.call_count, 2)
         self.assertEqual(enriched.sources[0].page_text, "body of https://example.com/a")
         self.assertEqual(enriched.sources[1].page_text, "body of https://example.com/b")
+
+    def test_enrich_sources_attaches_page_image_candidates(self):
+        result = self._result_with_sources(("https://example.com/a", ("snippet",)))
+        document = _fetched_document(
+            "https://example.com/a",
+            "body with an image",
+            images=(
+                FetchedImage(
+                    url="https://cdn.example.com/hero.jpg",
+                    alt="Article photo",
+                    kind="og:image",
+                ),
+            ),
+        )
+
+        with patch.object(web_search, "fetch_url_document", return_value=document):
+            enriched = web_search.enrich_sources_with_page_content(result)
+
+        self.assertEqual(
+            enriched.sources[0].image_candidates[0].url,
+            "https://cdn.example.com/hero.jpg",
+        )
+        self.assertEqual(enriched.sources[0].image_candidates[0].alt, "Article photo")
 
     # 日本語: およびpreferssnippets、enrichsourcesrespectstopn制限ことを検証します。
     # English: Verify that enrich sources respects top n limit and prefers snippets.

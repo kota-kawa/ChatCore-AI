@@ -121,6 +121,43 @@ test("normalizers keep valid sandbox artifact parts", () => {
   assert.equal(response.parts?.[0]?.type, "sandbox_artifact");
 });
 
+test("normalizers keep safe web-search image parts", () => {
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [
+      {
+        type: "web_search_image",
+        image: {
+          url: "https://cdn.example.com/hero.jpg",
+          alt: "Relevant photo",
+          source_url: "https://example.com/article",
+          source_title: "Article",
+        },
+      },
+      {
+        type: "web_search_image",
+        image: {
+          url: "javascript:alert(1)",
+          alt: "Unsafe",
+          source_url: "https://example.com/article",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(response.parts, [
+    {
+      type: "web_search_image",
+      image: {
+        url: "https://cdn.example.com/hero.jpg",
+        alt: "Relevant photo",
+        sourceUrl: "https://example.com/article",
+        sourceTitle: "Article",
+      },
+    },
+  ]);
+});
+
 test("normalizers keep the three library declaration and drop unknown ones", () => {
   const artifact = {
     version: 1,

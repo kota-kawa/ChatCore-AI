@@ -31,6 +31,7 @@ MAX_LINKS_PER_DOCUMENT = 40
 MAX_LINK_URL_CHARS = 1_000
 MAX_LINK_TEXT_CHARS = 240
 MAX_LINK_CONTEXT_CHARS = 320
+MAX_IMAGES_PER_DOCUMENT = 20
 
 # URL抽出用の正規表現
 # Regular expression to extract URLs
@@ -72,6 +73,16 @@ class FetchedLink:
 
 
 @dataclass(frozen=True)
+class FetchedImage:
+    """A normalized image candidate discovered in a fetched HTML document."""
+
+    url: str
+    alt: str = ""
+    title: str = ""
+    kind: str = "image"
+
+
+@dataclass(frozen=True)
 class FetchedUrlDocument:
     """Readable content and safe follow-up candidates from one URL fetch."""
 
@@ -80,6 +91,7 @@ class FetchedUrlDocument:
     title: str
     text: str
     links: tuple[FetchedLink, ...] = ()
+    images: tuple[FetchedImage, ...] = ()
 
 
 # --- DNS pinning to defeat DNS-rebinding-style SSRF -------------------------
@@ -145,6 +157,7 @@ class _TextExtractor(HTMLParser):
         self._base_href = ""
         self._active_link: dict[str, object] | None = None
         self._raw_links: list[tuple[str, str, str]] = []
+        self._raw_images: list[tuple[str, str, str, str]] = []
 
     def handle_starttag(self, tag: str, attrs: list) -> None:  # type: ignore[override]
         # 無視対象のタグの開始時の処理
@@ -155,6 +168,16 @@ class _TextExtractor(HTMLParser):
             self._inside_title = True
         if tag == "base" and not self._base_href:
             self._base_href = attributes.get("href", "").strip()
+        if tag == "meta":
+            image_kind = self._meta_image_kind(attributes)
+            content = attributes.get("content", "").strip()
+            if image_kind and content:
+                self._raw_images.append((content, "", "", image_kind))
+        if tag == "link":
+            rel = {item.strip().lower() for item in attributes.get("rel", "").split()}
+            href = attributes.get("href", "").strip()
+            if href and ("image_src" in rel or "image" in rel):
+                self._raw_images.append((href, "", attributes.get("title", ""), "link"))
         if tag == "a" and self._skip_depth == 0:
             href = attributes.get("href", "").strip()
             if href:
@@ -171,8 +194,42 @@ class _TextExtractor(HTMLParser):
                 parts = self._active_link["parts"]
                 assert isinstance(parts, list)
                 parts.append(fallback_text)
+        if tag == "img" and self._skip_depth == 0:
+            image_url = (
+                attributes.get("src")
+                or attributes.get("data-src")
+                or attributes.get("data-original")
+                or self._first_srcset_url(attributes.get("srcset") or attributes.get("data-srcset", ""))
+            ).strip()
+            if image_url:
+                self._raw_images.append(
+                    (
+                        image_url,
+                        attributes.get("alt", ""),
+                        attributes.get("title", ""),
+                        "img",
+                    )
+                )
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
+
+    @staticmethod
+    def _meta_image_kind(attributes: dict[str, str]) -> str:
+        property_name = attributes.get("property", "").strip().lower()
+        name = attributes.get("name", "").strip().lower()
+        if property_name in {"og:image", "og:image:url"}:
+            return "og:image"
+        if name in {"twitter:image", "twitter:image:src"}:
+            return "twitter:image"
+        return ""
+
+    @staticmethod
+    def _first_srcset_url(srcset: str) -> str:
+        for candidate in srcset.split(","):
+            url = candidate.strip().split(None, 1)[0] if candidate.strip() else ""
+            if url:
+                return url
+        return ""
 
     def handle_endtag(self, tag: str) -> None:  # type: ignore[override]
         # タグ終了時の処理。ブロック要素の場合は改行を挿入する
@@ -233,6 +290,9 @@ class _TextExtractor(HTMLParser):
 
     def get_base_href(self) -> str:
         return self._base_href
+
+    def get_raw_images(self) -> list[tuple[str, str, str, str]]:
+        return list(self._raw_images)
 
 
 def _extract_text_from_html(raw_html: str) -> str:
@@ -300,12 +360,30 @@ def _extract_document_from_html(
         )
         if len(links) >= MAX_LINKS_PER_DOCUMENT:
             break
+    images: list[FetchedImage] = []
+    seen_image_urls: set[str] = set()
+    for raw_url, alt, title, kind in extractor.get_raw_images():
+        normalized_url = canonicalize_url(urljoin(link_base_url, raw_url))
+        if normalized_url is None or normalized_url in seen_image_urls:
+            continue
+        seen_image_urls.add(normalized_url)
+        images.append(
+            FetchedImage(
+                url=normalized_url,
+                alt=" ".join(alt.split())[:MAX_LINK_TEXT_CHARS],
+                title=" ".join(title.split())[:MAX_LINK_TEXT_CHARS],
+                kind=kind,
+            )
+        )
+        if len(images) >= MAX_IMAGES_PER_DOCUMENT:
+            break
     return FetchedUrlDocument(
         requested_url=requested_url,
         final_url=normalized_final_url,
         title=extractor.get_title(),
         text=extractor.get_text()[:MAX_URL_TEXT_CHARS],
         links=tuple(links),
+        images=tuple(images),
     )
 
 
