@@ -73,6 +73,7 @@ class DeployHardeningTest(unittest.TestCase):
     def test_compose_files_persist_prompt_share_uploads(self):
         expected_entries = (
             "PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share",
+            "PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}",
             "prompt_share_uploads:/app/data/uploads/prompt_share",
             "name: ${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}",
         )
@@ -119,6 +120,12 @@ class DeployHardeningTest(unittest.TestCase):
         config_text = NGINX_CONFIG.read_text()
 
         self.assertIn(r"\.well-known/oauth-protected-resource(?:/mcp)?", config_text)
+
+    def test_nginx_applies_a_narrow_upload_limit_to_prompt_publish(self):
+        config_text = NGINX_CONFIG.read_text()
+
+        self.assertIn("location = /prompt_share/api/prompts", config_text)
+        self.assertIn("client_max_body_size 6m;", config_text)
 
     # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
     # English: Verify that workflow forwards nginx test command to remote deploy.

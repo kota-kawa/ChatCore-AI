@@ -157,6 +157,8 @@ services:
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
       - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
+      # Per-user total of normalized display + card variants (100 MiB default).
+      - PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}
     ports:
       # ホスト側 nginx からのみアクセスするためループバックに限定する
       # Bind to loopback only; the host nginx is the sole external consumer.

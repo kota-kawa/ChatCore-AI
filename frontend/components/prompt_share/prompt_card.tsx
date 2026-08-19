@@ -99,12 +99,16 @@ function PromptCardComponent({
   const authorName = prompt.author || t("promptShare.authorMissing");
   const authorUserId = Number(prompt.author_user_id || 0);
   const hasAuthorProfile = authorUserId > 0;
+  const referenceAttachment = Array.isArray(prompt.attachments)
+    ? prompt.attachments.find((attachment) => attachment.role === "reference")
+    : undefined;
   const referenceImageUrl = prompt.reference_image_url || "";
+  const cardImageUrl = referenceAttachment?.thumbnail_url || referenceImageUrl;
   // 管理対象の相対URLだけNext Imageの最適化対象にする。
   // Keep external/legacy URLs on a native img for backwards compatibility.
   const canOptimizeReferenceImage =
-    referenceImageUrl.startsWith("/prompt_share/api/media/") ||
-    referenceImageUrl.startsWith("/static/uploads/prompt_share/");
+    cardImageUrl.startsWith("/prompt_share/api/media/") ||
+    cardImageUrl.startsWith("/static/uploads/prompt_share/");
 
   // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
@@ -249,11 +253,11 @@ function PromptCardComponent({
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
-      {referenceImageUrl ? (
+      {cardImageUrl ? (
         <div className="prompt-card__image">
           {canOptimizeReferenceImage ? (
             <Image
-              src={referenceImageUrl}
+              src={cardImageUrl}
               alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
               fill
               sizes="(max-width: 700px) calc(100vw - 2rem), (max-width: 1100px) 45vw, 360px"
@@ -264,7 +268,7 @@ function PromptCardComponent({
             />
           ) : (
             <img
-              src={referenceImageUrl}
+              src={cardImageUrl}
               alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
               loading={isPriorityImage ? "eager" : "lazy"}
               fetchPriority={isPriorityImage ? "high" : "auto"}

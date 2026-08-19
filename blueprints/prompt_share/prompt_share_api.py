@@ -6,7 +6,6 @@ import logging
 import os
 import re
 from datetime import datetime
-from uuid import uuid4
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -29,12 +28,15 @@ from services.i18n import get_request_locale
 from services.prompt_categories import normalize_category
 from services.prompt_attachment_storage import (
     build_prompt_attachment_public_url,
-    get_prompt_attachment_upload_root,
+    delete_prompt_attachment,
+    get_prompt_attachment_storage,
+    PROMPT_ATTACHMENT_MAX_BYTES,
+    PROMPT_ATTACHMENT_MAX_REQUEST_BYTES,
     prompt_attachment_content_type,
-    prompt_attachment_filename_from_url,
     resolve_legacy_prompt_attachment_path,
     resolve_prompt_attachment_path,
 )
+from services.prompt_attachment_processing import process_prompt_attachment
 from services.prompt_types import (
     CONTENT_FORMATS,
     CONTENT_FORMAT_SKILL,
@@ -79,6 +81,10 @@ PROMPT_COMMENT_MAX_URLS = 3
 RECOMMENDED_PROMPT_LIMIT = 3
 PROMPT_FEED_DEFAULT_LIMIT = 24
 PROMPT_FEED_MAX_LIMIT = 100
+PROMPT_CREATE_RATE_WINDOW_SECONDS = 60 * 60
+PROMPT_CREATE_PER_IP_LIMIT = 12
+PROMPT_CREATE_PER_USER_LIMIT = 8
+PROMPT_CREATE_COOLDOWN_SECONDS = 15
 
 # コメント内のURL検知用正規表現パターン
 # Regular expression pattern to detect URLs inside comments.
@@ -94,6 +100,44 @@ def _parse_prompt_feed_limit(value: str | None) -> int:
     if parsed <= 0:
         return PROMPT_FEED_DEFAULT_LIMIT
     return min(parsed, PROMPT_FEED_MAX_LIMIT)
+
+
+def _request_body_exceeds_prompt_attachment_limit(request: Request) -> bool:
+    """Reject known oversize uploads before multipart parsing allocates temp space."""
+    raw_length = request.headers.get("content-length")
+    if not raw_length:
+        return False
+    try:
+        return int(raw_length) > PROMPT_ATTACHMENT_MAX_REQUEST_BYTES
+    except (TypeError, ValueError):
+        return True
+
+
+def _consume_prompt_create_limits(
+    request: Request,
+    user_id: int,
+) -> tuple[bool, str | None, int | None]:
+    """Apply Redis-backed abuse controls before an image is stored or decoded."""
+    client_ip = get_request_client_ip(request)
+    checks = (
+        ("prompt:create:ip", client_ip, PROMPT_CREATE_PER_IP_LIMIT, PROMPT_CREATE_RATE_WINDOW_SECONDS),
+        ("prompt:create:user", str(user_id), PROMPT_CREATE_PER_USER_LIMIT, PROMPT_CREATE_RATE_WINDOW_SECONDS),
+        ("prompt:create:cooldown", str(user_id), 1, PROMPT_CREATE_COOLDOWN_SECONDS),
+    )
+    for key_prefix, identifier, limit, window_seconds in checks:
+        allowed, _, retry_after = consume_rate_limit(
+            key_prefix,
+            identifier,
+            limit=limit,
+            window_seconds=window_seconds,
+        )
+        if not allowed:
+            return (
+                False,
+                f"画像付きプロンプトの投稿回数が多すぎます。{retry_after}秒ほど待ってから再試行してください。",
+                retry_after,
+            )
+    return True, None, None
 
 
 def _decode_prompt_feed_cursor(value: str | None) -> tuple[datetime, int] | None:
@@ -345,16 +389,7 @@ def _delete_prompt_attachments(attachments: Any) -> None:
     if not isinstance(attachments, list):
         return
     for attachment in attachments:
-        url = attachment.get("url") if isinstance(attachment, dict) else None
-        filename = prompt_attachment_filename_from_url(url)
-        if filename is None:
-            continue
-        try:
-            filepath = resolve_prompt_attachment_path(filename)
-        except ValueError:
-            continue
-        if os.path.isfile(filepath):
-            os.remove(filepath)
+        delete_prompt_attachment(attachment)
 
 
 # アップロードされたメディア添付を保存し、attachments要素を返却する関数
@@ -383,44 +418,37 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
     if content_type and content_type not in rule.accepted_mime:
         raise ValueError("許可されていない形式の添付ファイルです。")
 
-    # 保存ディレクトリを自動生成
-    # Automatically create directory structure if not exists.
-    upload_root = get_prompt_attachment_upload_root()
-    os.makedirs(upload_root, exist_ok=True)
-    stored_filename = f"user_{user_id}_{uuid4().hex}{extension}"
-    filepath = resolve_prompt_attachment_path(stored_filename)
     file_obj = upload_file.file
     total_size = 0
-    max_mb = rule.max_bytes // (1024 * 1024)
-    signature_prefix = b""
+    chunks: list[bytes] = []
 
     try:
         if hasattr(file_obj, "seek"):
             file_obj.seek(0)
 
-        # ファイルをチャンクごとに分割して保存し、サイズ閾値超えを判定
-        # Write chunks to disk and check file size.
-        with open(filepath, "wb") as out_f:
-            while True:
-                chunk = file_obj.read(1024 * 1024)
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > rule.max_bytes:
-                    raise ValueError(f"添付ファイルのサイズは{max_mb}MB以下にしてください。")
-                if len(signature_prefix) < 16:
-                    signature_prefix += chunk[: 16 - len(signature_prefix)]
-                out_f.write(chunk)
+        # The request middleware bounds the transport body. Keep a second
+        # defense here before decoding so direct/internal callers cannot make
+        # the image processor hold more than the attachment policy allows.
+        while True:
+            chunk = file_obj.read(1024 * 1024)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > min(rule.max_bytes, PROMPT_ATTACHMENT_MAX_BYTES):
+                max_mb = rule.max_bytes // (1024 * 1024)
+                raise ValueError(f"添付ファイルのサイズは{max_mb}MB以下にしてください。")
+            chunks.append(chunk)
         if total_size == 0:
             raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
-        if not _prompt_attachment_signature_matches(extension, signature_prefix):
+        source = b"".join(chunks)
+        if not _prompt_attachment_signature_matches(extension, source[:16]):
             raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
-    except Exception:
-        # 途中での失敗時には作成途中の物理ファイルを削除
-        # Delete broken file on failure.
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        raise
+        processed = process_prompt_attachment(source)
+        stored = get_prompt_attachment_storage().save_variants(
+            user_id,
+            processed.display_bytes,
+            processed.thumbnail_bytes,
+        )
     finally:
         if hasattr(file_obj, "seek"):
             try:
@@ -429,9 +457,13 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
                 pass
 
     return {
-        "url": build_prompt_attachment_public_url(stored_filename),
+        "url": build_prompt_attachment_public_url(stored.display_filename),
+        "thumbnail_url": build_prompt_attachment_public_url(stored.thumbnail_filename),
         "role": rule.role,
-        "media_type": prompt_attachment_content_type(stored_filename),
+        "media_type": prompt_attachment_content_type(stored.display_filename),
+        "width": str(processed.width),
+        "height": str(processed.height),
+        "size_bytes": str(stored.display_size_bytes),
     }
 
 
@@ -2021,12 +2053,22 @@ async def create_prompt(request: Request):
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    if _request_body_exceeds_prompt_attachment_limit(request):
+        max_mb = PROMPT_ATTACHMENT_MAX_REQUEST_BYTES // (1024 * 1024)
+        return jsonify(
+            {"error": f"アップロードリクエストは{max_mb}MB以下にしてください。"},
+            status_code=413,
+        )
+
     # コンテンツタイプに応じてフォームデータ、またはJSONを取得
     # Determine the payload source based on request headers.
     content_type = request.headers.get("content-type", "")
     upload_file = None
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
-        form = await request.form()
+        # This endpoint accepts one image and a small, fixed field set. Keep
+        # multipart parser limits aligned with that contract so unused file
+        # parts cannot consume temporary disk before validation.
+        form = await request.form(max_files=1, max_fields=32, max_part_size=256 * 1024)
         file_candidate = form.get("reference_image")
         upload_file = file_candidate if getattr(file_candidate, "filename", "") else None
         # attributes は JSON 文字列として送られる (型固有フィールドをまとめて格納)
@@ -2081,6 +2123,15 @@ async def create_prompt(request: Request):
         # 添付ファイルがある場合、ディスクに保存して attachments 要素を得る
         # Save the uploaded attachment and build its descriptor.
         if upload_file is not None:
+            allowed, limit_message, retry_after = _consume_prompt_create_limits(
+                request,
+                int(user_id),
+            )
+            if not allowed:
+                return jsonify_rate_limited(
+                    limit_message or "画像付き投稿の回数が多すぎます。",
+                    retry_after=retry_after,
+                )
             saved = await run_blocking(
                 _save_prompt_attachment, upload_file, user_id, payload.media_type
             )

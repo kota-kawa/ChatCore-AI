@@ -3,9 +3,11 @@ from io import BytesIO
 import json
 import os
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
+from PIL import Image
 from starlette.datastructures import Headers, UploadFile
 
 from blueprints.prompt_share.prompt_share_api import (
@@ -17,12 +19,19 @@ from services.error_messages import ERROR_PROMPT_ATTACHMENT_NOT_FOUND
 from services.prompt_attachment_storage import (
     PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV,
     get_prompt_attachment_upload_root,
+    get_prompt_attachment_storage,
     normalize_prompt_attachment_public_url,
     resolve_prompt_attachment_path,
 )
 
 
 class PromptAttachmentStorageTestCase(unittest.TestCase):
+    @staticmethod
+    def _valid_png_bytes() -> bytes:
+        buffer = BytesIO()
+        Image.new("RGB", (16, 12), color="navy").save(buffer, format="PNG")
+        return buffer.getvalue()
+
     def test_default_upload_root_is_outside_frontend_public(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV, None)
@@ -58,7 +67,7 @@ class PromptAttachmentStorageTestCase(unittest.TestCase):
             {PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV: temp_dir},
         ):
             upload = UploadFile(
-                BytesIO(b"\x89PNG\r\n\x1a\nexample"),
+                BytesIO(self._valid_png_bytes()),
                 filename="example.png",
                 headers=Headers({"content-type": "image/png"}),
             )
@@ -68,12 +77,13 @@ class PromptAttachmentStorageTestCase(unittest.TestCase):
             stored_path = resolve_prompt_attachment_path(filename)
 
             self.assertTrue(os.path.isfile(stored_path))
-            self.assertEqual(attachment["media_type"], "image/png")
+            self.assertTrue(attachment["thumbnail_url"].startswith("/prompt_share/api/media/"))
+            self.assertEqual(attachment["media_type"], "image/webp")
             self.assertTrue(attachment["url"].startswith("/prompt_share/api/media/"))
 
             response = asyncio.run(get_prompt_attachment_media(filename))
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.media_type, "image/png")
+            self.assertEqual(response.media_type, "image/webp")
             self.assertEqual(response.headers["x-content-type-options"], "nosniff")
             self.assertEqual(
                 response.headers["cache-control"],
@@ -82,6 +92,8 @@ class PromptAttachmentStorageTestCase(unittest.TestCase):
 
             _delete_prompt_attachments([attachment])
             self.assertFalse(os.path.exists(stored_path))
+            thumbnail_filename = attachment["thumbnail_url"].rsplit("/", 1)[-1]
+            self.assertFalse(os.path.exists(resolve_prompt_attachment_path(thumbnail_filename)))
 
     def test_media_route_returns_404_for_invalid_or_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
@@ -127,7 +139,39 @@ class PromptAttachmentStorageTestCase(unittest.TestCase):
                     )
                     with self.assertRaises(ValueError):
                         _save_prompt_attachment(upload, 42, "image")
-            self.assertEqual(os.listdir(temp_dir), [])
+            self.assertFalse(
+                [name for name in os.listdir(temp_dir) if name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))]
+            )
+
+    def test_storage_enforces_user_quota_and_reconciles_unreferenced_variants(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV: temp_dir},
+        ):
+            storage = get_prompt_attachment_storage()
+            with patch("services.prompt_attachment_storage.PROMPT_ATTACHMENT_USER_QUOTA_BYTES", 3):
+                with self.assertRaisesRegex(ValueError, "保存容量"):
+                    storage.save_variants(7, b"12", b"34")
+
+            saved = storage.save_variants(7, b"display", b"thumb")
+            orphan_path = os.path.join(temp_dir, "user_7_orphan.webp")
+            with open(orphan_path, "wb") as file_obj:
+                file_obj.write(b"orphan")
+            old_time = time.time() - 7200
+            os.utime(orphan_path, (old_time, old_time))
+
+            deleted = storage.cleanup_unreferenced(
+                [
+                    {
+                        "url": f"/prompt_share/api/media/{saved.display_filename}",
+                        "thumbnail_url": f"/prompt_share/api/media/{saved.thumbnail_filename}",
+                    }
+                ]
+            )
+
+            self.assertEqual(deleted, 1)
+            self.assertFalse(os.path.exists(orphan_path))
+            self.assertTrue(os.path.exists(resolve_prompt_attachment_path(saved.display_filename)))
 
 
 if __name__ == "__main__":

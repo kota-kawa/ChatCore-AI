@@ -11,8 +11,12 @@ export type MediaType = "text" | "image";
 // A single media attachment descriptor.
 export type PromptAttachment = {
   url: string;
+  thumbnail_url?: string;
   role?: string;
   media_type?: string;
+  width?: string;
+  height?: string;
+  size_bytes?: string;
 };
 
 export type PromptResourceRole = "script" | "reference" | "config" | "other";

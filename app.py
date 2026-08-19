@@ -35,6 +35,9 @@ from services.locale_middleware import LocaleMiddleware  # noqa: E402
 from services.cache import try_acquire_single_flight  # noqa: E402
 from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.request_context import RequestContextMiddleware  # noqa: E402
+from services.prompt_attachment_cleanup import cleanup_orphaned_prompt_attachments  # noqa: E402
+from services.request_body_limit import RequestBodySizeLimitMiddleware  # noqa: E402
+from services.prompt_attachment_storage import PROMPT_ATTACHMENT_MAX_REQUEST_BYTES  # noqa: E402
 from services.runtime_config import (  # noqa: E402
     get_session_same_site,
     get_session_secret_key,
@@ -101,8 +104,10 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
                 # 一時チャットの削除処理を呼び出す
                 # Call the handler to delete ephemeral chats
                 cleanup_ephemeral_chats()
+            if try_acquire_single_flight("prompt_attachment_cleanup", CLEANUP_LOCK_TTL_SECONDS):
+                cleanup_orphaned_prompt_attachments()
         except Exception:
-            logger.exception("Failed to clean up ephemeral chats.")
+            logger.exception("Failed to run periodic cleanup.")
         # 設定間隔だけ待機するか、停止イベントの発生を待つ
         # Wait for the configured interval or until the stop event is signaled
         stop_event.wait(timeout=CLEANUP_INTERVAL_SECONDS)
@@ -212,6 +217,11 @@ app.add_middleware(
 )
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RequestBodySizeLimitMiddleware,
+    path="/prompt_share/api/prompts",
+    max_bytes=PROMPT_ATTACHMENT_MAX_REQUEST_BYTES,
+)
 
 # ミドルウェア設定値をアプリケーション状態に保存
 # Store session settings in the application state

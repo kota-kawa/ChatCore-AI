@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.db import get_db_connection
+from services.prompt_attachment_storage import delete_prompt_attachment
 from services.prompt_types import serialize_axes
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.request_models import PromptUpdateRequest
@@ -404,6 +405,34 @@ def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
             cursor.close()
 
 
+def _get_active_prompt_attachments_for_user(user_id: int, prompt_id: int) -> list[dict[str, Any]]:
+    """Read attachment descriptors before a prompt is soft-deleted."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT attachments
+                  FROM prompts
+                 WHERE id = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+                 LIMIT 1
+                """,
+                (prompt_id, user_id),
+            )
+            row = cursor.fetchone()
+            values = row.get("attachments") if isinstance(row, dict) else None
+            return [value for value in values if isinstance(value, dict)] if isinstance(values, list) else []
+        finally:
+            cursor.close()
+
+
+def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
+    """Best-effort physical cleanup after the authoritative DB soft delete."""
+    return sum(delete_prompt_attachment(attachment) for attachment in attachments)
+
+
 # ログインユーザーが投稿したプロンプト一覧を取得するエンドポイント
 # Endpoint to get list of prompts published by the authenticated user.
 @prompt_manage_api_bp.get("/my_prompts", name="prompt_manage_api.get_my_prompts")
@@ -591,11 +620,22 @@ async def delete_prompt(prompt_id: int, request: Request):
     try:
         # 非ブロッキングスレッドプールでDB論理削除処理を実行
         # Run database soft-delete in a separate thread.
+        attachments = await run_blocking(
+            _get_active_prompt_attachments_for_user,
+            user_id,
+            prompt_id,
+        )
         deleted = await run_blocking(_delete_prompt_for_user, user_id, prompt_id)
         if deleted == 0:
             # 対象のプロンプトが存在しない、または別ユーザーの作成だった場合
             # Return 404 if the prompt was not found or didn't belong to the user.
             return jsonify({"error": "対象のプロンプトが見つかりませんでした。"}, status_code=404)
+        try:
+            await run_blocking(_delete_prompt_attachment_files, attachments)
+        except Exception:
+            # The periodic reconciler will remove remaining files. Do not undo a
+            # completed logical deletion merely because filesystem cleanup failed.
+            logger.exception("Failed to delete prompt attachment files for prompt %s.", prompt_id)
         return jsonify({"message": "プロンプトが削除されました。"})
     except Exception:
         # エラーログ出力と500レスポンス返却

@@ -729,7 +729,7 @@ export const jaMessages = {
   "promptShare.generatedExampleAttachment": "生成結果の作例画像（任意・1点）",
   "promptShare.uploadGeneratedExample": "生成結果の作例画像をアップロード",
   "promptShare.uploadMedia": "{media}をアップロード",
-  "promptShare.attachmentRules": "{types}、{max}MBまで",
+  "promptShare.attachmentRules": "{types}、{max}MBまで。保存時に縮小・最適化されます（アニメーション画像は不可）",
   "promptShare.uploadPreview": "アップロードのプレビュー",
   "promptShare.removeAttachment": "外す",
   "promptShare.examplesOptional": "利用例（任意）",
