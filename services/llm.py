@@ -390,16 +390,21 @@ def _openai_responses_reasoning_kwargs(model_name: str) -> dict[str, Any]:
 
 
 def _groq_reasoning_kwargs(model_name: str) -> dict[str, Any]:
-    """Keep Groq reasoning enabled while excluding private reasoning output."""
+    """Return Groq-only reasoning options through the OpenAI SDK extension body."""
+    reasoning_options: dict[str, Any] = {}
     if model_name == QWEN_3_6_27B_MODEL:
-        return {
+        reasoning_options = {
             "reasoning_effort": "default",
             "reasoning_format": "hidden",
         }
-    if model_name in GPT_OSS_MODELS:
+    elif model_name in GPT_OSS_MODELS:
         # Do not set reasoning_effort: Groq's current default effort remains in effect.
-        return {"include_reasoning": False}
-    return {}
+        reasoning_options = {"include_reasoning": False}
+
+    # The application uses the OpenAI SDK against Groq's compatible endpoint.
+    # Groq-specific fields are not accepted as top-level SDK keyword arguments,
+    # so pass them through its supported extension body instead.
+    return {"extra_body": reasoning_options} if reasoning_options else {}
 
 
 # ツール呼び出しの設定用キーワード引数を構築する
