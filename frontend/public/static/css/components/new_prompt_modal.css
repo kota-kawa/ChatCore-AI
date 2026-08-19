@@ -285,6 +285,25 @@
 :where(body.chat-page, .chat-page-shell) .composer-status[data-variant="error"] {
   background: rgba(220, 38, 38, 0.08);
   color: #991b1b;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 送信中/成功メッセージはボタンのビジュアルで代替するため画面上には出さないが、
+   スクリーンリーダーには読み上げさせる（視覚的に隠すだけの汎用パターン）。 */
+/* Submitting/success messages are conveyed by the button's own visuals, so they are
+   hidden on screen but still announced to screen readers (standard visually-hidden pattern). */
+:where(body.chat-page, .chat-page-shell) .composer-status--visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 :where(body.chat-page, .chat-page-shell) .form-group--toggle {
@@ -351,7 +370,10 @@
   transition:
     transform var(--transition-normal, 0.2s ease),
     box-shadow var(--transition-normal, 0.2s ease),
-    filter var(--transition-normal, 0.2s ease);
+    filter var(--transition-normal, 0.2s ease),
+    width var(--transition-normal, 0.2s ease),
+    border-radius var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -369,6 +391,62 @@
   opacity: 0.78;
   transform: none;
   box-shadow: none;
+}
+
+/* 送信中はラベルを消してアイコンだけの丸いスピナーボタンにし、文字ではなく動きで伝える。
+   ラベル自体はDOMに残し、視覚的にのみ隠すことでスクリーンリーダーの読み上げは維持する。 */
+/* While submitting, hide the label and shrink to an icon-only spinner button so the state
+   reads visually instead of through text; the label stays in the DOM (visually hidden) for a11y. */
+:where(body.chat-page, .chat-page-shell) .new-post-form .new-prompt-submit-btn.is-loading,
+:where(body.chat-page, .chat-page-shell) .new-post-form .new-prompt-submit-btn.is-success {
+  width: 48px;
+  min-width: 48px;
+  padding: 0;
+  border-radius: 50%;
+  gap: 0;
+  align-self: center;
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn__label {
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn.is-loading .new-prompt-submit-btn__label,
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn.is-success .new-prompt-submit-btn__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn__spinner {
+  font-size: 1.1rem;
+  animation: spin 0.85s linear infinite;
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn.is-success {
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+  box-shadow: 0 16px 28px rgba(22, 163, 74, 0.28);
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn.is-success:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+:where(body.chat-page, .chat-page-shell) .new-prompt-submit-btn.is-success i {
+  font-size: 1.15rem;
+  animation: submitBtnPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes submitBtnPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 @media (max-width: 720px) {

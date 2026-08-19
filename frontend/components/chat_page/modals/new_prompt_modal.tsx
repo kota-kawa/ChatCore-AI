@@ -158,12 +158,22 @@ export function NewPromptModal({
 
           {/* AI補助機能のルートノード（JSで動的に内容を注入する）/ Root node for AI assist feature (content injected dynamically) */}
           <div id="newPromptAssistRoot" ref={newPromptAssistRootRef}></div>
+          {/* エラー時のみ文言を可視表示し、送信中/成功はボタン自体のビジュアル（スピナー→チェック）で伝える。
+              読み上げ用のテキストはスクリーンリーダー向けに残す（視覚的には非表示）。 */}
+          {/* Only errors show visible text; submitting/success states are conveyed by the button's
+              own visuals (spinner → checkmark). The message stays for screen readers but is visually hidden otherwise. */}
           <p
             id="newPromptSubmitStatus"
-            className="composer-status"
+            className={`composer-status${newPromptStatus.variant === "error" ? "" : " composer-status--visually-hidden"}`}
             hidden={!newPromptStatus.message}
             data-variant={newPromptStatus.variant}
+            role={newPromptStatus.variant === "error" ? "alert" : "status"}
+            aria-live={newPromptStatus.variant === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
           >
+            {newPromptStatus.variant === "error" ? (
+              <i className="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+            ) : null}
             {newPromptStatus.message}
           </p>
 
@@ -217,17 +227,32 @@ export function NewPromptModal({
             </div>
           </div>
 
-          {/* 投稿ボタン（送信中はローディング表示）/ Submit button (shows loading state while submitting) */}
-          <button type="submit" className="primary-button new-prompt-submit-btn" disabled={isPromptSubmitting}>
-            {isPromptSubmitting ? (
-              <>
-                <i className="bi bi-stars"></i> {locale === "en" ? "Preparing with AI…" : "AIと投稿を準備中..."}
-              </>
-            ) : (
-              <>
-                <i className="bi bi-upload"></i> {locale === "en" ? "Post prompt" : "投稿する"}
-              </>
-            )}
+          {/* 投稿ボタン（送信中はアイコンのみのスピナー、成功時はチェックマークで状態を伝える）*/}
+          {/* Submit button (an icon-only spinner conveys submitting; a checkmark conveys success) */}
+          <button
+            type="submit"
+            className={`primary-button new-prompt-submit-btn${isPromptSubmitting ? " is-loading" : ""}${
+              newPromptStatus.variant === "success" ? " is-success" : ""
+            }`}
+            disabled={isPromptSubmitting}
+          >
+            <i
+              className={`bi ${
+                newPromptStatus.variant === "success"
+                  ? "bi-check-lg"
+                  : isPromptSubmitting
+                    ? "bi-arrow-repeat new-prompt-submit-btn__spinner"
+                    : "bi-upload"
+              }`}
+              aria-hidden="true"
+            ></i>
+            <span className="new-prompt-submit-btn__label">
+              {newPromptStatus.variant === "success"
+                ? (locale === "en" ? "Posted" : "投稿しました")
+                : isPromptSubmitting
+                  ? (locale === "en" ? "Preparing with AI…" : "AIと投稿を準備中...")
+                  : (locale === "en" ? "Post prompt" : "投稿する")}
+            </span>
           </button>
         </form>
         </div>

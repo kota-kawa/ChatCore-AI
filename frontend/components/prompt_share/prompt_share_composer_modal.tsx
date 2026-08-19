@@ -988,22 +988,50 @@ export function PromptShareComposerModal({
             {/* --- 送信アクション: 画面下部に固定せず、入力欄の末尾にそのまま並べる --- */}
             {/* --- Submit action: not pinned to the viewport; it flows at the end of the inputs --- */}
             <div className="composer-actions">
+              {/* エラー時のみ文言を可視表示し、送信中/成功はボタン自体のビジュアル（スピナー→チェック）で伝える。
+                  読み上げ用のテキストはスクリーンリーダー向けに残す（視覚的には非表示）。 */}
+              {/* Only errors show visible text; submitting/success states are conveyed by the button's
+                  own visuals (spinner → checkmark). The message stays for screen readers but is visually hidden otherwise. */}
               <p
                 id="promptPostStatus"
-                className="composer-status"
+                className={`composer-status${promptPostStatus.variant === "error" ? "" : " composer-status--visually-hidden"}`}
                 hidden={!promptPostStatus.message}
                 data-variant={promptPostStatus.variant}
                 role={promptPostStatus.variant === "error" ? "alert" : "status"}
                 aria-live={promptPostStatus.variant === "error" ? "assertive" : "polite"}
                 aria-atomic="true"
               >
+                {promptPostStatus.variant === "error" ? (
+                  <i className="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                ) : null}
                 {promptPostStatus.message}
               </p>
               {/* 送信中はボタンをdisabledにして重複送信を防ぐ */}
               {/* Disable submit button during submission to prevent duplicate requests */}
-              <button type="submit" className="submit-btn" disabled={isPostSubmitting}>
-                <i className={`bi ${isPostSubmitting ? "bi-stars" : "bi-upload"}`} aria-hidden="true"></i>
-                {isPostSubmitting ? t("promptShare.preparingPost") : t("promptShare.post")}
+              <button
+                type="submit"
+                className={`submit-btn${isPostSubmitting ? " is-loading" : ""}${
+                  promptPostStatus.variant === "success" ? " is-success" : ""
+                }`}
+                disabled={isPostSubmitting}
+              >
+                <i
+                  className={`bi ${
+                    promptPostStatus.variant === "success"
+                      ? "bi-check-lg"
+                      : isPostSubmitting
+                        ? "bi-arrow-repeat submit-btn__spinner"
+                        : "bi-upload"
+                  }`}
+                  aria-hidden="true"
+                ></i>
+                <span className="submit-btn__label">
+                  {promptPostStatus.variant === "success"
+                    ? t("promptShare.posted")
+                    : isPostSubmitting
+                      ? t("promptShare.preparingPost")
+                      : t("promptShare.post")}
+                </span>
               </button>
             </div>
           </form>
