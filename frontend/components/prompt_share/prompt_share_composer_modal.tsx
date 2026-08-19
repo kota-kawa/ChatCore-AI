@@ -69,7 +69,7 @@ type PromptShareComposerModalProps = {
   promptPostTitleInputRef: RefObject<HTMLInputElement | null>;
   promptPostCategorySelectRef: RefObject<HTMLSelectElement | null>;
   promptPostContentTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  promptPostAiModelSelectRef: RefObject<HTMLSelectElement | null>;
+  promptPostAiModelSelectRef: RefObject<HTMLInputElement | null>;
   promptPostInputExamplesRef: RefObject<HTMLTextAreaElement | null>;
   promptPostOutputExamplesRef: RefObject<HTMLTextAreaElement | null>;
   promptImageInputRef: RefObject<HTMLInputElement | null>;
@@ -85,7 +85,6 @@ type PromptShareComposerModalProps = {
 type PromptComposerSelectOption = {
   value: string;
   label: string;
-  group?: string;
 };
 
 type ComposerPostType = "text-prompt" | "image-prompt" | "skill";
@@ -121,8 +120,10 @@ const COMPOSER_POST_TYPES: Array<{
   }
 ];
 
-// AIモデルをベンダーでグループ化した選択肢の定義
-// AI model options grouped by vendor for visual separation in the dropdown
+// AIモデルの入力候補（datalist）。固定リストではなく自由入力の補助のため、
+// ここに無いモデル名を入力してもそのまま投稿できる。
+// AI model suggestions for the <datalist>. The field itself is free text, so
+// typing a model that isn't listed here still works fine.
 const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOption[] }[] = [
   {
     label: "OpenAI",
@@ -178,7 +179,6 @@ function PromptComposerSelect({
   nativeRef,
   value,
   options,
-  groupedOptions,
   onChange,
   onAfterChange,
   required = false,
@@ -189,7 +189,6 @@ function PromptComposerSelect({
   nativeRef: RefObject<HTMLSelectElement | null>;
   value: string;
   options: PromptComposerSelectOption[];
-  groupedOptions?: { label: string; options: PromptComposerSelectOption[] }[];
   onChange: (value: string) => void;
   onAfterChange: () => void;
   required?: boolean;
@@ -329,10 +328,6 @@ function PromptComposerSelect({
     }
   };
 
-  // グループ付きレンダリング時にフラットなoptionIndexを手動でインクリメントする
-  // Manual counter for flat option index when rendering grouped options
-  let optionIndex = 0;
-
   return (
     <div ref={rootRef} className={`prompt-composer-select${isOpen ? " is-open" : ""}`.trim()}>
       {/* ネイティブselectはフォームバリデーションとスクリーンリーダーのためのフォールバック */}
@@ -350,27 +345,11 @@ function PromptComposerSelect({
           onAfterChange();
         }}
       >
-        {groupedOptions ? (
-          <>
-            <option value={options[0]?.value ?? ""}>{options[0]?.label}</option>
-            {groupedOptions.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-            <option value={options[options.length - 1]?.value ?? "その他"}>{options[options.length - 1]?.label}</option>
-          </>
-        ) : (
-          options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))
-        )}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
       </select>
 
       <button
@@ -393,62 +372,18 @@ function PromptComposerSelect({
       </button>
 
       <div className="prompt-composer-select__menu" id={listboxId} role="listbox" aria-label={menuLabel}>
-        {groupedOptions ? (
-          <>
-            {/* 「未設定」はグループ外の先頭に独立して配置する */}
-            {/* Render the "unset" option separately before the grouped options */}
-            <PromptComposerSelectOptionButton
-              index={optionIndex++}
-              option={options[0]}
-              value={value}
-              optionRefs={optionRefs}
-              activeIndex={activeIndex}
-              onSelect={selectOption}
-              onKeyDown={handleOptionKeyDown}
-            />
-            {groupedOptions.map((group) => (
-              <div key={group.label} className="prompt-composer-select__group" role="group" aria-label={group.label}>
-                <div className="prompt-composer-select__group-label">{group.label}</div>
-                {group.options.map((option) => (
-                  <PromptComposerSelectOptionButton
-                    key={option.value}
-                    index={optionIndex++}
-                    option={option}
-                    value={value}
-                    optionRefs={optionRefs}
-                    activeIndex={activeIndex}
-                    onSelect={selectOption}
-                    onKeyDown={handleOptionKeyDown}
-                  />
-                ))}
-              </div>
-            ))}
-            {/* 「その他」はグループ外の末尾に独立して配置する */}
-            {/* Render "other" as a standalone option after all groups */}
-            <PromptComposerSelectOptionButton
-              index={optionIndex++}
-              option={options[options.length - 1]}
-              value={value}
-              optionRefs={optionRefs}
-              activeIndex={activeIndex}
-              onSelect={selectOption}
-              onKeyDown={handleOptionKeyDown}
-            />
-          </>
-        ) : (
-          options.map((option, index) => (
-            <PromptComposerSelectOptionButton
-              key={option.value}
-              index={index}
-              option={option}
-              value={value}
-              optionRefs={optionRefs}
-              activeIndex={activeIndex}
-              onSelect={selectOption}
-              onKeyDown={handleOptionKeyDown}
-            />
-          ))
-        )}
+        {options.map((option, index) => (
+          <PromptComposerSelectOptionButton
+            key={option.value}
+            index={index}
+            option={option}
+            value={value}
+            optionRefs={optionRefs}
+            activeIndex={activeIndex}
+            onSelect={selectOption}
+            onKeyDown={handleOptionKeyDown}
+          />
+        ))}
       </div>
     </div>
   );
@@ -563,18 +498,11 @@ export function PromptShareComposerModal({
     ...option,
     label: option.value ? getCategoryLabelOrFallback(option.value, option.label, locale) : t("promptShare.notSelected")
   }));
-  const compatibleAiModelGroups = AI_MODEL_OPTION_GROUPS.filter((group) =>
+  // 投稿タイプ（テキスト/画像）に合わせて、datalistに出す候補モデル名だけ絞り込む
+  // Narrow the datalist suggestions to models relevant to the current post type (text vs image)
+  const aiModelSuggestions = AI_MODEL_OPTION_GROUPS.filter((group) =>
     mediaType === "image" ? group.label === "画像生成" : group.label !== "画像生成"
-  );
-  const localizedAiModelGroups = compatibleAiModelGroups.map((group) => ({
-    ...group,
-    label: group.label === "画像生成" ? t("promptShare.imageGeneration") : group.label
-  }));
-  const localizedAiModelOptions: PromptComposerSelectOption[] = [
-    { value: "", label: t("promptShare.unset") },
-    ...localizedAiModelGroups.flatMap((group) => group.options.map((option) => ({ ...option, group: group.label }))),
-    { value: "その他", label: t("promptShare.categoryOther") }
-  ];
+  ).flatMap((group) => group.options.map((option) => option.value));
 
   // SKILLの説明パネルの開閉状態を管理し、フォーマットが切り替わると自動で閉じる
   // Manage the SKILL info panel toggle; reset it whenever the content format changes
@@ -582,15 +510,6 @@ export function PromptShareComposerModal({
   useEffect(() => {
     setShowSkillInfo(false);
   }, [contentFormat]);
-
-  // 投稿タイプを切り替えた際、対象メディアでは選べないAIモデルを残さない。
-  // Clear a stale AI model when it is not compatible with the selected post type.
-  useEffect(() => {
-    const compatibleValues = new Set(localizedAiModelOptions.map((option) => option.value));
-    if (postAiModel && !compatibleValues.has(postAiModel)) {
-      setPostAiModel("");
-    }
-  }, [localizedAiModelOptions, postAiModel, setPostAiModel]);
 
   return (
     <div
@@ -808,18 +727,30 @@ export function PromptShareComposerModal({
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="prompt-ai-model-trigger">{t("promptShare.aiModelOptional")}</label>
-                  <PromptComposerSelect
-                    selectId="prompt-ai-model"
-                    nativeRef={promptPostAiModelSelectRef}
+                  <label htmlFor="prompt-ai-model">{t("promptShare.aiModelOptional")}</label>
+                  {/* 固定リストのプルダウンではなく自由入力にし、リストにないモデルも
+                      そのまま入力できるようにする。datalistは代表的なモデル名を補助として示すだけ。 */}
+                  {/* Free text instead of a fixed dropdown, so models not on the list can still be
+                      entered as-is. The datalist only offers common model names as a convenience. */}
+                  <input
+                    type="text"
+                    id="prompt-ai-model"
+                    list="prompt-ai-model-suggestions"
+                    autoComplete="off"
+                    placeholder={t("promptShare.aiModelPlaceholder")}
+                    maxLength={100}
+                    ref={promptPostAiModelSelectRef}
                     value={postAiModel}
-                    options={localizedAiModelOptions}
-                    groupedOptions={localizedAiModelGroups}
-                    menuLabel={t("promptShare.chooseAiModel")}
-                    onChange={setPostAiModel}
-                    onAfterChange={updatePromptFeedbackErrorIfNeeded}
-                    isModalOpen={isOpen}
+                    onChange={(event) => {
+                      setPostAiModel(event.target.value);
+                      updatePromptFeedbackErrorIfNeeded();
+                    }}
                   />
+                  <datalist id="prompt-ai-model-suggestions">
+                    {aiModelSuggestions.map((modelName) => (
+                      <option key={modelName} value={modelName} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
