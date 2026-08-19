@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from html import escape as escape_html, unescape as unescape_html
 from typing import Any, Callable, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -49,6 +50,9 @@ SOURCE_CODE_BLOCK_RE = re.compile(
 )
 
 MAX_ARTIFACTS_PER_MESSAGE = 3
+MAX_WEB_SEARCH_IMAGE_URL_CHARS = 2000
+MAX_WEB_SEARCH_IMAGE_ALT_CHARS = 180
+MAX_WEB_SEARCH_IMAGE_SOURCE_TITLE_CHARS = 160
 # サンドボックスで利用できるローカル配信ライブラリの正規名。
 # Canonical names of locally served libraries available inside the sandbox.
 SUPPORTED_ARTIFACT_LIBRARIES = ("three",)
@@ -1222,6 +1226,43 @@ def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
     return buttons.model_dump(exclude_none=True)
 
 
+def validate_web_search_image_payload(payload: Any) -> dict[str, Any]:
+    """Validate a server-selected external image before it reaches the browser."""
+    if not isinstance(payload, dict):
+        raise GenerativeUiValidationError("Web search image payload must be an object.")
+
+    def safe_url(value: Any, max_chars: int) -> str:
+        url = " ".join(str(value or "").split())[:max_chars].strip()
+        try:
+            parsed = urlsplit(url)
+        except ValueError as exc:
+            raise GenerativeUiValidationError("Web search image URL is invalid.") from exc
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or any(char in url for char in ("\r", "\n", "\x00"))
+        ):
+            raise GenerativeUiValidationError("Web search image URL is not safe.")
+        return url
+
+    image_url = safe_url(payload.get("url"), MAX_WEB_SEARCH_IMAGE_URL_CHARS)
+    source_url = safe_url(payload.get("source_url"), MAX_WEB_SEARCH_IMAGE_URL_CHARS)
+    alt = " ".join(str(payload.get("alt") or "").split())[:MAX_WEB_SEARCH_IMAGE_ALT_CHARS].strip()
+    if not alt:
+        raise GenerativeUiValidationError("Web search image alt text is required.")
+    source_title = " ".join(str(payload.get("source_title") or "").split())[
+        :MAX_WEB_SEARCH_IMAGE_SOURCE_TITLE_CHARS
+    ].strip()
+    return {
+        "url": image_url,
+        "alt": alt,
+        "source_url": source_url,
+        **({"source_title": source_title} if source_title else {}),
+    }
+
+
 # メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。
 # Parse and decode structured message parts from JSON or raw payloads.
 def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
@@ -1256,6 +1297,13 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
             except GenerativeUiValidationError:
                 continue
             parts.append({"type": "interactive_buttons", "buttons": buttons})
+            continue
+        if part_type == "web_search_image":
+            try:
+                image = validate_web_search_image_payload(part.get("image"))
+            except GenerativeUiValidationError:
+                continue
+            parts.append({"type": "web_search_image", "image": image})
             continue
     return parts or None
 
@@ -1331,6 +1379,23 @@ def build_message_parts_context(raw_parts: Any) -> str:
                             f"<options>{escape_html(' | '.join(safe_options))}</options>"
                         )
                 context_lines.append("</interactive_buttons>")
+        elif part.get("type") == "web_search_image":
+            image = part.get("image")
+            if not isinstance(image, dict):
+                continue
+            alt = _coerce_string(image.get("alt")).strip()
+            source_title = _coerce_string(image.get("source_title")).strip()
+            source_url = _coerce_string(image.get("source_url")).strip()
+            if not alt and not source_title:
+                continue
+            context_lines.append("<web_search_image>")
+            if alt:
+                context_lines.append(f"<alt>{escape_html(alt)}</alt>")
+            if source_title:
+                context_lines.append(f"<source_title>{escape_html(source_title)}</source_title>")
+            if source_url:
+                context_lines.append(f"<source_url>{escape_html(source_url)}</source_url>")
+            context_lines.append("</web_search_image>")
 
     if len(context_lines) == 2:
         return ""

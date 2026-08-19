@@ -311,6 +311,37 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
             ],
         )
 
+    def test_extract_document_collects_metadata_and_body_image_candidates(self):
+        html = """
+        <html><head>
+          <meta property="og:image" content="/images/hero.jpg">
+          <meta name="twitter:image" content="https://cdn.example.com/card.png">
+        </head><body>
+          <main>
+            <img src="/images/hero.jpg" alt="Main article photo">
+            <img data-src="/images/chart.png" title="Results chart">
+            <img src="data:image/png;base64,unsafe" alt="Ignore data image">
+          </main>
+        </body></html>
+        """
+
+        document = url_fetcher._extract_document_from_html(
+            html,
+            requested_url="https://example.com/article",
+            final_url="https://example.com/article",
+        )
+
+        self.assertEqual(
+            [image.url for image in document.images],
+            [
+                "https://example.com/images/hero.jpg",
+                "https://cdn.example.com/card.png",
+                "https://example.com/images/chart.png",
+            ],
+        )
+        self.assertEqual(document.images[0].kind, "og:image")
+        self.assertEqual(document.images[2].title, "Results chart")
+
 
 # 単一のURLからコンテンツをフェッチする機能（正常取得、例外処理、不正なコンテンツタイプの拒否、文字数制限等）をテストするクラス。
 # Test class for fetching content from a single URL (handling exceptions, content-type checks, and truncating size).

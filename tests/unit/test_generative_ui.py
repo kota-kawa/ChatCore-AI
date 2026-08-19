@@ -97,6 +97,26 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertNotIn(VALID_ARTIFACT["html"], context)
         self.assertNotIn(VALID_ARTIFACT["js"], context)
 
+    def test_message_parts_context_describes_web_search_image(self):
+        context = build_message_parts_context(
+            [
+                {
+                    "type": "web_search_image",
+                    "image": {
+                        "url": "https://cdn.example.com/hero.jpg",
+                        "alt": "Relevant photo",
+                        "source_url": "https://example.com/article",
+                        "source_title": "Article title",
+                    },
+                }
+            ]
+        )
+
+        self.assertIn("<alt>Relevant photo</alt>", context)
+        self.assertIn("<source_title>Article title</source_title>", context)
+        self.assertIn("<source_url>https://example.com/article</source_url>", context)
+        self.assertNotIn("https://cdn.example.com/hero.jpg", context)
+
     def test_message_parts_context_includes_safe_rendered_labels_for_follow_up_edits(self):
         artifact = {
             **VALID_ARTIFACT,
@@ -694,6 +714,33 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # デコード処理結果の検証：不正なアーティファクトのみが除去されること
         # Assert the results: only the invalid artifact is dropped
         self.assertEqual(decode_message_parts(parts), [{"type": "text", "text": "hello"}])
+
+    def test_decode_message_parts_keeps_safe_web_search_image(self):
+        parts = [
+            {"type": "text", "text": "answer"},
+            {
+                "type": "web_search_image",
+                "image": {
+                    "url": "https://cdn.example.com/hero.jpg",
+                    "alt": "Relevant photo",
+                    "source_url": "https://example.com/article",
+                    "source_title": "Article",
+                },
+            },
+        ]
+
+        self.assertEqual(decode_message_parts(parts), parts)
+
+    def test_decode_message_parts_drops_unsafe_web_search_image(self):
+        parts = [
+            {"type": "web_search_image", "image": {
+                "url": "javascript:alert(1)",
+                "alt": "Unsafe",
+                "source_url": "https://example.com/article",
+            }},
+        ]
+
+        self.assertIsNone(decode_message_parts(parts))
 
     def test_validate_artifact_keeps_three_library_declaration(self):
         """
