@@ -25,9 +25,6 @@ function WebSearchImagePartComponent({ image }: WebSearchImagePartProps) {
           referrerPolicy="no-referrer"
         />
       </a>
-      {image.sourceTitle ? (
-        <figcaption className="web-search-image-part__caption">{image.sourceTitle}</figcaption>
-      ) : null}
     </figure>
   );
 }

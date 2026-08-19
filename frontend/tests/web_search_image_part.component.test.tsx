@@ -24,6 +24,7 @@ describe("WebSearchImagePart", () => {
     expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(link?.getAttribute("href")).toBe("https://example.com/article");
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(container.querySelector("figcaption")).toHaveTextContent("Article title");
+    expect(link?.getAttribute("title")).toBe("Article title");
+    expect(container.querySelector("figcaption")).toBeNull();
   });
 });
