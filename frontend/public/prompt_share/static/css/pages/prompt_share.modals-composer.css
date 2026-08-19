@@ -1997,26 +1997,6 @@
   }
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__group {
-  margin-top: 0.24rem;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__group + .prompt-composer-select__option,
-:where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__option + .prompt-composer-select__group {
-  margin-top: 0.28rem;
-  padding-top: 0.28rem;
-  border-top: 1px solid rgba(203, 220, 238, 0.72);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__group-label {
-  padding: 0.42rem 0.62rem 0.28rem;
-  color: #6683a2;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__option {
   width: 100%;
   min-height: 42px;

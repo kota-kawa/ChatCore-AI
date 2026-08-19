@@ -78,7 +78,7 @@ function ComposerHarness({
       promptPostTitleInputRef={createRef<HTMLInputElement>()}
       promptPostCategorySelectRef={createRef<HTMLSelectElement>()}
       promptPostContentTextareaRef={createRef<HTMLTextAreaElement>()}
-      promptPostAiModelSelectRef={createRef<HTMLSelectElement>()}
+      promptPostAiModelSelectRef={createRef<HTMLInputElement>()}
       promptPostInputExamplesRef={createRef<HTMLTextAreaElement>()}
       promptPostOutputExamplesRef={createRef<HTMLTextAreaElement>()}
       promptImageInputRef={createRef<HTMLInputElement>()}
@@ -149,21 +149,35 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(document.getElementById("prompt-category")).not.toBeRequired();
   });
 
-  it("投稿タイプに合うAIモデルだけを候補にする", () => {
+  it("使用AIモデルは自由入力欄で、投稿タイプに合う候補をdatalistで提示する", () => {
     const { unmount } = render(<ComposerHarness />);
+    const aiModelInput = document.getElementById("prompt-ai-model");
+    expect(aiModelInput).toBeInstanceOf(HTMLInputElement);
+    expect(aiModelInput).toHaveAttribute("list", "prompt-ai-model-suggestions");
+
     const textModelOptions = Array.from(
-      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model option")
-    ).map((option) => option.textContent);
+      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model-suggestions option")
+    ).map((option) => option.value);
     expect(textModelOptions).toContain("ChatGPT (GPT-5.4)");
     expect(textModelOptions).not.toContain("Midjourney");
 
     unmount();
     render(<ComposerHarness initialType="image" />);
     const imageModelOptions = Array.from(
-      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model option")
-    ).map((option) => option.textContent);
+      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model-suggestions option")
+    ).map((option) => option.value);
     expect(imageModelOptions).toContain("Midjourney");
     expect(imageModelOptions).not.toContain("ChatGPT (GPT-5.4)");
+  });
+
+  it("リストにないモデル名も自由入力できる", async () => {
+    const user = userEvent.setup();
+    render(<ComposerHarness />);
+
+    const aiModelInput = document.getElementById("prompt-ai-model") as HTMLInputElement;
+    await user.type(aiModelInput, "自作のローカルLLM");
+
+    expect(aiModelInput).toHaveValue("自作のローカルLLM");
   });
 
   it("送信中は閉じる操作とフォーム内の編集を無効にする", async () => {

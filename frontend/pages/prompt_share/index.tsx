@@ -187,7 +187,7 @@ export default function PromptSharePage({
   const promptPostTitleInputRef = useRef<HTMLInputElement | null>(null);
   const promptPostCategorySelectRef = useRef<HTMLSelectElement | null>(null);
   const promptPostContentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const promptPostAiModelSelectRef = useRef<HTMLSelectElement | null>(null);
+  const promptPostAiModelSelectRef = useRef<HTMLInputElement | null>(null);
   const promptPostInputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostSkillMarkdownRef = useRef<HTMLTextAreaElement | null>(null);

@@ -989,15 +989,6 @@
   background-clip: padding-box;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__group + .prompt-composer-select__option,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__option + .prompt-composer-select__group {
-  border-top-color: rgba(148, 163, 184, 0.16);
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__group-label {
-  color: #64748b;
-}
-
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-composer-select__option {
   color: #dbeafe;
 }
