@@ -117,7 +117,7 @@ def _consume_prompt_create_limits(
     request: Request,
     user_id: int,
 ) -> tuple[bool, str | None, int | None]:
-    """Apply Redis-backed abuse controls before the upload is parsed or decoded."""
+    """Apply Redis-backed abuse controls before an image is stored or decoded."""
     client_ip = get_request_client_ip(request)
     checks = (
         ("prompt:create:ip", client_ip, PROMPT_CREATE_PER_IP_LIMIT, PROMPT_CREATE_RATE_WINDOW_SECONDS),
@@ -2060,10 +2060,6 @@ async def create_prompt(request: Request):
             status_code=413,
         )
 
-    allowed, limit_message, retry_after = _consume_prompt_create_limits(request, int(user_id))
-    if not allowed:
-        return jsonify_rate_limited(limit_message or "投稿回数が多すぎます。", retry_after=retry_after)
-
     # コンテンツタイプに応じてフォームデータ、またはJSONを取得
     # Determine the payload source based on request headers.
     content_type = request.headers.get("content-type", "")
@@ -2127,6 +2123,15 @@ async def create_prompt(request: Request):
         # 添付ファイルがある場合、ディスクに保存して attachments 要素を得る
         # Save the uploaded attachment and build its descriptor.
         if upload_file is not None:
+            allowed, limit_message, retry_after = _consume_prompt_create_limits(
+                request,
+                int(user_id),
+            )
+            if not allowed:
+                return jsonify_rate_limited(
+                    limit_message or "画像付き投稿の回数が多すぎます。",
+                    retry_after=retry_after,
+                )
             saved = await run_blocking(
                 _save_prompt_attachment, upload_file, user_id, payload.media_type
             )
