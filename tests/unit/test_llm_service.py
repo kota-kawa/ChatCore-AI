@@ -195,8 +195,8 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "groq-ok")
         mock_groq.chat.completions.create.assert_called_once()
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
-        self.assertFalse(request_kwargs["include_reasoning"])
-        self.assertNotIn("reasoning_effort", request_kwargs)
+        self.assertFalse(request_kwargs["extra_body"]["include_reasoning"])
+        self.assertNotIn("reasoning_effort", request_kwargs["extra_body"])
 
     def test_get_llm_response_routes_qwen_to_groq(self):
         mock_groq = MagicMock()
@@ -214,9 +214,9 @@ class LlmServiceTestCase(unittest.TestCase):
             llm.QWEN_3_6_27B_MODEL,
         )
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
-        self.assertEqual(request_kwargs["reasoning_effort"], "default")
-        self.assertEqual(request_kwargs["reasoning_format"], "hidden")
-        self.assertNotIn("include_reasoning", request_kwargs)
+        self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
+        self.assertEqual(request_kwargs["extra_body"]["reasoning_format"], "hidden")
+        self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
 
     def test_get_llm_response_routes_to_claude(self):
         """
@@ -523,8 +523,8 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(mock_stream.closed)
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
         self.assertTrue(request_kwargs["stream"])
-        self.assertFalse(request_kwargs["include_reasoning"])
-        self.assertNotIn("reasoning_effort", request_kwargs)
+        self.assertFalse(request_kwargs["extra_body"]["include_reasoning"])
+        self.assertNotIn("reasoning_effort", request_kwargs["extra_body"])
 
     def test_get_qwen_response_stream_hides_reasoning_without_disabling_it(self):
         mock_groq = MagicMock()
@@ -541,9 +541,9 @@ class LlmServiceTestCase(unittest.TestCase):
 
         self.assertEqual(response, ["qwen-stream"])
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
-        self.assertEqual(request_kwargs["reasoning_effort"], "default")
-        self.assertEqual(request_kwargs["reasoning_format"], "hidden")
-        self.assertNotIn("include_reasoning", request_kwargs)
+        self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
+        self.assertEqual(request_kwargs["extra_body"]["reasoning_format"], "hidden")
+        self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
         self.assertTrue(mock_stream.closed)
 
     def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
