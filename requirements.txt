@@ -21,3 +21,4 @@ rank-bm25==0.2.2
 numpy==2.5.1
 defusedxml==0.7.1
 pypdf==6.15.0
+Pillow==12.2.0
