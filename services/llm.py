@@ -76,6 +76,7 @@ LIGHTWEIGHT_TASK_MODEL = GPT_OSS_20B_MODEL
 QWEN_3_6_27B_MODEL = "qwen/qwen3.6-27b"
 GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
+GPT_OSS_MODELS = {GPT_OSS_20B_MODEL, GPT_OSS_120B_MODEL}
 GROQ_MODEL = GPT_OSS_120B_MODEL
 OPENAI_DEFAULT_MODEL = GPT_5_6_LUNA_MODEL
 CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
@@ -388,6 +389,19 @@ def _openai_responses_reasoning_kwargs(model_name: str) -> dict[str, Any]:
     return {}
 
 
+def _groq_reasoning_kwargs(model_name: str) -> dict[str, Any]:
+    """Keep Groq reasoning enabled while excluding private reasoning output."""
+    if model_name == QWEN_3_6_27B_MODEL:
+        return {
+            "reasoning_effort": "default",
+            "reasoning_format": "hidden",
+        }
+    if model_name in GPT_OSS_MODELS:
+        # Do not set reasoning_effort: Groq's current default effort remains in effect.
+        return {"include_reasoning": False}
+    return {}
+
+
 # ツール呼び出しの設定用キーワード引数を構築する
 # Build tool-choice keyword arguments for chat completions.
 # LLMツール（関数呼び出し）指定用の引数辞書を構築します。
@@ -527,6 +541,7 @@ def get_groq_response(
             "model": model_name,
             "messages": sanitized_messages,
             **_chat_completion_token_limit_kwargs(model_name),
+            **_groq_reasoning_kwargs(model_name),
             **_chat_completion_tool_kwargs(tools),
         }
         response = groq_client.chat.completions.create(
@@ -567,6 +582,7 @@ def _get_openai_compatible_response_stream(
     missing_key_message: str,
     provider_error_message: str,
     tools: list[dict[str, Any]] | None = None,
+    reasoning_kwargs: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     # OpenAI互換APIのストリーム断片を順次返し、最後に確実に close します。
     # Yield OpenAI-compatible stream deltas and always close the stream.
@@ -582,6 +598,7 @@ def _get_openai_compatible_response_stream(
             "messages": sanitized_messages,
             **_chat_completion_token_limit_kwargs(model_name),
             **_openai_reasoning_kwargs(model_name),
+            **(reasoning_kwargs or {}),
             "stream": True,
             **_chat_completion_tool_kwargs(tools),
         }
@@ -677,6 +694,7 @@ def get_groq_response_stream(
         missing_key_message="GROQ_API_KEY が未設定です。",
         provider_error_message="Groq streaming API call failed.",
         tools=tools,
+        reasoning_kwargs=_groq_reasoning_kwargs(model_name),
     )
 
 
@@ -1121,6 +1139,7 @@ def _get_chat_completions_json_response(
             "model": model_name,
             "messages": sanitized_messages,
             **_chat_completion_token_limit_kwargs(model_name),
+            **(_groq_reasoning_kwargs(model_name) if provider_name == "Groq" else {}),
             **_openai_reasoning_kwargs(model_name),
             "temperature": 0,
             "response_format": {"type": "json_object"},
