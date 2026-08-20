@@ -88,6 +88,40 @@ test("the composer's submit action is not pinned to the bottom of the modal", ()
   );
 });
 
+// ファイル選択後にプレビューが増えても、フォーカス中のinputがモーダル外へ移動しないようにする。
+// Keep the focused file input anchored when the preview is inserted so the modal cannot jump-scroll.
+test("the composer's image input and preview stay within the upload field width", () => {
+  const uploadRule = promptShareModalCss.match(
+    /\.image-upload-field\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(uploadRule, "the composer must style its image upload field");
+  assert.match(uploadRule[1], /position:\s*relative;/);
+  assert.match(uploadRule[1], /min-width:\s*0;/);
+  assert.match(uploadRule[1], /overflow:\s*hidden;/);
+
+  const inputRule = promptShareModalCss.match(
+    /\.image-upload-field input\[type="file"\]\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(inputRule, "the file input must have a local, visually hidden position");
+  assert.match(inputRule[1], /position:\s*absolute;/);
+  assert.match(inputRule[1], /top:\s*0;/);
+  assert.match(inputRule[1], /left:\s*0;/);
+
+  const previewRule = promptShareModalCss.match(
+    /\.prompt-image-preview\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(previewRule, "the composer must constrain the selected image preview");
+  assert.match(previewRule[1], /min-width:\s*0;/);
+  assert.match(previewRule[1], /max-width:\s*100%;/);
+  assert.match(previewRule[1], /overflow:\s*hidden;/);
+
+  const previewImageRule = promptShareModalCss.match(
+    /\.prompt-image-preview img\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(previewImageRule, "the selected image must be constrained to the preview card");
+  assert.match(previewImageRule[1], /max-width:\s*100%;/);
+});
+
 // 詳細モーダルのヘッダーは上に貼り付けない。特にスマホでは本文の縦幅を削ってしまうため。
 // The detail modal's header must not be pinned: on phones it eats the body's height.
 test("the detail modal's header scrolls with the body instead of sticking", () => {

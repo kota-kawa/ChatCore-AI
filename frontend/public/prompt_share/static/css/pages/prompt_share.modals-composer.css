@@ -2195,6 +2195,7 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .image-prompt-fields {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 0.5rem;
 }
@@ -2206,6 +2207,9 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
   border: 1px dashed #94bfe9;
   border-radius: 20px;
   background: linear-gradient(180deg, #f8fbff 0%, #edf5ff 100%);
@@ -2224,9 +2228,11 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field input[type="file"] {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
-  margin: -1px;
+  margin: 0;
   padding: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
@@ -2258,8 +2264,10 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 0.14rem;
+  overflow-wrap: anywhere;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy strong {
@@ -2274,6 +2282,9 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   gap: 0.7rem;
   margin-top: 0.7rem;
   padding: 0.96rem;
@@ -2286,6 +2297,8 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview img {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   aspect-ratio: 16 / 10;
   max-height: 260px;
   object-fit: contain;
@@ -2308,6 +2321,9 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__meta span {
   display: inline-flex;
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   min-height: 34px;
   padding: 0.45rem 0.7rem;
