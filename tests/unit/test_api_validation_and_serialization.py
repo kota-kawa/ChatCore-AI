@@ -207,9 +207,9 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             payload["response"],
         )
         self.assertIn("https://example.com/openai-news", payload["response"])
-        self.assertEqual(payload["parts"][0]["type"], "text")
-        self.assertEqual(payload["parts"][1]["type"], "web_search_image")
-        self.assertEqual(payload["parts"][1]["image"]["url"], "https://cdn.example.com/news.jpg")
+        self.assertEqual(payload["parts"][0]["type"], "web_search_image")
+        self.assertEqual(payload["parts"][1]["type"], "text")
+        self.assertEqual(payload["parts"][0]["image"]["url"], "https://cdn.example.com/news.jpg")
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
         mock_image.assert_called_once()

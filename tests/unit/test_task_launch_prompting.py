@@ -184,6 +184,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
         self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
         self.assertIn("text only", BASE_SYSTEM_PROMPT)
+        self.assertIn("single turn may show either a generated UI or a web-search image", BASE_SYSTEM_PROMPT)
+        self.assertIn("never as a trailing block at the bottom", BASE_SYSTEM_PROMPT)
         self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
     # 日本語: ベースシステムプロンプトが、そのまま貼り付ける完成文を chatcore-copy フェンスへ入れるよう

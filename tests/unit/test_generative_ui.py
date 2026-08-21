@@ -729,7 +729,28 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             },
         ]
 
-        self.assertEqual(decode_message_parts(parts), parts)
+        self.assertEqual(decode_message_parts(parts), [parts[1], parts[0]])
+
+    def test_decode_message_parts_drops_web_search_image_when_generated_ui_is_present(self):
+        parts = [
+            {"type": "text", "text": "answer"},
+            {
+                "type": "web_search_image",
+                "image": {
+                    "url": "https://cdn.example.com/hero.jpg",
+                    "alt": "Relevant photo",
+                    "source_url": "https://example.com/article",
+                },
+            },
+            {"type": "sandbox_artifact", "artifact": VALID_ARTIFACT},
+        ]
+
+        decoded = decode_message_parts(parts)
+
+        self.assertEqual(
+            decoded,
+            [parts[0], {"type": "sandbox_artifact", "artifact": VALID_ARTIFACT}],
+        )
 
     def test_decode_message_parts_drops_unsafe_web_search_image(self):
         parts = [
