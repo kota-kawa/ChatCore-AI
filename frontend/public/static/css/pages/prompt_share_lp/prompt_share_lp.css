@@ -164,7 +164,7 @@
 }
 
 .pslp-cardmock__body {
-  border-left: 2px solid var(--lp-green-soft);
+  border-left: 2px solid var(--lp-line);
   color: var(--lp-muted);
   font-family: var(--pslp-mono);
   font-size: var(--text-xs);
@@ -204,7 +204,7 @@
 }
 
 .pslp-value__item {
-  border-top: 2px solid var(--lp-green);
+  border-top: 1px solid var(--lp-line);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -324,7 +324,7 @@
 
 /* 対象外を先に見せるための注記リスト / Up-front list of what is out of scope */
 .pslp-limits {
-  border-left: 3px solid var(--lp-green);
+  border-left: 2px solid var(--lp-line);
   color: var(--lp-muted);
   display: flex;
   flex-direction: column;

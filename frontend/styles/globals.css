@@ -1240,9 +1240,9 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 .global-ai-agent-modal .mini-chat-markdown blockquote {
   margin: 0.58rem 0;
   padding: 0.46rem 0.72rem;
-  border-left: 3px solid rgba(26, 115, 232, 0.54);
-  border-radius: 0 6px 6px 0;
-  background: rgba(26, 115, 232, 0.06);
+  border-left: 2px solid rgba(15, 23, 42, 0.16);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.035);
   color: #475569;
 }
 
@@ -2102,8 +2102,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-markdown blockquote {
-  border-left-color: rgba(96, 165, 250, 0.68);
-  background: rgba(96, 165, 250, 0.08);
+  border-left-color: rgba(148, 163, 184, 0.42);
+  background: rgba(148, 163, 184, 0.08);
   color: #cbd5e1;
 }
 

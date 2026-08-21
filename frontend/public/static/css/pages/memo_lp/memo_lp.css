@@ -182,9 +182,6 @@
 .mslp-mock__card {
   background: var(--lp-paper);
   border: 1px solid var(--lp-line);
-  /* メモ一覧のカードが持つ背景色アクセントを、左端の帯として表す
-     The list card's background-colour accent, shown here as a stripe on the leading edge */
-  border-left: 4px solid var(--lp-green);
   border-radius: var(--radius-m);
   display: flex;
   flex-direction: column;
@@ -326,7 +323,7 @@
 }
 
 .mslp-value__item {
-  border-top: 2px solid var(--lp-green);
+  border-top: 1px solid var(--lp-line);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -491,7 +488,7 @@
 
 /* 制限を先に見せるための注記リスト / Up-front list of what is missing or capped */
 .mslp-limits {
-  border-left: 3px solid var(--lp-green);
+  border-left: 2px solid var(--lp-line);
   color: var(--lp-muted);
   display: flex;
   flex-direction: column;

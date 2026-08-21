@@ -23,12 +23,6 @@
   --cc-modal-accent-soft: var(--primary-subtle, rgba(25, 195, 125, 0.08));
   --cc-modal-accent-ring: var(--primary-alpha-28, rgba(25, 195, 125, 0.28));
   --cc-modal-accent-shadow: rgba(15, 122, 81, 0.28);
-  --cc-modal-rail: linear-gradient(
-    90deg,
-    var(--cc-modal-accent) 0%,
-    var(--cc-modal-accent-strong) 52%,
-    transparent 100%
-  );
   --cc-modal-on-accent: #ffffff;
   --cc-modal-title-color: #10261d;
   --cc-modal-text-color: #38504a;
@@ -94,21 +88,6 @@
 
 .cc-alert-modal.is-closing .cc-alert-modal__dialog {
   animation: cc-alert-modal-dialog-out var(--cc-modal-exit-duration) ease-in both;
-}
-
-/* Brand rail that draws itself along the top edge when the dialog opens. */
-.cc-alert-modal__dialog::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  transform-origin: left center;
-  background: var(--cc-modal-rail);
-  pointer-events: none;
-}
-
-.cc-alert-modal.is-visible .cc-alert-modal__dialog::before {
-  animation: cc-alert-modal-rail 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ---------- close button ---------- */
@@ -462,16 +441,6 @@ body.memo-page .cc-alert-modal {
   }
 }
 
-@keyframes cc-alert-modal-rail {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
 @keyframes cc-alert-modal-halo {
   from {
     box-shadow: 0 0 0 0 var(--cc-modal-accent-ring);
@@ -487,7 +456,6 @@ body.memo-page .cc-alert-modal {
   .cc-alert-modal.is-closing .cc-alert-modal__overlay,
   .cc-alert-modal.is-visible .cc-alert-modal__dialog,
   .cc-alert-modal.is-closing .cc-alert-modal__dialog,
-  .cc-alert-modal.is-visible .cc-alert-modal__dialog::before,
   .cc-alert-modal.is-visible .cc-alert-modal__icon::after {
     animation: none;
   }

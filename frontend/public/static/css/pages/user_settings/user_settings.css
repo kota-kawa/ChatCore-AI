@@ -1279,7 +1279,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 2px solid var(--primary-color);
+  border-bottom: 1px solid var(--settings-border-color, rgba(15, 23, 42, 0.12));
   padding-bottom: 0.75rem;
   margin-bottom: 1.5rem;
 }
@@ -3043,16 +3043,6 @@ body.settings-page :where(
     linear-gradient(135deg, #f8fffc 0%, #eefbf5 64%, #ffffff 100%);
 }
 
-:where(body.settings-page, .user-settings-page) .edit-prompt-modal__header::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #0f7a51, var(--primary-color, #19c37d), #67d8a7);
-  content: "";
-}
-
 :where(body.settings-page, .user-settings-page) .edit-prompt-modal__heading {
   display: flex;
   min-width: 0;
@@ -3499,16 +3489,6 @@ body.settings-page :where(
     linear-gradient(135deg, #f8fffc 0%, #eefbf5 64%, #ffffff 100%);
 }
 
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__header::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #0f7a51, var(--primary-color, #19c37d), #67d8a7);
-  content: "";
-}
-
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__heading {
   display: flex;
   min-width: 0;
@@ -3607,7 +3587,6 @@ body.settings-page :where(
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
   overflow: clip;
   border: 1px solid rgba(200, 220, 210, 0.8);
-  border-left: 3px solid rgba(25, 195, 125, 0.55);
   border-radius: 16px;
   background: #ffffff;
 }
@@ -3730,7 +3709,7 @@ body.settings-page :where(
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown blockquote {
   margin-inline: 0;
   padding: 0.2em 0 0.2em 0.9em;
-  border-left: 3px solid rgba(25, 195, 125, 0.35);
+  border-left: 2px solid rgba(15, 23, 42, 0.14);
   color: var(--settings-text-muted, #64748b);
 }
 
@@ -3909,7 +3888,6 @@ body.settings-page :where(
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
   border-color: rgba(71, 101, 88, 0.62);
-  border-left-color: rgba(52, 211, 153, 0.6);
   background: rgba(15, 23, 42, 0.72);
 }
 
@@ -3933,7 +3911,7 @@ body.settings-page :where(
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown blockquote {
-  border-left-color: rgba(52, 211, 153, 0.5);
+  border-left-color: rgba(148, 163, 184, 0.42);
   color: #94a3b8;
 }
 

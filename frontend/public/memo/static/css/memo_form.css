@@ -2816,10 +2816,10 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-markdown blockquote {
   margin: 0.5rem 0;
   padding: 0.38rem 0.66rem;
-  border-left: 3px solid rgba(191, 122, 23, 0.5);
-  border-radius: 0 6px 6px 0;
-  background: rgba(254, 243, 199, 0.5);
-  color: #78350f;
+  border-left: 2px solid rgba(15, 23, 42, 0.16);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.035);
+  color: #4b5563;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-markdown code {
@@ -3409,9 +3409,9 @@ html[data-cc-auth="in"] .memo-guest-intro {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-markdown blockquote {
-  border-left-color: rgba(251, 191, 36, 0.5);
-  background: rgba(251, 191, 36, 0.06);
-  color: #d4b483;
+  border-left-color: rgba(148, 163, 184, 0.42);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-markdown code {
