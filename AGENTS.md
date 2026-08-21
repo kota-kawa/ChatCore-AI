@@ -2,12 +2,27 @@
 
 ## プロジェクト構成とモジュール構成
 - `app.py` はメインサーバーの FastAPI エントリーポイントです。
-- `blueprints/` には機能モジュール（auth、chat、memo、prompt_share、admin）と、それぞれのルーティング、テンプレート、静的アセットが含まれています。
+- `blueprints/` には機能モジュール（auth、chat、memo、prompt_share、context_vault、admin、MCP OAuth）と、それぞれのルーティング・ハンドラが含まれています。
 - `services/` には、共通のインテグレーション（DB、LLM、メール、ユーザーヘルパー）が格納されています。DB アクセスは可能な限り `services/repositories/`（`chat_repository.py` など）のリポジトリ経由に寄せてください。
 - `frontend/` は独立した Next.js アプリ（`strike-frontend`）です。`components/`、`hooks/`、`contexts/`、`lib/` などで構成され、スタイル方針は `frontend/STYLING_STRATEGY.md` を参照してください。バックエンドの API とやり取りする UI はここに実装します。
-- `templates/` および `static/` はグローバルな HTML/CSS/JS アセットです。ブループリント固有のアセットは、各ブループリントの `templates/` および `static/` フォルダ配下にあります。
+- `frontend/public/` には Next.js が配信する公開アセットと CSS があり、ルートの `static/` はレガシー／ランタイム用の静的アセットです。
 - `alembic/versions/` には PostgreSQL のスキーマ移行履歴が保存されています。
 - `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
+
+## ドキュメントの参照先
+- `README.md` は公開向けの概要・機能紹介・起動手順です。内部設計の正本としては扱わず、実装との差分が見つかった場合は公開向け説明として修正します。
+- `ARCHITECTURE.md` はシステム構成、責務、リクエスト経路、データ・契約の境界をまとめた内部設計の正本です。複数レイヤーにまたがる変更では最初に必要な章だけ参照してください。
+- `docs/architecture/` はサブシステム固有の詳細です。現在のプロンプト添付画像の保存境界は `docs/architecture/prompt_attachment_storage.md` にあります。
+- `docs/architecture/README.md` は構造詳細の索引です。Frontend の機能マップ、Backend のルートマップ、DB エンティティ、Docker／デプロイ、テスト対応表へ必要なときだけ辿ってください。
+- `docs/architecture/frontend_feature_map.md` はページから主要コンポーネント・hook・API までの対応表です。
+- `docs/architecture/backend_route_map.md` は router、URL 接頭辞、機能別の Backend ハンドラの対応表です。
+- `docs/architecture/data_model.md` は主要 PostgreSQL エンティティと Redis／ファイル保存の境界を説明します。
+- `docs/architecture/deployment_and_operations.md` は Docker Compose、Blue/Green、起動順、ポート、永続ボリュームを説明します。
+- `docs/architecture/testing_map.md` は機能ごとの Backend／Frontend テストの選び方を説明します。
+- `docs/knowledge/README.md` は再利用可能な知見の索引です。デバッグ手順は `docs/knowledge/debugging.md`、API契約とマイグレーションの注意点は `docs/knowledge/contracts-and-migrations.md` を参照してください。作業ログや一時的な状態は追加しません。
+- `docs/decisions/README.md` は重要な技術判断（ADR）の索引です。判断を変更・追加するときは、既存 ADR を確認して理由と影響を更新・記録してください。
+- `docs/manual/` は利用者向けマニュアルであり、実装の責務や内部挙動を確認する資料ではありません。
+- `frontend/STYLING_STRATEGY.md` は Next.js 側の CSS 配置・トークン・レガシー互換方針です。UI の変更時は `ARCHITECTURE.md` のフロントエンド章と併せて参照してください。
 
 ## ビルド、テスト、開発コマンド
 > **注意:** この環境には `python` コマンドがありません。Python コマンドはすべて `python3`（および `python3 -m pip`）を使用してください。
