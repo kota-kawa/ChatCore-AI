@@ -512,6 +512,14 @@
   display: none;
 }
 
+/* 読み込めなかった画像はパーツ自体が空になる。空のままだとパーツ間の gap だけが
+   残るため、枠ごと畳む。
+   An image that failed to load leaves its part empty; collapse the part so only
+   the gap between parts does not remain. */
+:where(body.chat-page, .chat-page-shell) .bot-message-part--web-search-image:empty {
+  display: none;
+}
+
 :where(body.chat-page, .chat-page-shell) .sandbox-artifact {
   position: relative;
   width: 100%;
