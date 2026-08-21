@@ -20,7 +20,6 @@ from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
     _budgeted_web_search_result_tool_payload,
-    _parse_research_summary,
     _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
@@ -29,6 +28,7 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
+from services.chat_research_notes import parse_research_summary
 from services.llm import LlmConfigurationError, LlmTimeoutError
 from services.selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
@@ -248,7 +248,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             "unexpected": "破棄する",
         }
 
-        summary = _parse_research_summary(
+        summary = parse_research_summary(
             [
                 "<research_complete>",
                 json.dumps(payload, ensure_ascii=False),
@@ -265,11 +265,11 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Verify that malformed or oversized research notes are not forwarded to the final answer.
     def test_parse_research_summary_rejects_invalid_or_oversized_note(self):
         self.assertIsNone(
-            _parse_research_summary(["<research_complete>not-json</research_complete>"])
+            parse_research_summary(["<research_complete>not-json</research_complete>"])
         )
         oversized = json.dumps({"answer_plan": "x" * 2401}, ensure_ascii=False)
         self.assertIsNone(
-            _parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
+            parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
         )
 
     # 日本語: 一時チャットのページネーションにおいて、残りデータがある旨(has_more)と次回用カーソルが正しく返ることを検証します。
