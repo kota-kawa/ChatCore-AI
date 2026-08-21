@@ -115,7 +115,9 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             "services.web_search_images.get_llm_json_response",
             return_value=(
                 '{"show_image": true, "image_id": "image-1", '
-                '"alt_text": "嵐山の紅葉風景", "reason": "景観の説明に役立つ"}'
+                '"alt_text": "嵐山の紅葉風景", '
+                '"placements": {"image-1": {"position": "after_subject", "anchor": "嵐山"}}, '
+                '"reason": "景観の説明に役立つ"}'
             ),
         ) as mock_llm:
             selection = choose_web_search_image("京都の紅葉名所を画像付きで教えて", _result())
@@ -127,13 +129,17 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 "alt": "嵐山の紅葉風景",
                 "source_url": "https://example.com/kyoto",
                 "source_title": "京都の紅葉ガイド",
+                "placement": "after_subject",
+                "placement_anchor": "嵐山",
             },
         )
         prompt = mock_llm.call_args.args[0][1]["content"]
         self.assertIn("image-1", prompt)
         self.assertIn("image-2", prompt)
         system_prompt = mock_llm.call_args.args[0][0]["content"]
-        self.assertIn("immediately after a matching subject when possible", system_prompt)
+        self.assertIn("This is an LLM placement plan", system_prompt)
+        self.assertIn("after_subject", system_prompt)
+        self.assertIn("do not leave the application to infer an anchor", system_prompt)
         self.assertIn("mutually exclusive", system_prompt)
         self.assertIn("places and travel destinations", system_prompt)
         self.assertIn("programming, legal explanations", system_prompt)
@@ -232,11 +238,15 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 "url": "https://example.com/meigetsu.jpg",
                 "alt": "明月院の写真",
                 "source_url": "https://example.com/meigetsu",
+                "placement": "after_subject",
+                "placement_anchor": "明月院",
             },
             {
                 "url": "https://example.com/tokeiji.jpg",
                 "alt": "東慶寺の写真",
                 "source_url": "https://example.com/tokeiji",
+                "placement": "after_subject",
+                "placement_anchor": "東慶寺",
             },
         ]
 
@@ -253,7 +263,25 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(parts[2]["text"], " 説明です。東慶寺")
         self.assertEqual(parts[4]["text"], " 説明です。")
 
-    def test_streaming_reveals_an_image_at_the_subject_boundary(self):
+    def test_streaming_reveals_an_image_at_the_llm_planned_boundary(self):
+        images = build_web_search_image_parts(
+            [
+                {
+                    "url": "https://example.com/meigetsu.jpg",
+                    "alt": "明月院の写真",
+                    "source_url": "https://example.com/meigetsu",
+                    "placement": "after_subject",
+                    "placement_anchor": "明月院",
+                }
+            ]
+        )
+
+        self.assertEqual(
+            find_next_streaming_image_insertion("明月院", images),
+            (3, 0),
+        )
+
+    def test_backend_does_not_infer_a_subject_from_image_metadata(self):
         images = build_web_search_image_parts(
             [
                 {
@@ -266,7 +294,7 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
 
         self.assertEqual(
             find_next_streaming_image_insertion("明月院", images),
-            (3, 0),
+            (0, 0),
         )
 
     def test_appends_up_to_five_images_and_deduplicates_urls(self):
@@ -300,6 +328,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 "alt": "明月院の写真",
                 "source_url": "https://example.com/meigetsu",
             },
+            "_placement": "after_subject",
+            "_placement_anchor": "明月院",
         }
         parts = append_web_search_image_parts(
             [{"type": "text", "text": "明月院と東慶寺を紹介します。"}, existing_image],
@@ -307,6 +337,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 "url": "https://example.com/images/new.jpg",
                 "alt": "東慶寺の写真",
                 "source_url": "https://example.com/tokeiji",
+                "placement": "after_subject",
+                "placement_anchor": "東慶寺",
             },
         )
 

@@ -188,6 +188,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                                         "alt": "OpenAIの関連画像",
                                                         "source_url": "https://example.com/openai-news",
                                                         "source_title": "OpenAI News",
+                                                        "placement": "start",
                                                     }
                                                 ],
                                             ) as mock_image:
@@ -209,8 +210,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             payload["response"],
         )
         self.assertIn("https://example.com/openai-news", payload["response"])
-        # 対象語が本文にない画像は回答の冒頭へ置かれる。
-        # An image without a matching subject in the answer is placed at the beginning.
+        # LLM が冒頭配置を指定した画像は、回答トレースの直後へ置かれる。
+        # An image whose LLM plan says start is placed immediately after the trace.
         self.assertEqual(
             [part["type"] for part in payload["parts"]],
             ["text", "web_search_image", "text"],

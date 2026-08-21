@@ -923,7 +923,11 @@ class ChatGenerationJob:
             if result is None or len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
                 return
             try:
-                selections = choose_web_search_images(latest_user_message, result)
+                selections = choose_web_search_images(
+                    latest_user_message,
+                    result,
+                    answer_text=streamed_display_text,
+                )
             except Exception:
                 logger.warning(
                     "Web search image selection failed during streaming; continuing without an image.",
@@ -1327,7 +1331,6 @@ class ChatGenerationJob:
                         )
                         if result.has_sources:
                             web_search_results.append(result)
-                        collect_web_search_image_selections(result)
                         self._publish(
                             "web_search_completed",
                             {
@@ -1338,6 +1341,7 @@ class ChatGenerationJob:
                                 "cached": False,
                             },
                         )
+                        collect_web_search_image_selections(result)
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1550,11 +1554,11 @@ class ChatGenerationJob:
                     for part in message_parts
                 ]
 
-        # 画像は検索結果を取得した時点で選定済み。引用解決後の本文内の対象語へ
-        # 挿入位置を確定し、ストリーム中に表示した順序と保存内容を一致させる。
+        # 画像は検索結果を取得した時点で選定済み。引用解決後は、選定LLMが返した
+        # 配置計画を本文へ反映し、ストリーム中に表示した順序と保存内容を一致させる。
         # Image selection already happened when each search result arrived. After
-        # citation resolution, place the same selections near their subjects so
-        # persisted history matches what the stream revealed.
+        # citation resolution, realize the placement plan returned by the selector
+        # so persisted history matches what the stream revealed.
         if selected_web_search_images:
             message_parts = append_web_search_image_parts(
                 message_parts,

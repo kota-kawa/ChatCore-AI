@@ -812,6 +812,8 @@ class ChatStreamingTestCase(unittest.TestCase):
                         "alt": "京都の紅葉の写真",
                         "source_url": "https://example.com/kyoto",
                         "source_title": "京都の紅葉ガイド",
+                        "placement": "after_subject",
+                        "placement_anchor": "京都の紅葉",
                     }
                 ],
             ) as mock_image,
@@ -861,8 +863,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             "https://cdn.example.com/maple.jpg",
         )
         self.assertEqual(response_parts_payload["parts"][3]["text"], "")
-        # 画像は本文中の対象語の直後へ挿入される。
-        # The image is inserted immediately after the matching subject.
+        # 画像は選定LLMが指定したアンカーの直後へ挿入される。
+        # The image is inserted immediately after the anchor specified by the selector LLM.
         persisted_parts = persisted_records[0]["message_parts"]
         self.assertEqual(
             [part["type"] for part in persisted_parts],
@@ -1361,6 +1363,92 @@ class ChatStreamingTestCase(unittest.TestCase):
         deep_index = trace.index("リンクをたどって深掘り")
         self.assertLess(trace.index("追加検索"), deep_index)
         self.assertLess(deep_index, trace.index("検索結果を確認", deep_index))
+
+    # 日本語: モデルが本文の途中で追加検索を要求した場合、検索前の本文と検索後の続きが
+    # それぞれ生成順にクライアントへ届くことを検証します。
+    # English: Verify that prose emitted before a model-requested search and the continuation
+    # emitted after that search both reach the client in generation order.
+    def test_background_generation_job_streams_prose_before_and_after_model_search(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="東慶寺の詳細",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/tokeiji",
+                    title="東慶寺の案内",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("東慶寺の概要",),
+                ),
+            ),
+        )
+        stream_call_count = 0
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count == 1:
+                yield "明月院の概要です。"
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-mid-answer",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "東慶寺の詳細"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            self.assertIsNotNone(tools)
+            yield "東慶寺の説明です。"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "明月院と東慶寺を教えて"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-mid-answer-search:default",
+                conversation_messages=[
+                    {"role": "user", "content": "明月院と東慶寺を教えて"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            events = list(_iter_llm_stream_events(job))
+            body = b"".join(events).decode("utf-8")
+
+        event_names = [
+            line.removeprefix("event: ")
+            for event in events
+            for line in event.decode("utf-8").splitlines()
+            if line.startswith("event: ")
+        ]
+        chunk_indices = [index for index, name in enumerate(event_names) if name == "chunk"]
+        search_started_index = event_names.index("web_search_started")
+        search_completed_index = event_names.index("web_search_completed")
+        self.assertGreaterEqual(len(chunk_indices), 2)
+        self.assertLess(chunk_indices[0], search_started_index)
+        self.assertLess(search_started_index, search_completed_index)
+        self.assertLess(search_completed_index, chunk_indices[1])
+        self.assertLess(chunk_indices[1], event_names.index("done"))
+        self.assertIn("明月院の概要です。", body)
+        self.assertIn("東慶寺の説明です。", body)
+        self.assertEqual(persisted_messages, ["明月院の概要です。東慶寺の説明です。"])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
