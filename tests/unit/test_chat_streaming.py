@@ -196,6 +196,11 @@ def make_request(json_body, session=None):
     )
 
 
+def _research_then_answer_stream(*answer_chunks):
+    """Return mock streams for a short research-complete pass followed by final prose."""
+    return [iter(["<research_complete>"]), iter(answer_chunks)]
+
+
 # 日本語: チャットのストリーミング応答、検索拡張、履歴制限、再生成などの処理を検証するテストクラス。
 # English: Test class to verify chat streaming responses, search augmentation, history limits, and regeneration.
 class ChatStreamingTestCase(unittest.TestCase):
@@ -733,7 +738,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(["回答本文"]),
+                side_effect=_research_then_answer_stream("回答本文"),
             ),
         ):
             job = start_generation_job(
@@ -802,7 +807,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(["京都の紅葉名所です。"]),
+                side_effect=_research_then_answer_stream("京都の紅葉名所です。"),
             ),
             patch(
                 "services.chat_generation.choose_web_search_images",
@@ -905,7 +910,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(["回答本文"]),
+                side_effect=_research_then_answer_stream("回答本文"),
             ),
         ):
             job = start_generation_job(
@@ -971,11 +976,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(
-                    [
-                        "最新版です。[[sou",
-                        f"rce:{search_result.sources[0].evidence_id}]]",
-                    ]
+                side_effect=_research_then_answer_stream(
+                    "最新版です。[[sou",
+                    f"rce:{search_result.sources[0].evidence_id}]]",
                 ),
             ),
         ):
@@ -1069,12 +1072,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(
-                    [
-                        "利用できます。",
-                        f"【{evidence_id}",
-                        "】。",
-                    ]
+                side_effect=_research_then_answer_stream(
+                    "利用できます。",
+                    f"【{evidence_id}",
+                    "】。",
                 ),
             ),
         ):
@@ -1128,12 +1129,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(
-                    [
-                        "利用できます。",
-                        f"【{evidence_id}",
-                        " 詳細です。",
-                    ]
+                side_effect=_research_then_answer_stream(
+                    "利用できます。",
+                    f"【{evidence_id}",
+                    " 詳細です。",
                 ),
             ),
         ):
@@ -1184,12 +1183,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(
-                    [
-                        "最新版です。[[sr",
-                        f"c_{search_result.sources[0].evidence_id.removeprefix('src_')}]]",
-                        " 詳細です。",
-                    ]
+                side_effect=_research_then_answer_stream(
+                    "最新版です。[[sr",
+                    f"c_{search_result.sources[0].evidence_id.removeprefix('src_')}]]",
+                    " 詳細です。",
                 ),
             ),
         ):
@@ -1278,24 +1275,42 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            self.assertIsNotNone(tools)
-            tool_payloads = [
-                json.loads(message["content"])
-                for message in _messages
-                if message.get("role") == "tool"
-            ]
-            self.assertEqual(
-                [payload["sources"][0]["evidence_id"] for payload in tool_payloads],
-                [
-                    search_results["Python latest news"].sources[0].evidence_id,
-                    search_results["Python release details"].sources[0].evidence_id,
-                ],
-            )
-            self.assertEqual(tool_payloads[1]["sources"][0]["page_text"], "Full release page")
-            self.assertEqual(tool_payloads[1]["sources"][0]["link_depth"], 1)
-            self.assertEqual(
-                tool_payloads[1]["sources"][0]["linked_from_url"],
-                "https://example.com/python",
+            if stream_call_count == 3:
+                self.assertIsNotNone(tools)
+                tool_payloads = [
+                    json.loads(message["content"])
+                    for message in _messages
+                    if message.get("role") == "tool"
+                ]
+                self.assertEqual(
+                    [payload["sources"][0]["evidence_id"] for payload in tool_payloads],
+                    [
+                        search_results["Python latest news"].sources[0].evidence_id,
+                        search_results["Python release details"].sources[0].evidence_id,
+                    ],
+                )
+                self.assertEqual(tool_payloads[1]["sources"][0]["page_text"], "Full release page")
+                self.assertEqual(tool_payloads[1]["sources"][0]["link_depth"], 1)
+                self.assertEqual(
+                    tool_payloads[1]["sources"][0]["linked_from_url"],
+                    "https://example.com/python",
+                )
+                self.assertTrue(
+                    any(
+                        message.get("role") == "system"
+                        and "<research_complete>" in message.get("content", "")
+                        for message in _messages
+                    )
+                )
+                yield "<research_complete>"
+                return
+            self.assertIsNone(tools)
+            self.assertTrue(
+                any(
+                    message.get("role") == "system"
+                    and "final user-facing answer" in message.get("content", "")
+                    for message in _messages
+                )
             )
             yield "検索結果を踏まえた回答"
 
@@ -1321,7 +1336,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(stream_call_count, 3)
+        self.assertEqual(stream_call_count, 4)
         self.assertEqual(
             [call.args[0] for call in mock_search.call_args_list],
             ["Python latest news", "Python release details"],
@@ -1403,7 +1418,25 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            self.assertIsNotNone(tools)
+            if stream_call_count == 2:
+                self.assertIsNotNone(tools)
+                self.assertTrue(
+                    any(
+                        message.get("role") == "system"
+                        and "<research_complete>" in message.get("content", "")
+                        for message in _messages
+                    )
+                )
+                yield "<research_complete>"
+                return
+            self.assertIsNone(tools)
+            self.assertTrue(
+                any(
+                    message.get("role") == "system"
+                    and "final user-facing answer" in message.get("content", "")
+                    for message in _messages
+                )
+            )
             yield "明月院と東慶寺の最終回答です。"
 
         with (
@@ -1486,6 +1519,11 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
+            if stream_call_count == 3:
+                self.assertIsNotNone(tools)
+                yield "<research_complete>"
+                return
+            self.assertIsNone(tools)
             yield "回答"
 
         with (
@@ -1510,7 +1548,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(stream_call_count, 3)
+        self.assertEqual(stream_call_count, 4)
         self.assertEqual(mock_search.call_args.args, ("OpenAI news",))
         self.assertEqual(mock_search.call_args.kwargs["freshness"], "")
         self.assertEqual(mock_search.call_args.kwargs["page_fetch_budget"].max_attempts, 10)
@@ -1640,7 +1678,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                return_value=iter(["回答"]),
+                side_effect=_research_then_answer_stream("回答"),
             ),
         ):
             job = start_generation_job(
@@ -1653,7 +1691,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("event: web_search_failed", body)
-        self.assertNotIn("event: response_generation_started", body)
+        self.assertIn('"phase": "final_answer"', body)
         self.assertIn("event: chunk", body)
 
     # 日本語: LLMの設定エラー(APIキー不足等)が発生した際、その詳細メッセージがエラーイベントとして出力されることを検証します。
@@ -1685,18 +1723,26 @@ class ChatStreamingTestCase(unittest.TestCase):
                 raise LlmTimeoutError("provider timed out")
             yield from ["こん", "にちは"]
 
-        with patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0):
-            with patch(
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "こんにちは"}],
+                ),
+            ),
+            patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
+            patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=flaky_stream,
-            ):
-                job = start_generation_job(
-                    "guest:sid-1:default",
-                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                    model="openai/gpt-oss-120b",
-                    persist_response=lambda _: None,
-                )
-                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertEqual(attempts["count"], 2)
         self.assertNotIn("event: error", body)
