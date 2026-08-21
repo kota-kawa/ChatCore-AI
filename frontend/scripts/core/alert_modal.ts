@@ -1,4 +1,10 @@
 import { getRuntimeLocale } from "../../lib/i18n/config";
+import {
+  buildButtonMarkup,
+  buildDialogMarkup,
+  playCloseTransition,
+  playOpenTransition
+} from "./alert_modal_view";
 
 const ALERT_MODAL_ROOT_ID = "cc-alert-modal-root";
 const CONFIRM_MODAL_ROOT_ID = "cc-confirm-modal-root";
@@ -17,6 +23,7 @@ class GlobalAlertModal {
   private readonly queue: string[] = [];
   private isVisible = false;
   private previouslyFocusedElement: HTMLElement | null = null;
+  private cancelExitTransition: (() => void) | null = null;
 
   constructor() {
     this.rootEl = this.createModalElement();
@@ -63,17 +70,13 @@ class GlobalAlertModal {
     root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-hidden", "true");
     root.hidden = true;
-    root.innerHTML = `
-      <div class="cc-alert-modal__overlay" data-cc-alert-close></div>
-      <div class="cc-alert-modal__dialog" role="document" tabindex="-1">
-        <button type="button" class="cc-alert-modal__close" aria-label="${english ? "Close" : "閉じる"}">×</button>
-        <h2 class="cc-alert-modal__title">${english ? "Notice" : "お知らせ"}</h2>
-        <p class="cc-alert-modal__message"></p>
-        <div class="cc-alert-modal__actions">
-          <button type="button" class="cc-alert-modal__button">OK</button>
-        </div>
-      </div>
-    `;
+    root.innerHTML = buildDialogMarkup({
+      variant: "alert",
+      closeLabel: english ? "Close" : "閉じる",
+      title: english ? "Notice" : "お知らせ",
+      overlayAttribute: "data-cc-alert-close",
+      actionsMarkup: buildButtonMarkup({ label: "OK", hint: "Enter" })
+    });
     document.body.appendChild(root);
     return root;
   }
@@ -82,7 +85,7 @@ class GlobalAlertModal {
     this.rootEl.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-      if (target.hasAttribute("data-cc-alert-close")) {
+      if (target.closest("[data-cc-alert-close]")) {
         this.closeCurrent();
       }
     });
@@ -133,12 +136,13 @@ class GlobalAlertModal {
     const nextMessage = this.queue.shift();
     if (nextMessage === undefined) return;
 
+    this.cancelExitTransition?.();
+    this.cancelExitTransition = null;
+
     this.previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.messageEl.textContent = nextMessage;
-    this.rootEl.hidden = false;
-    this.rootEl.setAttribute("aria-hidden", "false");
-    this.rootEl.classList.add("is-visible");
+    playOpenTransition(this.rootEl);
     document.body.classList.add(ALERT_MODAL_OPEN_CLASS);
     this.isVisible = true;
     this.okBtn.focus();
@@ -147,18 +151,17 @@ class GlobalAlertModal {
   private closeCurrent() {
     if (!this.isVisible) return;
 
-    this.rootEl.classList.remove("is-visible");
-    this.rootEl.setAttribute("aria-hidden", "true");
-    this.rootEl.hidden = true;
     this.isVisible = false;
-    releaseBodyModalState();
+    this.cancelExitTransition = playCloseTransition(this.rootEl, () => {
+      this.cancelExitTransition = null;
+      releaseBodyModalState();
+      this.openNext();
+    });
 
     if (this.previouslyFocusedElement?.isConnected) {
       this.previouslyFocusedElement.focus();
     }
     this.previouslyFocusedElement = null;
-
-    this.openNext();
   }
 }
 
@@ -177,6 +180,7 @@ class GlobalConfirmModal {
   private currentItem: ConfirmQueueItem | null = null;
   private isVisible = false;
   private previouslyFocusedElement: HTMLElement | null = null;
+  private cancelExitTransition: (() => void) | null = null;
 
   constructor() {
     this.rootEl = this.createModalElement();
@@ -227,18 +231,25 @@ class GlobalConfirmModal {
     root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-hidden", "true");
     root.hidden = true;
-    root.innerHTML = `
-      <div class="cc-alert-modal__overlay" data-cc-confirm-cancel="true"></div>
-      <div class="cc-alert-modal__dialog" role="document" tabindex="-1">
-        <button type="button" class="cc-alert-modal__close" aria-label="${english ? "Close" : "閉じる"}">×</button>
-        <h2 class="cc-alert-modal__title">${english ? "Confirm" : "確認"}</h2>
-        <p class="cc-alert-modal__message"></p>
-        <div class="cc-alert-modal__actions">
-          <button type="button" class="cc-alert-modal__button cc-alert-modal__button--secondary" data-cc-confirm-cancel="true">${english ? "Cancel" : "キャンセル"}</button>
-          <button type="button" class="cc-alert-modal__button" data-cc-confirm-ok="true">OK</button>
-        </div>
-      </div>
-    `;
+    root.innerHTML = buildDialogMarkup({
+      variant: "confirm",
+      closeLabel: english ? "Close" : "閉じる",
+      title: english ? "Confirm" : "確認",
+      overlayAttribute: 'data-cc-confirm-cancel="true"',
+      actionsMarkup: [
+        buildButtonMarkup({
+          label: english ? "Cancel" : "キャンセル",
+          hint: "Esc",
+          secondary: true,
+          attributes: 'data-cc-confirm-cancel="true"'
+        }),
+        buildButtonMarkup({
+          label: "OK",
+          hint: "Enter",
+          attributes: 'data-cc-confirm-ok="true"'
+        })
+      ].join("")
+    });
     document.body.appendChild(root);
     return root;
   }
@@ -247,7 +258,7 @@ class GlobalConfirmModal {
     this.rootEl.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-      if (target.getAttribute("data-cc-confirm-cancel") === "true") {
+      if (target.closest('[data-cc-confirm-cancel="true"]')) {
         this.finish(false);
       }
     });
@@ -307,12 +318,13 @@ class GlobalConfirmModal {
     if (!nextItem) return;
     this.currentItem = nextItem;
 
+    this.cancelExitTransition?.();
+    this.cancelExitTransition = null;
+
     this.previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.messageEl.textContent = nextItem.message;
-    this.rootEl.hidden = false;
-    this.rootEl.setAttribute("aria-hidden", "false");
-    this.rootEl.classList.add("is-visible");
+    playOpenTransition(this.rootEl);
     document.body.classList.add(ALERT_MODAL_OPEN_CLASS);
     this.isVisible = true;
     this.cancelBtn.focus();
@@ -321,11 +333,12 @@ class GlobalConfirmModal {
   private finish(confirmed: boolean) {
     if (!this.isVisible) return;
 
-    this.rootEl.classList.remove("is-visible");
-    this.rootEl.setAttribute("aria-hidden", "true");
-    this.rootEl.hidden = true;
     this.isVisible = false;
-    releaseBodyModalState();
+    this.cancelExitTransition = playCloseTransition(this.rootEl, () => {
+      this.cancelExitTransition = null;
+      releaseBodyModalState();
+      this.openNext();
+    });
 
     const activeItem = this.currentItem;
     this.currentItem = null;
@@ -337,8 +350,6 @@ class GlobalConfirmModal {
       this.previouslyFocusedElement.focus();
     }
     this.previouslyFocusedElement = null;
-
-    this.openNext();
   }
 }
 
