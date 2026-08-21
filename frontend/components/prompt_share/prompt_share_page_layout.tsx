@@ -45,12 +45,14 @@ type PromptSharePageLayoutProps = {
   likePendingIds: Set<string>;
   actionEffectIds: Set<string>;
   addAsTaskPendingIds: Set<string>;
+  memoSavePendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => void;
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
+  onSaveAsMemo: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
   // モーダルなど追加UIを差し込める拡張スロット
@@ -123,12 +125,14 @@ export function PromptSharePageLayout({
   likePendingIds,
   actionEffectIds,
   addAsTaskPendingIds,
+  memoSavePendingIds,
   onOpenDetail,
   onOpenComments,
   onOpenShare,
   onToggleDropdown,
   onCloseDropdown,
   onAddAsTask,
+  onSaveAsMemo,
   onToggleLike,
   onOpenAuthorProfile,
   children
@@ -373,6 +377,7 @@ export function PromptSharePageLayout({
                   isLikePending={likePendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
+                  isMemoSavePending={memoSavePendingIds.has(promptId)}
                   isUseInChatEffectActive={actionEffectIds.has(`${promptId}:use-in-chat`)}
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
@@ -380,6 +385,7 @@ export function PromptSharePageLayout({
                   onToggleDropdown={onToggleDropdown}
                   onCloseDropdown={onCloseDropdown}
                   onAddAsTask={onAddAsTask}
+                  onSaveAsMemo={onSaveAsMemo}
                   onToggleLike={onToggleLike}
                   onOpenAuthorProfile={onOpenAuthorProfile}
                 />

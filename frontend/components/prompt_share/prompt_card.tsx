@@ -35,6 +35,7 @@ type PromptCardProps = {
   isLikePending: boolean;
   isLikeEffectActive: boolean;
   isAddAsTaskPending: boolean;
+  isMemoSavePending: boolean;
   isUseInChatEffectActive: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
@@ -42,6 +43,7 @@ type PromptCardProps = {
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
+  onSaveAsMemo: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
 };
@@ -71,6 +73,7 @@ function PromptCardComponent({
   isLikePending,
   isLikeEffectActive,
   isAddAsTaskPending,
+  isMemoSavePending,
   isUseInChatEffectActive,
   onOpenDetail,
   onOpenComments,
@@ -78,6 +81,7 @@ function PromptCardComponent({
   onToggleDropdown,
   onCloseDropdown,
   onAddAsTask,
+  onSaveAsMemo,
   onToggleLike,
   onOpenAuthorProfile,
 }: PromptCardProps) {
@@ -209,6 +213,22 @@ function PromptCardComponent({
           event.stopPropagation();
         }}
       >
+        <button
+          className="dropdown-item cc-press"
+          type="button"
+          role="menuitem"
+          disabled={isMemoSavePending}
+          aria-label={isMemoSavePending ? t("promptShare.savingMemo") : t("promptShare.saveToMemo")}
+          onClick={() => {
+            if (isMemoSavePending) {
+              return;
+            }
+            void onSaveAsMemo(prompt);
+          }}
+        >
+          <i className={`bi ${isMemoSavePending ? "bi-hourglass-split" : "bi-bookmark-plus"}`}></i>
+          <span>{isMemoSavePending ? t("promptShare.savingMemo") : t("promptShare.saveToMemo")}</span>
+        </button>
         <button
           className="dropdown-item cc-press"
           type="button"

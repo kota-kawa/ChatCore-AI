@@ -757,8 +757,10 @@ export default function PromptSharePage({
   const {
     addAsTaskPendingIds,
     handleAddPromptAsTask,
+    handleSavePromptAsMemo,
     handleTogglePromptLike,
-    likePendingIds
+    likePendingIds,
+    memoSavePendingIds
   } = usePromptCardActions({
     closePromptDropdown,
     isLoggedIn,
@@ -1150,12 +1152,14 @@ export default function PromptSharePage({
         likePendingIds={likePendingIds}
         actionEffectIds={actionEffectIds}
         addAsTaskPendingIds={addAsTaskPendingIds}
+        memoSavePendingIds={memoSavePendingIds}
         onOpenDetail={openPromptDetailModal}
         onOpenComments={openPromptCommentsModal}
         onOpenShare={openPromptShareDialog}
         onToggleDropdown={togglePromptDropdown}
         onCloseDropdown={closePromptDropdown}
         onAddAsTask={handleAddPromptAsTask}
+        onSaveAsMemo={handleSavePromptAsMemo}
         onToggleLike={handleTogglePromptLike}
         onOpenAuthorProfile={openAuthorProfile}
       >

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchPromptAuthorProfile, fetchPromptList } from "../scripts/prompt_share/api";
+import { fetchPromptAuthorProfile, fetchPromptList, savePromptAsMemo } from "../scripts/prompt_share/api";
 
 const originalFetch = globalThis.fetch;
 
@@ -99,4 +99,58 @@ test("fetchPromptAuthorProfile requests the author profile endpoint by user ID",
 
   assert.equal(requestedUrl, "/prompt_share/api/users/42");
   assert.equal(payload.user?.username, "Kota");
+});
+
+test("savePromptAsMemo saves the shared prompt title and body through the memo API", async () => {
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return jsonResponse({ status: "success", memo_id: 21 });
+  }) as typeof fetch;
+
+  try {
+    await savePromptAsMemo({
+      id: 7,
+      title: "設計レビューの観点",
+      content: "設計をレビューして、懸念点を列挙してください。",
+      content_format: "prompt"
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestedUrl, "/memo/api");
+  assert.equal(requestedInit?.method, "POST");
+  assert.equal(requestedInit?.credentials, "same-origin");
+  assert.deepEqual(JSON.parse(String(requestedInit?.body)), {
+    ai_response: "設計をレビューして、懸念点を列挙してください。",
+    title: "設計レビューの観点"
+  });
+});
+
+test("savePromptAsMemo prefers skill_markdown for SKILL posts", async () => {
+  let requestedBody = "";
+  globalThis.fetch = (async (_input, init) => {
+    requestedBody = String(init?.body || "");
+    return jsonResponse({ status: "success", memo_id: 22 });
+  }) as typeof fetch;
+
+  try {
+    await savePromptAsMemo({
+      id: 8,
+      title: "レビュー SKILL",
+      content: "一覧用の説明",
+      content_format: "skill",
+      skill_markdown: "# Review SKILL\n\n## Steps\n1. Check the design"
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(
+    JSON.parse(requestedBody).ai_response,
+    "# Review SKILL\n\n## Steps\n1. Check the design"
+  );
 });

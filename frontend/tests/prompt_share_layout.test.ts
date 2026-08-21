@@ -43,12 +43,14 @@ test("prompt share layout renders crawlable page content before client API data 
       likePendingIds: new Set<string>(),
       actionEffectIds: new Set<string>(),
       addAsTaskPendingIds: new Set<string>(),
+      memoSavePendingIds: new Set<string>(),
       onOpenDetail: noop,
       onOpenComments: noop,
       onOpenShare: noop,
       onToggleDropdown: noop,
       onCloseDropdown: noop,
       onAddAsTask: noop,
+      onSaveAsMemo: noop,
       onToggleLike: noop,
       onOpenAuthorProfile: noop
     })
@@ -102,12 +104,14 @@ test("prompt share layout places load more after the final prompt card", () => {
       likePendingIds: new Set<string>(),
       actionEffectIds: new Set<string>(),
       addAsTaskPendingIds: new Set<string>(),
+      memoSavePendingIds: new Set<string>(),
       onOpenDetail: noop,
       onOpenComments: noop,
       onOpenShare: noop,
       onToggleDropdown: noop,
       onCloseDropdown: noop,
       onAddAsTask: noop,
+      onSaveAsMemo: noop,
       onToggleLike: noop,
       onOpenAuthorProfile: noop
     })

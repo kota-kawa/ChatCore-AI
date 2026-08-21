@@ -32,6 +32,7 @@ function renderPromptCard(overrides: Partial<PromptRecord> = {}, onOpenAuthorPro
       isLikePending={false}
       isLikeEffectActive={false}
       isAddAsTaskPending={false}
+      isMemoSavePending={false}
       isUseInChatEffectActive={false}
       onOpenDetail={onOpenDetail}
       onOpenComments={noop}
@@ -39,6 +40,7 @@ function renderPromptCard(overrides: Partial<PromptRecord> = {}, onOpenAuthorPro
       onToggleDropdown={noop}
       onCloseDropdown={noop}
       onAddAsTask={noop}
+      onSaveAsMemo={noop}
       onToggleLike={noop}
       onOpenAuthorProfile={onOpenAuthorProfile}
     />
