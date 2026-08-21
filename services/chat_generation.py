@@ -66,7 +66,7 @@ from .web_search import (
     WebEvidenceContextBudget,
     WebSearchResult,
 )
-from .web_search_images import append_web_search_image_part, choose_web_search_image
+from .web_search_images import append_web_search_image_parts, choose_web_search_images
 from .web_search_trace import (
     TraceStep,
     answer_step,
@@ -1398,13 +1398,13 @@ class ChatGenerationJob:
         message_parts = normalized_response.parts
 
         # Web検索で取得したページに画像候補がある場合だけ、軽量LLMへ表示要否と候補選択を委ねる。
-        # Ask the lightweight LLM to decide whether one fetched search-page image helps and which one.
+        # Ask the lightweight LLM to decide whether fetched search-page images help and which ones.
         if web_search_results:
             image_result = combine_web_search_results(web_search_results)
-            image_selection = choose_web_search_image(latest_user_message, image_result)
-            message_parts = append_web_search_image_part(
+            image_selections = choose_web_search_images(latest_user_message, image_result)
+            message_parts = append_web_search_image_parts(
                 message_parts,
-                image_selection,
+                image_selections,
                 fallback_text=bot_reply,
             )
 

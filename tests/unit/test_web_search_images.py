@@ -6,7 +6,9 @@ from services.web_search_images import (
     WebSearchImageCandidate,
     _is_non_photo_image_url,
     append_web_search_image_part,
+    append_web_search_image_parts,
     choose_web_search_image,
+    choose_web_search_images,
 )
 
 
@@ -40,6 +42,31 @@ def _result() -> web_search.WebSearchResult:
                     WebSearchImageCandidate(
                         url="https://example.com/assets/noimage.png",
                         alt="嵐山の紅葉",
+                        kind="img",
+                    ),
+                    WebSearchImageCandidate(
+                        url="https://example.com/images/temple.jpg",
+                        alt="古寺の紅葉",
+                        kind="img",
+                    ),
+                    WebSearchImageCandidate(
+                        url="https://example.com/images/garden.jpg",
+                        alt="庭園の紅葉",
+                        kind="img",
+                    ),
+                    WebSearchImageCandidate(
+                        url="https://example.com/images/street.jpg",
+                        alt="京都の街並み",
+                        kind="img",
+                    ),
+                    WebSearchImageCandidate(
+                        url="https://example.com/images/river.jpg",
+                        alt="川沿いの紅葉",
+                        kind="img",
+                    ),
+                    WebSearchImageCandidate(
+                        url="https://example.com/images/park.jpg",
+                        alt="公園の紅葉",
                         kind="img",
                     ),
                 ),
@@ -113,6 +140,32 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("non-duplication", system_prompt)
         self.assertIn("large watermarks", system_prompt)
 
+    def test_llm_can_select_up_to_five_relevant_images(self):
+        with patch(
+            "services.web_search_images.get_llm_json_response",
+            return_value=(
+                '{"show_image": true, "image_ids": '
+                '["image-1", "image-2", "image-3", "image-4", "image-5", "image-6"], '
+                '"alt_texts": {"image-1": "嵐山", "image-3": "古寺"}}'
+            ),
+        ):
+            selections = choose_web_search_images("京都の紅葉を画像付きで教えて", _result())
+
+        self.assertEqual(len(selections), 5)
+        self.assertEqual(
+            [selection["url"] for selection in selections],
+            [
+                "https://example.com/images/maple.jpg",
+                "https://example.com/images/togetsukyo.jpg",
+                "https://example.com/images/temple.jpg",
+                "https://example.com/images/garden.jpg",
+                "https://example.com/images/street.jpg",
+            ],
+        )
+        self.assertEqual(selections[0]["alt"], "嵐山")
+        self.assertEqual(selections[2]["alt"], "古寺")
+        self.assertEqual(selections[1]["alt"], "渡月橋の紅葉")
+
     def test_placeholder_and_site_furniture_candidates_never_reach_the_llm(self):
         # 空の枠になる素材（noimage 等）とロゴは、選定LLMへ渡す前に落とす。
         # Assets that render as an empty frame and site logos are dropped before
@@ -170,6 +223,29 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(part[0]["type"], "web_search_image")
         self.assertEqual(part[0]["image"]["source_url"], "https://example.com/article")
         self.assertEqual(part[1], {"type": "text", "text": "回答"})
+
+    def test_appends_up_to_five_images_and_deduplicates_urls(self):
+        selections = [
+            {
+                "url": f"https://example.com/images/selected-{index}.jpg",
+                "alt": f"画像{index}",
+                "source_url": "https://example.com/article",
+            }
+            for index in range(1, 7)
+        ]
+        parts = append_web_search_image_parts(
+            [{"type": "text", "text": "回答"}],
+            [selections[0], *selections, selections[1]],
+        )
+
+        self.assertIsNotNone(parts)
+        assert parts is not None
+        image_parts = [part for part in parts if part["type"] == "web_search_image"]
+        self.assertEqual(len(image_parts), 5)
+        self.assertEqual(
+            [part["image"]["url"] for part in image_parts],
+            [selection["url"] for selection in selections[:5]],
+        )
 
     def test_does_not_add_image_when_a_generated_ui_is_present(self):
         parts = append_web_search_image_part(

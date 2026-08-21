@@ -74,6 +74,27 @@ class SplitAnswerTraceBlockTestCase(unittest.TestCase):
 
 
 class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
+    def test_at_most_five_images_are_retained_per_reply(self):
+        images = [
+            {
+                **IMAGE_PART,
+                "image": {
+                    **IMAGE_PART["image"],
+                    "url": f"https://cdn.example.com/hero-{index}.jpg",
+                },
+            }
+            for index in range(1, 7)
+        ]
+
+        normalized = normalize_message_parts_for_display(
+            [{"type": "text", "text": "本文です。"}, *images]
+        )
+
+        self.assertEqual(
+            len([part for part in normalized if part["type"] == "web_search_image"]),
+            5,
+        )
+
     def test_image_is_placed_below_the_answer_trace(self):
         trace = _trace_markdown()
         parts = [IMAGE_PART, {"type": "text", "text": f"{trace}\n\n本文です。"}]
