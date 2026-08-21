@@ -60,6 +60,9 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         prompt = mock_llm.call_args.args[0][1]["content"]
         self.assertIn("image-1", prompt)
         self.assertIn("image-2", prompt)
+        system_prompt = mock_llm.call_args.args[0][0]["content"]
+        self.assertIn("before the explanation", system_prompt)
+        self.assertIn("mutually exclusive", system_prompt)
 
     def test_llm_can_decide_that_no_image_is_needed(self):
         with patch(
@@ -86,8 +89,30 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             },
         )
 
-        self.assertEqual(part[1]["type"], "web_search_image")
-        self.assertEqual(part[1]["image"]["source_url"], "https://example.com/article")
+        self.assertEqual(part[0]["type"], "web_search_image")
+        self.assertEqual(part[0]["image"]["source_url"], "https://example.com/article")
+        self.assertEqual(part[1], {"type": "text", "text": "回答"})
+
+    def test_does_not_add_image_when_a_generated_ui_is_present(self):
+        parts = append_web_search_image_part(
+            [
+                {"type": "text", "text": "説明"},
+                {"type": "sandbox_artifact", "artifact": {"title": "図"}},
+            ],
+            {
+                "url": "https://example.com/image.jpg",
+                "alt": "説明",
+                "source_url": "https://example.com/article",
+            },
+        )
+
+        self.assertEqual(
+            parts,
+            [
+                {"type": "text", "text": "説明"},
+                {"type": "sandbox_artifact", "artifact": {"title": "図"}},
+            ],
+        )
 
     def test_rejects_non_http_image_selection(self):
         part = append_web_search_image_part(

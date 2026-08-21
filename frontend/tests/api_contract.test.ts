@@ -125,6 +125,7 @@ test("normalizers keep safe web-search image parts", () => {
   const response = normalizeChatResponsePayload({
     response: "answer",
     parts: [
+      { type: "text", text: "answer" },
       {
         type: "web_search_image",
         image: {
@@ -155,6 +156,38 @@ test("normalizers keep safe web-search image parts", () => {
         sourceTitle: "Article",
       },
     },
+    { type: "text", text: "answer" },
+  ]);
+});
+
+test("normalizers keep generated UI and web-search image parts mutually exclusive", () => {
+  const artifact = {
+    version: 1,
+    title: "Diagram",
+    html: '<div id="app"></div>',
+    css: "#app{padding:12px}",
+    js: "document.getElementById('app').textContent = 'ready';",
+  };
+
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [
+      {
+        type: "web_search_image",
+        image: {
+          url: "https://cdn.example.com/hero.jpg",
+          alt: "Relevant photo",
+          source_url: "https://example.com/article",
+        },
+      },
+      { type: "text", text: "answer" },
+      { type: "sandbox_artifact", artifact },
+    ],
+  });
+
+  assert.deepEqual(response.parts, [
+    { type: "text", text: "answer" },
+    { type: "sandbox_artifact", artifact },
   ]);
 });
 

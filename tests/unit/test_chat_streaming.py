@@ -826,8 +826,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(len(persisted_records), 1)
         self.assertIn("web_search_image", body)
         self.assertIn("https://cdn.example.com/maple.jpg", body)
-        self.assertEqual(persisted_records[0]["message_parts"][0]["type"], "text")
-        self.assertEqual(persisted_records[0]["message_parts"][1]["type"], "web_search_image")
+        self.assertEqual(persisted_records[0]["message_parts"][0]["type"], "web_search_image")
+        self.assertEqual(persisted_records[0]["message_parts"][1]["type"], "text")
         mock_image.assert_called_once()
 
     def test_background_generation_job_appends_selected_reference_steps(self):

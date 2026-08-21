@@ -137,7 +137,18 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
       return;
     }
   });
-  return parts.length > 0 ? parts : undefined;
+  const hasGeneratedUi = parts.some(
+    (part) => part.type === "sandbox_artifact" || part.type === "interactive_buttons",
+  );
+  if (hasGeneratedUi) {
+    const withoutImage = parts.filter((part) => part.type !== "web_search_image");
+    return withoutImage.length > 0 ? withoutImage : undefined;
+  }
+
+  const imageParts = parts.filter((part) => part.type === "web_search_image");
+  const otherParts = parts.filter((part) => part.type !== "web_search_image");
+  const orderedParts = [...imageParts, ...otherParts];
+  return orderedParts.length > 0 ? orderedParts : undefined;
 }
 
 export function normalizeChatRoom(raw: unknown): ChatRoom | null {
