@@ -63,6 +63,12 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         system_prompt = mock_llm.call_args.args[0][0]["content"]
         self.assertIn("before the explanation", system_prompt)
         self.assertIn("mutually exclusive", system_prompt)
+        self.assertIn("places and travel destinations", system_prompt)
+        self.assertIn("programming, legal explanations", system_prompt)
+        self.assertIn("Relevance is the highest priority", system_prompt)
+        self.assertIn("sufficient quality", system_prompt)
+        self.assertIn("non-duplication", system_prompt)
+        self.assertIn("large watermarks", system_prompt)
 
     def test_llm_can_decide_that_no_image_is_needed(self):
         with patch(
