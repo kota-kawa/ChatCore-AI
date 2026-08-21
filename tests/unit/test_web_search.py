@@ -1703,6 +1703,75 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertIn("ordinary Markdown citations or links", content)
         self.assertIn("not user-facing text", content)
         self.assertIn("compact source chips", content)
+        self.assertIn('Never write chip markup yourself', content)
+
+
+    def test_strip_citation_html_removes_chip_markup_echoed_by_the_model(self):
+        complete_chip = (
+            "高山の見どころです"
+            '<a class="web-search-citation" href="https://example.com/a" '
+            'target="_blank" title="観光8選">'
+            '<span class="web-search-citation__label">観光8選</span></a>。次の文。'
+        )
+        truncated_chip = (
+            "平湯大滝が魅力です"
+            '<a class="web-search-citation" href="https://example.com/a" '
+            'target="_blank" title="観光8選'
+        )
+        orphan_label = 'ラベルだけ<span class="web-search-citation__label">観光8選</span>残り'
+
+        self.assertEqual(
+            web_search.strip_web_search_citation_html(complete_chip),
+            "高山の見どころです。次の文。",
+        )
+        self.assertEqual(
+            web_search.strip_web_search_citation_html(truncated_chip),
+            "平湯大滝が魅力です",
+        )
+        self.assertEqual(
+            web_search.strip_web_search_citation_html(orphan_label),
+            "ラベルだけ残り",
+        )
+
+    def test_strip_citation_html_keeps_prose_after_an_unclosed_chip_tag(self):
+        unclosed_tag = (
+            "前置き"
+            '<a class="web-search-citation" href="https://example.com/a" title="観光8選">'
+            "ラベル。続きの本文です。"
+        )
+
+        self.assertEqual(
+            web_search.strip_web_search_citation_html(unclosed_tag),
+            "前置きラベル。続きの本文です。",
+        )
+
+    def test_strip_citation_html_keeps_ordinary_links_and_prose(self):
+        text = '通常の<a href="https://example.com">リンク</a>と本文はそのまま残す'
+
+        self.assertEqual(web_search.strip_web_search_citation_html(text), text)
+        self.assertEqual(web_search.strip_web_search_citation_html("本文のみ"), "本文のみ")
+        self.assertEqual(web_search.strip_web_search_citation_html(""), "")
+
+    def test_split_stream_text_holds_partial_citation_chip_until_closed(self):
+        partial = '本文の途中<a class="web-search-citation" href="https://example.com/a'
+
+        complete, pending = web_search.split_web_search_citation_stream_text(partial)
+
+        self.assertEqual(complete, "本文の途中")
+        self.assertEqual(pending, partial.removeprefix("本文の途中"))
+
+        complete, pending = web_search.split_web_search_citation_stream_text(
+            "本文の途中<a class=\"web-"
+        )
+
+        self.assertEqual(complete, "本文の途中")
+        self.assertEqual(pending, '<a class="web-')
+
+        closed = '本文<a class="web-search-citation" href="https://example.com/a">L</a> 続き'
+        complete, pending = web_search.split_web_search_citation_stream_text(closed)
+
+        self.assertEqual(complete, closed)
+        self.assertEqual(pending, "")
 
     def test_resolve_citations_converts_only_known_markers_and_returns_offsets(self):
         result = self._result()

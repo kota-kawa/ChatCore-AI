@@ -1061,6 +1061,75 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages[0],
         )
 
+
+    # 日本語: モデルが真似て書いた出典チップHTMLを表示・保存の双方から取り除き、正規のmarkerだけをチップ化することを検証します。
+    # English: Verify chip markup echoed by the model is removed from both the stream and the persisted body, while a real marker still resolves.
+    def test_background_generation_job_strips_citation_chip_html_echoed_by_model(self):
+        persisted_records = []
+        search_result = WebSearchResult(
+            query="高山 観光",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/takayama",
+                    title="高山おすすめ観光スポット8選",
+                    hostname="example.com",
+                    age="2026-08-02",
+                    snippets=("高山の観光情報",),
+                ),
+            ),
+        )
+        evidence_id = search_result.sources[0].evidence_id
+        echoed_chip = (
+            '<a class="web-search-citation" href="https://www.nap-camp.com/mag/18604" '
+            'target="_blank" title="高山おすすめ観光スポット8選'
+        )
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted_records.append(response)
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "高山のおすすめ観光地は?"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=_research_then_answer_stream(
+                    "高山のおすすめは古い町並です",
+                    f"[[source:{evidence_id}]]",
+                    "。平湯大滝も魅力です",
+                    echoed_chip,
+                ),
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-echoed-chip:default",
+                conversation_messages=[
+                    {"role": "user", "content": "高山のおすすめ観光地は?"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        persisted = persisted_records[0]
+        self.assertNotIn("nap-camp.com", persisted)
+        self.assertNotIn("nap-camp.com", body)
+        self.assertIn("高山のおすすめは古い町並です", persisted)
+        self.assertIn("。平湯大滝も魅力です", persisted)
+        # 正規のmarkerは従来どおりチップへ解決される。
+        # A real marker still resolves into a chip.
+        self.assertIn(
+            '<a class="web-search-citation" href="https://example.com/takayama"',
+            persisted,
+        )
+
     # 日本語: Web検索回答の引用markerが実ソースへ解決され、根拠metadataとともに保存されることを検証します。
     # English: Verify that a web-search citation marker resolves to its source and is persisted with evidence metadata.
     def test_background_generation_job_resolves_and_persists_web_search_citations(self):

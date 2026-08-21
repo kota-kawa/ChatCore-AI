@@ -40,6 +40,7 @@ from services.web_search import (
     inject_prior_web_search_context,
     maybe_augment_messages_with_web_search,
     resolve_web_search_citations,
+    strip_web_search_citation_html,
     serialize_web_search_result,
     with_web_search_citations,
 )
@@ -814,6 +815,9 @@ class ChatPostUseCase:
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
 
+        # モデルが真似て書いた出典チップHTMLを、引用marker解決の前に取り除く。
+        # Remove chip markup echoed by the model before resolving citation markers.
+        bot_reply = strip_web_search_citation_html(bot_reply)
         citation_evidence = combine_web_search_results(
             [
                 *([augmentation.result] if augmentation.result is not None else []),

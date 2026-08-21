@@ -71,6 +71,7 @@ from .web_search import (
     resolve_web_search_citations,
     search_brave_llm_context,
     split_web_search_citation_stream_text,
+    strip_web_search_citation_html,
     serialize_web_search_result,
     with_web_search_citations,
     WebSearchQuotaExceeded,
@@ -1054,15 +1055,21 @@ class ChatGenerationJob:
                 streaming_evidence = combine_web_search_results(
                     [*web_search_results, *self._prior_web_search_results]
                 )
-                if streaming_evidence is None:
-                    stream_text = f"{streaming_citation_buffer}{chunk}"
-                    streaming_citation_buffer = ""
-                else:
-                    complete_stream_text, streaming_citation_buffer = (
-                        split_web_search_citation_stream_text(
-                            f"{streaming_citation_buffer}{chunk}"
-                        )
+                # モデルが真似て書いたチップHTMLは、検索根拠の有無にかかわらず
+                # 表示前に取り除く。正規のチップはこの後の解決処理だけが描画する。
+                # Chip markup echoed by the model is removed before display whether or
+                # not this turn has evidence; only the resolution below renders chips.
+                complete_stream_text, streaming_citation_buffer = (
+                    split_web_search_citation_stream_text(
+                        f"{streaming_citation_buffer}{chunk}"
                     )
+                )
+                complete_stream_text = strip_web_search_citation_html(
+                    complete_stream_text
+                )
+                if streaming_evidence is None:
+                    stream_text = complete_stream_text
+                else:
                     stream_text = resolve_web_search_citations(
                         complete_stream_text,
                         streaming_evidence,
@@ -1542,14 +1549,14 @@ class ChatGenerationJob:
                 streaming_evidence = combine_web_search_results(
                     [*web_search_results, *self._prior_web_search_results]
                 )
-                buffered_text = (
-                    resolve_web_search_citations(
-                        streaming_citation_buffer,
+                buffered_text = strip_web_search_citation_html(
+                    streaming_citation_buffer
+                )
+                if streaming_evidence is not None:
+                    buffered_text = resolve_web_search_citations(
+                        buffered_text,
                         streaming_evidence,
                     ).text
-                    if streaming_evidence is not None
-                    else streaming_citation_buffer
-                )
                 if buffered_text:
                     publish_stream_text_with_images(buffered_text)
 
@@ -1653,6 +1660,11 @@ class ChatGenerationJob:
         # 表示本文と保存本文が一致するよう、text partを同時に更新する。
         # Resolve model citation markers against current and prior evidence, then
         # keep the visible text part aligned with the persisted response.
+        # 保存本文からもチップHTMLを取り除いてから、引用markerを解決する。
+        # 順序を逆にすると、描画したばかりの正規チップまで消えてしまう。
+        # Strip chip markup from the persisted body before resolving citation markers.
+        # The reverse order would delete the chips this step just rendered.
+        bot_reply = strip_web_search_citation_html(bot_reply)
         citation_evidence = combine_web_search_results(
             [*web_search_results, *self._prior_web_search_results]
         )

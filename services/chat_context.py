@@ -5,6 +5,7 @@ import math
 import re
 
 from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
+from services.web_search import strip_web_search_citation_html
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
@@ -95,6 +96,12 @@ def normalize_message_text(text: str) -> str:
     normalized = _TRAILING_WHITESPACE_PATTERN.sub("", normalized)
     normalized = _INLINE_WHITESPACE_PATTERN.sub(" ", normalized)
     normalized = _BLANK_LINES_PATTERN.sub("\n\n", normalized)
+    # 過去の回答に描画済みの出典チップは、モデルへ戻す前に取り除く。残したままだと
+    # モデルがHTMLごと真似てしまい、予算による切り詰めがタグの途中で切ることもある。
+    # Strip source chips rendered into earlier answers before replaying them to the
+    # model: left in place the model imitates the markup, and budget trimming can cut
+    # a tag in half.
+    normalized = strip_web_search_citation_html(normalized)
     return normalized.strip()
 
 
