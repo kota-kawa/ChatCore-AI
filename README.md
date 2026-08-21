@@ -52,9 +52,9 @@ Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** s
 - **Groq / Claude / OpenAI** integrations for LLM responses
 
 ## Tech Stack
-- **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
+- **Backend**: Python 3.14, FastAPI, psycopg2 connection pool, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 18, Redis 7 (optional)
+- **Database / Cache**: PostgreSQL 18, Redis 7 (server-side sessions and coordination; required for persistent session state)
 - **LLM Providers**: Groq, Anthropic Claude, OpenAI
 - **Local Dev**: Docker Compose
 
@@ -80,7 +80,7 @@ docker-compose up --build
 - When running behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy IPs/CIDRs that may supply `X-Forwarded-For`.
 
 ## Database Migrations (Alembic)
-Schema management is unified on Alembic. `docker-compose up --build` now waits for PostgreSQL and runs `alembic upgrade head` automatically before starting the API. No separate `init.sql` bootstrap is required or used.
+Schema management is unified on Alembic. In development (`FASTAPI_ENV=development`), the app entrypoint waits for PostgreSQL and runs `alembic upgrade head` before starting the API. Production Blue/Green deployment runs migrations explicitly before starting the target color; production app containers skip automatic startup migrations. No separate `init.sql` bootstrap is required or used.
 
 For existing environments, you can also apply DB changes manually:
 
@@ -96,16 +96,17 @@ alembic upgrade head
 - `alembic/versions/` contains incremental migration history.
 - `db/performance_indexes.sql` is kept as a direct SQL fallback for index-only updates.
 - API schema single source: backend Pydantic models (`services/request_models.py`, `services/response_models.py`) are converted into frontend Zod schemas at `frontend/types/generated/api_schemas.ts` via `python3 scripts/generate_frontend_zod_schemas.py` (or `npm --prefix frontend run generate:api-schemas`).
+- Internal structure maps: [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/architecture/`](docs/architecture/).
 
 ## Challenges & Solutions
 
-**Redis session fallback** — Sessions are stored server-side in Redis, but a Redis outage would have invalidated all user sessions. Solved by implementing a hybrid session middleware that automatically falls back to signed cookies when Redis is unavailable or fails mid-request, with no disruption to the user.
+**Redis session safety** — Sessions are stored server-side in Redis, while the browser cookie contains only a signed Redis session reference. If Redis is unavailable or a session write fails, the middleware clears the session cookie instead of copying sensitive session data into a signed cookie; the user can authenticate again after Redis recovers.
 
 **DB connection resilience** — In Docker Compose, the backend container sometimes starts before the database is ready. Solved by having the connection pool try multiple host aliases (`db`, `localhost`, `127.0.0.1`) in sequence, validating each candidate before accepting it.
 
 **LLM cost control** — Exposing LLM endpoints directly risked runaway API costs. Solved by implementing a centralized daily quota counter (shared across all users) that short-circuits requests at the service layer before any external API call is made.
 
-**Testing Redis-dependent code in CI** — The session middleware's Redis fallback path is hard to exercise because it only triggers when Redis is down or fails mid-request. Solved by driving it with a mock Redis client that simulates outages and mid-request write failures, so the fallback-to-signed-cookie behavior is verified deterministically inside the standard integration test gate — no live Redis instance required.
+**Testing Redis-dependent code in CI** — Redis failure paths are hard to exercise because they trigger only when Redis is down or fails mid-request. Solved by driving the session middleware and Redis coordination code with a mock Redis client that simulates outages and write failures, so secure cookie-clearing and degraded-cache behavior are verified deterministically inside the standard test gate — no live Redis instance required.
 
 ## CI/CD & Testing
 
@@ -128,18 +129,19 @@ alembic upgrade head
 
 - **Connection pooling**: PostgreSQL connections are managed via `psycopg2.ThreadedConnectionPool` with configurable min/max bounds, avoiding per-request connection overhead.
   Set `DB_POOL_MIN_CONN` / `DB_POOL_MAX_CONN` for general environments, and `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` to override them only when `FASTAPI_ENV=production`.
-- **Redis-backed sessions**: When Redis is available, session data is stored server-side, enabling stateless horizontal scaling of the application tier.
+- **Redis-backed sessions**: Session data is stored server-side in Redis, enabling stateless horizontal scaling of the application tier when Redis is available. Redis is an operational dependency for persistent authenticated sessions; cache and coordination features have separate degraded behavior.
 - **Rate limiting**: Per-day caps on chat LLM API calls and verification email sends, plus a separate monthly support AI agent cap, are enforced at the service layer to protect external API quotas and infrastructure cost.
-- **Health endpoints**: `GET /healthz` returns process liveness; `GET /readyz` checks live DB reachability and reports Redis as degraded-but-optional, enabling load balancer health checks without false negatives.
+- **Health endpoints**: `GET /healthz` returns process liveness; `GET /readyz` checks live DB reachability and reports Redis degradation separately. The database is required for readiness, while Redis is required to persist authenticated sessions.
 - **Structured logging**: All requests emit JSON logs with `X-Request-ID` correlation IDs, making distributed tracing and incident diagnosis tractable at scale.
 
 ## Project Structure
 - `app.py`: FastAPI entry point
-- `blueprints/`: feature modules (auth, chat, memo, prompt_share, admin)
+- `blueprints/`: feature modules (auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth)
 - `services/`: shared integrations (DB, LLM, email, user helpers)
-- `templates/` and `static/`: global HTML/CSS/JS assets
+- `frontend/public/`: public frontend assets and modular CSS
+- `static/`: legacy/runtime static assets
 - `alembic/versions/`: PostgreSQL schema migration history
-- `frontend/`: Next.js frontend
+- `frontend/`: Next.js frontend (pages, components, hooks, contexts, and shared libraries)
 
 ## Architecture Diagram
 ```mermaid
@@ -147,10 +149,10 @@ flowchart LR
     U[User Browser]
     FE[Next.js Frontend]
     API[FastAPI Backend]
-    BP[Blueprints<br/>auth/chat/memo/prompt_share/admin]
+    BP[Blueprints<br/>auth/chat/memo/prompt_share/context_vault/admin/MCP OAuth]
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
-    RD[(Redis Optional)]
+    RD[(Redis<br/>sessions and coordination)]
     LLM[Groq / Claude / OpenAI APIs]
     EM[Email Provider]
 
@@ -163,16 +165,16 @@ flowchart LR
 ```
 
 ## Design Decisions
-- **Why FastAPI (instead of Flask)**: FastAPI gives async-first request handling, type-driven validation, and automatic OpenAPI docs. This reduces API integration friction and keeps backend contracts explicit.  
+- **Why FastAPI (instead of Flask)**: FastAPI gives async-first request handling, type-driven validation, and automatic OpenAPI docs. This reduces API integration friction and keeps backend contracts explicit.
   Trade-off: stricter typing and async patterns add some implementation complexity.
-- **Why Redis for session/state (optional)**: When Redis is available, sessions are stored server-side and shared across instances, which improves horizontal scalability and supports operational controls (e.g., centralized invalidation, quota/ephemeral state handling).  
-  Trade-off: extra infrastructure and operational overhead.
+- **Why Redis for session/state**: Sessions are stored server-side and shared across instances, which supports horizontal scaling and operational controls such as centralized invalidation, quota state, and ephemeral state. Redis is required for persistent authenticated sessions, while some cache and coordination paths can degrade independently.
+  Trade-off: extra infrastructure and operational overhead, plus re-authentication when Redis cannot persist a session.
 - **Why PostgreSQL as the primary datastore**: Core entities (users, chats, prompts, admin data) are relational and consistency-sensitive. PostgreSQL provides strong integrity guarantees plus mature indexing/migration workflows.
 - **Why Next.js for frontend**: Next.js supports route-based UI composition and production-ready optimization while allowing incremental migration from legacy static/script assets.
 - **Why backend-driven API schemas**: Request/response contracts are authored once in backend Pydantic models and generated into frontend Zod schemas. This removes manual double maintenance and prevents backend/frontend contract drift.
 
 ## Engineering Highlights (for reviewers)
-- **Hybrid session middleware** (`services/session_middleware.py`): Built a custom ASGI middleware that transparently falls back from Redis-backed sessions to signed-cookie sessions when Redis is unavailable or fails mid-request — no session loss, no user disruption. Also implements session fixation prevention by rotating the session identifier on login.
+- **Secure Redis-backed sessions** (`services/session_middleware.py`): Built a custom ASGI middleware that stores the session body in Redis and keeps only a signed Redis reference in the browser cookie. If Redis cannot persist the session, the middleware clears the cookie rather than exposing sensitive session data in a signed cookie. It also prevents session fixation by rotating the session identifier on login.
 - **Streaming LLM responses** (`services/chat_generation.py`): LLM responses are streamed token-by-token via SSE using a background `ChatGenerationJob` thread. Jobs are cancellable, and the completed response is persisted to the database only after the full stream finishes, keeping the HTTP handler thin.
 - **Provider-agnostic LLM abstraction** (`services/llm.py`): A single `get_llm_response` / `get_llm_response_stream` interface routes to Groq, Claude, or OpenAI based on model name, with an allowlist that rejects unsupported models before any external call is made.
 - **LLM input sanitization**: Conversation messages are scanned for known secret patterns (API keys, OAuth tokens, passwords) using compiled regexes and redacted before forwarding to any LLM provider, preventing accidental secret leakage.
@@ -240,9 +242,9 @@ ChatGPT などの AI チャットサービスを日常的に使うなかで、�
 - **Groq / Claude / OpenAI 連携**
 
 ## 技術スタック
-- **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
+- **Backend**: Python 3.14, FastAPI, psycopg2 connection pool, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 18, Redis 7（任意）
+- **Database / Cache**: PostgreSQL 18, Redis 7（セッション・協調処理に使用。認証セッションの永続化には必須）
 - **LLM Providers**: Groq, Anthropic Claude, OpenAI
 - **Local Dev**: Docker Compose
 
@@ -270,7 +272,7 @@ docker-compose up --build
 - リバースプロキシ配下で動かす場合は、`X-Forwarded-For` を渡せるプロキシの IP/CIDR を `TRUSTED_PROXY_IPS` に設定してください。
 
 ## データベースマイグレーション（Alembic）
-スキーマ管理は Alembic に統一しています。`docker-compose up --build` では PostgreSQL の起動待ち後に `alembic upgrade head` を実行してから API を起動します。`init.sql` のような別系統の初期化スクリプトは使いません。
+スキーマ管理は Alembic に統一しています。開発環境（`FASTAPI_ENV=development`）では、コンテナのエントリーポイントが PostgreSQL の起動を待ってから `alembic upgrade head` を実行し、APIを起動します。本番のBlue/Greenデプロイでは、対象色の起動前にデプロイスクリプトがmigrationを明示的に実行し、本番コンテナ起動時の自動migrationはスキップします。`init.sql` のような別系統の初期化スクリプトは使いません。
 
 既存環境へ手動で適用する場合は次を実行してください。
 
@@ -286,16 +288,17 @@ alembic upgrade head
 - `alembic/versions/`: 段階的な変更履歴
 - `db/performance_indexes.sql`: インデックスのみを直接適用するフォールバックSQL
 - APIスキーマの単一ソース: バックエンドPydantic（`services/request_models.py`, `services/response_models.py`）を `python3 scripts/generate_frontend_zod_schemas.py`（または `npm --prefix frontend run generate:api-schemas`）でフロントエンドZod（`frontend/types/generated/api_schemas.ts`）へ生成
+- 内部構成の詳細: [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`docs/architecture/`](docs/architecture/)
 
 ## 課題と解決策（Challenges & Solutions）
 
-**Redisセッションのフォールバック** — セッションをRedisにサーバー側保存する設計では、Redis障害時に全ユーザーのセッションが失われるリスクがありました。ハイブリッドセッションミドルウェアを実装し、RedisがダウンまたはリクエストM中にエラーが発生した場合は署名付きCookieへ自動フォールバックすることで、ユーザーへの影響ゼロで障害を吸収しています。
+**Redisセッションの安全な失敗** — セッション本体はRedisに保存し、ブラウザCookieには署名済みのRedis参照IDだけを保持します。Redisがダウンまたはセッション保存中にエラーが発生した場合、機密情報を署名付きCookieへ退避せず、ミドルウェアがセッションCookieを消去します。Redis復旧後は再認証が必要です。
 
 **DBコネクションの耐障害性** — Docker ComposeではバックエンドコンテナがDBより先に起動してしまうことがありました。コネクションプールが `db`・`localhost`・`127.0.0.1` など複数ホストを順番に試し、接続確認が取れた最初のホストを採用する設計で解決しています。
 
 **LLMコスト制御** — LLMエンドポイントを直接公開すると外部API費用が青天井になるリスクがあります。全ユーザー合算の日次クォータカウンターをサービス層で一元管理し、外部API呼び出しの前段階でリクエストを遮断することで対処しています。
 
-**CI環境でのRedis依存テスト** — セッションのフォールバック挙動はRedisダウン時やリクエスト中の書き込み失敗時にしか発動せず、そのままでは再現が困難でした。障害や書き込み失敗を模擬するモックRedisクライアントで駆動することで、署名付きCookieへのフォールバック挙動を実Redisなしで決定論的に検証し、通常の統合テストゲート内で確実にテストしています。
+**CI環境でのRedis依存テスト** — Redis障害経路はRedisダウン時やリクエスト中の書き込み失敗時にしか発動せず、そのままでは再現が困難でした。障害や書き込み失敗を模擬するモックRedisクライアントで駆動することで、安全なCookie消去とキャッシュ劣化の挙動を実Redisなしで決定論的に検証しています。
 
 ## CI/CDとテスト（CI/CD & Testing）
 
@@ -317,18 +320,19 @@ alembic upgrade head
 ## パフォーマンスとスケーラビリティ（Performance & Scalability）
 
 - **コネクションプール**: PostgreSQL接続を `psycopg2.ThreadedConnectionPool` で管理し、リクエストごとの接続確立コストを排除。プールサイズは環境変数で調整可能で、`FASTAPI_ENV=production` では `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` で本番向けに上書きできます。
-- **Redisセッション**: Redis利用時はセッションデータをサーバー側に保存。アプリ層をステートレスに保ち、水平スケールを容易にする設計。
+- **Redisセッション**: セッション本体をRedisに保存し、アプリ層をステートレスに保つことで水平スケールに対応。認証セッションの永続化にはRedisが必要で、キャッシュや協調処理は用途ごとに劣化動作します。
 - **レート制限**: LLM API呼び出し・認証メール送信の日次上限に加え、ゲストチャット回数制限（`GUEST_CHAT_DAILY_LIMIT`）もサービス層のサーバー側カウンタで一元管理し、Cookie改ざんによる回避や外部APIコスト増大を防止。
-- **ヘルスエンドポイント**: `GET /healthz` でプロセス生存確認、`GET /readyz` でDB到達性とRedis劣化状態を返し、ロードバランサーのヘルスチェックに対応。
+- **ヘルスエンドポイント**: `GET /healthz` でプロセス生存確認、`GET /readyz` でDB到達性とRedisの劣化状態を分けて返し、ロードバランサーのヘルスチェックに対応。DBはreadinessに必須で、Redisは認証セッションの永続化に必須。
 - **構造化ログ**: 全リクエストに `X-Request-ID` 相関IDを付与したJSONログを出力し、障害時のトレーサビリティを確保。
 
 ## ディレクトリ構成
 - `app.py`: FastAPI エントリーポイント
-- `blueprints/`: 機能別モジュール（auth, chat, memo, prompt_share, admin）
+- `blueprints/`: 機能別モジュール（auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth）
 - `services/`: DB/LLM/メールなど共通処理
-- `templates/`・`static/`: 共有 HTML/CSS/JS
+- `frontend/public/`: フロントエンドの公開アセットとモジュール単位のCSS
+- `static/`: レガシー／ランタイム用の静的アセット
 - `alembic/versions/`: PostgreSQL スキーマ変更履歴
-- `frontend/`: Next.js フロントエンド
+- `frontend/`: Next.js フロントエンド（pages、components、hooks、contexts、共通ライブラリ）
 
 ## アーキテクチャ図
 ```mermaid
@@ -336,10 +340,10 @@ flowchart LR
     U[ユーザーブラウザ]
     FE[Next.js フロントエンド]
     API[FastAPI バックエンド]
-    BP[Blueprints<br/>auth/chat/memo/prompt_share/admin]
+    BP[Blueprints<br/>auth/chat/memo/prompt_share/context_vault/admin/MCP OAuth]
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
-    RD[(Redis 任意)]
+    RD[(Redis<br/>セッション・協調処理)]
     LLM[Groq / Claude / OpenAI API]
     EM[メールプロバイダ]
 
@@ -352,16 +356,16 @@ flowchart LR
 ```
 
 ## 技術的な意思決定（Design Decisions）
-- **なぜ FastAPI（Flask ではなく）を選んだか**: 非同期処理、型ヒントベースのバリデーション、自動生成される OpenAPI ドキュメントを活用し、API 連携と仕様の明確化を優先したためです。  
+- **なぜ FastAPI（Flask ではなく）を選んだか**: 非同期処理、型ヒントベースのバリデーション、自動生成される OpenAPI ドキュメントを活用し、API 連携と仕様の明確化を優先したためです。
   トレードオフ: 型定義と async の実装負荷は増えます。
-- **なぜ Redis をセッション/状態管理に使うか（任意）**: Redis 利用時はセッションをサーバー側で一元管理でき、複数インスタンス構成でも共有しやすく、失効制御やクォータ/エフェメラル状態の運用がしやすくなります。  
-  トレードオフ: 追加インフラの運用コストが発生します。
+- **なぜ Redis をセッション/状態管理に使うか**: セッションをサーバー側で一元管理でき、複数インスタンス構成でも共有しやすく、失効制御やクォータ/エフェメラル状態の運用がしやすくなります。認証セッションの永続化にはRedisが必要ですが、キャッシュや協調処理は用途ごとに劣化できます。
+  トレードオフ: 追加インフラの運用コストと、Redis障害時の再認証が発生します。
 - **なぜ PostgreSQL を主データストアにしたか**: ユーザー・チャット・プロンプト・管理データは関係性と整合性が重要なため、整合性保証・インデックス・マイグレーションが成熟した PostgreSQL を採用しています。
 - **なぜ Next.js を採用したか**: ルート単位でUIを構成しつつ本番最適化を行え、既存の静的アセット/スクリプト構成から段階的に移行しやすいためです。
 - **なぜ API スキーマをバックエンド主導にしたか**: リクエスト/レスポンス契約をバックエンドPydanticに集約し、フロントエンドZodは生成で同期します。手書き二重管理をなくし、契約ドリフトを防ぐためです。
 
 ## レビュー観点の強み
-- **ハイブリッドセッションミドルウェア** (`services/session_middleware.py`): Redis バックエンドから署名付き Cookie への透過的フォールバックを実装したカスタム ASGI ミドルウェア。Redis 障害時もセッション消失なし・ユーザー影響ゼロで吸収。ログイン時のセッション ID 再発行によるセッション固定攻撃対策も実装。
+- **安全なRedisセッションミドルウェア** (`services/session_middleware.py`): セッション本体をRedisに保存し、ブラウザCookieには署名済みのRedis参照IDだけを保持するカスタムASGIミドルウェア。Redis障害時は機密情報をCookieへ退避せず、Cookieを消去して再認証へ誘導。ログイン時のセッションID再発行によるセッション固定攻撃対策も実装。
 - **LLM ストリーミング応答** (`services/chat_generation.py`): バックグラウンドスレッド上の `ChatGenerationJob` がトークン逐次生成し SSE で配信。ジョブはキャンセル可能で、レスポンス全体の受信完了後にのみ DB 保存を行うことで HTTP ハンドラを薄く保つ設計。
 - **プロバイダ非依存 LLM 抽象層** (`services/llm.py`): `get_llm_response` / `get_llm_response_stream` の単一インターフェースがモデル名でルーティング。許可リスト外のモデルは外部 API 呼び出し前に即時拒否。
 - **LLM 入力サニタイズ**: API キー・OAuth トークン・パスワードなどの秘密情報パターンをコンパイル済み正規表現でスキャンし、外部 LLM プロバイダへ送信する前に自動的に伏せ字化。意図しない秘密漏洩を防止。
