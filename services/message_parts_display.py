@@ -1,10 +1,10 @@
 # アシスタントメッセージのパーツ（テキスト／生成UI／Web検索画像）の表示順を決める。
-# 生成UIとWeb検索画像は1ターン内で排他であり、画像は「回答までのステップ」
-# （回答トレース）の直下・本文の上に置く。1回答あたりの画像数もここで制限する。
+# 生成UIとWeb検索画像は1ターン内で排他であり、画像は本文パーツの指定位置に挿入する。
+# 旧形式でトレース前に保存された画像だけは「回答までのステップ」の直下へ移す。
 # Owns the display ordering contract for assistant message parts (text /
 # generated UI / web-search images). A generated UI and web-search images are
-# mutually exclusive within one turn, and images belong directly below the
-# answer-trace block ("回答までのステップ") and above the explanation.
+# mutually exclusive within one turn. Inline images preserve their authored
+# position; legacy images before the answer trace move below that trace.
 
 from __future__ import annotations
 
@@ -52,24 +52,26 @@ def split_answer_trace_block(text: str) -> tuple[str, str]:
 
 
 def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Enforce visual exclusivity and keep images above the explanation.
+    """Enforce visual exclusivity and keep the authored part order.
 
-    A generated UI wins over web-search images. Without a generated UI, images move
-    ahead of the prose so they never become a trailing footer, and only the first
-    five images are retained. The trace-aware placement is applied later by
+    A generated UI wins over web-search images. Without a generated UI, inline
+    image parts stay between their surrounding text parts, and only the first five
+    images are retained. The trace-aware placement is applied later by
     :func:`normalize_message_parts_for_display`.
     """
     normalized = [part for part in (parts or []) if isinstance(part, dict)]
     if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized):
         return [part for part in normalized if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
 
-    image_parts = [
-        part
-        for part in normalized
-        if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE
-    ][:MAX_WEB_SEARCH_IMAGES_PER_REPLY]
-    other_parts = [part for part in normalized if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
-    return [*image_parts, *other_parts]
+    contracted: list[dict[str, Any]] = []
+    image_count = 0
+    for part in normalized:
+        if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE:
+            if image_count >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
+                continue
+            image_count += 1
+        contracted.append(part)
+    return contracted
 
 
 def normalize_message_parts_for_display(
@@ -78,22 +80,33 @@ def normalize_message_parts_for_display(
     """Apply the display contract without re-validating payloads.
 
     On top of :func:`apply_visual_part_contract`, a leading answer-trace block is
-    split into its own text part so the web-search images render below
-    「回答までのステップ」 instead of above it. Payload validation remains the
-    responsibility of ``services.generative_ui._decode_message_parts``.
+    split into its own text part so legacy images saved before the trace render
+    below 「回答までのステップ」. Inline images remain between their surrounding
+    text parts. Payload validation remains the responsibility of
+    ``services.generative_ui._decode_message_parts``.
     """
     contracted = apply_visual_part_contract(parts)
-    image_parts = [part for part in contracted if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE]
-    if not image_parts:
+    if not any(part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE for part in contracted):
+        return contracted
+    first_text_index = next(
+        (
+            index
+            for index, part in enumerate(contracted)
+            if part.get("type") == TEXT_PART_TYPE
+        ),
+        None,
+    )
+    if first_text_index is None:
         return contracted
 
-    other_parts = [part for part in contracted if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
-    head = other_parts[0] if other_parts else None
-    trace, remainder = ("", "")
-    if head is not None and head.get("type") == TEXT_PART_TYPE:
-        trace, remainder = split_answer_trace_block(head.get("text") or "")
+    head = contracted[first_text_index]
+    trace, remainder = split_answer_trace_block(head.get("text") or "")
     if not trace:
-        return [*image_parts, *other_parts]
+        return contracted
 
-    body_parts = [{**head, "text": remainder}] if remainder.strip() else []
-    return [{**head, "text": trace}, *image_parts, *body_parts, *other_parts[1:]]
+    prefix_parts = contracted[:first_text_index]
+    suffix_parts = contracted[first_text_index + 1 :]
+    head_parts: list[dict[str, Any]] = [{**head, "text": trace}, *prefix_parts]
+    if remainder.strip():
+        head_parts.append({**head, "text": remainder})
+    return [*head_parts, *suffix_parts]

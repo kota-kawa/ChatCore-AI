@@ -147,6 +147,7 @@ test("normalizers keep safe web-search image parts", () => {
   });
 
   assert.deepEqual(response.parts, [
+    { type: "text", text: "answer" },
     {
       type: "web_search_image",
       image: {
@@ -156,11 +157,10 @@ test("normalizers keep safe web-search image parts", () => {
         sourceTitle: "Article",
       },
     },
-    { type: "text", text: "answer" },
   ]);
 });
 
-test("normalizers place the web-search image below the answer trace", () => {
+test("normalizers keep legacy images below the answer trace", () => {
   const trace =
     '<details class="web-search-sources web-search-sources--trace">\n' +
     '<summary class="web-search-sources__summary">' +

@@ -812,6 +812,8 @@ class ChatStreamingTestCase(unittest.TestCase):
                         "alt": "京都の紅葉の写真",
                         "source_url": "https://example.com/kyoto",
                         "source_title": "京都の紅葉ガイド",
+                        "placement": "after_subject",
+                        "placement_anchor": "京都の紅葉",
                     }
                 ],
             ) as mock_image,
@@ -823,25 +825,59 @@ class ChatStreamingTestCase(unittest.TestCase):
                 persist_response=persist_response,
             )
 
-            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+            events = list(_iter_llm_stream_events(job))
+            body = b"".join(events).decode("utf-8")
 
         self.assertEqual(len(persisted_records), 1)
         self.assertIn("web_search_image", body)
         self.assertIn("https://cdn.example.com/maple.jpg", body)
-        # 画像は「回答までのステップ」の下・本文の上に置かれる。
-        # The image sits below the answer trace and above the explanation.
+        event_names = [
+            line.removeprefix("event: ")
+            for event in events
+            for line in event.decode("utf-8").splitlines()
+            if line.startswith("event: ")
+        ]
+        self.assertLess(
+            event_names.index("response_parts_updated"),
+            event_names.index("done"),
+        )
+        response_parts_event_index = next(
+            index
+            for index, event in enumerate(events)
+            if b"event: response_parts_updated" in event
+        )
+        response_parts_payload = json.loads(
+            next(
+                line.removeprefix("data: ")
+                for line in events[response_parts_event_index].decode("utf-8").splitlines()
+                if line.startswith("data: ")
+            )
+        )
+        self.assertEqual(
+            [part["type"] for part in response_parts_payload["parts"]],
+            ["text", "text", "web_search_image", "text"],
+        )
+        self.assertIn("京都の紅葉", response_parts_payload["response"])
+        self.assertEqual(
+            response_parts_payload["parts"][2]["image"]["url"],
+            "https://cdn.example.com/maple.jpg",
+        )
+        self.assertEqual(response_parts_payload["parts"][3]["text"], "")
+        # 画像は選定LLMが指定したアンカーの直後へ挿入される。
+        # The image is inserted immediately after the anchor specified by the selector LLM.
         persisted_parts = persisted_records[0]["message_parts"]
         self.assertEqual(
             [part["type"] for part in persisted_parts],
-            ["text", "web_search_image", "text"],
+            ["text", "text", "web_search_image", "text"],
         )
         self.assertTrue(
             persisted_parts[0]["text"].startswith(
                 '<details class="web-search-sources web-search-sources--trace">'
             )
         )
-        self.assertNotIn("回答までのステップ", persisted_parts[2]["text"])
-        self.assertIn("京都の紅葉名所です。", persisted_parts[2]["text"])
+        self.assertIn("京都の紅葉", persisted_parts[1]["text"])
+        self.assertNotIn("回答までのステップ", persisted_parts[3]["text"])
+        self.assertIn("名所です。", persisted_parts[3]["text"])
         mock_image.assert_called_once()
 
     def test_background_generation_job_appends_selected_reference_steps(self):
@@ -1327,6 +1363,92 @@ class ChatStreamingTestCase(unittest.TestCase):
         deep_index = trace.index("リンクをたどって深掘り")
         self.assertLess(trace.index("追加検索"), deep_index)
         self.assertLess(deep_index, trace.index("検索結果を確認", deep_index))
+
+    # 日本語: モデルが追加検索を要求した場合、ツール呼び出しを含む中間本文を表示せず、
+    # ツール呼び出しがなくなった最終ステップの回答だけを検索後にクライアントへ届けることを検証します。
+    # English: Verify that intermediate prose from a model-requested search is hidden and only
+    # the no-tool final answer reaches the client after the search completes.
+    def test_background_generation_job_waits_for_final_answer_after_model_search(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="東慶寺の詳細",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/tokeiji",
+                    title="東慶寺の案内",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("東慶寺の概要",),
+                ),
+            ),
+        )
+        stream_call_count = 0
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count == 1:
+                yield "検索前の中間メモです。"
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-mid-answer",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "東慶寺の詳細"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            self.assertIsNotNone(tools)
+            yield "明月院と東慶寺の最終回答です。"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "明月院と東慶寺を教えて"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-mid-answer-search:default",
+                conversation_messages=[
+                    {"role": "user", "content": "明月院と東慶寺を教えて"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            events = list(_iter_llm_stream_events(job))
+            body = b"".join(events).decode("utf-8")
+
+        event_names = [
+            line.removeprefix("event: ")
+            for event in events
+            for line in event.decode("utf-8").splitlines()
+            if line.startswith("event: ")
+        ]
+        chunk_indices = [index for index, name in enumerate(event_names) if name == "chunk"]
+        search_started_index = event_names.index("web_search_started")
+        search_completed_index = event_names.index("web_search_completed")
+        self.assertTrue(chunk_indices)
+        self.assertGreater(chunk_indices[0], search_completed_index)
+        self.assertLess(search_started_index, search_completed_index)
+        self.assertLess(chunk_indices[0], event_names.index("done"))
+        self.assertNotIn("検索前の中間メモです。", body)
+        self.assertIn("明月院と東慶寺の最終回答です。", body)
+        self.assertIn("明月院と東慶寺の最終回答です。", persisted_messages[0])
+        self.assertNotIn("検索前の中間メモです。", persisted_messages[0])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.

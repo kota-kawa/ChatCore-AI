@@ -72,18 +72,27 @@ export function updateStreamingTextPart(
   if (!parts || parts.length === 0) return undefined;
 
   const cloned = parts.map((part) => ({ ...part })) as ChatMessagePart[];
-  const firstTextIndex = cloned.findIndex((part) => part.type === "text");
-  if (firstTextIndex >= 0) {
-    cloned[firstTextIndex] = { type: "text", text };
-    // 回答トレースと本文に分割済みのパーツは、全文で置き換えると本文が重複する。
-    // 残りのテキストパートを落として表示規約で組み直す。
-    // Parts already split into an answer trace and a body would duplicate the
-    // prose when overwritten with the full text, so drop the remaining text
-    // parts and let the display contract rebuild the split.
-    const withSingleText = cloned.filter(
-      (part, index) => index === firstTextIndex || part.type !== "text",
-    );
-    return normalizeMessagePartsForDisplay(withSingleText);
+  const textIndices = cloned.reduce<number[]>(
+    (indices, part, index) => (part.type === "text" ? [...indices, index] : indices),
+    [],
+  );
+  if (textIndices.length > 0) {
+    const lastTextIndex = textIndices[textIndices.length - 1];
+    // 画像で区切られた前半のテキストは確定済み。最後のテキストだけを
+    // 現在の全文の残りで更新し、画像の挿入位置をストリーム中も維持する。
+    // Text before an image is already committed. Update only the final text
+    // segment with the suffix of the current full response so image positions
+    // remain stable while the stream grows.
+    const committedText = textIndices
+      .slice(0, -1)
+      .map((index) => cloned[index].type === "text" ? cloned[index].text : "")
+      .join("");
+    let nextText = text;
+    if (committedText && text.startsWith(committedText)) {
+      nextText = text.slice(committedText.length).replace(/^\n+/, "");
+    }
+    cloned[lastTextIndex] = { type: "text", text: nextText };
+    return normalizeMessagePartsForDisplay(cloned);
   }
 
   if (!text) return cloned;

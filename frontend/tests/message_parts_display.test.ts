@@ -46,7 +46,7 @@ test("splitAnswerTraceBlock returns text without a trace unchanged", () => {
   assert.equal(remainder, "answer only");
 });
 
-test("normalizeMessagePartsForDisplay puts the image below the answer trace", () => {
+test("normalizeMessagePartsForDisplay keeps legacy images below the answer trace", () => {
   const parts: ChatMessagePart[] = [IMAGE_PART, { type: "text", text: `${TRACE}\n\nanswer` }];
 
   const normalized = normalizeMessagePartsForDisplay(parts);
@@ -59,10 +59,10 @@ test("normalizeMessagePartsForDisplay puts the image below the answer trace", ()
   assert.deepEqual(normalizeMessagePartsForDisplay(normalized), normalized);
 });
 
-test("normalizeMessagePartsForDisplay keeps the image above an answer without a trace", () => {
+test("normalizeMessagePartsForDisplay preserves inline order without a trace", () => {
   const parts: ChatMessagePart[] = [{ type: "text", text: "answer" }, IMAGE_PART];
 
-  assert.deepEqual(normalizeMessagePartsForDisplay(parts), [IMAGE_PART, { type: "text", text: "answer" }]);
+  assert.deepEqual(normalizeMessagePartsForDisplay(parts), [{ type: "text", text: "answer" }, IMAGE_PART]);
 });
 
 test("applyVisualPartContract keeps at most five web-search images", () => {
@@ -79,7 +79,7 @@ test("applyVisualPartContract keeps at most five web-search images", () => {
 test("applyVisualPartContract never splits the trace off the answer text", () => {
   const textPart: ChatMessagePart = { type: "text", text: `${TRACE}\n\nanswer` };
 
-  assert.deepEqual(applyVisualPartContract([textPart, IMAGE_PART]), [IMAGE_PART, textPart]);
+  assert.deepEqual(applyVisualPartContract([textPart, IMAGE_PART]), [textPart, IMAGE_PART]);
 });
 
 test("updateStreamingTextPart re-splits the trace instead of duplicating the answer", () => {
@@ -95,5 +95,19 @@ test("updateStreamingTextPart re-splits the trace instead of duplicating the ans
     { type: "text", text: TRACE },
     IMAGE_PART,
     { type: "text", text: "answer 2" },
+  ]);
+});
+
+test("updateStreamingTextPart keeps inline images while extending the trailing text", () => {
+  const parts: ChatMessagePart[] = [
+    { type: "text", text: "明月院" },
+    IMAGE_PART,
+    { type: "text", text: "" },
+  ];
+
+  assert.deepEqual(updateStreamingTextPart(parts, "明月院 説明です。"), [
+    { type: "text", text: "明月院" },
+    IMAGE_PART,
+    { type: "text", text: " 説明です。" },
   ]);
 });

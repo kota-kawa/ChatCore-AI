@@ -95,7 +95,7 @@ class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
             5,
         )
 
-    def test_image_is_placed_below_the_answer_trace(self):
+    def test_legacy_leading_image_is_placed_below_the_answer_trace(self):
         trace = _trace_markdown()
         parts = [IMAGE_PART, {"type": "text", "text": f"{trace}\n\n本文です。"}]
 
@@ -116,7 +116,7 @@ class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
 
         self.assertEqual(normalize_message_parts_for_display(once), once)
 
-    def test_trace_only_answer_keeps_the_image_below_the_trace(self):
+    def test_legacy_trace_only_answer_keeps_the_image_below_the_trace(self):
         trace = _trace_markdown()
         parts = [{"type": "text", "text": trace}, IMAGE_PART]
 
@@ -125,12 +125,12 @@ class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
         self.assertEqual([part["type"] for part in normalized], ["text", "web_search_image"])
         self.assertEqual(normalized[0]["text"], trace)
 
-    def test_image_stays_above_the_answer_without_a_trace(self):
+    def test_inline_image_order_is_preserved_without_a_trace(self):
         parts = [{"type": "text", "text": "本文です。"}, IMAGE_PART]
 
         normalized = normalize_message_parts_for_display(parts)
 
-        self.assertEqual([part["type"] for part in normalized], ["web_search_image", "text"])
+        self.assertEqual([part["type"] for part in normalized], ["text", "web_search_image"])
 
     def test_generated_ui_suppresses_the_image(self):
         trace = _trace_markdown()
@@ -156,7 +156,7 @@ class ApplyVisualPartContractTestCase(unittest.TestCase):
 
         contracted = apply_visual_part_contract([text_part, IMAGE_PART])
 
-        self.assertEqual(contracted, [IMAGE_PART, text_part])
+        self.assertEqual(contracted, [text_part, IMAGE_PART])
 
 
 if __name__ == "__main__":

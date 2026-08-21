@@ -245,8 +245,8 @@ class ChatGenerationStopTestCase(unittest.TestCase):
             **kwargs,
         )
 
-    # 日本語: 生成ジョブを開始し、最初のチャンクが出力されるまで待ちます。
-    # English: Start a generation job and wait until the first chunk is emitted.
+    # 日本語: 生成ジョブを開始し、最初の本文チャンクが出力または保留されるまで待ちます。
+    # English: Start a generation job and wait until the first body chunk is emitted or buffered.
     def _start_job(self, service, persisted=None):
         job = service.start_generation_job(
             self.job_key,
@@ -258,7 +258,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
                 else (lambda response, **kwargs: None)
             ),
         )
-        self.assertTrue(_wait_until(lambda: bool(job._chunks)))
+        self.assertTrue(_wait_until(lambda: bool(job._chunks or job._pending_stream_chunks)))
         return job
 
     # 日本語: ジョブを所有しないワーカーへ停止要求が届いても、生成が停止しロックが解放されることを検証します。

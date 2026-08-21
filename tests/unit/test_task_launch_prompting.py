@@ -185,7 +185,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
         self.assertIn("text only", BASE_SYSTEM_PROMPT)
         self.assertIn("single turn may show either a generated UI or web-search images", BASE_SYSTEM_PROMPT)
-        self.assertIn("never as a trailing block at the bottom", BASE_SYSTEM_PROMPT)
+        self.assertIn(
+            "Images must never be a trailing footer added only after all prose",
+            BASE_SYSTEM_PROMPT,
+        )
         self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
     # 日本語: 画像を求められたときにリンクの羅列で代替させないルールが入っていることを検証します。

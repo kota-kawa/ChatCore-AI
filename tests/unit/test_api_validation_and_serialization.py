@@ -185,9 +185,10 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                                 return_value=[
                                                     {
                                                         "url": "https://cdn.example.com/news.jpg",
-                                                        "alt": "ニュースの関連画像",
+                                                        "alt": "OpenAIの関連画像",
                                                         "source_url": "https://example.com/openai-news",
                                                         "source_title": "OpenAI News",
+                                                        "placement": "start",
                                                     }
                                                 ],
                                             ) as mock_image:
@@ -209,8 +210,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             payload["response"],
         )
         self.assertIn("https://example.com/openai-news", payload["response"])
-        # 画像は「回答までのステップ」の下・本文の上に置かれる。
-        # The image sits below the answer trace and above the explanation.
+        # LLM が冒頭配置を指定した画像は、回答トレースの直後へ置かれる。
+        # An image whose LLM plan says start is placed immediately after the trace.
         self.assertEqual(
             [part["type"] for part in payload["parts"]],
             ["text", "web_search_image", "text"],

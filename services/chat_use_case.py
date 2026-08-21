@@ -813,17 +813,6 @@ class ChatPostUseCase:
             )
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
-        if augmentation.result is not None:
-            image_selections = await run_blocking(
-                choose_web_search_images,
-                user_message,
-                augmentation.result,
-            )
-            message_parts = append_web_search_image_parts(
-                message_parts,
-                image_selections,
-                fallback_text=bot_reply,
-            )
 
         citation_evidence = combine_web_search_results(
             [
@@ -856,9 +845,25 @@ class ChatPostUseCase:
                     for part in message_parts
                 ]
 
-        # 「回答までのステップ」の直下に画像が来るよう、保存直前に表示順を確定する。
-        # Finalize the display order right before persisting so the web-search
-        # image lands directly below the answer trace.
+        # 引用解決後の本文に画像を挿入する。先に画像を挿入してから本文全体を
+        # 引用解決すると、画像前後のテキストパーツが重複するため、この順序を保つ。
+        # Place images after citation resolution. Replacing every text part with the
+        # resolved full response before this point would duplicate text around images.
+        if augmentation.result is not None:
+            image_selections = await run_blocking(
+                choose_web_search_images,
+                user_message,
+                augmentation.result,
+                answer_text=bot_reply,
+            )
+            message_parts = append_web_search_image_parts(
+                message_parts,
+                image_selections,
+                fallback_text=bot_reply,
+            )
+
+        # 保存直前にトレース分割と本文内の画像位置を確定する。
+        # Finalize trace splitting and inline image placement before persisting.
         if message_parts:
             message_parts = normalize_message_parts_for_display(message_parts) or None
 
