@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from html import escape
 from typing import Any
@@ -19,6 +20,49 @@ logger = logging.getLogger(__name__)
 MAX_IMAGE_CANDIDATES = 18
 MAX_IMAGE_ALT_CHARS = 180
 MAX_IMAGE_SOURCE_TITLE_CHARS = 160
+
+# 画像ファイル名に現れる「本文の写真ではない」印。空の枠・壊れた画像になる素材と、
+# ロゴ／アイコン／バナーのようなサイト部品を候補から外すために使う。
+# 区切り文字で割った語として一致させるので、iconic-view.jpg のような実写真は残る。
+# Markers in an image file name that mean "not a content photo": assets that render
+# as an empty or broken frame, and site furniture such as logos, icons, and banners.
+# Matched as whole words split on separators, so a real photo such as
+# iconic-view.jpg is kept.
+_NON_PHOTO_FILENAME_WORDS = frozenset(
+    {
+        "1x1",
+        "avatar",
+        "avatars",
+        "badge",
+        "banner",
+        "banners",
+        "blank",
+        "dummy",
+        "favicon",
+        "icon",
+        "icons",
+        "loader",
+        "loading",
+        "logo",
+        "logos",
+        "pixel",
+        "placeholder",
+        "spacer",
+        "sprite",
+        "sprites",
+        "tracking",
+        "transparent",
+    }
+)
+# 区切りを取り除いた形でのみ現れる印（no_image / no-image / noimage を一度に拾う）。
+# Markers that only appear once separators are removed, catching no_image,
+# no-image, and noimage in one rule.
+_NON_PHOTO_FILENAME_FRAGMENTS: tuple[str, ...] = (
+    "dummyimage",
+    "noimage",
+    "noimg",
+    "nophoto",
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +90,21 @@ _IMAGE_SELECTION_SYSTEM_PROMPT = (
     "relevant article/product/place/photo/diagram over a generic site image.\n"
     "Relevance is the highest priority. Match the exact subject and place: if the question is "
     "about Hasedera, reject a photo of another temple or a generic Kamakura stock image.\n"
+    "Select only a candidate that is itself a real photograph or a substantive diagram of the "
+    "subject. Reject site furniture and anything that would render as an empty or broken frame: "
+    "logos, wordmarks, icons, sprites, buttons, badges, share widgets, QR codes, map pins, "
+    "avatars, ad creatives, 1x1 tracking pixels, lazy-loading placeholders, spacer or transparent "
+    "images, 'no image' graphics, and dummy, sample, or default thumbnails. A URL whose file name "
+    "reads like noimage, no_image, blank, spacer, dummy, placeholder, loading, sprite, icon, "
+    "logo, avatar, or banner is such a candidate even when its alt text sounds relevant.\n"
+    "Trust the candidate's own alt text and image title over the page it came from. A candidate "
+    "from a search-result, tag, category, index, or gallery-listing page is usually the site's "
+    "banner rather than a picture of the subject, so select it only when its own alt or title "
+    "names the subject.\n"
+    "Prefer an og:image or twitter:image from an article or detail page about the subject, or an "
+    "inline image whose alt text describes the subject.\n"
+    "When no candidate is clearly a real picture of the subject, return show_image=false. A reply "
+    "with no image is much better than one with a broken, empty, or unrelated image.\n"
     "Rank candidates by these criteria: (1) make the real subject easy to understand, preferring "
     "a representative view or full scene; (2) sufficient quality, rejecting tiny or visibly "
     "degraded images; (3) trustworthy attribution, sometimes preferring official sites, tourism "
@@ -92,6 +151,31 @@ def _candidate_value(candidate: Any, name: str) -> str:
     return str(getattr(candidate, name, "") or "")
 
 
+def _is_non_photo_image_url(url: str) -> bool:
+    # 画像として何も写らないURL（プレースホルダ、スペーサ、トラッキング画素）や、
+    # 記事の写真ではないサイト部品（ロゴ、アイコン、バナー）をファイル名から落とす。
+    # 選定LLMへ渡す前に外すことで、壊れた画像や空の枠が選ばれる余地を減らす。
+    # Drop URLs that render as nothing (placeholders, spacers, tracking pixels) and
+    # site furniture that is never an article photo (logos, icons, banners), judged
+    # by file name. Removing them before the selection LLM sees them keeps a broken
+    # or empty frame from being selected at all.
+    try:
+        path = urlsplit(url).path.lower()
+    except ValueError:
+        return False
+    # ディレクトリ名にも印は出る（/icons/search.png、/avatar/user12.jpg）ため、
+    # パス全体を語に割って判定する。クエリ文字列は別URLを含むことがあるので見ない。
+    # The markers also live in directory names (/icons/search.png,
+    # /avatar/user12.jpg), so the whole path is split into words. The query string
+    # is ignored because it can carry a different URL.
+    words = {word for word in re.split(r"[^a-z0-9]+", path) if word}
+    if words & _NON_PHOTO_FILENAME_WORDS:
+        return True
+    filename = path.rsplit("/", 1)[-1] or path
+    squashed = re.sub(r"[^a-z0-9]+", "", filename)
+    return any(fragment in squashed for fragment in _NON_PHOTO_FILENAME_FRAGMENTS)
+
+
 def _candidate_rows(result: Any) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     seen_urls: set[str] = set()
@@ -101,6 +185,8 @@ def _candidate_rows(result: Any) -> list[dict[str, str]]:
         for candidate in getattr(source, "image_candidates", ()):
             image_url = _safe_http_url(_candidate_value(candidate, "url"))
             if not image_url or image_url in seen_urls:
+                continue
+            if _is_non_photo_image_url(image_url):
                 continue
             seen_urls.add(image_url)
             rows.append(
