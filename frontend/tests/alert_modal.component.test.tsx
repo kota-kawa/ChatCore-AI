@@ -46,9 +46,7 @@ describe("global alert & confirm modal", () => {
     const cancel = button(CONFIRM_ROOT, 'data-cc-confirm-cancel="true"');
     const ok = button(CONFIRM_ROOT, 'data-cc-confirm-ok="true"');
     expect(cancel.querySelector(".cc-alert-modal__label")?.textContent).toBe("キャンセル");
-    expect(cancel.querySelector(".cc-alert-modal__hint")?.textContent).toBe("Esc");
     expect(ok.querySelector(".cc-alert-modal__label")?.textContent).toBe("OK");
-    expect(ok.querySelector(".cc-alert-modal__hint")?.textContent).toBe("Enter");
   });
 
 

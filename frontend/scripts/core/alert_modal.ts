@@ -75,7 +75,7 @@ class GlobalAlertModal {
       closeLabel: english ? "Close" : "閉じる",
       title: english ? "Notice" : "お知らせ",
       overlayAttribute: "data-cc-alert-close",
-      actionsMarkup: buildButtonMarkup({ label: "OK", hint: "Enter" })
+      actionsMarkup: buildButtonMarkup({ label: "OK" })
     });
     document.body.appendChild(root);
     return root;
@@ -239,13 +239,11 @@ class GlobalConfirmModal {
       actionsMarkup: [
         buildButtonMarkup({
           label: english ? "Cancel" : "キャンセル",
-          hint: "Esc",
           secondary: true,
           attributes: 'data-cc-confirm-cancel="true"'
         }),
         buildButtonMarkup({
           label: "OK",
-          hint: "Enter",
           attributes: 'data-cc-confirm-ok="true"'
         })
       ].join("")

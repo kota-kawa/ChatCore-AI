@@ -63,18 +63,12 @@ function buildDialogMarkup({
   `;
 }
 
-function buildButtonMarkup(options: {
-  label: string;
-  hint: string;
-  secondary?: boolean;
-  attributes?: string;
-}) {
+function buildButtonMarkup(options: { label: string; secondary?: boolean; attributes?: string }) {
   const modifier = options.secondary ? " cc-alert-modal__button--secondary" : "";
   const attributes = options.attributes ? ` ${options.attributes}` : "";
   return `
     <button type="button" class="cc-alert-modal__button${modifier}"${attributes}>
       <span class="cc-alert-modal__label">${options.label}</span>
-      <span class="cc-alert-modal__hint" aria-hidden="true">${options.hint}</span>
     </button>
   `;
 }
