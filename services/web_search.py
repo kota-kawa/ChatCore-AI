@@ -460,6 +460,30 @@ _CITATION_MARKER_STYLES = (
     ("【source:", "】", True),
     ("【src_", "】", True),
 )
+# 出典チップのHTMLはサーバー側でのみ描画する。モデルが過去の回答を真似て書いた
+# チップや、履歴の切り詰めで途中まで残ったタグは本文から取り除く。
+# Source chips are rendered server-side only. Chips echoed back by the model, and
+# tags left half-written by history trimming, are removed from answer prose.
+CITATION_CHIP_CLASS = "web-search-citation"
+_CITATION_CHIP_HTML_PATTERNS = (
+    # 完全な出典チップ（アンカー要素まるごと）
+    # A complete source chip, anchor element and all.
+    re.compile(r"<a\b[^<>]*web-search-citation.*?</a>", re.IGNORECASE | re.DOTALL),
+    # アンカーを伴わないチップ内部要素
+    # Chip inner elements that arrived without their anchor.
+    re.compile(r"<span\b[^<>]*web-search-citation.*?</span>", re.IGNORECASE | re.DOTALL),
+    re.compile(r"<img\b[^<>]*web-search-citation[^<>]*>", re.IGNORECASE),
+    # 上のどれにも当てはまらずに残った単独タグ。本文は残す。
+    # Any lone tag the rules above did not match; the surrounding prose stays.
+    re.compile(r"<[^<>]*web-search-citation[^<>]*>", re.IGNORECASE),
+    # タグを閉じないまま途切れたチップは、以降をすべて捨てる。閉じ括弧が無い以上、
+    # 続きの文字列もタグの内側であり、本文として表示できない。
+    # A chip that never closes its tag takes the remainder with it: without a closing
+    # bracket the rest is still inside the tag and cannot be shown as prose.
+    re.compile(r"<[^<>]*web-search-citation[^<>]*$", re.IGNORECASE | re.DOTALL),
+)
+_CITATION_CHIP_STREAM_PREFIX = '<a class="web-search-citation"'
+_CITATION_CHIP_STREAM_CLOSING = "</a>"
 _FALLBACK_SEARCH_REQUEST_RE = re.compile(
     r"(?:検索|調べ(?:て|る)|探して|最新|今日|現在|今(?:の|日)|ニュース|天気|株価|為替|価格|"
     r"\b(?:search|look\s*up|latest|current|today|news|weather|stock|price)\b)",
@@ -506,8 +530,43 @@ def _parse_web_search_citation_marker(marker: str) -> tuple[str, bool]:
     return "", False
 
 
-def split_web_search_citation_stream_text(text: str) -> tuple[str, str]:
-    """Split complete streamed text from a trailing partial citation marker."""
+def strip_web_search_citation_html(text: str) -> str:
+    """Remove citation chip markup that the model wrote instead of a citation marker."""
+    if not isinstance(text, str) or not text:
+        return ""
+    if CITATION_CHIP_CLASS not in text.lower():
+        return text
+
+    cleaned = text
+    for pattern in _CITATION_CHIP_HTML_PATTERNS:
+        cleaned = pattern.sub("", cleaned)
+    return cleaned
+
+
+def _split_trailing_citation_chip_html(text: str) -> tuple[str, str]:
+    """Hold back a chip tag that the model has only partially streamed."""
+    lowered = text.lower()
+    chip_start = lowered.rfind(_CITATION_CHIP_STREAM_PREFIX)
+    if chip_start >= 0 and _CITATION_CHIP_STREAM_CLOSING not in lowered[chip_start:]:
+        return text[:chip_start], text[chip_start:]
+
+    partial_prefix_length = max(
+        (
+            prefix_length
+            for prefix_length in range(
+                1, min(len(text), len(_CITATION_CHIP_STREAM_PREFIX) - 1) + 1
+            )
+            if lowered.endswith(_CITATION_CHIP_STREAM_PREFIX[:prefix_length])
+        ),
+        default=0,
+    )
+    if partial_prefix_length:
+        return text[:-partial_prefix_length], text[-partial_prefix_length:]
+    return text, ""
+
+
+def _split_trailing_citation_marker(text: str) -> tuple[str, str]:
+    """Hold back a citation marker that the model has only partially streamed."""
     lowered = text.lower()
     marker_candidates = [
         (lowered.rfind(prefix), closing)
@@ -533,6 +592,13 @@ def split_web_search_citation_stream_text(text: str) -> tuple[str, str]:
     if partial_prefix_length:
         return text[:-partial_prefix_length], text[-partial_prefix_length:]
     return text, ""
+
+
+def split_web_search_citation_stream_text(text: str) -> tuple[str, str]:
+    """Split complete streamed text from a trailing partial citation marker or chip."""
+    complete, pending = _split_trailing_citation_marker(text)
+    complete, chip_pending = _split_trailing_citation_chip_html(complete)
+    return complete, f"{chip_pending}{pending}"
 
 
 def _coerce_link_depth(value: Any) -> int:
@@ -1846,6 +1912,7 @@ def build_web_search_system_message(
         "For facts that come from the web, use the evidence_id of the matching source and put a citation marker in the form [[source:<evidence_id>]] immediately after the fact (for example [[source:src_0123456789abcdefabcd]]). These markers are converted into compact source chips that open the real sources after you answer.",
         "Use only evidence_id values that actually appear below, exactly as written. Do not put result numbers, URLs, titles, or guessed IDs into a marker, and do not create an ordinary Markdown link in place of a citation marker.",
         "The marker is internal transport syntax, not user-facing text. Use only the exact [[source:<evidence_id>]] form above. Never use full-width citation brackets such as 【src_...】 or ordinary Markdown citations or links. Never shorten it to [[src_...]], output a bare evidence_id, mention the marker syntax, or expose any other internal label in your prose.",
+        "The application builds the source chips from your markers after you answer. Never write chip markup yourself, such as an <a> tag with class=\"web-search-citation\", even if earlier answers in this conversation look as though they contain it.",
         "When there is at least one source, you must not end the answer with only \"I am not aware of that\", \"I recommend checking\", or \"please see the official site\". Always summarize directly from the search results.",
         "Answer the user's question directly in the first 1-2 sentences. Since search results are available, a reply that only tells the user to verify elsewhere is prohibited.",
         "A list of links is never an answer. Never write bare URLs in the prose, never build a per-item list of URLs, and never hand the user photo-library, image-search, gallery, or official-page links so they can look something up themselves. The citation markers already carry every source, so a URL in your text adds nothing.",

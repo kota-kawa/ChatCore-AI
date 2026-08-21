@@ -324,6 +324,27 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
     # 日本語: 行中の余分な空白と行末の空白は従来どおり圧縮されることを検証します。
     # English: Verify that redundant mid-line and trailing whitespace is still compacted.
+    def test_normalize_message_text_strips_rendered_citation_chips(self):
+        replayed_answer = (
+            "高山のおすすめは古い町並です"
+            '<a class="web-search-citation" href="https://example.com/a" '
+            'target="_blank" title="観光8選">'
+            '<span class="web-search-citation__label">観光8選</span></a>。'
+        )
+        truncated_answer = (
+            "平湯大滝が魅力です"
+            '<a class="web-search-citation" href="https://example.com/a" title="観光8選'
+        )
+
+        self.assertEqual(
+            normalize_message_text(replayed_answer),
+            "高山のおすすめは古い町並です。",
+        )
+        self.assertEqual(
+            normalize_message_text(truncated_answer),
+            "平湯大滝が魅力です",
+        )
+
     def test_normalize_message_text_still_compacts_redundant_whitespace(self):
         self.assertEqual(
             normalize_message_text("語句    の   あいだ   \n次の行   "),
