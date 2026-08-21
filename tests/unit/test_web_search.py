@@ -1427,6 +1427,30 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(restored.sources[0].evidence_id, source.evidence_id)
 
+    def test_system_message_forbids_answering_with_a_list_of_links(self):
+        # 画像を求められたときにフォトライブラリのURLを並べる回答を禁止する。
+        # Ban replies that line up photo-library URLs when asked to see something.
+        result = web_search.WebSearchResult(
+            query="鎌倉 観光 写真",
+            searched_at="2026-08-21T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/kamakura",
+                    title="鎌倉観光ガイド",
+                    hostname="example.com",
+                    age="",
+                    snippets=("鎌倉大仏は高徳院にある",),
+                ),
+            ),
+        )
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertIn("A list of links is never an answer", content)
+        self.assertIn("never build a per-item list of URLs", content)
+        self.assertIn("photo-library, image-search, gallery", content)
+        self.assertIn("answer with a concrete description drawn from the sources", content)
+
     def test_system_message_keeps_complete_sources_within_context_budget(self):
         sources = tuple(
             web_search.WebSearchSource(

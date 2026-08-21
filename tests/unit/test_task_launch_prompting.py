@@ -188,6 +188,19 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("never as a trailing block at the bottom", BASE_SYSTEM_PROMPT)
         self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
+    # 日本語: 画像を求められたときにリンクの羅列で代替させないルールが入っていることを検証します。
+    # English: Verify the prompt forbids answering a "show me" request with a list of links.
+    def test_base_system_prompt_forbids_link_lists_instead_of_visuals(self):
+        self.assertIn("A link is never a substitute for an answer", BASE_SYSTEM_PROMPT)
+        self.assertIn("photo libraries, image searches, galleries", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not print bare URLs in the prose at all", BASE_SYSTEM_PROMPT)
+        self.assertIn("describe the concrete appearance", BASE_SYSTEM_PROMPT)
+        self.assertIn("attaches at most one for the whole reply", BASE_SYSTEM_PROMPT)
+        self.assertIn(
+            "Never fall back to links when you cannot show a visual",
+            GENERATIVE_UI_EXECUTION_CONTRACT,
+        )
+
     # 日本語: ベースシステムプロンプトが、そのまま貼り付ける完成文を chatcore-copy フェンスへ入れるよう
     #         指示していることを検証します。
     # English: Verify the base system prompt routes copy-ready deliverables into a chatcore-copy fence.
