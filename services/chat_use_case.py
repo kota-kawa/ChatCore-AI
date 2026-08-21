@@ -19,6 +19,7 @@ from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import normalize_response_with_artifact_retry
+from services.message_parts_display import normalize_message_parts_for_display
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
@@ -854,6 +855,12 @@ class ChatPostUseCase:
                     )
                     for part in message_parts
                 ]
+
+        # 「回答までのステップ」の直下に画像が来るよう、保存直前に表示順を確定する。
+        # Finalize the display order right before persisting so the web-search
+        # image lands directly below the answer trace.
+        if message_parts:
+            message_parts = normalize_message_parts_for_display(message_parts) or None
 
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう保存する
         # Serialize this turn's search results so later turns can reference them.

@@ -21,6 +21,7 @@ from services.generative_ui import (
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
 )
+from services.message_parts_display import normalize_message_parts_for_display
 
 from .personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
@@ -1439,6 +1440,13 @@ class ChatGenerationJob:
                     )
                     for part in message_parts
                 ]
+
+        # 「回答までのステップ」の直下に画像が来るよう、保存・配信の直前に表示順を確定する。
+        # Finalize the display order right before persisting and publishing so the
+        # web-search image lands directly below the answer trace.
+        if message_parts:
+            message_parts = normalize_message_parts_for_display(message_parts) or None
+
         self.response = bot_reply
 
         # 本文もUIパーツも空なら「回答なし」であり、成功として保存してはいけない。

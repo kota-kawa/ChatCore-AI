@@ -826,8 +826,20 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(len(persisted_records), 1)
         self.assertIn("web_search_image", body)
         self.assertIn("https://cdn.example.com/maple.jpg", body)
-        self.assertEqual(persisted_records[0]["message_parts"][0]["type"], "web_search_image")
-        self.assertEqual(persisted_records[0]["message_parts"][1]["type"], "text")
+        # 画像は「回答までのステップ」の下・本文の上に置かれる。
+        # The image sits below the answer trace and above the explanation.
+        persisted_parts = persisted_records[0]["message_parts"]
+        self.assertEqual(
+            [part["type"] for part in persisted_parts],
+            ["text", "web_search_image", "text"],
+        )
+        self.assertTrue(
+            persisted_parts[0]["text"].startswith(
+                '<details class="web-search-sources web-search-sources--trace">'
+            )
+        )
+        self.assertNotIn("回答までのステップ", persisted_parts[2]["text"])
+        self.assertIn("京都の紅葉名所です。", persisted_parts[2]["text"])
         mock_image.assert_called_once()
 
     def test_background_generation_job_appends_selected_reference_steps(self):

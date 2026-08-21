@@ -1,4 +1,5 @@
 import type { ChatMessagePart } from "./types";
+import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 
 // Only this exact fence can start the generative-UI loading state. Legacy aliases
 // are still hidden from streamed prose below so malformed model output does not
@@ -74,9 +75,17 @@ export function updateStreamingTextPart(
   const firstTextIndex = cloned.findIndex((part) => part.type === "text");
   if (firstTextIndex >= 0) {
     cloned[firstTextIndex] = { type: "text", text };
-    return cloned;
+    // 回答トレースと本文に分割済みのパーツは、全文で置き換えると本文が重複する。
+    // 残りのテキストパートを落として表示規約で組み直す。
+    // Parts already split into an answer trace and a body would duplicate the
+    // prose when overwritten with the full text, so drop the remaining text
+    // parts and let the display contract rebuild the split.
+    const withSingleText = cloned.filter(
+      (part, index) => index === firstTextIndex || part.type !== "text",
+    );
+    return normalizeMessagePartsForDisplay(withSingleText);
   }
 
   if (!text) return cloned;
-  return [{ type: "text", text }, ...cloned];
+  return normalizeMessagePartsForDisplay([{ type: "text", text }, ...cloned]);
 }

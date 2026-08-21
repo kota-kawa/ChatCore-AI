@@ -61,7 +61,7 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("image-1", prompt)
         self.assertIn("image-2", prompt)
         system_prompt = mock_llm.call_args.args[0][0]["content"]
-        self.assertIn("before the explanation", system_prompt)
+        self.assertIn("below the answer-trace panel and above the explanation", system_prompt)
         self.assertIn("mutually exclusive", system_prompt)
         self.assertIn("places and travel destinations", system_prompt)
         self.assertIn("programming, legal explanations", system_prompt)
