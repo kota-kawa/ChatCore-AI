@@ -528,18 +528,6 @@
     0 18px 44px -18px rgba(15, 118, 110, 0.34);
 }
 
-/* カード上端のティールのアクセントライン（生成UIカードのシグネチャ） */
-/* Teal accent line across the card top (the generated-UI card signature) */
-:where(body.chat-page, .chat-page-shell) .sandbox-artifact::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: linear-gradient(90deg, #0f766e, #2dd4bf 42%, rgba(45, 212, 191, 0) 88%);
-  pointer-events: none;
-  z-index: 1;
-}
-
 :where(body.chat-page, .chat-page-shell) .sandbox-artifact__header {
   display: flex;
   align-items: flex-start;

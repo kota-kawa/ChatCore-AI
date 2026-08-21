@@ -26,6 +26,8 @@
   --md-accent-wash: color-mix(in srgb, var(--primary-color, #19c37d) 9%, transparent);
   --md-accent-line: color-mix(in srgb, var(--primary-color, #19c37d) 24%, transparent);
   --md-chip-bg: color-mix(in srgb, var(--primary-color, #19c37d) 16%, transparent);
+  --md-quote-rule: rgba(15, 23, 42, 0.16);
+  --md-quote-wash: rgba(15, 23, 42, 0.035);
   --md-box-line: rgba(15, 23, 42, 0.22);
   --md-rule: rgba(15, 23, 42, 0.1);
   --md-rule-soft: rgba(15, 23, 42, 0.06);
@@ -279,8 +281,8 @@
   margin: 1rem 0;
   padding: 0.85rem 1.1rem;
   border: 0;
-  border-radius: 4px var(--radius-m, 12px) var(--radius-m, 12px) 4px;
-  background: var(--md-accent-wash);
+  border-radius: var(--radius-m, 12px);
+  background: var(--md-quote-wash);
   color: var(--text-dark, #1a1a1a);
   font-style: normal;
   line-height: var(--chat-font-body-leading, 1.7);
@@ -292,9 +294,8 @@
   top: 0.5rem;
   bottom: 0.5rem;
   left: 0;
-  width: 3px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--md-accent), var(--md-accent-ink));
+  width: 2px;
+  background: var(--md-quote-rule);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message blockquote > :first-child {
@@ -591,6 +592,8 @@
   --md-accent-wash: color-mix(in srgb, var(--primary-color, #19c37d) 14%, transparent);
   --md-accent-line: color-mix(in srgb, var(--primary-color, #19c37d) 32%, transparent);
   --md-chip-bg: color-mix(in srgb, var(--primary-color, #19c37d) 22%, transparent);
+  --md-quote-rule: rgba(148, 163, 184, 0.42);
+  --md-quote-wash: rgba(148, 163, 184, 0.08);
   --md-box-line: rgba(148, 163, 184, 0.45);
   /* 暗い背景では原色のままだと沈むので、ブランド色を白へ寄せて読める明度にする */
   /* The raw brand colour sinks into the dark surface, so it is lifted toward white */

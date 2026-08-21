@@ -121,10 +121,10 @@
 .shared-memo-page .md-content blockquote {
   margin: 0.65rem 0;
   padding: 0.5rem 0.9rem;
-  border-left: 3px solid #d97706;
-  background: rgba(217, 119, 6, 0.08);
-  border-radius: 0 6px 6px 0;
-  color: #7c5a35;
+  border-left: 2px solid rgba(15, 23, 42, 0.16);
+  background: rgba(15, 23, 42, 0.035);
+  border-radius: 6px;
+  color: #5c5750;
   font-style: italic;
 }
 

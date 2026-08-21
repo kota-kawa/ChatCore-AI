@@ -405,10 +405,6 @@
   box-shadow: none;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section--body {
-  border-left-color: rgba(124, 178, 251, 0.6);
-}
-
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__label {
   color: #e5e7eb;
 }
@@ -451,7 +447,7 @@
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-markdown blockquote {
-  border-left-color: rgba(124, 178, 251, 0.45);
+  border-left-color: rgba(148, 163, 184, 0.42);
   color: #9fb0c4;
 }
 

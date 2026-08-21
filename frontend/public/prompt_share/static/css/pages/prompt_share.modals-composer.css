@@ -92,15 +92,6 @@
     0 18px 44px rgba(37, 99, 235, 0.14);
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .post-modal-content--composer::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 5px;
-  border-radius: 30px 30px 0 0;
-  background: linear-gradient(90deg, #0f4aa6 0%, #4f9cf5 55%, #77b7ff 100%);
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .post-modal .composer-hero,
 :where(body.prompt-share-page, .prompt-share-page) .post-modal .post-form > * {
   opacity: 0;
@@ -127,12 +118,12 @@
 /* ── プロンプト詳細モーダル ─────────────────────────────────────────────
    本文を読むための面として組む。ヘッダー（見出し・署名・タブ）とフッターは
    固定し、スクロールはモーダル内で1箇所だけ。本文の入れ子スクロールは持たせない。
-   枠組み（高さ固定のシート・帯・アイコン付き見出し・フッター）は設定画面の
+   枠組み（高さ固定のシート・アイコン付き見出し・フッター）は設定画面の
    プロンプト閲覧モーダルに揃え、配色だけ prompt_share の青系を使う。
    Detail modal: the prompt body is the reading surface. Header and footer are
    fixed and the modal has exactly one scroll container, so the body never
    scrolls inside another scroller. The shell mirrors the settings-page preview
-   modal (fixed-height sheet, accent rule, icon heading, footer) in blue. */
+   modal (fixed-height sheet, icon heading, footer) in blue. */
 :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
   width: min(96%, 1080px);
   /* 内容量に関わらず枠が動かないよう高さを決め打ちする / a fixed height keeps the sheet steady */
@@ -186,19 +177,6 @@
   background:
     radial-gradient(circle at 92% 12%, rgba(26, 115, 232, 0.14), transparent 34%),
     linear-gradient(135deg, #f8fbff 0%, #f1f7ff 64%, #ffffff 100%);
-}
-
-/* シート上端の色帯は固定要素へ移し、スクロールしても起点が残るようにする
-   The accent rule lives on the sheet itself, so it stays put while the header scrolls */
-:where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content--detail::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 20;
-  height: 4px;
-  background: linear-gradient(90deg, #0f4aa6, #1a73e8, #77b7ff);
-  content: "";
 }
 
 /* タイトルとタブを積む格子。広い画面ではタブを見出し行の右へ寄せる
@@ -490,7 +468,6 @@
    The body drops the box-in-box: the card itself becomes the reading surface */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section--body {
   padding: 0;
-  border-left: 3px solid rgba(26, 115, 232, 0.55);
   overflow: clip;
 }
 
@@ -681,7 +658,7 @@
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-markdown blockquote {
   margin-inline: 0;
   padding: 0.2em 0 0.2em 0.9em;
-  border-left: 3px solid rgba(26, 115, 232, 0.3);
+  border-left: 2px solid var(--pd-line, rgba(15, 23, 42, 0.14));
   color: #4d647b;
 }
 

@@ -42,7 +42,7 @@ body.prompt-manage-page,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 2px solid var(--ps-accent-color);
+  border-bottom: 1px solid var(--ps-border-color);
   padding-bottom: 0.5rem;
   margin-bottom: 2rem;
 }
@@ -360,7 +360,7 @@ body.prompt-manage-page,
 }
 
 [data-theme="dark"] :where(body.prompt-manage-page, .prompt-manage-page) .header-bar {
-  border-bottom-color: var(--ps-primary-color);
+  border-bottom-color: rgba(148, 163, 184, 0.28);
 }
 
 [data-theme="dark"] :where(body.prompt-manage-page, .prompt-manage-page) .section-title {

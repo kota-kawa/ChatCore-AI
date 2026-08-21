@@ -157,7 +157,7 @@
 }
 
 .docs-toc__list {
-  border-left: 2px solid var(--lp-green-soft);
+  border-left: 2px solid var(--lp-line);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

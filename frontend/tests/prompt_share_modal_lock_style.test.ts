@@ -135,11 +135,12 @@ test("the detail modal's header scrolls with the body instead of sticking", () =
     "the header must not be pinned to the top of the modal",
   );
 
-  // 上端の色帯はスクロールしないシート側へ移し、ヘッダーが流れても起点が残るようにする
-  // The accent rule moved to the sheet so it stays put while the header scrolls away
-  assert.match(
+  // 上端の色帯は持たない。カードやモーダルの端だけを塗るアクセントは使わない方針。
+  // No accent rail on the top edge: colouring just one edge of a card or modal is out.
+  assert.doesNotMatch(
     promptShareModalCss,
-    /#promptDetailModal \.post-modal-content--detail::before\s*\{[\s\S]*?height:\s*4px;/,
+    /\.post-modal-content--(detail|composer)::before\s*\{/,
+    "the detail and composer sheets must not draw a coloured rail on their top edge",
   );
 });
 
