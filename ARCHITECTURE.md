@@ -115,6 +115,8 @@ Redis 障害時の扱いは用途ごとに異なります。一般キャッシ�
 4. フロントエンドは `/api/chat_generation_stream` などの SSE エンドポイントを購読し、切断時はステータス確認と再接続を行う。
 5. 応答の永続化はジョブの終了・停止経路で一度だけ行います。途中停止でも生成済みの本文を扱うため、完了と停止の二重保存を追加しないでください。
 
+調査ループ（ツール呼び出しを繰り返すフェーズ）で使う内部メモは `services/chat_research_notes.py` が担当します。ステップメモ（`<step_note>`、任意・1〜2文の「次の一手の根拠」）は直近数件だけを次ステップの system メッセージへ組み直して渡し、会話履歴の assistant メッセージにも最終回答パスにも渡しません。最終回答パスへ渡る内部メモは調査完了ノート（`<research_complete>`）だけです。内部メモはいずれもユーザー向け本文には出力せず、途中停止時の部分出力からも取り除きます。
+
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 
 ### 添付ファイル
@@ -146,7 +148,7 @@ npm --prefix frontend run generate:api-schemas
 | 変更したいもの | 最初に見る場所 | 併せて確認するもの |
 | --- | --- | --- |
 | API の入出力 | 対応する `blueprints/` と `services/*_models.py` | 生成 Zod、フロントの API 正規化、ルートテスト |
-| チャットの生成・停止・再接続 | `services/chat_generation.py` | `blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
+| チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_research_notes.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
 | 認証・セッション・CSRF | `blueprints/auth*`、`services/session_middleware.py`、`services/csrf.py` | Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |
 | プロンプト画像 | `services/prompt_attachment_processing.py` と storage | `docs/architecture/prompt_attachment_storage.md`、添付テスト |

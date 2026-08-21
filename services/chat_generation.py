@@ -51,9 +51,12 @@ from .llm import (
     is_retryable_llm_error,
 )
 from .chat_research_notes import (
+    append_step_note,
     build_final_answer_messages,
     build_research_loop_messages,
     parse_research_summary,
+    parse_step_note,
+    strip_internal_notes,
 )
 from .web_search import (
     WEB_SEARCH_MAX_CONTEXT_CHARS,
@@ -529,10 +532,12 @@ class ChatGenerationJob:
         self._cancelled = True
 
         if self._pending_stream_chunks:
-            pending_text = "".join(self._pending_stream_chunks)
-            self._chunks.extend(self._pending_stream_chunks)
+            # 調査ステップの途中で停止した場合、内部メモが本文として残らないよう取り除く。
+            # A stop during a research step must not leave internal notes in the saved body.
+            pending_text = strip_internal_notes("".join(self._pending_stream_chunks))
             self._pending_stream_chunks = []
             if pending_text:
+                self._chunks.append(pending_text)
                 self._publish("chunk", {"text": pending_text})
         partial_text = "".join(self._chunks)
         if not partial_text.strip():
@@ -1156,6 +1161,10 @@ class ChatGenerationJob:
             final_answer_required = False
             answer_stream_started = False
             research_summary: dict[str, Any] | None = None
+            # 各ステップが任意で書く「次の一手の根拠」。直近分だけを次のステップへ渡す。
+            # The optional rationale each step may write for its next move; only the most
+            # recent notes are carried into the following step.
+            step_notes: list[str] = []
             while step_count < max_steps:
                 if self._should_stop():
                     return
@@ -1175,7 +1184,10 @@ class ChatGenerationJob:
                 allow_tools = bool(available_tools)
                 tools = available_tools if allow_tools else None
                 research_messages = (
-                    build_research_loop_messages(current_messages)
+                    build_research_loop_messages(
+                        current_messages,
+                        step_notes=step_notes,
+                    )
                     if research_phase_used
                     else current_messages
                 )
@@ -1242,7 +1254,11 @@ class ChatGenerationJob:
                     break
 
                 # このステップは検索・参照のための中間生成なので、本文として表示・保存しない。
+                # 任意のステップメモだけを取り出し、次のステップのsystemメッセージへ引き継ぐ。
                 # This step is intermediate tool-use output; do not display or persist it as the answer.
+                # Only the optional step note is kept, and it is carried into the next step's
+                # system message.
+                append_step_note(step_notes, parse_step_note(step_chunks))
                 self._pending_stream_chunks = []
                 research_phase_used = True
 
