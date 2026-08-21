@@ -185,7 +185,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                                 return_value=[
                                                     {
                                                         "url": "https://cdn.example.com/news.jpg",
-                                                        "alt": "ニュースの関連画像",
+                                                        "alt": "OpenAIの関連画像",
                                                         "source_url": "https://example.com/openai-news",
                                                         "source_title": "OpenAI News",
                                                     }
@@ -209,8 +209,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             payload["response"],
         )
         self.assertIn("https://example.com/openai-news", payload["response"])
-        # 画像は「回答までのステップ」の下・本文の上に置かれる。
-        # The image sits below the answer trace and above the explanation.
+        # 対象語が本文にない画像は回答の冒頭へ置かれる。
+        # An image without a matching subject in the answer is placed at the beginning.
         self.assertEqual(
             [part["type"] for part in payload["parts"]],
             ["text", "web_search_image", "text"],

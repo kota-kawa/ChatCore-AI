@@ -1,12 +1,12 @@
 import type { ChatMessagePart } from "./types";
 
 // アシスタントメッセージのパーツ表示順を決める規約。services/message_parts_display.py と
-// 同じ規則を保つ: 生成UIとWeb検索画像は1ターン内で排他、画像は最大5枚まで「回答までのステップ」
-// （回答トレース）の直下・本文の上に置く。
+// 同じ規則を保つ: 生成UIとWeb検索画像は1ターン内で排他、画像は最大5枚まで保持し、
+// 画像パーツの挿入位置は周囲のテキストとの順序を保つ。
 // The display ordering contract for assistant message parts, mirroring
 // services/message_parts_display.py: a generated UI and web-search images are
-// mutually exclusive within one turn, up to five images belong directly below the
-// answer-trace block ("回答までのステップ") and above the explanation.
+// mutually exclusive within one turn, up to five images preserve their authored
+// inline position relative to the surrounding text.
 export const ANSWER_TRACE_DETAILS_CLASS = "web-search-sources web-search-sources--trace";
 export const MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5;
 
@@ -47,29 +47,33 @@ export function applyVisualPartContract(parts: ChatMessagePart[]): ChatMessagePa
   if (parts.some(isGenerativeUiPart)) {
     return parts.filter((part) => part.type !== "web_search_image");
   }
-  const imageParts = parts
-    .filter((part) => part.type === "web_search_image")
-    .slice(0, MAX_WEB_SEARCH_IMAGES_PER_REPLY);
-  const otherParts = parts.filter((part) => part.type !== "web_search_image");
-  return [...imageParts, ...otherParts];
+  let imageCount = 0;
+  return parts.filter((part) => {
+    if (part.type !== "web_search_image") return true;
+    if (imageCount >= MAX_WEB_SEARCH_IMAGES_PER_REPLY) return false;
+    imageCount += 1;
+    return true;
+  });
 }
 
 // 表示規約を適用する。回答トレースは独立したテキストパートへ切り出し、
-// Web検索画像がその下に来るようにする。
-// Apply the display contract, splitting the answer trace into its own text part
-// so the web-search images render below it.
+// 旧形式でトレースより前に保存された画像だけをトレース直下へ移す。
+// Apply the display contract, splitting the answer trace into its own text part.
+// Only legacy images saved before the trace are moved below that trace.
 export function normalizeMessagePartsForDisplay(parts: ChatMessagePart[]): ChatMessagePart[] {
   const contracted = applyVisualPartContract(parts);
-  const imageParts = contracted.filter((part) => part.type === "web_search_image");
-  if (imageParts.length === 0) return contracted;
+  if (!contracted.some((part) => part.type === "web_search_image")) return contracted;
+  const firstTextIndex = contracted.findIndex((part) => part.type === "text");
+  if (firstTextIndex < 0) return contracted;
 
-  const otherParts = contracted.filter((part) => part.type !== "web_search_image");
-  const head = otherParts[0];
-  if (!head || head.type !== "text") return [...imageParts, ...otherParts];
-
+  const head = contracted[firstTextIndex];
+  if (head.type !== "text") return contracted;
   const { trace, remainder } = splitAnswerTraceBlock(head.text);
-  if (!trace) return [...imageParts, ...otherParts];
+  if (!trace) return contracted;
 
-  const bodyParts: ChatMessagePart[] = remainder.trim() ? [{ type: "text", text: remainder }] : [];
-  return [{ type: "text", text: trace }, ...imageParts, ...bodyParts, ...otherParts.slice(1)];
+  const prefixParts = contracted.slice(0, firstTextIndex);
+  const suffixParts = contracted.slice(firstTextIndex + 1);
+  const headParts: ChatMessagePart[] = [{ type: "text", text: trace }, ...prefixParts];
+  if (remainder.trim()) headParts.push({ type: "text", text: remainder });
+  return [...headParts, ...suffixParts];
 }

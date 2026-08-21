@@ -823,25 +823,59 @@ class ChatStreamingTestCase(unittest.TestCase):
                 persist_response=persist_response,
             )
 
-            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+            events = list(_iter_llm_stream_events(job))
+            body = b"".join(events).decode("utf-8")
 
         self.assertEqual(len(persisted_records), 1)
         self.assertIn("web_search_image", body)
         self.assertIn("https://cdn.example.com/maple.jpg", body)
-        # 画像は「回答までのステップ」の下・本文の上に置かれる。
-        # The image sits below the answer trace and above the explanation.
+        event_names = [
+            line.removeprefix("event: ")
+            for event in events
+            for line in event.decode("utf-8").splitlines()
+            if line.startswith("event: ")
+        ]
+        self.assertLess(
+            event_names.index("response_parts_updated"),
+            event_names.index("done"),
+        )
+        response_parts_event_index = next(
+            index
+            for index, event in enumerate(events)
+            if b"event: response_parts_updated" in event
+        )
+        response_parts_payload = json.loads(
+            next(
+                line.removeprefix("data: ")
+                for line in events[response_parts_event_index].decode("utf-8").splitlines()
+                if line.startswith("data: ")
+            )
+        )
+        self.assertEqual(
+            [part["type"] for part in response_parts_payload["parts"]],
+            ["text", "text", "web_search_image", "text"],
+        )
+        self.assertIn("京都の紅葉", response_parts_payload["response"])
+        self.assertEqual(
+            response_parts_payload["parts"][2]["image"]["url"],
+            "https://cdn.example.com/maple.jpg",
+        )
+        self.assertEqual(response_parts_payload["parts"][3]["text"], "")
+        # 画像は本文中の対象語の直後へ挿入される。
+        # The image is inserted immediately after the matching subject.
         persisted_parts = persisted_records[0]["message_parts"]
         self.assertEqual(
             [part["type"] for part in persisted_parts],
-            ["text", "web_search_image", "text"],
+            ["text", "text", "web_search_image", "text"],
         )
         self.assertTrue(
             persisted_parts[0]["text"].startswith(
                 '<details class="web-search-sources web-search-sources--trace">'
             )
         )
-        self.assertNotIn("回答までのステップ", persisted_parts[2]["text"])
-        self.assertIn("京都の紅葉名所です。", persisted_parts[2]["text"])
+        self.assertIn("京都の紅葉", persisted_parts[1]["text"])
+        self.assertNotIn("回答までのステップ", persisted_parts[3]["text"])
+        self.assertIn("名所です。", persisted_parts[3]["text"])
         mock_image.assert_called_once()
 
     def test_background_generation_job_appends_selected_reference_steps(self):

@@ -7,8 +7,10 @@ from services.web_search_images import (
     _is_non_photo_image_url,
     append_web_search_image_part,
     append_web_search_image_parts,
+    build_web_search_image_parts,
     choose_web_search_image,
     choose_web_search_images,
+    find_next_streaming_image_insertion,
 )
 
 
@@ -131,7 +133,7 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("image-1", prompt)
         self.assertIn("image-2", prompt)
         system_prompt = mock_llm.call_args.args[0][0]["content"]
-        self.assertIn("below the answer-trace panel and above the explanation", system_prompt)
+        self.assertIn("immediately after a matching subject when possible", system_prompt)
         self.assertIn("mutually exclusive", system_prompt)
         self.assertIn("places and travel destinations", system_prompt)
         self.assertIn("programming, legal explanations", system_prompt)
@@ -224,6 +226,49 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(part[0]["image"]["source_url"], "https://example.com/article")
         self.assertEqual(part[1], {"type": "text", "text": "回答"})
 
+    def test_inserts_images_after_matching_subjects(self):
+        selections = [
+            {
+                "url": "https://example.com/meigetsu.jpg",
+                "alt": "明月院の写真",
+                "source_url": "https://example.com/meigetsu",
+            },
+            {
+                "url": "https://example.com/tokeiji.jpg",
+                "alt": "東慶寺の写真",
+                "source_url": "https://example.com/tokeiji",
+            },
+        ]
+
+        parts = append_web_search_image_parts(
+            [{"type": "text", "text": "明月院 説明です。東慶寺 説明です。"}],
+            selections,
+        )
+
+        self.assertEqual(
+            [part["type"] for part in parts],
+            ["text", "web_search_image", "text", "web_search_image", "text"],
+        )
+        self.assertEqual(parts[0]["text"], "明月院")
+        self.assertEqual(parts[2]["text"], " 説明です。東慶寺")
+        self.assertEqual(parts[4]["text"], " 説明です。")
+
+    def test_streaming_reveals_an_image_at_the_subject_boundary(self):
+        images = build_web_search_image_parts(
+            [
+                {
+                    "url": "https://example.com/meigetsu.jpg",
+                    "alt": "明月院の写真",
+                    "source_url": "https://example.com/meigetsu",
+                }
+            ]
+        )
+
+        self.assertEqual(
+            find_next_streaming_image_insertion("明月院", images),
+            (3, 0),
+        )
+
     def test_appends_up_to_five_images_and_deduplicates_urls(self):
         selections = [
             {
@@ -246,6 +291,31 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             [part["image"]["url"] for part in image_parts],
             [selection["url"] for selection in selections[:5]],
         )
+
+    def test_preserves_existing_images_when_adding_more_selections(self):
+        existing_image = {
+            "type": "web_search_image",
+            "image": {
+                "url": "https://example.com/images/existing.jpg",
+                "alt": "明月院の写真",
+                "source_url": "https://example.com/meigetsu",
+            },
+        }
+        parts = append_web_search_image_parts(
+            [{"type": "text", "text": "明月院と東慶寺を紹介します。"}, existing_image],
+            {
+                "url": "https://example.com/images/new.jpg",
+                "alt": "東慶寺の写真",
+                "source_url": "https://example.com/tokeiji",
+            },
+        )
+
+        self.assertEqual(
+            [part["type"] for part in parts],
+            ["text", "web_search_image", "text", "web_search_image", "text"],
+        )
+        self.assertEqual(parts[1]["image"]["url"], existing_image["image"]["url"])
+        self.assertEqual(parts[3]["image"]["url"], "https://example.com/images/new.jpg")
 
     def test_does_not_add_image_when_a_generated_ui_is_present(self):
         parts = append_web_search_image_part(

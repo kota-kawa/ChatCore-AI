@@ -730,9 +730,9 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             },
         ]
 
-        self.assertEqual(decode_message_parts(parts), [parts[1], parts[0]])
+        self.assertEqual(decode_message_parts(parts), [parts[0], parts[1]])
 
-    def test_decode_message_parts_places_web_search_image_below_the_answer_trace(self):
+    def test_decode_message_parts_keeps_legacy_image_below_the_answer_trace(self):
         trace = build_web_search_trace_markdown(
             steps=[{"title": "検索が必要か判断", "detail": "最新情報が必要でした。"}]
         )
