@@ -20,6 +20,7 @@ from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
     _budgeted_web_search_result_tool_payload,
+    _parse_research_summary,
     _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
@@ -196,9 +197,17 @@ def make_request(json_body, session=None):
     )
 
 
-def _research_then_answer_stream(*answer_chunks):
+def _research_then_answer_stream(*answer_chunks, research_summary=None):
     """Return mock streams for a short research-complete pass followed by final prose."""
-    return [iter(["<research_complete>"]), iter(answer_chunks)]
+    summary_payload = (
+        json.dumps(research_summary, ensure_ascii=False)
+        if research_summary is not None
+        else ""
+    )
+    return [
+        iter([f"<research_complete>{summary_payload}</research_complete>"]),
+        iter(answer_chunks),
+    ]
 
 
 # 日本語: チャットのストリーミング応答、検索拡張、履歴制限、再生成などの処理を検証するテストクラス。
@@ -228,6 +237,40 @@ class ChatStreamingTestCase(unittest.TestCase):
         self._context_extraction_patch.stop()
         self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
+
+    # 日本語: 研究完了メモが構造化・短文化され、許可された項目だけが残ることを検証します。
+    # English: Verify that a research-complete note is structured, bounded, and limited to allowed fields.
+    def test_parse_research_summary_accepts_bounded_structured_note(self):
+        payload = {
+            "facts": [f"事実{i}" for i in range(8)],
+            "uncertainties": [f"不確実性{i}" for i in range(5)],
+            "answer_plan": "  要点を整理して回答する。  ",
+            "unexpected": "破棄する",
+        }
+
+        summary = _parse_research_summary(
+            [
+                "<research_complete>",
+                json.dumps(payload, ensure_ascii=False),
+                "</research_complete>",
+            ]
+        )
+
+        self.assertEqual(summary["facts"], [f"事実{i}" for i in range(5)])
+        self.assertEqual(summary["uncertainties"], [f"不確実性{i}" for i in range(3)])
+        self.assertEqual(summary["answer_plan"], "要点を整理して回答する。")
+        self.assertNotIn("unexpected", summary)
+
+    # 日本語: 不正な形式や上限超過の研究メモを最終回答へ渡さないことを検証します。
+    # English: Verify that malformed or oversized research notes are not forwarded to the final answer.
+    def test_parse_research_summary_rejects_invalid_or_oversized_note(self):
+        self.assertIsNone(
+            _parse_research_summary(["<research_complete>not-json</research_complete>"])
+        )
+        oversized = json.dumps({"answer_plan": "x" * 2401}, ensure_ascii=False)
+        self.assertIsNone(
+            _parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
+        )
 
     # 日本語: 一時チャットのページネーションにおいて、残りデータがある旨(has_more)と次回用カーソルが正しく返ることを検証します。
     # English: Verify that ephemeral chat pagination correctly reports has_more and the next cursor ID.
@@ -1399,6 +1442,14 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
         )
         stream_call_count = 0
+        research_summary = {
+            "facts": [
+                "明月院は鎌倉の寺院です。",
+                "東慶寺は鎌倉の寺院です。",
+            ],
+            "uncertainties": ["季節ごとの見どころは追加確認が必要です。"],
+            "answer_plan": "2か所を分けて簡潔に説明し、違いを補足する。",
+        }
 
         def stream_side_effect(_messages, _model, *, tools=None):
             nonlocal stream_call_count
@@ -1427,13 +1478,25 @@ class ChatStreamingTestCase(unittest.TestCase):
                         for message in _messages
                     )
                 )
-                yield "<research_complete>"
+                yield (
+                    "<research_complete>"
+                    f"{json.dumps(research_summary, ensure_ascii=False)}"
+                    "</research_complete>"
+                )
                 return
             self.assertIsNone(tools)
             self.assertTrue(
                 any(
                     message.get("role") == "system"
                     and "final user-facing answer" in message.get("content", "")
+                    for message in _messages
+                )
+            )
+            self.assertTrue(
+                any(
+                    message.get("role") == "system"
+                    and "明月院は鎌倉の寺院です。" in message.get("content", "")
+                    and "answer_plan" in message.get("content", "")
                     for message in _messages
                 )
             )
