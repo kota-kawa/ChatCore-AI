@@ -331,24 +331,6 @@
   box-shadow: var(--shadow-focus-strong, 0 0 0 4px rgba(25, 195, 125, 0.18));
 }
 
-/* Keyboard affordance mirroring the Enter / Escape shortcuts. */
-.cc-alert-modal__hint {
-  display: inline-flex;
-  align-items: center;
-  height: 1.1rem;
-  padding: 0 0.3rem;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-xs, 4px);
-  font-size: var(--text-2xs, 0.75rem);
-  font-weight: 600;
-  line-height: 1;
-  opacity: 0.55;
-}
-
-.cc-alert-modal__button:hover .cc-alert-modal__hint {
-  opacity: 0.8;
-}
-
 /* ---------- alert variant ---------- */
 
 .cc-alert-modal:not(.cc-alert-modal--confirm) .cc-alert-modal__actions {
@@ -435,10 +417,6 @@ body.memo-page .cc-alert-modal {
 
   .cc-alert-modal__button {
     width: 100%;
-  }
-
-  .cc-alert-modal__hint {
-    display: none;
   }
 }
 
