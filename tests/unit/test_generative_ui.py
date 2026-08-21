@@ -12,6 +12,7 @@ from services.generative_ui import (
     requested_generative_ui_mode,
     validate_artifact_payload,
 )
+from services.web_search_trace import build_web_search_trace_markdown
 
 # 有効なアーティファクトの定義
 # Definition of a valid artifact
@@ -730,6 +731,31 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         ]
 
         self.assertEqual(decode_message_parts(parts), [parts[1], parts[0]])
+
+    def test_decode_message_parts_places_web_search_image_below_the_answer_trace(self):
+        trace = build_web_search_trace_markdown(
+            steps=[{"title": "検索が必要か判断", "detail": "最新情報が必要でした。"}]
+        )
+        image_part = {
+            "type": "web_search_image",
+            "image": {
+                "url": "https://cdn.example.com/hero.jpg",
+                "alt": "Relevant photo",
+                "source_url": "https://example.com/article",
+            },
+        }
+        parts = [image_part, {"type": "text", "text": f"{trace}\n\nanswer"}]
+
+        decoded = decode_message_parts(parts)
+
+        self.assertEqual(
+            decoded,
+            [
+                {"type": "text", "text": trace},
+                image_part,
+                {"type": "text", "text": "answer"},
+            ],
+        )
 
     def test_decode_message_parts_drops_web_search_image_when_generated_ui_is_present(self):
         parts = [

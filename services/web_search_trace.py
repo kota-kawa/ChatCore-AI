@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from html import escape
 from typing import Any, Iterable, Sequence
 
+from .message_parts_display import ANSWER_TRACE_DETAILS_CLASS
 from .selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
     SelectedReferenceLookupTrace,
@@ -646,7 +647,7 @@ def build_web_search_trace_markdown(
 
     return "\n".join(
         [
-            '<details class="web-search-sources web-search-sources--trace">',
+            f'<details class="{ANSWER_TRACE_DETAILS_CLASS}">',
             '<summary class="web-search-sources__summary">',
             '<span class="web-search-sources__summary-main">',
             '<span class="web-search-sources__summary-icon"><i class="bi bi-list-check"></i></span>',

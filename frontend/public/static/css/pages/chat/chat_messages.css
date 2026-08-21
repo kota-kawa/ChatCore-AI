@@ -463,6 +463,13 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message-part--web-search-image {
+  /* 画像は読み取れる大きさで出す。幅は本文カラム、高さはビューポートに合わせて
+     頭打ちにし、縦長画像でも1画面を埋め尽くさないようにする。
+     Show the image large enough to read: the width follows the prose column and
+     the height is capped against the viewport so a tall image cannot fill the
+     whole screen. */
+  --web-search-image-max-width: min(100%, 34rem);
+  --web-search-image-max-height: min(60vh, 26rem);
   display: flex;
   width: fit-content;
   max-width: 100%;
@@ -471,7 +478,7 @@
 :where(body.chat-page, .chat-page-shell) .web-search-image-part {
   display: block;
   width: fit-content;
-  max-width: min(100%, 320px);
+  max-width: var(--web-search-image-max-width);
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--border-default, rgba(15, 23, 42, 0.1));
@@ -496,7 +503,7 @@
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: 240px;
+  max-height: var(--web-search-image-max-height);
   object-fit: contain;
   background: var(--surface-tertiary, #eef2f7);
 }
@@ -1402,6 +1409,14 @@
   :where(body.chat-page, .chat-page-shell) .bot-message-wrapper {
     max-width: 100%;
     width: 100%;
+  }
+
+  /* スマホでは吹き出しの幅いっぱいまで使い、高さは画面の半分強で頭打ちにする。
+     On phones the image may use the full bubble width, with its height capped at
+     a little over half the screen. */
+  :where(body.chat-page, .chat-page-shell) .bot-message-part--web-search-image {
+    --web-search-image-max-width: 100%;
+    --web-search-image-max-height: min(52vh, 20rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .user-message {

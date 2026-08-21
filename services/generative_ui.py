@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from services.message_parts_display import normalize_message_parts_for_display
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +58,6 @@ MAX_WEB_SEARCH_IMAGE_SOURCE_TITLE_CHARS = 160
 # サンドボックスで利用できるローカル配信ライブラリの正規名。
 # Canonical names of locally served libraries available inside the sandbox.
 SUPPORTED_ARTIFACT_LIBRARIES = ("three",)
-# A generated UI and a web-search image are alternative visual treatments for a
-# single turn. Interactive buttons use the same visual slot as sandbox artifacts.
-# 生成UI（アーティファクト／対話ボタン）とWeb検索画像は、1ターン内で排他的に扱う。
-GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact", "interactive_buttons"})
 # モデル出力の表記ゆれ（three.js / threejs 等）を正規名へ寄せるためのエイリアス表。
 # Alias table folding model-output spelling variants (three.js / threejs etc.)
 # into canonical library names.
@@ -1265,25 +1263,6 @@ def validate_web_search_image_payload(payload: Any) -> dict[str, Any]:
         "source_url": source_url,
         **({"source_title": source_title} if source_title else {}),
     }
-
-
-def normalize_message_parts_for_display(
-    parts: list[dict[str, Any]] | None,
-) -> list[dict[str, Any]]:
-    """Apply the visual-part display contract without re-validating payloads.
-
-    A generated UI takes precedence over a web-search image. When no generated
-    UI is present, web-search images are moved to the front so they cannot become
-    a trailing block below the explanation. Validation remains the responsibility
-    of ``_decode_message_parts``.
-    """
-    normalized = [part for part in (parts or []) if isinstance(part, dict)]
-    if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized):
-        return [part for part in normalized if part.get("type") != "web_search_image"]
-
-    image_parts = [part for part in normalized if part.get("type") == "web_search_image"]
-    other_parts = [part for part in normalized if part.get("type") != "web_search_image"]
-    return [*image_parts, *other_parts]
 
 
 # メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。

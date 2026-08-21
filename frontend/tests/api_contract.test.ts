@@ -160,6 +160,47 @@ test("normalizers keep safe web-search image parts", () => {
   ]);
 });
 
+test("normalizers place the web-search image below the answer trace", () => {
+  const trace =
+    '<details class="web-search-sources web-search-sources--trace">\n' +
+    '<summary class="web-search-sources__summary">' +
+    '<span class="web-search-sources__label">回答までのステップ</span>' +
+    "</summary>\n" +
+    '<div class="web-search-sources__list">' +
+    '<details class="web-search-sources__step-details">' +
+    '<summary class="web-search-sources__step-summary">step</summary>' +
+    "<div>sources</div>" +
+    "</details>" +
+    "</div>\n" +
+    "</details>";
+  const image = {
+    type: "web_search_image",
+    image: {
+      url: "https://cdn.example.com/hero.jpg",
+      alt: "Relevant photo",
+      source_url: "https://example.com/article",
+    },
+  };
+
+  const response = normalizeChatResponsePayload({
+    response: `${trace}\n\nanswer`,
+    parts: [image, { type: "text", text: `${trace}\n\nanswer` }],
+  });
+
+  assert.deepEqual(response.parts, [
+    { type: "text", text: trace },
+    {
+      type: "web_search_image",
+      image: {
+        url: "https://cdn.example.com/hero.jpg",
+        alt: "Relevant photo",
+        sourceUrl: "https://example.com/article",
+      },
+    },
+    { type: "text", text: "answer" },
+  ]);
+});
+
 test("normalizers keep generated UI and web-search image parts mutually exclusive", () => {
   const artifact = {
     version: 1,

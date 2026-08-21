@@ -13,6 +13,8 @@ import type {
   GenerationStatusPayload,
 } from "./types";
 
+import { normalizeMessagePartsForDisplay } from "./message_parts_display";
+
 type UnknownRecord = Record<string, unknown>;
 
 function isUnknownRecord(value: unknown): value is UnknownRecord {
@@ -137,17 +139,7 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
       return;
     }
   });
-  const hasGeneratedUi = parts.some(
-    (part) => part.type === "sandbox_artifact" || part.type === "interactive_buttons",
-  );
-  if (hasGeneratedUi) {
-    const withoutImage = parts.filter((part) => part.type !== "web_search_image");
-    return withoutImage.length > 0 ? withoutImage : undefined;
-  }
-
-  const imageParts = parts.filter((part) => part.type === "web_search_image");
-  const otherParts = parts.filter((part) => part.type !== "web_search_image");
-  const orderedParts = [...imageParts, ...otherParts];
+  const orderedParts = normalizeMessagePartsForDisplay(parts);
   return orderedParts.length > 0 ? orderedParts : undefined;
 }
 
