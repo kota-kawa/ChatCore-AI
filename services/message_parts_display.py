@@ -1,9 +1,9 @@
 # アシスタントメッセージのパーツ（テキスト／生成UI／Web検索画像）の表示順を決める。
 # 生成UIとWeb検索画像は1ターン内で排他であり、画像は「回答までのステップ」
-# （回答トレース）の直下・本文の上に置く。
+# （回答トレース）の直下・本文の上に置く。1回答あたりの画像数もここで制限する。
 # Owns the display ordering contract for assistant message parts (text /
-# generated UI / web-search image). A generated UI and a web-search image are
-# mutually exclusive within one turn, and the image belongs directly below the
+# generated UI / web-search images). A generated UI and web-search images are
+# mutually exclusive within one turn, and images belong directly below the
 # answer-trace block ("回答までのステップ") and above the explanation.
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact", "interactive_buttons"})
 WEB_SEARCH_IMAGE_PART_TYPE = "web_search_image"
 TEXT_PART_TYPE = "text"
+MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5
 
 # 回答トレース（「回答までのステップ」）ブロックのルート要素クラス。
 # web_search_trace.py の組み立てと、ここでの分割で同じ定義を共有する。
@@ -51,18 +52,22 @@ def split_answer_trace_block(text: str) -> tuple[str, str]:
 
 
 def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Enforce visual exclusivity and keep the image above the explanation.
+    """Enforce visual exclusivity and keep images above the explanation.
 
-    A generated UI wins over a web-search image. Without a generated UI the image
-    moves ahead of the prose so it never becomes a trailing footer. The
-    trace-aware placement is applied later by
+    A generated UI wins over web-search images. Without a generated UI, images move
+    ahead of the prose so they never become a trailing footer, and only the first
+    five images are retained. The trace-aware placement is applied later by
     :func:`normalize_message_parts_for_display`.
     """
     normalized = [part for part in (parts or []) if isinstance(part, dict)]
     if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized):
         return [part for part in normalized if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
 
-    image_parts = [part for part in normalized if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE]
+    image_parts = [
+        part
+        for part in normalized
+        if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE
+    ][:MAX_WEB_SEARCH_IMAGES_PER_REPLY]
     other_parts = [part for part in normalized if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
     return [*image_parts, *other_parts]
 
@@ -73,7 +78,7 @@ def normalize_message_parts_for_display(
     """Apply the display contract without re-validating payloads.
 
     On top of :func:`apply_visual_part_contract`, a leading answer-trace block is
-    split into its own text part so the web-search image renders below
+    split into its own text part so the web-search images render below
     「回答までのステップ」 instead of above it. Payload validation remains the
     responsibility of ``services.generative_ui._decode_message_parts``.
     """

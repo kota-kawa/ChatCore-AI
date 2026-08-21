@@ -181,13 +181,15 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                             return_value="最新ニュースです。",
                                         ) as mock_llm:
                                             with patch(
-                                                "services.chat_use_case.choose_web_search_image",
-                                                return_value={
-                                                    "url": "https://cdn.example.com/news.jpg",
-                                                    "alt": "ニュースの関連画像",
-                                                    "source_url": "https://example.com/openai-news",
-                                                    "source_title": "OpenAI News",
-                                                },
+                                                "services.chat_use_case.choose_web_search_images",
+                                                return_value=[
+                                                    {
+                                                        "url": "https://cdn.example.com/news.jpg",
+                                                        "alt": "ニュースの関連画像",
+                                                        "source_url": "https://example.com/openai-news",
+                                                        "source_title": "OpenAI News",
+                                                    }
+                                                ],
                                             ) as mock_image:
                                                 response = asyncio.run(chat(request))
 

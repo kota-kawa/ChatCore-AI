@@ -1450,6 +1450,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("never build a per-item list of URLs", content)
         self.assertIn("photo-library, image-search, gallery", content)
         self.assertIn("answer with a concrete description drawn from the sources", content)
+        self.assertIn("up to five illustrative images", content)
 
     def test_system_message_keeps_complete_sources_within_context_budget(self):
         sources = tuple(

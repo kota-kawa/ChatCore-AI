@@ -53,7 +53,7 @@ from services.web_search_trace import (
     search_step,
     selected_reference_steps,
 )
-from services.web_search_images import append_web_search_image_part, choose_web_search_image
+from services.web_search_images import append_web_search_image_parts, choose_web_search_images
 from services.chat_title import (
     build_initial_title_candidates,
     maybe_auto_title_chat_room,
@@ -814,14 +814,14 @@ class ChatPostUseCase:
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
         if augmentation.result is not None:
-            image_selection = await run_blocking(
-                choose_web_search_image,
+            image_selections = await run_blocking(
+                choose_web_search_images,
                 user_message,
                 augmentation.result,
             )
-            message_parts = append_web_search_image_part(
+            message_parts = append_web_search_image_parts(
                 message_parts,
-                image_selection,
+                image_selections,
                 fallback_text=bot_reply,
             )
 

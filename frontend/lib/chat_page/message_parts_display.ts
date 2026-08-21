@@ -1,13 +1,14 @@
 import type { ChatMessagePart } from "./types";
 
 // アシスタントメッセージのパーツ表示順を決める規約。services/message_parts_display.py と
-// 同じ規則を保つ: 生成UIとWeb検索画像は1ターン内で排他、画像は「回答までのステップ」
+// 同じ規則を保つ: 生成UIとWeb検索画像は1ターン内で排他、画像は最大5枚まで「回答までのステップ」
 // （回答トレース）の直下・本文の上に置く。
 // The display ordering contract for assistant message parts, mirroring
-// services/message_parts_display.py: a generated UI and a web-search image are
-// mutually exclusive within one turn, and the image belongs directly below the
+// services/message_parts_display.py: a generated UI and web-search images are
+// mutually exclusive within one turn, up to five images belong directly below the
 // answer-trace block ("回答までのステップ") and above the explanation.
 export const ANSWER_TRACE_DETAILS_CLASS = "web-search-sources web-search-sources--trace";
+export const MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5;
 
 const TRACE_BLOCK_START = `<details class="${ANSWER_TRACE_DETAILS_CLASS}"`;
 // トレース内部にもステップ用の <details> が入れ子になるため、開閉を数えて末尾を探す。
@@ -40,13 +41,15 @@ export function splitAnswerTraceBlock(text: string): { trace: string; remainder:
   return { trace: "", remainder: text };
 }
 
-// 視覚パーツの排他規約を適用し、画像を本文より前に置く
-// Enforce visual exclusivity and keep the image ahead of the explanation
+// 視覚パーツの排他規約を適用し、最大5枚の画像を本文より前に置く
+// Enforce visual exclusivity and keep up to five images ahead of the explanation
 export function applyVisualPartContract(parts: ChatMessagePart[]): ChatMessagePart[] {
   if (parts.some(isGenerativeUiPart)) {
     return parts.filter((part) => part.type !== "web_search_image");
   }
-  const imageParts = parts.filter((part) => part.type === "web_search_image");
+  const imageParts = parts
+    .filter((part) => part.type === "web_search_image")
+    .slice(0, MAX_WEB_SEARCH_IMAGES_PER_REPLY);
   const otherParts = parts.filter((part) => part.type !== "web_search_image");
   return [...imageParts, ...otherParts];
 }
@@ -54,7 +57,7 @@ export function applyVisualPartContract(parts: ChatMessagePart[]): ChatMessagePa
 // 表示規約を適用する。回答トレースは独立したテキストパートへ切り出し、
 // Web検索画像がその下に来るようにする。
 // Apply the display contract, splitting the answer trace into its own text part
-// so the web-search image renders below it.
+// so the web-search images render below it.
 export function normalizeMessagePartsForDisplay(parts: ChatMessagePart[]): ChatMessagePart[] {
   const contracted = applyVisualPartContract(parts);
   const imageParts = contracted.filter((part) => part.type === "web_search_image");

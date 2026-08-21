@@ -184,7 +184,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
         self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
         self.assertIn("text only", BASE_SYSTEM_PROMPT)
-        self.assertIn("single turn may show either a generated UI or a web-search image", BASE_SYSTEM_PROMPT)
+        self.assertIn("single turn may show either a generated UI or web-search images", BASE_SYSTEM_PROMPT)
         self.assertIn("never as a trailing block at the bottom", BASE_SYSTEM_PROMPT)
         self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
@@ -195,7 +195,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("photo libraries, image searches, galleries", BASE_SYSTEM_PROMPT)
         self.assertIn("Do not print bare URLs in the prose at all", BASE_SYSTEM_PROMPT)
         self.assertIn("describe the concrete appearance", BASE_SYSTEM_PROMPT)
-        self.assertIn("attaches at most one for the whole reply", BASE_SYSTEM_PROMPT)
+        self.assertIn("attaches at most five for the whole reply", BASE_SYSTEM_PROMPT)
         self.assertIn(
             "Never fall back to links when you cannot show a visual",
             GENERATIVE_UI_EXECUTION_CONTRACT,

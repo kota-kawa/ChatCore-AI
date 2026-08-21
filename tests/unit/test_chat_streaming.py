@@ -805,13 +805,15 @@ class ChatStreamingTestCase(unittest.TestCase):
                 return_value=iter(["京都の紅葉名所です。"]),
             ),
             patch(
-                "services.chat_generation.choose_web_search_image",
-                return_value={
-                    "url": "https://cdn.example.com/maple.jpg",
-                    "alt": "京都の紅葉の写真",
-                    "source_url": "https://example.com/kyoto",
-                    "source_title": "京都の紅葉ガイド",
-                },
+                "services.chat_generation.choose_web_search_images",
+                return_value=[
+                    {
+                        "url": "https://cdn.example.com/maple.jpg",
+                        "alt": "京都の紅葉の写真",
+                        "source_url": "https://example.com/kyoto",
+                        "source_title": "京都の紅葉ガイド",
+                    }
+                ],
             ) as mock_image,
         ):
             job = start_generation_job(

@@ -65,6 +65,17 @@ test("normalizeMessagePartsForDisplay keeps the image above an answer without a 
   assert.deepEqual(normalizeMessagePartsForDisplay(parts), [IMAGE_PART, { type: "text", text: "answer" }]);
 });
 
+test("applyVisualPartContract keeps at most five web-search images", () => {
+  const images = Array.from({ length: 6 }, (_, index) => ({
+    ...IMAGE_PART,
+    image: { ...IMAGE_PART.image, url: `https://cdn.example.com/hero-${index}.jpg` },
+  }));
+
+  const normalized = applyVisualPartContract(images);
+
+  assert.equal(normalized.filter((part) => part.type === "web_search_image").length, 5);
+});
+
 test("applyVisualPartContract never splits the trace off the answer text", () => {
   const textPart: ChatMessagePart = { type: "text", text: `${TRACE}\n\nanswer` };
 
