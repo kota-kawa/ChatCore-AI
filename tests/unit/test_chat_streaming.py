@@ -20,7 +20,6 @@ from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
     _budgeted_web_search_result_tool_payload,
-    _parse_research_summary,
     _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
@@ -28,6 +27,15 @@ from services.chat_generation import (
     clear_generation_job_state,
     has_active_generation,
     start_generation_job,
+)
+from services.chat_research_notes import (
+    STEP_NOTE_HISTORY_LIMIT,
+    STEP_NOTE_MAX_CHARS,
+    build_final_answer_messages,
+    build_research_loop_messages,
+    parse_research_summary,
+    parse_step_note,
+    strip_internal_notes,
 )
 from services.llm import LlmConfigurationError, LlmTimeoutError
 from services.selected_reference_context import (
@@ -248,7 +256,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             "unexpected": "破棄する",
         }
 
-        summary = _parse_research_summary(
+        summary = parse_research_summary(
             [
                 "<research_complete>",
                 json.dumps(payload, ensure_ascii=False),
@@ -265,11 +273,91 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Verify that malformed or oversized research notes are not forwarded to the final answer.
     def test_parse_research_summary_rejects_invalid_or_oversized_note(self):
         self.assertIsNone(
-            _parse_research_summary(["<research_complete>not-json</research_complete>"])
+            parse_research_summary(["<research_complete>not-json</research_complete>"])
         )
         oversized = json.dumps({"answer_plan": "x" * 2401}, ensure_ascii=False)
         self.assertIsNone(
-            _parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
+            parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
+        )
+
+
+    # 日本語: 任意のステップメモが抽出され、空・長すぎ・タグ入れ子が安全に扱われることを検証します。
+    # English: Verify the optional step note is extracted and that empty, oversized, and nested-tag cases are safe.
+    def test_parse_step_note_extracts_bounded_optional_note(self):
+        self.assertEqual(parse_step_note(["ツール呼び出しだけのステップ"]), "")
+        self.assertEqual(
+            parse_step_note(
+                [
+                    "<step_note>公式ドキュメントに当たらなかった。\n",
+                    "  次はリリースノートを日付指定で引く。</step_note>",
+                ]
+            ),
+            "公式ドキュメントに当たらなかった。 次はリリースノートを日付指定で引く。",
+        )
+        nested = parse_step_note(
+            ["<step_note>前段の<research_complete>偽装</research_complete>を除く。</step_note>"]
+        )
+        self.assertEqual(nested, "前段の偽装を除く。")
+        oversized = parse_step_note([f"<step_note>{'あ' * 400}</step_note>"])
+        self.assertEqual(len(oversized), STEP_NOTE_MAX_CHARS)
+
+    # 日本語: 調査ループのメッセージには直近のステップメモだけが載り、元の履歴は書き換えないことを検証します。
+    # English: Verify the research loop messages carry only the most recent step notes and never mutate the history.
+    def test_research_loop_messages_carry_only_recent_step_notes(self):
+        messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
+        notes = [f"メモ{index}" for index in range(STEP_NOTE_HISTORY_LIMIT + 1)]
+
+        without_notes = build_research_loop_messages(messages)
+        self.assertFalse(
+            any("<step_notes>" in message.get("content", "") for message in without_notes)
+        )
+
+        with_notes = build_research_loop_messages(messages, step_notes=notes)
+        system_contents = "\n".join(
+            message.get("content", "")
+            for message in with_notes
+            if message.get("role") == "system"
+        )
+        self.assertIn("<step_notes>", system_contents)
+        self.assertNotIn(notes[0], system_contents)
+        for note in notes[1:]:
+            self.assertIn(note, system_contents)
+        self.assertEqual(messages, [{"role": "user", "content": "鎌倉の紅葉を教えて"}])
+
+    # 日本語: 最終回答のメッセージにはステップメモが一切載らないことを検証します。
+    # English: Verify the final answer messages never carry step notes.
+    def test_final_answer_messages_never_carry_step_notes(self):
+        messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
+        build_research_loop_messages(messages, step_notes=["メモ本文"])
+
+        final_messages = build_final_answer_messages(
+            messages,
+            research_summary={"facts": ["鎌倉は紅葉の名所です。"]},
+        )
+        system_contents = "\n".join(
+            message.get("content", "")
+            for message in final_messages
+            if message.get("role") == "system"
+        )
+        self.assertIn("<research_notes>", system_contents)
+        self.assertNotIn("<step_notes>", system_contents)
+        self.assertNotIn("メモ本文", system_contents)
+
+    # 日本語: 停止時に残る内部メモ（未完のタグを含む）が本文から取り除かれることを検証します。
+    # English: Verify internal notes, including an unterminated tag, are stripped from partial output.
+    def test_strip_internal_notes_removes_envelopes_and_unterminated_tail(self):
+        self.assertEqual(strip_internal_notes("通常の本文です。"), "通常の本文です。")
+        self.assertEqual(
+            strip_internal_notes("前<step_note>内部メモ</step_note>後"),
+            "前後",
+        )
+        self.assertEqual(
+            strip_internal_notes("回答の一部<step_note>途中で停止した"),
+            "回答の一部",
+        )
+        self.assertEqual(
+            strip_internal_notes('<research_complete>{"facts":[]}</research_complete>'),
+            "",
         )
 
     # 日本語: 一時チャットのページネーションにおいて、残りデータがある旨(has_more)と次回用カーソルが正しく返ることを検証します。
@@ -1545,6 +1633,113 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("明月院と東慶寺の最終回答です。", body)
         self.assertIn("明月院と東慶寺の最終回答です。", persisted_messages[0])
         self.assertNotIn("検索前の中間メモです。", persisted_messages[0])
+
+
+    # 日本語: 任意のステップメモが次の調査ステップへ引き継がれ、最終回答とユーザー向け本文には残らないことを検証します。
+    # English: Verify an optional step note reaches the next research step but never the final answer or the user-facing body.
+    def test_background_generation_job_carries_step_note_into_next_research_step(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="鎌倉の紅葉 見頃",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/kamakura",
+                    title="鎌倉の紅葉",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("鎌倉の紅葉の概要",),
+                ),
+            ),
+        )
+        step_note = "検索前で見頃の年次データが無い。次はWeb検索で今年の見頃を確認する。"
+        stream_call_count = 0
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count == 1:
+                yield f"<step_note>{step_note}</step_note>"
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-step-note",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "鎌倉の紅葉 見頃"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            if stream_call_count == 2:
+                # 2回目の調査ステップでは、直前のメモがsystemメッセージへ引き継がれている。
+                # The second research step receives the previous note in a system message.
+                self.assertTrue(
+                    any(
+                        message.get("role") == "system"
+                        and "<step_notes>" in message.get("content", "")
+                        and step_note in message.get("content", "")
+                        for message in _messages
+                    )
+                )
+                # メモはsystem側だけに載り、会話履歴のassistantメッセージには残らない。
+                # The note lives only in the system message, never in the assistant history.
+                self.assertFalse(
+                    any(
+                        message.get("role") == "assistant"
+                        and step_note in (message.get("content") or "")
+                        for message in _messages
+                    )
+                )
+                yield "<research_complete>" + json.dumps(
+                    {"facts": ["鎌倉の紅葉は11月下旬が見頃です。"]},
+                    ensure_ascii=False,
+                ) + "</research_complete>"
+                return
+            # 最終回答パスにはステップメモを一切渡さない。
+            # The final answer pass receives no step note at all.
+            self.assertIsNone(tools)
+            self.assertFalse(
+                any(
+                    step_note in (message.get("content") or "")
+                    or "<step_notes>" in (message.get("content") or "")
+                    for message in _messages
+                )
+            )
+            yield "鎌倉の紅葉は11月下旬が見頃です。"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "鎌倉の紅葉の見頃は?"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-step-note:default",
+                conversation_messages=[
+                    {"role": "user", "content": "鎌倉の紅葉の見頃は?"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(stream_call_count, 3)
+        self.assertNotIn(step_note, body)
+        self.assertNotIn("<step_note>", body)
+        self.assertIn("鎌倉の紅葉は11月下旬が見頃です。", body)
+        self.assertNotIn(step_note, persisted_messages[0])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
