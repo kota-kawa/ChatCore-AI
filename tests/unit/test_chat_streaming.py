@@ -1364,11 +1364,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertLess(trace.index("追加検索"), deep_index)
         self.assertLess(deep_index, trace.index("検索結果を確認", deep_index))
 
-    # 日本語: モデルが本文の途中で追加検索を要求した場合、検索前の本文と検索後の続きが
-    # それぞれ生成順にクライアントへ届くことを検証します。
-    # English: Verify that prose emitted before a model-requested search and the continuation
-    # emitted after that search both reach the client in generation order.
-    def test_background_generation_job_streams_prose_before_and_after_model_search(self):
+    # 日本語: モデルが追加検索を要求した場合、ツール呼び出しを含む中間本文を表示せず、
+    # ツール呼び出しがなくなった最終ステップの回答だけを検索後にクライアントへ届けることを検証します。
+    # English: Verify that intermediate prose from a model-requested search is hidden and only
+    # the no-tool final answer reaches the client after the search completes.
+    def test_background_generation_job_waits_for_final_answer_after_model_search(self):
         persisted_messages = []
         search_result = WebSearchResult(
             query="東慶寺の詳細",
@@ -1389,7 +1389,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
-                yield "明月院の概要です。"
+                yield "検索前の中間メモです。"
                 yield json.dumps(
                     [
                         {
@@ -1404,7 +1404,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 )
                 return
             self.assertIsNotNone(tools)
-            yield "東慶寺の説明です。"
+            yield "明月院と東慶寺の最終回答です。"
 
         with (
             patch(
@@ -1441,14 +1441,14 @@ class ChatStreamingTestCase(unittest.TestCase):
         chunk_indices = [index for index, name in enumerate(event_names) if name == "chunk"]
         search_started_index = event_names.index("web_search_started")
         search_completed_index = event_names.index("web_search_completed")
-        self.assertGreaterEqual(len(chunk_indices), 2)
-        self.assertLess(chunk_indices[0], search_started_index)
+        self.assertTrue(chunk_indices)
+        self.assertGreater(chunk_indices[0], search_completed_index)
         self.assertLess(search_started_index, search_completed_index)
-        self.assertLess(search_completed_index, chunk_indices[1])
-        self.assertLess(chunk_indices[1], event_names.index("done"))
-        self.assertIn("明月院の概要です。", body)
-        self.assertIn("東慶寺の説明です。", body)
-        self.assertEqual(persisted_messages, ["明月院の概要です。東慶寺の説明です。"])
+        self.assertLess(chunk_indices[0], event_names.index("done"))
+        self.assertNotIn("検索前の中間メモです。", body)
+        self.assertIn("明月院と東慶寺の最終回答です。", body)
+        self.assertIn("明月院と東慶寺の最終回答です。", persisted_messages[0])
+        self.assertNotIn("検索前の中間メモです。", persisted_messages[0])
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.

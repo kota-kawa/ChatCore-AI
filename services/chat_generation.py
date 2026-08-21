@@ -442,6 +442,10 @@ class ChatGenerationJob:
         # 生成途中で停止された場合でも保存できるよう、出力済みチャンクを保持する。
         # Keep emitted chunks so a mid-stream stop can still persist the partial reply.
         self._chunks: list[str] = []
+        # ツール呼び出しの有無が確定するまでの一時チャンク。キャンセル時だけ部分応答として使う。
+        # Buffer the current model step until tool-call presence is known; use it as a partial
+        # response only when the user cancels generation.
+        self._pending_stream_chunks: list[str] = []
         # Search-image selections are made as soon as search results arrive so a
         # cancellation can still persist images that were already revealed.
         self._selected_web_search_images: list[dict[str, str]] = []
@@ -519,6 +523,12 @@ class ChatGenerationJob:
             return
         self._cancelled = True
 
+        if self._pending_stream_chunks:
+            pending_text = "".join(self._pending_stream_chunks)
+            self._chunks.extend(self._pending_stream_chunks)
+            self._pending_stream_chunks = []
+            if pending_text:
+                self._publish("chunk", {"text": pending_text})
         partial_text = "".join(self._chunks)
         if not partial_text.strip():
             # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
@@ -1014,6 +1024,70 @@ class ChatGenerationJob:
                 )
                 pending_text = pending_text[relative_offset:]
 
+        def publish_completed_answer_step(step_chunks: list[str]) -> None:
+            """Publish a model step only after confirming it requested no tools."""
+            nonlocal last_streaming_parts_signature, streaming_citation_buffer
+            for raw_chunk in step_chunks:
+                chunk = raw_chunk
+                if not chunks:
+                    combined_web_search_result = combine_web_search_results(web_search_results)
+                    if web_search_trace_steps or combined_web_search_result is not None:
+                        web_search_trace_steps.append(answer_step(web_search_results))
+                    trace_block = build_web_search_trace_markdown(
+                        combined_web_search_result,
+                        steps=web_search_trace_steps,
+                    )
+                    if trace_block:
+                        chunk = f"{trace_block}\n\n{chunk}"
+
+                chunks.append(chunk)
+                streaming_evidence = combine_web_search_results(
+                    [*web_search_results, *self._prior_web_search_results]
+                )
+                if streaming_evidence is None:
+                    stream_text = f"{streaming_citation_buffer}{chunk}"
+                    streaming_citation_buffer = ""
+                else:
+                    complete_stream_text, streaming_citation_buffer = (
+                        split_web_search_citation_stream_text(
+                            f"{streaming_citation_buffer}{chunk}"
+                        )
+                    )
+                    stream_text = resolve_web_search_citations(
+                        complete_stream_text,
+                        streaming_evidence,
+                    ).text
+                if stream_text:
+                    publish_stream_text_with_images(stream_text)
+                streaming_parts_update = _build_streaming_parts_update("".join(chunks))
+                if streaming_parts_update is not None:
+                    if streaming_evidence is not None:
+                        parts_resolution = resolve_web_search_citations(
+                            streaming_parts_update["response"],
+                            streaming_evidence,
+                        )
+                        resolved_parts_text = parts_resolution.text
+                        streaming_parts_update = {
+                            **streaming_parts_update,
+                            "response": resolved_parts_text,
+                            "parts": [
+                                (
+                                    {**part, "text": resolved_parts_text}
+                                    if part.get("type") == "text"
+                                    else part
+                                )
+                                for part in streaming_parts_update["parts"]
+                            ],
+                        }
+                    streaming_parts_signature = json.dumps(
+                        streaming_parts_update,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    if streaming_parts_signature != last_streaming_parts_signature:
+                        last_streaming_parts_signature = streaming_parts_signature
+                        self._publish("response_parts_updated", streaming_parts_update)
+
         try:
             # ウェブ検索によるコンテキスト拡張の判定
             # Determine context augmentation using web search
@@ -1094,6 +1168,8 @@ class ChatGenerationJob:
                 step_count += 1
 
                 tool_calls_buffer: list[dict[str, Any]] = []
+                step_chunks: list[str] = []
+                self._pending_stream_chunks = step_chunks
                 for chunk in self._iter_llm_stream_with_retry(current_messages, tools=tools):
                     if self._should_stop():
                         return
@@ -1104,68 +1180,16 @@ class ChatGenerationJob:
                     if parsed_tool_calls is not None:
                         tool_calls_buffer.extend(parsed_tool_calls)
                         continue
-
-                    if not chunks:
-                        combined_web_search_result = combine_web_search_results(web_search_results)
-                        if web_search_trace_steps or combined_web_search_result is not None:
-                            web_search_trace_steps.append(answer_step(web_search_results))
-                        trace_block = build_web_search_trace_markdown(
-                            combined_web_search_result,
-                            steps=web_search_trace_steps,
-                        )
-                        if trace_block:
-                            chunk = f"{trace_block}\n\n{chunk}"
-
-                    chunks.append(chunk)
-                    streaming_evidence = combine_web_search_results(
-                        [*web_search_results, *self._prior_web_search_results]
-                    )
-                    if streaming_evidence is None:
-                        stream_text = f"{streaming_citation_buffer}{chunk}"
-                        streaming_citation_buffer = ""
-                    else:
-                        complete_stream_text, streaming_citation_buffer = (
-                            split_web_search_citation_stream_text(
-                                f"{streaming_citation_buffer}{chunk}"
-                            )
-                        )
-                        stream_text = resolve_web_search_citations(
-                            complete_stream_text,
-                            streaming_evidence,
-                        ).text
-                    if stream_text:
-                        publish_stream_text_with_images(stream_text)
-                    streaming_parts_update = _build_streaming_parts_update("".join(chunks))
-                    if streaming_parts_update is not None:
-                        if streaming_evidence is not None:
-                            parts_resolution = resolve_web_search_citations(
-                                streaming_parts_update["response"],
-                                streaming_evidence,
-                            )
-                            resolved_parts_text = parts_resolution.text
-                            streaming_parts_update = {
-                                **streaming_parts_update,
-                                "response": resolved_parts_text,
-                                "parts": [
-                                    (
-                                        {**part, "text": resolved_parts_text}
-                                        if part.get("type") == "text"
-                                        else part
-                                    )
-                                    for part in streaming_parts_update["parts"]
-                                ],
-                            }
-                        streaming_parts_signature = json.dumps(
-                            streaming_parts_update,
-                            ensure_ascii=False,
-                            sort_keys=True,
-                        )
-                        if streaming_parts_signature != last_streaming_parts_signature:
-                            last_streaming_parts_signature = streaming_parts_signature
-                            self._publish("response_parts_updated", streaming_parts_update)
+                    step_chunks.append(chunk)
 
                 if not tool_calls_buffer:
+                    self._pending_stream_chunks = []
+                    publish_completed_answer_step(step_chunks)
                     break
+
+                # このステップは検索・参照のための中間生成なので、本文として表示・保存しない。
+                # This step is intermediate tool-use output; do not display or persist it as the answer.
+                self._pending_stream_chunks = []
 
                 normalized_tool_calls = [
                     _normalize_tool_call(tool_call, step=llm_step, index=index)
