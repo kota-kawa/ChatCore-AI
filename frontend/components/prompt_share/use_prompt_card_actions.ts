@@ -5,6 +5,7 @@ import {
   addPromptAsTask,
   removePromptAsTask,
   removePromptLike,
+  savePromptAsMemo,
   savePromptLike
 } from "../../scripts/prompt_share/api";
 import type { PromptRecord } from "./prompt_card";
@@ -28,7 +29,9 @@ export function usePromptCardActions({
   const { t } = useTranslation();
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
+  const [memoSavePendingIds, setMemoSavePendingIds] = useState<Set<string>>(new Set());
   const likePendingIdsRef = useRef<Set<string>>(new Set());
+  const memoSavePendingIdsRef = useRef<Set<string>>(new Set());
 
   // いいね操作のAPIリクエスト中に重複送信を防ぐためのフラグを管理する
   // Manages a pending flag to prevent duplicate like API requests
@@ -54,6 +57,49 @@ export function usePromptCardActions({
       return next;
     });
   }, []);
+
+  // メモ保存の送信中状態をrefとstateで同期し、連打による重複保存を防ぐ
+  // Keeps memo-save pending state in a ref and state to prevent duplicate saves on rapid clicks
+  const setMemoSavePending = useCallback((clientId: string, pending: boolean) => {
+    if (pending) {
+      memoSavePendingIdsRef.current.add(clientId);
+    } else {
+      memoSavePendingIdsRef.current.delete(clientId);
+    }
+    setMemoSavePendingIds(new Set(memoSavePendingIdsRef.current));
+  }, []);
+
+  // 共有プロンプトのタイトルと本文を既存のメモ作成APIへ保存する
+  // Saves the shared prompt title and body through the existing memo creation API
+  const handleSavePromptAsMemo = useCallback(
+    async (prompt: PromptRecord) => {
+      const promptId = prompt.clientId;
+      closePromptDropdown();
+
+      if (!isLoggedIn) {
+        showToast(t("promptShare.loginToSaveMemo"), { variant: "error" });
+        return;
+      }
+
+      if (memoSavePendingIdsRef.current.has(promptId)) {
+        return;
+      }
+
+      setMemoSavePending(promptId, true);
+      try {
+        await savePromptAsMemo(prompt);
+        showToast(t("promptShare.savedToMemo"), { variant: "success" });
+      } catch (error) {
+        console.error("プロンプトのメモ保存中にエラーが発生しました:", error);
+        showToast(error instanceof Error ? error.message : t("promptShare.saveMemoFailed"), {
+          variant: "error"
+        });
+      } finally {
+        setMemoSavePending(promptId, false);
+      }
+    },
+    [closePromptDropdown, isLoggedIn, setMemoSavePending, t]
+  );
 
   // プロンプトのチャット利用状態をトグルするAPIを呼び出す。未ログインの場合はトーストで案内する
   // Calls the use-in-chat toggle API; shows a toast guide if the user is not logged in
@@ -156,7 +202,9 @@ export function usePromptCardActions({
   return {
     addAsTaskPendingIds,
     handleAddPromptAsTask,
+    handleSavePromptAsMemo,
     handleTogglePromptLike,
-    likePendingIds
+    likePendingIds,
+    memoSavePendingIds
   };
 }

@@ -35,6 +35,7 @@ function renderCard(
       isLikePending={false}
       isLikeEffectActive={false}
       isAddAsTaskPending={false}
+      isMemoSavePending={false}
       isUseInChatEffectActive={false}
       onOpenDetail={noop}
       onOpenComments={noop}
@@ -42,6 +43,7 @@ function renderCard(
       onToggleDropdown={noop}
       onCloseDropdown={noop}
       onAddAsTask={noop}
+      onSaveAsMemo={noop}
       onToggleLike={noop}
       onOpenAuthorProfile={noop}
     />

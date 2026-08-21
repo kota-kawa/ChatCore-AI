@@ -782,6 +782,10 @@
   transition-delay: 90ms;
 }
 
+.prompt-share-page .prompt-actions-dropdown.is-open .dropdown-item:nth-child(4) {
+  transition-delay: 120ms;
+}
+
 .prompt-share-page .prompt-actions-dropdown .dropdown-item i {
   flex: 0 0 auto;
   width: 1rem;

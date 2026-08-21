@@ -143,6 +143,37 @@ export function removePromptAsTask(prompt: PromptData) {
   }).then(({ payload }) => payload);
 }
 
+// 共有プロンプトの実体をメモ本文として保存する。SKILL は定義本文を優先する。
+// Saves the shared prompt's actual body as a memo, preferring the SKILL definition for SKILL posts.
+export function savePromptAsMemo(prompt: PromptData) {
+  const promptContent = String(prompt.content || "").trim();
+  const skillContent = String(prompt.skill_markdown || "").trim();
+  const memoContent = prompt.content_format === "skill"
+    ? skillContent || promptContent
+    : promptContent || skillContent;
+
+  if (!memoContent) {
+    return Promise.reject(new Error(promptShareText("promptShare.memoContentMissing")));
+  }
+
+  return promptShareFetchJsonOrThrow<ApiResponse>(
+    "/memo/api",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ai_response: memoContent,
+        title: String(prompt.title || "").trim()
+      })
+    },
+    {
+      defaultMessage: promptShareText("promptShare.saveMemoFailed"),
+      hasApplicationError: (payload) => payload.status === "fail"
+    }
+  ).then(({ payload }) => payload);
+}
+
 export function fetchPromptList(options?: {
   limit?: number;
   cursor?: string | null;
