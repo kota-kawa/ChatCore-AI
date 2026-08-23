@@ -5,11 +5,11 @@ from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
+    decide_generative_ui_mode,
     decode_message_parts,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
     requested_artifact_quality_issues,
-    requested_generative_ui_mode,
     validate_artifact_payload,
 )
 from services.web_search_trace import build_web_search_trace_markdown
@@ -959,7 +959,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         """ユーザーがUIを求めても、モデルの明示Artifactなしでは補完しない。"""
         normalized = normalize_response_with_artifacts(
             "こちらが完成イメージです。",
-            artifact_intent_text="Three.jsを使った3Dの回転デモを生成UIで見せて",
+            ui_mode="3D",
         )
 
         self.assertEqual(normalized.text, "こちらが完成イメージです。")
@@ -976,7 +976,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         normalized = normalize_response_with_artifacts(
             raw,
-            artifact_intent_text="生成UIで選択できるカードを作って",
+            ui_mode="2D",
         )
 
         self.assertEqual(normalized.validation_errors, [])
@@ -991,19 +991,72 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         normalized = normalize_response_with_artifacts(
             raw,
-            artifact_intent_text="このHTMLの意味を説明して",
+            ui_mode="NONE",
         )
 
         self.assertIsNone(normalized.parts)
 
-    def test_requested_mode_does_not_treat_three_discussion_as_generation(self):
-        self.assertIsNone(requested_generative_ui_mode("Three.jsの仕組みを説明して"))
-        self.assertEqual(
-            requested_generative_ui_mode("Three.jsで回転する3D生成UIを作って"),
-            "3D",
+    def test_ui_mode_decision_comes_from_selected_model_json(self):
+        calls = []
+
+        def decide(messages, model):
+            calls.append((messages, model))
+            return '{"ui_mode":"3d"}'
+
+        mode = decide_generative_ui_mode(
+            [{"role": "user", "content": "Three.jsで回転するデモを作って"}],
+            "selected-conversation-model",
+            llm_json_response=decide,
         )
-        self.assertEqual(requested_generative_ui_mode("比較を図解して"), "2D")
-        self.assertEqual(requested_generative_ui_mode("UIを生成して"), "2D")
+
+        self.assertEqual(mode, "3D")
+        self.assertEqual(calls[0][1], "selected-conversation-model")
+        self.assertIn(
+            "do not decide from keyword",
+            next(message["content"] for message in calls[0][0] if message["role"] == "system"),
+        )
+
+    def test_ui_mode_decision_omits_tool_protocol_messages(self):
+        captured = []
+
+        mode = decide_generative_ui_mode(
+            [
+                {"role": "system", "content": "base prompt"},
+                {"role": "user", "content": "前の質問"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"id": "call-1", "function": {"name": "web_search"}}],
+                },
+                {"role": "tool", "content": "検索結果"},
+                {"role": "user", "content": "この結果を図解して"},
+            ],
+            "selected-conversation-model",
+            llm_json_response=lambda messages, _model: captured.append(messages)
+            or '{"ui_mode":"2D"}',
+        )
+
+        self.assertEqual(mode, "2D")
+        self.assertEqual([message["role"] for message in captured[0]], ["system", "user", "user"])
+        self.assertEqual(captured[0][-1]["content"], "この結果を図解して")
+
+    def test_malformed_ui_mode_decision_does_not_fallback_to_user_text(self):
+        mode = decide_generative_ui_mode(
+            [{"role": "user", "content": "生成UIで見せて"}],
+            "selected-conversation-model",
+            llm_json_response=lambda *_args: '{"ui_mode":"maybe"}',
+        )
+
+        self.assertIsNone(mode)
+
+    def test_ui_mode_decision_recovers_json_wrapped_in_provider_prose(self):
+        mode = decide_generative_ui_mode(
+            [{"role": "user", "content": "比較を図解して"}],
+            "selected-conversation-model",
+            llm_json_response=lambda *_args: '判定結果: {"ui_mode":"2D"}',
+        )
+
+        self.assertEqual(mode, "2D")
 
     def test_quality_gate_accepts_a_complete_polished_2d_artifact(self):
         raw = (
@@ -1013,7 +1066,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         )
         normalized = normalize_response_with_artifacts(
             raw,
-            artifact_intent_text="生成UIで見せて",
+            ui_mode="2D",
         )
 
         self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
@@ -1034,7 +1087,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             conversation_messages=[{"role": "user", "content": "比較を生成UIで見せて"}],
             model="test-model",
             generate_response=generate_response,
-            artifact_intent_text="比較を生成UIで見せて",
+            user_request="比較を生成UIで見せて",
+            ui_mode="2D",
         )
 
         self.assertEqual(len(calls), 1)
@@ -1061,7 +1115,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             conversation_messages=[{"role": "user", "content": "生成UIで見せて"}],
             model="test-model",
             generate_response=lambda *_args: repaired_raw,
-            artifact_intent_text="生成UIで見せて",
+            user_request="生成UIで見せて",
+            ui_mode="2D",
         )
 
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "優先度マップ")
@@ -1078,7 +1133,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             conversation_messages=[{"role": "user", "content": "生成UIで見せて"}],
             model="test-model",
             generate_response=lambda *_args: self.fail("complete UI must not be retried"),
-            artifact_intent_text="生成UIで見せて",
+            user_request="生成UIで見せて",
+            ui_mode="2D",
         )
 
         self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
@@ -1087,7 +1143,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         """Request-aware recovery respects explicit UI opt-outs."""
         normalized = normalize_response_with_artifacts(
             "文章だけで回答します。",
-            artifact_intent_text="Three.jsについてテキストだけで説明して。UIは不要。",
+            ui_mode="NONE",
         )
 
         self.assertIsNone(normalized.parts)
@@ -1103,7 +1159,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         normalized = normalize_response_with_artifacts(
             raw,
-            artifact_intent_text="text-onlyで。UI不要、図不要。",
+            ui_mode="NONE",
         )
 
         self.assertEqual(normalized.text, "文章で説明します。")

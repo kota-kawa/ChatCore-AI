@@ -128,6 +128,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             build_llm_stream_response=Mock(),
             iter_llm_stream_events=Mock(),
             get_llm_response=Mock(return_value="assistant reply"),
+            decide_generative_ui_mode=Mock(return_value=None),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
             should_extract_context=Mock(return_value=True),

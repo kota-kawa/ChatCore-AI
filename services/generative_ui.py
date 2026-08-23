@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from services.llm import get_llm_json_response
 from services.message_parts_display import normalize_message_parts_for_display
 
 
@@ -58,6 +59,8 @@ MAX_WEB_SEARCH_IMAGE_SOURCE_TITLE_CHARS = 160
 # サンドボックスで利用できるローカル配信ライブラリの正規名。
 # Canonical names of locally served libraries available inside the sandbox.
 SUPPORTED_ARTIFACT_LIBRARIES = ("three",)
+GENERATIVE_UI_MODES = ("NONE", "2D", "3D")
+GenerativeUiMode = Literal["NONE", "2D", "3D"]
 # モデル出力の表記ゆれ（three.js / threejs 等）を正規名へ寄せるためのエイリアス表。
 # Alias table folding model-output spelling variants (three.js / threejs etc.)
 # into canonical library names.
@@ -71,16 +74,6 @@ _ARTIFACT_LIBRARY_ALIASES = {
 # Detect THREE usage in JS so the three dependency is inferred even when the
 # model forgets to declare "libraries".
 _THREE_USAGE_RE = re.compile(r"\bTHREE\s*[.\[(]")
-_THREE_INTENT_RE = re.compile(
-    r"(?:\bthree(?:\.js|js)?\b|\bwebgl\b|3\s*d|３\s*[dｄ]|三次元|立体|空間モデル)",
-    re.IGNORECASE,
-)
-_NO_ARTIFACT_REQUEST_RE = re.compile(
-    r"(?:(?:テキスト|文章)(?:だけ|のみ)|(?:ui|図|可視化|3\s*d|three(?:\.js)?)\s*(?:は)?\s*(?:不要|なし|使わない|要らない)|"
-    r"text[\s-]?only|(?:without|no)\s+(?:ui|diagram|visuali[sz]ation|3d|three(?:\.js)?)|"
-    r"(?:ui|diagram|visuali[sz]ation|3d|three(?:\.js)?)\s+(?:is\s+)?(?:not\s+needed|unnecessary))",
-    re.IGNORECASE,
-)
 # Some providers return browser-module imports even though artifacts execute as
 # classic scripts with a local THREE global. These patterns let us fold the
 # common core/OrbitControls forms into that supported runtime.
@@ -151,36 +144,6 @@ _ARTIFACT_CONTEXT_KEY_RE = re.compile(
     r'"(?:artifact|version|title|name|label|height|description|summary|caption|libraries)"\s*:',
     re.IGNORECASE,
 )
-# 「明示的に生成UIを作ろうとした」強いシグナル。本文の長さに関わらずfallbackを許可する。
-# Strong signals that the model explicitly attempted an artifact; allow a fallback
-# regardless of how long the surrounding prose is.
-_STRONG_ARTIFACT_INTENT_RE = re.compile(
-    r"(chatcore-artifact|generative ui|生成UI|artifact)",
-    re.IGNORECASE,
-)
-# 可視化を匂わせる弱いシグナル。通常の文章でも偶発的に出現する（例: 「表やグラフで確認」）
-# ため、短い宣言文のときだけfallbackのトリガーにする。
-# Weak visualization hints that also appear incidentally in ordinary prose (e.g.
-# "check the tables and charts"). Only treat them as intent for short announcements.
-_WEAK_ARTIFACT_INTENT_RE = re.compile(
-    r"(可視化|図解|インフォグラフィック|ダッシュボード|チャート|グラフ|"
-    r"タイムライン|フローチャート|比較表|カードビュー|"
-    r"visuali[sz]ation|diagram|infographic|dashboard|chart|flowchart|timeline|interactive demo)",
-    re.IGNORECASE,
-)
-_UI_TERM_RE = re.compile(r"(?<![A-Za-z0-9_])ui(?![A-Za-z0-9_])", re.IGNORECASE)
-_DISPLAY_ONLY_INTENT_RE = re.compile(
-    r"(表示します|表示しました|作成します|作成しました|用意しました|以下に示します)",
-    re.IGNORECASE,
-)
-# 弱いシグナルや表示宣言から生成UIを補完するのは、本文が短い宣言文のときに限る。
-# Only synthesize a fallback from weak/display-only intent when the prose is short.
-_SHORT_INTENT_CHAR_LIMIT = 180
-_UI_REQUEST_ACTION_RE = re.compile(
-    r"(?:作(?:って|成)|生成|描(?:いて|画)|表示(?:して)?|見せて|可視化(?:して)?|"
-    r"create|make|build|generate|draw|render|show|visuali[sz]e)",
-    re.IGNORECASE,
-)
 # Web検索結果は <details class="web-search-sources …">…</details> として本文へ差し込まれる。
 # fallback生成やintent判定では本文だけを見たいので、このブロックを除去する。
 # Web search results are injected as <details class="web-search-sources …">…</details>
@@ -215,6 +178,129 @@ _JS_BANNED_TOKEN_RE = re.compile(
 # Custom exception class representing a validation error for generative UI.
 class GenerativeUiValidationError(ValueError):
     pass
+
+
+def _coerce_generative_ui_mode(value: Any) -> GenerativeUiMode | None:
+    """Normalize the finite mode vocabulary returned by the decision model."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().upper()
+    if normalized not in GENERATIVE_UI_MODES:
+        return None
+    return normalized  # type: ignore[return-value]
+
+
+class GenerativeUiDecision(BaseModel):
+    """Structured semantic decision returned by the selected conversation model."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ui_mode: GenerativeUiMode
+
+    @field_validator("ui_mode", mode="before")
+    @classmethod
+    def _validate_ui_mode(cls, value: Any) -> GenerativeUiMode:
+        normalized = _coerce_generative_ui_mode(value)
+        if normalized is None:
+            raise ValueError("ui_mode must be one of NONE, 2D, or 3D")
+        return normalized
+
+
+# The semantic decision is deliberately made by the selected conversation model.
+# This prompt is separate from artifact parsing so protocol/safety validation remains
+# deterministic while user intent is interpreted in the user's language and context.
+GENERATIVE_UI_DECISION_PROMPT = """
+You are the semantic UI-mode decision pass for a normal chat response.
+Read the entire conversation and prioritize the latest user request. Understand the
+request in its language and conversational context; do not decide from keyword or
+regular-expression matches. Distinguish discussing a UI, diagram, 3D, or code from
+asking the assistant to create and show a visual result.
+
+Return exactly one JSON object with the key `ui_mode` and no Markdown.
+The value must be one of "NONE", "2D", or "3D". Example: {"ui_mode":"NONE"}
+
+Choose NONE when the user wants an explanation, code/sample, comparison, calculation,
+or text-only answer, or when a visual is merely discussed. Choose 3D for a requested
+working 3D/spatial/Three.js visual. Choose 2D for a requested generated UI, diagram,
+chart, flow, timeline, visualization, simulation, or interactive visual that is not 3D.
+Honor explicit negation and the latest turn over older requests.
+""".strip()
+
+
+def _parse_generative_ui_decision(raw: str | None) -> GenerativeUiMode | None:
+    """Parse provider-compatible JSON without interpreting user text."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    candidate = raw.strip()
+    # Claude may wrap a JSON response in a Markdown fence even though the prompt
+    # requests plain JSON. Removing the fence is protocol recovery, not intent
+    # classification.
+    if candidate.startswith("```"):
+        opening_end = candidate.find("\n")
+        closing_start = candidate.rfind("```")
+        if opening_end >= 0 and closing_start > opening_end:
+            candidate = candidate[opening_end + 1 : closing_start].strip()
+    try:
+        payload = json.loads(candidate)
+    except (TypeError, json.JSONDecodeError):
+        # Some providers add a short explanation around the requested object.
+        # Recover only the JSON object shape; never inspect the user's text here.
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            payload = json.loads(candidate[start : end + 1])
+        except (TypeError, json.JSONDecodeError):
+            return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return GenerativeUiDecision.model_validate(payload).ui_mode
+    except ValidationError:
+        return None
+
+
+def decide_generative_ui_mode(
+    conversation_messages: list[dict[str, Any]],
+    model: str,
+    *,
+    llm_json_response: Callable[[list[dict[str, Any]], str], str | None] | None = None,
+) -> GenerativeUiMode | None:
+    """Ask the selected conversation model for the structured UI mode.
+
+    A failed or malformed decision is represented by ``None``. Callers must not
+    infer a mode from the user's text in that case; explicit artifacts can still
+    undergo their normal deterministic safety validation.
+    """
+    # The decision call uses a JSON endpoint, which does not accept the tool-call
+    # history shape used by some OpenAI Responses requests. UI intent only needs
+    # the conversational text, so omit protocol/tool messages and keep the
+    # decision instruction as the sole system message. This also keeps untrusted
+    # selected-reference payloads from becoming a competing system instruction.
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": GENERATIVE_UI_DECISION_PROMPT}
+    ]
+    for message in conversation_messages:
+        role = str(message.get("role") or "")
+        if role not in {"user", "assistant"}:
+            continue
+        if message.get("tool_calls"):
+            continue
+        content = message.get("content")
+        if content is None:
+            continue
+        messages.append({"role": role, "content": str(content)})
+    invoke = llm_json_response or get_llm_json_response
+    try:
+        raw = invoke(messages, model)
+    except Exception:
+        logger.warning(
+            "Generative UI mode decision failed; skipping intent-based recovery.",
+            exc_info=True,
+        )
+        return None
+    return _parse_generative_ui_decision(raw)
 
 
 # 応答から抽出された、生成UIアーティファクトの候補となる生JSONと位置情報を保持するデータクラスです。
@@ -531,49 +617,6 @@ def _infer_artifact_title(text: str) -> str:
         if line:
             return line[:60]
     return "生成UI"
-
-
-# 本文のテキストから、モデルが明示的または暗示的に生成UIを作成しようとしていた意図があるかを判定します。
-# Infer whether the model intended to produce a visual UI block from the text content.
-def _has_artifact_intent(text: str) -> bool:
-    stripped = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
-    if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
-        return True
-    if len(stripped) > _SHORT_INTENT_CHAR_LIMIT:
-        return False
-    return bool(
-        _WEAK_ARTIFACT_INTENT_RE.search(stripped)
-        or _DISPLAY_ONLY_INTENT_RE.search(stripped)
-    )
-
-
-def _has_requested_artifact_intent(text: str) -> bool:
-    """Infer explicit UI intent from the user request, honoring opt-outs first."""
-    stripped = _strip_web_search_sources_html(text or "").strip()
-    if not stripped or _NO_ARTIFACT_REQUEST_RE.search(stripped):
-        return False
-    if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
-        return True
-    has_action = bool(_UI_REQUEST_ACTION_RE.search(stripped))
-    weak_visual_request = bool(
-        _WEAK_ARTIFACT_INTENT_RE.search(stripped)
-        and (has_action or len(stripped) <= 24)
-    )
-    explicit_ui_request = bool(_UI_TERM_RE.search(stripped) and has_action)
-    explicit_three_request = bool(_THREE_INTENT_RE.search(stripped) and has_action)
-    return weak_visual_request or explicit_ui_request or explicit_three_request
-
-
-def _has_three_intent(text: str) -> bool:
-    stripped = _strip_web_search_sources_html(text or "")
-    return bool(stripped and _THREE_INTENT_RE.search(stripped))
-
-
-def requested_generative_ui_mode(text: str) -> Literal["2D", "3D"] | None:
-    """Return the explicitly requested UI mode without treating 3D discussion as generation."""
-    if not _has_requested_artifact_intent(text):
-        return None
-    return "3D" if _has_three_intent(text) else "2D"
 
 
 # 開き括弧 { に対応する閉じ括弧 } のペアをパースし、JSONオブジェクトの終端インデックスを返します。
@@ -1422,14 +1465,15 @@ def normalize_response_with_artifacts(
     *,
     recover_truncated: bool = False,
     allow_fallback: bool = True,
-    artifact_intent_text: str | None = None,
+    ui_mode: GenerativeUiMode | str | None = None,
 ) -> NormalizedGenerativeResponse:
-    """Extract sandbox artifacts, recovering format variants only for explicit UI requests."""
+    """Extract sandbox artifacts, using only the structured UI-mode decision for recovery."""
     # Kept as a public keyword for older callers. Fallback UI synthesis was
     # intentionally removed, so its value no longer changes behavior.
     _ = allow_fallback
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    requested_artifact = _has_requested_artifact_intent(artifact_intent_text or "")
+    normalized_ui_mode = _coerce_generative_ui_mode(ui_mode)
+    requested_artifact = normalized_ui_mode in {"2D", "3D"}
     candidates = _extract_artifact_candidates(
         text,
         recover_truncated=recover_truncated,
@@ -1445,9 +1489,7 @@ def normalize_response_with_artifacts(
         text,
         [candidate.span for candidate in all_candidates],
     )
-    user_opted_out = bool(
-        artifact_intent_text and _NO_ARTIFACT_REQUEST_RE.search(artifact_intent_text)
-    )
+    user_opted_out = normalized_ui_mode == "NONE"
     if not candidates and not button_candidates and not malformed_fence_spans:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
@@ -1594,17 +1636,19 @@ def normalize_response_with_artifact_retry(
     conversation_messages: list[dict[str, Any]],
     model: str,
     generate_response: Callable[[list[dict[str, Any]], str], str | None],
-    artifact_intent_text: str | None = None,
+    user_request: str | None = None,
+    ui_mode: GenerativeUiMode | str | None = None,
 ) -> NormalizedGenerativeResponse:
-    """Normalize a response and make one targeted repair attempt for requested low-quality UI."""
+    """Normalize a response and repair low-quality UI only for an LLM-selected mode."""
     source_text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    intent_text = artifact_intent_text or ""
+    intent_text = user_request or ""
+    normalized_ui_mode = _coerce_generative_ui_mode(ui_mode)
     normalized = normalize_response_with_artifacts(
         source_text,
         recover_truncated=True,
-        artifact_intent_text=intent_text,
+        ui_mode=normalized_ui_mode,
     )
-    mode = requested_generative_ui_mode(intent_text)
+    mode = normalized_ui_mode if normalized_ui_mode in {"2D", "3D"} else None
     if mode is None:
         return normalized
 
@@ -1633,7 +1677,7 @@ def normalize_response_with_artifact_retry(
     repaired = normalize_response_with_artifacts(
         repaired_text,
         recover_truncated=True,
-        artifact_intent_text=intent_text,
+        ui_mode=normalized_ui_mode,
     )
     repaired_issues = requested_artifact_quality_issues(repaired, mode)
     if not repaired_issues:

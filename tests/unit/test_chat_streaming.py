@@ -709,6 +709,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 persist_response=lambda response, message_parts=None: persisted_messages.append(
                     (response, message_parts)
                 ),
+                ui_mode="2D",
             )
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
@@ -766,6 +767,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 persist_response=lambda response, message_parts=None: persisted_messages.append(
                     (response, message_parts)
                 ),
+                ui_mode="2D",
             )
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
