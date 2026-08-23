@@ -1,4 +1,4 @@
-"""Deterministic context loading for user-selected chat reference sources."""
+"""Context loading for user-selected chat reference sources."""
 
 from __future__ import annotations
 
@@ -33,66 +33,6 @@ MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS = 3
 # abandoned instead of being hammered once per remaining attempt.
 MAX_SELECTED_REFERENCE_FAILURE_RETRIES = 1
 _WHITESPACE_PATTERN = re.compile(r"\s+")
-_JAPANESE_QUERY_SEPARATOR_PATTERN = re.compile(
-    r"(?:について|として|から|まで|より|ので|の|は|を|が|に|で|と|へ|や|も|な)"
-)
-_QUERY_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]*|[ぁ-んァ-ヶ一-龠々ー]{2,}")
-_REQUEST_ENDINGS = (
-    "してください",
-    "してほしい",
-    "参照して",
-    "使って",
-    "教えて",
-    "知りたい",
-    "書きたい",
-    "作りたい",
-    "まとめて",
-    "したい",
-)
-_ENGLISH_STOP_WORDS = {
-    "about",
-    "from",
-    "please",
-    "show",
-    "tell",
-    "that",
-    "this",
-    "using",
-    "want",
-    "what",
-    "with",
-}
-# 指示語と汎用的な依頼語は検索語にならない。除外することで、絞り込み再検索の質が上がり、
-# 「これらしか残らない発話＝前ターンを引き継ぐべき追従発話」も判別できる。
-# Demonstratives and generic request words are not search terms. Dropping them sharpens the
-# narrowed retry, and a turn left with nothing else is exactly the follow-up that needs the
-# previous turn's topic.
-_JAPANESE_STOP_WORDS = {
-    "あれ",
-    "あの",
-    "あそこ",
-    "いま",
-    "ここ",
-    "この",
-    "これ",
-    "こと",
-    "さっき",
-    "そこ",
-    "その",
-    "それ",
-    "ため",
-    "どう",
-    "どの",
-    "どれ",
-    "なに",
-    "もっと",
-    "もの",
-    "内容",
-    "場合",
-    "続き",
-    "詳しく",
-    "説明",
-}
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
 PERSONAL_OVERVIEW_TAG = "personal_overview_result"
@@ -132,24 +72,6 @@ def _normalize_query(query: str, limit: int = MAX_SELECTED_REFERENCE_QUERY_CHARS
     return f"{normalized[:head_length]} {normalized[-tail_length:]}"
 
 
-def _fallback_queries(query: str) -> list[str]:
-    separated = _JAPANESE_QUERY_SEPARATOR_PATTERN.sub(" ", query)
-    tokens = []
-    for raw_token in _QUERY_TOKEN_PATTERN.findall(separated):
-        token = raw_token.strip(".,!?;:()[]{}『』「」【】・、。！？")
-        for ending in _REQUEST_ENDINGS:
-            if token.endswith(ending):
-                token = token[: -len(ending)].strip()
-                break
-        if len(token) < 2 or token.casefold() in _ENGLISH_STOP_WORDS:
-            continue
-        if token in _JAPANESE_STOP_WORDS:
-            continue
-        if token != query and token not in tokens:
-            tokens.append(token)
-    return sorted(tokens, key=len, reverse=True)
-
-
 def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
     """Return the user turn before the current one, used to resolve follow-up phrasing.
 
@@ -166,34 +88,13 @@ def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
     return _normalize_query(user_contents[-2], MAX_PREVIOUS_TURN_QUERY_CHARS)
 
 
-def _candidate_queries(query: str, previous_query: str) -> list[str]:
-    """Order the queries to try: the turn itself first, then narrower rephrasings."""
-    candidates: list[str] = []
-    own_tokens = _fallback_queries(query)
-    if previous_query and not own_tokens:
-        # 「それを詳しく」のような指示語だけの追従発話は、単体では検索語にならない。
-        # 前ターンの発話と繋いだものを先頭に置き、話題を引き継いで検索する。
-        # A follow-up made only of pronouns ("tell me more about that") is not a usable query
-        # on its own, so lead with it joined to the previous turn to carry the topic over.
-        candidates.append(_normalize_query(f"{previous_query} {query}"))
-    candidates.append(query)
-    candidates.extend(own_tokens)
-    if previous_query:
-        candidates.extend(_fallback_queries(previous_query))
-
-    unique: list[str] = []
-    for candidate in candidates:
-        if candidate and candidate not in unique:
-            unique.append(candidate)
-    return unique[:MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS]
-
-
 class CandidateQueryPlan:
-    """The queries to try, with the LLM rewrite deferred until the first one misses.
+    """The original turn followed by LLM-produced structured query rewrites.
 
     The turn as typed is tried first so a hit costs nothing extra. Only when that finds
-    nothing is a small model asked for better keywords — and because every selected source
-    shares one plan, that happens once per turn no matter how many sources are enabled.
+    nothing is the selected-reference query planner asked to interpret the latest turn in
+    the context of the previous turn. If the model fails or returns no usable query, the
+    original turn is the only query; no mechanical token fallback is used.
     """
 
     def __init__(
@@ -203,7 +104,6 @@ class CandidateQueryPlan:
         *,
         rewrite: Callable[..., list[str]] | None = None,
     ) -> None:
-        self._base = _candidate_queries(query, previous_query)
         self._query = query
         self._previous_query = previous_query
         self._rewrite = rewrite
@@ -216,14 +116,20 @@ class CandidateQueryPlan:
                 # 差し替え可能にしておくため、既定はモジュール属性から都度解決する。
                 # Resolved from the module attribute each time so it stays substitutable.
                 rewrite = self._rewrite or rewrite_reference_query
-                self._rewritten = rewrite(self._query, previous_query=self._previous_query)
+                try:
+                    rewritten = rewrite(self._query, previous_query=self._previous_query)
+                except Exception:
+                    # LLM障害時は機械的な候補を作らず、原文だけで検索を続ける。
+                    # On an LLM failure, do not synthesize mechanical candidates; keep only the original.
+                    logger.warning("Selected-reference query planning failed.", exc_info=True)
+                    rewritten = []
+                self._rewritten = rewritten if isinstance(rewritten, list) else []
             return self._rewritten
 
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
         emitted = 0
-        first = self._base[0] if self._base else self._query
-        ordered = [[first], self._rewritten_queries, self._base[1:]]
+        ordered = [[self._query], self._rewritten_queries]
         for group in ordered:
             if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
                 return
