@@ -49,6 +49,7 @@ from services.web_search import (
     WebSearchAugmentation,
     WebSearchResult,
     WebSearchSource,
+    WEB_SEARCH_ERROR_REQUEST_FAILED,
 )
 from services.web_search_images import WebSearchImageCandidate
 from tests.helpers.request_helpers import build_request
@@ -1997,7 +1998,11 @@ class ChatStreamingTestCase(unittest.TestCase):
                 publish_event("web_search_planning_started", {})
                 publish_event(
                     "web_search_failed",
-                    {"query": "news", "message": "Web検索に失敗しました。"},
+                    {
+                        "query": "news",
+                        "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
+                        "message": "Web検索に失敗しました。",
+                    },
                 )
             return WebSearchAugmentation(messages=messages, status="failed")
 
@@ -2021,6 +2026,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("event: web_search_failed", body)
+        self.assertIn(f'"code": "{WEB_SEARCH_ERROR_REQUEST_FAILED}"', body)
         self.assertIn('"phase": "final_answer"', body)
         self.assertIn("event: chunk", body)
 

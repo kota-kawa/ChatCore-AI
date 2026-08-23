@@ -83,6 +83,11 @@ WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL = 2
 WEB_SEARCH_PLANNER_REPAIR_ATTEMPTS_PER_MODEL = 1
 WEB_SEARCH_PLANNER_MODEL = LIGHTWEIGHT_TASK_MODEL
+# Stable codes for UI status handling. User-facing wording is localized in the client;
+# callers must not classify failures by matching translated error text.
+WEB_SEARCH_ERROR_CONFIGURATION = "web_search.configuration"
+WEB_SEARCH_ERROR_QUOTA_EXCEEDED = "web_search.quota_exceeded"
+WEB_SEARCH_ERROR_REQUEST_FAILED = "web_search.request_failed"
 
 _SENSITIVE_MARKERS = (
     "api_key",
@@ -2541,6 +2546,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_CONFIGURATION,
                     "message": message,
                 },
             )
@@ -2588,6 +2594,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
                     "message": message,
                     "retry_after_seconds": exc.retry_after_seconds,
                 },
@@ -2616,6 +2623,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
                     "message": "Web検索に失敗しました。検索なしで回答を続けます。",
                 },
             )

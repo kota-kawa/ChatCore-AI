@@ -535,6 +535,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             [event.event for event in events],
             ["web_search_planning_started", "web_search_started", "web_search_failed"],
         )
+        self.assertEqual(events[2].payload["code"], web_search.WEB_SEARCH_ERROR_QUOTA_EXCEEDED)
         self.assertIn("月間上限", events[2].payload["message"])
         self.assertIsNone(augmented.result)
         self.assertEqual(augmented.status, "failed")
@@ -564,6 +565,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 )
 
         self.assertEqual([event.event for event in events], ["web_search_planning_started", "web_search_failed"])
+        self.assertEqual(events[1].payload["code"], web_search.WEB_SEARCH_ERROR_CONFIGURATION)
         self.assertIn("APIキーが未設定", events[1].payload["message"])
         self.assertIsNone(augmented.result)
         self.assertEqual(augmented.status, "failed")

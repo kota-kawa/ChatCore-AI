@@ -5,7 +5,6 @@ import {
   buildAiAgentHttpError,
   isActionStep,
   isAllowedNavigationPath,
-  isDestructiveActionLabel,
   isSafeInternalPath,
   isUnexpectedAuthRedirect,
   normalizePathname,
@@ -62,15 +61,6 @@ test("isAllowedNavigationPath permits app pages and blocks side-effecting endpoi
   assert.equal(isAllowedNavigationPath("/google-login"), false);
   assert.equal(isAllowedNavigationPath("/prompt_share_evil"), false);
   assert.equal(isAllowedNavigationPath("https://example.com"), false);
-});
-
-test("isDestructiveActionLabel detects irreversible-control wording", () => {
-  assert.equal(isDestructiveActionLabel("削除する"), true);
-  assert.equal(isDestructiveActionLabel("Delete account"), true);
-  assert.equal(isDestructiveActionLabel("送信"), true);
-  assert.equal(isDestructiveActionLabel("ログアウト"), true);
-  assert.equal(isDestructiveActionLabel("もっと見る"), false);
-  assert.equal(isDestructiveActionLabel(null), false);
 });
 
 test("isActionStep accepts memo_edit steps and keeps rejecting unknown actions", () => {

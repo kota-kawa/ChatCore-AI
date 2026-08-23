@@ -78,6 +78,8 @@ from .web_search import (
     WebSearchQuotaExceeded,
     WebEvidenceContextBudget,
     WebSearchResult,
+    WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
+    WEB_SEARCH_ERROR_REQUEST_FAILED,
 )
 from .web_search_images import (
     append_web_search_image_parts,
@@ -1473,6 +1475,7 @@ class ChatGenerationJob:
                             "web_search_failed",
                             {
                                 "query": query_text,
+                                "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
                                 "message": message,
                                 "retry_after_seconds": exc.retry_after_seconds,
                                 "step": step_count,
@@ -1502,6 +1505,7 @@ class ChatGenerationJob:
                             "web_search_failed",
                             {
                                 "query": query_text,
+                                "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
                                 "message": "Web検索に失敗しました。検索なしで回答を続けます。",
                                 "step": step_count,
                                 "max_steps": max_steps,

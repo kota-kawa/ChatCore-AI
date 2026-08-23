@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { describeActionStep } from "../lib/chat_page/mini_chat_runtime";
+import { describeActionStep, requiresActionConfirmation } from "../lib/chat_page/mini_chat_runtime";
+
+test("requires confirmation from typed action metadata instead of visible wording", () => {
+  assert.equal(
+    requiresActionConfirmation({ action: "click", selector: "#open-menu", risk: "low", description: "メニューを開く" }),
+    true,
+  );
+  assert.equal(
+    requiresActionConfirmation({ action: "app_action", command: "prompt.openComposer", risk: "low", description: "作成画面を開く" }),
+    false,
+  );
+  assert.equal(
+    requiresActionConfirmation({ action: "app_action", command: "memo.save", risk: "low", description: "保存する" }),
+    true,
+  );
+  assert.equal(
+    requiresActionConfirmation({ action: "app_action", command: "unknown.command", risk: "low", description: "任意の操作" }),
+    true,
+  );
+  assert.equal(
+    requiresActionConfirmation({ action: "memo_edit", risk: "low", description: "内容を編集する", content: "本文" }),
+    true,
+  );
+});
 
 test("describeActionStep exposes the command and parameters of a typed action", () => {
   const details = describeActionStep({
