@@ -1,12 +1,13 @@
-"""Rewrite a chat turn into search queries for the user's own saved notes.
+"""Rewrite a chat turn into search queries for selected chat references.
 
-The mechanical rewriting this replaces splits on Japanese particles and keeps two-character
-runs, which turns "今月は何をしたらいいかな？" into "したらいいか" and "今月" — neither of
-which matches anything. A small model reads the turn instead and returns the content words
-worth searching for, resolving relative dates on the way.
+The query planner reads the latest turn and the previous user turn instead of splitting on
+Japanese particles or applying a fixed stop-word list. It returns structured queries that
+can be used for memos, My Context facts, and shared prompts, resolving relative dates on the
+way.
 
 Only used after a lookup already came back empty, so its cost lands on the turns that need
-it rather than on every turn.
+it rather than on every turn. If the model is unavailable, the caller keeps the original
+turn unchanged.
 """
 
 from __future__ import annotations
@@ -24,8 +25,9 @@ MAX_REWRITTEN_QUERIES = 2
 MAX_REWRITTEN_QUERY_CHARS = 120
 
 _SYSTEM_PROMPT = (
-    "You turn one chat turn into keyword queries for searching the user's own saved notes "
-    "(their memos and personal context facts).\n"
+    "You are the selected-reference query planner for a chat turn. Turn the latest user "
+    "request into search queries for the explicitly selected sources: the user's memos, "
+    "My Context facts, and shared prompts.\n"
     'Reply with JSON only: {"queries": ["...", "..."]}\n'
     "Rules:\n"
     f"- Return 1 to {MAX_REWRITTEN_QUERIES} queries, ordered best first.\n"
@@ -34,7 +36,8 @@ _SYSTEM_PROMPT = (
     "- Resolve relative time expressions using today's date, and keep both forms "
     '(for example, with today at 2026-08-18: "今月" becomes "2026年8月 8月").\n'
     "- Add the obvious near-synonyms a note about this topic would plausibly use.\n"
-    "- If the turn only makes sense together with the previous turn, take the topic from it.\n"
+    "- Resolve follow-up wording by understanding the previous user turn; do not copy it "
+    "unless it supplies the missing topic.\n"
     "- Never invent facts about the user. Only rephrase what the turn is asking for."
 )
 
@@ -43,7 +46,7 @@ def _build_messages(query: str, previous_query: str, now: datetime) -> list[dict
     lines = [f"Today's date: {now.strftime('%Y-%m-%d')}"]
     if previous_query:
         lines.append(f"Previous user turn: {previous_query}")
-    lines.append(f"Current user turn: {query}")
+    lines.append(f"Latest user turn: {query}")
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": "\n".join(lines)},
@@ -86,7 +89,7 @@ def rewrite_reference_query(
     previous_query: str = "",
     now: datetime | None = None,
 ) -> list[str]:
-    """Return keyword queries for one turn, or an empty list when the rewrite is unusable."""
+    """Return LLM-produced queries, or an empty list when the rewrite is unusable."""
     normalized = " ".join(str(query or "").split())
     if not normalized:
         return []
@@ -95,8 +98,8 @@ def rewrite_reference_query(
     try:
         raw = get_llm_json_response(messages, LIGHTWEIGHT_TASK_MODEL) or ""
     except Exception:
-        # 言い換えは補助にすぎない。失敗しても呼び出し側の既存候補で検索を続ける。
-        # The rewrite is only an aid; on failure the caller keeps its own candidates.
+        # LLM が使えない場合は呼び出し側が原文だけで検索を続ける。
+        # On failure the caller continues with the original turn only.
         logger.warning("Reference query rewrite failed.", exc_info=True)
         return []
 

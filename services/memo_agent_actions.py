@@ -20,24 +20,6 @@ MEMO_EDIT_MAX_CONTENT_LENGTH = 60_000
 # English: Maximum memo title length allowed by the DB schema.
 MEMO_EDIT_MAX_TITLE_LENGTH = 255
 
-# 日本語: メモ本文の編集依頼を示すキーワード。マッチした場合はLLM分類を省略して編集フローへ進む。
-# English: Keywords that signal a memo edit request; on match we skip LLM classification and go straight to the edit flow.
-_EDIT_HINTS = re.compile(
-    r"(書き直|書き換|リライト|清書|推敲|添削して|校正|修正して|直して|訂正して|"
-    r"追記|追加して|付け加え|削除して|消して|取り除いて|置き換え|置換|"
-    r"整形して|整理して|並べ替えて|まとめ直|見出しを付け|箇条書きに(?:し|変え|変換)|"
-    r"翻訳して|英語に(?:して|変え)|日本語に(?:して|変え)|敬語に|口調を|文体を|"
-    r"短くして|簡潔にして|長くして|詳しくして|本文を変更|タイトルを変更|編集して)",
-    re.IGNORECASE,
-)
-
-# 日本語: 質問・要約などの参照系依頼を示すキーワード。マッチした場合はLLM分類を省略してQAフローへ進む。
-# English: Keywords that signal a read-only request; on match we skip LLM classification and answer directly.
-_QA_HINTS = re.compile(
-    r"(要約して|教えて|説明して|とは何|どういう意味|なぜ|何が|どこが|answer|質問|[?？])",
-    re.IGNORECASE,
-)
-
 # 日本語: メモ意図分類のLLM用システムプロンプト。
 # English: System prompt for LLM-based memo intent classification.
 _MEMO_INTENT_SYSTEM = """
@@ -103,15 +85,8 @@ def _parse_memo_intent(text: str) -> MemoIntent | None:
 # 日本語: メモを開いた状態のユーザーメッセージを「編集依頼」か「質問・要約」かに分類します。
 # English: Classify a memo-scoped user message as an edit request or a read-only QA request.
 def classify_memo_intent(message: str) -> MemoIntent:
-    # 明確な編集キーワードがあれば即editと判定します。
-    # A clear edit keyword short-circuits to "edit" without an LLM call.
-    if _EDIT_HINTS.search(message):
-        return "edit"
-    # 明確な参照キーワードがあれば即qaと判定します。
-    # A clear read-only keyword short-circuits to "qa" without an LLM call.
-    if _QA_HINTS.search(message):
-        return "qa"
-
+    # 日本語: ユーザーの表現に依存せず、すべての意図分類をLLMへ委譲します。
+    # English: Delegate every intent decision to the LLM instead of using phrase-based shortcuts.
     messages = [
         {"role": "system", "content": _MEMO_INTENT_SYSTEM},
         {"role": "user", "content": f"Message: {message}"},

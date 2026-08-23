@@ -242,15 +242,16 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertIn('"status":"failed"', context)
         self.assertIn("議事録テンプレ", context)
 
-    # 日本語: 自然文全体で0件でも、主要語へ絞って自動再検索します。
-    # English: A zero-hit natural-language query is retried automatically with a focused term.
+    # 日本語: 自然文全体で0件なら、LLMが返した構造化クエリで自動再検索します。
+    # English: A zero-hit natural-language query is retried with an LLM-produced structured query.
     def test_retries_no_results_with_focused_query(self):
+        self.rewrite.return_value = ["沖縄旅行 予算"]
         shared_search = Mock(
             side_effect=[
                 {"status": "no_results", "query": "去年の沖縄旅行の予算は？", "prompts": []},
                 {
                     "status": "ok",
-                    "query": "沖縄旅行",
+                    "query": "沖縄旅行 予算",
                     "prompt_count": 1,
                     "prompts": [{"title": "沖縄旅行プラン"}],
                 },
@@ -265,11 +266,11 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
         self.assertEqual(
             [item.args[0] for item in shared_search.call_args_list],
-            ["去年の沖縄旅行の予算は？", "沖縄旅行"],
+            ["去年の沖縄旅行の予算は？", "沖縄旅行 予算"],
         )
         context = augmented[0]["content"]
         self.assertIn("沖縄旅行プラン", context)
-        self.assertIn('"attempted_queries":["去年の沖縄旅行の予算は？","沖縄旅行"]', context)
+        self.assertIn('"attempted_queries":["去年の沖縄旅行の予算は？","沖縄旅行 予算"]', context)
 
     # 日本語: 参照元が選択されていないターンは、従来のメッセージ列を変更しません。
     # English: Turns with no selected source keep the original messages unchanged.
@@ -323,6 +324,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
     # 日本語: 0件が続いても、試行回数の上限を超えて検索し続けません。
     # English: Repeated zero-hit results never exceed the attempt cap.
     def test_no_results_stops_at_the_attempt_cap(self):
+        self.rewrite.return_value = ["沖縄旅行 予算", "沖縄旅行 費用"]
         shared_search = Mock(return_value={"status": "no_results", "prompts": []})
 
         augment_messages_with_selected_references(
@@ -333,11 +335,15 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
         self.assertEqual(shared_search.call_count, MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS)
 
-    # 日本語: 指示語だけの追従発話は、前ターンの発話と繋いだクエリで検索します。
-    # English: A follow-up made of pronouns alone is searched using the previous user turn.
+    # 日本語: 指示語だけの追従発話は、LLMが前ターンを理解したクエリで検索します。
+    # English: A pronoun-only follow-up is searched with a query produced by understanding the previous turn.
     def test_follow_up_query_uses_the_previous_user_turn(self):
+        self.rewrite.return_value = ["沖縄旅行 予算 詳細"]
         shared_search = Mock(
-            return_value={"status": "ok", "prompt_count": 1, "prompts": [{"title": "沖縄旅行プラン"}]}
+            side_effect=[
+                {"status": "no_results", "query": "それを詳しく", "prompts": []},
+                {"status": "ok", "prompt_count": 1, "prompts": [{"title": "沖縄旅行プラン"}]},
+            ]
         )
         messages = [
             {"role": "user", "content": "沖縄旅行の予算をまとめて"},
@@ -351,7 +357,13 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             shared_prompt_search=shared_search,
         )
 
-        shared_search.assert_called_once_with("沖縄旅行の予算をまとめて それを詳しく")
+        self.assertEqual(
+            [item.args[0] for item in shared_search.call_args_list],
+            ["それを詳しく", "沖縄旅行 予算 詳細"],
+        )
+        self.rewrite.assert_called_once_with(
+            "それを詳しく", previous_query="沖縄旅行の予算をまとめて"
+        )
 
     # 日本語: 検索語を含む発話は、前ターンに引きずられず自分自身のクエリを優先します。
     # English: A self-contained turn keeps its own query first instead of inheriting the previous one.
@@ -440,15 +452,27 @@ class CandidateQueryPlanTestCase(unittest.TestCase):
 
         rewrite.assert_called_once()
 
-    # 日本語: 言い換えが使えなくても、従来の絞り込み候補で検索を続けます。
-    # English: An unusable rewrite still leaves the mechanical candidates to try.
-    def test_falls_back_to_mechanical_candidates_without_a_rewrite(self):
+    # 日本語: LLMの言い換えが使えないときは、原文だけで検索します。
+    # English: When the LLM rewrite is unusable, search uses the original turn only.
+    def test_falls_back_to_original_query_without_a_rewrite(self):
         plan = CandidateQueryPlan("沖縄旅行の予算を教えて", rewrite=lambda *_args, **_kwargs: [])
 
         candidates = list(plan)
 
-        self.assertEqual(candidates[0], "沖縄旅行の予算を教えて")
-        self.assertGreater(len(candidates), 1)
+        self.assertEqual(candidates, ["沖縄旅行の予算を教えて"])
+
+    # 日本語: LLM呼び出しが例外になっても、機械候補へ戻らず原文だけを使います。
+    # English: An LLM exception keeps the original query and never falls back to mechanical candidates.
+    def test_falls_back_to_original_query_when_rewrite_fails(self):
+        plan = CandidateQueryPlan(
+            "沖縄旅行の予算を教えて",
+            rewrite=Mock(side_effect=RuntimeError("provider down")),
+        )
+
+        with self.assertLogs("services.selected_reference_context", level="WARNING"):
+            candidates = list(plan)
+
+        self.assertEqual(candidates, ["沖縄旅行の予算を教えて"])
 
     # 日本語: 試行回数の上限は言い換えを足しても変わりません。
     # English: Adding the rewrite must not raise the attempt cap.
@@ -463,16 +487,16 @@ class CandidateQueryPlanTestCase(unittest.TestCase):
         self.assertEqual(len(candidates), MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS)
         self.assertEqual(len(set(candidates)), len(candidates))
 
-    # 日本語: 追従発話では、前ターンと繋いだ候補が先頭のままです。
-    # English: A follow-up still leads with the previous turn joined in.
-    def test_follow_up_still_leads_with_the_previous_turn(self):
+    # 日本語: 追従発話の前ターン解決はLLMに委ねます。
+    # English: LLM handles previous-turn resolution for a follow-up.
+    def test_follow_up_is_rewritten_with_the_previous_turn(self):
         plan = CandidateQueryPlan(
             "それを詳しく",
             "沖縄旅行の予算",
-            rewrite=lambda *_args, **_kwargs: [],
+            rewrite=Mock(return_value=["沖縄旅行 予算 詳細"]),
         )
 
-        self.assertEqual(next(iter(plan)), "沖縄旅行の予算 それを詳しく")
+        self.assertEqual(list(plan), ["それを詳しく", "沖縄旅行 予算 詳細"])
 
 
 if __name__ == "__main__":

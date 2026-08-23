@@ -109,6 +109,7 @@ class ChatPostUseCaseDependencies:
     build_llm_stream_response: Callable[..., Any]
     iter_llm_stream_events: Callable[..., Any]
     get_llm_response: Callable[..., Any]
+    decide_generative_ui_mode: Callable[..., Any]
     is_retryable_llm_error: Callable[[BaseException], bool]
     rebuild_room_summary: Callable[..., Any]
     should_extract_context: Callable[[int], bool]
@@ -606,6 +607,20 @@ class ChatPostUseCase:
             ),
             conversation_messages,
         )
+        # UI_MODE is a structured semantic decision made by the selected
+        # conversation model. Do not infer it from the user's text here.
+        try:
+            ui_mode = await run_blocking(
+                deps.decide_generative_ui_mode,
+                conversation_messages,
+                model,
+            )
+        except Exception:
+            deps.logger.warning(
+                "Failed to decide generative UI mode; continuing without intent recovery.",
+                exc_info=True,
+            )
+            ui_mode = None
 
         # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
         # Start a background generation job if the model supports streaming
@@ -697,6 +712,7 @@ class ChatPostUseCase:
                     personal_knowledge_search=personal_knowledge_search,
                     shared_prompt_search=shared_prompt_search,
                     selected_reference_trace=selected_reference_trace,
+                    ui_mode=ui_mode,
                 )
             except ChatGenerationAlreadyRunningError:
                 return deps.jsonify(
@@ -803,7 +819,8 @@ class ChatPostUseCase:
                 conversation_messages=response_messages,
                 model=model,
                 generate_response=deps.get_llm_response,
-                artifact_intent_text=user_message,
+                user_request=user_message,
+                ui_mode=ui_mode,
             ),
             bot_reply,
         )

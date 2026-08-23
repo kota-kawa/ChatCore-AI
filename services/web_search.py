@@ -83,6 +83,11 @@ WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL = 2
 WEB_SEARCH_PLANNER_REPAIR_ATTEMPTS_PER_MODEL = 1
 WEB_SEARCH_PLANNER_MODEL = LIGHTWEIGHT_TASK_MODEL
+# Stable codes for UI status handling. User-facing wording is localized in the client;
+# callers must not classify failures by matching translated error text.
+WEB_SEARCH_ERROR_CONFIGURATION = "web_search.configuration"
+WEB_SEARCH_ERROR_QUOTA_EXCEEDED = "web_search.quota_exceeded"
+WEB_SEARCH_ERROR_REQUEST_FAILED = "web_search.request_failed"
 
 _SENSITIVE_MARKERS = (
     "api_key",
@@ -741,6 +746,11 @@ def _coerce_search_flag(value: Any) -> bool | None:
     return None
 
 
+def _has_structured_should_search(loaded: dict[str, Any]) -> bool:
+    """Return whether the planner emitted the required boolean search decision."""
+    return isinstance(loaded.get("should_search"), bool)
+
+
 def _is_valid_date_range(value: str) -> bool:
     # 期間指定形式が ISO日付 TO ISO日付 (例: 2026-01-01to2026-01-02) であるか検証する
     # Validate if the date range format is ISOdate to ISOdate.
@@ -767,12 +777,14 @@ def _is_iso_date(value: str) -> bool:
 def _parse_decision_payload(
     loaded: dict[str, Any],
     user_message: str,
-) -> WebSearchDecision:
+) -> WebSearchDecision | None:
     # 解析済みのペイロードから判断データを取り出し、クエリなどの検証を行う
     # Extract and validate decision details from the parsed payload.
-    should_search = _coerce_search_flag(loaded.get("decision"))
-    if should_search is None:
-        should_search = _coerce_search_flag(loaded.get("should_search"))
+    if not _has_structured_should_search(loaded):
+        # queryやdecisionの有無から検索要否を推定せず、修復LLMまたは検索なしへ進める。
+        # Never infer search intent from query/decision; let planner repair or skip search.
+        return None
+    should_search = loaded["should_search"]
     needs_web_images = _coerce_search_flag(loaded.get("needs_web_images"))
     query = _normalize_text(_redact_secretish_text(loaded.get("query", "")), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     freshness = str(loaded.get("freshness") or "").strip()
@@ -780,8 +792,6 @@ def _parse_decision_payload(
         freshness = ""
     reason = _normalize_text(loaded.get("reason", ""), max_chars=240)
 
-    if should_search is None:
-        should_search = bool(query)
     if needs_web_images is True:
         # 画像の有用性はプランナーLLMの意味判断を正とし、文字列一致では推定しない。
         # Trust the planner LLM's semantic visual judgment; never infer it from keywords.
@@ -901,18 +911,19 @@ def _invoke_planner(
             continue
 
         loaded = _extract_json_object(raw_response)
-        if loaded is None:
-            # planner 本体が自然文や壊れた JSON を返した場合でも、同じモデルに修復だけを試させる。
-            # 検索判断はユーザー体験に直結するため、単発失敗で検索を諦めない。
-            repaired = _repair_planner_output(candidate, planner_messages, raw_response)
-            if repaired is not None:
-                return repaired
-            logger.warning(
-                "Web search planner returned non-JSON output; retrying.",
-                extra={"model": candidate.model, "attempt": attempt_index + 1},
-            )
-            continue
-        return loaded
+        if loaded is not None and _has_structured_should_search(loaded):
+            return loaded
+
+        # JSONが壊れている場合だけでなく、should_searchが欠落・不正な場合も修復LLMへ渡す。
+        # Repair malformed JSON as well as missing or invalid should_search values.
+        repaired = _repair_planner_output(candidate, planner_messages, raw_response)
+        if repaired is not None and _has_structured_should_search(repaired):
+            return repaired
+        logger.warning(
+            "Web search planner returned invalid or incomplete output; retrying.",
+            extra={"model": candidate.model, "attempt": attempt_index + 1},
+        )
+        continue
     return None
 
 
@@ -976,7 +987,13 @@ def decide_web_search(
     for candidate in _planner_candidates():
         loaded = _invoke_planner(candidate, planner_messages)
         if loaded is not None:
-            return _parse_decision_payload(loaded, user_message)
+            decision = _parse_decision_payload(loaded, user_message)
+            if decision is not None:
+                return decision
+            logger.warning(
+                "Web search planner returned an unusable structured decision; continuing without search.",
+                extra={"model": candidate.model},
+            )
 
     logger.warning("All web search planner candidates failed; continuing without web search.")
     return WebSearchDecision(False, reason="web search planner unavailable")
@@ -2529,6 +2546,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_CONFIGURATION,
                     "message": message,
                 },
             )
@@ -2576,6 +2594,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
                     "message": message,
                     "retry_after_seconds": exc.retry_after_seconds,
                 },
@@ -2604,6 +2623,7 @@ def maybe_augment_messages_with_web_search(
                 "web_search_failed",
                 {
                     "query": decision.query,
+                    "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
                     "message": "Web検索に失敗しました。検索なしで回答を続けます。",
                 },
             )

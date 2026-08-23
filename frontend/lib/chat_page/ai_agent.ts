@@ -169,16 +169,6 @@ export function isAllowedNavigationPath(path: string | undefined): boolean {
   return NAVIGABLE_APP_ROUTES.some((route) => pathnamesMatch(route, target));
 }
 
-// Words that signal an irreversible / state-changing control. Used to force a confirmation
-// before clicking such a control even when the model labelled the step low risk.
-const DESTRUCTIVE_INTENT_PATTERN =
-  /(削除|消去|破棄|取り消|退会|解約|購入|支払|決済|送信|投稿|保存|登録|ログアウト|サインアウト|delete|remove|destroy|discard|purchase|checkout|\bbuy\b|\bpay\b|submit|publish|sign[\s-]*out|log[\s-]*out)/i;
-
-export function isDestructiveActionLabel(text: string | null | undefined): boolean {
-  if (!text) return false;
-  return DESTRUCTIVE_INTENT_PATTERN.test(text);
-}
-
 const SENSITIVE_AUTOCOMPLETE_PATTERN =
   /(password|current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp|cc-name)/i;
 const SENSITIVE_NAME_PATTERN = /(pass(word)?|secret|token|otp|cvv|card[\s_-]?number)/i;

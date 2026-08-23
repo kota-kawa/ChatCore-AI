@@ -94,6 +94,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             build_llm_stream_response=Mock(),
             iter_llm_stream_events=Mock(),
             get_llm_response=Mock(return_value="assistant reply"),
+            decide_generative_ui_mode=Mock(return_value="2D"),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
             should_extract_context=Mock(return_value=False),
@@ -133,7 +134,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
                 side_effect=lambda response, **_kwargs: SimpleNamespace(
                     text=response, parts=None, validation_errors=[]
                 ),
-            ),
+            ) as mock_normalize,
         ):
             asyncio.run(
                 use_case.execute(
@@ -145,6 +146,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             )
 
         last_user_message = captured_context["recent_messages"][-1]["content"]
+        self.assertEqual(mock_normalize.call_args.kwargs["ui_mode"], "2D")
         return last_user_message, mock_fetch, deps
 
     # 発話に含まれるURLの本文が取得され、最後のユーザー発話へ参照資料として付与されることを検証します。

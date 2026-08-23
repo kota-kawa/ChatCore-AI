@@ -81,6 +81,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             build_llm_stream_response=Mock(return_value=JSONResponse({"streaming": True})),
             iter_llm_stream_events=Mock(return_value=iter(())),
             get_llm_response=Mock(return_value="assistant reply"),
+            decide_generative_ui_mode=Mock(return_value="2D"),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
             should_extract_context=Mock(return_value=False),
@@ -133,6 +134,8 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         )
 
         self.assertIsNotNone(lookup)
+        self.assertEqual(deps.start_generation_job.call_args.kwargs["ui_mode"], "2D")
+        deps.decide_generative_ui_mode.assert_called_once()
         search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
         trace = deps.start_generation_job.call_args.kwargs["selected_reference_trace"]
         self.assertEqual(len(trace), 1)

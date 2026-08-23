@@ -30,6 +30,8 @@ class RewriteReferenceQueryTestCase(unittest.TestCase):
         prompt = call.call_args.args[0][1]["content"]
         self.assertIn("2026-08-18", prompt)
         self.assertIn("来月の予定を立てたい", prompt)
+        self.assertIn("Latest user turn: 今月は何をしたらいいかな？", prompt)
+        self.assertIn("shared prompts", call.call_args.args[0][0]["content"])
 
     def test_caps_the_number_of_queries(self):
         queries, _ = self._rewrite('{"queries": ["a", "b", "c", "d"]}')

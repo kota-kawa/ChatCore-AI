@@ -3,7 +3,6 @@ import {
   cssEscape,
   isActionStep,
   isAllowedNavigationPath,
-  isDestructiveActionLabel,
   isSafeInternalPath,
   isUnexpectedAuthRedirect,
   isVisibleElement,
@@ -719,24 +718,40 @@ async function waitForStepTarget(step: ActionStep): Promise<StepExecutionResult>
   return { ok: true };
 }
 
-// A click is treated as destructive when it submits a form or its visible label/attributes
-// read as an irreversible action, so we confirm it even if the model rated it low risk.
-function isDestructiveStep(step: ActionStep): boolean {
-  if (step.action !== "click" || !step.selector) return false;
-  const el = getElement(step.selector);
-  if (!el) return false;
-  if (el instanceof HTMLButtonElement && el.type === "submit") return true;
-  if (el instanceof HTMLInputElement && (el.type === "submit" || el.type === "image")) return true;
-  // ボタンのラベルテキストや属性をまとめて検査して破壊的操作かを判定する
-  // Collects all visible label sources and delegates the destructive check to the shared utility
-  const haystack = [
-    el.getAttribute("aria-label"),
-    el.textContent,
-    el.getAttribute("title"),
-    el.getAttribute("name"),
-    el.getAttribute("value"),
-  ].filter(Boolean).join(" ");
-  return isDestructiveActionLabel(haystack);
+// Visible labels and attributes are never used for intent classification.
+// These commands are explicitly registered as UI-only operations. The command name is
+// protocol metadata, not user-facing text, so it is safe to use for the structural guard.
+// Any command not in this allowlist requires confirmation before execution.
+const NON_MUTATING_APP_ACTION_COMMANDS = new Set([
+  "chat.fillSetupMessage",
+  "chat.openPromptComposer",
+  "chat.toggleTaskOrder",
+  "chat.showChatHistory",
+  "navigation.openPage",
+  "prompt.search",
+  "prompt.openComposer",
+  "prompt.openLogin",
+  "prompt.scrollResults",
+  "settings.openSection",
+  "memo.fillForm",
+]);
+
+/**
+ * Decide whether an action needs a confirmation using typed action metadata only.
+ *
+ * Direct DOM clicks are intentionally treated as unknown and therefore confirmed;
+ * their visible label must never be interpreted as an intent classifier. Typed
+ * app_action commands can skip confirmation only when they are registered as
+ * non-mutating. Memo edits and unregistered commands remain confirmation-gated.
+ */
+export function requiresActionConfirmation(step: ActionStep): boolean {
+  if (step.risk === "medium" || step.risk === "high") return true;
+  if (step.action === "click") return Boolean(step.selector);
+  if (step.action === "memo_edit") return true;
+  if (step.action === "app_action") {
+    return !NON_MUTATING_APP_ACTION_COMMANDS.has(step.command || "");
+  }
+  return false;
 }
 
 // memo_edit ステップを検証してホスト側のハンドラへ委譲する
@@ -764,6 +779,9 @@ async function executeActionStep(
 ): Promise<StepExecutionResult> {
   const { navigateInternal } = options;
   if (step.action === "memo_edit") {
+    if (requiresActionConfirmation(step) && !await showConfirmModal("この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？")) {
+      return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
+    }
     return executeMemoEdit(step, options.applyMemoEdit);
   }
   if (step.action === "navigate" || (step.action === "app_action" && step.command === "navigation.openPage")) {
@@ -774,9 +792,9 @@ async function executeActionStep(
   const ready = await waitForStepTarget(step);
   if (!ready.ok) return ready;
 
-  // Confirm before any state-changing action. Risk is honoured, but destructive controls
-  // are also caught here so a low-risk label cannot silently submit/delete/log out.
-  const needsConfirmation = step.risk === "medium" || step.risk === "high" || isDestructiveStep(step);
+  // Confirm before any state-changing action. Unknown DOM clicks and unregistered
+  // app_action commands are confirmation-gated without inspecting their labels.
+  const needsConfirmation = requiresActionConfirmation(step);
   if (needsConfirmation && !await showConfirmModal("この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？")) {
     return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
   }

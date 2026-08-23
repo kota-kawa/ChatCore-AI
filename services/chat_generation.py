@@ -18,6 +18,7 @@ from .background_executor import submit_background_task
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
+    GenerativeUiMode,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
 )
@@ -77,6 +78,8 @@ from .web_search import (
     WebSearchQuotaExceeded,
     WebEvidenceContextBudget,
     WebSearchResult,
+    WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
+    WEB_SEARCH_ERROR_REQUEST_FAILED,
 )
 from .web_search_images import (
     append_web_search_image_parts,
@@ -419,9 +422,11 @@ class ChatGenerationJob:
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
+        ui_mode: GenerativeUiMode | str | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
+        self._ui_mode = ui_mode
         self._prior_web_search_results = list(prior_web_search_results or [])
         # メモ/マイコンテキスト検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
         # ジョブ自身はセッションもDBも知らないままでいられる。None のときは機能そのものが無効。
@@ -550,7 +555,7 @@ class ChatGenerationJob:
         normalized_response = normalize_response_with_artifacts(
             partial_text,
             recover_truncated=True,
-            artifact_intent_text=_latest_user_message_text(self._conversation_messages),
+            ui_mode=self._ui_mode,
         )
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
@@ -1470,6 +1475,7 @@ class ChatGenerationJob:
                             "web_search_failed",
                             {
                                 "query": query_text,
+                                "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
                                 "message": message,
                                 "retry_after_seconds": exc.retry_after_seconds,
                                 "step": step_count,
@@ -1499,6 +1505,7 @@ class ChatGenerationJob:
                             "web_search_failed",
                             {
                                 "query": query_text,
+                                "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
                                 "message": "Web検索に失敗しました。検索なしで回答を続けます。",
                                 "step": step_count,
                                 "max_steps": max_steps,
@@ -1646,7 +1653,8 @@ class ChatGenerationJob:
             conversation_messages=current_messages,
             model=self._model,
             generate_response=get_llm_response,
-            artifact_intent_text=latest_user_message,
+            user_request=latest_user_message,
+            ui_mode=self._ui_mode,
         )
         if normalized_response.validation_errors:
             logger.warning(
@@ -2383,6 +2391,7 @@ return 0
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
+        ui_mode: GenerativeUiMode | str | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -2417,6 +2426,7 @@ return 0
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
+                ui_mode=ui_mode,
             )
             self._jobs[job_key] = job
 
@@ -2567,6 +2577,7 @@ def start_generation_job(
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
+    ui_mode: GenerativeUiMode | str | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -2584,4 +2595,5 @@ def start_generation_job(
         personal_knowledge_search=personal_knowledge_search,
         shared_prompt_search=shared_prompt_search,
         selected_reference_trace=selected_reference_trace,
+        ui_mode=ui_mode,
     )

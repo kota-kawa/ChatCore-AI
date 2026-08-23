@@ -89,7 +89,7 @@ class GenerativeUiContractTestCase(unittest.TestCase):
         normalized = normalize_response_with_artifacts(
             _artifact_message("fetch('/api/data');"),
             recover_truncated=True,
-            artifact_intent_text="グラフを作って",
+            ui_mode="2D",
         )
 
         self.assertTrue(normalized.validation_errors)
@@ -106,7 +106,7 @@ class GenerativeUiContractTestCase(unittest.TestCase):
                 "document.getElementById('app').textContent = 'ok';"
             ),
             recover_truncated=True,
-            artifact_intent_text="グラフを作って",
+            ui_mode="2D",
         )
 
         self.assertEqual(normalized.validation_errors, [])

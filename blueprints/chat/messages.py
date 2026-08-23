@@ -57,6 +57,7 @@ from services.web_search_trace import (
 from services.project_service import get_project_context
 from services.generative_ui import (
     build_message_parts_context,
+    decide_generative_ui_mode,
     normalize_response_with_artifact_retry,
 )
 from services.chat_state import (
@@ -779,6 +780,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             build_llm_stream_response=_build_llm_stream_response,
             iter_llm_stream_events=_iter_llm_stream_events,
             get_llm_response=get_llm_response,
+            decide_generative_ui_mode=decide_generative_ui_mode,
             is_retryable_llm_error=is_retryable_llm_error,
             rebuild_room_summary=rebuild_room_summary,
             should_extract_context=should_extract_context,
@@ -1024,6 +1026,18 @@ async def chat_regenerate(
         ),
         conversation_messages,
     )
+    try:
+        ui_mode = await run_blocking(
+            decide_generative_ui_mode,
+            conversation_messages,
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to decide generative UI mode for regeneration; continuing without intent recovery.",
+            exc_info=True,
+        )
+        ui_mode = None
 
     if is_streaming_model(model):
         on_finished = None
@@ -1081,6 +1095,7 @@ async def chat_regenerate(
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
+                ui_mode=ui_mode,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1122,7 +1137,8 @@ async def chat_regenerate(
             conversation_messages=conversation_messages,
             model=model,
             generate_response=get_llm_response,
-            artifact_intent_text=latest_user_message,
+            user_request=latest_user_message,
+            ui_mode=ui_mode,
         ),
         bot_reply,
     )
@@ -1463,6 +1479,18 @@ async def chat_edit_and_regenerate(
         ),
         conversation_messages,
     )
+    try:
+        ui_mode = await run_blocking(
+            decide_generative_ui_mode,
+            conversation_messages,
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to decide generative UI mode for edit_and_regenerate; continuing without intent recovery.",
+            exc_info=True,
+        )
+        ui_mode = None
 
     if is_streaming_model(model):
         on_finished = None
@@ -1522,6 +1550,7 @@ async def chat_edit_and_regenerate(
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
+                ui_mode=ui_mode,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1563,7 +1592,8 @@ async def chat_edit_and_regenerate(
             conversation_messages=conversation_messages,
             model=model,
             generate_response=get_llm_response,
-            artifact_intent_text=latest_user_message,
+            user_request=latest_user_message,
+            ui_mode=ui_mode,
         ),
         bot_reply,
     )

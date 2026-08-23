@@ -73,6 +73,7 @@ import {
 } from "../../scripts/core/runtime_validation";
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 import { useTranslation } from "../../contexts/locale_context";
+import { getWebSearchFailureStatus } from "../../lib/chat_page/web_search_failure_status";
 
 // SSE は回線切替時にブラウザから明示的なエラーとして通知されないことがある。
 // 最初はすぐ再接続し、以後は上限付きバックオフでサーバー側で継続中の生成へ戻る。
@@ -960,13 +961,17 @@ export function useHomePageGenerationActions({
         }
 
         if (parsed.event === "web_search_failed") {
-          const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
-          if (message.includes("APIキー") || message.includes("設定")) {
-            updateThinkingStatus(localize("検索設定を確認できませんでした。回答を作成しています", "Search settings were unavailable. Preparing an answer"), "generating");
-          } else if (message.includes("上限")) {
-            updateThinkingStatus(localize("Web検索の上限に達しました。回答を作成しています", "The web search limit was reached. Preparing an answer"), "generating");
-          } else {
-            updateThinkingStatus(localize("Web検索に失敗しました。回答を作成しています", "Web search failed. Preparing an answer"), "generating");
+          switch (getWebSearchFailureStatus(parsed.data.code)) {
+            case "configuration":
+              updateThinkingStatus(localize("検索設定を確認できませんでした。回答を作成しています", "Search settings were unavailable. Preparing an answer"), "generating");
+              break;
+            case "quota_exceeded":
+              updateThinkingStatus(localize("Web検索の上限に達しました。回答を作成しています", "The web search limit was reached. Preparing an answer"), "generating");
+              break;
+            case "request_failed":
+            default:
+              updateThinkingStatus(localize("Web検索に失敗しました。回答を作成しています", "Web search failed. Preparing an answer"), "generating");
+              break;
           }
           return;
         }
