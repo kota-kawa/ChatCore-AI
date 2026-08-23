@@ -152,9 +152,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(decision.query, "React 19 latest information")
         self.assertEqual(mock_llm.call_count, 2)
 
-    # 日本語: プランナー障害時でも明示的な最新情報検索要求を捨てないことを検証します。
-    # English: Verify that an explicit current-information search request survives planner failure.
-    def test_decide_web_search_falls_back_to_explicit_search_when_planner_fails(self):
+    # 日本語: プランナー障害時に文字列一致のフォールバックで検索要否を決めないことを検証します。
+    # English: Verify planner failure never falls back to keyword matching.
+    def test_decide_web_search_does_not_use_keyword_fallback_when_planner_fails(self):
         messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -162,9 +162,31 @@ class WebSearchServiceTestCase(unittest.TestCase):
         with patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")):
             decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "React 19の最新情報を検索して")
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.query, "")
         self.assertIn("planner unavailable", decision.reason)
+
+    # 日本語: 画像の有用性は文字列一致ではなくLLMの意味判断で検索へ反映することを検証します。
+    # English: Verify the LLM's semantic visual judgment requires a search in any language.
+    def test_decide_web_search_uses_llm_visual_judgment_across_languages(self):
+        messages = [{"role": "user", "content": "Enséñame cómo es la Sagrada Família"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value=(
+                '{"decision":"skip","should_search":false,'
+                '"needs_web_images":true,"query":"Sagrada Família Barcelona",'
+                '"freshness":"","reason":"visual evidence materially helps"}'
+            ),
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "Sagrada Família Barcelona")
+        planner_prompt = mock_llm.call_args.args[0][0]["content"]
+        self.assertIn("semantic meaning and conversational context, in any language", planner_prompt)
+        self.assertIn("needs_web_images", planner_prompt)
 
     # 日本語: newsリクエストに対して、decideWeb検索usesllmことを検証します。
     # English: Verify that decide web search uses llm for news request.

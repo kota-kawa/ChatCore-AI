@@ -8,7 +8,7 @@ from html import escape
 from typing import Any
 from urllib.parse import urlsplit
 
-from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
+from services.llm import get_llm_json_response
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
@@ -289,9 +289,10 @@ def choose_web_search_images(
     user_question: str,
     result: Any,
     *,
+    model: str,
     answer_text: str = "",
 ) -> list[dict[str, str]]:
-    """Ask the lightweight LLM which images to show and where each belongs."""
+    """Ask the selected conversation model which images to show and where they belong."""
     rows = _candidate_rows(result)
     if not rows or not str(user_question or "").strip():
         return []
@@ -327,7 +328,7 @@ def choose_web_search_images(
         },
     ]
     try:
-        raw_response = get_llm_json_response(messages, LIGHTWEIGHT_TASK_MODEL)
+        raw_response = get_llm_json_response(messages, model)
     except Exception:
         logger.warning("Web search image selection failed; continuing without an image.", exc_info=True)
         return []
@@ -385,9 +386,14 @@ def choose_web_search_images(
     return selections
 
 
-def choose_web_search_image(user_question: str, result: Any) -> dict[str, str] | None:
+def choose_web_search_image(
+    user_question: str,
+    result: Any,
+    *,
+    model: str,
+) -> dict[str, str] | None:
     """Return the first selected image for callers that still use the old API."""
-    selections = choose_web_search_images(user_question, result)
+    selections = choose_web_search_images(user_question, result, model=model)
     return selections[0] if selections else None
 
 

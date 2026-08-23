@@ -13,6 +13,8 @@ from services.web_search_images import (
     find_next_streaming_image_insertion,
 )
 
+SELECTED_MODEL = "claude-haiku-4-5-20251001"
+
 
 def _result() -> web_search.WebSearchResult:
     return web_search.WebSearchResult(
@@ -120,7 +122,11 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 '"reason": "景観の説明に役立つ"}'
             ),
         ) as mock_llm:
-            selection = choose_web_search_image("京都の紅葉名所を画像付きで教えて", _result())
+            selection = choose_web_search_image(
+                "京都の紅葉名所を画像付きで教えて",
+                _result(),
+                model=SELECTED_MODEL,
+            )
 
         self.assertEqual(
             selection,
@@ -147,6 +153,7 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("sufficient quality", system_prompt)
         self.assertIn("non-duplication", system_prompt)
         self.assertIn("large watermarks", system_prompt)
+        self.assertEqual(mock_llm.call_args.args[1], SELECTED_MODEL)
 
     def test_llm_can_select_up_to_five_relevant_images(self):
         with patch(
@@ -157,7 +164,11 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 '"alt_texts": {"image-1": "嵐山", "image-3": "古寺"}}'
             ),
         ):
-            selections = choose_web_search_images("京都の紅葉を画像付きで教えて", _result())
+            selections = choose_web_search_images(
+                "京都の紅葉を画像付きで教えて",
+                _result(),
+                model=SELECTED_MODEL,
+            )
 
         self.assertEqual(len(selections), 5)
         self.assertEqual(
@@ -182,7 +193,11 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             "services.web_search_images.get_llm_json_response",
             return_value='{"show_image": false, "image_id": "", "alt_text": ""}',
         ) as mock_llm:
-            choose_web_search_image("京都の紅葉名所を教えて", _result())
+            choose_web_search_image(
+                "京都の紅葉名所を教えて",
+                _result(),
+                model=SELECTED_MODEL,
+            )
 
         prompt = mock_llm.call_args.args[0][1]["content"]
         self.assertIn("https://example.com/images/maple.jpg", prompt)
@@ -195,7 +210,11 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             "services.web_search_images.get_llm_json_response",
             return_value='{"show_image": false, "image_id": "", "alt_text": ""}',
         ) as mock_llm:
-            choose_web_search_image("京都の紅葉名所を教えて", _result())
+            choose_web_search_image(
+                "京都の紅葉名所を教えて",
+                _result(),
+                model=SELECTED_MODEL,
+            )
 
         system_prompt = mock_llm.call_args.args[0][0]["content"]
         self.assertIn("real photograph or a substantive diagram of the subject", system_prompt)
@@ -208,14 +227,26 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             "services.web_search_images.get_llm_json_response",
             return_value='{"show_image": false, "image_id": "", "alt_text": "", "reason": "text is enough"}',
         ):
-            self.assertIsNone(choose_web_search_image("京都の紅葉の見頃を教えて", _result()))
+            self.assertIsNone(
+                choose_web_search_image(
+                    "京都の紅葉の見頃を教えて",
+                    _result(),
+                    model=SELECTED_MODEL,
+                )
+            )
 
     def test_unknown_candidate_id_is_never_rendered(self):
         with patch(
             "services.web_search_images.get_llm_json_response",
             return_value='{"show_image": true, "image_id": "image-99", "alt_text": "x"}',
         ):
-            self.assertIsNone(choose_web_search_image("画像を見せて", _result()))
+            self.assertIsNone(
+                choose_web_search_image(
+                    "画像を見せて",
+                    _result(),
+                    model=SELECTED_MODEL,
+                )
+            )
 
     def test_builds_a_structured_image_part(self):
         part = append_web_search_image_part(

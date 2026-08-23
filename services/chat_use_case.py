@@ -858,6 +858,7 @@ class ChatPostUseCase:
                 choose_web_search_images,
                 user_message,
                 augmentation.result,
+                model=model,
                 answer_text=bot_reply,
             )
             message_parts = append_web_search_image_parts(

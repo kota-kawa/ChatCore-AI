@@ -198,11 +198,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("photo libraries, image searches, galleries", BASE_SYSTEM_PROMPT)
         self.assertIn("Do not print bare URLs in the prose at all", BASE_SYSTEM_PROMPT)
         self.assertIn("describe the concrete appearance", BASE_SYSTEM_PROMPT)
-        self.assertIn("attaches at most five for the whole reply", BASE_SYSTEM_PROMPT)
+        self.assertIn("Image display is an available normal-chat capability", BASE_SYSTEM_PROMPT)
+        self.assertIn("Never tell the user that normal chat cannot display images", BASE_SYSTEM_PROMPT)
+        self.assertIn("selected conversation model", BASE_SYSTEM_PROMPT)
+        self.assertNotIn("You cannot request, position, or count on them", BASE_SYSTEM_PROMPT)
         self.assertIn(
-            "Never fall back to links when you cannot show a visual",
+            "Never substitute links for a requested visual",
             GENERATIVE_UI_EXECUTION_CONTRACT,
         )
+        self.assertNotIn("when you cannot show a visual", GENERATIVE_UI_EXECUTION_CONTRACT)
 
     # 日本語: ベースシステムプロンプトが、そのまま貼り付ける完成文を chatcore-copy フェンスへ入れるよう
     #         指示していることを検証します。

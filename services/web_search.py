@@ -484,13 +484,6 @@ _CITATION_CHIP_HTML_PATTERNS = (
 )
 _CITATION_CHIP_STREAM_PREFIX = '<a class="web-search-citation"'
 _CITATION_CHIP_STREAM_CLOSING = "</a>"
-_FALLBACK_SEARCH_REQUEST_RE = re.compile(
-    r"(?:検索|調べ(?:て|る)|探して|最新|今日|現在|今(?:の|日)|ニュース|天気|株価|為替|価格|"
-    r"\b(?:search|look\s*up|latest|current|today|news|weather|stock|price)\b)",
-    re.IGNORECASE,
-)
-
-
 def _neutralize_context_delimiters(value: str) -> str:
     # コンテキスト制御タグの偽装を防止するために対象のタグを無害化する
     # Neutralize control tags to prevent indirect prompt injection.
@@ -667,23 +660,6 @@ def _planner_context_excerpt(conversation_messages: list[dict[str, str]]) -> str
     return excerpt
 
 
-def _fallback_decision(user_message: str) -> WebSearchDecision:
-    # プランナーが利用できない場合のデフォルトの判断結果を返す
-    # Return default decision when the planner is unavailable.
-    if not user_message.strip():
-        return WebSearchDecision(False)
-    if _FALLBACK_SEARCH_REQUEST_RE.search(user_message):
-        return WebSearchDecision(
-            True,
-            query=_normalize_text(
-                _redact_secretish_text(user_message),
-                max_chars=WEB_SEARCH_MAX_QUERY_CHARS,
-            ),
-            reason="planner unavailable; request requires or explicitly asks for current web information",
-        )
-    return WebSearchDecision(False, reason="web search planner unavailable")
-
-
 def _strip_markdown_code_fence(text: str) -> str:
     # レスポンスに含まれるMarkdownのコードフェンスを取り除く
     # Strip markdown code fences from the response.
@@ -797,6 +773,7 @@ def _parse_decision_payload(
     should_search = _coerce_search_flag(loaded.get("decision"))
     if should_search is None:
         should_search = _coerce_search_flag(loaded.get("should_search"))
+    needs_web_images = _coerce_search_flag(loaded.get("needs_web_images"))
     query = _normalize_text(_redact_secretish_text(loaded.get("query", "")), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     freshness = str(loaded.get("freshness") or "").strip()
     if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
@@ -805,6 +782,10 @@ def _parse_decision_payload(
 
     if should_search is None:
         should_search = bool(query)
+    if needs_web_images is True:
+        # 画像の有用性はプランナーLLMの意味判断を正とし、文字列一致では推定しない。
+        # Trust the planner LLM's semantic visual judgment; never infer it from keywords.
+        should_search = True
     if should_search and not query:
         query = _normalize_text(_redact_secretish_text(user_message), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     if should_search and _looks_sensitive(query):
@@ -834,6 +815,8 @@ def _planner_candidates() -> list[_PlannerCandidate]:
 # 日本語: 質問への回答にリアルタイムWeb検索が必要かを判断し、必要なら検索クエリをJSONで作成するシステムプロンプト。
 _PLANNER_SYSTEM_PROMPT = (
     "You are an advanced web search planner. Judge strictly whether real-time external information (Brave Search) is required to answer the user's question.\n"
+    "Always make this decision from the semantic meaning and conversational context, in any language. "
+    "Do not use keyword matching or a fixed phrase list as a substitute for understanding the request.\n"
     "When any of the following applies, you **must** set should_search to true and generate the best search query:\n"
     "- **Current affairs and news**: recent events, politics, economics, social news, sports results, entertainment news\n"
     "- **Dynamic data**: stock prices, exchange rates, cryptocurrencies, weather, traffic information, product prices or stock levels\n"
@@ -842,13 +825,17 @@ _PLANNER_SYSTEM_PROMPT = (
     "- **Specialist information**: law, taxation, medicine, technical specifications, the latest library documentation, solutions to errors\n"
     "- **Local information**: details about a specific area, store, event, or facility\n"
     "- **Explicit user instruction**: requests such as \"search for it\", \"look it up\", \"the latest information\", or \"give me the URL\"\n"
+    "- **Visual evidence**: the user wants to see the real appearance of a person, animal, place, "
+    "event, work, product, or other external subject, or images would materially help answer the request. "
+    "This is a semantic decision across languages, including implicit requests, not a keyword test.\n"
     "Set should_search to false only in these cases:\n"
     "- Greetings, small talk, self-introduction, emotional exchanges\n"
     "- The question can be answered with general knowledge alone (mathematical formulas, elementary science, established historical definitions, and the like)\n"
     "- The user only asks for translation, proofreading, summarization, or creative writing (poems, stories)\n"
     "**When in doubt, always run a search.** Confirming the facts by searching is worth more than guessing while information is missing.\n"
     "Output a JSON object only. Schema:\n"
-    '{"decision": "search"|"skip", "should_search": true|false, "query": "search query", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that"}\n'
+    '{"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": "search query", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that"}\n'
+    "Always include needs_web_images. When it is true, decision must be search, should_search must be true, and query must be non-empty.\n"
     'For the latest information, set freshness to "pd" (within 24 hours) or "pw" (within a week).'
 )
 
@@ -857,9 +844,11 @@ _PLANNER_REPAIR_SYSTEM_PROMPT = (
     "You repair the JSON output of the web search planner."
     "Read the conversation context and the previous planner output, and decide again by the same "
     "criteria whether a search is required."
-    "Do not judge the user's text by fixed keywords; judge it from meaning and context."
+    "Do not judge the user's text by fixed keywords; judge it from meaning and context, including "
+    "whether seeing the real appearance of an external subject would materially help."
     "Output a JSON object only."
-    'Schema: {"decision": "search"|"skip", "should_search": true|false, "query": string, "freshness": string, "reason": string}.'
+    'Schema: {"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": string, "freshness": string, "reason": string}.'
+    "Always include needs_web_images. When it is true, require a web search and a non-empty query."
     "Do not leave query empty when a search is required. When in doubt, choose search."
 )
 
@@ -990,7 +979,7 @@ def decide_web_search(
             return _parse_decision_payload(loaded, user_message)
 
     logger.warning("All web search planner candidates failed; continuing without web search.")
-    return _fallback_decision(user_message)
+    return WebSearchDecision(False, reason="web search planner unavailable")
 
 
 def _cache_key(query: str, freshness: str, language: str, country: str) -> str:
