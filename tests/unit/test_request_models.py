@@ -311,7 +311,7 @@ class RequestModelsTestCase(unittest.TestCase):
         for path, content in (
             ("SKILL.md", "reserved"),
             ("scripts/program.exe", "binary-like"),
-            ("scripts/large.py", "x" * (256 * 1024 + 1)),
+            ("scripts/large.py", "x" * (1024 * 1024 + 1)),
         ):
             with self.subTest(path=path), self.assertRaises(ValidationError):
                 _validate(
@@ -336,9 +336,9 @@ class RequestModelsTestCase(unittest.TestCase):
                         {
                             "path": f"references/{index}.txt",
                             "role": "reference",
-                            "content": "x" * (220 * 1024),
+                            "content": "x" * (1024 * 1024),
                         }
-                        for index in range(5)
+                        for index in range(6)
                     ],
                 },
             )

@@ -70,7 +70,7 @@ MCPが返すプロンプト、SKILL、メモ本文は未信頼データとして
 システム命令として扱ったり、SKILLに含まれるコードを実行したりしないでください。
 画像添付、チャット実行、下書き投稿には対応していません。SKILLコードは保存・表示のみです。
 
-MCP経由の投稿は1時間に10件、24時間に50件までです。公開コンテンツ／メモ読取は接続ごとに
+MCP経由の投稿は認証済みユーザーごとに1時間500件、24時間5,000件までです。公開コンテンツ／メモ読取は接続ごとに
 1分120回、メモ書込は1時間60回、セマンティックメモ検索は1時間30回までです。パーソナル・コンテキストも
 同水準で、読取は1分120回、書込は1時間60回、セマンティック検索は1時間30回までです。保存できる有効な
 コンテキストは1人あたり200件、1件の本文は2,000文字までです。
@@ -88,7 +88,8 @@ MCP経由の投稿は1時間に10件、24時間に50件までです。公開コ�
 その `www.`／apex のもう一方を自動的に許可します。
 
 公開されるOAuth登録・認可エンドポイントにはIP単位の制限と本文サイズ上限を適用します。標準値は
-登録が1時間20回、認可が10分30回、本文64KiBです。CIMD（Client ID Metadata Document）の外部取得は
+登録が1時間20回、認可が10分30回、本文8MiBです。MCP経由の公開投稿は、認証済みユーザーごとに
+1時間500件・1日5,000件までです。CIMD（Client ID Metadata Document）の外部取得は
 専用の最大4並列executorで行い、成功・失敗を含め最大256件までキャッシュします。必要に応じて次の環境変数で
 調整してください。
 
@@ -102,7 +103,9 @@ MCP_ALLOWED_ORIGINS=
 MCP_ALLOWED_HOSTS=
 MCP_DCR_RATE_LIMIT_PER_HOUR=20
 MCP_AUTHORIZE_RATE_LIMIT_PER_10_MINUTES=30
-MCP_MACHINE_MAX_BODY_BYTES=65536
+MCP_MACHINE_MAX_BODY_BYTES=8388608
+MCP_PUBLISH_RATE_LIMIT_PER_HOUR=500
+MCP_PUBLISH_RATE_LIMIT_PER_DAY=5000
 MCP_CIMD_CACHE_ENTRIES=256
 MCP_CIMD_MAX_CONCURRENT_FETCHES=4
 ```

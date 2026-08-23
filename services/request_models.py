@@ -71,13 +71,15 @@ MAX_PROMPT_ASSIST_TEXT_LENGTH = 4000
 MAX_PROMPT_ASSIST_META_LENGTH = 256
 MAX_PROMPT_COMMENT_LENGTH = 1000
 MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH = 500
-MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 30000
+# MCP 経由の SKILL と長文プロンプトを保存できるよう、投稿本文は 256,000 文字まで
+# 許可する。通信経路側ではより大きいバイト単位の上限も適用される。
+MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 256_000
 MAX_SHARED_PROMPT_TITLE_LENGTH = 255
-MAX_SHARED_PROMPT_CONTENT_LENGTH = 30000
+MAX_SHARED_PROMPT_CONTENT_LENGTH = 256_000
 MAX_SHARED_PROMPT_AI_MODEL_LENGTH = 100
 MAX_MCP_MEMO_TITLE_LENGTH = 255
-# MCP request bodies are capped at 64 KiB. Twenty thousand Unicode characters
-# remain within that limit even when most input uses three-byte UTF-8 characters.
+# MCP request bodies have an independent, configurable byte limit. Memo content
+# remains intentionally smaller so a single memo stays easy to retrieve and edit.
 MAX_MCP_MEMO_CONTENT_LENGTH = 20000
 MAX_MEMO_STORED_CONTENT_LENGTH = 60000
 # パーソナル・コンテキスト金庫の1件あたりの上限。事実は小さな単位に保つ。

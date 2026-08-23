@@ -81,7 +81,7 @@ class McpRequestProtectionMiddlewareTestCase(unittest.TestCase):
         async def run():
             receive = await _single_body_receive(b"")
             await middleware(
-                _scope("/register", headers=[(b"content-length", b"65537")]),
+                _scope("/register", headers=[(b"content-length", b"8388609")]),
                 receive,
                 send,
             )

@@ -10,7 +10,11 @@ from services.web_constants import FRONTEND_URL
 
 DEFAULT_MCP_DCR_RATE_LIMIT_PER_HOUR = 20
 DEFAULT_MCP_AUTHORIZE_RATE_LIMIT_PER_10_MINUTES = 30
-DEFAULT_MCP_MACHINE_MAX_BODY_BYTES = 64 * 1024
+# MCP は SKILL のリソースを含む公開投稿を受け付けるため、通常の JSON-RPC
+# リクエストより大きい本文を許容する。個々の投稿モデルでも別途検証する。
+DEFAULT_MCP_MACHINE_MAX_BODY_BYTES = 8 * 1024 * 1024
+DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_HOUR = 500
+DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_DAY = 5_000
 DEFAULT_MCP_CIMD_CACHE_ENTRIES = 256
 DEFAULT_MCP_CIMD_MAX_CONCURRENT_FETCHES = 4
 
@@ -99,6 +103,20 @@ def get_mcp_authorize_rate_limit_per_10_minutes() -> int:
 
 def get_mcp_machine_max_body_bytes() -> int:
     return _get_positive_int_env("MCP_MACHINE_MAX_BODY_BYTES", DEFAULT_MCP_MACHINE_MAX_BODY_BYTES)
+
+
+def get_mcp_publish_rate_limit_per_hour() -> int:
+    return _get_positive_int_env(
+        "MCP_PUBLISH_RATE_LIMIT_PER_HOUR",
+        DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_HOUR,
+    )
+
+
+def get_mcp_publish_rate_limit_per_day() -> int:
+    return _get_positive_int_env(
+        "MCP_PUBLISH_RATE_LIMIT_PER_DAY",
+        DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_DAY,
+    )
 
 
 def get_mcp_cimd_cache_entries() -> int:

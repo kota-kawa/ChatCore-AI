@@ -7,7 +7,11 @@ import httpx
 from pydantic import ValidationError
 
 from services import mcp_server
-from services.request_models import SharedPromptCreateRequest
+from services.request_models import (
+    MAX_SHARED_PROMPT_CONTENT_LENGTH,
+    SharedPromptCreateRequest,
+)
+from services.prompt_resources import MAX_SKILL_RESOURCES
 
 
 class McpServerTestCase(unittest.TestCase):
@@ -138,6 +142,20 @@ class McpServerTestCase(unittest.TestCase):
         self.assertIn("resources", skill_properties)
         self.assertNotIn("skill_python_script", skill_properties)
         self.assertIn("does not execute code", skill_properties["resources"]["description"])
+        self.assertEqual(
+            skill_properties["resources"]["anyOf"][0]["maxItems"],
+            MAX_SKILL_RESOURCES,
+        )
+
+        prompt_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "publish_prompt"
+        )
+        self.assertEqual(
+            prompt_definition["inputSchema"]["properties"]["content"]["maxLength"],
+            MAX_SHARED_PROMPT_CONTENT_LENGTH,
+        )
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:

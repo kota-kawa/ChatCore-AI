@@ -3,7 +3,13 @@ import unittest
 from unittest.mock import patch
 
 from services.mcp_config import (
+    DEFAULT_MCP_MACHINE_MAX_BODY_BYTES,
+    DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_DAY,
+    DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_HOUR,
     get_mcp_allowed_hosts,
+    get_mcp_machine_max_body_bytes,
+    get_mcp_publish_rate_limit_per_day,
+    get_mcp_publish_rate_limit_per_hour,
     get_mcp_public_base_url,
     is_mcp_enabled,
 )
@@ -49,3 +55,22 @@ class McpConfigTestCase(unittest.TestCase):
             clear=True,
         ):
             self.assertEqual(get_mcp_allowed_hosts(), ["a.test", "b.test"])
+
+    def test_publish_limits_and_machine_body_size_use_relaxed_defaults_and_allow_overrides(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(get_mcp_machine_max_body_bytes(), DEFAULT_MCP_MACHINE_MAX_BODY_BYTES)
+            self.assertEqual(get_mcp_publish_rate_limit_per_hour(), DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_HOUR)
+            self.assertEqual(get_mcp_publish_rate_limit_per_day(), DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_DAY)
+
+        with patch.dict(
+            os.environ,
+            {
+                "MCP_MACHINE_MAX_BODY_BYTES": "123456",
+                "MCP_PUBLISH_RATE_LIMIT_PER_HOUR": "321",
+                "MCP_PUBLISH_RATE_LIMIT_PER_DAY": "6543",
+            },
+            clear=True,
+        ):
+            self.assertEqual(get_mcp_machine_max_body_bytes(), 123456)
+            self.assertEqual(get_mcp_publish_rate_limit_per_hour(), 321)
+            self.assertEqual(get_mcp_publish_rate_limit_per_day(), 6543)
