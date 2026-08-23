@@ -227,6 +227,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
         mock_image.assert_called_once()
+        self.assertEqual(mock_image.call_args.kwargs["model"], "openai/gpt-oss-120b")
 
     # 日本語: プロンプト管理APIにおける日付オブジェクトが、ISO-8601形式（YYYY-MM-DDTHH:MM:SS）で一貫してシリアライズされることを検証します。
     # English: Verify that datetime objects in prompt management API payloads are consistently serialized to ISO-8601 format.

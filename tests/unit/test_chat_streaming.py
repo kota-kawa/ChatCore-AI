@@ -1015,6 +1015,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("回答までのステップ", persisted_parts[3]["text"])
         self.assertIn("名所です。", persisted_parts[3]["text"])
         mock_image.assert_called_once()
+        self.assertEqual(mock_image.call_args.kwargs["model"], "openai/gpt-oss-120b")
 
     def test_background_generation_job_appends_selected_reference_steps(self):
         persisted_messages = []

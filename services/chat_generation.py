@@ -947,6 +947,7 @@ class ChatGenerationJob:
                 selections = choose_web_search_images(
                     latest_user_message,
                     result,
+                    model=self._model,
                     answer_text=streamed_display_text,
                 )
             except Exception:
