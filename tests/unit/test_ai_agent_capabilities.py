@@ -46,27 +46,41 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("現在ページで優先して使える操作: 設定", context)
         self.assertIn("frontend/pages/settings.tsx", context)
 
-    # 日本語: 明確なアクション指示について、LLMを呼び出さずに決定論的に"action"インテントに分類されることを検証します。
-    # English: Verify that clear action phrases are deterministically classified as "action" without calling the LLM.
-    def test_classify_intent_uses_deterministic_action_hints(self):
-        # 日本語: インテント分類のLLM呼び出しをモック
-        # English: Mock LLM call for intent classification
-        with patch("services.intent_classifier.get_llm_response") as mock_llm:
+    # 日本語: アクションの意味分類を固定語句ではなくLLMの構造化応答で行うことを検証します。
+    # English: Verify that action semantics are classified from the LLM's structured response, not fixed phrases.
+    def test_classify_intent_always_uses_llm_for_action_semantics(self):
+        with patch(
+            "services.intent_classifier.get_llm_response",
+            return_value='{"intent":"action"}',
+        ) as mock_llm:
             intent = classify_intent("プロンプト共有ページを開いて", "/")
 
         self.assertEqual(intent, "action")
-        mock_llm.assert_not_called()
+        mock_llm.assert_called_once()
 
-    # 日本語: テキスト生成系の指示について、決定論的に"direct"（直接応答）インテントに分類されることを検証します。
-    # English: Verify that generation requests are deterministically classified as "direct" without calling the LLM.
-    def test_classify_intent_keeps_generation_requests_direct(self):
-        # 日本語: インテント分類のLLM呼び出しをモック
-        # English: Mock LLM call for intent classification
-        with patch("services.intent_classifier.get_llm_response") as mock_llm:
+    # 日本語: テキスト生成系の意味分類もLLMの構造化応答で行うことを検証します。
+    # English: Verify that generation semantics are also classified from the LLM's structured response.
+    def test_classify_intent_always_uses_llm_for_direct_semantics(self):
+        with patch(
+            "services.intent_classifier.get_llm_response",
+            return_value='{"intent":"direct"}',
+        ) as mock_llm:
             intent = classify_intent("タイトル案を3つ出して", "/prompt_share")
 
         self.assertEqual(intent, "direct")
-        mock_llm.assert_not_called()
+        mock_llm.assert_called_once()
+
+    # 日本語: LLMが利用できない場合は操作や検索を開始しないunknownへフォールバックすることを検証します。
+    # English: Verify that an unavailable LLM falls back to unknown without starting an action or search.
+    def test_classify_intent_falls_back_to_unknown_when_llm_fails(self):
+        with patch(
+            "services.intent_classifier.get_llm_response",
+            side_effect=RuntimeError("classifier unavailable"),
+        ) as mock_llm:
+            intent = classify_intent("設定を開いて", "/")
+
+        self.assertEqual(intent, "unknown")
+        mock_llm.assert_called_once()
 
     # 日本語: アクション指示用プロンプトメッセージ内に、DOM情報や利用可能な操作・ルールが含まれていることを検証します。
     # English: Verify that the action system prompt includes the DOM structure and defined action schemas.

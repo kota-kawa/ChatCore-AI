@@ -10,7 +10,7 @@ from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_response
 
 logger = logging.getLogger(__name__)
 
-Intent = Literal["action", "page_info", "search", "direct"]
+Intent = Literal["action", "page_info", "search", "direct", "unknown"]
 
 # 日本語: ユーザー発話を画面操作・ページ情報・検索・直接回答のいずれかへJSONで分類するシステムプロンプト。
 _CLASSIFIER_SYSTEM = """
@@ -30,30 +30,6 @@ Decision rules:
 Response format:
 {"intent": "action" | "page_info" | "search" | "direct"}
 """.strip()
-
-_ACTION_HINTS = re.compile(
-    r"(クリック|タップ|押して|開いて|移動して|表示して|入力して|記入して|検索して|コピーして|共有して|"
-    r"保存して|投稿して|削除して|編集して|切り替えて|選択して|スクロールして|実行して|やって|"
-    r"代わりに|ページへ|ページに行)",
-    re.IGNORECASE,
-)
-
-_PAGE_INFO_HINTS = re.compile(
-    r"(このページ|この画面|今のページ|今の画面|ここで|どこ|何ができる|使い方|操作方法|"
-    r"ボタン|入力欄|フォーム|タブ)",
-    re.IGNORECASE,
-)
-
-_SEARCH_HINTS = re.compile(
-    r"(機能|設定|手順|仕様|できること|方法|Passkey|パスキー|プロンプト共有|メモ|チャットルーム|タスク)",
-    re.IGNORECASE,
-)
-
-_DIRECT_GENERATION_HINTS = re.compile(
-    r"(タイトル案|文章|要約|翻訳|添削|改善|短く|長く|例文|テンプレート|下書き|アイデア)",
-    re.IGNORECASE,
-)
-
 
 # LLMの応答テキストからJSONをパースし、分類された意図(Intent)を抽出します。
 # Parse JSON from the LLM response text and extract the classified intent.
@@ -75,29 +51,15 @@ def _parse_intent(text: str) -> Intent | None:
     return None
 
 
-# ユーザーメッセージから意図を判定します。まずヒューリスティクスによるパターンマッチングを行い、マッチしない場合はLLMを用いて分類します。
-# Classify the user's intent. First performs heuristic pattern matching, and falls back to LLM classification if no match is found.
+# ユーザーメッセージから意図を判定します。意味の分類は常にLLMへ委譲します。
+# Classify the user's intent. Semantic classification is always delegated to the LLM.
 def classify_intent(message: str, current_page: str = "") -> Intent:
-    # ユーザーメッセージの意図をLLMで1回分類して返します。失敗時は "direct"（検索なし）にフォールバックします。
-    # Classifies the user message intent once with the LLM. Falls back to "direct" (no search) on failure.
+    # ユーザーメッセージの意図をLLMで1回分類して返します。失敗時は "unknown"（操作・検索なし）にフォールバックします。
+    # Classifies the user message intent once with the LLM. Falls back to "unknown" (no action or search) on failure.
     """
     ユーザーメッセージの意図をLLMで1回分類して返す。
-    失敗時は "direct"（検索なし）にフォールバックする。
+    失敗時は "unknown"（操作・検索なし）にフォールバックする。
     """
-    # 具体的なアクション操作（クリック等）を示唆するキーワードが含まれているか判定します。
-    # Check if the message contains keywords suggesting specific user actions (e.g., clicking).
-    if _ACTION_HINTS.search(message):
-        return "action" if current_page else "search"
-    # ページ構成や使い方を示唆するキーワードが含まれているか判定します。
-    # Check if the message contains keywords suggesting page layout or usage info.
-    if _PAGE_INFO_HINTS.search(message):
-        return "page_info" if current_page else "search"
-    
-    # 直接回答の生成を促すキーワードが含まれ、かつ機能検索のキーワードが無い場合は "direct" を返します。
-    # Return "direct" if direct answer keywords are present and search keywords are absent.
-    if _DIRECT_GENERATION_HINTS.search(message) and not _SEARCH_HINTS.search(message):
-        return "direct"
-
     # ユーザーメッセージとコンテキスト情報（現在のページ、エージェント機能等）を元に、LLMへ送信するプロンプトを構築します。
     # Construct prompt messages to send to the LLM, including user message and context details (current page, capabilities).
     page_line = (
@@ -121,5 +83,5 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
                 return "search"
             return intent
     except Exception:
-        logger.warning("Intent classification failed, falling back to 'direct'")
-    return "direct"
+        logger.warning("Intent classification failed, falling back to 'unknown'")
+    return "unknown"
