@@ -82,9 +82,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "OpenAI news")
 
-    # 日本語: decideWeb検索acceptsstringshould検索ことを検証します。
-    # English: Verify that decide web search accepts string should search.
-    def test_decide_web_search_accepts_string_should_search(self):
+    # 日本語: should_searchの文字列値は構造化判断として受け入れないことを検証します。
+    # English: Verify that a string should_search value is not accepted as a structured decision.
+    def test_decide_web_search_rejects_string_should_search(self):
         messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -96,7 +96,42 @@ class WebSearchServiceTestCase(unittest.TestCase):
         ):
             decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
-        self.assertTrue(decision.should_search)
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.query, "")
+
+    # 日本語: should_search欠落時にqueryの有無から検索要否を推定せず、修復LLMの判断を使うことを検証します。
+    # English: Verify that a missing should_search never infers intent from query presence and uses planner repair.
+    def test_decide_web_search_repairs_missing_should_search_instead_of_inferring_from_query(self):
+        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            side_effect=[
+                '{"decision": "search", "query": "React 19 latest information", "reason": "current software information"}',
+                '{"should_search": false, "query": "", "freshness": "", "reason": "repair says no search"}',
+            ],
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
+
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.query, "")
+        self.assertEqual(mock_llm.call_count, 2)
+
+    # 日本語: 初回出力と修復出力の両方でshould_searchが欠落した場合は検索しないことを検証します。
+    # English: Verify that search is skipped when both the initial and repaired outputs omit should_search.
+    def test_decide_web_search_skips_when_repair_still_omits_should_search(self):
+        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"query": "React 19 latest information", "reason": "current software information"}',
+        ):
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
+
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.query, "")
 
     # 日本語: decideWeb検索acceptsdecisionenumことを検証します。
     # English: Verify that decide web search accepts decision enum.
@@ -115,9 +150,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "OpenAI news")
 
-    # 日本語: decideWeb検索acceptsjapanese検索flagことを検証します。
-    # English: Verify that decide web search accepts japanese search flag.
-    def test_decide_web_search_accepts_japanese_search_flag(self):
+    # 日本語: should_searchの日本語文字列値は構造化判断として受け入れないことを検証します。
+    # English: Verify that a Japanese string should_search value is not accepted as a structured decision.
+    def test_decide_web_search_rejects_japanese_string_should_search(self):
         messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -129,7 +164,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         ):
             decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
-        self.assertTrue(decision.should_search)
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.query, "")
 
     # 日本語: decideWeb検索repairsnonjsonplanneroutputことを検証します。
     # English: Verify that decide web search repairs non json planner output.
