@@ -18,6 +18,8 @@ from services.mcp_config import (
     get_mcp_allowed_hosts,
     get_mcp_allowed_origins,
     get_mcp_encryption_keys,
+    get_mcp_publish_rate_limit_per_day,
+    get_mcp_publish_rate_limit_per_hour,
     get_mcp_public_base_url,
     get_mcp_server_url,
 )
@@ -127,7 +129,7 @@ async def _consume_publish_limit(user_id: int) -> None:
         consume_rate_limit,
         "mcp_prompt_publish:hour",
         str(user_id),
-        limit=10,
+        limit=get_mcp_publish_rate_limit_per_hour(),
         window_seconds=3600,
     )
     if not allowed:
@@ -136,7 +138,7 @@ async def _consume_publish_limit(user_id: int) -> None:
         consume_rate_limit,
         "mcp_prompt_publish:day",
         str(user_id),
-        limit=50,
+        limit=get_mcp_publish_rate_limit_per_day(),
         window_seconds=24 * 3600,
     )
     if not allowed:

@@ -22,7 +22,7 @@ from services.prompt_attachment_storage import normalize_prompt_attachment_publi
 
 # 型固有テキスト属性 (skill_markdown 等) の最大文字数
 # Maximum length for a type-specific text attribute (e.g. skill_markdown).
-MAX_PROMPT_ATTRIBUTE_TEXT_LENGTH = 30000
+MAX_PROMPT_ATTRIBUTE_TEXT_LENGTH = 256_000
 
 # フォーマット軸キー
 # Content format axis keys.
