@@ -14,10 +14,11 @@ from services.memo_agent_actions import (
 # 日本語: メモエージェントの意図分類（編集/QA）をテストするクラス。
 # English: Test class for memo agent intent classification (edit vs QA).
 class ClassifyMemoIntentTestCase(unittest.TestCase):
-    # 日本語: 明確な編集指示はLLMを呼び出さずに"edit"へ分類されることを検証します。
-    # English: Verify that clear edit phrases are classified as "edit" without calling the LLM.
-    def test_edit_hints_classified_deterministically(self):
+    # 日本語: 明確な編集指示でも固定語句判定を使わずLLMへ委譲することを検証します。
+    # English: Verify that even obvious edit requests are delegated to the LLM instead of phrase matching.
+    def test_edit_requests_always_use_llm_classification(self):
         with patch("services.memo_agent_actions.get_llm_response") as mock_llm:
+            mock_llm.return_value = '{"intent": "edit"}'
             for message in (
                 "誤字脱字を修正して",
                 "この文章を英語に翻訳して",
@@ -25,19 +26,20 @@ class ClassifyMemoIntentTestCase(unittest.TestCase):
                 "本文を読みやすく整理して書き直して",
             ):
                 self.assertEqual(classify_memo_intent(message), "edit", message)
-        mock_llm.assert_not_called()
+        self.assertEqual(mock_llm.call_count, 4)
 
-    # 日本語: 明確な質問・要約はLLMを呼び出さずに"qa"へ分類されることを検証します。
-    # English: Verify that clear read-only phrases are classified as "qa" without calling the LLM.
-    def test_qa_hints_classified_deterministically(self):
+    # 日本語: 明確な質問・要約でも固定語句判定を使わずLLMへ委譲することを検証します。
+    # English: Verify that even obvious read-only requests are delegated to the LLM instead of phrase matching.
+    def test_qa_requests_always_use_llm_classification(self):
         with patch("services.memo_agent_actions.get_llm_response") as mock_llm:
+            mock_llm.return_value = '{"intent": "qa"}'
             for message in (
                 "このメモを要約して",
                 "このメモの結論を教えて",
                 "この用語とは何？",
             ):
                 self.assertEqual(classify_memo_intent(message), "qa", message)
-        mock_llm.assert_not_called()
+        self.assertEqual(mock_llm.call_count, 3)
 
     # 日本語: 曖昧なメッセージはLLM分類の結果を採用することを検証します。
     # English: Verify that ambiguous messages use the LLM classification result.
