@@ -69,6 +69,7 @@ from blueprints.auth_common import (  # noqa: E402
     _build_absolute_url_from_reference,
     _clear_google_oauth_session,
     _clear_google_oauth_state,
+    _claim_guest_prompts_after_login,
     _clear_login_verification_session,
     _copy_default_tasks_after_login,
     _google_callback_redirect_target,
@@ -121,6 +122,10 @@ from services.auth_limits import (  # noqa: E402
 from services.auth_session import establish_authenticated_session  # noqa: E402
 from services.csrf import require_csrf  # noqa: E402
 from services.email_service import send_email  # noqa: E402
+from services.guest_prompt_service import (  # noqa: E402
+    claim_guest_prompts_for_user,
+    get_guest_prompt_token,
+)
 from services.llm_daily_limit import (  # noqa: E402
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -249,6 +254,7 @@ __all__ = [
     "_clean_google_field",
     "_clear_google_oauth_session",
     "_clear_google_oauth_state",
+    "_claim_guest_prompts_after_login",
     "_clear_login_verification_session",
     "_copy_default_tasks_after_login",
     "_fetch_google_user_info",
@@ -286,6 +292,7 @@ __all__ = [
     "consume_passkey_auth_options_limit",
     "consume_passkey_auth_verify_limit",
     "consume_verification_attempt_limit",
+    "claim_guest_prompts_for_user",
     "copy_default_tasks_for_user",
     "create_passkey",
     "create_user",
@@ -299,6 +306,7 @@ __all__ = [
     "generate_verification_code",
     "get_auth_limit_service",
     "get_credential_lookup_id",
+    "get_guest_prompt_token",
     "get_llm_daily_limit_service",
     "get_passkey_authentication_ceremony",
     "get_passkey_by_credential_id",

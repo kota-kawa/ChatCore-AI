@@ -3,6 +3,8 @@ import time
 
 from fastapi import APIRouter, Depends, Request
 
+from blueprints.auth_common import _claim_guest_prompts_after_login
+
 from services.async_utils import run_blocking
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.auth_limits import (
@@ -372,6 +374,12 @@ async def api_verify_registration_code(
     # 認証済みセッションの確立（ログイン状態に移行）
     # Establish an authenticated session (transitioning to logged-in state).
     establish_authenticated_session(request, int(user_id), user["email"])
+
+    await _claim_guest_prompts_after_login(
+        request,
+        int(user_id),
+        context="Email registration verification",
+    )
 
     # 登録・認証用の一時セッション情報をクリーンアップ
     # Clear temporary registration/verification session data.

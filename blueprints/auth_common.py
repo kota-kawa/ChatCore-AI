@@ -71,6 +71,32 @@ async def _copy_default_tasks_after_login(user_id: int, *, context: str) -> None
         )
 
 
+async def _claim_guest_prompts_after_login(
+    request: Request,
+    user_id: int,
+    *,
+    context: str,
+) -> list[int]:
+    """Transfer this browser's guest prompts without making authentication fail."""
+    guest_token = dep("get_guest_prompt_token")(request.session)
+    if guest_token is None:
+        return []
+
+    try:
+        return await dep("run_blocking")(
+            dep("claim_guest_prompts_for_user"),
+            user_id,
+            guest_token,
+        )
+    except Exception:
+        dep("logger").exception(
+            "%s: failed to claim guest prompts for user %s",
+            context,
+            user_id,
+        )
+        return []
+
+
 def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | None:
     parts = urlsplit(reference_url)
     if not parts.scheme or not parts.netloc:

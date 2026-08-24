@@ -34,6 +34,7 @@ export type AttributeBinding = {
 // Defines all state and handlers passed down from the parent into the composer modal
 type PromptShareComposerModalProps = {
   isOpen: boolean;
+  isGuest: boolean;
   isPostSubmitting: boolean;
   postModalRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
@@ -439,6 +440,7 @@ function PromptComposerSelectOptionButton({
 // Main composer modal that wraps the full prompt submission form
 export function PromptShareComposerModal({
   isOpen,
+  isGuest,
   isPostSubmitting,
   postModalRef,
   onClose,
@@ -481,19 +483,24 @@ export function PromptShareComposerModal({
   onClearReferenceImage
 }: PromptShareComposerModalProps) {
   const { locale, t } = useTranslation();
+  // ゲストでは表示もテキストプロンプトに固定する。親が保持している古い選択状態を
+  // 表示や送信に反映させない。
+  // Guests are visually fixed to text prompts so stale parent selections cannot affect the UI or payload.
+  const resolvedContentFormat: ContentFormat = isGuest ? "prompt" : contentFormat;
+  const resolvedMediaType: MediaType = isGuest ? "text" : mediaType;
   // 選択中の2軸からレジストリ定義を解決する。
   // Resolve the registry descriptors for the currently selected axes.
-  const activeFormat = getContentFormat(contentFormat);
-  const activeMedia = getMediaType(mediaType);
+  const activeFormat = getContentFormat(resolvedContentFormat);
+  const activeMedia = getMediaType(resolvedMediaType);
   const attachmentRule = activeMedia.attachmentRule;
-  const activeFieldKeys = new Set(getAttributeFields(contentFormat).map((field) => field.key));
-  const activeFormatLabel = getPromptFormatLabel(contentFormat, locale);
-  const activePostType: ComposerPostType = contentFormat === "skill"
+  const activeFieldKeys = new Set(getAttributeFields(resolvedContentFormat).map((field) => field.key));
+  const activeFormatLabel = getPromptFormatLabel(resolvedContentFormat, locale);
+  const activePostType: ComposerPostType = resolvedContentFormat === "skill"
     ? "skill"
-    : mediaType === "image"
+    : resolvedMediaType === "image"
       ? "image-prompt"
       : "text-prompt";
-  const showExamples = contentFormat === "prompt" && mediaType === "text" && !activeFormat.hidesExamples;
+  const showExamples = !isGuest && resolvedContentFormat === "prompt" && resolvedMediaType === "text" && !activeFormat.hidesExamples;
   const localizedCategoryOptions = categoryOptions.map((option) => ({
     ...option,
     label: option.value ? getCategoryLabelOrFallback(option.value, option.label, locale) : t("promptShare.notSelected")
@@ -501,7 +508,7 @@ export function PromptShareComposerModal({
   // 投稿タイプ（テキスト/画像）に合わせて、datalistに出す候補モデル名だけ絞り込む
   // Narrow the datalist suggestions to models relevant to the current post type (text vs image)
   const aiModelSuggestions = AI_MODEL_OPTION_GROUPS.filter((group) =>
-    mediaType === "image" ? group.label === "画像生成" : group.label !== "画像生成"
+    resolvedMediaType === "image" ? group.label === "画像生成" : group.label !== "画像生成"
   ).flatMap((group) => group.options.map((option) => option.value));
 
   // SKILLの説明パネルの開閉状態を管理し、フォーマットが切り替わると自動で閉じる
@@ -509,7 +516,7 @@ export function PromptShareComposerModal({
   const [showSkillInfo, setShowSkillInfo] = useState(false);
   useEffect(() => {
     setShowSkillInfo(false);
-  }, [contentFormat]);
+  }, [resolvedContentFormat]);
 
   return (
     <div
@@ -542,6 +549,23 @@ export function PromptShareComposerModal({
             </div>
           </div>
 
+          {isGuest ? (
+            <aside className="guest-post-notice" aria-label={t("promptShare.guestPostTitle")}>
+              <div className="guest-post-notice__icon" aria-hidden="true">
+                <i className="bi bi-person"></i>
+              </div>
+              <div>
+                <strong>{t("promptShare.guestPostTitle")}</strong>
+                <p>{t("promptShare.guestPostDescription")}</p>
+                <ul>
+                  <li>{t("promptShare.guestPostLimit")}</li>
+                  <li>{t("promptShare.guestPostRestrictions")}</li>
+                  <li>{t("promptShare.guestPostTransfer")}</li>
+                </ul>
+              </div>
+            </aside>
+          ) : null}
+
           <form className="post-form" id="postForm" onSubmit={onSubmit}>
             <fieldset className="composer-form-fields" disabled={isPostSubmitting}>
             {/* --- 基本情報セクション: タイプ・タイトル・カテゴリを設定する --- */}
@@ -554,38 +578,45 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
-              {/* 保存上の2軸は維持しつつ、利用者には意味のある投稿タイプ3択として提示する。 */}
-              {/* Preserve the two-axis data model while presenting three meaningful post types. */}
-              <div className="form-group">
-                <label>{t("promptShare.postType")}</label>
-                <div className="prompt-axis-toggle prompt-axis-toggle--post-types" role="radiogroup" aria-label={t("promptShare.choosePostType")}>
-                  {COMPOSER_POST_TYPES.map((postType) => (
-                    <label
-                      key={postType.key}
-                      className={`prompt-axis-option${activePostType === postType.key ? " prompt-axis-option--active" : ""}`}
-                    >
-                      <input
-                        type="radio"
-                        name="post-type"
-                        value={postType.key}
-                        checked={activePostType === postType.key}
-                        onChange={() => {
-                          setContentFormat(postType.contentFormat);
-                          setMediaType(postType.mediaType);
-                          updatePromptFeedbackErrorIfNeeded();
-                        }}
-                      />
-                      <span className="prompt-axis-option__icon" aria-hidden="true">
-                        <i className={`bi ${postType.icon}`}></i>
-                      </span>
-                      <span className="prompt-axis-option__body">
-                        <strong>{t(postType.labelKey)}</strong>
-                        <small>{t(postType.helpKey)}</small>
-                      </span>
-                    </label>
-                  ))}
+              {/* ゲストでは投稿タイプを切り替えられない。ログイン後の既存投稿UIは従来どおり3択。 */}
+              {/* Guests cannot change type. The existing three-option UI remains for signed-in users. */}
+              {isGuest ? (
+                <div className="guest-post-type" role="status">
+                  <i className="bi bi-chat-square-text" aria-hidden="true"></i>
+                  <span>{t("promptShare.postType.text-prompt")}</span>
                 </div>
-              </div>
+              ) : (
+                <div className="form-group">
+                  <label>{t("promptShare.postType")}</label>
+                  <div className="prompt-axis-toggle prompt-axis-toggle--post-types" role="radiogroup" aria-label={t("promptShare.choosePostType")}>
+                    {COMPOSER_POST_TYPES.map((postType) => (
+                      <label
+                        key={postType.key}
+                        className={`prompt-axis-option${activePostType === postType.key ? " prompt-axis-option--active" : ""}`}
+                      >
+                        <input
+                          type="radio"
+                          name="post-type"
+                          value={postType.key}
+                          checked={activePostType === postType.key}
+                          onChange={() => {
+                            setContentFormat(postType.contentFormat);
+                            setMediaType(postType.mediaType);
+                            updatePromptFeedbackErrorIfNeeded();
+                          }}
+                        />
+                        <span className="prompt-axis-option__icon" aria-hidden="true">
+                          <i className={`bi ${postType.icon}`}></i>
+                        </span>
+                        <span className="prompt-axis-option__body">
+                          <strong>{t(postType.labelKey)}</strong>
+                          <small>{t(postType.helpKey)}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="composer-field-grid">
                 <div className="form-group">
@@ -623,15 +654,15 @@ export function PromptShareComposerModal({
                   <p className="composer-section__eyebrow">{activeFormatLabel}</p>
                   <div className="composer-section__title-row">
                     <h3 id="composerContentTitle">
-                      {contentFormat === "skill"
+                      {resolvedContentFormat === "skill"
                         ? t("promptShare.skillSupport")
-                        : mediaType === "image"
+                        : resolvedMediaType === "image"
                           ? t("promptShare.imagePromptContent")
                           : t("promptShare.promptContent")}
                     </h3>
                     {/* SKILLの場合のみ情報ボタンを表示し、説明文の表示をトグルする */}
                     {/* Show info toggle only for skill format to explain the SKILL structure */}
-                    {contentFormat === "skill" ? (
+                    {resolvedContentFormat === "skill" ? (
                       <button
                         type="button"
                         className={`composer-info-btn${showSkillInfo ? " is-active" : ""}`}
@@ -645,7 +676,7 @@ export function PromptShareComposerModal({
                     ) : null}
                   </div>
                 </div>
-                {contentFormat === "skill" && showSkillInfo ? (
+                {resolvedContentFormat === "skill" && showSkillInfo ? (
                   <p className="composer-section__description" id="composerSkillHelp">
                     {t("promptShare.skillHelp")}
                   </p>
@@ -656,13 +687,13 @@ export function PromptShareComposerModal({
               {/* Hide with CSS display rather than unmounting to preserve refs when the format omits content */}
               <div className="form-group" style={{ display: activeFormat.requiresContent ? "" : "none" }}>
                 <label htmlFor="prompt-content">
-                  {mediaType === "image" ? t("promptShare.imagePromptContent") : t("promptShare.promptContent")}
+                  {resolvedMediaType === "image" ? t("promptShare.imagePromptContent") : t("promptShare.promptContent")}
                   {" "}<span className="composer-required">{t("settings.required")}</span>
                 </label>
                 <textarea
                   id="prompt-content"
                   rows={6}
-                  placeholder={mediaType === "image" ? t("promptShare.imageContentPlaceholder") : t("promptShare.contentPlaceholder")}
+                  placeholder={resolvedMediaType === "image" ? t("promptShare.imageContentPlaceholder") : t("promptShare.contentPlaceholder")}
                   required={activeFormat.requiresContent}
                   maxLength={MAX_PROMPT_CONTENT_LENGTH}
                   aria-describedby="prompt-content-counter"
@@ -680,6 +711,7 @@ export function PromptShareComposerModal({
 
               {/* AI補助は必要な利用者だけ展開できるようにし、通常入力の見通しを保つ。 */}
               {/* Keep AI assistance collapsible so the primary form remains easy to scan. */}
+              {!isGuest ? (
               <details className="composer-ai-assist" aria-disabled={isPostSubmitting ? "true" : undefined}>
                 <summary
                   tabIndex={isPostSubmitting ? -1 : undefined}
@@ -697,10 +729,12 @@ export function PromptShareComposerModal({
                 </summary>
                 <div id="sharedPromptAssistRoot" ref={promptAssistRootRef}></div>
               </details>
+              ) : null}
             </section>
 
             {/* --- 詳細設定セクション: AIモデル選択・画像・SKILLフィールド --- */}
             {/* --- Details section: AI model, reference image, and SKILL-specific fields --- */}
+            {!isGuest ? (
             <section className="composer-section" aria-labelledby="composerMetaTitle">
               <div className="composer-section__header">
                 <div>
@@ -834,7 +868,7 @@ export function PromptShareComposerModal({
                     </div>
                   );
                 })}
-                {contentFormat === "skill" ? (
+                {resolvedContentFormat === "skill" ? (
                   <SkillResourceEditor
                     resources={postResources}
                     setResources={setPostResources}
@@ -843,6 +877,7 @@ export function PromptShareComposerModal({
                 ) : null}
               </div>
             </section>
+            ) : null}
 
             {/* --- 利用例セクション: テキストプロンプトでのみ表示 --- */}
             {/* --- Examples section: shown only for text prompts --- */}

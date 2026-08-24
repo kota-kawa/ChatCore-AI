@@ -10,11 +10,13 @@ type ComposerType = "text" | "image" | "skill";
 
 function ComposerHarness({
   initialType = "text",
+  isGuest = false,
   isPostSubmitting = false,
   statusMessage = "",
   onClose = vi.fn()
 }: {
   initialType?: ComposerType;
+  isGuest?: boolean;
   isPostSubmitting?: boolean;
   statusMessage?: string;
   onClose?: () => void;
@@ -35,6 +37,7 @@ function ComposerHarness({
   return (
     <PromptShareComposerModal
       isOpen
+      isGuest={isGuest}
       isPostSubmitting={isPostSubmitting}
       postModalRef={createRef<HTMLDivElement>()}
       onClose={onClose}
@@ -140,6 +143,21 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(document.getElementById("prompt-content")).not.toBeVisible();
     expect(document.getElementById("prompt-reference-image")).not.toBeVisible();
     expect(getExamplesSection()).toHaveAttribute("hidden");
+  });
+
+  it("ゲスト投稿ではテキストだけを表示し、制限と引継ぎを案内する", () => {
+    render(<ComposerHarness initialType="image" isGuest />);
+
+    expect(screen.getByText("ゲストとして投稿")).toBeVisible();
+    expect(screen.getByText("投稿はIPアドレスとCookieごとに24時間で1件までです。")).toBeVisible();
+    expect(screen.getByText("登録後、このゲスト投稿はあなたのアカウントへ自動で引き継がれます。")).toBeVisible();
+    expect(screen.getByText("テキストプロンプト")).toBeVisible();
+    expect(screen.queryByRole("radiogroup", { name: "投稿タイプを選択" })).toBeNull();
+    expect(document.getElementById("prompt-content")).toBeVisible();
+    expect(document.getElementById("prompt-reference-image")).toBeNull();
+    expect(screen.queryByLabelText("SKILL定義（Markdown）")).toBeNull();
+    expect(screen.queryByText("AIで下書きを作る")).toBeNull();
+    expect(document.getElementById("prompt-ai-model")).toBeNull();
   });
 
   it("カテゴリが必須ではないことをラベルとフォーム制約の両方で伝える", () => {

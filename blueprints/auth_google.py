@@ -7,6 +7,7 @@ from fastapi import Request
 
 from blueprints.auth_common import (
     _append_query_params,
+    _claim_guest_prompts_after_login,
     _clear_google_oauth_session,
     _clear_google_oauth_state,
     _copy_default_tasks_after_login,
@@ -384,6 +385,11 @@ async def google_callback(request: Request):
             dep("logger").exception("Google OAuth callback: failed to verify user %s", user_id)
 
     await _copy_default_tasks_after_login(user_id, context="Google OAuth callback")
+    await _claim_guest_prompts_after_login(
+        request,
+        int(user_id),
+        context="Google OAuth callback",
+    )
 
     try:
         persisted_user = await dep("run_blocking")(dep("get_user_by_id"), user_id)

@@ -18,11 +18,18 @@ from services.api_errors import ApiServiceError
 from services.csrf import require_csrf
 from services.db import get_db_connection
 from services.error_messages import (
+    ERROR_GUEST_PROMPT_TEXT_ONLY,
+    ERROR_GUEST_PROMPT_URL_FORBIDDEN,
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
+)
+from services.guest_prompt_service import (
+    GuestPromptLimitExceeded,
+    create_guest_shared_prompt,
+    get_or_create_guest_prompt_token,
 )
 from services.i18n import get_request_locale
 from services.prompt_categories import normalize_category
@@ -85,6 +92,10 @@ PROMPT_CREATE_RATE_WINDOW_SECONDS = 60 * 60
 PROMPT_CREATE_PER_IP_LIMIT = 12
 PROMPT_CREATE_PER_USER_LIMIT = 8
 PROMPT_CREATE_COOLDOWN_SECONDS = 15
+GUEST_PROMPT_LINK_PATTERN = re.compile(
+    r"(?:\b(?:https?|ftp)://|\bwww\.|\bmailto:)",
+    re.IGNORECASE,
+)
 
 # コメント内のURL検知用正規表現パターン
 # Regular expression pattern to detect URLs inside comments.
@@ -111,6 +122,34 @@ def _request_body_exceeds_prompt_attachment_limit(request: Request) -> bool:
         return int(raw_length) > PROMPT_ATTACHMENT_MAX_REQUEST_BYTES
     except (TypeError, ValueError):
         return True
+
+
+def _guest_prompt_validation_error(
+    payload: SharedPromptCreateRequest,
+    raw_data: dict[str, Any],
+    has_file_upload: bool,
+) -> str | None:
+    """Apply guest-only restrictions after the shared payload is normalized."""
+    if payload.content_format != "prompt" or payload.media_type != "text":
+        return ERROR_GUEST_PROMPT_TEXT_ONLY
+    if has_file_upload:
+        return ERROR_GUEST_PROMPT_TEXT_ONLY
+
+    raw_attributes = raw_data.get("attributes")
+    raw_resources = raw_data.get("resources")
+    if raw_attributes or raw_resources:
+        return ERROR_GUEST_PROMPT_TEXT_ONLY
+
+    text_fields = (
+        payload.title,
+        payload.content,
+        payload.input_examples,
+        payload.output_examples,
+        payload.ai_model,
+    )
+    if any(GUEST_PROMPT_LINK_PATTERN.search(value or "") for value in text_fields):
+        return ERROR_GUEST_PROMPT_URL_FORBIDDEN
+    return None
 
 
 def _consume_prompt_create_limits(
@@ -2047,11 +2086,10 @@ async def create_prompt(request: Request):
     新しいプロンプトを投稿・公開共有するエンドポイント（JSONおよびマルチパートフォームに対応）。
     POST API endpoint to publish and share a new prompt with optional reference image upload.
     """
-    # ログイン認証チェック
-    # Verify authentication state.
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    user_id = request.session["user_id"]
+    # ゲストはテキスト投稿だけ許可する。ログイン済み投稿は従来の機能を維持する。
+    # Guests are limited below; authenticated users keep the existing full feature set.
+    is_guest_post = "user_id" not in request.session
+    user_id = request.session.get("user_id")
 
     if _request_body_exceeds_prompt_attachment_limit(request):
         max_mb = PROMPT_ATTACHMENT_MAX_REQUEST_BYTES // (1024 * 1024)
@@ -2064,6 +2102,7 @@ async def create_prompt(request: Request):
     # Determine the payload source based on request headers.
     content_type = request.headers.get("content-type", "")
     upload_file = None
+    has_file_upload = False
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         # This endpoint accepts one image and a small, fixed field set. Keep
         # multipart parser limits aligned with that contract so unused file
@@ -2071,6 +2110,10 @@ async def create_prompt(request: Request):
         form = await request.form(max_files=1, max_fields=32, max_part_size=256 * 1024)
         file_candidate = form.get("reference_image")
         upload_file = file_candidate if getattr(file_candidate, "filename", "") else None
+        has_file_upload = any(
+            bool(getattr(candidate, "filename", ""))
+            for candidate in form.values()
+        )
         # attributes は JSON 文字列として送られる (型固有フィールドをまとめて格納)
         # attributes is sent as a JSON string carrying format-specific fields.
         attributes_raw = form.get("attributes", "")
@@ -2110,6 +2153,38 @@ async def create_prompt(request: Request):
     if validation_error is not None:
         return validation_error
 
+    if is_guest_post:
+        guest_validation_error = _guest_prompt_validation_error(payload, data, has_file_upload)
+        if guest_validation_error is not None:
+            return jsonify({"error": guest_validation_error}, status_code=400)
+
+        guest_token = get_or_create_guest_prompt_token(request.session)
+        try:
+            prompt_id = await run_blocking(
+                create_guest_shared_prompt,
+                guest_token,
+                get_request_client_ip(request),
+                payload,
+            )
+            return jsonify(
+                {
+                    "message": "ゲストプロンプトが作成されました。登録後に投稿を引き継げます。",
+                    "prompt_id": prompt_id,
+                    "is_guest": True,
+                },
+                status_code=201,
+            )
+        except GuestPromptLimitExceeded as exc:
+            return jsonify_rate_limited(
+                str(exc),
+                retry_after=exc.retry_after,
+            )
+        except Exception:
+            return log_and_internal_server_error(
+                logger,
+                "Failed to create guest shared prompt.",
+            )
+
     # 添付ファイルは、そのメディアが添付を許可する場合のみ受け付ける
     # Accept the upload only when the selected media allows attachments.
     if upload_file is not None and not media_allows_attachment(payload.media_type):
@@ -2140,7 +2215,7 @@ async def create_prompt(request: Request):
         # Create new prompt row in DB.
         prompt_id = await run_blocking(
             _create_prompt_for_user,
-            user_id,
+            int(user_id),
             payload.title,
             payload.category,
             payload.content,
@@ -2153,7 +2228,10 @@ async def create_prompt(request: Request):
             [resource.model_dump(mode="python") for resource in payload.resources],
             attachments,
         )
-        return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
+        return jsonify(
+            {"message": "プロンプトが作成されました。", "prompt_id": prompt_id, "is_guest": False},
+            status_code=201,
+        )
     except ValueError as exc:
         # ファイルバリデーションなどのエラー時は、アップロード済みの添付を削除して差し戻し
         # Clean up any written file on validation failures.
