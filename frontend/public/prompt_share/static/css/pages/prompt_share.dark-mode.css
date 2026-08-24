@@ -946,17 +946,14 @@
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger {
-  border-color: rgba(96, 165, 250, 0.38);
-  background: linear-gradient(145deg, rgba(30, 58, 100, 0.9), rgba(20, 45, 78, 0.92));
-  box-shadow: inset 0 1px 0 rgba(191, 219, 254, 0.12);
   color: #93c5fd;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger:hover,
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker.is-open .ai-model-picker__trigger {
-  border-color: rgba(147, 197, 253, 0.64);
-  background: linear-gradient(145deg, rgba(37, 83, 143, 0.94), rgba(28, 63, 112, 0.96));
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(191, 219, 254, 0.16);
+  background: none;
+  box-shadow: none;
+  color: #60a5fa;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__menu {

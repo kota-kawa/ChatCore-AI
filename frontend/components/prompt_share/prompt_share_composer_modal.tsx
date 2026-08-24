@@ -778,12 +778,11 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
-              <div className="composer-field-grid composer-field-grid--two composer-field-grid--settings">
+              <div className="composer-field-grid composer-field-grid--two">
                 <div className="form-group">
                   <label htmlFor="prompt-category-trigger">
                     {t("promptShare.category")} <span className="composer-optional">{t("common.optional")}</span>
                   </label>
-                  <span className="form-group__hint" id="prompt-category-help">{t("promptShare.categoryOptionalHelp")}</span>
                   <PromptComposerSelect
                     selectId="prompt-category"
                     nativeRef={promptPostCategorySelectRef}
@@ -797,7 +796,6 @@ export function PromptShareComposerModal({
                 </div>
                 <div className="form-group form-group--ai-model">
                   <label htmlFor="prompt-ai-model">{t("promptShare.aiModelOptional")}</label>
-                  <span className="form-group__hint form-group__hint--placeholder" aria-hidden="true"></span>
                   <div ref={aiModelMenuRef} className={`ai-model-picker${isAiModelMenuOpen ? " is-open" : ""}`.trim()}>
                     <input
                       type="text"
@@ -822,7 +820,7 @@ export function PromptShareComposerModal({
                       aria-controls="prompt-ai-model-menu"
                       onClick={() => setIsAiModelMenuOpen((previous) => !previous)}
                     >
-                      <i className="bi bi-cpu" aria-hidden="true"></i>
+                      <i className="bi bi-chevron-down" aria-hidden="true"></i>
                     </button>
                     <div
                       id="prompt-ai-model-menu"

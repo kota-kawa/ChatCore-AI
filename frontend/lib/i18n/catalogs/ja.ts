@@ -726,7 +726,6 @@ export const jaMessages = {
   "promptShare.aiAssistToggle": "AIで下書きを作る",
   "promptShare.characterCount": "{current} / {max}文字",
   "promptShare.postSettings": "投稿設定",
-  "promptShare.categoryOptionalHelp": "用途で見つけやすくするための分類です。画像投稿でも必要に応じて選べます。",
   "promptShare.aiModelOptional": "使用AIモデル（任意）",
   "promptShare.aiModelPlaceholder": "例: ChatGPT (GPT-5.6 Sol)、Midjourney V8.2 など",
   "promptShare.chooseAiModel": "候補のAIモデルを選択",
