@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import Depends, Request
 
 from blueprints.auth_common import (
+    _claim_guest_prompts_after_login,
     _copy_default_tasks_after_login,
     _passkey_unavailable_response,
     _resolve_auth_limit_service,
@@ -305,6 +306,11 @@ async def api_passkey_authenticate_verify(
         )
 
     await _copy_default_tasks_after_login(
+        int(passkey["user_id"]),
+        context="Passkey authentication",
+    )
+    await _claim_guest_prompts_after_login(
+        request,
         int(passkey["user_id"]),
         context="Passkey authentication",
     )

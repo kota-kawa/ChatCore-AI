@@ -23,6 +23,11 @@ ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件�
 ERROR_PROMPT_ATTACHMENT_EMPTY = "空の添付ファイルはアップロードできません。"
 ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
+ERROR_GUEST_PROMPT_TEXT_ONLY = (
+    "ゲスト投稿ではテキストプロンプトのみ投稿できます。"
+)
+ERROR_GUEST_PROMPT_URL_FORBIDDEN = "ゲスト投稿ではURLを含めることはできません。"
+ERROR_GUEST_PROMPT_LIMIT_REACHED = "ゲスト投稿は24時間に1件までです。"
 ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT = (
     "同じ冪等キーが別のコンテキスト保存に使用されています。"
 )

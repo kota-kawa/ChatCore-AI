@@ -11,7 +11,6 @@ import {
 
 import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
-import { showToast } from "../../scripts/core/toast";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
 import {
   createPrompt,
@@ -19,6 +18,10 @@ import {
   fetchPromptSearchResults
 } from "../../scripts/prompt_share/api";
 import { normalizePromptData } from "../../scripts/prompt_share/formatters";
+import {
+  buildPromptCreateFormData,
+  containsGuestPostUrl
+} from "../../scripts/prompt_share/guest_post";
 import {
   buildAttributes,
   deriveLegacyPromptType,
@@ -97,6 +100,7 @@ export default function PromptSharePage({
   }, [initialPrompts]);
 
   const { authUiReady, isLoggedIn } = usePromptShareAuth();
+  const isGuestPost = !isLoggedIn;
 
   // 検索・フィルタ関連の状態
   // Search and filter state
@@ -768,17 +772,15 @@ export default function PromptSharePage({
     updatePromptRecord
   });
 
-  // 未ログイン時はトーストで案内し、ログイン済みの場合は投稿モーダルを開く
-  // Shows a toast guide for unauthenticated users and opens the composer modal for logged-in users
+  // ゲストも制限付きで投稿できる。送信時にも同じ制限を強制するため、ここはモーダルを開くだけにする。
+  // Guests can post with restrictions. Submission enforces the same restrictions, so this only opens the modal.
   const openComposerModal = useCallback(() => {
-    if (!isLoggedIn) {
-      showToast(t("promptShare.loginToPost"), { variant: "error" });
-      return;
-    }
-
-    setPromptPostStatus(t("promptShare.aiAssistHint"), "info");
+    setPromptPostStatus(
+      isGuestPost ? t("promptShare.guestPostHint") : t("promptShare.aiAssistHint"),
+      "info"
+    );
     openModal("post", promptPostTitleInputRef.current);
-  }, [isLoggedIn, openModal, setPromptPostStatus]);
+  }, [isGuestPost, openModal, setPromptPostStatus]);
 
   // カテゴリをクリックしたとき、検索中なら一覧をリセットしてから選択カテゴリを適用する
   // When a category is clicked, resets the search if active before applying the selected category
@@ -863,8 +865,8 @@ export default function PromptSharePage({
       // Verify that all required form elements are present in the DOM
       if (
         !promptPostTitleInputRef.current ||
-        !promptPostCategorySelectRef.current ||
-        !promptPostContentTextareaRef.current
+        !promptPostContentTextareaRef.current ||
+        (!isGuestPost && !promptPostCategorySelectRef.current)
       ) {
         setPromptPostStatus(
           t("promptShare.formMissing"),
@@ -877,7 +879,12 @@ export default function PromptSharePage({
         return;
       }
 
-      const referenceImageError = mediaAllowsAttachment(mediaType)
+      if (isGuestPost && containsGuestPostUrl(postTitle, postContent)) {
+        setPromptPostStatus(t("promptShare.guestPostUrlForbidden"), "error");
+        return;
+      }
+
+      const referenceImageError = !isGuestPost && mediaAllowsAttachment(mediaType)
         ? validateReferenceImageFile(referenceImageFile)
         : null;
       if (referenceImageError) {
@@ -887,37 +894,40 @@ export default function PromptSharePage({
 
       // 2軸とフォーマット固有の属性を選択的にFormDataへ追加する
       // Selectively append the two axes and format-specific attributes to FormData
-      const isSkill = contentFormat === "skill";
+      const isSkill = !isGuestPost && contentFormat === "skill";
       const includeExamples = !isSkill && mediaType === "text" && guardrailEnabled;
       // レジストリが宣言するキーのみを属性として送る (JSON文字列)。
       // Send only the keys the format declares, as a JSON string.
-      const attributes = buildAttributes(contentFormat, {
-        skill_markdown: postSkillMarkdown
+      const attributes = isGuestPost
+        ? {}
+        : buildAttributes(contentFormat, {
+            skill_markdown: postSkillMarkdown
+          });
+      const formData = buildPromptCreateFormData({
+        isGuest: isGuestPost,
+        title: postTitle,
+        category: postCategory,
+        content: isSkill ? "" : postContent,
+        contentFormat,
+        mediaType,
+        inputExamples: includeExamples ? postInputExample : "",
+        outputExamples: includeExamples ? postOutputExample : "",
+        aiModel: postAiModel,
+        attributes,
+        resources: isSkill ? postResources : [],
+        referenceImageFile
       });
-
-      const formData = new FormData();
-      formData.append("title", postTitle);
-      formData.append("category", postCategory);
-      formData.append("content", isSkill ? "" : postContent);
-      formData.append("content_format", contentFormat);
-      formData.append("media_type", mediaType);
-      formData.append("input_examples", includeExamples ? postInputExample : "");
-      formData.append("output_examples", includeExamples ? postOutputExample : "");
-      formData.append("ai_model", postAiModel);
-      formData.append("attributes", JSON.stringify(attributes));
-      formData.append("resources", JSON.stringify(isSkill ? postResources : []));
-
-      if (mediaAllowsAttachment(mediaType) && referenceImageFile) {
-        formData.append("reference_image", referenceImageFile);
-      }
 
       setIsPostSubmitting(true);
       setPromptPostStatus(t("promptShare.posting"), "info");
 
       try {
-        await createPrompt(formData);
+        const result = await createPrompt(formData);
 
-        setPromptPostStatus(t("promptShare.posted"), "success");
+        setPromptPostStatus(
+          result.is_guest || isGuestPost ? t("promptShare.guestPosted") : t("promptShare.posted"),
+          "success"
+        );
 
         // 投稿成功後にフォームを全フィールドリセットする
         // Reset all form fields after a successful submission
@@ -964,6 +974,7 @@ export default function PromptSharePage({
       clearPromptImageSelection,
       closeModal,
       guardrailEnabled,
+      isGuestPost,
       isPostSubmitting,
       loadPrompts,
       postAiModel,
@@ -1011,6 +1022,9 @@ export default function PromptSharePage({
   // 投稿フォームの全フィールドがDOMにマウントされてからAI補助パネルを一度だけ初期化する
   // Initializes the AI-assist panel exactly once after all composer form fields are mounted in the DOM
   useEffect(() => {
+    if (isGuestPost) {
+      return;
+    }
     if (!promptAssistRootRef.current || promptAssistInitializedRef.current) {
       return;
     }
@@ -1064,7 +1078,7 @@ export default function PromptSharePage({
       promptAssistControllerRef.current = null;
       promptAssistInitializedRef.current = false;
     };
-  }, []);
+  }, [isGuestPost, t]);
 
   // コメントビューが開いたときにテキストエリアへフォーカスしてスムーズにスクロールする
   // Scrolls to and focuses the comment textarea when the comments view becomes active
@@ -1164,9 +1178,11 @@ export default function PromptSharePage({
         onOpenAuthorProfile={openAuthorProfile}
       >
 
-        {/* プロンプト投稿フォームのモーダル。ログイン済みユーザーのみ利用可能 / Composer modal for posting new prompts; only available to logged-in users */}
+        {/* プロンプト投稿フォーム。ゲスト時はテキスト専用の制限付き Composer を表示する。 */}
+        {/* Prompt composer. Guests receive a restricted text-only composer. */}
         <PromptShareComposerModal
           isOpen={activeModal === "post"}
+          isGuest={isGuestPost}
           isPostSubmitting={isPostSubmitting}
           postModalRef={postModalRef}
           onClose={() => {

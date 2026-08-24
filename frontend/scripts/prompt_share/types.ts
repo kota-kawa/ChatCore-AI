@@ -92,6 +92,15 @@ export type PromptFeedResponse = {
   message?: string;
 };
 
+// 投稿作成APIの応答。ゲスト投稿かどうかで、完了後に表示する案内を切り替える。
+// Create-post API response. is_guest controls the post-completion guidance.
+export type PromptCreateResponse = {
+  message?: string;
+  prompt_id?: string | number;
+  is_guest?: boolean;
+  error?: string;
+};
+
 // SNS風プロフィールモーダルに表示する、投稿者の公開プロフィール情報
 // Author's public profile info shown in the SNS-style profile modal
 export type PromptAuthorProfile = {

@@ -1501,6 +1501,64 @@
   line-height: 1.75;
 }
 
+/* 未ログイン利用者にも投稿条件とアカウント引継ぎを明確に伝える。 */
+/* Make the guest-post limits and account-transfer behavior clear before submission. */
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice {
+  display: flex;
+  gap: 0.85rem;
+  margin: 1rem 1.25rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(85, 145, 224, 0.45);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(232, 243, 255, 0.96), rgba(246, 250, 255, 0.96));
+  color: #25445f;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice__icon,
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #1769aa;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.74);
+  font-size: 1.08rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice p,
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice ul {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-notice ul {
+  padding-left: 1.1rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .guest-post-type {
+  gap: 0.5rem;
+  width: fit-content;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(85, 145, 224, 0.34);
+  border-radius: 14px;
+  background: rgba(238, 247, 255, 0.82);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .post-form {
   display: flex;
   flex-direction: column;

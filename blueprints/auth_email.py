@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import Depends, Request
 
 from blueprints.auth_common import (
+    _claim_guest_prompts_after_login,
     _clear_login_verification_session,
     _copy_default_tasks_after_login,
     _resolve_auth_limit_service,
@@ -232,6 +233,11 @@ async def api_verify_login_code(
         dep("establish_authenticated_session")(request, int(user_id), user["email"] if user else "")
         _clear_login_verification_session(session)
         await _copy_default_tasks_after_login(
+            int(user_id),
+            context="Email login verification",
+        )
+        await _claim_guest_prompts_after_login(
+            request,
             int(user_id),
             context="Email login verification",
         )

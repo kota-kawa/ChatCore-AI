@@ -1005,6 +1005,26 @@
 }
 
 /* ── コンポーザー: セクション ── */
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .guest-post-notice {
+  border-color: rgba(96, 165, 250, 0.38);
+  background: linear-gradient(135deg, rgba(30, 58, 88, 0.82), rgba(20, 35, 54, 0.88));
+  color: #dbeafe;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .guest-post-notice__icon,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .guest-post-type {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .guest-post-notice__icon {
+  background: rgba(15, 23, 42, 0.62);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .guest-post-type {
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(30, 58, 88, 0.64);
+}
+
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-section {
   background: rgba(17, 24, 39, 0.8);
   border-color: rgba(148, 163, 184, 0.15);

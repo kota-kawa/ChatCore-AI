@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchPromptAuthorProfile, fetchPromptList, savePromptAsMemo } from "../scripts/prompt_share/api";
+import { createPrompt, fetchPromptAuthorProfile, fetchPromptList, savePromptAsMemo } from "../scripts/prompt_share/api";
 
 const originalFetch = globalThis.fetch;
 
@@ -99,6 +99,28 @@ test("fetchPromptAuthorProfile requests the author profile endpoint by user ID",
 
   assert.equal(requestedUrl, "/prompt_share/api/users/42");
   assert.equal(payload.user?.username, "Kota");
+});
+
+test("createPrompt returns the guest-post marker from the API", async () => {
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return jsonResponse({ message: "created", prompt_id: 19, is_guest: true });
+  }) as typeof fetch;
+
+  let payload;
+  try {
+    payload = await createPrompt(new FormData());
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestedUrl, "/prompt_share/api/prompts");
+  assert.equal(requestedInit?.method, "POST");
+  assert.equal(payload.is_guest, true);
+  assert.equal(payload.prompt_id, 19);
 });
 
 test("savePromptAsMemo saves the shared prompt title and body through the memo API", async () => {

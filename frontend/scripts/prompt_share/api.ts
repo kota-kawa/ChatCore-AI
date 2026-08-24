@@ -3,6 +3,7 @@ import type {
   MediaType,
   PromptAuthorProfileResponse,
   PromptCommentsResponse,
+  PromptCreateResponse,
   PromptData,
   PromptFeedResponse,
   PromptType
@@ -264,10 +265,10 @@ export function fetchPromptSearchResults(
   ).then(({ payload }) => payload);
 }
 
-export async function createPrompt(postData: FormData) {
+export async function createPrompt(postData: FormData): Promise<PromptCreateResponse> {
   // FormData は multipart 送信になるため Content-Type は自動設定に任せる
   // Let browser set multipart Content-Type automatically for FormData.
-  const { payload } = await promptShareFetchJsonOrThrow<ApiResponse>(
+  const { payload } = await promptShareFetchJsonOrThrow<PromptCreateResponse>(
     "/prompt_share/api/prompts",
     {
       method: "POST",
