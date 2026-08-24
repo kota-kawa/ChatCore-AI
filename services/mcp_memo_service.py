@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from blueprints.memo.embeddings import schedule_embedding
-from blueprints.memo.helpers import ensure_title
-from blueprints.memo.repository import (
+from services.memo_embedding_service import schedule_embedding
+from services.repositories.memo_helpers import ensure_title
+from services.repositories.memo_repository import (
     fetch_collections,
     fetch_memo_detail,
     fetch_memo_summaries,
@@ -17,6 +19,7 @@ from blueprints.memo.repository import (
     update_memo as update_memo_record,
 )
 from services.api_errors import ApiServiceError
+from services.db import session_scope
 from services.embeddings import embeddings_available, generate_embedding
 from services.request_models import (
     MAX_MEMO_STORED_CONTENT_LENGTH,
@@ -102,14 +105,20 @@ def _to_summary(memo: dict[str, Any]) -> McpMemoSummary:
 
 
 def _to_search_result(memo: dict[str, Any]) -> McpMemoSearchResult:
-    return McpMemoSearchResult(**_summary_fields(memo), excerpt=str(memo.get("excerpt") or ""))
+    return McpMemoSearchResult(
+        **_summary_fields(memo),
+        excerpt=str(memo.get("excerpt") or ""),
+    )
 
 
 def _to_detail(memo: dict[str, Any]) -> McpMemoDetail:
-    return McpMemoDetail(**_summary_fields(memo), content=str(memo.get("ai_response") or ""))
+    return McpMemoDetail(
+        **_summary_fields(memo),
+        content=str(memo.get("ai_response") or ""),
+    )
 
 
-def list_memos(
+async def list_memos(
     user_id: int,
     *,
     limit: int = DEFAULT_MCP_MEMO_LIST_LIMIT,
@@ -118,9 +127,10 @@ def list_memos(
     include_archived: bool = False,
     only_archived: bool = False,
     collection_id: int | None = None,
+    session: AsyncSession | None = None,
 ) -> McpMemoListResult:
     """List only the authenticated owner's memo titles and safe metadata."""
-    result = fetch_memo_summaries(
+    result = await fetch_memo_summaries(
         user_id,
         limit=_safe_limit(limit),
         offset=max(int(offset), 0),
@@ -133,6 +143,7 @@ def list_memos(
         pinned_first=True,
         collection_id=collection_id,
         semantic_query_embedding=None,
+        session=session,
     )
     return McpMemoListResult(
         total=max(int(result.get("total") or 0), 0),
@@ -140,7 +151,7 @@ def list_memos(
     )
 
 
-def search_memos(
+async def search_memos(
     user_id: int,
     query: str,
     *,
@@ -152,6 +163,7 @@ def search_memos(
     include_archived: bool = False,
     only_archived: bool = False,
     collection_id: int | None = None,
+    session: AsyncSession | None = None,
 ) -> McpMemoSearchListResult:
     """Search the authenticated owner's memo titles and bodies."""
     normalized_query = query.strip()
@@ -161,12 +173,17 @@ def search_memos(
     semantic_embedding: list[float] | None = None
     if mode == "semantic" and embeddings_available():
         try:
-            semantic_embedding = generate_embedding(normalized_query)
+            semantic_embedding = await asyncio.to_thread(
+                generate_embedding,
+                normalized_query,
+            )
         except Exception:
-            # Keyword fallback keeps private memo search usable when the embedding provider is unavailable.
-            logger.warning("Failed to generate an MCP memo search embedding; using keyword search.", exc_info=True)
+            logger.warning(
+                "Failed to generate an MCP memo search embedding; using keyword search.",
+                exc_info=True,
+            )
 
-    result = fetch_memo_summaries(
+    result = await fetch_memo_summaries(
         user_id,
         limit=_safe_limit(limit),
         offset=max(int(offset), 0),
@@ -179,6 +196,7 @@ def search_memos(
         pinned_first=False,
         collection_id=collection_id,
         semantic_query_embedding=semantic_embedding,
+        session=session,
     )
     return McpMemoSearchListResult(
         total=max(int(result.get("total") or 0), 0),
@@ -186,14 +204,25 @@ def search_memos(
     )
 
 
-def get_memo(user_id: int, memo_id: int) -> McpMemoDetail:
+async def get_memo(
+    user_id: int,
+    memo_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> McpMemoDetail:
     """Load one private memo owned by the authenticated user."""
-    return _to_detail(fetch_memo_detail(user_id, memo_id))
+    return _to_detail(await fetch_memo_detail(user_id, memo_id, session=session))
 
 
-def update_memo(user_id: int, memo_id: int, payload: McpMemoUpdateRequest) -> McpMemoDetail:
+async def update_memo(
+    user_id: int,
+    memo_id: int,
+    payload: McpMemoUpdateRequest,
+    *,
+    session: AsyncSession | None = None,
+) -> McpMemoDetail:
     """Update title/content only when the caller's revision is still current."""
-    memo = update_memo_record(
+    memo = await update_memo_record(
         user_id,
         memo_id,
         title=payload.title,
@@ -202,49 +231,105 @@ def update_memo(user_id: int, memo_id: int, payload: McpMemoUpdateRequest) -> Mc
         clear_collection=False,
         expected_revision=payload.expected_revision,
         allow_shared_content_change=payload.allow_shared_content_change,
+        session=session,
     )
-    schedule_embedding(
-        memo_id,
-        str(memo.get("title") or ""),
-        str(memo.get("ai_response") or ""),
-        int(memo.get("revision") or 1),
-    )
+    if session is None:
+        schedule_embedding(
+            memo_id,
+            str(memo.get("title") or ""),
+            str(memo.get("ai_response") or ""),
+            int(memo.get("revision") or 1),
+        )
     return _to_detail(memo)
 
 
-def create_memo(user_id: int, payload: McpMemoCreateRequest) -> McpMemoDetail:
+async def create_memo(
+    user_id: int,
+    payload: McpMemoCreateRequest,
+    *,
+    session: AsyncSession | None = None,
+) -> McpMemoDetail:
     """Create a private memo for the authenticated owner."""
     title = ensure_title(payload.content, payload.title)
-    memo_id = insert_memo(user_id, payload.content, title, None)
-    if memo_id is None:
-        raise ApiServiceError("メモを作成できませんでした。", 500, status="fail")
-    memo = fetch_memo_detail(user_id, memo_id)
-    schedule_embedding(memo_id, title, payload.content, int(memo.get("revision") or 1))
-    return _to_detail(memo)
 
-
-def append_memo(user_id: int, memo_id: int, payload: McpMemoAppendRequest) -> McpMemoDetail:
-    """Append text without silently overwriting a concurrently changed memo."""
-    current = fetch_memo_detail(user_id, memo_id)
-    current_content = str(current.get("ai_response") or "")
-    appended_content = f"{current_content}{payload.separator}{payload.text}"
-    if len(appended_content) > MAX_MEMO_STORED_CONTENT_LENGTH:
-        raise ApiServiceError(
-            f"追記後のメモ本文は{MAX_MEMO_STORED_CONTENT_LENGTH}文字以内にしてください。",
-            400,
-            status="fail",
+    async def operation(db: AsyncSession) -> McpMemoDetail:
+        memo_id = await insert_memo(
+            user_id,
+            payload.content,
+            title,
+            None,
+            session=db,
         )
-    update_payload = McpMemoUpdateRequest(
-        expected_revision=payload.expected_revision,
-        content=appended_content,
-        allow_shared_content_change=payload.allow_shared_content_change,
+        if memo_id is None:
+            raise ApiServiceError("メモを作成できませんでした。", 500, status="fail")
+        return _to_detail(await fetch_memo_detail(user_id, memo_id, session=db))
+
+    if session is not None:
+        return await operation(session)
+    async with session_scope() as db:
+        async with db.begin():
+            memo = await operation(db)
+    schedule_embedding(
+        memo.id,
+        title,
+        payload.content,
+        memo.revision,
     )
-    return update_memo(user_id, memo_id, update_payload)
+    return memo
 
 
-def list_collections(user_id: int) -> McpMemoCollectionListResult:
+async def append_memo(
+    user_id: int,
+    memo_id: int,
+    payload: McpMemoAppendRequest,
+    *,
+    session: AsyncSession | None = None,
+) -> McpMemoDetail:
+    """Append text without silently overwriting a concurrently changed memo."""
+    async def operation(db: AsyncSession) -> McpMemoDetail:
+        current = await fetch_memo_detail(user_id, memo_id, session=db)
+        current_content = str(current.get("ai_response") or "")
+        appended_content = f"{current_content}{payload.separator}{payload.text}"
+        if len(appended_content) > MAX_MEMO_STORED_CONTENT_LENGTH:
+            raise ApiServiceError(
+                f"追記後のメモ本文は{MAX_MEMO_STORED_CONTENT_LENGTH}文字以内にしてください。",
+                400,
+                status="fail",
+            )
+        memo = await update_memo_record(
+            user_id,
+            memo_id,
+            title=None,
+            ai_response=appended_content,
+            collection_id=None,
+            clear_collection=False,
+            expected_revision=payload.expected_revision,
+            allow_shared_content_change=payload.allow_shared_content_change,
+            session=db,
+        )
+        return _to_detail(memo)
+
+    if session is not None:
+        return await operation(session)
+    async with session_scope() as db:
+        async with db.begin():
+            memo = await operation(db)
+    schedule_embedding(
+        memo.id,
+        memo.title,
+        memo.content,
+        memo.revision,
+    )
+    return memo
+
+
+async def list_collections(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> McpMemoCollectionListResult:
     """List collection metadata owned by the authenticated user."""
-    collections = fetch_collections(user_id)
+    collections = await fetch_collections(user_id, session=session)
     return McpMemoCollectionListResult(
         collections=[
             McpMemoCollection(

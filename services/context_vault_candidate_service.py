@@ -1,17 +1,22 @@
-"""Review queue operations for automatically extracted personal context facts."""
+"""Review-queue use cases for automatically extracted context facts."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import unicodedata
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from hashlib import sha256
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
+from services.db import is_retryable_db_error, session_scope
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
 from services.repositories.context_fact_candidate_repository import (
     ContextFactCandidateRepository,
@@ -33,7 +38,10 @@ from services.response_models import (
 
 DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT = 20
 MAX_CONTEXT_CANDIDATE_LIST_LIMIT = 50
+MAX_DB_WRITE_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
 _CURSOR_SEPARATOR = "~"
+T = TypeVar("T")
 
 
 class _ExtractedCandidateInput(BaseModel):
@@ -52,12 +60,34 @@ class _ExtractedCandidateInput(BaseModel):
         return self
 
 
-def _repository() -> ContextFactCandidateRepository:
-    return ContextFactCandidateRepository()
+def _repository(session: AsyncSession) -> ContextFactCandidateRepository:
+    return ContextFactCandidateRepository(session)
+
+
+async def _transaction(
+    session: AsyncSession | None,
+    operation: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    """Run one candidate use case in an explicit transaction."""
+    if session is not None:
+        return await operation(session)
+
+    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
+        try:
+            async with session_scope() as db:
+                async with db.begin():
+                    return await operation(db)
+        except ApiServiceError:
+            raise
+        except SQLAlchemyError as exc:
+            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
+                raise
+            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
+    raise RuntimeError("Context candidate transaction retry loop exhausted.")
 
 
 def _to_candidate_response(candidate: dict[str, Any]) -> ContextFactCandidateResponse:
-    """Allowlist candidate fields; never expose owner, fingerprint, or promoted id."""
+    """Allowlist candidate fields; never expose owner or fingerprint data."""
     return ContextFactCandidateResponse(
         id=int(candidate["id"]),
         fact_type=str(candidate["fact_type"]),
@@ -110,17 +140,14 @@ def _fingerprint(candidate: _ExtractedCandidateInput) -> str:
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def store_extracted_candidates(
+async def store_extracted_candidates(
     user_id: int,
     *,
     candidates: list[dict[str, Any]],
     source_ref: str,
+    session: AsyncSession | None = None,
 ) -> int:
     """Validate and enqueue unique LLM-extracted facts for an opted-in owner."""
-    repo = _repository()
-    if not repo.get_extraction_settings(user_id):
-        return 0
-
     normalized_source_ref = source_ref.strip()[:500] or None
     prepared: list[dict[str, Any]] = []
     for raw_candidate in candidates:
@@ -144,7 +171,14 @@ def store_extracted_candidates(
         )
     if not prepared:
         return 0
-    return repo.store_candidates(user_id, prepared)
+
+    async def operation(db: AsyncSession) -> int:
+        repo = _repository(db)
+        if not await repo.get_extraction_settings(user_id):
+            return 0
+        return await repo.store_candidates(user_id, prepared)
+
+    return await _transaction(session, operation)
 
 
 def _decode_cursor(cursor: str | None) -> tuple[datetime, int] | None:
@@ -167,37 +201,41 @@ def _decode_cursor(cursor: str | None) -> tuple[datetime, int] | None:
         ) from exc
 
 
-def list_candidates(
+async def list_candidates(
     user_id: int,
     *,
     status: ContextFactCandidateStatus = "pending",
     limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     cursor: str | None = None,
+    session: AsyncSession | None = None,
 ) -> ContextFactCandidateListResponse:
-    repo = _repository()
-    safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
-    decoded = _decode_cursor(cursor)
-    rows = repo.list_candidates(
-        user_id,
-        status=status,
-        limit=safe_limit + 1,
-        before_created_at=decoded[0] if decoded else None,
-        before_id=decoded[1] if decoded else None,
-    )
-    next_cursor: str | None = None
-    if len(rows) > safe_limit:
-        last = rows[safe_limit - 1]
-        if last.get("created_at"):
-            next_cursor = f"{last['created_at']}{_CURSOR_SEPARATOR}{int(last['id'])}"
-        rows = rows[:safe_limit]
-    return ContextFactCandidateListResponse(
-        candidates=[_to_candidate_response(row) for row in rows],
-        next_cursor=next_cursor,
-        total_pending=repo.count_pending(user_id),
-    )
+    async def operation(db: AsyncSession) -> ContextFactCandidateListResponse:
+        safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
+        decoded = _decode_cursor(cursor)
+        repo = _repository(db)
+        rows = await repo.list_candidates(
+            user_id,
+            status=status,
+            limit=safe_limit + 1,
+            before_created_at=decoded[0] if decoded else None,
+            before_id=decoded[1] if decoded else None,
+        )
+        next_cursor: str | None = None
+        if len(rows) > safe_limit:
+            last = rows[safe_limit - 1]
+            if last.get("created_at"):
+                next_cursor = f"{last['created_at']}{_CURSOR_SEPARATOR}{int(last['id'])}"
+            rows = rows[:safe_limit]
+        return ContextFactCandidateListResponse(
+            candidates=[_to_candidate_response(row) for row in rows],
+            next_cursor=next_cursor,
+            total_pending=await repo.count_pending(user_id),
+        )
+
+    return await _transaction(session, operation)
 
 
-def approve_candidate(
+async def approve_candidate(
     user_id: int,
     candidate_id: int,
     *,
@@ -206,62 +244,98 @@ def approve_candidate(
     title: str | None = None,
     content: str | None = None,
     importance: int | None = None,
+    session: AsyncSession | None = None,
 ) -> ContextFactCandidateApprovalResponse:
-    candidate, fact = _repository().approve_candidate(
-        user_id,
-        candidate_id,
-        expected_revision=expected_revision,
-        fact_type=fact_type,
-        title=title.strip()[:MAX_CONTEXT_FACT_TITLE_LENGTH] if title is not None else None,
-        content=(
-            content.strip()[:MAX_CONTEXT_FACT_CONTENT_LENGTH]
+    async def operation(db: AsyncSession) -> tuple[dict[str, Any], dict[str, Any]]:
+        return await _repository(db).approve_candidate(
+            user_id,
+            candidate_id,
+            expected_revision=expected_revision,
+            fact_type=fact_type,
+            title=title.strip()[:MAX_CONTEXT_FACT_TITLE_LENGTH]
+            if title is not None
+            else None,
+            content=content.strip()[:MAX_CONTEXT_FACT_CONTENT_LENGTH]
             if content is not None
-            else None
-        ),
-        importance=(max(0, min(int(importance), 100)) if importance is not None else None),
-    )
-    schedule_embedding(
-        int(fact["id"]),
-        str(fact["fact_type"]),
-        str(fact["title"]),
-        str(fact["content"]),
-        int(fact["revision"]),
-    )
+            else None,
+            importance=max(0, min(int(importance), 100))
+            if importance is not None
+            else None,
+        )
+
+    candidate, fact = await _transaction(session, operation)
+    if session is None:
+        schedule_embedding(
+            int(fact["id"]),
+            str(fact["fact_type"]),
+            str(fact["title"]),
+            str(fact["content"]),
+            int(fact["revision"]),
+        )
     return ContextFactCandidateApprovalResponse(
         candidate=_to_candidate_response(candidate),
         fact=_to_fact_response(fact),
     )
 
 
-def reject_candidate(
+async def reject_candidate(
     user_id: int,
     candidate_id: int,
     *,
     expected_revision: int,
+    session: AsyncSession | None = None,
 ) -> ContextFactCandidateResponse:
-    candidate = _repository().reject_candidate(
-        user_id,
-        candidate_id,
-        expected_revision=expected_revision,
+    candidate = await _transaction(
+        session,
+        lambda db: _repository(db).reject_candidate(
+            user_id,
+            candidate_id,
+            expected_revision=expected_revision,
+        ),
     )
     return _to_candidate_response(candidate)
 
 
-def is_context_extraction_enabled(user_id: int) -> bool:
-    return _repository().get_extraction_settings(user_id)
+async def is_context_extraction_enabled(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> bool:
+    return await _transaction(
+        session,
+        lambda db: _repository(db).get_extraction_settings(user_id),
+    )
 
 
-def should_extract_context(user_id: int) -> bool:
-    return _repository().should_extract_context(user_id)
+async def should_extract_context(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> bool:
+    return await _transaction(
+        session,
+        lambda db: _repository(db).should_extract_context(user_id),
+    )
 
 
-def get_extraction_settings(user_id: int) -> ContextExtractionSettingsResponse:
-    return ContextExtractionSettingsResponse(enabled=is_context_extraction_enabled(user_id))
+async def get_extraction_settings(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> ContextExtractionSettingsResponse:
+    return ContextExtractionSettingsResponse(
+        enabled=await is_context_extraction_enabled(user_id, session=session),
+    )
 
 
-def update_extraction_settings(
+async def update_extraction_settings(
     user_id: int,
     enabled: bool,
+    *,
+    session: AsyncSession | None = None,
 ) -> ContextExtractionSettingsResponse:
-    updated = _repository().update_extraction_settings(user_id, enabled)
+    updated = await _transaction(
+        session,
+        lambda db: _repository(db).update_extraction_settings(user_id, enabled),
+    )
     return ContextExtractionSettingsResponse(enabled=updated)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import sys
 from typing import Any
 
@@ -15,6 +16,18 @@ def auth_module() -> Any:
 
 def dep(name: str) -> Any:
     return getattr(auth_module(), name)
+
+
+async def await_result(value: Any) -> Any:
+    """Await async dependencies while keeping unit-test doubles lightweight."""
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def call_dependency(name: str, *args: Any, **kwargs: Any) -> Any:
+    """Call an auth dependency without routing database work through a thread."""
+    return await await_result(dep(name)(*args, **kwargs))
 
 
 def get_auth_limit_service_dependency(request: Request) -> Any:

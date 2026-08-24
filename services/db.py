@@ -1,462 +1,229 @@
-import atexit
+"""Async SQLAlchemy database lifecycle and transaction helpers.
+
+The application owns one :class:`AsyncEngine` per worker process and creates a
+short-lived :class:`AsyncSession` for each unit of work.  Sessions are never
+shared between concurrent tasks.
+"""
+
+from __future__ import annotations
+
 import logging
 import os
-import threading
-import time
-from types import TracebackType
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from .runtime_config import is_production_env
 
-# テスト環境では psycopg2 が未導入の場合があるため遅延フォールバックする
-# Allow graceful fallback when psycopg2 is unavailable in test environments.
-try:
-    import psycopg2
-    from psycopg2 import Error, extras
-    from psycopg2.pool import PoolError, ThreadedConnectionPool
-except ModuleNotFoundError:  # pragma: no cover - optional for test envs
-    psycopg2 = None
-    Error = Exception
-    extras = None
-    ThreadedConnectionPool = None
-
-    class PoolError(Exception):  # type: ignore[no-redef]
-        """psycopg2 未導入環境向けのプレースホルダ例外。"""
-
-
 logger = logging.getLogger(__name__)
 
+_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
 
-# 接続プールが枯渇し、待機タイムアウト内に接続を確保できなかったことを表す例外
-# Raised when the connection pool stays exhausted past the acquire timeout.
-class DbConnectionPoolTimeout(RuntimeError):
-    """Raised when a pooled DB connection cannot be acquired in time."""
-
-
-# プール枯渇待機の既定値（秒）。スパイク時の一時的な枯渇を吸収するために待機する。
-# Defaults for the bounded wait that absorbs short-lived pool exhaustion spikes.
-DEFAULT_POOL_ACQUIRE_TIMEOUT_SECONDS = 10.0
-DEFAULT_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS = 0.05
-MAX_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS = 0.5
-
-
-_pool_lock = threading.Lock()
-DbConfig = dict[str, str | int]
-PoolKey = tuple[tuple[str, ...], str, str, str, int, int, int]
-
-_connection_pool: Any | None = None
-_connection_pool_key: PoolKey | None = None
-_RETRYABLE_DB_PG_CODES = {
-    # serialization_failure
-    "40001",
-    # deadlock_detected
-    "40P01",
-    # lock_not_available
-    "55P03",
-    # connection_failure, sqlclient_unable_to_establish_sqlconnection
-    "08006",
-    "08001",
-    # too_many_connections
-    "53300",
-    # cannot_connect_now
-    "57P03",
+_RETRYABLE_SQLSTATES = {
+    "40001",  # serialization_failure
+    "40P01",  # deadlock_detected
+    "55P03",  # lock_not_available
+    "08001",  # sqlclient_unable_to_establish_sqlconnection
+    "08006",  # connection_failure
+    "53300",  # too_many_connections
+    "57P03",  # cannot_connect_now
 }
 
 
-# 接続プールから取得した接続をラップし、辞書形式のカーソルサポートと安全な返却を提供するプロキシクラス
-# A proxy class wrapping a connection from the pool, providing dictionary cursor support and safe release
-class _ConnectionProxy:
-    # プールへ返却済み接続の再利用を防ぐ薄いラッパー
-    # Lightweight wrapper that prevents reuse after returning to the pool.
-    """Pooled connection wrapper with dictionary=True cursor support."""
-
-    # プロキシインスタンスを初期化し、DB接続と接続プールを保持する
-    # Initialize the proxy instance, retaining the database connection and the connection pool.
-    def __init__(self, connection: Any, connection_pool: Any) -> None:
-        self._connection = connection
-        self._connection_pool = connection_pool
-        self._returned = False
-
-    # 接続がすでにプールに返却されていないことを確認する
-    # Ensure that the connection has not already been returned to the pool.
-    def _ensure_open(self) -> None:
-        if self._returned or self._connection is None:
-            raise RuntimeError("Connection already returned to pool.")
-
-    # データベース操作を実行するためのカーソルオブジェクトを作成して返す
-    # Create and return a cursor object to execute database operations.
-    def cursor(self, *args: Any, **kwargs: Any) -> Any:
-        self._ensure_open()
-        dictionary = kwargs.pop("dictionary", False)
-        if dictionary:
-            # mysqlclient 互換の dictionary=True を psycopg2 の RealDictCursor に変換する
-            # Translate mysqlclient-style dictionary=True into psycopg2 RealDictCursor.
-            if extras is None:
-                raise RuntimeError("psycopg2 extras are required for dictionary cursors.")
-            kwargs["cursor_factory"] = extras.RealDictCursor
-        return self._connection.cursor(*args, **kwargs)
-
-    # 接続をプールに返却し、必要に応じてロールバックを行う
-    # Return the connection back to the pool, performing a rollback if necessary.
-    def close(self) -> None:
-        if self._returned or self._connection is None:
-            return
-
-        connection = self._connection
-        connection_pool = self._connection_pool
-        self._connection = None
-        self._connection_pool = None
-        self._returned = True
-
-        # 返却前にロールバックし、汚れたトランザクション状態を持ち越さない
-        # Roll back before returning so dirty transactions are not leaked.
-        close_physical = bool(getattr(connection, "closed", 0))
-        if not close_physical:
-            rolled_back = rollback_connection(connection)
-            if not rolled_back:
-                close_physical = True
-
-        try:
-            connection_pool.putconn(connection, close=close_physical)
-        except Exception:  # pragma: no cover - depends on env/pool state
-            try:
-                connection.close()
-            except Exception:
-                pass
-
-    # context managerの開始処理。自身を返す
-    # Enter the context manager, returning the proxy instance itself.
-    def __enter__(self) -> "_ConnectionProxy":
-        self._ensure_open()
-        return self
-
-    # context managerの終了処理。接続を閉じる（プールに返却する）
-    # Exit the context manager, closing (returning) the connection.
-    def __exit__(
-        self,
-        _exc_type: type[BaseException] | None,
-        _exc: BaseException | None,
-        _tb: TracebackType | None,
-    ) -> bool:
-        self.close()
-        return False
-
-    # デストラクタ。インスタンス破棄時に接続を安全に閉じる
-    # Destructor. Safely closes the connection when the instance is destroyed.
-    def __del__(self) -> None:  # pragma: no cover - GC timing is nondeterministic
-        try:
-            self.close()
-        except Exception:
-            pass
-
-    # 内部の接続オブジェクトの属性へアクセスを委譲する
-    # Delegate attribute access to the underlying connection object.
-    def __getattr__(self, name: str) -> Any:
-        self._ensure_open()
-        return getattr(self._connection, name)
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+    return value if value else default
 
 
-# 環境変数から正の浮動小数点数を取得する（不正値は既定値にフォールバック）
-# Read a positive float env var, falling back to the default on invalid input.
-def _get_positive_float_env(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
+def resolve_database_url() -> str:
+    """Return a psycopg 3 async SQLAlchemy URL without reading secret files."""
+
+    configured = _env("DATABASE_URL")
+    if configured:
+        for prefix in ("postgresql://", "postgres://"):
+            if configured.startswith(prefix):
+                return "postgresql+psycopg://" + configured[len(prefix) :]
+        if configured.startswith("postgresql+psycopg://"):
+            return configured
+        raise ValueError("DATABASE_URL must use a PostgreSQL URL scheme.")
+
+    user = _env("POSTGRES_USER")
+    password = _env("POSTGRES_PASSWORD")
+    database = _env("POSTGRES_DB")
+    if user is None or password is None or database is None:
+        raise ValueError("POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB are required.")
+
+    host = (_env("POSTGRES_HOST", "db") or "db").split(",", 1)[0].strip()
+    port = _env("POSTGRES_PORT", "5432") or "5432"
+    from urllib.parse import quote_plus
+
+    return (
+        f"postgresql+psycopg://{quote_plus(user)}:{quote_plus(password)}"
+        f"@{host}:{port}/{quote_plus(database)}"
+    )
+
+
+def _positive_int(name: str, default: int) -> int:
+    raw = _env(name)
     try:
-        value = float(raw)
+        value = int(raw) if raw is not None else default
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
 
 
-# プールから接続を確保する際の待機タイムアウト（秒）を取得する
-# Resolve the bounded wait timeout (seconds) for acquiring a pooled connection.
-def _get_pool_acquire_timeout_seconds() -> float:
-    return _get_positive_float_env(
-        "DB_POOL_ACQUIRE_TIMEOUT_SECONDS",
-        DEFAULT_POOL_ACQUIRE_TIMEOUT_SECONDS,
-    )
-
-
-# 枯渇時のリトライ間隔（秒）を取得する。上限でクランプし、過剰なスピンを防ぐ。
-# Resolve the retry interval (seconds) while the pool is exhausted, clamped to a ceiling.
-def _get_pool_acquire_retry_interval_seconds() -> float:
-    interval = _get_positive_float_env(
-        "DB_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS",
-        DEFAULT_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS,
-    )
-    return min(interval, MAX_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS)
-
-
-# PoolError が「プール枯渇」を表すものか（再試行で解消し得る一過性か）を判定する
-# Decide whether a PoolError signals a (transient, retryable) pool exhaustion.
-def _is_pool_exhausted_error(exc: BaseException) -> bool:
-    return isinstance(exc, PoolError) and "exhausted" in str(exc).lower()
-
-
-# 環境変数を優先度の順に参照し、値を決定するヘルパー関数
-# Helper function to resolve environment variables in order of priority.
-def _get_env(name: str, default: str | None) -> str | None:
-    # 環境変数を取得し、未設定なら既定値を返す
-    # Resolve value from the env var, falling back to the default when unset.
-    value = os.environ.get(name)
-    if value:
-        return value
-    return default
-
-
-# 接続オブジェクトに対して安全にロールバックを実行する
-# Safely perform a rollback on the connection object.
-def rollback_connection(connection: Any) -> bool:
-    # 例外処理時に安全にロールバックし、失敗しても二次例外を出さない
-    # Roll back safely during exception handling and swallow rollback failures.
-    if connection is None:
-        return False
+def _positive_float(name: str, default: float) -> float:
+    raw = _env(name)
     try:
-        connection.rollback()
-        return True
-    except Exception:
-        return False
+        value = float(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
 
 
-# DBエラーが一時的で、再試行可能なものかどうかを判定する
-# Determine whether the database error is transient and can be retried.
-def is_retryable_db_error(exc: BaseException) -> bool:
-    # DB例外から再試行可能性を判定する
-    # Infer whether a DB error is retryable.
-    pgcode = getattr(exc, "pgcode", None)
-    if isinstance(pgcode, str) and pgcode in _RETRYABLE_DB_PG_CODES:
-        return True
-
-    if Error is not Exception and isinstance(exc, Error):
-        exc_name = exc.__class__.__name__
-        if exc_name in {"OperationalError", "InterfaceError"}:
-            return True
-
-    return False
-
-
-# 環境変数からDBのホスト名のリストを取得する（ローカル開発用フォールバックを含む）
-# Get the list of database hosts from environment variables (including local development fallbacks).
-def _get_db_hosts() -> list[str]:
-    env_host = os.environ.get("POSTGRES_HOST")
-    if env_host:
-        hosts = [host.strip() for host in env_host.split(",") if host.strip()]
-        # If a single docker-compose host is provided, add safe local fallbacks.
-        if len(hosts) == 1 and hosts[0] == "db":
-            hosts.extend(["localhost", "127.0.0.1", "host.docker.internal"])
-        return hosts
-    # Prefer docker-compose's default service name but allow local dev fallback.
-    return ["db", "localhost", "127.0.0.1", "host.docker.internal"]
-
-
-# 環境変数からデータベース設定（ユーザー名、パスワード、DB名など）を取得する
-# Retrieve database configuration settings (user, password, dbname, etc.) from env variables.
-def _get_db_config() -> DbConfig:
-    user = _get_env("POSTGRES_USER", None)
-    password = _get_env("POSTGRES_PASSWORD", None)
-    dbname = _get_env("POSTGRES_DB", None)
-
-    if not all([user, password, dbname]):
-        raise ValueError("Database configuration (USER, PASSWORD, DB) must be set in environment variables.")
-
-    return {
-        "host": _get_env("POSTGRES_HOST", "db"),
-        "user": user,
-        "password": password,
-        "dbname": dbname,
-        "port": int(_get_env("POSTGRES_PORT", "5432")),
-    }
-
-
-# 接続プールの最小接続数と最大接続数の制限値を取得・検証する
-# Retrieve and validate the minimum and maximum connection limits for the connection pool.
-def _get_pool_bounds() -> tuple[int, int]:
+def _pool_size() -> int:
     if is_production_env():
-        min_conn_raw = os.environ.get(
-            "DB_POOL_MIN_CONN_PRODUCTION",
-            os.environ.get("DB_POOL_MIN_CONN", "1"),
-        )
-        max_conn_raw = os.environ.get(
+        return _positive_int(
             "DB_POOL_MAX_CONN_PRODUCTION",
-            os.environ.get("DB_POOL_MAX_CONN", "10"),
+            _positive_int("DB_POOL_MAX_CONN", 10),
         )
-    else:
-        min_conn_raw = os.environ.get("DB_POOL_MIN_CONN", "1")
-        max_conn_raw = os.environ.get("DB_POOL_MAX_CONN", "10")
-
-    min_conn = int(min_conn_raw)
-    max_conn = int(max_conn_raw)
-    if min_conn < 1:
-        raise ValueError("DB_POOL_MIN_CONN must be >= 1.")
-    if max_conn < min_conn:
-        raise ValueError("DB_POOL_MAX_CONN must be >= DB_POOL_MIN_CONN.")
-    return min_conn, max_conn
+    return _positive_int("DB_POOL_MAX_CONN", 10)
 
 
-# 接続プールのキャッシュキーとなるタプルを構築する
-# Construct a tuple that serves as the cache key for the connection pool.
-def _build_pool_key(
-    config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
-) -> PoolKey:
-    # 接続先・認証情報・プールサイズのいずれかが変わったら、既存プールを再利用しない。
-    # テストで環境変数を書き換えるケースにもこのキーで追従する。
-    return (
-        tuple(hosts),
-        config["user"],
-        config["password"],
-        config["dbname"],
-        config["port"],
-        min_conn,
-        max_conn,
-    )
-
-
-# 設定とホストリストに基づいてスレッドセーフな接続プールを生成する
-# Create a thread-safe connection pool based on configuration and host list.
-def _build_connection_pool(
-    config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
-) -> Any:
-    if ThreadedConnectionPool is None:
-        raise RuntimeError("psycopg2 ThreadedConnectionPool is required to connect to the database.")
-
-    first_exc = None
-    # 複数ホストを順に試し、最初に接続成功したプールを採用する
-    # Try hosts in order and keep the first successfully validated pool.
-    for host in hosts:
-        candidate_config = dict(config)
-        candidate_config["host"] = host
-        pool_instance = None
-        try:
-            pool_instance = ThreadedConnectionPool(min_conn, max_conn, **candidate_config)
-            # プール生成だけでは実接続に失敗しても遅れて表面化する場合があるため、
-            # 1本借りて返すところまで確認してから採用する。
-            validation_conn = pool_instance.getconn()
-            pool_instance.putconn(validation_conn)
-            return pool_instance
-        except Exception as exc:  # pragma: no cover - depends on env
-            if first_exc is None:
-                first_exc = exc
-            if pool_instance is not None:
-                try:
-                    pool_instance.closeall()
-                except Exception:
-                    pass
-            continue
-
-    if first_exc is not None:
-        raise first_exc
-    raise RuntimeError("Database connection pool initialization failed without an exception.")
-
-
-# キャッシュされた接続プールを取得する、または必要に応じて初期化/更新する
-# Retrieve the cached connection pool, initializing or updating it if necessary.
-def _get_connection_pool() -> Any:
-    global _connection_pool, _connection_pool_key
-
-    config = _get_db_config()
-    hosts = _get_db_hosts()
-    min_conn, max_conn = _get_pool_bounds()
-    pool_key = _build_pool_key(config, hosts, min_conn, max_conn)
-    old_pool = None
-    new_pool = None
-
-    with _pool_lock:
-        if _connection_pool is not None and _connection_pool_key == pool_key:
-            return _connection_pool
-
-        # 設定が変わった場合は新プールへ差し替え、旧プールはロック外で閉じる
-        # Replace pool on config change and close previous pool outside the lock.
-        old_pool = _connection_pool
-        new_pool = _build_connection_pool(config, hosts, min_conn, max_conn)
-        _connection_pool = new_pool
-        _connection_pool_key = pool_key
-
-    if old_pool is not None:
-        # closeall() はブロックしうるため、新しいプールを公開してロックを解放してから閉じる。
-        # これにより設定変更中でも他リクエストの接続取得を長く止めない。
-        try:
-            old_pool.closeall()
-        except Exception:
-            pass
-
-    return new_pool
-
-
-# 接続プール内のすべてのコネクションをクローズし、リソースを解放する
-# Close all connections in the pool and release resources.
-def close_db_pool() -> None:
-    """Close all pooled DB connections."""
-    global _connection_pool, _connection_pool_key
-
-    with _pool_lock:
-        pool_instance = _connection_pool
-        _connection_pool = None
-        _connection_pool_key = None
-
-    if pool_instance is None:
+def _warn_if_pool_capacity_is_unsafe(pool_size: int) -> None:
+    workers = _positive_int("WEB_CONCURRENCY", 1)
+    max_connections_raw = _env("POSTGRES_MAX_CONNECTIONS")
+    if max_connections_raw is None:
         return
-
     try:
-        pool_instance.closeall()
-    except Exception:  # pragma: no cover - depends on env
-        pass
+        max_connections = int(max_connections_raw)
+    except ValueError:
+        return
+    # Blue/Green deployments can briefly run both colors against the same DB.
+    deployment_multiplier = 2 if (_env("BLUE_GREEN_DEPLOYMENT", "false") or "false").lower() in {"1", "true", "yes"} else 1
+    reserved = _positive_int("DB_CONNECTION_HEADROOM", 10)
+    required = deployment_multiplier * workers * pool_size + reserved
+    if required >= max_connections:
+        logger.warning(
+            "Configured DB capacity may be unsafe: %s workers x %s pool connections "
+            "x %s deployment colors + %s headroom = %s, PostgreSQL max_connections=%s.",
+            workers,
+            pool_size,
+            deployment_multiplier,
+            reserved,
+            required,
+            max_connections,
+        )
 
 
-atexit.register(close_db_pool)
+def get_engine() -> AsyncEngine:
+    """Lazily create and return this worker's shared async engine."""
+
+    global _engine, _session_factory
+    if _engine is not None:
+        return _engine
+
+    pool_size = _pool_size()
+    _warn_if_pool_capacity_is_unsafe(pool_size)
+    _engine = create_async_engine(
+        resolve_database_url(),
+        pool_size=pool_size,
+        max_overflow=0,
+        pool_timeout=_positive_float("DB_POOL_ACQUIRE_TIMEOUT_SECONDS", 10.0),
+        pool_pre_ping=True,
+        pool_recycle=_positive_int("DB_POOL_RECYCLE_SECONDS", 1800),
+        echo=(_env("SQLALCHEMY_ECHO", "false") or "false").lower() in {"1", "true", "yes"},
+    )
+    _session_factory = async_sessionmaker(
+        bind=_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        autocommit=False,
+    )
+    return _engine
 
 
-# データベース接続プールから接続を1つ取得し、プロキシオブジェクトとして返す
-# Retrieve a connection from the pool and return it as a proxy object.
-def get_db_connection() -> _ConnectionProxy:
-    # プールから 1 接続を貸し出し、close() 時に自動返却されるプロキシを返す
-    # Borrow a pooled connection and return a proxy that puts it back on close().
-    """PostgreSQL への接続を返す (connection pool backed)."""
-    if psycopg2 is None:
-        raise RuntimeError("psycopg2 is required to connect to the database.")
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Return the process-local session factory."""
 
-    connection_pool = _get_connection_pool()
+    get_engine()
+    assert _session_factory is not None
+    return _session_factory
 
-    # ThreadedConnectionPool.getconn() は枯渇時に待機せず即時 PoolError を送出する。
-    # 同時実行がプール上限を一瞬超えただけで失敗しないよう、上限付きで待機リトライする。
-    # getconn() raises immediately on exhaustion instead of waiting, so retry within a
-    # bounded window to ride out short bursts where in-flight work briefly exceeds the pool.
-    timeout = _get_pool_acquire_timeout_seconds()
-    retry_interval = _get_pool_acquire_retry_interval_seconds()
-    deadline = time.monotonic() + timeout
 
-    while True:
-        try:
-            connection = connection_pool.getconn()
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """Yield an isolated session and rollback any uncommitted work on exit.
 
-            # 接続が生きているか物理レベルと論理レベルで確認する (pool_pre_ping)。
-            # DBの再起動などによりプール内の接続が切断されている場合、
-            # 破棄して別の接続（または新規接続）を取得し直す。
-            # Verify if the connection is alive (pool_pre_ping). If broken due to
-            # a DB restart, discard it and retrieve another.
-            if getattr(connection, "closed", 0) != 0:
-                connection_pool.putconn(connection, close=True)
-                continue
+    Commit is deliberately explicit at the use-case boundary.  This prevents a
+    repository called by a multi-step service from committing half a workflow.
+    """
 
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-            except Exception:
-                connection_pool.putconn(connection, close=True)
-                continue
+    session = get_session_factory()()
+    try:
+        yield session
+    except BaseException:
+        await session.rollback()
+        raise
+    finally:
+        if session.in_transaction():
+            await session.rollback()
+        await session.close()
 
-            return _ConnectionProxy(connection, connection_pool)
-        except PoolError as exc:
-            if not _is_pool_exhausted_error(exc):
-                raise
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                logger.warning(
-                    "DB connection pool exhausted; gave up after %.1fs of waiting.",
-                    timeout,
-                )
-                raise DbConnectionPoolTimeout(
-                    "Database connection pool exhausted; no connection became "
-                    f"available within {timeout:.1f}s."
-                ) from exc
-            time.sleep(min(retry_interval, remaining))
+
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """FastAPI dependency that provides one isolated AsyncSession per request."""
+
+    async with session_scope() as session:
+        yield session
+
+
+async def dispose_engine() -> None:
+    """Dispose the worker engine during FastAPI shutdown."""
+
+    global _engine, _session_factory
+    engine = _engine
+    _engine = None
+    _session_factory = None
+    if engine is not None:
+        await engine.dispose()
+
+
+async def check_database() -> bool:
+    """Run the readiness probe through SQLAlchemy's async path."""
+
+    async with session_scope() as session:
+        await session.scalar(text("SELECT 1"))
+    return True
+
+
+def is_retryable_db_error(exc: BaseException) -> bool:
+    """Identify transient PostgreSQL failures without exposing DBAPI objects."""
+
+    current: BaseException | None = exc
+    for _ in range(3):
+        if current is None:
+            break
+        sqlstate = getattr(current, "sqlstate", None)
+        if sqlstate in _RETRYABLE_SQLSTATES:
+            return True
+        orig = getattr(current, "orig", None)
+        current = orig if isinstance(orig, BaseException) else None
+    return isinstance(exc, (OperationalError, DBAPIError)) and bool(getattr(exc, "connection_invalidated", False))
+
+
+async def execute_health_query(session: AsyncSession) -> Any:
+    """Small shared helper for readiness tests and repository diagnostics."""
+
+    return await session.scalar(text("SELECT 1"))

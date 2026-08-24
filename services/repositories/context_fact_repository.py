@@ -1,13 +1,28 @@
+"""Async SQLAlchemy persistence for the personal context vault."""
+
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import (
+    and_,
+    bindparam,
+    column,
+    exists,
+    func,
+    literal,
+    select,
+    tuple_,
+    update,
+    values,
+)
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
-from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from services.embeddings import get_semantic_max_distance
 from services.error_messages import (
     ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
@@ -15,21 +30,13 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_NOT_FOUND,
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
 )
+from services.models import ContextFact
+from services.models.types import Vector
 from services.search_terms import build_like_pattern, split_search_terms
 
-DB_WRITE_MAX_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
-
-# active な事実の上限。get_personal_context ダイジェストと文脈注入のサイズを有界に保つ。
-# Cap on active facts so the personal-context digest and injected context stay bounded.
 MAX_ACTIVE_CONTEXT_FACTS = 200
-
-# Advisory locks share a database-wide namespace. Use a dedicated first key so
-# an integer user ID cannot collide with another feature's one-key lock.
 _CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
 
-# context_facts の全カラム。返却順を固定してタプル→dict 変換を安全にする。
-# All context_facts columns, in a fixed order so tuple→dict mapping stays stable.
 _FACT_COLUMNS = (
     "id",
     "user_id",
@@ -47,120 +54,82 @@ _FACT_COLUMNS = (
     "created_at",
     "updated_at",
 )
-_SELECT_COLUMNS = ", ".join(_FACT_COLUMNS)
+_FACT_RETURNING_COLUMNS = tuple(getattr(ContextFact, name) for name in _FACT_COLUMNS)
+
+
+def _record_from_row(row: Any) -> dict[str, Any]:
+    if isinstance(row, ContextFact):
+        return {name: getattr(row, name) for name in _FACT_COLUMNS}
+    mapping = row if isinstance(row, Mapping) else getattr(row, "_mapping", row)
+    return {
+        name: mapping[name] if name in mapping else getattr(mapping, name, None)
+        for name in _FACT_COLUMNS
+    }
+
+
+def _serialize_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(record["id"]),
+        "user_id": int(record["user_id"]),
+        "fact_type": str(record["fact_type"]),
+        "title": str(record["title"] or ""),
+        "content": str(record["content"] or ""),
+        "source_kind": str(record["source_kind"] or "manual"),
+        "source_ref": str(record["source_ref"]) if record["source_ref"] is not None else None,
+        "source_client_id": (
+            str(record["source_client_id"])
+            if record["source_client_id"] is not None
+            else None
+        ),
+        "importance": int(record["importance"] if record["importance"] is not None else 50),
+        "idempotency_key_hash": (
+            str(record["idempotency_key_hash"])
+            if record["idempotency_key_hash"] is not None
+            else None
+        ),
+        "idempotency_payload_hash": (
+            str(record["idempotency_payload_hash"])
+            if record["idempotency_payload_hash"] is not None
+            else None
+        ),
+        "status": str(record["status"] or "active"),
+        "revision": max(int(record["revision"] or 1), 1),
+        "created_at": serialize_datetime_iso(record["created_at"]),
+        "updated_at": serialize_datetime_iso(record["updated_at"]),
+        "_updated_at_raw": record["updated_at"],
+    }
 
 
 class ContextFactRepository:
-    """context_facts の永続化境界。ProjectRepository と同じくテストで依存を差し替えられる。
+    """Persistence boundary for ``context_facts``.
 
-    Persistence boundary for context_facts. Like ProjectRepository, its dependencies
-    can be injected in tests to exercise retries without a real database.
+    The repository never commits or rolls back.  The caller owns the
+    ``AsyncSession`` transaction so a use case can combine several operations
+    atomically.
     """
 
-    def __init__(
-        self,
-        *,
-        connection_getter: Callable[[], Any] = get_db_connection,
-        retryable_error_checker: Callable[[BaseException], bool] = is_retryable_db_error,
-        rollback: Callable[[Any], bool] = rollback_connection,
-        sleep: Callable[[float], Any] = time.sleep,
-    ) -> None:
-        self._connection_getter = connection_getter
-        self._is_retryable_db_error = retryable_error_checker
-        self._rollback = rollback
-        self._sleep = sleep
-
-    # ----- write retry helper ------------------------------------------------
-
-    def _run_write(self, operation: Callable[[Any], Any], *, error_message: str) -> Any:
-        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
-            with self._connection_getter() as conn:
-                cursor = conn.cursor()
-                try:
-                    result = operation(cursor)
-                    conn.commit()
-                    return result
-                except ApiServiceError:
-                    self._rollback(conn)
-                    raise
-                except Error as exc:
-                    self._rollback(conn)
-                    if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
-                        self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
-                        continue
-                    raise
-                except BaseException:
-                    self._rollback(conn)
-                    raise
-                finally:
-                    cursor.close()
-
-        raise RuntimeError(error_message)
-
-    # ----- serialization -----------------------------------------------------
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
     @staticmethod
     def _serialize_row(row: Any) -> dict[str, Any]:
-        record = dict(zip(_FACT_COLUMNS, row))
-        return {
-            "id": int(record["id"]),
-            "user_id": int(record["user_id"]),
-            "fact_type": str(record["fact_type"]),
-            "title": str(record["title"] or ""),
-            "content": str(record["content"] or ""),
-            "source_kind": str(record["source_kind"] or "manual"),
-            "source_ref": (
-                str(record["source_ref"]) if record["source_ref"] is not None else None
-            ),
-            "source_client_id": (
-                str(record["source_client_id"])
-                if record["source_client_id"] is not None
-                else None
-            ),
-            "importance": int(
-                record["importance"] if record["importance"] is not None else 50
-            ),
-            "idempotency_key_hash": (
-                str(record["idempotency_key_hash"])
-                if record["idempotency_key_hash"] is not None
-                else None
-            ),
-            "idempotency_payload_hash": (
-                str(record["idempotency_payload_hash"])
-                if record["idempotency_payload_hash"] is not None
-                else None
-            ),
-            "status": str(record["status"] or "active"),
-            "revision": max(int(record["revision"] or 1), 1),
-            "created_at": serialize_datetime_iso(record["created_at"]),
-            "updated_at": serialize_datetime_iso(record["updated_at"]),
-            "_updated_at_raw": record["updated_at"],
-        }
+        return _serialize_record(_record_from_row(row))
 
-    # ----- reads -------------------------------------------------------------
-
-    @staticmethod
-    def _lock_user_writes(cursor: Any, user_id: int) -> None:
-        """Serialize cap-sensitive writes for one user until transaction end."""
-        cursor.execute(
-            "SELECT pg_advisory_xact_lock(%s, %s)",
-            (_CONTEXT_FACT_LOCK_NAMESPACE, user_id),
+    async def _lock_user_writes(self, user_id: int) -> None:
+        await self.session.execute(
+            select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id))
         )
 
-    def count_active(self, user_id: int) -> int:
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
-                    (user_id,),
-                )
-                row = cursor.fetchone()
-                return int(row[0]) if row else 0
-            finally:
-                cursor.close()
+    async def count_active(self, user_id: int) -> int:
+        count = await self.session.scalar(
+            select(func.count(ContextFact.id)).where(
+                ContextFact.user_id == user_id,
+                ContextFact.status == "active",
+            )
+        )
+        return int(count or 0)
 
-    def list_facts(
+    async def list_facts(
         self,
         user_id: int,
         *,
@@ -170,153 +139,128 @@ class ContextFactRepository:
         before_updated_at: datetime | None = None,
         before_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        conditions = ["user_id = %s", "status = %s"]
-        params: list[Any] = [user_id, status]
+        conditions = [ContextFact.user_id == user_id, ContextFact.status == status]
         if fact_type is not None:
-            conditions.append("fact_type = %s")
-            params.append(fact_type)
-        # Keyset pagination over the (updated_at DESC, id DESC) index.
+            conditions.append(ContextFact.fact_type == fact_type)
         if before_updated_at is not None and before_id is not None:
-            conditions.append("(updated_at, id) < (%s, %s)")
-            params.extend([before_updated_at, before_id])
-        params.append(limit)
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE {" AND ".join(conditions)}
-                     ORDER BY updated_at DESC, id DESC
-                     LIMIT %s
-                    """,
-                    tuple(params),
-                )
-                return [self._serialize_row(row) for row in cursor.fetchall()]
-            finally:
-                cursor.close()
+            conditions.append(
+                tuple_(ContextFact.updated_at, ContextFact.id)
+                < tuple_(literal(before_updated_at), literal(before_id))
+            )
+        result = await self.session.execute(
+            select(ContextFact)
+            .where(*conditions)
+            .order_by(ContextFact.updated_at.desc(), ContextFact.id.desc())
+            .limit(limit)
+        )
+        return [self._serialize_row(fact) for fact in result.scalars().all()]
 
-    def list_active_for_digest(self, user_id: int) -> list[dict[str, Any]]:
-        """全 active 事実を重要度・更新日時順で返す。件数上限があるため一括取得で足りる。"""
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE user_id = %s AND status = 'active'
-                     ORDER BY importance DESC, updated_at DESC, id DESC
-                     LIMIT %s
-                    """,
-                    (user_id, MAX_ACTIVE_CONTEXT_FACTS),
-                )
-                return [self._serialize_row(row) for row in cursor.fetchall()]
-            finally:
-                cursor.close()
+    async def list_active_for_digest(self, user_id: int) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(ContextFact)
+            .where(ContextFact.user_id == user_id, ContextFact.status == "active")
+            .order_by(
+                ContextFact.importance.desc(),
+                ContextFact.updated_at.desc(),
+                ContextFact.id.desc(),
+            )
+            .limit(MAX_ACTIVE_CONTEXT_FACTS)
+        )
+        return [self._serialize_row(fact) for fact in result.scalars().all()]
 
-    def list_all_facts(
+    async def list_all_facts(
         self,
         user_id: int,
         *,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Return every active/deprecated fact for a full owner export."""
-        limit_clause = " LIMIT %s" if limit is not None else ""
-        params: list[Any] = [user_id]
+        statement = (
+            select(ContextFact)
+            .where(ContextFact.user_id == user_id)
+            .order_by(ContextFact.created_at.asc(), ContextFact.id.asc())
+        )
         if limit is not None:
-            params.append(limit)
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE user_id = %s
-                     ORDER BY created_at ASC, id ASC
-                     {limit_clause}
-                    """,
-                    tuple(params),
-                )
-                return [self._serialize_row(row) for row in cursor.fetchall()]
-            finally:
-                cursor.close()
+            statement = statement.limit(limit)
+        result = await self.session.execute(statement)
+        return [self._serialize_row(fact) for fact in result.scalars().all()]
 
-    def find_existing_portable_signatures(
+    async def find_existing_portable_signatures(
         self,
         user_id: int,
         facts: list[dict[str, Any]],
     ) -> set[tuple[str, str, str, str, int]]:
-        """Return exact portable signatures already owned without loading the full vault."""
+        """Find exact import duplicates with a PostgreSQL ``VALUES`` CTE."""
         if not facts:
             return set()
-        values_sql = ", ".join(["(%s, %s, %s, %s, %s)"] * len(facts))
-        params: list[Any] = []
-        for fact in facts:
-            params.extend(
-                [
+        imported = values(
+            column("fact_type"),
+            column("title"),
+            column("content"),
+            column("status"),
+            column("importance"),
+            name="imported",
+        ).data(
+            [
+                (
                     fact["fact_type"],
                     fact["title"],
                     fact["content"],
                     fact["status"],
                     fact["importance"],
-                ]
+                )
+                for fact in facts
+            ]
+        ).cte("imported")
+        statement = (
+            select(
+                imported.c.fact_type,
+                imported.c.title,
+                imported.c.content,
+                imported.c.status,
+                imported.c.importance,
             )
-        params.append(user_id)
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    WITH imported (fact_type, title, content, status, importance) AS (
-                        VALUES {values_sql}
-                    )
-                    SELECT DISTINCT
-                           imported.fact_type,
-                           imported.title,
-                           imported.content,
-                           imported.status,
-                           imported.importance
-                      FROM imported
-                      JOIN context_facts AS existing
-                        ON existing.user_id = %s
-                       AND existing.fact_type = imported.fact_type
-                       AND existing.title = imported.title
-                       AND existing.content = imported.content
-                       AND existing.status = imported.status
-                       AND existing.importance = imported.importance
-                    """,
-                    tuple(params),
+            .select_from(
+                imported.join(
+                    ContextFact,
+                    and_(
+                        ContextFact.user_id == user_id,
+                        ContextFact.fact_type == imported.c.fact_type,
+                        ContextFact.title == imported.c.title,
+                        ContextFact.content == imported.c.content,
+                        ContextFact.status == imported.c.status,
+                        ContextFact.importance == imported.c.importance,
+                    ),
                 )
-                return {
-                    (str(row[0]), str(row[1]), str(row[2]), str(row[3]), int(row[4]))
-                    for row in cursor.fetchall()
-                }
-            finally:
-                cursor.close()
+            )
+            .distinct()
+        )
+        rows = (await self.session.execute(statement)).all()
+        return {
+            (str(row[0]), str(row[1]), str(row[2]), str(row[3]), int(row[4]))
+            for row in rows
+        }
 
-    def get_fact(self, user_id: int, fact_id: int) -> dict[str, Any]:
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE id = %s AND user_id = %s
-                    """,
-                    (fact_id, user_id),
-                )
-                row = cursor.fetchone()
-                if not row:
-                    raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
-                return self._serialize_row(row)
-            finally:
-                cursor.close()
+    async def get_fact(self, user_id: int, fact_id: int) -> dict[str, Any]:
+        fact = await self.session.scalar(
+            select(ContextFact).where(
+                ContextFact.id == fact_id,
+                ContextFact.user_id == user_id,
+            )
+        )
+        if fact is None:
+            raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
+        return self._serialize_row(fact)
 
-    def semantic_search(
+    @staticmethod
+    def _distance(embedding: list[float]):
+        query_vector = bindparam(
+            "context_query_embedding",
+            value=[float(value) for value in embedding],
+            type_=Vector(768),
+        )
+        return ContextFact.embedding_vector.op("<=>")(query_vector)
+
+    async def semantic_search(
         self,
         user_id: int,
         embedding: list[float],
@@ -324,35 +268,21 @@ class ContextFactRepository:
         limit: int = 20,
         status: str = "active",
     ) -> list[dict[str, Any]]:
-        vector_literal = "[" + ",".join(format(float(value), ".9g") for value in embedding) + "]"
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE user_id = %s
-                       AND status = %s
-                       AND embedding_vector IS NOT NULL
-                       AND embedding_vector <=> %s::vector <= %s
-                     ORDER BY embedding_vector <=> %s::vector
-                     LIMIT %s
-                    """,
-                    (
-                        user_id,
-                        status,
-                        vector_literal,
-                        get_semantic_max_distance(),
-                        vector_literal,
-                        limit,
-                    ),
-                )
-                return [self._serialize_row(row) for row in cursor.fetchall()]
-            finally:
-                cursor.close()
+        distance = self._distance(embedding)
+        result = await self.session.execute(
+            select(ContextFact)
+            .where(
+                ContextFact.user_id == user_id,
+                ContextFact.status == status,
+                ContextFact.embedding_vector.is_not(None),
+                distance <= get_semantic_max_distance(),
+            )
+            .order_by(distance)
+            .limit(limit)
+        )
+        return [self._serialize_row(fact) for fact in result.scalars().all()]
 
-    def text_search(
+    async def text_search(
         self,
         user_id: int,
         query: str,
@@ -360,40 +290,22 @@ class ContextFactRepository:
         limit: int = 20,
         status: str = "active",
     ) -> list[dict[str, Any]]:
-        # 語ごとの絞り込み。クエリ全体の部分一致では、複数語の検索が成立しない。
-        # Narrow term by term; one whole-query substring match never satisfies a
-        # multi-word query.
-        terms = split_search_terms(query)
-        term_clauses = " AND ".join(
-            "(title ILIKE %s ESCAPE '\\' OR content ILIKE %s ESCAPE '\\')" for _ in terms
-        )
-        params: list[Any] = [user_id, status]
-        for term in terms:
+        conditions = [ContextFact.user_id == user_id, ContextFact.status == status]
+        for term in split_search_terms(query):
             pattern = build_like_pattern(term)
-            params.extend([pattern, pattern])
-        params.append(limit)
-        where_terms = f" AND {term_clauses}" if term_clauses else ""
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE user_id = %s
-                       AND status = %s{where_terms}
-                     ORDER BY updated_at DESC, id DESC
-                     LIMIT %s
-                    """,
-                    tuple(params),
-                )
-                return [self._serialize_row(row) for row in cursor.fetchall()]
-            finally:
-                cursor.close()
+            conditions.append(
+                ContextFact.title.ilike(pattern, escape="\\")
+                | ContextFact.content.ilike(pattern, escape="\\")
+            )
+        result = await self.session.execute(
+            select(ContextFact)
+            .where(*conditions)
+            .order_by(ContextFact.updated_at.desc(), ContextFact.id.desc())
+            .limit(limit)
+        )
+        return [self._serialize_row(fact) for fact in result.scalars().all()]
 
-    # ----- writes ------------------------------------------------------------
-
-    def create_fact(
+    async def create_fact(
         self,
         user_id: int,
         *,
@@ -407,82 +319,14 @@ class ContextFactRepository:
         idempotency_key_hash: str | None = None,
         idempotency_payload_hash: str | None = None,
     ) -> dict[str, Any]:
-        def op(cursor: Any) -> dict[str, Any]:
-            self._lock_user_writes(cursor, user_id)
-            if idempotency_key_hash is not None:
-                cursor.execute(
-                    f"""
-                    SELECT {_SELECT_COLUMNS}
-                      FROM context_facts
-                     WHERE user_id = %s AND idempotency_key_hash = %s
-                    """,
-                    (user_id, idempotency_key_hash),
+        await self._lock_user_writes(user_id)
+        if idempotency_key_hash is not None:
+            existing = await self.session.scalar(
+                select(ContextFact).where(
+                    ContextFact.user_id == user_id,
+                    ContextFact.idempotency_key_hash == idempotency_key_hash,
                 )
-                existing = cursor.fetchone()
-                if existing is not None:
-                    serialized = self._serialize_row(existing)
-                    if serialized["idempotency_payload_hash"] != idempotency_payload_hash:
-                        raise ApiServiceError(
-                            ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
-                            409,
-                            status="fail",
-                        )
-                    serialized["_idempotent_replay"] = True
-                    return serialized
-
-            cursor.execute(
-                "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
-                (user_id,),
             )
-            active_count = int((cursor.fetchone() or [0])[0])
-            if active_count >= MAX_ACTIVE_CONTEXT_FACTS:
-                raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
-            cursor.execute(
-                f"""
-                INSERT INTO context_facts (
-                    user_id,
-                    fact_type,
-                    title,
-                    content,
-                    source_kind,
-                    source_ref,
-                    source_client_id,
-                    importance,
-                    idempotency_key_hash,
-                    idempotency_payload_hash
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (idempotency_key_hash) DO NOTHING
-                RETURNING {_SELECT_COLUMNS}
-                """,
-                (
-                    user_id,
-                    fact_type,
-                    title,
-                    content,
-                    source_kind,
-                    source_ref,
-                    source_client_id,
-                    importance,
-                    idempotency_key_hash,
-                    idempotency_payload_hash,
-                ),
-            )
-            row = cursor.fetchone()
-            if row is not None:
-                return self._serialize_row(row)
-
-            # A concurrent request may have committed the same key. Never
-            # return another user's fact even in the event of a hash collision.
-            cursor.execute(
-                f"""
-                SELECT {_SELECT_COLUMNS}
-                  FROM context_facts
-                 WHERE user_id = %s AND idempotency_key_hash = %s
-                """,
-                (user_id, idempotency_key_hash),
-            )
-            existing = cursor.fetchone()
             if existing is not None:
                 serialized = self._serialize_row(existing)
                 if serialized["idempotency_payload_hash"] != idempotency_payload_hash:
@@ -493,22 +337,59 @@ class ContextFactRepository:
                     )
                 serialized["_idempotent_replay"] = True
                 return serialized
-            raise ApiServiceError(
-                ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
-                409,
-                status="fail",
+
+        if await self.count_active(user_id) >= MAX_ACTIVE_CONTEXT_FACTS:
+            raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
+
+        statement = (
+            pg_insert(ContextFact)
+            .values(
+                user_id=user_id,
+                fact_type=fact_type,
+                title=title,
+                content=content,
+                source_kind=source_kind,
+                source_ref=source_ref,
+                source_client_id=source_client_id,
+                importance=importance,
+                idempotency_key_hash=idempotency_key_hash,
+                idempotency_payload_hash=idempotency_payload_hash,
             )
+            .on_conflict_do_nothing(index_elements=[ContextFact.idempotency_key_hash])
+            .returning(*_FACT_RETURNING_COLUMNS)
+        )
+        row = (await self.session.execute(statement)).mappings().first()
+        if row is not None:
+            return self._serialize_row(row)
 
-        return self._run_write(op, error_message="Failed to create context fact after retry attempts.")
+        if idempotency_key_hash is not None:
+            existing = await self.session.scalar(
+                select(ContextFact).where(
+                    ContextFact.user_id == user_id,
+                    ContextFact.idempotency_key_hash == idempotency_key_hash,
+                )
+            )
+            if existing is not None:
+                serialized = self._serialize_row(existing)
+                if serialized["idempotency_payload_hash"] != idempotency_payload_hash:
+                    raise ApiServiceError(
+                        ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
+                        409,
+                        status="fail",
+                    )
+                serialized["_idempotent_replay"] = True
+                return serialized
+        raise ApiServiceError(ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT, 409, status="fail")
 
-    def bulk_import_facts(
+    async def bulk_import_facts(
         self,
         user_id: int,
         facts: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Append a portable fact batch atomically, skipping exact duplicates."""
+        """Append an import batch atomically and skip exact duplicates."""
+        await self._lock_user_writes(user_id)
 
-        def portable_signature(fact: dict[str, Any]) -> tuple[str, str, str, str, int]:
+        def signature(fact: dict[str, Any]) -> tuple[str, str, str, str, int]:
             return (
                 str(fact["fact_type"]),
                 str(fact["title"]),
@@ -517,111 +398,55 @@ class ContextFactRepository:
                 int(fact["importance"]),
             )
 
-        def op(cursor: Any) -> dict[str, Any]:
-            self._lock_user_writes(cursor, user_id)
-            unique_facts: list[dict[str, Any]] = []
-            seen: set[tuple[str, str, str, str, int]] = set()
-            skipped_duplicate_count = 0
-            for fact in facts:
-                signature = portable_signature(fact)
-                if signature in seen:
-                    skipped_duplicate_count += 1
-                    continue
-                seen.add(signature)
-                unique_facts.append(fact)
+        unique_facts: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str, str, int]] = set()
+        skipped_duplicate_count = 0
+        for fact in facts:
+            item_signature = signature(fact)
+            if item_signature in seen:
+                skipped_duplicate_count += 1
+                continue
+            seen.add(item_signature)
+            unique_facts.append(fact)
 
-            values_sql = ", ".join(["(%s, %s, %s, %s, %s)"] * len(unique_facts))
-            duplicate_params: list[Any] = []
-            for fact in unique_facts:
-                duplicate_params.extend(portable_signature(fact))
-            duplicate_params.append(user_id)
-            cursor.execute(
-                f"""
-                WITH imported (fact_type, title, content, status, importance) AS (
-                    VALUES {values_sql}
-                )
-                SELECT DISTINCT
-                       imported.fact_type,
-                       imported.title,
-                       imported.content,
-                       imported.status,
-                       imported.importance
-                  FROM imported
-                  JOIN context_facts AS existing
-                    ON existing.user_id = %s
-                   AND existing.fact_type = imported.fact_type
-                   AND existing.title = imported.title
-                   AND existing.content = imported.content
-                   AND existing.status = imported.status
-                   AND existing.importance = imported.importance
-                """,
-                tuple(duplicate_params),
-            )
-            existing_signatures = {
-                (str(row[0]), str(row[1]), str(row[2]), str(row[3]), int(row[4]))
-                for row in cursor.fetchall()
-            }
-            skipped_duplicate_count += len(existing_signatures)
-            importable = [
-                fact
-                for fact in unique_facts
-                if portable_signature(fact) not in existing_signatures
-            ]
-
-            cursor.execute(
-                "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
-                (user_id,),
-            )
-            current_active = int((cursor.fetchone() or [0])[0])
-            active_to_insert = sum(1 for fact in importable if fact["status"] == "active")
-            if current_active + active_to_insert > MAX_ACTIVE_CONTEXT_FACTS:
-                raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
-
-            imported: list[dict[str, Any]] = []
-            for fact in importable:
-                cursor.execute(
-                    f"""
-                    INSERT INTO context_facts (
-                        user_id,
-                        fact_type,
-                        title,
-                        content,
-                        source_kind,
-                        importance,
-                        status
-                    )
-                    VALUES (%s, %s, %s, %s, 'import', %s, %s)
-                    RETURNING {_SELECT_COLUMNS}
-                    """,
-                    (
-                        user_id,
-                        fact["fact_type"],
-                        fact["title"],
-                        fact["content"],
-                        fact["importance"],
-                        fact["status"],
-                    ),
-                )
-                row = cursor.fetchone()
-                if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
-                    raise RuntimeError("Context fact import did not return the inserted row.")
-                imported.append(self._serialize_row(row))
-
-            return {
-                "facts": imported,
-                "skipped_duplicate_count": skipped_duplicate_count,
-                "active_count": sum(1 for fact in imported if fact["status"] == "active"),
-                "deprecated_count": sum(
-                    1 for fact in imported if fact["status"] == "deprecated"
-                ),
-            }
-
-        return self._run_write(
-            op,
-            error_message="Failed to import context facts after retry attempts.",
+        existing_signatures = await self.find_existing_portable_signatures(
+            user_id, unique_facts
         )
+        skipped_duplicate_count += len(existing_signatures)
+        importable = [fact for fact in unique_facts if signature(fact) not in existing_signatures]
 
-    def update_fact(
+        current_active = await self.count_active(user_id)
+        active_to_insert = sum(1 for fact in importable if fact["status"] == "active")
+        if current_active + active_to_insert > MAX_ACTIVE_CONTEXT_FACTS:
+            raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
+
+        imported: list[dict[str, Any]] = []
+        if importable:
+            statement = pg_insert(ContextFact).values(
+                [
+                    {
+                        "user_id": user_id,
+                        "fact_type": fact["fact_type"],
+                        "title": fact["title"],
+                        "content": fact["content"],
+                        "source_kind": "import",
+                        "importance": fact["importance"],
+                        "status": fact["status"],
+                    }
+                    for fact in importable
+                ]
+            ).returning(*_FACT_RETURNING_COLUMNS)
+            rows = (await self.session.execute(statement)).mappings().all()
+            imported = [self._serialize_row(row) for row in rows]
+
+        return {
+            "facts": imported,
+            "skipped_duplicate_count": skipped_duplicate_count,
+            "active_count": sum(1 for fact in imported if fact["status"] == "active"),
+            "deprecated_count": sum(1 for fact in imported if fact["status"] == "deprecated"),
+        }
+
+    async def update_fact(
         self,
         user_id: int,
         fact_id: int,
@@ -633,89 +458,64 @@ class ContextFactRepository:
         status: str | None = None,
         importance: int | None = None,
     ) -> dict[str, Any]:
-        def op(cursor: Any) -> dict[str, Any]:
-            # Enforce the active cap when re-activating a deprecated fact.
-            if status == "active":
-                self._lock_user_writes(cursor, user_id)
-                cursor.execute(
-                    """
-                    SELECT status FROM context_facts
-                     WHERE id = %s AND user_id = %s
-                    """,
-                    (fact_id, user_id),
+        if status == "active":
+            await self._lock_user_writes(user_id)
+            current_status = await self.session.scalar(
+                select(ContextFact.status).where(
+                    ContextFact.id == fact_id,
+                    ContextFact.user_id == user_id,
                 )
-                existing = cursor.fetchone()
-                if existing is not None and str(existing[0]) != "active":
-                    cursor.execute(
-                        "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
-                        (user_id,),
-                    )
-                    active_count = int((cursor.fetchone() or [0])[0])
-                    if active_count >= MAX_ACTIVE_CONTEXT_FACTS:
-                        raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
-
-            fields: list[str] = []
-            params: list[Any] = []
-            if title is not None:
-                fields.append("title = %s")
-                params.append(title)
-            if content is not None:
-                fields.append("content = %s")
-                params.append(content)
-            if fact_type is not None:
-                fields.append("fact_type = %s")
-                params.append(fact_type)
-            if status is not None:
-                fields.append("status = %s")
-                params.append(status)
-            if importance is not None:
-                fields.append("importance = %s")
-                params.append(importance)
-            fields.append("revision = revision + 1")
-            params.extend([fact_id, user_id, expected_revision])
-            cursor.execute(
-                f"""
-                UPDATE context_facts
-                   SET {", ".join(fields)}
-                 WHERE id = %s AND user_id = %s AND revision = %s
-                 RETURNING {_SELECT_COLUMNS}
-                """,
-                tuple(params),
             )
-            row = cursor.fetchone()
-            if row is not None:
-                return self._serialize_row(row)
-            # No row updated: distinguish "not found" from "revision conflict".
-            cursor.execute(
-                "SELECT 1 FROM context_facts WHERE id = %s AND user_id = %s",
-                (fact_id, user_id),
+            if current_status is not None and current_status != "active":
+                if await self.count_active(user_id) >= MAX_ACTIVE_CONTEXT_FACTS:
+                    raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
+
+        changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
+        if title is not None:
+            changes["title"] = title
+        if content is not None:
+            changes["content"] = content
+        if fact_type is not None:
+            changes["fact_type"] = fact_type
+        if status is not None:
+            changes["status"] = status
+        if importance is not None:
+            changes["importance"] = importance
+        changes["updated_at"] = func.current_timestamp()
+
+        statement = (
+            update(ContextFact)
+            .where(
+                ContextFact.id == fact_id,
+                ContextFact.user_id == user_id,
+                ContextFact.revision == expected_revision,
             )
-            if cursor.fetchone() is None:
-                raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
-            raise ApiServiceError(ERROR_CONTEXT_FACT_REVISION_CONFLICT, 409, status="fail")
+            .values(**changes)
+            .returning(*_FACT_RETURNING_COLUMNS)
+        )
+        row = (await self.session.execute(statement)).mappings().first()
+        if row is not None:
+            return self._serialize_row(row)
 
-        return self._run_write(op, error_message="Failed to update context fact after retry attempts.")
+        exists_for_owner = await self.session.scalar(
+            select(exists().where(ContextFact.id == fact_id, ContextFact.user_id == user_id))
+        )
+        if not exists_for_owner:
+            raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
+        raise ApiServiceError(ERROR_CONTEXT_FACT_REVISION_CONFLICT, 409, status="fail")
 
-    def store_embedding(
+    async def store_embedding(
         self,
         fact_id: int,
         embedding: list[float],
         expected_revision: int | None = None,
     ) -> None:
-        vector_literal = "[" + ",".join(format(float(value), ".9g") for value in embedding) + "]"
-        revision_clause = " AND revision = %s" if expected_revision is not None else ""
-        params: list[Any] = [vector_literal, fact_id]
+        conditions = [ContextFact.id == fact_id]
         if expected_revision is not None:
-            params.append(expected_revision)
-
-        def op(cursor: Any) -> None:
-            cursor.execute(
-                f"""
-                UPDATE context_facts
-                   SET embedding_vector = %s::vector
-                 WHERE id = %s{revision_clause}
-                """,
-                tuple(params),
-            )
-
-        self._run_write(op, error_message="Failed to store context fact embedding after retry attempts.")
+            conditions.append(ContextFact.revision == expected_revision)
+        statement = (
+            update(ContextFact)
+            .where(*conditions)
+            .values(embedding_vector=[float(value) for value in embedding])
+        )
+        await self.session.execute(statement)

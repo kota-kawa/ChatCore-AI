@@ -1,62 +1,67 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from scripts import backfill_embeddings
 
 
-class BackfillTableTestCase(unittest.TestCase):
-    def _run(self, *, rows, generate, available=True, **kwargs):
+class BackfillTableTestCase(unittest.IsolatedAsyncioTestCase):
+    async def _run(self, *, rows, generate, available=True):
         stored: list[tuple[int, list[float]]] = []
         batches = [list(rows), []]
 
-        def fake_fetch(_table, _columns, *, after_id, include_existing, batch_size):
+        async def fake_fetch(_table, _columns, *, after_id, include_existing, batch_size):
             del after_id, include_existing, batch_size
             return batches.pop(0) if batches else []
 
-        with patch.object(backfill_embeddings, "_count_pending", return_value=len(rows)), patch.object(
-            backfill_embeddings, "_fetch_batch", side_effect=fake_fetch
-        ), patch.object(
-            backfill_embeddings, "generate_embedding", side_effect=generate
-        ), patch.object(
-            backfill_embeddings, "embeddings_available", return_value=available
+        async def fake_store(row_id, embedding):
+            stored.append((row_id, embedding))
+
+        with (
+            patch.object(
+                backfill_embeddings,
+                "_count_pending",
+                new=AsyncMock(return_value=len(rows)),
+            ),
+            patch.object(backfill_embeddings, "_fetch_batch", side_effect=fake_fetch),
+            patch.object(backfill_embeddings, "_store_embedding", new=fake_store),
+            patch.object(backfill_embeddings, "generate_embedding", side_effect=generate),
+            patch.object(backfill_embeddings, "embeddings_available", return_value=available),
         ):
-            stats = backfill_embeddings._backfill_table(
+            stats = await backfill_embeddings._backfill_table(
                 label="memo_entries",
                 table="memo_entries",
                 columns="title, ai_response",
                 build_text=backfill_embeddings._memo_text,
-                store=lambda row_id, embedding: stored.append((row_id, embedding)),
+                store=fake_store,
                 include_existing=False,
                 limit=None,
                 sleep_seconds=0.0,
                 dry_run=False,
-                **kwargs,
             )
         return stats, stored
 
-    def test_embeds_and_stores_each_row(self):
+    async def test_embeds_and_stores_each_row(self):
         rows = [(1, "タイトル", "本文"), (2, "title", "body")]
 
-        stats, stored = self._run(rows=rows, generate=lambda _text: [0.1, 0.2])
+        stats, stored = await self._run(rows=rows, generate=lambda _text: [0.1, 0.2])
 
         self.assertEqual(stats.embedded, 2)
         self.assertEqual(stats.failed, 0)
         self.assertEqual([row_id for row_id, _ in stored], [1, 2])
 
-    def test_rows_without_text_are_skipped_rather_than_embedded(self):
+    async def test_rows_without_text_are_skipped_rather_than_embedded(self):
         rows = [(1, "", ""), (2, "title", "body")]
 
-        stats, stored = self._run(rows=rows, generate=lambda _text: [0.1, 0.2])
+        stats, stored = await self._run(rows=rows, generate=lambda _text: [0.1, 0.2])
 
         self.assertEqual(stats.skipped_empty, 1)
         self.assertEqual(stats.embedded, 1)
         self.assertEqual([row_id for row_id, _ in stored], [2])
 
-    def test_aborts_once_the_provider_stops_responding(self):
-        """埋め込みが停止したら、残り全行を叩かずに中断する。"""
+    async def test_aborts_once_the_provider_stops_responding(self):
         rows = [(index, "title", "body") for index in range(1, 6)]
 
-        stats, stored = self._run(
+        stats, stored = await self._run(
             rows=rows,
             generate=lambda _text: None,
             available=False,
@@ -66,36 +71,25 @@ class BackfillTableTestCase(unittest.TestCase):
         self.assertEqual(stats.failed, 1)
         self.assertEqual(stored, [])
 
-    def test_dry_run_reports_without_calling_the_provider(self):
-        calls: list[str] = []
-
-        def generate(text):
-            calls.append(text)
-            return [0.1]
-
-        stats, stored = self._run(
-            rows=[(1, "title", "body")],
-            generate=generate,
-        )
-        self.assertEqual(stats.embedded, 1)
-
-        with patch.object(backfill_embeddings, "_count_pending", return_value=3), patch.object(
-            backfill_embeddings, "generate_embedding", side_effect=generate
+    async def test_dry_run_reports_without_calling_the_provider(self):
+        generate = AsyncMock(return_value=[0.1])
+        with patch.object(
+            backfill_embeddings, "_count_pending", new=AsyncMock(return_value=3)
         ):
-            dry_stats = backfill_embeddings._backfill_table(
+            stats = await backfill_embeddings._backfill_table(
                 label="memo_entries",
                 table="memo_entries",
                 columns="title, ai_response",
                 build_text=backfill_embeddings._memo_text,
-                store=lambda row_id, embedding: stored.append((row_id, embedding)),
+                store=AsyncMock(),
                 include_existing=False,
                 limit=None,
                 sleep_seconds=0.0,
                 dry_run=True,
             )
 
-        self.assertEqual(dry_stats.embedded, 0)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(stats.embedded, 0)
+        generate.assert_not_awaited()
 
 
 class BackfillTextBuildersTestCase(unittest.TestCase):

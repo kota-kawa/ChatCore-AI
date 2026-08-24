@@ -149,7 +149,7 @@ async def _consume_publish_limit(user_id: int) -> None:
 
 async def _publish(user_id: int, payload: SharedPromptCreateRequest) -> McpPublishResult:
     await _consume_publish_limit(user_id)
-    prompt_id = await run_blocking(create_shared_prompt, user_id, payload)
+    prompt_id = await create_shared_prompt(user_id, payload)
     return McpPublishResult(
         prompt_id=prompt_id,
         title=payload.title,

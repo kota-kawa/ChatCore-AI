@@ -16,7 +16,7 @@ from blueprints.auth_common import (
     _google_next_path,
     _redirect_to_login_after_google_failure,
 )
-from blueprints.auth_support import dep
+from blueprints.auth_support import call_dependency, dep
 
 
 def _google_client_config() -> dict[str, Any]:
@@ -321,14 +321,14 @@ async def google_callback(request: Request):
         return dep("RedirectResponse")(login_redirect_url, status_code=302)
 
     try:
-        user = await dep("run_blocking")(dep("get_user_by_google_id"), google_user_id)
+        user = await call_dependency("get_user_by_google_id", google_user_id)
         should_mark_verified = False
         if user:
             user_id = user["id"]
-            await dep("run_blocking")(dep("link_google_account"), user_id, google_user_id, email)
+            await call_dependency("link_google_account", user_id, google_user_id, email)
             should_mark_verified = not user.get("is_verified")
         else:
-            user = await dep("run_blocking")(dep("get_user_by_email"), email)
+            user = await call_dependency("get_user_by_email", email)
             if user:
                 existing_google_user_id = (user.get("provider_user_id") or "").strip()
                 if existing_google_user_id and existing_google_user_id != google_user_id:
@@ -339,11 +339,11 @@ async def google_callback(request: Request):
                     _clear_google_oauth_session(session)
                     return dep("RedirectResponse")(login_redirect_url, status_code=302)
                 user_id = user["id"]
-                await dep("run_blocking")(dep("link_google_account"), user_id, google_user_id, email)
+                await call_dependency("link_google_account", user_id, google_user_id, email)
                 should_mark_verified = not user.get("is_verified")
             else:
-                user_id = await dep("run_blocking")(
-                    dep("create_user"),
+                user_id = await call_dependency(
+                    "create_user",
                     email,
                     username=display_name or None,
                     avatar_url=picture or None,
@@ -369,8 +369,8 @@ async def google_callback(request: Request):
     dep("establish_authenticated_session")(request, int(user_id), email)
 
     try:
-        await dep("run_blocking")(
-            dep("update_user_profile_from_google_if_unset"),
+        await call_dependency(
+            "update_user_profile_from_google_if_unset",
             user_id,
             display_name or None,
             picture or None,
@@ -380,7 +380,7 @@ async def google_callback(request: Request):
 
     if should_mark_verified:
         try:
-            await dep("run_blocking")(dep("set_user_verified"), user_id)
+            await call_dependency("set_user_verified", user_id)
         except Exception:
             dep("logger").exception("Google OAuth callback: failed to verify user %s", user_id)
 
@@ -392,7 +392,7 @@ async def google_callback(request: Request):
     )
 
     try:
-        persisted_user = await dep("run_blocking")(dep("get_user_by_id"), user_id)
+        persisted_user = await call_dependency("get_user_by_id", user_id)
         if persisted_user:
             session["user_email"] = persisted_user["email"]
     except Exception:

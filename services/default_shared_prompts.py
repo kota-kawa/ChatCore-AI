@@ -1,7 +1,13 @@
-import time
+import asyncio
 from typing import Any
 
-from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from sqlalchemy.exc import SQLAlchemyError
+
+from services.db import is_retryable_db_error, session_scope
+from services.repositories.default_seed_repository import (
+    ensure_sample_prompt_owner,
+    seed_default_shared_prompts,
+)
 
 SAMPLE_PROMPT_OWNER_EMAIL = "sample-prompts@chat-core.local"
 SAMPLE_PROMPT_OWNER_NAME = "運営サンプル"
@@ -167,127 +173,30 @@ def _extract_id(
 
 # サンプルの所有者ユーザー（運営サンプル）が存在することを保証し、そのIDを返す
 # Ensure the sample owner user exists, creating it if necessary, and return its ID
-def _ensure_sample_owner(cursor: Any) -> int:
-    # サンプル投稿者ユーザーを再利用し、未作成なら作成してIDを返す
-    # Reuse sample owner user or create it when missing, then return its ID.
-    cursor.execute(
-        "SELECT id FROM users WHERE email = %s",
-        (SAMPLE_PROMPT_OWNER_EMAIL,),
-    )
-    row = cursor.fetchone()
-    owner_id = _extract_id(row)
-    if owner_id is not None:
-        return owner_id
-
-    cursor.execute(
-        """
-        INSERT INTO users (email, username, is_verified)
-        VALUES (%s, %s, TRUE)
-        RETURNING id
-        """,
-        (SAMPLE_PROMPT_OWNER_EMAIL, SAMPLE_PROMPT_OWNER_NAME),
-    )
-    row = cursor.fetchone()
-    owner_id = _extract_id(row)
-    if owner_id is None:
-        raise RuntimeError("Failed to create sample prompt owner.")
-    cursor.execute(
-        """
-        INSERT INTO user_auth_providers (
-            user_id,
-            provider,
-            provider_user_id,
-            provider_email
-        )
-        VALUES (%s, 'email', %s, %s)
-        ON CONFLICT (user_id, provider) DO UPDATE
-           SET provider_user_id = EXCLUDED.provider_user_id,
-               provider_email = EXCLUDED.provider_email,
-               updated_at = CURRENT_TIMESTAMP
-        """,
-        (owner_id, SAMPLE_PROMPT_OWNER_EMAIL, SAMPLE_PROMPT_OWNER_EMAIL),
-    )
-    return owner_id
-
-
 # デフォルトの共有プロンプトがデータベースに存在することを保証（不足分のみシード）する
 # Ensure default shared prompts are seeded into the database, adding only missing ones
-def ensure_default_shared_prompts() -> int:
+async def ensure_default_shared_prompts() -> int:
     # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
     # Seed missing public sample prompts under the sample owner account.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                owner_user_id = _ensure_sample_owner(cursor)
-                inserted = 0
-                existing_variants: set[tuple[str, str]] = set()
-
-                if DEFAULT_SHARED_PROMPTS:
-                    cursor.execute(
-                        """
-                        SELECT system_prompt_key, content_locale
-                          FROM prompts
-                         WHERE user_id = %s
-                           AND deleted_at IS NULL
-                           AND system_prompt_key IS NOT NULL
-                           AND content_locale IS NOT NULL
-                        """,
-                        (owner_user_id,),
+        try:
+            async with session_scope() as session:
+                async with session.begin():
+                    owner_user_id = await ensure_sample_prompt_owner(
+                        session,
+                        email=SAMPLE_PROMPT_OWNER_EMAIL,
+                        username=SAMPLE_PROMPT_OWNER_NAME,
                     )
-                    for row in cursor.fetchall() or []:
-                        if isinstance(row, dict):
-                            existing_variants.add(
-                                (str(row["system_prompt_key"]), str(row["content_locale"]))
-                            )
-                        else:
-                            existing_variants.add((str(row[0]), str(row[1])))
-
-                for prompt in DEFAULT_SHARED_PROMPTS:
-                    variant = (
-                        str(prompt["system_prompt_key"]),
-                        str(prompt["content_locale"]),
+                    return await seed_default_shared_prompts(
+                        session,
+                        owner_user_id=owner_user_id,
+                        owner_name=SAMPLE_PROMPT_OWNER_NAME,
+                        prompts=DEFAULT_SHARED_PROMPTS,
                     )
-                    if variant in existing_variants:
-                        continue
-
-                    cursor.execute(
-                        """
-                        INSERT INTO prompts
-                            (user_id, is_public, system_prompt_key, content_locale,
-                             title, category, content, author, input_examples,
-                             output_examples, created_at)
-                        VALUES (%s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                        """,
-                        (
-                            owner_user_id,
-                            prompt["system_prompt_key"],
-                            prompt["content_locale"],
-                            prompt["title"],
-                            prompt["category"],
-                            prompt["content"],
-                            SAMPLE_PROMPT_OWNER_NAME,
-                            prompt["input_examples"],
-                            prompt["output_examples"],
-                        ),
-                    )
-                    existing_variants.add(variant)
-                    inserted += 1
-
-                if inserted > 0:
-                    conn.commit()
-
-                return inserted
-            except Error as exc:
-                rollback_connection(conn)
-                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
-                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
-                    continue
-                raise
-            except BaseException:
-                rollback_connection(conn)
-                raise
-            finally:
-                cursor.close()
+        except SQLAlchemyError as exc:
+            if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                continue
+            raise
 
     raise RuntimeError("Failed to seed default shared prompts after retry attempts.")

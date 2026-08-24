@@ -4,15 +4,20 @@ import base64
 import binascii
 import hashlib
 import json
+import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, TypeVar
 
 from pydantic import AnyHttpUrl, BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.db import session_scope
 from services.prompt_categories import category_keys_matching, normalize_category
-from services.prompt_types import CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
+from services.prompt_types import CONTENT_FORMATS, CONTENT_FORMAT_SKILL, MEDIA_TYPES, serialize_axes
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.shared_content_repository import SharedContentRepository
+from services.repositories.prompt_view_repository import PromptViewRepository
 from services.web_urls import build_frontend_url
 
 
@@ -20,6 +25,7 @@ SHARED_CONTENT_DEFAULT_LIMIT = 20
 SHARED_CONTENT_MAX_LIMIT = 50
 SHARED_CONTENT_SNIPPET_LENGTH = 280
 SHARED_CONTENT_MAX_QUERY_LENGTH = 500
+T = TypeVar("T")
 
 
 class InvalidSharedContentCursor(ValueError):
@@ -94,8 +100,30 @@ class SharedContentService:
         self._public_base_url = public_base_url
         self._repository = repository or SharedContentRepository()
         self._resource_repository = resource_repository or PromptResourceRepository()
+        self._view_repository = PromptViewRepository()
 
-    def list_public_content(
+    @staticmethod
+    async def _read(
+        session: AsyncSession | None,
+        operation: Callable[[AsyncSession], Awaitable[T]],
+    ) -> T:
+        if session is not None:
+            return await operation(session)
+        async with session_scope() as owned_session:
+            return await operation(owned_session)
+
+    @staticmethod
+    async def _write(
+        session: AsyncSession | None,
+        operation: Callable[[AsyncSession], Awaitable[T]],
+    ) -> T:
+        if session is not None:
+            return await operation(session)
+        async with session_scope() as owned_session:
+            async with owned_session.begin():
+                return await operation(owned_session)
+
+    async def list_public_content(
         self,
         *,
         query: str | None = None,
@@ -104,7 +132,19 @@ class SharedContentService:
         category: str | None = None,
         content_format: str | None = None,
         media_type: str | None = None,
+        session: AsyncSession | None = None,
     ) -> PublicSharedContentPage:
+        if session is None:
+            async with session_scope() as owned_session:
+                return await self.list_public_content(
+                    query=query,
+                    limit=limit,
+                    cursor=cursor,
+                    category=category,
+                    content_format=content_format,
+                    media_type=media_type,
+                    session=owned_session,
+                )
         normalized_query = self._normalize_query(query)
         normalized_category = self._normalize_category_filter(category)
         normalized_content_format = self._normalize_axis_filter(
@@ -126,7 +166,8 @@ class SharedContentService:
         )
         decoded_cursor = self._decode_cursor(cursor, expected_fingerprint=fingerprint)
 
-        rows, has_next = self._repository.list_public_content(
+        rows, has_next = await self._repository.list_public_content(
+            session,
             limit=normalized_limit,
             cursor=decoded_cursor,
             query=normalized_query or None,
@@ -153,18 +194,27 @@ class SharedContentService:
             next_cursor=next_cursor,
         )
 
-    def get_public_content(self, prompt_id: int) -> PublicSharedContentDetail | None:
+    async def get_public_content(
+        self,
+        prompt_id: int,
+        *,
+        session: AsyncSession | None = None,
+    ) -> PublicSharedContentDetail | None:
+        if session is None:
+            async with session_scope() as owned_session:
+                return await self.get_public_content(prompt_id, session=owned_session)
         if isinstance(prompt_id, bool) or int(prompt_id) <= 0:
             raise ValueError("prompt_id must be a positive integer.")
-        row = self._repository.get_public_content(int(prompt_id))
+        row = await self._repository.get_public_content(session, int(prompt_id))
         if row is None:
             return None
 
         axes = serialize_axes(row)
-        resources = self._resource_metadata_for_prompt(int(row["id"]))
+        resources = await self._resource_metadata_for_prompt(session, int(row["id"]))
         skill_python_script = str(axes["skill_python_script"])
         if axes["content_format"] == "skill":
-            legacy_resource = self._resource_repository.get_for_prompt(
+            legacy_resource = await self._resource_repository.get_for_prompt(
+                session,
                 int(row["id"]),
                 "scripts/main.py",
             )
@@ -191,27 +241,45 @@ class SharedContentService:
             public_url=self._public_url(int(row["id"])),
         )
 
-    def list_public_skill_resources(
+    async def list_public_skill_resources(
         self,
         prompt_id: int,
+        *,
+        session: AsyncSession | None = None,
     ) -> list[PublicSkillResourceMetadata] | None:
-        row = self._get_public_skill_row(prompt_id)
+        if session is None:
+            async with session_scope() as owned_session:
+                return await self.list_public_skill_resources(prompt_id, session=owned_session)
+        row = await self._get_public_skill_row(session, prompt_id)
         if row is None:
             return None
-        return self._resource_metadata_for_prompt(int(row["id"]))
+        return await self._resource_metadata_for_prompt(session, int(row["id"]))
 
-    def get_public_skill_resource(
+    async def get_public_skill_resource(
         self,
         prompt_id: int,
         path: str,
+        *,
+        session: AsyncSession | None = None,
     ) -> PublicSkillResourceDetail | None:
-        row = self._get_public_skill_row(prompt_id)
+        if session is None:
+            async with session_scope() as owned_session:
+                return await self.get_public_skill_resource(
+                    prompt_id,
+                    path,
+                    session=owned_session,
+                )
+        row = await self._get_public_skill_row(session, prompt_id)
         if row is None:
             return None
         normalized_path = str(path or "").strip()
         if not normalized_path:
             raise ValueError("path must not be blank.")
-        resource = self._resource_repository.get_for_prompt(int(row["id"]), normalized_path)
+        resource = await self._resource_repository.get_for_prompt(
+            session,
+            int(row["id"]),
+            normalized_path,
+        )
         if resource is None:
             return None
         metadata = self._resource_metadata(resource)
@@ -220,10 +288,492 @@ class SharedContentService:
             content=self._resource_content(resource),
         )
 
-    def _get_public_skill_row(self, prompt_id: int) -> dict[str, Any] | None:
+    async def get_public_feed(
+        self,
+        *,
+        user_id: int | None,
+        limit: int,
+        cursor: tuple[int, datetime, int] | None = None,
+        category: str | None = None,
+        content_format: str | None = None,
+        media_type: str | None = None,
+        author_id: int | None = None,
+        locale: str = "ja",
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = await self._read(
+            session,
+            lambda active: self._repository.get_public_feed(
+                active,
+                user_id=user_id,
+                limit=limit,
+                cursor=cursor,
+                category=category,
+                content_format=content_format,
+                media_type=media_type,
+                author_id=author_id,
+                locale=locale,
+            ),
+        )
+        return rows
+
+    async def get_recommended_prompts(
+        self,
+        *,
+        exclude_prompt_id: int | None,
+        limit: int,
+        locale: str = "ja",
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._read(
+            session,
+            lambda active: self._repository.get_recommended_prompts(
+                active,
+                exclude_prompt_id=exclude_prompt_id,
+                limit=limit,
+                locale=locale,
+            ),
+        )
+
+    async def get_public_prompt_detail(
+        self,
+        prompt_id: int,
+        *,
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any] | None:
+        return await self._read(
+            session,
+            lambda active: self._repository.get_public_prompt_detail(active, prompt_id),
+        )
+
+    async def get_public_author_profile(
+        self,
+        user_id: int,
+        *,
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any] | None:
+        return await self._read(
+            session,
+            lambda active: self._repository.get_public_author_profile(active, user_id),
+        )
+
+    async def search_public_prompts(
+        self,
+        *,
+        query: str,
+        page: int,
+        per_page: int,
+        user_id: int | None,
+        content_format: str | None,
+        media_type: str | None,
+        include_total: bool,
+        locale: str,
+        matching_category_keys: list[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any]:
+        if not query:
+            return {
+                "rows": [],
+                "total": 0,
+                "has_next": False,
+            }
+        return await self._read(
+            session,
+            lambda active: self._repository.search_public_prompts(
+                active,
+                query=query,
+                page=page,
+                per_page=per_page,
+                user_id=user_id,
+                content_format=content_format,
+                media_type=media_type,
+                include_total=include_total,
+                locale=locale,
+                matching_category_keys=matching_category_keys,
+            ),
+        )
+
+    async def record_public_view(
+        self,
+        prompt_id: int,
+        *,
+        session: AsyncSession | None = None,
+    ) -> int | None:
+        return await self._write(
+            session,
+            lambda active: self._view_repository.increment_public_view(active, prompt_id),
+        )
+
+    async def create_prompt(
+        self,
+        *,
+        user_id: int,
+        title: str,
+        category: str,
+        content: str,
+        description: str | None,
+        content_format: str,
+        media_type: str,
+        input_examples: str | None,
+        output_examples: str | None,
+        ai_model: str | None,
+        attributes: dict[str, Any],
+        resources: list[object],
+        attachments: list[dict[str, Any]],
+        session: AsyncSession | None = None,
+    ) -> int:
+        async def operation(active: AsyncSession) -> int:
+            prompt_id = await self._repository.create_prompt(
+                active,
+                user_id=user_id,
+                title=title,
+                category=category,
+                content=content,
+                description=description,
+                content_format=content_format,
+                media_type=media_type,
+                input_examples=input_examples,
+                output_examples=output_examples,
+                ai_model=ai_model,
+                attributes=attributes,
+                attachments=attachments,
+            )
+            await self._resource_repository.insert_many(active, prompt_id, resources)
+            return prompt_id
+
+        return await self._write(session, operation)
+
+    async def update_prompt(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        title: str,
+        category: str,
+        content: str,
+        description: str | None,
+        content_format: str,
+        media_type: str,
+        input_examples: str | None,
+        output_examples: str | None,
+        attributes: dict[str, Any],
+        resources: list[object] | None,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        async def operation(active: AsyncSession) -> bool:
+            updated = await self._repository.update_prompt_for_user(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+                title=title,
+                category=category,
+                content=content,
+                description=description,
+                content_format=content_format,
+                media_type=media_type,
+                input_examples=input_examples,
+                output_examples=output_examples,
+                attributes=attributes,
+            )
+            if updated and resources is not None:
+                await self._resource_repository.replace_for_prompt(active, prompt_id, resources)
+            return updated
+
+        return await self._write(session, operation)
+
+    async def delete_prompt(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        async def operation(active: AsyncSession) -> tuple[list[dict[str, Any]], int]:
+            attachments = await self._repository.get_active_prompt_attachments(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            )
+            deleted = await self._repository.delete_prompt_for_user(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            )
+            return attachments, deleted
+
+        return await self._write(session, operation)
+
+    async def get_active_prompt_attachments(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._read(
+            session,
+            lambda active: self._repository.get_active_prompt_attachments(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            ),
+        )
+
+    async def list_my_prompts(
+        self,
+        *,
+        user_id: int,
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._read(
+            session,
+            lambda active: self._repository.list_my_prompts(active, user_id=user_id),
+        )
+
+    async def list_saved_prompts(
+        self,
+        *,
+        user_id: int,
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._read(
+            session,
+            lambda active: self._repository.list_saved_prompts(active, user_id=user_id),
+        )
+
+    async def list_liked_prompts(
+        self,
+        *,
+        user_id: int,
+        session: AsyncSession | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._read(
+            session,
+            lambda active: self._repository.list_liked_prompts(active, user_id=user_id),
+        )
+
+    async def delete_saved_prompt(
+        self,
+        *,
+        user_id: int,
+        task_id: int,
+        session: AsyncSession | None = None,
+    ) -> int:
+        return await self._write(
+            session,
+            lambda active: self._repository.delete_saved_prompt(
+                active,
+                user_id=user_id,
+                task_id=task_id,
+            ),
+        )
+
+    async def import_prompt_as_task(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        async def operation(active: AsyncSession) -> tuple[dict[str, Any], int]:
+            prompt = await self._repository.get_prompt_for_import(
+                active,
+                prompt_id=prompt_id,
+            )
+            if prompt is None:
+                return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
+            prompt_template = self._compose_task_prompt_template(prompt)
+            if not prompt_template:
+                return {"error": "タスクとして追加できる本文がありません。"}, 400
+            return await self._repository.add_prompt_as_task(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+                prompt_template=prompt_template,
+            )
+
+        return await self._write(session, operation)
+
+    async def remove_prompt_as_task(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return await self._write(
+            session,
+            lambda active: self._repository.remove_prompt_as_task(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            ),
+        )
+
+    async def add_like(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return await self._write(
+            session,
+            lambda active: self._repository.add_like(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            ),
+        )
+
+    async def remove_like(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> int:
+        return await self._write(
+            session,
+            lambda active: self._repository.remove_like(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+            ),
+        )
+
+    async def list_comments(
+        self,
+        *,
+        prompt_id: int,
+        limit: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[list[dict[str, Any]] | None, int]:
+        async def operation(active: AsyncSession) -> tuple[list[dict[str, Any]] | None, int]:
+            comments = await self._repository.list_prompt_comments(
+                active,
+                prompt_id=prompt_id,
+                limit=limit,
+            )
+            if comments is None:
+                return None, 0
+            return comments, await self._repository.count_visible_comments(active, prompt_id)
+
+        return await self._read(session, operation)
+
+    async def add_comment(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        content: str,
+        actor_is_admin: bool,
+        duplicate_window_seconds: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return await self._write(
+            session,
+            lambda active: self._repository.add_comment(
+                active,
+                user_id=user_id,
+                prompt_id=prompt_id,
+                content=content,
+                actor_is_admin=actor_is_admin,
+                duplicate_window_seconds=duplicate_window_seconds,
+            ),
+        )
+
+    async def delete_comment(
+        self,
+        *,
+        actor_user_id: int,
+        comment_id: int,
+        actor_is_admin: bool,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return await self._write(
+            session,
+            lambda active: self._repository.delete_comment(
+                active,
+                actor_user_id=actor_user_id,
+                comment_id=comment_id,
+                actor_is_admin=actor_is_admin,
+            ),
+        )
+
+    async def report_comment(
+        self,
+        *,
+        reporter_user_id: int,
+        comment_id: int,
+        reason: str,
+        details: str | None,
+        auto_hide_threshold: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        return await self._write(
+            session,
+            lambda active: self._repository.report_comment(
+                active,
+                reporter_user_id=reporter_user_id,
+                comment_id=comment_id,
+                reason=reason,
+                details=details,
+                auto_hide_threshold=auto_hide_threshold,
+            ),
+        )
+
+    @staticmethod
+    def _resource_code_fence(resource: Mapping[str, Any]) -> str:
+        path = str(resource.get("path") or "").strip()
+        content = str(resource.get("content") or "")
+        if not path or not content:
+            return ""
+        language = re.sub(r"[^a-zA-Z0-9_+.-]", "", str(resource.get("language") or "text"))
+        longest_run = max(
+            (len(match.group(0)) for match in re.finditer(r"`+", content)),
+            default=0,
+        )
+        fence = "`" * max(3, longest_run + 1)
+        return f"## Resource: `{path}`\n\n{fence}{language}\n{content}\n{fence}"
+
+    @classmethod
+    def _compose_task_prompt_template(cls, prompt: Mapping[str, Any]) -> str:
+        if str(prompt.get("content_format") or "").strip().lower() != CONTENT_FORMAT_SKILL:
+            return str(prompt.get("content") or "")
+        parts: list[str] = []
+        attributes = prompt.get("attributes") if isinstance(prompt.get("attributes"), dict) else {}
+        skill_markdown = str(attributes.get("skill_markdown") or "")
+        if skill_markdown:
+            parts.append(skill_markdown)
+        resources = prompt.get("resources") if isinstance(prompt.get("resources"), list) else []
+        for resource in resources:
+            if isinstance(resource, dict):
+                rendered = cls._resource_code_fence(resource)
+                if rendered:
+                    parts.append(rendered)
+        if not resources:
+            legacy_script = str(attributes.get("skill_python_script") or "")
+            if legacy_script:
+                parts.append(
+                    cls._resource_code_fence(
+                        {
+                            "path": "scripts/main.py",
+                            "language": "python",
+                            "content": legacy_script,
+                        }
+                    )
+                )
+        return "\n\n".join(parts) or str(prompt.get("content") or "")
+
+    async def _get_public_skill_row(
+        self,
+        session: AsyncSession,
+        prompt_id: int,
+    ) -> dict[str, Any] | None:
         if isinstance(prompt_id, bool) or int(prompt_id) <= 0:
             raise ValueError("prompt_id must be a positive integer.")
-        row = self._repository.get_public_content(int(prompt_id))
+        row = await self._repository.get_public_content(session, int(prompt_id))
         if row is None:
             return None
         axes = serialize_axes(row)
@@ -231,13 +781,14 @@ class SharedContentService:
             raise ValueError("指定された投稿はSKILLではありません。")
         return row
 
-    def _resource_metadata_for_prompt(
+    async def _resource_metadata_for_prompt(
         self,
+        session: AsyncSession,
         prompt_id: int,
     ) -> list[PublicSkillResourceMetadata]:
         return [
             self._resource_metadata(resource)
-            for resource in self._resource_repository.list_for_prompt(prompt_id)
+            for resource in await self._resource_repository.list_for_prompt(session, prompt_id)
         ]
 
     @classmethod

@@ -1,10 +1,13 @@
+import asyncio
 import json
-import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from sqlalchemy.exc import SQLAlchemyError
+
+from services.db import is_retryable_db_error, session_scope
+from services.repositories.default_seed_repository import seed_default_tasks
 
 DEFAULT_TASKS_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.json"
@@ -26,7 +29,6 @@ DEFAULT_TASK_CATALOG_PATHS = {
 DEFAULT_TASK_CATALOGS = DEFAULT_TASK_CATALOG_PATHS[CURRENT_SYSTEM_TASK_REVISION]
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
-DEFAULT_TASK_SEED_ADVISORY_LOCK_ID = 743_241_901
 
 
 # JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
@@ -213,112 +215,22 @@ def _extract_system_key_and_name(
 
 # データベースに不足しているデフォルトタスクをインサートし、追加された件数を返す
 # Seed default tasks into the database if they do not already exist, returning the insert count.
-def ensure_default_tasks_seeded() -> int:
+async def ensure_default_tasks_seeded() -> int:
     # 共通タスク（user_id IS NULL）に不足分のみ追加し、追加件数を返す
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                # Serialize startup seeding across application workers. The unique
-                # indexes remain the final guard, while this lock also protects
-                # legacy name-only rows that predate stable system keys.
-                cursor.execute(
-                    "SELECT pg_advisory_xact_lock(%s)",
-                    (DEFAULT_TASK_SEED_ADVISORY_LOCK_ID,),
-                )
-                # 既存のデフォルトタスク名を取得する
-                # Retrieve the names of existing default tasks
-                cursor.execute(
-                    """
-                    SELECT system_task_key, name
-                      FROM task_with_examples
-                     WHERE user_id IS NULL
-                    """
-                )
-                existing_rows = [_extract_system_key_and_name(row) for row in cursor.fetchall()]
-                existing_keys = {key for key, _ in existing_rows if isinstance(key, str) and key}
-                existing_names = {
-                    name.strip().lower()
-                    for _, name in existing_rows
-                    if isinstance(name, str)
-                }
-
-                inserted = 0
-                for (
-                    system_task_key,
-                    system_task_revision,
-                    name,
-                    template,
-                    response_rules,
-                    output_skeleton,
-                    input_example,
-                    output_example,
-                    display_order,
-                ) in default_task_rows(include_key=True):
-                    # 既に存在する場合は挿入をスキップする
-                    # Skip insertion if the task already exists
-                    normalized_name = name.strip().lower()
-                    if (
-                        (system_task_key and system_task_key in existing_keys)
-                        or normalized_name in existing_names
-                    ):
-                        continue
-
-                    cursor.execute(
-                        """
-                        INSERT INTO task_with_examples
-                              (
-                                  user_id,
-                                  system_task_key,
-                                  system_task_revision,
-                                  name,
-                                  prompt_template,
-                                  response_rules,
-                                  output_skeleton,
-                                  input_examples,
-                                  output_examples,
-                                  display_order
-                              )
-                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        (
-                            system_task_key,
-                            system_task_revision,
-                            name,
-                            template,
-                            response_rules,
-                            output_skeleton,
-                            input_example,
-                            output_example,
-                            display_order,
-                        ),
+        try:
+            async with session_scope() as session:
+                async with session.begin():
+                    return await seed_default_tasks(
+                        session, default_task_rows(include_key=True)
                     )
-                    if getattr(cursor, "rowcount", 1) > 0:
-                        if system_task_key:
-                            existing_keys.add(system_task_key)
-                        existing_names.add(normalized_name)
-                        inserted += 1
-
-                # 挿入があった場合はコミットする
-                # Commit the transaction if insertions occurred
-                if inserted > 0:
-                    conn.commit()
-
-                return inserted
-            except Error as exc:
-                rollback_connection(conn)
-                # 再試行可能なエラーの場合は待機して再試行する
-                # Wait and retry if the error is retryable
-                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
-                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
-                    continue
-                raise
-            except BaseException:
-                rollback_connection(conn)
-                raise
-            finally:
-                cursor.close()
+        except SQLAlchemyError as exc:
+            # Retry only transient PostgreSQL failures. session_scope rolls back
+            # the failed transaction before the next isolated attempt.
+            if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                continue
+            raise
 
     raise RuntimeError("Failed to seed default tasks after retry attempts.")

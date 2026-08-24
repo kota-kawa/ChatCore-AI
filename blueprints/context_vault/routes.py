@@ -6,9 +6,8 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import Response
 
-from blueprints.memo.helpers import user_id_from_session
+from services.repositories.memo_helpers import user_id_from_session
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.context_vault_candidate_service import (
     DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     MAX_CONTEXT_CANDIDATE_LIST_LIMIT,
@@ -138,8 +137,7 @@ async def api_list_context_facts(
 
     safe_limit = max(1, min(int(limit), MAX_CONTEXT_LIST_LIMIT))
     try:
-        result = await run_blocking(
-            list_facts,
+        result = await list_facts(
             user_id,
             fact_type=fact_type,
             status=status,
@@ -163,7 +161,7 @@ async def api_export_context_vault(request: Request, format: str = "json"):
             status_code=400,
         )
     try:
-        content, media_type, filename = await run_blocking(build_export, user_id, format)
+        content, media_type, filename = await build_export(user_id, format)
         return Response(
             content=content,
             media_type=media_type,
@@ -201,12 +199,7 @@ async def api_preview_context_vault_import(request: Request):
     if validation_error is not None:
         return validation_error
     try:
-        result = await run_blocking(
-            preview_import,
-            user_id,
-            payload.format,
-            payload.content,
-        )
+        result = await preview_import(user_id, payload.format, payload.content)
         return jsonify(result.model_dump())
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
@@ -236,8 +229,7 @@ async def api_import_context_vault(request: Request):
     if validation_error is not None:
         return validation_error
     try:
-        result = await run_blocking(
-            confirm_import,
+        result = await confirm_import(
             user_id,
             payload.format,
             payload.content,
@@ -273,8 +265,7 @@ async def api_list_context_fact_candidates(
 
     safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
     try:
-        result = await run_blocking(
-            list_candidates,
+        result = await list_candidates(
             user_id,
             status=status,
             limit=safe_limit,
@@ -307,8 +298,7 @@ async def api_approve_context_fact_candidate(request: Request, candidate_id: int
         return validation_error
 
     try:
-        result = await run_blocking(
-            approve_candidate,
+        result = await approve_candidate(
             user_id,
             candidate_id,
             expected_revision=payload.revision,
@@ -346,8 +336,7 @@ async def api_reject_context_fact_candidate(request: Request, candidate_id: int)
         return validation_error
 
     try:
-        candidate = await run_blocking(
-            reject_candidate,
+        candidate = await reject_candidate(
             user_id,
             candidate_id,
             expected_revision=payload.revision,
@@ -369,7 +358,7 @@ async def api_get_context_extraction_settings(request: Request):
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
     try:
-        result = await run_blocking(get_extraction_settings, user_id)
+        result = await get_extraction_settings(user_id)
         return jsonify(result.model_dump())
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
@@ -398,7 +387,7 @@ async def api_update_context_extraction_settings(request: Request):
     if validation_error is not None:
         return validation_error
     try:
-        result = await run_blocking(update_extraction_settings, user_id, payload.enabled)
+        result = await update_extraction_settings(user_id, payload.enabled)
         return jsonify({"status": "success", **result.model_dump()})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
@@ -425,8 +414,7 @@ async def api_create_context_fact(request: Request):
         return validation_error
 
     try:
-        fact = await run_blocking(
-            create_fact,
+        fact = await create_fact(
             user_id,
             fact_type=payload.fact_type,
             title=payload.title,
@@ -461,8 +449,7 @@ async def api_update_context_fact(request: Request, fact_id: int):
         return validation_error
 
     try:
-        fact = await run_blocking(
-            update_fact,
+        fact = await update_fact(
             user_id,
             fact_id,
             expected_revision=payload.revision,

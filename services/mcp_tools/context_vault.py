@@ -14,7 +14,6 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field, ValidationError
 
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.context_vault_service import (
     DEFAULT_DIGEST_MAX_CHARS,
     ContextSearchResult,
@@ -112,8 +111,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_CONTEXT_READ_SCOPE)
         await consume_tool_limit(actor, "context_read", limit=120, window_seconds=60)
         try:
-            return await run_blocking(
-                build_digest,
+            return await build_digest(
                 actor.user_id,
                 limit_per_type=limit_per_type,
                 max_chars=max_chars,
@@ -142,9 +140,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
         if mode == "semantic":
             await consume_tool_limit(actor, "context_semantic_search", limit=30, window_seconds=3600)
         try:
-            return await run_blocking(
-                search_facts, actor.user_id, query, mode=mode, limit=limit
-            )
+            return await search_facts(actor.user_id, query, mode=mode, limit=limit)
         except Exception as exc:
             raise _tool_error(exc) from exc
 
@@ -188,8 +184,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
                 importance=importance,
                 idempotency_key=idempotency_key,
             )
-            fact = await run_blocking(
-                create_fact,
+            fact = await create_fact(
                 actor.user_id,
                 fact_type=payload.fact_type,
                 title=payload.title,
@@ -243,8 +238,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
                 fact_type=fact_type,
                 importance=importance,
             )
-            fact = await run_blocking(
-                update_fact,
+            fact = await update_fact(
                 actor.user_id,
                 fact_id,
                 expected_revision=payload.expected_revision,
@@ -278,8 +272,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
         await consume_tool_limit(actor, "context_write", limit=60, window_seconds=3600)
         try:
             payload = McpContextFactDeprecateRequest(expected_revision=expected_revision)
-            fact = await run_blocking(
-                deprecate_fact,
+            fact = await deprecate_fact(
                 actor.user_id,
                 fact_id,
                 expected_revision=payload.expected_revision,

@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -9,10 +9,6 @@ from services.api_errors import ApiServiceError
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
 from services.response_models import ContextFactResponse
 from tests.helpers.app_helpers import build_session_test_app
-
-
-async def _run_blocking_inline(func, *args, **kwargs):
-    return func(*args, **kwargs)
 
 
 def _fact_response(**overrides):
@@ -99,16 +95,10 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
         async def scenario():
             async with self._make_client() as client:
                 token = await self._authenticate_with_csrf(client)
-                with (
-                    patch(
-                        "blueprints.context_vault.routes.run_blocking",
-                        side_effect=_run_blocking_inline,
-                    ),
-                    patch(
-                        "blueprints.context_vault.routes.create_fact",
-                        return_value=_fact_response(importance=75),
-                    ) as create,
-                ):
+                with patch(
+                    "blueprints.context_vault.routes.create_fact",
+                    new=AsyncMock(return_value=_fact_response(importance=75)),
+                ) as create:
                     response = await client.post(
                         "/api/context-facts",
                         json={
@@ -123,7 +113,7 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["status"], "success")
             self.assertEqual(response.json()["fact"]["id"], 3)
-            create.assert_called_once()
+            create.assert_awaited_once()
             self.assertEqual(create.call_args.kwargs["importance"], 75)
 
         asyncio.run(scenario())
@@ -134,18 +124,14 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
                 token = await self._authenticate_with_csrf(client)
                 headers = {CSRF_HEADER_NAME: token}
                 conflict = ApiServiceError("競合しました。", 409, status="fail")
-                with (
-                    patch(
-                        "blueprints.context_vault.routes.run_blocking",
-                        side_effect=_run_blocking_inline,
-                    ),
-                    patch(
-                        "blueprints.context_vault.routes.create_fact",
+                with patch(
+                    "blueprints.context_vault.routes.create_fact",
+                    new=AsyncMock(
                         side_effect=ApiServiceError(
                             "有効なコンテキストは200件までです。",
                             409,
                             status="fail",
-                        ),
+                        )
                     ),
                 ):
                     create_response = await client.post(
@@ -157,15 +143,9 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
                         },
                         headers=headers,
                     )
-                with (
-                    patch(
-                        "blueprints.context_vault.routes.run_blocking",
-                        side_effect=_run_blocking_inline,
-                    ),
-                    patch(
-                        "blueprints.context_vault.routes.update_fact",
-                        side_effect=conflict,
-                    ),
+                with patch(
+                    "blueprints.context_vault.routes.update_fact",
+                    new=AsyncMock(side_effect=conflict),
                 ):
                     update_response = await client.put(
                         "/api/context-facts/3",

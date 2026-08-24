@@ -15,20 +15,18 @@ from services.auth_limits import (
 )
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
-from services.db import get_db_connection
 from services.chat_service import (
     create_or_get_shared_chat_token,
     create_chat_room_in_db,
+    delete_chat_room_for_user,
+    delete_chat_rooms_for_user,
+    fork_shared_chat_into_db_room,
     get_shared_chat_room_payload,
+    list_chat_rooms,
     rename_chat_room_in_db,
     validate_room_owner,
 )
 from services.project_service import assign_room_to_project
-from services.shared_chat_fork import (
-    fork_shared_chat_into_db_room,
-    fork_shared_chat_into_ephemeral_room,
-)
-from services.datetime_serialization import serialize_datetime_iso
 
 from services.request_models import (
     ChatRoomIdRequest,
@@ -64,6 +62,41 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
+
+MAX_FORKED_MESSAGES = 500
+
+
+async def _fork_shared_chat_into_ephemeral_room(
+    token: str,
+    sid: str,
+    room_id: str,
+) -> dict[str, Any]:
+    """Load the shared room asynchronously, then write only to the ephemeral store."""
+    payload = await get_shared_chat_room_payload(token)
+    room = payload.get("room") if isinstance(payload, dict) else None
+    title = str((room or {}).get("title") or "共有チャット").strip() or "共有チャット"
+    messages = [
+        message
+        for message in (payload.get("messages") if isinstance(payload, dict) else [])
+        if isinstance(message, dict)
+    ][:MAX_FORKED_MESSAGES]
+    await run_blocking(ephemeral_store.create_room, sid, room_id, title)
+    copied = 0
+    for message in messages:
+        role = "user" if message.get("sender") == "user" else "assistant"
+        message_parts = message.get("message_parts")
+        appended = await run_blocking(
+            ephemeral_store.append_message,
+            sid,
+            room_id,
+            role,
+            str(message.get("message") or ""),
+            message_parts=message_parts if isinstance(message_parts, list) else None,
+        )
+        if not appended:
+            break
+        copied += 1
+    return {"id": room_id, "title": title, "mode": "temporary", "message_count": copied}
 
 # チャットルーム一覧のデフォルトの1ページ表示件数
 # Default page size for chat room lists.
@@ -189,7 +222,7 @@ def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
 
 # データベースに保存されているユーザーのチャットルーム一覧を取得する関数（カーソルページング対応）
 # Fetch persisted chat rooms for a user from the database using cursor-based pagination.
-def _fetch_persisted_user_rooms(
+async def _fetch_persisted_user_rooms(
     user_id: int,
     *,
     limit: int | None = None,
@@ -199,68 +232,12 @@ def _fetch_persisted_user_rooms(
     DBに永続化されているユーザーのチャットルーム情報を、作成日時の降順・IDの降順で取得します（一時的なルームは除外）。
     Retrieves the user's persistent chat rooms from the database, sorted newest first.
     """
-    # 永続保存されたチャットルーム一覧のみを取得する
-    # Fetch only persisted chat rooms ordered by newest first.
-    conn = None
-    db_cursor = None
-    try:
-        conn = get_db_connection()
-        db_cursor = conn.cursor()
-        
-        # 基本となる取得クエリ（temporary以外の通常ルームのみ）
-        # Base query fetching non-temporary rooms
-        query = """
-            SELECT id, title, COALESCE(mode, 'normal'), created_at
-            FROM chat_rooms
-            WHERE user_id = %s
-              AND COALESCE(mode, 'normal') <> 'temporary'
-        """
-        params: list[Any] = [user_id]
-        
-        # カーソル情報がある場合、カーソル位置以前のデータをフィルタリング
-        # Filter rooms created before the cursor position
-        if cursor is not None:
-            query = f"{query} AND (created_at, id) < (%s, %s)"
-            params.extend([cursor[0], cursor[1]])
-            
-        # ソート条件を追加
-        # Append sorting clauses
-        query = f"{query} ORDER BY created_at DESC, id DESC"
-        
-        # 取得件数制限がある場合
-        # Apply limit constraints if specified
-        if limit is not None:
-            query = f"{query} LIMIT %s"
-            params.append(limit)
-            
-        db_cursor.execute(query, tuple(params))
-        rows = db_cursor.fetchall()
-        
-        rooms = []
-        for (room_id, title, mode, created_at) in rows:
-            rooms.append(
-                {
-                    "id": room_id,
-                    "title": title,
-                    "mode": mode or "normal",
-                    # 作成日時をISO形式文字列に変換
-                    # Serialize datetime to ISO string
-                    "created_at": serialize_datetime_iso(created_at),
-                }
-            )
-        return rooms
-    finally:
-        # リソース解放
-        # Resource cleanup
-        if db_cursor is not None:
-            db_cursor.close()
-        if conn is not None:
-            conn.close()
+    return await list_chat_rooms(user_id, limit=limit, cursor=cursor)
 
 
 # 指定ルームのモード（通常モードnormalまたは一時モードtemporary）を判定する関数
 # Resolve whether the room is normal (persisted in DB) or temporary (ephemeral store) for authenticated requests.
-def _resolve_authenticated_room_mode(
+async def _resolve_authenticated_room_mode(
     user_id: int,
     room_id: str,
     forbidden_message: str,
@@ -273,12 +250,12 @@ def _resolve_authenticated_room_mode(
     temporary_sid = get_temporary_user_store_key(user_id)
     # エフェメラルストアにルームがある場合はtemporaryと判断
     # If room exists in ephemeral store, treat it as temporary
-    if ephemeral_store.room_exists(temporary_sid, room_id):
+    if await run_blocking(ephemeral_store.room_exists, temporary_sid, room_id):
         return "temporary", None
 
     # DB内のルームの場合、所有者が正しいか検証
     # If room is in DB, validate that the current user owns it
-    owner_result = validate_room_owner(room_id, user_id, forbidden_message)
+    owner_result = await validate_room_owner(room_id, user_id, forbidden_message)
     legacy_response = _legacy_error_response(owner_result)
     if legacy_response is not None:
         # 所有権のないエラーレスポンスがある場合は返却
@@ -289,50 +266,12 @@ def _resolve_authenticated_room_mode(
 
 # DBから指定されたチャットルームとそのメッセージ履歴を削除する関数
 # Delete a specific chat room and its message history from the database after verifying ownership.
-def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
+async def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
     """
     DBから該当するチャットルーム、およびそのチャット履歴を一連のトランザクションとして削除します。
     Deletes the chat room and its history from the database in a single transaction.
     """
-    # 所有者確認後に履歴→ルームの順で削除し、整合性を保つ
-    # Validate owner, then delete history and room to keep data consistent.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # ルーム所有者の確認
-        # Verify ownership of the chat room
-        check_q = "SELECT user_id FROM chat_rooms WHERE id = %s"
-        cursor.execute(check_q, (room_id,))
-        result = cursor.fetchone()
-        if not result:
-            raise ApiServiceError(ERROR_CHAT_ROOM_NOT_FOUND, 404)
-        if result[0] != user_id:
-            raise ApiServiceError("他ユーザーのチャットルームは削除できません", 403)
-
-        # チャット履歴を削除
-        # Delete message history first
-        del_history_q = "DELETE FROM chat_history WHERE chat_room_id = %s"
-        cursor.execute(del_history_q, (room_id,))
-        
-        # ルーム自体を削除
-        # Delete the chat room row
-        del_room_q = "DELETE FROM chat_rooms WHERE id = %s"
-        cursor.execute(del_room_q, (room_id,))
-        
-        # トランザクションコミット
-        # Commit the transaction
-        conn.commit()
-        return {"message": "削除しました"}
-    finally:
-        # カーソルとコネクションの解放
-        # Release db resources
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    return await delete_chat_room_for_user(room_id, user_id)
 
 
 # ルームIDリストから重複したIDを取り除く関数
@@ -357,73 +296,12 @@ def _placeholders(count: int) -> str:
 
 # 複数のチャットルームとそのメッセージ履歴を一括削除する関数
 # Bulk delete multiple chat rooms and their history from the database after verifying ownership.
-def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:
+async def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:
     """
     複数のルームIDについて、すべての所有権を検証した上で、一括で履歴とルームデータを削除します。
     Atomically deletes multiple chat rooms and histories after verifying ownership of all target rooms.
     """
-    # 一括削除は全IDの所有者確認後に実行し、部分削除を避ける
-    # Validate every room before deleting so bulk actions do not partially apply.
-    unique_room_ids = _unique_room_ids(room_ids)
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        placeholders = _placeholders(len(unique_room_ids))
-        
-        # 削除対象ルームがDBに存在し、現在のユーザーが所有者であるか一括確認
-        # Validate that all requested room IDs exist and are owned by the current user
-        cursor.execute(
-            f"SELECT id, user_id FROM chat_rooms WHERE id IN ({placeholders})",
-            tuple(unique_room_ids),
-        )
-        rows = cursor.fetchall()
-        found_by_id = {str(room_id): owner_id for room_id, owner_id in rows}
-
-        # 存在しないルームがある場合は削除を拒否
-        # Error if any room ID could not be found
-        if len(found_by_id) != len(unique_room_ids):
-            raise ApiServiceError(ERROR_CHAT_ROOM_NOT_FOUND, 404)
-            
-        # 他人のルームが混ざっている場合は権限エラー
-        # Error if the user does not own all rooms
-        if any(owner_id != user_id for owner_id in found_by_id.values()):
-            raise ApiServiceError("他ユーザーのチャットルームは削除できません", 403)
-
-        # チャット履歴の一括削除
-        # Bulk delete histories
-        cursor.execute(
-            f"DELETE FROM chat_history WHERE chat_room_id IN ({placeholders})",
-            tuple(unique_room_ids),
-        )
-        
-        # チャットルームの一括削除
-        # Bulk delete chat room rows
-        cursor.execute(
-            f"DELETE FROM chat_rooms WHERE id IN ({placeholders})",
-            tuple(unique_room_ids),
-        )
-        
-        # コミットして変更を反映
-        # Commit the transaction
-        conn.commit()
-        return {
-            "message": "削除しました",
-            "deleted_count": len(unique_room_ids),
-            "deleted_room_ids": unique_room_ids,
-        }
-    except Exception:
-        # エラー発生時はロールバック
-        # Roll back on error to keep data consistency
-        if conn is not None:
-            conn.rollback()
-        raise
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    return await delete_chat_rooms_for_user(room_ids, user_id)
 
 
 # レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
@@ -494,12 +372,12 @@ async def new_chat_room(
                 temporary_sid = get_temporary_user_store_key(user_id)
                 await run_blocking(ephemeral_store.create_room, temporary_sid, room_id, title)
             else:
-                await run_blocking(create_chat_room_in_db, room_id, user_id, title, mode)
+                await create_chat_room_in_db(room_id, user_id, title, mode)
                 # プロジェクト指定時はルームを紐づける（通常ルームのみ）。失敗してもルーム作成は成功扱い。
                 # Assign the room to the project when requested (normal rooms only).
                 if project_id is not None:
                     try:
-                        await run_blocking(assign_room_to_project, room_id, user_id, project_id)
+                        await assign_room_to_project(room_id, user_id, project_id)
                     except Exception:
                         logger.warning("Failed to assign new room to project %s.", project_id)
             return jsonify(
@@ -579,8 +457,7 @@ async def get_chat_rooms(request: Request):
         # Fetch 1 extra item to check if there are subsequent pages
         fetch_limit = limit + 1
         try:
-            persisted_rooms = await run_blocking(
-                _fetch_persisted_user_rooms,
+            persisted_rooms = await _fetch_persisted_user_rooms(
                 user_id,
                 limit=fetch_limit,
                 cursor=cursor,
@@ -656,8 +533,7 @@ async def delete_chat_room(request: Request):
         try:
             # 削除対象ルームがDBか一時保存かを解決しつつ、権限を確認
             # Resolve room storage location and validate user access permissions
-            room_mode, legacy_response = await run_blocking(
-                _resolve_authenticated_room_mode,
+            room_mode, legacy_response = await _resolve_authenticated_room_mode(
                 session["user_id"],
                 room_id,
                 "他ユーザーのチャットルームは削除できません",
@@ -676,7 +552,7 @@ async def delete_chat_room(request: Request):
 
             # DB内の通常ルームの場合、履歴を含めトランザクション削除
             # Delete database room and history atomically
-            response_payload = await run_blocking(_delete_room_for_user, room_id, session["user_id"])
+            response_payload = await _delete_room_for_user(room_id, session["user_id"])
             return jsonify(response_payload, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -733,11 +609,7 @@ async def delete_chat_rooms(request: Request):
     try:
         # 一括削除処理を呼び出す
         # Dispatch the database bulk deletion logic
-        response_payload = await run_blocking(
-            _delete_rooms_for_user,
-            payload.room_ids,
-            session["user_id"],
-        )
+        response_payload = await _delete_rooms_for_user(payload.room_ids, session["user_id"])
         return jsonify(response_payload, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -783,8 +655,7 @@ async def rename_chat_room(request: Request):
         try:
             # 所有権とストレージ（DBまたは一時ストア）の解決
             # Verify owner permissions and storage type (DB or ephemeral)
-            room_mode, legacy_response = await run_blocking(
-                _resolve_authenticated_room_mode,
+            room_mode, legacy_response = await _resolve_authenticated_room_mode(
                 session["user_id"],
                 room_id,
                 "他ユーザーのチャットルームは変更できません",
@@ -802,7 +673,7 @@ async def rename_chat_room(request: Request):
             # 永続ルームの名称変更をDBに反映
             # Rename database room title
             else:
-                await run_blocking(rename_chat_room_in_db, room_id, new_title)
+                await rename_chat_room_in_db(room_id, new_title)
             return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -856,8 +727,7 @@ async def share_chat_room(request: Request):
     try:
         # ルームが所有者のものか、および一時ルームではないか検証
         # Verify ownership of room and ensure it is not temporary
-        room_mode, legacy_response = await run_blocking(
-            _resolve_authenticated_room_mode,
+        room_mode, legacy_response = await _resolve_authenticated_room_mode(
             user_id,
             room_id,
             "他ユーザーのチャットルームは共有できません",
@@ -869,7 +739,7 @@ async def share_chat_room(request: Request):
 
         # 共有トークンの生成または既存トークンの取得
         # Create a new shared chat token or fetch the existing one from database
-        share_token_result = await run_blocking(create_or_get_shared_chat_token, room_id, user_id)
+        share_token_result = await create_or_get_shared_chat_token(room_id, user_id)
         if isinstance(share_token_result, tuple) and len(share_token_result) == 2:
             share_token, status_code = share_token_result
             if status_code == 404 or not share_token:
@@ -914,7 +784,7 @@ async def shared_chat_room(request: Request):
     try:
         # トークンに紐づくルームデータと履歴を取得
         # Retrieve the shared room payload using the share token
-        payload_result = await run_blocking(get_shared_chat_room_payload, token)
+        payload_result = await get_shared_chat_room_payload(token)
         if isinstance(payload_result, tuple) and len(payload_result) == 2:
             payload, status_code = payload_result
             return jsonify(payload, status_code=status_code or 200)
@@ -964,8 +834,7 @@ async def fork_shared_chat_room(
         if "user_id" in session:
             # ログインユーザーは自分の通常ルームとしてDBに永続化する
             # Authenticated viewers get a persisted normal room of their own.
-            result = await run_blocking(
-                fork_shared_chat_into_db_room,
+            result = await fork_shared_chat_into_db_room(
                 token,
                 room_id,
                 session["user_id"],
@@ -987,13 +856,7 @@ async def fork_shared_chat_room(
             )
 
         sid = get_session_id(session)
-        result = await run_blocking(
-            fork_shared_chat_into_ephemeral_room,
-            token,
-            sid,
-            room_id,
-            ephemeral_store,
-        )
+        result = await _fork_shared_chat_into_ephemeral_room(token, sid, room_id)
         register_guest_room(session, room_id)
         return jsonify(result, status_code=201)
     except ApiServiceError as exc:

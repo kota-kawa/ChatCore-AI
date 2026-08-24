@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 import sys
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.csrf import require_csrf
-from services.db import Error
 from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
     ERROR_TOKEN_REQUIRED,
@@ -39,8 +39,8 @@ from services.web import (
     validate_payload_model,
 )
 
-from .constants import DEFAULT_MEMO_LIST_LIMIT, MAX_MEMO_LIST_LIMIT
-from .helpers import user_id_from_session
+from services.repositories.memo_constants import DEFAULT_MEMO_LIST_LIMIT, MAX_MEMO_LIST_LIMIT
+from services.repositories.memo_helpers import user_id_from_session
 
 # CSRF保護を設定したメモ機能用APIRouterの初期化
 # Initialize FastAPI APIRouter for memo with CSRF protection.
@@ -114,7 +114,10 @@ async def api_recent_memos(
         try:
             # 外部の埋め込み生成処理を実行
             # Generate vector embedding for the query.
-            semantic_embedding = await run_blocking(_memo_attr("generate_embedding"), q.strip())
+            semantic_embedding = await asyncio.to_thread(
+                _memo_attr("generate_embedding"),
+                q.strip(),
+            )
         except Exception:
             # ベクトル生成に失敗した場合は、テキスト検索にフォールバック
             # Log warning and fall back to regular text-based search.
@@ -123,8 +126,7 @@ async def api_recent_memos(
     try:
         # メモ一覧データをDBから取得
         # Fetch matching memo summaries from the database.
-        result = await run_blocking(
-            _memo_attr("_fetch_memo_summaries"),
+        result = await _memo_attr("_fetch_memo_summaries")(
             user_id,
             limit=safe_limit,
             offset=safe_offset,
@@ -139,7 +141,7 @@ async def api_recent_memos(
             semantic_query_embedding=semantic_embedding,
         )
         return jsonify(result)
-    except Error:
+    except SQLAlchemyError:
         # DBエラー発生時は警告ログを出力し、空のリストを返却
         # Log DB error and fallback to returning an empty memo list.
         logger.warning("Failed to load memo summaries; returning an empty list.", exc_info=True)
@@ -190,8 +192,7 @@ async def api_create_memo(request: Request):
     try:
         # DBにメモを新規挿入
         # Insert the new memo into database.
-        memo_id = await run_blocking(
-            _memo_attr("_insert_memo"),
+        memo_id = await _memo_attr("_insert_memo")(
             user_id,
             payload.ai_response,
             resolved_title,
@@ -207,7 +208,7 @@ async def api_create_memo(request: Request):
         if memo_id:
             _memo_attr("_schedule_embedding")(memo_id, resolved_title, payload.ai_response, 1)
         return jsonify({"status": "success", "memo_id": memo_id})
-    except Error:
+    except SQLAlchemyError:
         # DB登録エラー時の共通エラーハンドリング
         # Handle database insertion error and return 500 status.
         return log_and_internal_server_error(logger, "Failed to create memo entry.", status="fail")
@@ -251,7 +252,7 @@ async def api_suggest_memo(request: Request):
     try:
         # LLM等を用いて最適なタイトル候補を提案
         # Suggest appropriate title options using the system logic.
-        result = await run_blocking(
+        result = await asyncio.to_thread(
             _memo_attr("suggest_title"),
             payload.ai_response,
             locale=get_request_locale(request),
@@ -301,15 +302,14 @@ async def api_bulk_memo(request: Request):
     try:
         # 指定された一括アクション（削除、ピン留め、アーカイブ、コレクション設定など）を実行
         # Execute the bulk action (delete, pin, archive, set collection) on given memo IDs.
-        result = await run_blocking(
-            _memo_attr("_bulk_action"),
+        result = await _memo_attr("_bulk_action")(
             user_id,
             payload.action,
             payload.memo_ids,
             collection_id=payload.collection_id,
         )
         return jsonify({"status": "success", **result})
-    except Error:
+    except SQLAlchemyError:
         # 一括処理DBエラー時のハンドリング
         # Return internal server error if bulk DB query fails.
         return log_and_internal_server_error(logger, "Bulk memo action failed.", status="fail")
@@ -353,8 +353,7 @@ async def api_reorder_memo(request: Request):
     try:
         # メモのソート順序位置を更新
         # Update the position of the target memo relative to target neighbors.
-        memo = await run_blocking(
-            _memo_attr("_reorder_memo"),
+        memo = await _memo_attr("_reorder_memo")(
             user_id,
             payload.memo_id,
             before_id=payload.before_id,
@@ -365,7 +364,7 @@ async def api_reorder_memo(request: Request):
         # メモが見つからないなど、バリデーションエラーの場合は例外ハンドラに応じたレスポンスを返す
         # Handle business logic exceptions and return appropriate error payload.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB書き込み失敗時のエラーハンドリング
         # Handle database connection or SQL exception.
         return log_and_internal_server_error(logger, "Failed to reorder memo entry.", status="fail")
@@ -413,7 +412,7 @@ async def api_export_memos(
     try:
         # 指定されたメモデータをDBから取得
         # Retrieve target memos for export.
-        memos = await run_blocking(_memo_attr("_fetch_memos_for_export"), user_id, memo_ids)
+        memos = await _memo_attr("_fetch_memos_for_export")(user_id, memo_ids)
 
         # フォーマットに応じたファイルデータおよびContent-Typeの設定
         # Format mapping and headers config for file streaming.
@@ -440,7 +439,7 @@ async def api_export_memos(
                 "Cache-Control": "no-store",
             },
         )
-    except Error:
+    except SQLAlchemyError:
         # エクスポート失敗時のエラーハンドリング
         # Handle exceptions in formatting or fetching memos.
         return log_and_internal_server_error(logger, "Export failed.", status="fail")
@@ -467,9 +466,9 @@ async def api_list_collections(request: Request):
     try:
         # DBからコレクション一覧を取得
         # Query collections from the database.
-        collections = await run_blocking(_memo_attr("_fetch_collections"), user_id)
+        collections = await _memo_attr("_fetch_collections")(user_id)
         return jsonify({"status": "success", "collections": collections})
-    except Error:
+    except SQLAlchemyError:
         # コレクション取得失敗時のエラーハンドリング
         # Handle SQL errors during collection retrieval.
         return log_and_internal_server_error(logger, "Failed to load collections.", status="fail")
@@ -513,14 +512,17 @@ async def api_create_collection(request: Request):
     try:
         # DBに新しいコレクションを追加
         # Insert a new collection record in the DB.
-        collection = await run_blocking(
-            _memo_attr("_insert_collection"), user_id, payload.name, payload.color
+        collection = await _memo_attr("_insert_collection")(
+            user_id, payload.name, payload.color
         )
         return jsonify({"status": "success", "collection": collection})
-    except Error as exc:
+    except SQLAlchemyError as exc:
         # ユニークキー制約違反（同名コレクション）の場合は409衝突を返す
         # Return 409 Conflict if unique constraint violated (duplicate collection name).
-        if getattr(exc, "pgcode", None) == "23505":
+        original = getattr(exc, "orig", None)
+        if getattr(original, "sqlstate", None) == "23505" or getattr(
+            exc, "sqlstate", None
+        ) == "23505":
             return jsonify(
                 {"status": "fail", "error": "同名のコレクションが既に存在します。"},
                 status_code=409,
@@ -569,15 +571,15 @@ async def api_update_collection(request: Request, collection_id: int):
     try:
         # DBのコレクション情報を更新
         # Update details of the specified collection in DB.
-        collection = await run_blocking(
-            _memo_attr("_update_collection"), user_id, collection_id, payload.name, payload.color
+        collection = await _memo_attr("_update_collection")(
+            user_id, collection_id, payload.name, payload.color
         )
         return jsonify({"status": "success", "collection": collection})
     except ApiServiceError as exc:
         # コレクションが見つからないなどのサービスエラーを返却
         # Return specific service error if collection is missing or not owned.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # SQL実行例外などのエラーハンドリング
         # Return 500 status on database update failure.
         return log_and_internal_server_error(logger, "Failed to update collection.", status="fail")
@@ -605,13 +607,13 @@ async def api_delete_collection(request: Request, collection_id: int):
     try:
         # 指定されたコレクションをDBから削除（所属していたメモの関連付けは解除される）
         # Delete the collection from database (memos belonging to it will have association cleared).
-        await run_blocking(_memo_attr("_delete_collection"), user_id, collection_id)
+        await _memo_attr("_delete_collection")(user_id, collection_id)
         return jsonify({"status": "success"})
     except ApiServiceError as exc:
         # 所有権違反などのサービスエラーを返却
         # Handle authorization or existence service checks.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # データベース削除処理エラー時のハンドリング
         # Return 500 on database failure.
         return log_and_internal_server_error(logger, "Failed to delete collection.", status="fail")
@@ -660,8 +662,7 @@ async def api_share_memo(request: Request):
     try:
         # トークンを生成または取得
         # Create or fetch shared memo token.
-        share_state = await run_blocking(
-            _memo_attr("create_or_get_shared_memo_token"),
+        share_state = await _memo_attr("create_or_get_shared_memo_token")(
             payload.memo_id,
             user_id,
             force_refresh=share_options.force_refresh,
@@ -674,7 +675,7 @@ async def api_share_memo(request: Request):
         # メモが見つからない、または所有権が無い場合のエラーハンドリング
         # Return service error if memo does not exist or isn't owned.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DBトークン作成時のエラーハンドリング
         # Handle general SQL error.
         return log_and_internal_server_error(logger, "Failed to create share link for memo entry.", status="fail")
@@ -701,7 +702,7 @@ async def api_shared_memo(request: Request):
     try:
         # トークンによる検証とデータ取得を実行
         # Verify token validity and load shared memo details.
-        payload_result = await run_blocking(_memo_attr("get_shared_memo_payload"), token)
+        payload_result = await _memo_attr("get_shared_memo_payload")(token)
         # タプル形式 (payload, status_code) で返ってきた場合は対応するステータスコードで返す
         # If payload and status code tuple returned, respond with status.
         if isinstance(payload_result, tuple) and len(payload_result) == 2:
@@ -712,7 +713,7 @@ async def api_shared_memo(request: Request):
         # トークン無効化、期限切れなどのエラーを返却
         # Return service error on expired/revoked/invalid tokens.
         return jsonify_service_error(exc)
-    except Error:
+    except SQLAlchemyError:
         # 読み込み処理失敗時のエラーハンドリング
         # Respond with 500 status on database load failure.
         return log_and_internal_server_error(logger, "Failed to load shared memo payload.")
@@ -740,13 +741,13 @@ async def api_memo_detail(request: Request, memo_id: int):
     try:
         # DBから指定メモの詳細データを取得
         # Retrieve memo detail data from DB.
-        memo = await run_blocking(_memo_attr("_fetch_memo_detail"), user_id, memo_id)
+        memo = await _memo_attr("_fetch_memo_detail")(user_id, memo_id)
         return jsonify({"status": "success", "memo": memo})
     except ApiServiceError as exc:
         # 所有権や存在確認のエラーハンドリング
         # Return service error if not authorized or not found.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DBエラー時のハンドリング
         # Respond with 500 status on database connection issue.
         return log_and_internal_server_error(logger, "Failed to load memo detail.", status="fail")
@@ -800,8 +801,7 @@ async def api_update_memo(request: Request, memo_id: int):
     try:
         # データベース内のメモを更新
         # Commit memo edits to DB.
-        memo = await run_blocking(
-            _memo_attr("_update_memo"),
+        memo = await _memo_attr("_update_memo")(
             user_id,
             memo_id,
             title=payload.title,
@@ -825,7 +825,7 @@ async def api_update_memo(request: Request, memo_id: int):
         # 所有権違反などのエラーを返却
         # Return service error if edit not permitted.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB処理エラー
         # Respond with 500 status on database write failure.
         return log_and_internal_server_error(logger, "Failed to update memo entry.", status="fail")
@@ -853,13 +853,13 @@ async def api_delete_memo(request: Request, memo_id: int):
     try:
         # DBからメモを物理/論理削除
         # Delete the memo record from database.
-        await run_blocking(_memo_attr("_delete_memo"), user_id, memo_id)
+        await _memo_attr("_delete_memo")(user_id, memo_id)
         return jsonify({"status": "success"})
     except ApiServiceError as exc:
         # 所有権違反などのエラーを返却
         # Return service error if delete not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB処理エラー
         # Respond with 500 status on database deletion failure.
         return log_and_internal_server_error(logger, "Failed to delete memo entry.", status="fail")
@@ -901,13 +901,15 @@ async def api_archive_memo(request: Request, memo_id: int):
     try:
         # アーカイブ状態を設定・更新
         # Update the archive state in the DB.
-        memo = await run_blocking(_memo_attr("_set_memo_archive_state"), user_id, memo_id, payload.enabled)
+        memo = await _memo_attr("_set_memo_archive_state")(
+            user_id, memo_id, payload.enabled
+        )
         return jsonify({"status": "success", "memo": memo})
     except ApiServiceError as exc:
         # 所有権違反などのエラーを返却
         # Return service error if not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB処理エラー
         # Respond with 500 status on database write failure.
         return log_and_internal_server_error(logger, "Failed to archive memo entry.", status="fail")
@@ -949,13 +951,15 @@ async def api_pin_memo(request: Request, memo_id: int):
     try:
         # ピン留め状態を設定・更新
         # Update the pinned state in the DB.
-        memo = await run_blocking(_memo_attr("_set_memo_pin_state"), user_id, memo_id, payload.enabled)
+        memo = await _memo_attr("_set_memo_pin_state")(
+            user_id, memo_id, payload.enabled
+        )
         return jsonify({"status": "success", "memo": memo})
     except ApiServiceError as exc:
         # 所有権違反などのサービスエラーを返却
         # Return service error if not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB処理エラー
         # Respond with 500 status on database write failure.
         return log_and_internal_server_error(logger, "Failed to pin memo entry.", status="fail")
@@ -983,7 +987,7 @@ async def api_memo_share_detail(request: Request, memo_id: int):
     try:
         # 共有状態をDBから取得
         # Retrieve share status from the database.
-        share_state = await run_blocking(_memo_attr("get_memo_share_state"), memo_id, user_id)
+        share_state = await _memo_attr("get_memo_share_state")(memo_id, user_id)
         # ペイロードをシリアライズして返却
         # Serialize share metadata.
         return jsonify(_memo_attr("_share_payload")(share_state))
@@ -991,7 +995,7 @@ async def api_memo_share_detail(request: Request, memo_id: int):
         # 所有権違反や対象メモ無しのサービスエラー
         # Return service error if not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB処理エラー
         # Respond with 500 status on database query failure.
         return log_and_internal_server_error(logger, "Failed to load memo share status.", status="fail")
@@ -1033,8 +1037,7 @@ async def api_memo_share_refresh(request: Request, memo_id: int):
     try:
         # トークンを再生成、または既存のものを取得して設定更新
         # Refresh or recreate the share token.
-        share_state = await run_blocking(
-            _memo_attr("create_or_get_shared_memo_token"),
+        share_state = await _memo_attr("create_or_get_shared_memo_token")(
             memo_id,
             user_id,
             force_refresh=payload.force_refresh,
@@ -1045,7 +1048,7 @@ async def api_memo_share_refresh(request: Request, memo_id: int):
         # 所有権や対象メモが見つからないエラー
         # Return service error if not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB更新エラー
         # Respond with 500 status on database write failure.
         return log_and_internal_server_error(logger, "Failed to refresh memo share status.", status="fail")
@@ -1073,13 +1076,13 @@ async def api_memo_share_revoke(request: Request, memo_id: int):
     try:
         # 共有トークンを無効化（無効化日時を更新）
         # Revoke the sharing token for the memo.
-        share_state = await run_blocking(_memo_attr("revoke_shared_memo_token"), memo_id, user_id)
+        share_state = await _memo_attr("revoke_shared_memo_token")(memo_id, user_id)
         return jsonify(_memo_attr("_share_payload")(share_state))
     except ApiServiceError as exc:
         # 所有権や存在確認のエラー
         # Return service error if not authorized.
         return jsonify_service_error(exc, status="fail")
-    except Error:
+    except SQLAlchemyError:
         # DB更新エラー
         # Respond with 500 status on database write failure.
         return log_and_internal_server_error(logger, "Failed to revoke memo share link.", status="fail")

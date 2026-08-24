@@ -4,6 +4,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from blueprints.auth_common import _claim_guest_prompts_after_login
+from blueprints.auth_support import await_result
 
 from services.async_utils import run_blocking
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
@@ -192,9 +193,9 @@ async def api_send_verification_email(
 
     # すでにユーザーがあれば再利用、なければ作成
     # Reuse existing user or create a new unverified user.
-    user = await run_blocking(get_user_by_email, email)
+    user = await await_result(get_user_by_email(email))
     if not user:
-        user_id = await run_blocking(create_user, email)
+        user_id = await await_result(create_user(email))
     else:
         user_id = user["id"]
 
@@ -351,7 +352,7 @@ async def api_verify_registration_code(
 
     # ここから成功処理 ----------------------------------------------------
     # Success path starts here.
-    user = await run_blocking(get_user_by_id, user_id)
+    user = await await_result(get_user_by_id(user_id))
     if not user:
         # ユーザーが見つからない場合はセッション情報の一部をクリアしてエラーを返す
         # If the user is not found, clear some session data and return an error.
@@ -365,11 +366,11 @@ async def api_verify_registration_code(
 
     # ユーザーを認証済みに更新
     # Set the user status to verified.
-    await run_blocking(set_user_verified, user_id)                 # ユーザーを認証済みに
+    await await_result(set_user_verified(user_id))                 # ユーザーを認証済みに
     
     # 共通の初期タスクを新規ユーザー用に複製
     # Copy shared default tasks to this newly verified user.
-    await run_blocking(copy_default_tasks_for_user, user_id)       # ★ 共通タスクを複製 ★
+    await await_result(copy_default_tasks_for_user(user_id))       # ★ 共通タスクを複製 ★
 
     # 認証済みセッションの確立（ログイン状態に移行）
     # Establish an authenticated session (transitioning to logged-in state).

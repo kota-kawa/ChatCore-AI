@@ -3,7 +3,7 @@ import json
 import re
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.messages import chat
 from services.chat_prompt import (
@@ -292,15 +292,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
                             side_effect=lambda *_args, **_kwargs: list(saved_messages),
                         ):
                             with patch(
-                                "blueprints.chat.messages._fetch_prompt_data",
-                                return_value={
+                                "blueprints.chat.messages.get_task_prompt_data",
+                                new=AsyncMock(return_value={
                                     "name": "📧 メール作成",
                                     "prompt_template": "メール案を作成してください。",
                                     "response_rules": "- 丁寧に書く",
                                     "output_skeleton": "## 件名\n## 本文",
                                     "input_examples": "",
                                     "output_examples": "",
-                                },
+                                }),
                             ) as mock_fetch:
                                 with patch(
                                     "blueprints.chat.messages.consume_llm_daily_quota",
@@ -319,7 +319,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["response"], "ok")
-        mock_fetch.assert_called_once_with("📧 メール作成", None)
+        mock_fetch.assert_awaited_once_with("📧 メール作成", None, None)
 
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
@@ -373,15 +373,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
                             side_effect=lambda *_args, **_kwargs: list(saved_messages),
                         ):
                             with patch(
-                                "blueprints.chat.messages._fetch_prompt_data",
-                                return_value={
+                                "blueprints.chat.messages.get_task_prompt_data",
+                                new=AsyncMock(return_value={
                                     "name": "📧 メール作成",
                                     "prompt_template": "メール案を作成してください。",
                                     "response_rules": "- 丁寧に書く",
                                     "output_skeleton": "## 件名\n## 本文",
                                     "input_examples": "",
                                     "output_examples": "",
-                                },
+                                }),
                             ) as mock_fetch:
                                 with patch(
                                     "blueprints.chat.messages.consume_llm_daily_quota",
@@ -400,7 +400,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["response"], "ok")
-        mock_fetch.assert_called_once_with("📧 メール作成", None)
+        mock_fetch.assert_awaited_once_with("📧 メール作成", None, None)
 
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
@@ -443,8 +443,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
                             side_effect=lambda *_args, **_kwargs: list(saved_messages),
                         ):
                             with patch(
-                                "blueprints.chat.messages._fetch_prompt_data",
-                                side_effect=RuntimeError("db temporarily unavailable"),
+                                "blueprints.chat.messages.get_task_prompt_data",
+                                new=AsyncMock(side_effect=RuntimeError("db temporarily unavailable")),
                             ):
                                 with patch(
                                     "blueprints.chat.messages.consume_llm_daily_quota",

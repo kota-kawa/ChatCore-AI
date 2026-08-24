@@ -4,7 +4,10 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+import sqlalchemy as sa
 from sqlalchemy import engine_from_config, pool
+
+from services.models import Base
 
 # Alembic設定オブジェクトを取得
 # Retrieve Alembic configuration object
@@ -22,7 +25,12 @@ def _resolve_database_url() -> str:
     # Resolve database URL from environment variables
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        return database_url
+        for prefix in ("postgresql://", "postgres://"):
+            if database_url.startswith(prefix):
+                return "postgresql+psycopg://" + database_url[len(prefix) :]
+        if database_url.startswith("postgresql+psycopg://"):
+            return database_url
+        raise ValueError("DATABASE_URL must use a PostgreSQL URL scheme.")
 
     # 個別の接続情報環境変数からURLを組み立てる（デフォルトはPostgreSQL）
     # Construct URL from individual connection environment variables (defaults to PostgreSQL)
@@ -31,16 +39,39 @@ def _resolve_database_url() -> str:
     host = os.getenv("POSTGRES_HOST") or "localhost"
     port = os.getenv("POSTGRES_PORT") or "5432"
     dbname = os.getenv("POSTGRES_DB") or "postgres"
-    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
+    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
 
 
 # SQLAlchemyのURL設定を動的に解決した値に書き換える
 # Overwrite the SQLAlchemy URL setting with the dynamically resolved value
 config.set_main_option("sqlalchemy.url", _resolve_database_url())
 
-# 自動マイグレーション用のメタデータオブジェクト（今回はNone）
-# Metadata object for autogenerate migrations (set to None here)
-target_metadata = None
+# Alembic autogenerate compares the current schema against the same model
+# registry used by repositories.  Existing revisions remain immutable.
+target_metadata = Base.metadata
+
+
+class _OfflineInspector:
+    """Catalog view for legacy revisions that conditionally inspect the database.
+
+    Several immutable historical revisions use ``sa.inspect(op.get_bind())`` before
+    emitting their SQL. Alembic's offline bind is a mock connection and has no catalog.
+    The mapped table registry is the only schema source available offline; online runs
+    continue to use the real PostgreSQL inspector.
+    """
+
+    def get_table_names(self) -> list[str]:
+        return list(target_metadata.tables)
+
+
+class _OfflineExecutionResult:
+    """Empty result for immutable data migrations during SQL-only rendering."""
+
+    def mappings(self) -> "_OfflineExecutionResult":
+        return self
+
+    def __iter__(self):
+        return iter(())
 
 
 def run_migrations_offline() -> None:
@@ -54,12 +85,24 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        compare_server_default=True,
     )
 
-    # トランザクションを開始してマイグレーションを実行する
-    # Begin a transaction and run migrations
-    with context.begin_transaction():
-        context.run_migrations()
+    # Immutable historical revisions inspect op.get_bind().  Provide the mapped
+    # catalog only for offline SQL rendering, then restore SQLAlchemy's inspector.
+    original_inspect = sa.inspect
+    offline_bind = context.get_context().bind
+    original_execute = offline_bind.execute
+    sa.inspect = lambda _subject, *_args, **_kwargs: _OfflineInspector()  # type: ignore[assignment]
+    offline_bind.execute = lambda *_args, **_kwargs: _OfflineExecutionResult()  # type: ignore[method-assign]
+    try:
+        # トランザクションを開始してマイグレーションを実行する
+        # Begin a transaction and run migrations
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        sa.inspect = original_inspect
+        offline_bind.execute = original_execute  # type: ignore[method-assign]
 
 
 def run_migrations_online() -> None:
@@ -73,7 +116,12 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+        )
 
         # トランザクションを開始してマイグレーションを実行する
         # Begin a transaction and run migrations

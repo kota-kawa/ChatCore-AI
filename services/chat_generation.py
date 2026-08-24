@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import json
 import os
@@ -834,6 +835,13 @@ class ChatGenerationJob:
         )
         try:
             payload = search(query)
+            if inspect.isawaitable(payload):
+                # The generation loop is intentionally a synchronous worker because the LLM
+                # stream is blocking. Native-async repository callbacks are bridged only at
+                # this worker boundary; request-path database access never uses run_blocking.
+                payload = asyncio.run(payload)  # type: ignore[arg-type]
+            if not isinstance(payload, dict):
+                raise TypeError("selected reference lookup returned a non-object payload")
         except Exception:
             logger.exception(failure_log_message)
             self._publish(
@@ -2334,14 +2342,14 @@ return 0
                 if message and message.get("type") == "message":
                     raw_data = _decode_redis_text(message.get("data"))
                     if raw_data is not None:
-                        event = self._deserialize_event(raw_data)
-                        if event is not None and event.sequence_id > cursor:
-                            cursor = event.sequence_id
+                        deserialized_event = self._deserialize_event(raw_data)
+                        if deserialized_event is not None and deserialized_event.sequence_id > cursor:
+                            cursor = deserialized_event.sequence_id
                             idle_deadline = (
                                 time.monotonic() + self._distributed_stream_idle_timeout_seconds
                             )
-                            yield event
-                            if event.event in _TERMINAL_EVENTS:
+                            yield deserialized_event
+                            if deserialized_event.event in _TERMINAL_EVENTS:
                                 return
                     continue
 

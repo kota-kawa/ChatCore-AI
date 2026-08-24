@@ -1,8 +1,7 @@
 # app.py
 import logging
 import os
-import threading
-from concurrent.futures import TimeoutError as FutureTimeoutError
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import timedelta
 
@@ -17,15 +16,15 @@ load_dotenv()
 load_dotenv(".env.local", override=True)
 
 from fastapi import FastAPI, Request  # noqa: E402
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError  # noqa: E402
 
 from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
 from services.auth_limits import AuthLimitService  # noqa: E402
 from services.chat_generation import ChatGenerationService  # noqa: E402
 from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
-    submit_background_task,
 )
-from services.db import DbConnectionPoolTimeout, close_db_pool  # noqa: E402
+from services.db import dispose_engine  # noqa: E402
 from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
@@ -91,7 +90,7 @@ STARTUP_SEED_LOCK_TTL_SECONDS = 120
 
 # 一時的なチャットデータを定期的にクリーンアップするバックグラウンドタスク
 # A background task to periodically clean up ephemeral chat data
-def periodic_cleanup(stop_event: threading.Event) -> None:
+async def periodic_cleanup(stop_event: asyncio.Event) -> None:
     # 停止イベントがセットされるまでループを実行
     # Run the loop until the stop event is set
     while not stop_event.is_set():
@@ -100,17 +99,32 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
             # シングルフライトロックを獲得できたワーカーだけが実際の削除を行う。
             # Every worker process owns this thread under multi-worker deployments, so only
             # the worker that wins the single-flight lock performs the actual cleanup.
-            if try_acquire_single_flight("ephemeral_cleanup", CLEANUP_LOCK_TTL_SECONDS):
+            ephemeral_lock = await asyncio.to_thread(
+                try_acquire_single_flight,
+                "ephemeral_cleanup",
+                CLEANUP_LOCK_TTL_SECONDS,
+            )
+            if ephemeral_lock:
                 # 一時チャットの削除処理を呼び出す
                 # Call the handler to delete ephemeral chats
-                cleanup_ephemeral_chats()
-            if try_acquire_single_flight("prompt_attachment_cleanup", CLEANUP_LOCK_TTL_SECONDS):
-                cleanup_orphaned_prompt_attachments()
+                await asyncio.to_thread(cleanup_ephemeral_chats)
+            attachment_lock = await asyncio.to_thread(
+                try_acquire_single_flight,
+                "prompt_attachment_cleanup",
+                CLEANUP_LOCK_TTL_SECONDS,
+            )
+            if attachment_lock:
+                await cleanup_orphaned_prompt_attachments()
         except Exception:
             logger.exception("Failed to run periodic cleanup.")
         # 設定間隔だけ待機するか、停止イベントの発生を待つ
         # Wait for the configured interval or until the stop event is signaled
-        stop_event.wait(timeout=CLEANUP_INTERVAL_SECONDS)
+        try:
+            await asyncio.wait_for(
+                stop_event.wait(), timeout=CLEANUP_INTERVAL_SECONDS
+            )
+        except asyncio.TimeoutError:
+            continue
 
 
 # アプリケーションの起動時とシャットダウン時のライフサイクルイベントを管理する
@@ -125,11 +139,16 @@ async def lifespan(app_instance: FastAPI):
     # Every worker runs lifespan under a multi-worker deployment, so concurrent SELECT→INSERT
     # seeding could race into duplicate rows / unique violations. Only the worker that wins the
     # single-flight lock seeds; the others treat seeding as already handled and skip it.
-    if try_acquire_single_flight("startup_seed", STARTUP_SEED_LOCK_TTL_SECONDS):
+    startup_seed_lock = await asyncio.to_thread(
+        try_acquire_single_flight,
+        "startup_seed",
+        STARTUP_SEED_LOCK_TTL_SECONDS,
+    )
+    if startup_seed_lock:
         try:
             # デフォルトタスクの初期データをデータベースに投入する（未投入分のみ）
             # Seed default tasks into the database (insert only missing rows)
-            inserted = ensure_default_tasks_seeded()
+            inserted = await ensure_default_tasks_seeded()
             if inserted > 0:
                 logger.info("Seeded %s default tasks.", inserted)
         except Exception:
@@ -139,7 +158,7 @@ async def lifespan(app_instance: FastAPI):
         try:
             # 共有の初期プロンプトデータをデータベースに投入する（未投入分のみ）
             # Seed sample shared prompts into the database (insert only missing rows)
-            inserted = ensure_default_shared_prompts()
+            inserted = await ensure_default_shared_prompts()
             if inserted > 0:
                 logger.info("Seeded %s sample shared prompts.", inserted)
         except Exception:
@@ -148,10 +167,9 @@ async def lifespan(app_instance: FastAPI):
 
     # クリーンアップタスク用の停止シグナルイベントを作成
     # Create a stop signal event for the periodic cleanup task
-    cleanup_stop_event = threading.Event()
-    # バックグラウンドスレッドで一時チャットのクリーンアップを開始
-    # Start the ephemeral chat cleanup task in a background thread
-    cleanup_future = submit_background_task(periodic_cleanup, cleanup_stop_event)
+    cleanup_stop_event = asyncio.Event()
+    # Start the periodic cleanup as a native asyncio task.
+    cleanup_task = asyncio.create_task(periodic_cleanup(cleanup_stop_event))
 
     async with AsyncExitStack() as exit_stack:
         if is_mcp_enabled():
@@ -177,10 +195,15 @@ async def lifespan(app_instance: FastAPI):
 
             cleanup_stop_event.set()
             try:
-                cleanup_future.result(timeout=5.0)
-            except FutureTimeoutError:
+                await asyncio.wait_for(asyncio.shield(cleanup_task), timeout=5.0)
+            except asyncio.TimeoutError:
                 shutdown_wait_safe = False
                 logger.warning("Timed out while waiting for periodic cleanup to stop.")
+                cleanup_task.cancel()
+                try:
+                    await cleanup_task
+                except asyncio.CancelledError:
+                    pass
             except Exception:
                 logger.exception("Periodic cleanup worker exited with an unexpected error.")
 
@@ -188,7 +211,7 @@ async def lifespan(app_instance: FastAPI):
                 wait=shutdown_wait_safe,
                 cancel_futures=not shutdown_wait_safe,
             )
-            close_db_pool()
+            await dispose_engine()
 
 
 # FastAPIアプリケーションの初期化とサービスの登録
@@ -254,7 +277,7 @@ async def healthz():
 async def readyz():
     # 接続先DBや各種サービスのステータスを含む準備状態をJSONで返却
     # Return the readiness check results and corresponding HTTP status code
-    payload, status_code = get_readiness_status()
+    payload, status_code = await get_readiness_status()
     return jsonify(payload, status_code=status_code)
 
 
@@ -328,8 +351,8 @@ if is_mcp_enabled():
 
 # DB接続プール枯渇時はサーバー過負荷として 503 + Retry-After を返し、上流に再試行を促す
 # On pool-exhaustion treat the server as overloaded: return 503 with Retry-After to shed load.
-@app.exception_handler(DbConnectionPoolTimeout)
-async def db_pool_timeout_handler(request: Request, exc: DbConnectionPoolTimeout):
+@app.exception_handler(SQLAlchemyTimeoutError)
+async def db_pool_timeout_handler(request: Request, exc: SQLAlchemyTimeoutError):
     logger.warning(
         "Shedding load on %s %s: database connection pool exhausted.",
         request.method,

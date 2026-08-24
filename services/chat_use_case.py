@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import html
-from collections.abc import Callable
+import inspect
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -29,7 +31,7 @@ from services.llm import (
 from services.request_models import ChatMessageRequest
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
-    augment_messages_with_selected_references,
+    augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
@@ -55,10 +57,17 @@ from services.web_search_trace import (
     selected_reference_steps,
 )
 from services.web_search_images import append_web_search_image_parts, choose_web_search_images
-from services.chat_title import (
-    build_initial_title_candidates,
-    maybe_auto_title_chat_room,
-)
+from services.chat_title import build_initial_title_candidates, generate_chat_room_title
+
+
+async def _maybe_await(value: Any) -> Any:
+    """Accept async production dependencies while keeping light unit doubles usable."""
+    return await value if inspect.isawaitable(value) else value
+
+
+def _run_async_callback(coroutine_factory: Callable[[], Awaitable[Any]]) -> Any:
+    """Bridge async persistence callbacks into the synchronous generation worker."""
+    return asyncio.run(coroutine_factory())
 
 
 # 投稿時のチャット処理で使用する外部モジュールやリポジトリの依存関係を集約したクラス
@@ -135,7 +144,37 @@ class ChatPostUseCase:
         self.default_model = default_model
         self.locale = locale
 
-    def _maybe_schedule_context_extraction(
+    async def _generate_and_rename_room(
+        self,
+        *,
+        chat_room_id: str,
+        user_message: str,
+        assistant_response: str,
+        allowed_current_titles: list[str],
+    ) -> str | None:
+        """Generate a title off-loop, then conditionally persist it through AsyncSession."""
+        title = await asyncio.to_thread(
+            generate_chat_room_title,
+            user_message,
+            assistant_response,
+            locale=self.locale,
+        )
+        if not title or title in allowed_current_titles:
+            return None
+        try:
+            updated = await _maybe_await(
+                self.deps.rename_chat_room_if_current_title_in(
+                    chat_room_id,
+                    title,
+                    allowed_current_titles,
+                )
+            )
+        except Exception:
+            self.deps.logger.exception("Failed to update generated chat room title.")
+            return None
+        return title if updated else None
+
+    async def _maybe_schedule_context_extraction(
         self,
         *,
         user_id: int | None,
@@ -149,7 +188,7 @@ class ChatPostUseCase:
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:
-            if not self.deps.should_extract_context(user_id):
+            if not await _maybe_await(self.deps.should_extract_context(user_id)):
                 return
             self.deps.schedule_context_extraction(
                 user_id,
@@ -181,13 +220,15 @@ class ChatPostUseCase:
             return
         try:
             self.deps.submit_background_task(
-                self._maybe_schedule_context_extraction,
-                user_id=user_id,
-                room_mode=room_mode,
-                chat_room_id=chat_room_id,
-                assistant_message_id=assistant_message_id,
-                user_message=user_message,
-                assistant_response=assistant_response,
+                _run_async_callback,
+                lambda: self._maybe_schedule_context_extraction(
+                    user_id=user_id,
+                    room_mode=room_mode,
+                    chat_room_id=chat_room_id,
+                    assistant_message_id=assistant_message_id,
+                    user_message=user_message,
+                    assistant_response=assistant_response,
+                ),
             )
         except Exception:
             self.deps.logger.warning(
@@ -263,11 +304,12 @@ class ChatPostUseCase:
         # Validate room ownership and access permissions
         if "user_id" in session:
             try:
-                room_mode, sid, legacy_response = await run_blocking(
-                    deps.resolve_authenticated_room_target,
+                room_mode, sid, legacy_response = await _maybe_await(
+                    deps.resolve_authenticated_room_target(
                     chat_room_id,
                     user_id,
                     "他ユーザーのチャットルームには投稿できません",
+                    )
                 )
                 if legacy_response is not None:
                     return legacy_response
@@ -320,7 +362,7 @@ class ChatPostUseCase:
             else:
                 attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
                 # New turns extend the active branch: parent is the current branch tip.
-                parent_message_id = await run_blocking(deps.get_active_leaf_id, chat_room_id)
+                parent_message_id = await _maybe_await(deps.get_active_leaf_id(chat_room_id))
                 # 初回発話では assistant 応答がまだないため、DB から履歴を読み直さず最小文脈を作る。
                 # このフラグは、後段の初回タイトル自動生成にも使う。
                 should_auto_title_room = parent_message_id is None
@@ -329,22 +371,20 @@ class ChatPostUseCase:
                     if prepared_attached_files
                     else {}
                 )
-                saved_user_message_id = await run_blocking(
-                    deps.save_message_to_db,
+                saved_user_message_id = await _maybe_await(
+                    deps.save_message_to_db(
                     chat_room_id,
                     formatted_user_message,
                     "user",
                     attached_file_name_list,
                     parent_message_id,
                     **attachment_content_kwargs,
+                    )
                 )
                 if should_auto_title_room:
                     all_messages = [{"role": "user", "content": formatted_user_message}]
                 else:
-                    all_messages = await run_blocking(
-                        deps.get_chat_room_messages,
-                        chat_room_id,
-                    )
+                    all_messages = await _maybe_await(deps.get_chat_room_messages(chat_room_id))
         else:
             attachment_content_kwargs = (
                 {"attached_file_contents": prepared_attached_files}
@@ -459,7 +499,7 @@ class ChatPostUseCase:
         # Build the user profile prompt
         if user_id is not None:
             try:
-                user = await run_blocking(deps.get_user_by_id, user_id)
+                user = await _maybe_await(deps.get_user_by_id(user_id))
                 user_profile_prompt = deps.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
@@ -468,7 +508,7 @@ class ChatPostUseCase:
         # For normal user sessions, load the owning project's instructions.
         if user_id is not None and room_mode == "normal":
             try:
-                project_context = await run_blocking(deps.load_project_context, chat_room_id)
+                project_context = await _maybe_await(deps.load_project_context(chat_room_id))
                 if project_context:
                     project_instructions = str(project_context.get("instructions") or "") or None
             except Exception:
@@ -479,12 +519,12 @@ class ChatPostUseCase:
         if user_id is not None and room_mode == "normal":
             if not should_auto_title_room:
                 try:
-                    summary_payload = await run_blocking(deps.get_room_summary, chat_room_id)
+                    summary_payload = await _maybe_await(deps.get_room_summary(chat_room_id))
                     room_summary = str((summary_payload or {}).get("summary") or "")
                 except Exception:
                     deps.logger.warning("Failed to load room summary; proceeding without it.")
                 try:
-                    memory_facts = await run_blocking(deps.list_room_memory_facts, chat_room_id)
+                    memory_facts = await _maybe_await(deps.list_room_memory_facts(chat_room_id))
                 except Exception:
                     deps.logger.warning("Failed to load memory facts; proceeding without them.")
             if saved_user_message_id is not None:
@@ -497,11 +537,13 @@ class ChatPostUseCase:
                 # from the next turn onward.
                 try:
                     deps.submit_background_task(
-                        deps.remember_facts_from_message,
-                        chat_room_id,
-                        user_id,
-                        user_message,
-                        source_message_id=saved_user_message_id,
+                        _run_async_callback,
+                        lambda: deps.remember_facts_from_message(
+                            chat_room_id,
+                            user_id,
+                            user_message,
+                            source_message_id=saved_user_message_id,
+                        ),
                     )
                 except Exception:
                     deps.logger.warning(
@@ -529,8 +571,8 @@ class ChatPostUseCase:
             prior_web_search_results = (
                 []
                 if should_auto_title_room
-                else deserialize_web_search_results(
-                    await run_blocking(deps.get_room_web_search_contexts, chat_room_id)
+                    else deserialize_web_search_results(
+                    await _maybe_await(deps.get_room_web_search_contexts(chat_room_id))
                 )
             )
         else:
@@ -566,11 +608,12 @@ class ChatPostUseCase:
         if not can_access_llm:
             # quota 失敗時にユーザー発話だけを残すと、次回の文脈が「未回答の発話」から始まる。
             # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify_rate_limited(
                 (
@@ -595,17 +638,14 @@ class ChatPostUseCase:
         personal_knowledge_search = selected_references.personal_knowledge
         shared_prompt_search = selected_references.shared_prompt
         selected_reference_trace: list[SelectedReferenceLookupTrace] = []
-        conversation_messages = await run_blocking(
-            partial(
-                augment_messages_with_selected_references,
-                query=user_message,
-                personal_knowledge_search=personal_knowledge_search,
-                shared_prompt_search=shared_prompt_search,
-                personal_overview=selected_references.personal_overview,
-                unavailable_sources=selected_references.unavailable_sources,
-                trace_results=selected_reference_trace,
-            ),
+        conversation_messages = await augment_messages_with_selected_references_async(
             conversation_messages,
+            query=user_message,
+            personal_knowledge_search=personal_knowledge_search,
+            shared_prompt_search=shared_prompt_search,
+            personal_overview=selected_references.personal_overview,
+            unavailable_sources=selected_references.unavailable_sources,
+            trace_results=selected_reference_trace,
         )
         # UI_MODE is a structured semantic decision made by the selected
         # conversation model. Do not infer it from the user's text here.
@@ -639,15 +679,19 @@ class ChatPostUseCase:
                     message_parts: list[dict[str, Any]] | None = None,
                     web_search_context: list[dict[str, Any]] | None = None,
                 ) -> dict[str, Any] | None:
-                    assistant_message_id = deps.save_message_to_db(
-                        chat_room_id,
-                        response,
-                        "assistant",
-                        None,
-                        saved_user_message_id,
-                        message_parts,
-                        None,
-                        web_search_context,
+                    assistant_message_id = _run_async_callback(
+                        lambda: _maybe_await(
+                            deps.save_message_to_db(
+                                chat_room_id,
+                                response,
+                                "assistant",
+                                None,
+                                saved_user_message_id,
+                                message_parts,
+                                None,
+                                web_search_context,
+                            )
+                        )
                     )
                     self._defer_context_extraction(
                         user_id=user_id,
@@ -661,13 +705,13 @@ class ChatPostUseCase:
                     # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
                     if not should_auto_title_room:
                         return None
-                    generated_title = maybe_auto_title_chat_room(
-                        chat_room_id=chat_room_id,
-                        user_message=user_message,
-                        assistant_response=response,
-                        allowed_current_titles=title_candidates,
-                        conditional_rename=deps.rename_chat_room_if_current_title_in,
-                        locale=self.locale,
+                    generated_title = _run_async_callback(
+                        lambda: self._generate_and_rename_room(
+                            chat_room_id=chat_room_id,
+                            user_message=user_message,
+                            assistant_response=response,
+                            allowed_current_titles=title_candidates,
+                        )
                     )
                     if generated_title:
                         return {"room_title": generated_title}
@@ -675,11 +719,19 @@ class ChatPostUseCase:
 
                 def on_finished() -> None:
                     try:
-                        updated_messages = deps.get_chat_room_messages(chat_room_id)
+                        updated_messages = _run_async_callback(
+                            lambda: _maybe_await(deps.get_chat_room_messages(chat_room_id))
+                        )
                         # 要約はストリーミング完了後に一度だけ更新する。
                         # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
-                        deps.rebuild_room_summary(
-                            chat_room_id, updated_messages, model=model
+                        _run_async_callback(
+                            lambda: _maybe_await(
+                                deps.rebuild_room_summary(
+                                    chat_room_id,
+                                    updated_messages,
+                                    model=model,
+                                )
+                            )
                         )
                     except Exception:
                         deps.logger.warning(
@@ -702,10 +754,14 @@ class ChatPostUseCase:
                     persist_response=persist_response,
                     on_finished=on_finished,
                     on_error=partial(
-                        deps.cleanup_unanswered_user_messages,
-                        chat_room_id,
-                        user_id=user_id,
-                        sid=sid,
+                        _run_async_callback,
+                        lambda: _maybe_await(
+                            deps.cleanup_unanswered_user_messages(
+                                chat_room_id,
+                                user_id=user_id,
+                                sid=sid,
+                            )
+                        ),
                     ),
                     service=chat_generation_service,
                     prior_web_search_results=prior_web_search_results,
@@ -733,19 +789,21 @@ class ChatPostUseCase:
         try:
             bot_reply = await run_blocking(deps.get_llm_response, response_messages, model)
         except LlmInvalidModelError as exc:
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify({"error": str(exc)}, status_code=400)
         except LlmRateLimitError as exc:
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify_rate_limited(
                 "AI提供元が混み合っています。時間をおいて再試行してください。",
@@ -759,11 +817,12 @@ class ChatPostUseCase:
             deps.logger.exception(
                 "LLM authentication/configuration error while generating chat response."
             )
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify(
                 {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
@@ -775,11 +834,12 @@ class ChatPostUseCase:
                 "Failed to get LLM response (retryable=%s).",
                 retryable,
             )
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify(
                 {
@@ -913,11 +973,12 @@ class ChatPostUseCase:
                 "Chat generation produced an empty response.",
                 extra={"chat_room_id": chat_room_id, "model": model},
             )
-            await run_blocking(
-                deps.cleanup_unanswered_user_messages,
-                chat_room_id,
-                user_id=user_id,
-                sid=sid,
+            await _maybe_await(
+                deps.cleanup_unanswered_user_messages(
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                )
             )
             return deps.jsonify(
                 {"error": ERROR_CHAT_EMPTY_RESPONSE, "retryable": True},
@@ -927,8 +988,8 @@ class ChatPostUseCase:
         saved_assistant_message_id: int | None = None
         generated_room_title: str | None = None
         if user_id is not None and room_mode == "normal":
-            saved_assistant_message_id = await run_blocking(
-                deps.save_message_to_db,
+            saved_assistant_message_id = await _maybe_await(
+                deps.save_message_to_db(
                 chat_room_id,
                 bot_reply,
                 "assistant",
@@ -937,6 +998,7 @@ class ChatPostUseCase:
                 message_parts or None,
                 None,
                 this_turn_web_search,
+                )
             )
             self._defer_context_extraction(
                 user_id=user_id,
@@ -951,14 +1013,11 @@ class ChatPostUseCase:
                     user_message,
                     task_launch_request=active_task_request,
                 )
-                generated_room_title = await run_blocking(
-                    maybe_auto_title_chat_room,
+                generated_room_title = await self._generate_and_rename_room(
                     chat_room_id=chat_room_id,
                     user_message=user_message,
                     assistant_response=bot_reply,
                     allowed_current_titles=title_candidates,
-                    conditional_rename=deps.rename_chat_room_if_current_title_in,
-                    locale=self.locale,
                 )
         else:
             sid = sid or deps.get_session_id(session)
@@ -979,11 +1038,13 @@ class ChatPostUseCase:
             and saved_assistant_message_id is not None
         ):
             try:
-                all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
-                await run_blocking(
-                    partial(deps.rebuild_room_summary, model=model),
-                    chat_room_id,
-                    all_messages,
+                all_messages = await _maybe_await(deps.get_chat_room_messages(chat_room_id))
+                await _maybe_await(
+                    deps.rebuild_room_summary(
+                        chat_room_id,
+                        all_messages,
+                        model=model,
+                    )
                 )
             except Exception:
                 deps.logger.warning(

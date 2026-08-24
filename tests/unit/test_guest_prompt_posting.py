@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.prompt_share.prompt_share_api import create_prompt
 from services.guest_prompt_service import GuestPromptLimitExceeded
@@ -41,7 +41,7 @@ class GuestPromptPostingTestCase(unittest.TestCase):
 
         with patch(
             "blueprints.prompt_share.prompt_share_api.create_guest_shared_prompt",
-            return_value=44,
+            new=AsyncMock(return_value=44),
         ) as create_guest:
             with patch(
                 "blueprints.prompt_share.prompt_share_api.get_request_client_ip",
@@ -90,7 +90,7 @@ class GuestPromptPostingTestCase(unittest.TestCase):
         request = make_request(self._payload(), session={})
         with patch(
             "blueprints.prompt_share.prompt_share_api.create_guest_shared_prompt",
-            side_effect=GuestPromptLimitExceeded(123),
+            new=AsyncMock(side_effect=GuestPromptLimitExceeded(123)),
         ):
             response = asyncio.run(create_prompt(request))
 
@@ -115,15 +115,16 @@ class GuestPromptPostingTestCase(unittest.TestCase):
             session={"user_id": 9},
         )
         with patch(
-            "blueprints.prompt_share.prompt_share_api._create_prompt_for_user",
-            return_value=55,
+            "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
+            new=AsyncMock(return_value=55),
         ) as create_for_user:
             response = asyncio.run(create_prompt(request))
 
         self.assertEqual(response.status_code, 201)
         self.assertFalse(json.loads(response.body.decode("utf-8"))["is_guest"])
+        create_for_user.assert_awaited_once()
         self.assertEqual(create_for_user.call_args.args[0], 9)
-        self.assertEqual(create_for_user.call_args.args[-2][0]["path"], "scripts/main.py")
+        self.assertEqual(create_for_user.call_args.args[1].resources[0].path, "scripts/main.py")
 
 
 if __name__ == "__main__":

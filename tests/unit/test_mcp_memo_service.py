@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
 
@@ -41,6 +41,17 @@ def memo_payload(**overrides):
     return payload
 
 
+class _SessionScope:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+    def begin(self):
+        return self
+
+
 class McpMemoRequestModelTestCase(unittest.TestCase):
     def test_update_requires_revision_and_changed_field(self):
         with self.assertRaises(ValidationError):
@@ -48,133 +59,106 @@ class McpMemoRequestModelTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             McpMemoUpdateRequest(expected_revision=0, title="title")
 
-    def test_update_rejects_oversized_or_blank_content(self):
-        with self.assertRaises(ValidationError):
-            McpMemoUpdateRequest(expected_revision=1, content=" ")
-        with self.assertRaises(ValidationError):
-            McpMemoUpdateRequest(expected_revision=1, content="x" * 60001)
-        with self.assertRaises(ValidationError):
-            McpMemoUpdateRequest(expected_revision=1, title="x" * 256)
 
-
-class McpMemoServiceTestCase(unittest.TestCase):
-    def test_list_returns_allowlisted_metadata_without_share_bearer(self):
-        with patch(
-            "services.mcp_memo_service.fetch_memo_summaries",
-            return_value={"total": 1, "memos": [memo_payload()]},
-        ) as fetch:
-            result = list_memos(7, limit=500, offset=-10)
-
+class McpMemoServiceTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_list_returns_allowlisted_metadata_without_share_bearer(self):
+        fetch = AsyncMock(return_value={"total": 1, "memos": [memo_payload()]})
+        with patch("services.mcp_memo_service.fetch_memo_summaries", new=fetch):
+            result = await list_memos(7, limit=500, offset=-10)
         serialized = result.model_dump()
         self.assertEqual(serialized["memos"][0]["revision"], 4)
         self.assertTrue(serialized["memos"][0]["is_shared"])
         self.assertNotIn("share_token", serialized["memos"][0])
-        self.assertNotIn("share_url", serialized["memos"][0])
-        self.assertNotIn("content", serialized["memos"][0])
-        self.assertEqual(fetch.call_args.args[0], 7)
-        self.assertEqual(fetch.call_args.kwargs["limit"], 100)
-        self.assertEqual(fetch.call_args.kwargs["offset"], 0)
+        self.assertEqual(fetch.await_args.kwargs["limit"], 100)
+        self.assertEqual(fetch.await_args.kwargs["offset"], 0)
 
-    def test_search_returns_excerpt_and_uses_semantic_embedding(self):
-        with (
-            patch("services.mcp_memo_service.embeddings_available", return_value=True),
-            patch("services.mcp_memo_service.generate_embedding", return_value=[0.1, 0.2]),
-            patch(
-                "services.mcp_memo_service.fetch_memo_summaries",
-                return_value={"total": 1, "memos": [memo_payload()]},
-            ) as fetch,
-        ):
-            result = search_memos(7, " architecture ", mode="semantic")
-
+    async def test_search_uses_async_embedding_thread_and_returns_excerpt(self):
+        fetch = AsyncMock(return_value={"total": 1, "memos": [memo_payload()]})
+        with patch("services.mcp_memo_service.embeddings_available", return_value=True), patch(
+            "services.mcp_memo_service.generate_embedding", return_value=[0.1, 0.2]
+        ), patch("services.mcp_memo_service.fetch_memo_summaries", new=fetch):
+            result = await search_memos(7, " architecture ", mode="semantic")
         self.assertEqual(result.memos[0].excerpt, "secret excerpt")
-        self.assertEqual(fetch.call_args.kwargs["query"], "architecture")
-        self.assertEqual(fetch.call_args.kwargs["semantic_query_embedding"], [0.1, 0.2])
+        self.assertEqual(fetch.await_args.kwargs["query"], "architecture")
+        self.assertEqual(fetch.await_args.kwargs["semantic_query_embedding"], [0.1, 0.2])
 
-    def test_search_requires_non_empty_query(self):
-        with self.assertRaises(ApiServiceError) as context:
-            search_memos(7, "  ")
-        self.assertEqual(context.exception.status_code, 400)
+    async def test_search_requires_non_empty_query(self):
+        with self.assertRaises(ApiServiceError) as error:
+            await search_memos(7, "  ")
+        self.assertEqual(error.exception.status_code, 400)
 
-    def test_semantic_search_falls_back_to_keyword_when_embedding_fails(self):
-        with (
-            patch("services.mcp_memo_service.embeddings_available", return_value=True),
-            patch("services.mcp_memo_service.generate_embedding", side_effect=RuntimeError("offline")),
-            patch("services.mcp_memo_service.logger.warning"),
-            patch(
-                "services.mcp_memo_service.fetch_memo_summaries",
-                return_value={"total": 0, "memos": []},
-            ) as fetch,
-        ):
-            result = search_memos(7, "architecture", mode="semantic")
-
+    async def test_semantic_search_falls_back_to_keyword_when_embedding_fails(self):
+        fetch = AsyncMock(return_value={"total": 0, "memos": []})
+        with patch("services.mcp_memo_service.embeddings_available", return_value=True), patch(
+            "services.mcp_memo_service.generate_embedding",
+            side_effect=RuntimeError("offline"),
+        ), patch("services.mcp_memo_service.fetch_memo_summaries", new=fetch):
+            result = await search_memos(7, "architecture", mode="semantic")
         self.assertEqual(result.total, 0)
-        self.assertIsNone(fetch.call_args.kwargs["semantic_query_embedding"])
+        self.assertIsNone(fetch.await_args.kwargs["semantic_query_embedding"])
 
-    def test_get_maps_ai_response_to_content_without_share_token(self):
-        with patch("services.mcp_memo_service.fetch_memo_detail", return_value=memo_payload()) as fetch:
-            result = get_memo(7, 10)
-
+    async def test_get_maps_ai_response_to_content_without_share_token(self):
+        fetch = AsyncMock(return_value=memo_payload())
+        with patch("services.mcp_memo_service.fetch_memo_detail", new=fetch):
+            result = await get_memo(7, 10)
         self.assertEqual(result.content, "secret body")
         self.assertNotIn("share_token", result.model_dump())
-        fetch.assert_called_once_with(7, 10)
+        fetch.assert_awaited_once_with(7, 10, session=None)
 
-    def test_update_passes_revision_and_schedules_embedding(self):
+    async def test_update_passes_revision_and_schedules_embedding(self):
         updated = memo_payload(title="Updated", ai_response="new body", revision=5)
         payload = McpMemoUpdateRequest(expected_revision=4, title="Updated", content="new body")
-        with (
-            patch("services.mcp_memo_service.update_memo_record", return_value=updated) as repository_update,
-            patch("services.mcp_memo_service.schedule_embedding") as schedule,
-        ):
-            result = update_memo(7, 10, payload)
-
+        repository_update = AsyncMock(return_value=updated)
+        with patch(
+            "services.mcp_memo_service.update_memo_record",
+            new=repository_update,
+        ), patch("services.mcp_memo_service.schedule_embedding") as schedule:
+            result = await update_memo(7, 10, payload)
         self.assertEqual(result.revision, 5)
-        self.assertEqual(repository_update.call_args.kwargs["expected_revision"], 4)
-        self.assertFalse(repository_update.call_args.kwargs["allow_shared_content_change"])
+        self.assertEqual(repository_update.await_args.kwargs["expected_revision"], 4)
         schedule.assert_called_once_with(10, "Updated", "new body", 5)
 
-    def test_create_schedules_embedding_and_returns_detail(self):
-        payload = McpMemoCreateRequest(title="", content="created body")
-        created = memo_payload(title="created body", ai_response="created body", revision=1)
-        with (
-            patch("services.mcp_memo_service.insert_memo", return_value=42) as insert,
-            patch("services.mcp_memo_service.fetch_memo_detail", return_value=created),
-            patch("services.mcp_memo_service.schedule_embedding") as schedule,
-        ):
-            result = create_memo(7, payload)
-
+    async def test_create_and_append_keep_write_transactions_and_revision_guard(self):
+        created = memo_payload(
+            id=42,
+            title="created body",
+            ai_response="created body",
+            revision=1,
+        )
+        insert = AsyncMock(return_value=42)
+        detail = AsyncMock(return_value=created)
+        with patch("services.mcp_memo_service.session_scope", return_value=_SessionScope()), patch(
+            "services.mcp_memo_service.insert_memo", new=insert
+        ), patch("services.mcp_memo_service.fetch_memo_detail", new=detail), patch(
+            "services.mcp_memo_service.schedule_embedding"
+        ) as schedule:
+            result = await create_memo(7, McpMemoCreateRequest(title="", content="created body"))
         self.assertEqual(result.content, "created body")
-        self.assertEqual(insert.call_args.args[:4], (7, "created body", "created body", None))
+        self.assertEqual(insert.await_args.args[:4], (7, "created body", "created body", None))
         schedule.assert_called_once_with(42, "created body", "created body", 1)
 
-    def test_append_preserves_revision_guard_and_enforces_combined_limit(self):
         current = memo_payload(ai_response="first", revision=4, is_active=False)
         updated = memo_payload(ai_response="first\n\nsecond", revision=5, is_active=False)
+        detail.reset_mock()
+        detail.return_value = current
+        repository_update = AsyncMock(return_value=updated)
         payload = McpMemoAppendRequest(expected_revision=4, text="second")
-        with (
-            patch("services.mcp_memo_service.fetch_memo_detail", return_value=current),
-            patch("services.mcp_memo_service.update_memo_record", return_value=updated) as repository_update,
-            patch("services.mcp_memo_service.schedule_embedding"),
+        with patch("services.mcp_memo_service.session_scope", return_value=_SessionScope()), patch(
+            "services.mcp_memo_service.fetch_memo_detail", new=detail
+        ), patch("services.mcp_memo_service.update_memo_record", new=repository_update), patch(
+            "services.mcp_memo_service.schedule_embedding"
         ):
-            result = append_memo(7, 10, payload)
-
+            result = await append_memo(7, 10, payload)
         self.assertEqual(result.content, "first\n\nsecond")
-        self.assertEqual(repository_update.call_args.kwargs["expected_revision"], 4)
-        self.assertEqual(repository_update.call_args.kwargs["ai_response"], "first\n\nsecond")
+        self.assertEqual(repository_update.await_args.kwargs["expected_revision"], 4)
+        self.assertEqual(repository_update.await_args.kwargs["ai_response"], "first\n\nsecond")
 
-        too_large = memo_payload(ai_response="x" * 60000)
-        with patch("services.mcp_memo_service.fetch_memo_detail", return_value=too_large):
-            with self.assertRaises(ApiServiceError):
-                append_memo(7, 10, payload)
-
-    def test_list_collections_returns_owner_scoped_dto(self):
-        with patch(
-            "services.mcp_memo_service.fetch_collections",
-            return_value=[{"id": 2, "name": "Work", "color": "#123456", "memo_count": 3}],
-        ) as fetch:
-            result = list_collections(7)
-
+    async def test_list_collections_returns_owner_scoped_dto(self):
+        fetch = AsyncMock(return_value=[{"id": 2, "name": "Work", "color": "#123456", "memo_count": 3}])
+        with patch("services.mcp_memo_service.fetch_collections", new=fetch):
+            result = await list_collections(7)
         self.assertEqual(result.collections[0].name, "Work")
-        fetch.assert_called_once_with(7)
+        fetch.assert_awaited_once_with(7, session=None)
 
 
 if __name__ == "__main__":

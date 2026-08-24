@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.tasks import AI_AGENT_SYSTEM_PROMPT, ai_agent, prompt_assist
 from services.llm import LlmProviderError
@@ -280,6 +280,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                 with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
+                        new_callable=AsyncMock,
                         return_value="【現在開いているメモ】\nタイトル: 会議メモ\n\n本文:\n誤字のある本文",
                     ):
                         with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):
@@ -327,6 +328,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                 with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
+                        new_callable=AsyncMock,
                         return_value="【現在開いているメモ】\n本文:\nテスト本文",
                     ):
                         with patch("blueprints.chat.tasks.classify_memo_intent", return_value="qa"):
@@ -360,6 +362,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                 with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
+                        new_callable=AsyncMock,
                         return_value="【現在開いているメモ】\n本文:\nテスト本文",
                     ):
                         with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):
@@ -397,6 +400,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                 with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
+                        new_callable=AsyncMock,
                         return_value=(
                             "[Memo currently open]\n本文:\n長い本文の先頭部分\n\n"
                             "(part of the body was omitted because it is long)"

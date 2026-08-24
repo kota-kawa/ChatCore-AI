@@ -62,7 +62,7 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
         with self.assertRaises(ApiServiceError):
             _normalize_prompt_feed_filters("unknown", "prompt", "text")
 
-    def test_route_passes_cursor_and_filters_to_blocking_query(self):
+    def test_route_passes_cursor_and_filters_to_async_service(self):
         cursor = _encode_prompt_feed_cursor(
             {"view_count": 17, "created_at": "2026-07-16T12:34:56", "id": 42}
         )
@@ -81,17 +81,16 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
         }
 
         with patch(
-            "blueprints.prompt_share.prompt_share_api.run_blocking",
+            "blueprints.prompt_share.prompt_share_api._get_prompts_with_flags",
             new=AsyncMock(return_value=result),
-        ) as run_blocking_mock:
+        ) as get_prompts_mock:
             response = asyncio.run(get_prompts(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["prompts"], [{"id": 41}])
         self.assertEqual(payload["pagination"], result["pagination"])
-        run_blocking_mock.assert_awaited_once_with(
-            unittest.mock.ANY,
+        get_prompts_mock.assert_awaited_once_with(
             7,
             limit=12,
             cursor=(17, datetime(2026, 7, 16, 12, 34, 56), 42),
@@ -102,7 +101,7 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
             locale="ja",
         )
 
-    def test_route_passes_author_id_filter_to_blocking_query(self):
+    def test_route_passes_author_id_filter_to_async_service(self):
         # author_id はFastAPIがクエリ文字列から直接バインドするため、ここでは
         # ルート関数へ渡された後の値としてそのまま指定して検証する。
         # FastAPI binds author_id directly from the query string, so this test
@@ -119,14 +118,13 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
         }
 
         with patch(
-            "blueprints.prompt_share.prompt_share_api.run_blocking",
+            "blueprints.prompt_share.prompt_share_api._get_prompts_with_flags",
             new=AsyncMock(return_value=result),
-        ) as run_blocking_mock:
+        ) as get_prompts_mock:
             response = asyncio.run(get_prompts(request, author_id=99))
 
         self.assertEqual(response.status_code, 200)
-        run_blocking_mock.assert_awaited_once_with(
-            unittest.mock.ANY,
+        get_prompts_mock.assert_awaited_once_with(
             7,
             limit=PROMPT_FEED_DEFAULT_LIMIT,
             cursor=None,
@@ -145,15 +143,15 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
         )
 
         with patch(
-            "blueprints.prompt_share.prompt_share_api.run_blocking",
+            "blueprints.prompt_share.prompt_share_api._get_prompts_with_flags",
             new=AsyncMock(),
-        ) as run_blocking_mock:
+        ) as get_prompts_mock:
             response = asyncio.run(get_prompts(request))
 
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "プロンプト一覧のカーソルが不正です。")
-        run_blocking_mock.assert_not_awaited()
+        get_prompts_mock.assert_not_awaited()
 
 
 if __name__ == "__main__":

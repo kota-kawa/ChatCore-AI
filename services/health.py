@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from services.cache import get_redis_client, is_redis_configured
-from services.db import get_db_connection
+from services.db import session_scope
 from services.embeddings import get_embedding_health
+from services.repositories.health_repository import HealthRepository
 
 
 # サービスの生存（Liveness）状態を示すステータスを返します。基本的に常に "ok" を返します。
@@ -15,7 +16,7 @@ def get_liveness_status() -> dict[str, Any]:
 
 # データベースやRedisの接続状態を確認し、アプリがリクエストを受け入れ可能かを示す準備（Readiness）状態を返します。
 # Check database and Redis connections and return the readiness status of the application.
-def get_readiness_status() -> tuple[dict[str, Any], int]:
+async def get_readiness_status() -> tuple[dict[str, Any], int]:
     components: dict[str, dict[str, Any]] = {}
     overall_ok = True
     degraded = False
@@ -23,19 +24,11 @@ def get_readiness_status() -> tuple[dict[str, Any], int]:
     # データベースへの接続と基本的なテーブルへのアクセスを試行し、接続状態とスキーマの健全性を確認します。
     # Attempt database connection and verify access to key tables to ensure schema health.
     try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                # 単純な接続確認に加え、主要なテーブルが読み取り可能か確認
-                # In addition to a basic ping, verify that core tables are readable.
-                cursor.execute("SELECT COUNT(*) FROM users")
-                cursor.fetchone()
-                
-                # 必要に応じて他の重要テーブルもチェック
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-            finally:
-                cursor.close()
+        async with session_scope() as session:
+            # Check both connectivity and a core mapped table.  The query is
+            # intentionally tiny so readiness never consumes a long-lived
+            # application transaction.
+            await HealthRepository(session).check_database()
         components["database"] = {"status": "ok", "required": True}
     except Exception as exc:
         overall_ok = False

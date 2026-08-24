@@ -1,11 +1,18 @@
+"""User use cases backed by the async SQLAlchemy repositories."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
-from .db import get_db_connection
-from .default_tasks import default_task_rows
-from .i18n import Locale, normalize_locale
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# 定数定義
-# Define constants
+from .db import session_scope
+from .i18n import Locale, normalize_locale
+from .repositories.user_repository import UserRepository
+
+
 DEFAULT_USERNAME = "ユーザー"
 DEFAULT_AVATAR_URL = "/static/user-icon.png"
 LEGACY_AVATAR_URL_MAX_LENGTH = 255
@@ -14,224 +21,103 @@ GOOGLE_AUTH_PROVIDER = "google"
 ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT"
 
 
-# 認証プロバイダのメタデータを検証・正規化する
-# Validate and normalize authentication provider metadata.
 def _normalize_provider_metadata(
     auth_provider: str,
     email: str,
     provider_user_id: str | None,
     provider_email: str | None,
 ) -> tuple[str | None, str | None]:
-    # 空文字や前後の空白を除去して正規化
-    # Trim and normalize empty strings and surrounding spaces
     normalized_provider_user_id = (provider_user_id or "").strip() or None
     normalized_provider_email = (provider_email or "").strip() or None
-
-    # Eメールプロバイダの場合はメールアドレスをデフォルト値に設定
-    # Default to user email for the email provider type
     if auth_provider == EMAIL_AUTH_PROVIDER:
         normalized_provider_user_id = normalized_provider_user_id or email
         normalized_provider_email = normalized_provider_email or email
-
     return normalized_provider_user_id, normalized_provider_email
 
 
-# アバターURLを検証・正規化し、無効な場合はデフォルトのアバターURLを返す
-# Validate and normalize the avatar URL, returning the default if invalid.
 def _normalize_avatar_url(avatar_url: str | None) -> str:
     normalized = (avatar_url or "").strip()
-    if not normalized:
-        return DEFAULT_AVATAR_URL
-    if len(normalized) > LEGACY_AVATAR_URL_MAX_LENGTH:
+    if not normalized or len(normalized) > LEGACY_AVATAR_URL_MAX_LENGTH:
         return DEFAULT_AVATAR_URL
     return normalized
 
 
-# ユーザーの認証プロバイダ情報をテーブルに挿入または更新（アップサート）する
-# Insert or update (upsert) the user's authentication provider information in the database.
-def _upsert_user_auth_provider(
-    cursor: Any,
+@asynccontextmanager
+async def _managed_session(
+    session: AsyncSession | None,
+) -> AsyncIterator[AsyncSession]:
+    if session is not None:
+        yield session
+        return
+    async with session_scope() as owned_session:
+        yield owned_session
+
+
+async def _run(
+    operation: Callable[[UserRepository], Awaitable[Any]],
+    *,
+    session: AsyncSession | None,
+    commit: bool | Callable[[Any], bool] = False,
+) -> Any:
+    async with _managed_session(session) as db_session:
+        result = await operation(UserRepository(db_session))
+        if session is None:
+            should_commit = commit(result) if callable(commit) else commit
+            if should_commit:
+                await db_session.commit()
+            elif commit is not False:
+                await db_session.rollback()
+        return result
+
+
+async def copy_default_tasks_for_user(
     user_id: int,
-    provider: str,
-    provider_user_id: str | None,
-    provider_email: str | None,
+    *,
+    session: AsyncSession | None = None,
 ) -> None:
-    cursor.execute(
-        """
-        INSERT INTO user_auth_providers (
-            user_id,
-            provider,
-            provider_user_id,
-            provider_email
-        )
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (user_id, provider) DO UPDATE
-           SET provider_user_id = EXCLUDED.provider_user_id,
-               provider_email = EXCLUDED.provider_email,
-               updated_at = CURRENT_TIMESTAMP
-        """,
-        (user_id, provider, provider_user_id, provider_email),
+    """Copy the bundled tasks under the same transaction advisory lock."""
+
+    await _run(
+        lambda repository: repository.copy_default_tasks(int(user_id)),
+        session=session,
+        commit=True,
     )
 
 
-# 共通のデフォルトタスクを新規ユーザーにコピーする
-# Copy common default tasks into user-specific tasks.
-def copy_default_tasks_for_user(user_id: int) -> None:
-    # 共有タスクをユーザー専用タスクとして重複なく複製する
-    # Copy shared default tasks into user-owned rows without duplicates.
-    """user_id IS NULL の共通タスクを指定ユーザーに複製"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            # Use the same transaction advisory lock as task mutation routes so
-            # logins, manual additions, and prompt imports cannot interleave.
-            cursor.execute(
-                "SELECT pg_advisory_xact_lock(%s)",
-                (user_id,),
-            )
-            # The bundled catalog is the source of truth for new accounts. Reading
-            # every shared DB row here could copy historical duplicates or retired tasks.
-            defaults = default_task_rows(include_key=True)
-
-            for (
-                system_task_key,
-                system_task_revision,
-                name,
-                tmpl,
-                response_rules,
-                output_skeleton,
-                inp,
-                out,
-                disp,
-            ) in defaults:
-                # Deleted rows are deliberate user choices and must continue to
-                # suppress the corresponding built-in task. The legacy-name arm
-                # also prevents a keyed catalog row from duplicating pre-key data.
-                cursor.execute(
-                    """
-                    SELECT 1 FROM task_with_examples
-                     WHERE user_id = %s
-                       AND (
-                            system_task_key = %s
-                            OR LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
-                           )
-                     LIMIT 1
-                    """,
-                    (user_id, system_task_key, name),
-                )
-                if cursor.fetchone():
-                    continue
-                cursor.execute(
-                    """
-                    INSERT INTO task_with_examples
-                          (user_id, system_task_key, system_task_revision,
-                           name, prompt_template,
-                           response_rules, output_skeleton,
-                           input_examples, output_examples, display_order)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
-                    """,
-                    (
-                        user_id,
-                        system_task_key,
-                        system_task_revision,
-                        name,
-                        tmpl,
-                        response_rules,
-                        output_skeleton,
-                        inp,
-                        out,
-                        disp,
-                    ),
-                )
-
-            conn.commit()
-        finally:
-            cursor.close()
+async def get_user_by_email(
+    email: str,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    return await _run(
+        lambda repository: repository.get_by_email(email),
+        session=session,
+    )
 
 
-# 指定されたメールアドレスを持つユーザーを取得する
-# Retrieve a user by their email address.
-def get_user_by_email(email: str) -> dict[str, Any] | None:
-    # メールアドレス一致 of user を返す
-    # Fetch a single user by email.
-    """メールアドレスでユーザーを取得"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(
-                """
-                SELECT u.*,
-                       gap.provider AS auth_provider,
-                       gap.provider_user_id,
-                       gap.provider_email
-                  FROM users AS u
-                  LEFT JOIN user_auth_providers AS gap
-                    ON gap.user_id = u.id
-                   AND gap.provider = %s
-                 WHERE u.email = %s
-                """,
-                (GOOGLE_AUTH_PROVIDER, email),
-            )
-            return cursor.fetchone()
-        finally:
-            cursor.close()
+async def get_user_by_google_id(
+    google_user_id: str,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    return await _run(
+        lambda repository: repository.get_by_google_id(google_user_id),
+        session=session,
+    )
 
 
-# GoogleのユーザーID（プロバイダ識別子）に紐付くユーザーを取得する
-# Retrieve a user by their Google provider user ID.
-def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
-    # Google の安定IDでユーザーを取得する
-    # Look up a user by Google provider identity.
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(
-                """
-                SELECT u.*,
-                       p.provider AS auth_provider,
-                       p.provider_user_id,
-                       p.provider_email
-                  FROM user_auth_providers AS p
-                  JOIN users AS u
-                    ON u.id = p.user_id
-                 WHERE p.provider = %s
-                   AND p.provider_user_id = %s
-                """,
-                (GOOGLE_AUTH_PROVIDER, google_user_id),
-            )
-            return cursor.fetchone()
-        finally:
-            cursor.close()
+async def get_user_by_id(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    return await _run(
+        lambda repository: repository.get_by_id(int(user_id)),
+        session=session,
+    )
 
 
-# ユーザーIDに紐付くユーザー情報を取得する
-# Retrieve user information by user ID.
-def get_user_by_id(user_id: int) -> dict[str, Any] | None:
-    # プロフィール表示に必要なユーザー情報を取得する
-    # Fetch user fields needed by profile and session endpoints.
-    """ユーザーIDでユーザーを取得"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(
-                """
-                SELECT id, email, is_verified, created_at,
-                       username, bio, avatar_url, llm_profile_context,
-                       preferred_locale
-                  FROM users
-                 WHERE id = %s
-                """,
-                (user_id,)
-            )
-            return cursor.fetchone()
-        finally:
-            cursor.close()
-
-
-# 新しいユーザーレコードを作成し、そのIDを返す
-# Create a new user record and return its ID.
-def create_user(
+async def create_user(
     email: str,
     username: str | None = None,
     avatar_url: str | None = None,
@@ -241,10 +127,8 @@ def create_user(
     provider_email: str | None = None,
     is_verified: bool = False,
     preferred_locale: Locale | None = None,
+    session: AsyncSession | None = None,
 ) -> int | None:
-    # 未認証ユーザーを作成し、採番された user_id を返す
-    # Create an unverified user and return the generated user_id.
-    """未認証ユーザーを新規作成"""
     normalized_username = (username or "").strip()[:255] or DEFAULT_USERNAME
     normalized_avatar_url = _normalize_avatar_url(avatar_url)
     normalized_preferred_locale = normalize_locale(preferred_locale)
@@ -256,190 +140,87 @@ def create_user(
         provider_user_id,
         provider_email,
     )
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT INTO users (
-                    email,
-                    username,
-                    avatar_url,
-                    is_verified,
-                    preferred_locale
-                )
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
-                """,
-                (
-                    email,
-                    normalized_username,
-                    normalized_avatar_url,
-                    is_verified,
-                    normalized_preferred_locale,
-                ),
-            )
-            row = cursor.fetchone()
-            user_id = row[0] if row else None
-            if user_id is None:
-                conn.rollback()
-                return None
-
-            _upsert_user_auth_provider(
-                cursor,
-                user_id,
-                auth_provider,
-                normalized_provider_user_id,
-                normalized_provider_email,
-            )
-            conn.commit()
-            return user_id
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    return await _run(
+        lambda repository: repository.create(
+            email=email,
+            username=normalized_username,
+            avatar_url=normalized_avatar_url,
+            auth_provider=auth_provider,
+            provider_user_id=normalized_provider_user_id,
+            provider_email=normalized_provider_email,
+            is_verified=bool(is_verified),
+            preferred_locale=normalized_preferred_locale,
+        ),
+        session=session,
+        commit=True,
+    )
 
 
-# 指定されたユーザーIDにGoogleアカウントの認証情報を紐付ける
-# Link a Google account authentication provider to an existing user.
-def link_google_account(user_id: int, google_user_id: str, provider_email: str) -> None:
-    # 既存ユーザーへ Google 連携情報を紐付け・更新する
-    # Attach or refresh Google provider metadata for an existing user.
+async def link_google_account(
+    user_id: int,
+    google_user_id: str,
+    provider_email: str,
+    *,
+    session: AsyncSession | None = None,
+) -> None:
     normalized_google_user_id = (google_user_id or "").strip()
-    normalized_provider_email = (provider_email or "").strip() or None
     if not normalized_google_user_id:
         raise ValueError("google_user_id is required")
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            _upsert_user_auth_provider(
-                cursor,
-                user_id,
-                GOOGLE_AUTH_PROVIDER,
-                normalized_google_user_id,
-                normalized_provider_email,
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    normalized_provider_email = (provider_email or "").strip() or None
+    await _run(
+        lambda repository: repository.link_google_account(
+            user_id=int(user_id),
+            google_user_id=normalized_google_user_id,
+            provider_email=normalized_provider_email,
+        ),
+        session=session,
+        commit=True,
+    )
 
 
-# プロフィール項目（ユーザー名やアバター）が未設定の場合、Googleの情報で更新する
-# Update user profile fields (username, avatar) with Google details if they are currently default/unset.
-def update_user_profile_from_google_if_unset(
+async def update_user_profile_from_google_if_unset(
     user_id: int,
     name: str | None = None,
     picture: str | None = None,
+    *,
+    session: AsyncSession | None = None,
 ) -> None:
-    # 既定値のままのプロフィール項目だけ Google 情報で初期化する
-    # Seed profile fields from Google only when the user still has defaults.
-    normalized_name = (name or "").strip()
-    normalized_picture = (picture or "").strip()
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(
-                """
-                SELECT username, avatar_url
-                  FROM users
-                 WHERE id = %s
-                """,
-                (user_id,),
-            )
-            current = cursor.fetchone()
-            if not current:
-                return
-
-            next_username = current.get("username") or DEFAULT_USERNAME
-            next_avatar_url = current.get("avatar_url") or DEFAULT_AVATAR_URL
-
-            if normalized_name and next_username.strip() in {"", DEFAULT_USERNAME}:
-                next_username = normalized_name
-            normalized_avatar_url = _normalize_avatar_url(normalized_picture)
-            if normalized_picture and next_avatar_url.strip() in {"", DEFAULT_AVATAR_URL}:
-                next_avatar_url = normalized_avatar_url
-
-            cursor.execute(
-                """
-                UPDATE users
-                   SET username = %s,
-                       avatar_url = %s
-                 WHERE id = %s
-                """,
-                (next_username, next_avatar_url, user_id),
-            )
-            conn.commit()
-        finally:
-            cursor.close()
+    normalized_name = (name or "").strip() or None
+    normalized_picture = (picture or "").strip() or None
+    if normalized_picture:
+        normalized_picture = _normalize_avatar_url(normalized_picture)
+    await _run(
+        lambda repository: repository.update_profile_from_google_if_unset(
+            user_id=int(user_id),
+            username=normalized_name,
+            avatar_url=normalized_picture,
+            default_username=DEFAULT_USERNAME,
+            default_avatar_url=DEFAULT_AVATAR_URL,
+        ),
+        session=session,
+        commit=True,
+    )
 
 
-# ユーザーに関連する全データとアカウント自体をデータベースから削除する
-# Delete all data associated with a user and remove their account from the database.
-def delete_user_account(user_id: int) -> bool:
-    # 外部キーのCASCADE制約などで完全にカバーされないユーザー所有のレコードを削除し、
-    # その後同じトランザクションでユーザー行を削除する。
-    # Delete user-owned records that are not fully covered by cascading FKs,
-    # then remove the user row in the same transaction.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT id
-                  FROM users
-                 WHERE id = %s
-                 FOR UPDATE
-                """,
-                (user_id,),
-            )
-            if not cursor.fetchone():
-                conn.rollback()
-                return False
-
-            for query in (
-                "DELETE FROM prompt_likes WHERE user_id = %s",
-                "DELETE FROM memo_entries WHERE user_id = %s",
-                "DELETE FROM memory_facts WHERE user_id = %s",
-                "DELETE FROM user_auth_providers WHERE user_id = %s",
-                "DELETE FROM user_passkeys WHERE user_id = %s",
-                "DELETE FROM chat_rooms WHERE user_id = %s",
-                "DELETE FROM task_with_examples WHERE user_id = %s",
-                "DELETE FROM prompts WHERE user_id = %s",
-            ):
-                cursor.execute(query, (user_id,))
-
-            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-            conn.commit()
-            return True
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+async def delete_user_account(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> bool:
+    return await _run(
+        lambda repository: repository.delete_account(int(user_id)),
+        session=session,
+        commit=lambda result: bool(result),
+    )
 
 
-# ユーザーの認証状態（is_verified）をTrue（認証済み）に変更する
-# Set the user's verification status (is_verified) to True in the database.
-def set_user_verified(user_id: int) -> None:
-    # 認証完了後に is_verified フラグを更新する
-    # Mark user as verified after successful verification.
-    """ユーザーを認証済みに更新"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                UPDATE users SET is_verified = TRUE
-                WHERE id = %s
-                """,
-                (user_id,)
-            )
-            conn.commit()
-        finally:
-            cursor.close()
+async def set_user_verified(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    await _run(
+        lambda repository: repository.set_verified(int(user_id)),
+        session=session,
+        commit=True,
+    )

@@ -12,6 +12,7 @@ from blueprints.auth_common import (
     _resolve_llm_daily_limit_service,
 )
 from blueprints.auth_support import (
+    call_dependency,
     dep,
     get_auth_limit_service_dependency,
     get_llm_daily_limit_service_dependency,
@@ -43,7 +44,7 @@ async def api_send_email_code(
     if validation_error is not None:
         return validation_error
 
-    user = await dep("run_blocking")(dep("get_user_by_email"), payload.email)
+    user = await call_dependency("get_user_by_email", payload.email)
     if user and user.get("is_verified"):
         return await dep("api_send_login_code")(
             request,
@@ -110,7 +111,7 @@ async def api_send_login_code(
             status="fail",
         )
 
-    user = await dep("run_blocking")(dep("get_user_by_email"), email)
+    user = await call_dependency("get_user_by_email", email)
     if not user or not user["is_verified"]:
         return dep("jsonify")(
             {"status": "fail", "error": "ユーザーが存在しないか、認証されていません"},
@@ -220,7 +221,7 @@ async def api_verify_login_code(
 
     submitted_code = str(auth_code or "")
     if dep("constant_time_compare")(submitted_code, str(session_code)):
-        user = await dep("run_blocking")(dep("get_user_by_id"), user_id)
+        user = await call_dependency("get_user_by_id", user_id)
         if not user or not user.get("is_verified"):
             _clear_login_verification_session(session)
             session.pop("user_id", None)

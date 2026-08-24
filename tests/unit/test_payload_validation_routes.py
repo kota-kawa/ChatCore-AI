@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.tasks import add_task
 from blueprints.prompt_share.prompt_share_api import create_prompt
@@ -61,7 +61,10 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
 
         # 日本語: DB書き込みをモックして検証処理の手前で止める
         # English: Mock DB write to stop execution before actual insertion
-        with patch("blueprints.prompt_share.prompt_share_api._create_prompt_for_user") as mock_create:
+        with patch(
+            "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
+            new=AsyncMock(),
+        ) as mock_create:
             response = asyncio.run(create_prompt(request))
 
         # 日本語: 400エラーが返り、DB書き込みが呼ばれないことを確認
@@ -87,14 +90,16 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
 
         # 日本語: DB書き込みをモックして201レスポンスを確認
         # English: Mock DB write and confirm 201 response
-        with patch("blueprints.prompt_share.prompt_share_api._create_prompt_for_user") as mock_create:
-            mock_create.return_value = {"id": 1}
+        with patch(
+            "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
+            new=AsyncMock(return_value=1),
+        ) as mock_create:
             response = asyncio.run(create_prompt(request))
 
         # 日本語: 201 Created が返り、DB書き込みが1度呼ばれることを確認
         # English: Confirm 201 Created response and that DB write was called exactly once
         self.assertEqual(response.status_code, 201)
-        mock_create.assert_called_once()
+        mock_create.assert_awaited_once()
 
     def test_create_skill_passes_canonical_resources_to_persistence(self):
         request = make_request(
@@ -117,14 +122,17 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
             session={"user_id": 1},
         )
 
-        with patch("blueprints.prompt_share.prompt_share_api._create_prompt_for_user") as mock_create:
-            mock_create.return_value = 1
+        with patch(
+            "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
+            new=AsyncMock(return_value=1),
+        ) as mock_create:
             response = asyncio.run(create_prompt(request))
 
         self.assertEqual(response.status_code, 201)
-        resources = mock_create.call_args.args[-2]
-        self.assertEqual(resources[0]["path"], "scripts/main.ts")
-        self.assertEqual(resources[0]["language"], "typescript")
+        mock_create.assert_awaited_once()
+        resources = mock_create.call_args.args[1].resources
+        self.assertEqual(resources[0].path, "scripts/main.ts")
+        self.assertEqual(resources[0].language, "typescript")
 
 
 if __name__ == "__main__":

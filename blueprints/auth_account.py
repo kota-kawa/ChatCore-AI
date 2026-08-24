@@ -6,7 +6,7 @@ from blueprints.auth_common import (
     _clear_google_oauth_session,
     _user_id_from_session,
 )
-from blueprints.auth_support import dep
+from blueprints.auth_support import call_dependency, dep
 from services.i18n import (
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
@@ -24,7 +24,7 @@ async def api_current_user(request: Request):
     if "user_id" not in session:
         return dep("jsonify")({"logged_in": False})
 
-    user = await dep("run_blocking")(dep("get_user_by_id"), session["user_id"])
+    user = await call_dependency("get_user_by_id", session["user_id"])
     if user:
         preferred_locale = normalize_locale(user.get("preferred_locale"))
         if preferred_locale is not None:
@@ -74,7 +74,7 @@ async def api_delete_user_account(request: Request):
         return dep("jsonify")({"error": "確認文字列が一致しません。"}, status_code=400)
 
     try:
-        deleted = await dep("run_blocking")(dep("delete_user_account"), user_id)
+        deleted = await call_dependency("delete_user_account", user_id)
     except Exception:
         return dep("log_and_internal_server_error")(
             dep("logger"),

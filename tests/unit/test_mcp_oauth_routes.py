@@ -1,15 +1,10 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.mcp_oauth import patch_client, patch_connection, post_client
 from tests.helpers.request_helpers import build_request
-
-
-async def run_blocking_inline(func, *args, **kwargs):
-    return func(*args, **kwargs)
-
 
 class McpOAuthRouteTestCase(unittest.TestCase):
     def test_post_client_issues_a_public_client_when_secret_is_not_requested(self):
@@ -27,8 +22,10 @@ class McpOAuthRouteTestCase(unittest.TestCase):
 
         with (
             patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
-            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
-            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+            patch(
+                "blueprints.mcp_oauth.issue_user_client",
+                new=AsyncMock(return_value=credentials),
+            ) as issue_client,
         ):
             response = asyncio.run(post_client(request))
 
@@ -53,8 +50,10 @@ class McpOAuthRouteTestCase(unittest.TestCase):
         credentials = {"client_id": "mcp-client", "client_secret": "secret"}
         with (
             patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
-            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
-            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+            patch(
+                "blueprints.mcp_oauth.issue_user_client",
+                new=AsyncMock(return_value=credentials),
+            ) as issue_client,
         ):
             response = asyncio.run(post_client(request))
 
@@ -72,8 +71,10 @@ class McpOAuthRouteTestCase(unittest.TestCase):
 
         with (
             patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
-            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
-            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+            patch(
+                "blueprints.mcp_oauth.issue_user_client",
+                new=AsyncMock(return_value=credentials),
+            ) as issue_client,
         ):
             response = asyncio.run(post_client(request))
 
@@ -114,8 +115,10 @@ class McpOAuthRouteTestCase(unittest.TestCase):
 
         with (
             patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
-            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
-            patch("blueprints.mcp_oauth.update_user_client_label", return_value=True) as update_label,
+            patch(
+                "blueprints.mcp_oauth.update_user_client_label",
+                new=AsyncMock(return_value=True),
+            ) as update_label,
         ):
             response = asyncio.run(patch_client("mcp-personal-client", request))
 
@@ -133,8 +136,10 @@ class McpOAuthRouteTestCase(unittest.TestCase):
 
         with (
             patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
-            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
-            patch("blueprints.mcp_oauth.update_connection_display_name", return_value=True) as update_name,
+            patch(
+                "blueprints.mcp_oauth.update_connection_display_name",
+                new=AsyncMock(return_value=True),
+            ) as update_name,
         ):
             response = asyncio.run(patch_connection("grant-1", request))
 

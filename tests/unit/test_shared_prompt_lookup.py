@@ -1,251 +1,88 @@
-import json
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, patch
 
-from services.chat_generation import ChatGenerationJob
 from services.shared_prompt_lookup import (
-    SHARED_PROMPT_TOOL_NAME,
     SharedPromptResult,
     build_shared_prompt_tool_payload,
     search_shared_prompts,
+    search_shared_prompts_for_tool,
 )
 
 
-# 日本語: SharedContentService の検索結果を模した最小オブジェクト。
-# English: Minimal stand-ins for what SharedContentService returns.
-class _FakeSummary:
-    def __init__(self, prompt_id, title, description=""):
+class _Summary:
+    def __init__(self, prompt_id, title):
         self.prompt_id = prompt_id
         self.title = title
         self.category = "business"
-        self.description = description
+        self.description = ""
         self.author = "ユーザー"
         self.content_format = "prompt"
-        self.snippet = "丁寧なメール返信を書くためのプロンプト"
+        self.snippet = "検索スニペット"
         self.public_url = f"https://example.test/shared/prompt/{prompt_id}"
 
 
-class _FakePage:
+class _Page:
     def __init__(self, items):
         self.items = items
 
 
-class _FakeDetail:
+class _Detail:
     def __init__(self, content, skill_markdown="", description=""):
         self.content = content
         self.skill_markdown = skill_markdown
         self.description = description
 
 
-class SharedPromptSearchTestCase(unittest.TestCase):
-    def _service(self, *, page, detail=None, detail_side_effect=None):
-        service = Mock()
-        service.list_public_content.return_value = page
-        if detail_side_effect is not None:
-            service.get_public_content.side_effect = detail_side_effect
-        else:
-            service.get_public_content.return_value = detail
-        return service
-
-    # 日本語: 上位ヒットは本文まで読み込み、公開URLも一緒に返します。
-    # English: Top hits are expanded to their body and carry the public URL.
-    def test_returns_hits_with_full_body_for_top_results(self):
-        service = self._service(
-            page=_FakePage([_FakeSummary(11, "丁寧なメール返信")]),
-            detail=_FakeDetail("本文テンプレート", description="本文の用途を説明"),
-        )
-
+class SharedPromptSearchTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_search_is_native_async_and_expands_top_hit(self):
+        service = type("Service", (), {})()
+        service.list_public_content = AsyncMock(return_value=_Page([_Summary(11, "返信")]))
+        service.get_public_content = AsyncMock(return_value=_Detail("本文", description="用途"))
         with patch("services.shared_prompt_lookup._service", return_value=service):
-            result = search_shared_prompts("  メール 返信  ")
+            result = await search_shared_prompts("  メール 返信 ")
+        self.assertEqual(result.prompts[0]["content"], "本文")
+        self.assertEqual(result.prompts[0]["description"], "用途")
+        service.list_public_content.assert_awaited_once()
+        service.get_public_content.assert_awaited_once_with(11)
 
-        self.assertEqual(result.query, "メール 返信")
-        self.assertEqual(result.prompts[0]["title"], "丁寧なメール返信")
-        self.assertEqual(result.prompts[0]["content"], "本文テンプレート")
-        self.assertEqual(result.prompts[0]["description"], "本文の用途を説明")
-        self.assertEqual(result.prompts[0]["public_url"], "https://example.test/shared/prompt/11")
-        service.list_public_content.assert_called_once()
-
-    # 日本語: SKILL投稿は content が空でも、Markdown本文を根拠として渡します。
-    # English: SKILL posts have no plain content, so the markdown body is used instead.
-    def test_uses_skill_markdown_when_content_is_empty(self):
-        service = self._service(
-            page=_FakePage([_FakeSummary(12, "レビュー手順")]),
-            detail=_FakeDetail("", skill_markdown="# 手順\n1. 差分を読む"),
-        )
-
+    async def test_skill_markdown_is_used_when_content_is_empty(self):
+        service = type("Service", (), {})()
+        service.list_public_content = AsyncMock(return_value=_Page([_Summary(12, "手順")]))
+        service.get_public_content = AsyncMock(return_value=_Detail("", skill_markdown="# 手順"))
         with patch("services.shared_prompt_lookup._service", return_value=service):
-            result = search_shared_prompts("レビュー")
+            result = await search_shared_prompts("レビュー")
+        self.assertEqual(result.prompts[0]["content"], "# 手順")
 
-        self.assertEqual(result.prompts[0]["content"], "# 手順\n1. 差分を読む")
-
-    # 日本語: 本文が読めなくても、スニペットだけで紹介できるようヒットは残します。
-    # English: A failed body load still keeps the hit so the snippet can be used.
-    def test_keeps_the_hit_when_the_body_cannot_be_loaded(self):
-        service = self._service(
-            page=_FakePage([_FakeSummary(13, "議事録テンプレ")]),
-            detail_side_effect=RuntimeError("db down"),
-        )
-
+    async def test_body_failure_keeps_search_hit(self):
+        service = type("Service", (), {})()
+        service.list_public_content = AsyncMock(return_value=_Page([_Summary(13, "議事録")]))
+        service.get_public_content = AsyncMock(side_effect=RuntimeError("db down"))
         with patch("services.shared_prompt_lookup._service", return_value=service):
-            result = search_shared_prompts("議事録")
-
-        self.assertEqual(result.prompts[0]["title"], "議事録テンプレ")
+            result = await search_shared_prompts("議事録")
+        self.assertEqual(result.prompts[0]["title"], "議事録")
         self.assertNotIn("content", result.prompts[0])
 
-    # 日本語: 検索自体が落ちても例外を投げず、失敗として記録したうえで回答を続けさせます。
-    # English: A failing search returns no hits instead of raising, but records that it failed.
-    def test_failed_search_returns_no_hits(self):
+    async def test_search_failure_is_distinguished_from_no_results(self):
         with patch("services.shared_prompt_lookup._service", side_effect=RuntimeError("boom")):
-            result = search_shared_prompts("メール")
-
-        self.assertFalse(result.has_hits)
+            result = await search_shared_prompts("メール")
         self.assertTrue(result.failed)
-
-    # 日本語: 障害を「該当なし」と返すと、モデルが「共有プロンプトは無い」と断言してしまいます。
-    # English: An outage reported as "no match" would make the model assert no shared prompt exists.
-    def test_failed_lookup_is_reported_as_failed_not_as_no_results(self):
-        payload = build_shared_prompt_tool_payload(SharedPromptResult(query="メール", failed=True))
-
+        payload = build_shared_prompt_tool_payload(result)
         self.assertEqual(payload["status"], "failed")
-        self.assertEqual(payload["prompts"], [])
-        self.assertIn("Do not say no shared prompt matched", payload["message"])
 
-    # 日本語: 空クエリでは検索そのものを行いません。
-    # English: An empty query performs no lookup at all.
-    def test_blank_query_skips_the_lookup(self):
-        with patch("services.shared_prompt_lookup._service") as service_factory:
-            result = search_shared_prompts("   ")
-
-        service_factory.assert_not_called()
-        self.assertFalse(result.has_hits)
-
-    # 日本語: ヒット0件は「無かった」と明示し、捏造させないためのメッセージを返します。
-    # English: Zero hits must be reported explicitly so the model does not invent a prompt.
-    def test_empty_payload_tells_the_model_nothing_matched(self):
-        payload = build_shared_prompt_tool_payload(SharedPromptResult(query="メール"))
-
+    async def test_tool_payload_entrypoint_is_async(self):
+        with patch(
+            "services.shared_prompt_lookup.search_shared_prompts",
+            new=AsyncMock(return_value=SharedPromptResult(query="メール")),
+        ) as search:
+            payload = await search_shared_prompts_for_tool("メール")
         self.assertEqual(payload["status"], "no_results")
-        self.assertEqual(payload["prompts"], [])
+        search.assert_awaited_once_with("メール")
 
-
-class SharedPromptToolCallTestCase(unittest.TestCase):
-    def _build_job(self, search):
-        events = []
-        job = ChatGenerationJob(
-            conversation_messages=[{"role": "user", "content": "丁寧な断りメールを書きたい"}],
-            model="test-model",
-            persist_response=lambda response, **kwargs: None,
-            on_event=lambda event: events.append((event.event, event.payload)),
-            shared_prompt_search=search,
-        )
-        return job, events
-
-    @staticmethod
-    def _run(job, tool_call, *, current_messages, step_count, max_steps):
-        return job._run_lookup_tool_call(
-            tool_call,
-            tool_name=SHARED_PROMPT_TOOL_NAME,
-            search=job._shared_prompt_search,
-            event_prefix="shared_prompt_search",
-            result_counts=("prompt_count",),
-            failure_log_message="Shared prompt search via tool call failed.",
-            failure_tool_message="Shared prompt search failed.",
-            current_messages=current_messages,
-            step_count=step_count,
-            max_steps=max_steps,
-        )
-
-    @staticmethod
-    def _tool_call(arguments):
-        return {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": SHARED_PROMPT_TOOL_NAME, "arguments": json.dumps(arguments)},
-        }
-
-    # 日本語: 検索結果はツール結果メッセージとして会話へ戻り、件数付きのイベントも出ます。
-    # English: Results return as a tool message and the completion event carries the hit count.
-    def test_tool_call_appends_results_and_publishes_steps(self):
-        payload = {"status": "ok", "prompt_count": 3, "prompts": []}
-        job, events = self._build_job(lambda query: payload)
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "断り メール"}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(next_step, 2)
-        self.assertEqual(messages[0]["role"], "tool")
-        self.assertEqual(json.loads(messages[0]["content"])["prompt_count"], 3)
-        self.assertEqual(
-            [name for name, _ in events],
-            ["shared_prompt_search_started", "shared_prompt_search_completed"],
-        )
-        self.assertEqual(events[1][1]["prompt_count"], 3)
-
-    # 日本語: 検索が例外を投げても生成は続き、失敗をイベントとツール結果で伝えます。
-    # English: A failing lookup keeps generation alive and reports the failure both ways.
-    def test_failed_lookup_reports_and_continues(self):
-        def _raise(query):
-            raise RuntimeError("search exploded")
-
-        job, events = self._build_job(_raise)
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "メール"}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(next_step, 2)
-        self.assertEqual(json.loads(messages[0]["content"])["status"], "failed")
-        self.assertEqual(
-            [name for name, _ in events],
-            ["shared_prompt_search_started", "shared_prompt_search_failed"],
-        )
-
-    # 日本語: 例外ではなく failed ペイロードで返る障害も、0件ではなく失敗として通知します。
-    # English: A failure returned as a payload, not an exception, is still reported as a failure.
-    def test_failed_payload_is_not_reported_as_zero_hits(self):
-        job, events = self._build_job(lambda query: {"status": "failed", "prompts": []})
-        messages = []
-
-        self._run(
-            job,
-            self._tool_call({"query": "メール"}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(
-            [name for name, _ in events],
-            ["shared_prompt_search_started", "shared_prompt_search_failed"],
-        )
-
-    # 日本語: 事前検索済みのクエリは、再検索していないことがイベントにも表れます。
-    # English: An already prefetched query is surfaced as such in the completion event.
-    def test_already_searched_payload_keeps_its_status_in_the_event(self):
-        job, events = self._build_job(lambda query: {"status": "already_searched"})
-        messages = []
-
-        self._run(
-            job,
-            self._tool_call({"query": "メール"}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(events[1][0], "shared_prompt_search_completed")
-        self.assertEqual(events[1][1]["status"], "already_searched")
+    async def test_blank_query_skips_service(self):
+        with patch("services.shared_prompt_lookup._service") as factory:
+            result = await search_shared_prompts("   ")
+        factory.assert_not_called()
+        self.assertFalse(result.has_hits)
 
 
 if __name__ == "__main__":

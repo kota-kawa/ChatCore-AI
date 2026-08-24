@@ -11,7 +11,6 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, BaseModel, Field
 
-from services.async_utils import run_blocking
 from services.mcp_config import get_mcp_public_base_url
 from services.mcp_oauth import MCP_PROMPTS_READ_SCOPE
 from services.mcp_tools.common import consume_tool_limit, require_actor
@@ -89,7 +88,7 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
-            return await run_blocking(service.list_public_content, **kwargs)
+            return await service.list_public_content(**kwargs)
         except InvalidSharedContentCursor as exc:
             raise ToolError("カーソルが不正か、異なる検索条件のものです。") from exc
         except ValueError as exc:
@@ -179,7 +178,7 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
-            result = await run_blocking(service.get_public_content, prompt_id)
+            result = await service.get_public_content(prompt_id)
         except Exception as exc:
             logger.exception("Failed to load public content detail through MCP.")
             raise ToolError("公開コンテンツを取得できませんでした。") from exc
@@ -229,7 +228,7 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
-            resources = await run_blocking(service.list_public_skill_resources, prompt_id)
+            resources = await service.list_public_skill_resources(prompt_id)
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         except Exception as exc:
@@ -266,11 +265,7 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
-            resource = await run_blocking(
-                service.get_public_skill_resource,
-                prompt_id,
-                path,
-            )
+            resource = await service.get_public_skill_resource(prompt_id, path)
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         except Exception as exc:

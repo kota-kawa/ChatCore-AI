@@ -10,10 +10,10 @@ from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 
-# ブロッキングI/O（同期DB・外部HTTP・ファイル等）を逃がす専用スレッドプール。
+# DB以外のブロッキングI/O（外部HTTP・ファイル等）を逃がす専用スレッドプール。
 # asyncio.to_thread の既定エグゼキュータ（プロセス共有・暗黙のサイズ）に依存せず、
 # 1ワーカープロセスあたりの同時ブロッキング処理数を環境変数で明示制御する。
-# Dedicated pool for blocking I/O (sync DB / outbound HTTP / files). Avoids relying on
+# Dedicated pool for non-database blocking I/O (outbound HTTP / files). Avoids relying on
 # asyncio.to_thread's implicit shared default executor so the per-process concurrency
 # budget for blocking work is explicit and tunable via the environment.
 _DEFAULT_MAX_WORKERS = 64

@@ -1,6 +1,6 @@
 # Data model overview
 
-PostgreSQL の構造は `alembic/versions/` の適用後状態が正本です。ここでは機能間の関係を示し、全列・全インデックスを複製しません。DB アクセスは `psycopg2.ThreadedConnectionPool` と raw SQL を基本とし、SQLAlchemy ORM のモデル層はありません。
+PostgreSQL の構造は `alembic/versions/` の適用後状態が正本です。ここでは機能間の関係を示し、全列・全インデックスを複製しません。SQLAlchemyモデルの登録先は`services.models.Base.metadata`で、Alembicの`target_metadata`と共有します。DBアクセスは`AsyncSession`をRepositoryへ渡し、通常のCRUDはORM、複雑検索・JSONB・pgvector・PostgreSQL固有処理はSQLAlchemy Coreまたは`text()`で実装します。
 
 ## エンティティの関係
 

@@ -1,32 +1,28 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 import secrets
-import time
-from typing import Any
+from typing import Any, TypeVar
 
-from .api_errors import ResourceNotFoundError
-from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .datetime_serialization import serialize_datetime_iso
-from .error_messages import ERROR_MEMO_NOT_FOUND_FOR_SHARE, ERROR_SHARED_LINK_NOT_FOUND
+from .db import session_scope
+from .repositories.memo_share_repository import MemoShareRepository
 
 UNIQUE_VIOLATION_PGCODE = "23505"
-DB_WRITE_MAX_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
 SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 DEFAULT_SHARE_EXPIRES_DAYS = 30
+T = TypeVar("T")
 
 
-# 日本語: 指定された期限日時が現時刻を過ぎている（有効期限切れ）か判定します。
-# English: Check whether the given expiration datetime has passed.
 def _is_expired(expires_at: Any) -> bool:
-    if not isinstance(expires_at, datetime):
-        return False
-    return expires_at <= datetime.utcnow()
+    return isinstance(expires_at, datetime) and expires_at <= datetime.utcnow()
 
 
-# 日本語: 共有トークンの有効状態や期限切れステータスをシリアライズして辞書で返します。
-# English: Serialize the shared token active/expired/revoked state into a dictionary.
 def _serialize_share_state(
     share_token: str | None,
     expires_at: datetime | None,
@@ -34,257 +30,157 @@ def _serialize_share_state(
     *,
     is_reused: bool = False,
 ) -> dict[str, Any]:
-    # 日本語: トークンが存在し、失効しておらず、期限切れでもない場合に有効と判定します。
-    # English: Active if the token exists, is not revoked, and is not expired.
-    is_active = bool(share_token) and revoked_at is None and not _is_expired(expires_at)
+    expired = _is_expired(expires_at)
     return {
         "share_token": share_token or "",
         "expires_at": serialize_datetime_iso(expires_at),
         "revoked_at": serialize_datetime_iso(revoked_at),
-        "is_expired": _is_expired(expires_at),
+        "is_expired": expired,
         "is_revoked": revoked_at is not None,
-        "is_active": is_active,
+        "is_active": bool(share_token) and revoked_at is None and not expired,
         "is_reused": is_reused,
     }
 
 
-# 日本語: 指定日数後の期限切れ日時(datetime)を算出します。
-# English: Calculate the future expiration datetime based on the number of days.
 def _resolve_expires_at(expires_in_days: int | None) -> datetime | None:
     if expires_in_days is None:
         return None
     return datetime.utcnow() + timedelta(days=max(int(expires_in_days), 1))
 
 
-# 日本語: メモの共有トークンを作成または既存の有効なトークンを取得して返します。衝突発生時は再試行します。
-# English: Create a share token for a memo or retrieve an active existing one. Retries on database collisions.
-def create_or_get_shared_memo_token(
+async def _in_transaction(
+    session: AsyncSession | None,
+    operation: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    if session is not None:
+        return await operation(session)
+    async with session_scope() as owned_session:
+        async with owned_session.begin():
+            return await operation(owned_session)
+
+
+def _sqlstate(exc: BaseException) -> str | None:
+    current: BaseException | None = exc
+    for _ in range(3):
+        if current is None:
+            return None
+        value = getattr(current, "sqlstate", None)
+        if value:
+            return str(value)
+        current = getattr(current, "orig", None)
+        if not isinstance(current, BaseException):
+            return None
+    return None
+
+
+async def _create_once(
+    session: AsyncSession,
+    memo_id: int,
+    user_id: int,
+    token: str,
+    expires_at: datetime | None,
+    *,
+    force_refresh: bool,
+) -> dict[str, Any]:
+    row = await MemoShareRepository(session).create_or_get(
+        memo_id,
+        user_id,
+        token,
+        expires_at,
+        force_refresh=force_refresh,
+    )
+    return _serialize_share_state(
+        row.get("share_token"),
+        row.get("expires_at"),
+        row.get("revoked_at"),
+        is_reused=bool(row.get("is_reused")),
+    )
+
+
+async def create_or_get_shared_memo_token(
     memo_id: int,
     user_id: int,
     *,
     force_refresh: bool = False,
     expires_in_days: int | None = DEFAULT_SHARE_EXPIRES_DAYS,
+    session: AsyncSession | None = None,
 ) -> dict[str, Any]:
-    # 日本語: トークン衝突時にリトライを行うループ処理。
-    # English: Retry loop in case of token collision.
-    for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
+    expires_at = _resolve_expires_at(expires_in_days)
+    if session is not None:
+        return await _create_once(
+            session,
+            memo_id,
+            user_id,
+            secrets.token_urlsafe(18),
+            expires_at,
+            force_refresh=force_refresh,
+        )
+
+    for attempt in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
         token = secrets.token_urlsafe(18)
-        collision_detected = False
-        expires_at = _resolve_expires_at(expires_in_days)
-
-        # 日本語: DB書き込み試行ループ。一時的なDBエラー時に再試行します。
-        # English: Database write attempt loop. Retries on transient DB errors.
-        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
-            with get_db_connection() as conn:
-                cursor = conn.cursor(dictionary=True)
-                try:
-                    # 日本語: メモの存在と所有権を確認します。
-                    # English: Verify existence and ownership of the memo.
-                    cursor.execute(
-                        "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
-                        (memo_id, user_id),
+        try:
+            async with session_scope() as owned_session:
+                async with owned_session.begin():
+                    return await _create_once(
+                        owned_session,
+                        memo_id,
+                        user_id,
+                        token,
+                        expires_at,
+                        force_refresh=force_refresh,
                     )
-                    if not cursor.fetchone():
-                        raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
-
-                    # 日本語: 強制リフレッシュでない場合は、既存の有効な共有情報を再利用します。
-                    # English: If not forced to refresh, reuse the existing active share information.
-                    if not force_refresh:
-                        cursor.execute(
-                            """
-                            SELECT share_token, expires_at, revoked_at
-                            FROM shared_memo_entries
-                            WHERE memo_entry_id = %s
-                            LIMIT 1
-                            """,
-                            (memo_id,),
-                        )
-                        existing = cursor.fetchone()
-                        if existing:
-                            serialized_existing = _serialize_share_state(
-                                existing.get("share_token"),
-                                existing.get("expires_at"),
-                                existing.get("revoked_at"),
-                                is_reused=True,
-                            )
-                            if serialized_existing["is_active"]:
-                                return serialized_existing
-
-                    # 日本語: 共有情報を挿入または更新します。
-                    # English: Insert or update the sharing information.
-                    cursor.execute(
-                        """
-                        INSERT INTO shared_memo_entries (memo_entry_id, share_token, expires_at, revoked_at, created_at)
-                        VALUES (%s, %s, %s, NULL, CURRENT_TIMESTAMP)
-                        ON CONFLICT (memo_entry_id)
-                        DO UPDATE
-                        SET
-                            share_token = EXCLUDED.share_token,
-                            expires_at = EXCLUDED.expires_at,
-                            revoked_at = NULL,
-                            created_at = CURRENT_TIMESTAMP
-                        RETURNING share_token, expires_at, revoked_at
-                        """,
-                        (memo_id, token, expires_at),
-                    )
-                    row = cursor.fetchone()
-                    conn.commit()
-                    if row:
-                        return _serialize_share_state(
-                            row.get("share_token"),
-                            row.get("expires_at"),
-                            row.get("revoked_at"),
-                            is_reused=False,
-                        )
-                    return _serialize_share_state(token, expires_at, None, is_reused=False)
-                except ResourceNotFoundError:
-                    raise
-                except Error as exc:
-                    rollback_connection(conn)
-                    # 日本語: ユニークキー制約違反を検出した場合、トークンを再生成してリトライします。
-                    # English: If a unique constraint violation is detected, regenerate the token and retry.
-                    if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
-                        collision_detected = True
-                        break
-                    # 日本語: リトライ可能なDBエラーの場合は待機後に再試行します。
-                    # English: In case of a retryable DB error, wait and retry.
-                    if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
-                        time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
-                        continue
-                    raise
-                except BaseException:
-                    rollback_connection(conn)
-                    raise
-                finally:
-                    cursor.close()
-
-        if collision_detected:
-            continue
-
+        except IntegrityError as exc:
+            if _sqlstate(exc) != UNIQUE_VIOLATION_PGCODE or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
+                raise
+            await asyncio.sleep(0.05 * (attempt + 1))
     raise RuntimeError("Failed to create shared memo token after collision retries.")
 
 
-# 日本語: メモの共有状態（有効期限、無効化状況）を取得してシリアライズして返します。
-# English: Retrieve and serialize the current share status of the specified memo.
-def get_memo_share_state(memo_id: int, user_id: int) -> dict[str, Any]:
-    # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-    # English: Secure and clean up the required resource using a context manager.
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            # 日本語: メモの存在と所有権を確認します。
-            # English: Verify existence and ownership of the memo.
-            cursor.execute(
-                "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
-                (memo_id, user_id),
-            )
-            if not cursor.fetchone():
-                raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
+async def get_memo_share_state(
+    memo_id: int,
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    async def operation(db: AsyncSession) -> dict[str, Any]:
+        row = await MemoShareRepository(db).get_state(memo_id, user_id)
+        if row is None:
+            return _serialize_share_state(None, None, None)
+        return _serialize_share_state(row["share_token"], row["expires_at"], row["revoked_at"])
 
-            # 日本語: 共有情報を取得します。
-            # English: Retrieve the share information.
-            cursor.execute(
-                """
-                SELECT share_token, expires_at, revoked_at
-                FROM shared_memo_entries
-                WHERE memo_entry_id = %s
-                LIMIT 1
-                """,
-                (memo_id,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                return _serialize_share_state(None, None, None)
-            return _serialize_share_state(
-                row.get("share_token"),
-                row.get("expires_at"),
-                row.get("revoked_at"),
-            )
-        finally:
-            cursor.close()
+    return await _in_transaction(session, operation)
 
 
-# 日本語: メモの共有トークンを無効化（削除に近い更新）処理します。
-# English: Revoke/invalidate the active share token for the memo in the database.
-def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
-    # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-    # English: Secure and clean up the required resource using a context manager.
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            # 日本語: メモの存在と所有権を確認します。
-            # English: Verify existence and ownership of the memo.
-            cursor.execute(
-                "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
-                (memo_id, user_id),
-            )
-            if not cursor.fetchone():
-                raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
+async def revoke_shared_memo_token(
+    memo_id: int,
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    async def operation(db: AsyncSession) -> dict[str, Any]:
+        row = await MemoShareRepository(db).revoke(memo_id, user_id)
+        if row is None:
+            return _serialize_share_state(None, None, None)
+        return _serialize_share_state(row["share_token"], row["expires_at"], row["revoked_at"])
 
-            # 日本語: 共有情報を無効化し、現在時刻を失効日時として記録します。
-            # English: Invalidate the sharing info and record current timestamp as the revocation time.
-            cursor.execute(
-                """
-                UPDATE shared_memo_entries
-                SET revoked_at = CURRENT_TIMESTAMP
-                WHERE memo_entry_id = %s
-                RETURNING share_token, expires_at, revoked_at
-                """,
-                (memo_id,),
-            )
-            row = cursor.fetchone()
-            conn.commit()
-            if not row:
-                return _serialize_share_state(None, None, None)
-            return _serialize_share_state(
-                row.get("share_token"),
-                row.get("expires_at"),
-                row.get("revoked_at"),
-            )
-        finally:
-            cursor.close()
+    return await _in_transaction(session, operation)
 
 
-# 日本語: 共有トークンに紐づく、一般公開されているメモの内容を取得して返します。
-# English: Retrieve the publicly shared memo content by its unique share token.
-def get_shared_memo_payload(token: str) -> dict[str, Any]:
-    # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-    # English: Secure and clean up the required resource using a context manager.
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            # 日本語: トークンに対応するアクティブな共有メモを取得します。有効期限や失効状態も確認します。
-            # English: Fetch the active shared memo corresponding to the token. Checks expiration and revocation.
-            cursor.execute(
-                """
-                SELECT
-                    me.id,
-                    me.title,
-                    me.created_at,
-                    me.ai_response,
-                    me.background_color
-                FROM shared_memo_entries sme
-                JOIN memo_entries me ON me.id = sme.memo_entry_id
-                WHERE sme.share_token = %s
-                  AND sme.revoked_at IS NULL
-                  AND (sme.expires_at IS NULL OR sme.expires_at > CURRENT_TIMESTAMP)
-                LIMIT 1
-                """,
-                (token,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                raise ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND)
-
-            created_at = row.get("created_at")
-            return {
-                "memo": {
-                    "id": row.get("id"),
-                    "title": row.get("title") or "保存したメモ",
-                    "created_at": serialize_datetime_iso(created_at),
-                    "ai_response": row.get("ai_response") or "",
-                    "background_color": row.get("background_color"),
-                }
+async def get_shared_memo_payload(
+    token: str,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    async def operation(db: AsyncSession) -> dict[str, Any]:
+        row = await MemoShareRepository(db).get_public_payload(token)
+        return {
+            "memo": {
+                "id": row["id"],
+                "title": row["title"] or "保存したメモ",
+                "created_at": serialize_datetime_iso(row["created_at"]),
+                "ai_response": row["ai_response"] or "",
+                "background_color": row["background_color"],
             }
-        finally:
-            cursor.close()
+        }
+
+    return await _in_transaction(session, operation)

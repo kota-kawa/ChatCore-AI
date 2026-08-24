@@ -1,143 +1,72 @@
+import asyncio
 import unittest
-from unittest.mock import patch
+from contextlib import asynccontextmanager
+from unittest.mock import ANY, AsyncMock, patch
 
 from services.default_shared_prompts import (
     DEFAULT_SHARED_PROMPTS,
     ensure_default_shared_prompts,
 )
-from tests.helpers.db_helpers import TransactionTrackingConnection
 
 
-# デフォルト共有プロンプト作成処理をテストするための疑似DBカーソルクラス。
-# Mock database cursor class for testing default shared prompt insertion logic.
-class FakeCursor:
-    def __init__(self, *, owner_id=None, existing_prompt_variants=None):
-        self.owner_id = owner_id
-        self.existing_prompt_variants = set(existing_prompt_variants or [])
-        self.inserted_prompts = []
-        self.executed_queries = []
-        self._fetchone_result = None
-        self._fetchall_result = None
-        self.closed = False
+@asynccontextmanager
+async def _session_scope():
+    class _Transaction:
+        async def __aenter__(self):
+            return self
 
-    # クエリを実行し、テーブルのデータ状態をシミュレートします。
-    # Execute a query and simulate the database tables state.
-    def execute(self, query, params=None):
-        normalized = " ".join(query.split())
-        self.executed_queries.append((normalized, params))
+        async def __aexit__(self, _exc_type, _exc, _tb):
+            return False
 
-        # 管理者ユーザー（所有者）IDの検索をシミュレート
-        # Simulate lookup for admin user (owner) ID
-        if "SELECT id FROM users WHERE email = %s" in normalized:
-            self._fetchone_result = (self.owner_id,) if self.owner_id is not None else None
-            return
+    class _Session:
+        def begin(self):
+            return _Transaction()
 
-        # 管理者ユーザーの新規作成をシミュレート
-        # Simulate inserting a new admin user if not exists
-        if "INSERT INTO users" in normalized and "RETURNING id" in normalized:
-            self.owner_id = 999
-            self._fetchone_result = (self.owner_id,)
-            return
-
-        # 既存プロンプトのタイトル重複チェックをシミュレート
-        # Simulate check for existing prompt titles to avoid duplicate insertions
-        if "SELECT system_prompt_key, content_locale FROM prompts" in normalized:
-            self._fetchall_result = sorted(self.existing_prompt_variants)
-            return
-
-        # プロンプトの新規登録をシミュレート
-        # Simulate inserting a new prompt
-        if "INSERT INTO prompts" in normalized:
-            key, locale, title = params[1:4]
-            self.inserted_prompts.append(title)
-            self.existing_prompt_variants.add((key, locale))
-            self._fetchone_result = None
-            return
-
-        self._fetchone_result = None
-
-    # 1レコードの結果を取得します。
-    # Fetch a single query result.
-    def fetchone(self):
-        result = self._fetchone_result
-        self._fetchone_result = None
-        return result
-
-    # 全ての結果を取得します。
-    # Fetch all query results.
-    def fetchall(self):
-        result = self._fetchall_result or []
-        self._fetchall_result = None
-        return result
-
-    # カーソルを閉じます。
-    # Close the cursor.
-    def close(self):
-        self.closed = True
+    yield _Session()
 
 
-# システム標準のデフォルト共有プロンプトが存在しない場合に自動挿入され、存在する場合はスキップされるかをテストするクラス。
-# Test class to check that default shared prompts are auto-inserted if missing, and skipped if they already exist.
 class DefaultSharedPromptsTestCase(unittest.TestCase):
     def test_samples_have_stable_keys_and_both_locales(self):
         grouped = {}
         for prompt in DEFAULT_SHARED_PROMPTS:
-            grouped.setdefault(prompt["system_prompt_key"], set()).add(prompt["content_locale"])
+            grouped.setdefault(prompt["system_prompt_key"], set()).add(
+                prompt["content_locale"]
+            )
 
         self.assertTrue(grouped)
         self.assertTrue(all(locales == {"ja", "en"} for locales in grouped.values()))
 
-    # デフォルト共有プロンプトが存在しないとき、データベースに不足しているすべてのプロンプトが挿入されることを検証します。
-    # Verify that all missing default shared prompts are inserted into the database when they are not present.
-    def test_inserts_samples_when_they_are_missing(self):
-        fake_cursor = FakeCursor()
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        # 挿入処理をモックされたDB接続を利用して呼び出し
-        # Call the insertion function using the mocked DB connection
-        with patch("services.default_shared_prompts.get_db_connection", return_value=fake_conn):
-            inserted = ensure_default_shared_prompts()
+    def test_inserts_samples_in_one_async_transaction(self):
+        owner = AsyncMock(return_value=999)
+        seed = AsyncMock(return_value=len(DEFAULT_SHARED_PROMPTS))
+        with (
+            patch("services.default_shared_prompts.session_scope", new=_session_scope),
+            patch("services.default_shared_prompts.ensure_sample_prompt_owner", new=owner),
+            patch("services.default_shared_prompts.seed_default_shared_prompts", new=seed),
+        ):
+            inserted = asyncio.run(ensure_default_shared_prompts())
 
         self.assertEqual(inserted, len(DEFAULT_SHARED_PROMPTS))
-        self.assertTrue(fake_conn.committed)
-        self.assertFalse(fake_conn.rolled_back)
-        self.assertTrue(fake_conn.closed)
-        self.assertTrue(fake_cursor.closed)
-        self.assertEqual(len(fake_cursor.inserted_prompts), len(DEFAULT_SHARED_PROMPTS))
-        self.assertIsNotNone(fake_cursor.owner_id)
-        self.assertEqual(
-            len([query for query, _ in fake_cursor.executed_queries if "SELECT system_prompt_key, content_locale FROM prompts" in query]),
-            1,
+        owner.assert_awaited_once_with(
+            ANY,
+            email="sample-prompts@chat-core.local",
+            username="運営サンプル",
         )
+        seed.assert_awaited_once()
+        self.assertEqual(seed.await_args.kwargs["owner_user_id"], 999)
 
-    # すべてのデフォルト共有プロンプトが既に登録されているとき、挿入処理がスキップされることを検証します。
-    # Verify that the insertion is skipped when all default shared prompts already exist in the database.
-    def test_skips_when_all_samples_already_exist(self):
-        existing_variants = {
-            (prompt["system_prompt_key"], prompt["content_locale"])
-            for prompt in DEFAULT_SHARED_PROMPTS
-        }
-        fake_cursor = FakeCursor(owner_id=999, existing_prompt_variants=existing_variants)
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        # 挿入処理をモックされたDB接続を利用して呼び出し
-        # Call the insertion function using the mocked DB connection
-        with patch("services.default_shared_prompts.get_db_connection", return_value=fake_conn):
-            inserted = ensure_default_shared_prompts()
+    def test_returns_zero_when_repository_finds_no_missing_rows(self):
+        owner = AsyncMock(return_value=999)
+        seed = AsyncMock(return_value=0)
+        with (
+            patch("services.default_shared_prompts.session_scope", new=_session_scope),
+            patch("services.default_shared_prompts.ensure_sample_prompt_owner", new=owner),
+            patch("services.default_shared_prompts.seed_default_shared_prompts", new=seed),
+        ):
+            inserted = asyncio.run(ensure_default_shared_prompts())
 
         self.assertEqual(inserted, 0)
-        self.assertFalse(fake_conn.committed)
-        self.assertFalse(fake_conn.rolled_back)
-        self.assertTrue(fake_conn.closed)
-        self.assertTrue(fake_cursor.closed)
-        self.assertEqual(fake_cursor.inserted_prompts, [])
-        self.assertFalse(
-            any("INSERT INTO users" in query for query, _ in fake_cursor.executed_queries)
-        )
-        self.assertEqual(
-            len([query for query, _ in fake_cursor.executed_queries if "SELECT system_prompt_key, content_locale FROM prompts" in query]),
-            1,
-        )
+        seed.assert_awaited_once()
 
 
 if __name__ == "__main__":

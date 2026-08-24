@@ -20,14 +20,14 @@
 ### 確認する境界
 
 - `services/health.py` が readiness で確認している DB 操作。
-- `services/db.py` の `ThreadedConnectionPool`、ホスト候補、接続取得タイムアウト、返却時ロールバック。
+- `services/db.py` の `AsyncEngine`、`AsyncAdaptedQueuePool`、`pool_pre_ping`、接続取得タイムアウト、`AsyncSession`のrollback。
 - Docker Compose の DB の healthcheck と、アプリの `depends_on`／entrypoint の migration 実行順。
 
 ### 切り分け
 
 - 起動直後だけなら、アプリを変更する前に DB の healthcheck と migration の完了順を確認する。
-- 接続先の問題なら、実際のコンテナ構成と `POSTGRES_HOST` の関係を確認する。`services/db.py` は Compose の `db` に加えてローカル開発用の候補を検証するため、候補追加を場当たり的にルートへ書かない。
-- プール枯渇なら、接続を借りた箇所に `close()` または context manager があるかを確認する。上限値だけを増やすとリークを隠す可能性がある。
+- 接続先の問題なら、実際のコンテナ構成と `POSTGRES_HOST`／`DATABASE_URL` の関係を確認する。
+- プール枯渇なら、`AsyncSession`がスコープ終了時に閉じられているか、未完了transactionが残っていないかを確認する。上限値だけを増やすとリークを隠す可能性がある。
 - DB スキーマ不足なら、既存 revision を編集せず `alembic/versions/` に新しい migration を追加する。
 
 対象コードの単体テストでは DB 接続をモックし、統合テストではルートの結果とエラー変換を確認します。秘密情報を含む設定ファイルを読んで診断結果へ貼り付けないでください。

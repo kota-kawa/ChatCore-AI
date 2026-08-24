@@ -1,50 +1,41 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from blueprints.memo.embeddings import store_embedding
+from sqlalchemy.dialects.postgresql import dialect
 
-
-class FakeCursor:
-    def __init__(self):
-        self.executed = []
-        self.closed = False
-
-    def execute(self, query, params):
-        self.executed.append((" ".join(query.split()), params))
-
-    def close(self):
-        self.closed = True
+from services.memo_embedding_service import store_memo_embedding
 
 
-class FakeConnection:
-    def __init__(self, cursor):
-        self.cursor_instance = cursor
-        self.committed = False
-        self.closed = False
+class _SessionScope:
+    def __init__(self, session):
+        self.session = session
 
-    def cursor(self):
-        return self.cursor_instance
+    async def __aenter__(self):
+        return self.session
 
-    def commit(self):
-        self.committed = True
-
-    def close(self):
-        self.closed = True
+    async def __aexit__(self, *_args):
+        return False
 
 
-class MemoEmbeddingRevisionTestCase(unittest.TestCase):
-    def test_store_embedding_rejects_stale_background_results(self):
-        cursor = FakeCursor()
-        connection = FakeConnection(cursor)
-        with patch("blueprints.memo.embeddings._get_db_connection", return_value=connection):
-            store_embedding(9, [0.1, 0.2], expected_revision=4)
+class MemoEmbeddingRevisionTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_store_embedding_uses_native_async_revision_guard(self):
+        session = MagicMock()
+        session.execute = AsyncMock()
+        session.begin = MagicMock(return_value=session)
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=False)
 
-        sql, params = cursor.executed[0]
-        self.assertIn("WHERE id = %s AND revision = %s", sql)
-        self.assertEqual(params[-2:], (9, 4))
-        self.assertTrue(connection.committed)
-        self.assertTrue(cursor.closed)
-        self.assertTrue(connection.closed)
+        with patch(
+            "services.memo_embedding_service.session_scope",
+            return_value=_SessionScope(session),
+        ):
+            await store_memo_embedding(9, [0.1, 0.2], expected_revision=4)
+
+        statement = session.execute.await_args.args[0]
+        compiled = statement.compile(dialect=dialect())
+        self.assertIn("revision", str(compiled))
+        self.assertIn(9, compiled.params.values())
+        self.assertIn(4, compiled.params.values())
 
 
 if __name__ == "__main__":

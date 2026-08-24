@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from http.cookies import CookieError, SimpleCookie
 from typing import Any
@@ -8,7 +9,6 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from services.async_utils import run_blocking
 from services.i18n import (
     LOCALE_COOKIE_NAME,
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
@@ -19,11 +19,17 @@ from services.i18n import (
     reset_current_locale,
     set_current_locale,
 )
-from services.repositories.user_preferences_repository import get_user_preferred_locale
+from services.chat_service import get_user_preferred_locale
 
 
 LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 logger = logging.getLogger(__name__)
+
+
+async def _await_result(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 def _append_vary(headers: MutableHeaders, name: str) -> None:
@@ -105,7 +111,7 @@ class LocaleMiddleware:
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                response_locale = normalize_locale(state.get("locale"), default=locale)
+                response_locale = normalize_locale(state.get("locale"), default=locale) or locale
                 headers = MutableHeaders(scope=message)
                 headers["content-language"] = response_locale
                 _append_vary(headers, "Accept-Language")
@@ -141,7 +147,9 @@ class LocaleMiddleware:
             user_id = session.get("user_id")
             if user_id and session.get(PREFERRED_LOCALE_LOADED_SESSION_KEY) is not True:
                 try:
-                    preferred_locale = await run_blocking(get_user_preferred_locale, int(user_id))
+                    preferred_locale = await _await_result(
+                        get_user_preferred_locale(int(user_id))
+                    )
                 except Exception:
                     logger.exception("Failed to load the authenticated user's locale preference.")
                 else:

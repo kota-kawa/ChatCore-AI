@@ -101,14 +101,14 @@ def _trim(text: str, limit: int) -> str:
 
 # 検索モードを決める。埋め込みが使えない環境では semantic 指定でもキーワード検索へ落ちる
 # Pick the search mode; both services fall back to keyword search when embeddings are unavailable
-def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
-    result = search_memos(user_id, query, mode="semantic", limit=limit)
+async def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
+    result = await search_memos(user_id, query, mode="semantic", limit=limit)
     if not result.memos:
         # 類似度が届かなかった場合でも、語そのものを含むメモは拾えることがある。
         # マイコンテキスト側（search_facts）と同じ二段構えに揃える。
         # A query can miss on similarity yet still match memos containing the words. This
         # mirrors the two-stage lookup the My Context side (search_facts) already does.
-        result = search_memos(user_id, query, mode="keyword", limit=limit)
+        result = await search_memos(user_id, query, mode="keyword", limit=limit)
     memos: list[dict[str, Any]] = []
     for index, memo in enumerate(result.memos):
         entry: dict[str, Any] = {
@@ -120,7 +120,8 @@ def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any
         }
         if index < FULL_CONTENT_MEMO_LIMIT:
             try:
-                entry["content"] = _trim(get_memo(user_id, memo.id).content, MAX_MEMO_CONTENT_CHARS)
+                detail = await get_memo(user_id, memo.id)
+                entry["content"] = _trim(detail.content, MAX_MEMO_CONTENT_CHARS)
             except Exception:
                 # 全文が読めなくても抜粋だけで回答を続けられるようにする
                 # Keep the excerpt-only entry so the answer can still use the hit
@@ -129,8 +130,8 @@ def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any
     return memos
 
 
-def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
-    result = search_facts(user_id, query, mode="semantic", limit=limit)
+async def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
+    result = await search_facts(user_id, query, mode="semantic", limit=limit)
     return [
         {
             "id": fact.id,
@@ -147,7 +148,7 @@ def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[str, Any
 # 検索が空振りしたときに渡す棚卸し。クエリに依存しないので、広い問いでも必ず中身がある
 # The inventory handed over when a search finds nothing. It does not depend on the query, so
 # even a broad question gets something concrete to answer from.
-def build_personal_overview(
+async def build_personal_overview(
     user_id: int,
     *,
     memo_limit: int = OVERVIEW_MEMO_LIMIT,
@@ -156,7 +157,7 @@ def build_personal_overview(
     memos: list[dict[str, Any]] = []
     facts: list[dict[str, Any]] = []
     try:
-        listing = list_memos(user_id, limit=memo_limit, sort="updated")
+        listing = await list_memos(user_id, limit=memo_limit, sort="updated")
         memos = [
             {
                 "id": memo.id,
@@ -170,7 +171,7 @@ def build_personal_overview(
         logger.warning("Failed to list recent memos for the personal overview.", exc_info=True)
 
     try:
-        digest = build_digest(
+        digest = await build_digest(
             user_id,
             limit_per_type=OVERVIEW_DIGEST_LIMIT_PER_TYPE,
             max_chars=OVERVIEW_DIGEST_MAX_CHARS,
@@ -199,7 +200,7 @@ def build_personal_overview(
 
 # メモとマイコンテキストを同じクエリで検索する。片方が失敗しても、もう片方の結果は返す
 # Search memos and My Context with the same query; one side failing still returns the other
-def search_personal_knowledge(
+async def search_personal_knowledge(
     user_id: int,
     query: str,
     *,
@@ -214,12 +215,12 @@ def search_personal_knowledge(
     facts: list[dict[str, Any]] = []
     failed_sources: list[str] = []
     try:
-        memos = _search_memos(user_id, normalized_query, limit=memo_limit)
+        memos = await _search_memos(user_id, normalized_query, limit=memo_limit)
     except Exception:
         logger.warning("Memo search failed during personal knowledge lookup.", exc_info=True)
         failed_sources.append("memo")
     try:
-        facts = _search_facts(user_id, normalized_query, limit=fact_limit)
+        facts = await _search_facts(user_id, normalized_query, limit=fact_limit)
     except Exception:
         logger.warning("Context fact search failed during personal knowledge lookup.", exc_info=True)
         failed_sources.append("context_fact")
@@ -234,8 +235,9 @@ def search_personal_knowledge(
 
 # 検索からツール結果ペイロードまでを1呼び出しにまとめる（生成ジョブへ渡す入口）
 # Search and format in one call: the entry point handed to the generation job
-def search_personal_knowledge_for_tool(user_id: int, query: str) -> dict[str, Any]:
-    return build_personal_knowledge_tool_payload(search_personal_knowledge(user_id, query))
+async def search_personal_knowledge_for_tool(user_id: int, query: str) -> dict[str, Any]:
+    result = await search_personal_knowledge(user_id, query)
+    return build_personal_knowledge_tool_payload(result)
 
 
 # ツール実行結果としてLLMへ返すペイロードを組み立てる
