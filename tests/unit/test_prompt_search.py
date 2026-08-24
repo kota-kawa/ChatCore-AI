@@ -46,6 +46,7 @@ class FakeCursor:
                     "reference_image_url": None,
                     "skill_markdown": "",
                     "skill_python_script": "",
+                    "view_count": 9,
                     "created_at": "2024-01-01T00:00:00",
                     "liked": True,
                     "used_in_chat": True,
@@ -111,6 +112,7 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertEqual(payload["prompts"][0]["id"], 11)
         self.assertTrue(payload["prompts"][0]["liked"])
         self.assertTrue(payload["prompts"][0]["used_in_chat"])
+        self.assertEqual(payload["prompts"][0]["view_count"], 9)
         self.assertNotIn("bookmarked", payload["prompts"][0])
         self.assertNotIn("saved_to_list", payload["prompts"][0])
         self.assertEqual(payload["prompts"][0]["skill_markdown"], "")
@@ -141,6 +143,15 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertNotIn("used_tasks.name = p.title", search_query)
         self.assertNotIn("GROUP BY prompt_id", search_query)
         self.assertNotIn("LEFT JOIN prompt_list_entries AS ple", search_query)
+        self.assertIn("LEFT JOIN prompt_view_counts AS pvc", search_query)
+        self.assertIn(
+            "ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC",
+            search_query,
+        )
+        self.assertIn(
+            "ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC",
+            search_query,
+        )
         self.assertIn("LIMIT %s OFFSET %s", search_query)
         self.assertEqual(search_params[:6], ("ja", "%sample%", "%sample%", [], "%sample%", "%sample%"))
         self.assertEqual(search_params[-4:-2], (21, 20))

@@ -77,6 +77,7 @@ import { usePromptShareActionEffects } from "../../components/prompt_share/use_p
 import { usePromptShareAuth } from "../../components/prompt_share/use_prompt_share_auth";
 import { usePromptShareDialog } from "../../components/prompt_share/use_prompt_share_dialog";
 import { usePromptSharePageSetup } from "../../components/prompt_share/use_prompt_share_page_setup";
+import { usePromptViewRecorder } from "../../components/prompt_share/use_prompt_view_recorder";
 import { useTranslation } from "../../contexts/locale_context";
 import {
   getPromptShareServerSideProps,
@@ -421,6 +422,8 @@ export default function PromptSharePage({
     []
   );
 
+  const recordOpenedPromptView = usePromptViewRecorder({ updatePromptRecord });
+
   // APIから指定条件の先頭ページを取得し、現在の一覧を置き換える。
   // Fetch the first API page for the selected filters and replace the current feed.
   const loadPrompts = useCallback(
@@ -725,10 +728,11 @@ export default function PromptSharePage({
       resetPromptComments();
       openModal("detail", promptDetailCloseButtonRef.current);
       if (promptId) {
+        recordOpenedPromptView(prompt);
         void loadPromptComments(promptId);
       }
     },
-    [loadPromptComments, openModal, resetPromptComments]
+    [loadPromptComments, openModal, recordOpenedPromptView, resetPromptComments]
   );
 
   // コメントビューで詳細モーダルを直接開き、テキストエリアへのフォーカスを優先する
@@ -742,10 +746,11 @@ export default function PromptSharePage({
       resetPromptComments();
       openModal("detail", promptCommentTextareaRef.current || promptCommentsSectionRef.current);
       if (promptId) {
+        recordOpenedPromptView(prompt);
         void loadPromptComments(promptId);
       }
     },
-    [loadPromptComments, openModal, resetPromptComments]
+    [loadPromptComments, openModal, recordOpenedPromptView, resetPromptComments]
   );
 
   // 同じカードのドロップダウンを再度クリックした場合はトグルとして閉じる

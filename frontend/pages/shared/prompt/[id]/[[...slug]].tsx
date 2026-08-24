@@ -1,6 +1,6 @@
 import type { GetServerSideProps } from "next";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import MarkdownContent from "../../../../components/MarkdownContent";
 import { SeoHead } from "../../../../components/SeoHead";
 import { localizePublicPath } from "../../../../lib/seo";
@@ -18,6 +18,7 @@ import {
   normalizePromptMediaType
 } from "../../../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../../../scripts/prompt_share/prompt_category_registry";
+import { recordPromptView } from "../../../../scripts/prompt_share/api";
 import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
@@ -285,6 +286,21 @@ export default function SharedPromptPage({
   }, []);
 
   const prompt = payload.prompt;
+  const recordedPromptIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prompt?.id === undefined || prompt.id === null) {
+      return;
+    }
+    const promptId = String(prompt.id);
+    if (recordedPromptIdRef.current === promptId) {
+      return;
+    }
+    recordedPromptIdRef.current = promptId;
+    void recordPromptView(prompt.id).catch((error) => {
+      console.error("プロンプトビュー記録エラー:", error);
+    });
+  }, [prompt?.id]);
+
   const contentFormat = normalizePromptContentFormat(prompt?.content_format || prompt?.prompt_type || "");
   const mediaType = normalizePromptMediaType(prompt?.media_type || prompt?.prompt_type || "");
   const isSkillPrompt = contentFormat === "skill";

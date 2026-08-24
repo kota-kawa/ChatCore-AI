@@ -70,6 +70,7 @@ export type PromptData = {
   liked?: boolean;
   used_in_chat?: boolean;
   comment_count?: number;
+  view_count?: number;
   created_at?: string;
 };
 
@@ -90,6 +91,12 @@ export type PromptFeedResponse = {
   pagination?: PromptPagination;
   error?: string;
   message?: string;
+};
+
+export type PromptViewResponse = {
+  status?: string;
+  view_count?: number;
+  error?: string;
 };
 
 // 投稿作成APIの応答。ゲスト投稿かどうかで、完了後に表示する案内を切り替える。
