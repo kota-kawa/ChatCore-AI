@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.db import get_db_connection
 from services.embeddings import embeddings_available, generate_embedding
 from services.memo_ai import suggest_title
 from services.memo_share import (
@@ -11,17 +10,19 @@ from services.memo_share import (
     get_shared_memo_payload,
     revoke_shared_memo_token,
 )
+from services.memo_embedding_service import schedule_embedding as _schedule_embedding
+from services.repositories.memo_export_repository import (
+    fetch_memos_for_export as _fetch_memos_for_export,
+)
 from services.web import frontend_url
 
-from .embeddings import schedule_embedding as _schedule_embedding
 from .exports import (
     build_csv_export as _build_csv_export,
     build_json_export as _build_json_export,
     build_markdown_export as _build_markdown_export,
-    fetch_memos_for_export as _fetch_memos_for_export,
 )
-from .helpers import ensure_title as _ensure_title
-from .repository import (
+from services.repositories.memo_helpers import ensure_title as _ensure_title
+from services.repositories.memo_repository import (
     bulk_action as _bulk_action,
     delete_collection as _delete_collection,
     delete_memo as _delete_memo,
@@ -121,7 +122,6 @@ __all__ = [
     "frontend_url",
     "embeddings_available",
     "generate_embedding",
-    "get_db_connection",
     "get_memo_share_state",
     "get_shared_memo_payload",
     "memo_bp",

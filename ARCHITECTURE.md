@@ -91,7 +91,7 @@ flowchart LR
 
 ### PostgreSQL とマイグレーション
 
-`services/db.py` は `psycopg2` の `ThreadedConnectionPool` を包み、接続の検証、ホスト候補の切り替え、接続取得の有限リトライ、返却前のロールバックを提供します。アプリケーションの通常の DB 操作はこの接続境界を利用します。SQLAlchemy のモデル層を前提にして実装箇所を探さないでください。
+`services/db.py` はワーカーごとにSQLAlchemy 2.0の`AsyncEngine`と`async_sessionmaker`を遅延生成します。Repositoryは`AsyncSession`を受け取り、Serviceがtransaction境界を管理します。通常のCRUDはORM、検索・CTE・JSONB・pgvector・PostgreSQL固有処理はSQLAlchemy Coreまたは`text()`を使います。`AsyncSession`は並列Task間で共有しません。
 
 スキーマ変更は Alembic の新しい revision として追加します。適用済み revision の書き換えや、アプリ起動時だけの暗黙の ALTER は行いません。インデックスだけの直接 SQL フォールバックとして `db/performance_indexes.sql` が存在しますが、通常のスキーマ履歴の代替ではありません。
 

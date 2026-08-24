@@ -12,7 +12,7 @@ from blueprints.auth_common import (
     _resolve_auth_limit_service,
     _user_id_from_session,
 )
-from blueprints.auth_support import dep, get_auth_limit_service_dependency
+from blueprints.auth_support import call_dependency, dep, get_auth_limit_service_dependency
 
 
 async def api_list_passkeys(request: Request):
@@ -20,7 +20,7 @@ async def api_list_passkeys(request: Request):
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
-    passkeys = await dep("run_blocking")(dep("list_passkeys_for_user"), user_id)
+    passkeys = await call_dependency("list_passkeys_for_user", user_id)
     return dep("jsonify")({"status": "success", "passkeys": passkeys})
 
 
@@ -38,7 +38,7 @@ async def api_delete_passkey(request: Request):
     except (TypeError, ValueError):
         return dep("jsonify")({"status": "fail", "error": "Passkeyが指定されていません"}, status_code=400)
 
-    deleted = await dep("run_blocking")(dep("delete_passkey"), user_id, passkey_id)
+    deleted = await call_dependency("delete_passkey", user_id, passkey_id)
     if not deleted:
         return dep("jsonify")({"status": "fail", "error": "Passkeyが見つかりません"}, status_code=404)
 
@@ -63,11 +63,11 @@ async def api_passkey_register_options(request: Request):
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
-    user = await dep("run_blocking")(dep("get_user_by_id"), user_id)
+    user = await call_dependency("get_user_by_id", user_id)
     if not user:
         return dep("jsonify")({"status": "fail", "error": "ユーザーが存在しません"}, status_code=404)
 
-    existing_passkeys = await dep("run_blocking")(dep("list_passkeys_for_user"), user_id)
+    existing_passkeys = await call_dependency("list_passkeys_for_user", user_id)
     exclude_credentials = [
         dep("PublicKeyCredentialDescriptor")(id=dep("base64url_to_bytes")(row["credential_id"]))
         for row in existing_passkeys
@@ -143,8 +143,8 @@ async def api_passkey_register_verify(request: Request):
             expected_origin=dep("get_passkey_origins")(request),
             require_user_verification=True,
         )
-        passkey = await dep("run_blocking")(
-            dep("create_passkey"),
+        passkey = await call_dependency(
+            "create_passkey",
             user_id,
             dep("bytes_to_base64url")(verified.credential_id),
             dep("bytes_to_base64url")(verified.credential_public_key),
@@ -256,7 +256,7 @@ async def api_passkey_authenticate_verify(
     if not isinstance(credential_id, str) or not credential_id:
         return dep("jsonify")({"status": "fail", "error": "PasskeyのIDが不正です"}, status_code=400)
 
-    passkey = await dep("run_blocking")(dep("get_passkey_by_credential_id"), credential_id)
+    passkey = await call_dependency("get_passkey_by_credential_id", credential_id)
     if not passkey:
         dep("clear_passkey_session")(request.session)
         return dep("jsonify")({"status": "fail", "error": "Passkey認証に失敗しました"}, status_code=400)
@@ -280,7 +280,7 @@ async def api_passkey_authenticate_verify(
         dep("clear_passkey_session")(request.session)
         return dep("jsonify")({"status": "fail", "error": "Passkey認証に失敗しました"}, status_code=400)
 
-    user = await dep("run_blocking")(dep("get_user_by_id"), passkey["user_id"])
+    user = await call_dependency("get_user_by_id", passkey["user_id"])
     if not user or not user.get("is_verified"):
         dep("clear_passkey_session")(request.session)
         return dep("jsonify")(
@@ -292,8 +292,8 @@ async def api_passkey_authenticate_verify(
     dep("clear_passkey_session")(request.session)
 
     try:
-        await dep("run_blocking")(
-            dep("update_passkey_usage"),
+        await call_dependency(
+            "update_passkey_usage",
             int(passkey["id"]),
             int(verified.new_sign_count),
             credential_backed_up=bool(verified.credential_backed_up),

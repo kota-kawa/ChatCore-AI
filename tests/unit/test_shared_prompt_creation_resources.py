@@ -1,46 +1,19 @@
-import json
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock
 
 from services.request_models import SharedPromptCreateRequest
 from services.shared_prompt_service import create_shared_prompt
 
 
-class FakeCursor:
-    def __init__(self):
-        self.executed = []
-        self.closed = False
+class RecordingPromptRepository:
+    def __init__(self, prompt_id=42):
+        self.prompt_id = prompt_id
+        self.calls = []
 
-    def execute(self, sql, params=None):
-        self.executed.append((sql, params))
-
-    def fetchone(self):
-        return (42,)
-
-    def close(self):
-        self.closed = True
-
-
-class FakeConnection:
-    def __init__(self):
-        self.db_cursor = FakeCursor()
-        self.committed = False
-        self.rolled_back = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-    def cursor(self):
-        return self.db_cursor
-
-    def commit(self):
-        self.committed = True
-
-    def rollback(self):
-        self.rolled_back = True
+    async def create_prompt(self, session, **kwargs):
+        self.calls.append((session, kwargs))
+        return self.prompt_id
 
 
 class RecordingResourceRepository:
@@ -48,8 +21,8 @@ class RecordingResourceRepository:
         self.calls = []
         self.error = error
 
-    def insert_many(self, cursor, prompt_id, resources):
-        self.calls.append((cursor, prompt_id, list(resources)))
+    async def insert_many(self, session, prompt_id, resources):
+        self.calls.append((session, prompt_id, list(resources)))
         if self.error:
             raise self.error
 
@@ -76,50 +49,54 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
             }
         )
 
-    def test_saves_prompt_and_resources_with_one_transaction(self):
-        connection = FakeConnection()
-        repository = RecordingResourceRepository()
+    def test_saves_prompt_and_resources_with_one_async_transaction(self):
+        session = AsyncMock()
+        prompt_repository = RecordingPromptRepository()
+        resource_repository = RecordingResourceRepository()
 
-        with patch(
-            "services.shared_prompt_service.get_db_connection",
-            return_value=connection,
-        ):
-            prompt_id = create_shared_prompt(
-                7,
-                self._payload(),
-                resource_repository=repository,
-            )
-
-        self.assertEqual(prompt_id, 42)
-        self.assertTrue(connection.committed)
-        self.assertFalse(connection.rolled_back)
-        self.assertEqual(repository.calls[0][0], connection.db_cursor)
-        self.assertEqual(repository.calls[0][1], 42)
-        self.assertEqual(
-            [item.path for item in repository.calls[0][2]],
-            ["scripts/run.ts", "scripts/main.py"],
-        )
-        persisted_attributes = json.loads(connection.db_cursor.executed[0][1][6])
-        self.assertEqual(persisted_attributes, {"skill_markdown": "# Portable skill"})
-        self.assertEqual(connection.db_cursor.executed[0][1][11], "A reusable portable skill.")
-
-    def test_rolls_back_when_resource_insert_fails(self):
-        connection = FakeConnection()
-        repository = RecordingResourceRepository(error=RuntimeError("insert failed"))
-
-        with patch(
-            "services.shared_prompt_service.get_db_connection",
-            return_value=connection,
-        ), self.assertRaises(RuntimeError):
+        prompt_id = asyncio.run(
             create_shared_prompt(
                 7,
                 self._payload(),
-                resource_repository=repository,
+                repository=prompt_repository,
+                resource_repository=resource_repository,
+                session=session,
+            )
+        )
+
+        self.assertEqual(prompt_id, 42)
+        session.commit.assert_not_awaited()
+        session.rollback.assert_not_awaited()
+        self.assertEqual(resource_repository.calls[0][0], session)
+        self.assertEqual(resource_repository.calls[0][1], 42)
+        self.assertEqual(
+            [item.path for item in resource_repository.calls[0][2]],
+            ["scripts/run.ts", "scripts/main.py"],
+        )
+        self.assertEqual(
+            prompt_repository.calls[0][1]["attributes"],
+            {"skill_markdown": "# Portable skill"},
+        )
+        self.assertEqual(prompt_repository.calls[0][1]["description"], "A reusable portable skill.")
+
+    def test_rolls_back_when_resource_insert_fails(self):
+        session = AsyncMock()
+        prompt_repository = RecordingPromptRepository()
+        resource_repository = RecordingResourceRepository(error=RuntimeError("insert failed"))
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(
+                create_shared_prompt(
+                    7,
+                    self._payload(),
+                    repository=prompt_repository,
+                    resource_repository=resource_repository,
+                    session=session,
+                )
             )
 
-        self.assertFalse(connection.committed)
-        self.assertTrue(connection.rolled_back)
-        self.assertTrue(connection.db_cursor.closed)
+        session.commit.assert_not_awaited()
+        session.rollback.assert_not_awaited()
 
 
 if __name__ == "__main__":

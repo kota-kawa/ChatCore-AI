@@ -18,20 +18,19 @@ when every vector has to be regenerated with the new one.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from blueprints.memo.embeddings import store_embedding as store_memo_embedding  # noqa: E402
 from services.context_vault_embeddings import (  # noqa: E402
     build_context_fact_embedding_text,
 )
-from services.db import get_db_connection  # noqa: E402
+from services.db import session_scope  # noqa: E402
 from services.embeddings import (  # noqa: E402
     EMBEDDING_MODEL,
     embeddings_available,
@@ -39,7 +38,9 @@ from services.embeddings import (  # noqa: E402
 )
 from services.logging_config import configure_logging  # noqa: E402
 from services.memo_ai import build_memo_embedding_text  # noqa: E402
-from services.repositories.context_fact_repository import ContextFactRepository  # noqa: E402
+from services.repositories.embedding_backfill_repository import (  # noqa: E402
+    EmbeddingBackfillRepository,
+)
 
 logger = logging.getLogger("scripts.backfill_embeddings")
 
@@ -49,7 +50,7 @@ logger = logging.getLogger("scripts.backfill_embeddings")
 READ_BATCH_SIZE = 200
 
 
-def _fetch_batch(
+async def _fetch_batch(
     table: str,
     columns: str,
     *,
@@ -57,36 +58,34 @@ def _fetch_batch(
     include_existing: bool,
     batch_size: int,
 ) -> list[tuple]:
-    """Read one keyset-paginated batch, oldest id first."""
-    vector_clause = "" if include_existing else " AND embedding_vector IS NULL"
-    with get_db_connection() as connection:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                f"""
-                SELECT id, {columns}
-                  FROM {table}
-                 WHERE id > %s{vector_clause}
-                 ORDER BY id
-                 LIMIT %s
-                """,
-                (after_id, batch_size),
+    """Read one keyset-paginated batch through the mapped SQLAlchemy entity."""
+    del columns
+    async with session_scope() as session:
+        return await EmbeddingBackfillRepository(session).fetch_batch(
+            table,
+            after_id=after_id,
+            include_existing=include_existing,
+            batch_size=batch_size,
+        )
+
+
+async def _count_pending(table: str, *, include_existing: bool) -> int:
+    async with session_scope() as session:
+        return await EmbeddingBackfillRepository(session).count_pending(
+            table,
+            include_existing=include_existing,
+        )
+
+
+async def _store_embedding(table: str, row_id: int, embedding: list[float]) -> None:
+    """Persist one vector in an isolated native-async transaction."""
+    async with session_scope() as session:
+        async with session.begin():
+            await EmbeddingBackfillRepository(session).store_embedding(
+                table,
+                row_id,
+                embedding,
             )
-            return list(cursor.fetchall())
-        finally:
-            cursor.close()
-
-
-def _count_pending(table: str, *, include_existing: bool) -> int:
-    vector_clause = "" if include_existing else " WHERE embedding_vector IS NULL"
-    with get_db_connection() as connection:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(f"SELECT COUNT(*) FROM {table}{vector_clause}")
-            row = cursor.fetchone()
-            return int(row[0]) if row else 0
-        finally:
-            cursor.close()
 
 
 class BackfillStats:
@@ -105,7 +104,7 @@ class BackfillStats:
         )
 
 
-def _backfill_table(
+async def _backfill_table(
     *,
     label: str,
     table: str,
@@ -118,7 +117,7 @@ def _backfill_table(
     dry_run: bool,
 ) -> BackfillStats:
     stats = BackfillStats(label)
-    pending = _count_pending(table, include_existing=include_existing)
+    pending = await _count_pending(table, include_existing=include_existing)
     logger.info("%s: %s row(s) to process.", label, pending)
     if dry_run or pending == 0:
         return stats
@@ -132,7 +131,7 @@ def _backfill_table(
         if batch_size <= 0:
             break
 
-        rows = _fetch_batch(
+        rows = await _fetch_batch(
             table,
             columns,
             after_id=after_id,
@@ -152,7 +151,9 @@ def _backfill_table(
                 stats.skipped_empty += 1
                 continue
 
-            embedding = generate_embedding(text)
+            # The provider SDK is synchronous; keep it off the event loop.  The
+            # database path itself remains entirely native async SQLAlchemy.
+            embedding = await asyncio.to_thread(generate_embedding, text)
             if embedding is None:
                 stats.failed += 1
                 if not embeddings_available():
@@ -166,10 +167,10 @@ def _backfill_table(
                     return stats
                 continue
 
-            store(row_id, embedding)
+            await store(row_id, embedding)
             stats.embedded += 1
             if sleep_seconds:
-                time.sleep(sleep_seconds)
+                await asyncio.sleep(sleep_seconds)
 
         logger.info("%s: processed %s row(s) so far.", label, processed)
 
@@ -221,7 +222,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+async def _async_main(argv: list[str] | None = None) -> int:
     configure_logging()
     args = _parse_args(argv if argv is not None else sys.argv[1:])
 
@@ -232,7 +233,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    fact_repository = ContextFactRepository()
     targets = []
     if args.target in ("all", "memos"):
         targets.append(
@@ -241,7 +241,9 @@ def main(argv: list[str] | None = None) -> int:
                 "table": "memo_entries",
                 "columns": "title, ai_response",
                 "build_text": _memo_text,
-                "store": lambda row_id, embedding: store_memo_embedding(row_id, embedding),
+                "store": lambda row_id, embedding: _store_embedding(
+                    "memo_entries", row_id, embedding
+                ),
             }
         )
     if args.target in ("all", "facts"):
@@ -251,8 +253,8 @@ def main(argv: list[str] | None = None) -> int:
                 "table": "context_facts",
                 "columns": "fact_type, title, content",
                 "build_text": _fact_text,
-                "store": lambda row_id, embedding: fact_repository.store_embedding(
-                    row_id, embedding
+                "store": lambda row_id, embedding: _store_embedding(
+                    "context_facts", row_id, embedding
                 ),
             }
         )
@@ -260,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Backfilling embeddings with model %s.", EMBEDDING_MODEL)
     failed = 0
     for target in targets:
-        stats = _backfill_table(
+        stats = await _backfill_table(
             label=str(target["label"]),
             table=str(target["table"]),
             columns=str(target["columns"]),
@@ -278,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Backfill finished with %s failed row(s); re-run to retry them.", failed)
         return 1
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return asyncio.run(_async_main(argv))
 
 
 if __name__ == "__main__":

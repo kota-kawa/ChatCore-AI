@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.prompt_share.prompt_share_api import add_like, remove_like
 from tests.helpers.request_helpers import build_request
@@ -49,7 +49,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
 
         # いいね追加処理が呼び出されないことをモックで確認
         # Verify that the DB helper is not called using mocks
-        with patch("blueprints.prompt_share.prompt_share_api._add_prompt_like_for_user") as mock_add:
+        service = MagicMock()
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service) as service_factory:
             response = asyncio.run(add_like(request))
 
         # 400ステータスとエラーメッセージ、およびDB処理が呼ばれなかったことを検証
@@ -57,7 +58,7 @@ class PromptLikeApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "必要なフィールドが不足しています")
-        mock_add.assert_not_called()
+        service_factory.assert_not_called()
 
     # 正常に「いいね」を追加できた場合に、201ステータスと更新されたステータス情報を返すことを検証します。
     # Verify that successfully adding a like returns a 201 status and the updated status payload.
@@ -68,10 +69,11 @@ class PromptLikeApiTestCase(unittest.TestCase):
 
         # いいね登録の戻り値をモック
         # Mock the helper response for adding a like
-        with patch(
-            "blueprints.prompt_share.prompt_share_api._add_prompt_like_for_user",
-            return_value=({"message": "いいねしました。", "liked": True}, 201),
-        ) as mock_add:
+        service = MagicMock()
+        service.add_like = AsyncMock(
+            return_value=({"message": "いいねしました。", "liked": True}, 201)
+        )
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
             response = asyncio.run(add_like(request))
 
         # 201ステータスとレスポンス内容、DB処理の呼び出し引数を検証
@@ -80,7 +82,7 @@ class PromptLikeApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertTrue(payload["liked"])
         self.assertEqual(payload["message"], "いいねしました。")
-        mock_add.assert_called_once_with(5, 10)
+        service.add_like.assert_awaited_once_with(user_id=5, prompt_id=10)
 
     # 「いいね」を正常に解除できた場合に、200ステータスと解除成功情報を返すことを検証します。
     # Verify that successfully removing a like returns a 200 status and the updated status payload.
@@ -91,7 +93,9 @@ class PromptLikeApiTestCase(unittest.TestCase):
 
         # いいね削除処理をモック
         # Mock the helper for removing a like
-        with patch("blueprints.prompt_share.prompt_share_api._remove_prompt_like_for_user") as mock_remove:
+        service = MagicMock()
+        service.remove_like = AsyncMock()
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
             response = asyncio.run(remove_like(request))
 
         # 200ステータスとレスポンス内容、DB処理の呼び出し引数を検証
@@ -100,7 +104,7 @@ class PromptLikeApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertFalse(payload["liked"])
         self.assertEqual(payload["message"], "いいねを解除しました。")
-        mock_remove.assert_called_once_with(5, 10)
+        service.remove_like.assert_awaited_once_with(user_id=5, prompt_id=10)
 
 
 if __name__ == "__main__":

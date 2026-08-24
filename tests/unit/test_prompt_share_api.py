@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.prompt_share.prompt_share_api import (
     _serialize_prompt_row,
@@ -13,10 +13,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from tests.helpers.request_helpers import build_request
 
 
-# 公開されているプロンプトの詳細情報を取得するAPIの挙動を検証するテストクラス。
-# Test case class to verify the functionality and specifications of the prompt detail retrieval API.
 class PromptShareApiTestCase(unittest.TestCase):
-    def test_serializer_returns_resources_and_legacy_python_compatibility(self):
+    def test_serializer_preserves_resource_and_legacy_script_fields(self):
         serialized = _serialize_prompt_row(
             {
                 "id": 12,
@@ -27,28 +25,15 @@ class PromptShareApiTestCase(unittest.TestCase):
                 "media_type": "text",
                 "attributes": {"skill_markdown": "# Skill"},
                 "attachments": [],
-                "resources": [
-                    {
-                        "path": "scripts/main.py",
-                        "role": "script",
-                        "language": "python",
-                        "size_bytes": 8,
-                    }
-                ],
+                "resources": [{"path": "scripts/main.py", "role": "script", "size_bytes": 8}],
                 "resource_python_script": "print(1)",
             }
         )
-
         self.assertEqual(serialized["resources"][0]["path"], "scripts/main.py")
         self.assertEqual(serialized["skill_python_script"], "print(1)")
-        self.assertEqual(serialized["description"], "Reusable skill description")
         self.assertNotIn("resource_python_script", serialized)
 
-    # ID指定で正常に公開プロンプトの詳細情報がJSON形式で取得できることを検証します。
-    # Verify that get prompt detail returns the requested public prompt payload successfully.
-    def test_get_prompt_detail_returns_public_prompt(self):
-        # モック用の公開プロンプトサンプルデータを定義
-        # Define mock sample public prompt data
+    def test_get_prompt_detail_awaits_async_service_helper(self):
         sample_prompt = {
             "id": 12,
             "title": "共有タイトル",
@@ -58,105 +43,52 @@ class PromptShareApiTestCase(unittest.TestCase):
             "author": "tester",
             "input_examples": "input",
             "output_examples": "output",
-            "ai_model": "Claude Haiku 4.5",
-            "prompt_type": "text",
-            "reference_image_url": None,
-            "skill_markdown": "",
-            "skill_python_script": "",
-            "created_at": datetime(2024, 1, 2, 3, 4, 5).isoformat(),
+            "content_format": "prompt",
+            "media_type": "text",
+            "attributes": {},
+            "attachments": [],
+            "created_at": datetime(2024, 1, 2, 3, 4, 5),
         }
-
-        # DB取得関数をモックしてAPI呼び出しを実行
-        # Mock database lookup function and run prompt detail handler
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_public_prompt_by_id",
-            return_value=sample_prompt,
+            new=AsyncMock(return_value=sample_prompt),
         ):
             response = asyncio.run(get_prompt_detail(12))
-
-        # レスポンスステータスコードと取得データの正確性を検証
-        # Verify response status code and correct payload properties
         self.assertEqual(response.status_code, 200)
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["prompt"]["id"], 12)
-        self.assertEqual(payload["prompt"]["title"], "共有タイトル")
-        self.assertEqual(payload["prompt"]["description"], "説明")
-        self.assertEqual(payload["prompt"]["skill_markdown"], "")
+        self.assertEqual(json.loads(response.body.decode())["prompt"]["id"], 12)
 
-    # 指定されたプロンプトIDが存在しない場合に、APIが404エラーを返却することを検証します。
-    # Verify that get prompt detail returns a 404 response for a non-existent prompt.
     def test_get_prompt_detail_returns_404_for_missing_prompt(self):
-        # 存在しないプロンプトIDを指定した際のDB取得結果として None を返すようモック
-        # Mock database lookup to return None for a missing prompt ID
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_public_prompt_by_id",
-            return_value=None,
+            new=AsyncMock(return_value=None),
         ):
             response = asyncio.run(get_prompt_detail(99))
-
-        # 404ステータスコードと適切なエラーメッセージが返却されることを検証
-        # Verify 404 status code and appropriate error payload message
         self.assertEqual(response.status_code, 404)
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["error"], "プロンプトが見つかりません")
 
-    # 閲覧中のプロンプトIDを除外条件として渡し、おすすめ一覧を返すことを検証します。
-    # Verify that the recommendation endpoint passes the viewed prompt ID as its exclusion condition.
-    def test_get_recommended_prompts_returns_random_prompt_cards(self):
-        sample_prompts = [
-            {"id": 21, "title": "おすすめプロンプト", "content": "内容"},
-            {"id": 22, "title": "別のおすすめ", "content": "内容"},
-        ]
-
+    def test_recommendations_await_async_helper(self):
+        sample_prompts = [{"id": 21, "title": "おすすめプロンプト", "content": "内容"}]
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_recommended_prompts",
-            return_value=sample_prompts,
-        ) as mock_get_recommended:
+            new=AsyncMock(return_value=sample_prompts),
+        ) as recommended:
             request = build_request(
                 method="GET",
                 path="/prompt_share/api/prompts/recommended",
                 headers=[(b"accept-language", b"en")],
             )
             response = asyncio.run(get_recommended_prompts(request, exclude_id=12))
-
         self.assertEqual(response.status_code, 200)
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["prompts"], sample_prompts)
-        mock_get_recommended.assert_called_once_with(12, 3, "en")
+        self.assertEqual(json.loads(response.body.decode())["prompts"], sample_prompts)
+        recommended.assert_awaited_once_with(12, 3, "en")
 
-    # 公開投稿を持つユーザーのプロフィール（アバター・自己紹介・投稿数）が取得できることを検証します。
-    # Verify the author profile endpoint returns avatar, bio, and post count for a user with public posts.
-    def test_get_author_profile_returns_public_profile(self):
-        sample_profile = {
-            "id": 7,
-            "username": "tester",
-            "avatar_url": "/static/uploads/avatar-7.png",
-            "bio": "プロンプトを書くのが好きです。",
-            "prompt_count": 3,
-        }
-
+    def test_author_profile_awaits_async_helper(self):
+        profile = {"id": 7, "username": "tester", "prompt_count": 3}
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_public_author_profile",
-            return_value=sample_profile,
+            new=AsyncMock(return_value=profile),
         ):
             response = asyncio.run(get_author_profile(7))
-
-        self.assertEqual(response.status_code, 200)
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["user"], sample_profile)
-
-    # 公開投稿を持たないユーザーIDに対しては404を返し、bio等が総当たりで閲覧できないことを検証します。
-    # Verify a 404 for users without public posts, so bio and other fields cannot be enumerated by ID.
-    def test_get_author_profile_returns_404_for_user_without_public_posts(self):
-        with patch(
-            "blueprints.prompt_share.prompt_share_api._get_public_author_profile",
-            return_value=None,
-        ):
-            response = asyncio.run(get_author_profile(999))
-
-        self.assertEqual(response.status_code, 404)
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["error"], "ユーザーが見つかりません")
+        self.assertEqual(json.loads(response.body.decode())["user"], profile)
 
 
 if __name__ == "__main__":

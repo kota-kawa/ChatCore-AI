@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
-from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
@@ -42,7 +41,7 @@ async def get_consent_details(request: Request):
     if _current_verified_user_id(request) is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     token = request.query_params.get("request", "")
-    details = await run_blocking(consent_details, token)
+    details = consent_details(token)
     if not details:
         return jsonify({"error": "認可リクエストが無効または期限切れです。"}, status_code=400)
     return jsonify(details)
@@ -62,7 +61,7 @@ async def post_consent(request: Request):
     decision = body.get("decision") if body else None
     if not isinstance(token, str) or decision not in {"approve", "deny"}:
         return jsonify({"error": "認可リクエストが不正です。"}, status_code=400)
-    redirect_url = await run_blocking(complete_consent, token, user_id, decision == "approve")
+    redirect_url = await complete_consent(token, user_id, decision == "approve")
     if not redirect_url:
         return jsonify({"error": "認可リクエストが無効、期限切れ、または利用できません。"}, status_code=400)
     return jsonify({"redirect_url": redirect_url})
@@ -75,7 +74,7 @@ async def get_connections(request: Request):
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
-    connections = await run_blocking(list_connections, user_id)
+    connections = await list_connections(user_id)
     return jsonify({"connections": connections})
 
 
@@ -86,7 +85,7 @@ async def get_clients(request: Request):
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
-    return jsonify(await run_blocking(list_user_clients, user_id))
+    return jsonify(await list_user_clients(user_id))
 
 
 @mcp_oauth_bp.post("/clients", name="mcp_oauth.issue_client")
@@ -116,8 +115,7 @@ async def post_client(request: Request):
     ):
         return jsonify({"error": "OAuthスコープの指定が不正です。"}, status_code=400)
     try:
-        credentials = await run_blocking(
-            issue_user_client,
+        credentials = await issue_user_client(
             user_id,
             label,
             redirect_uri,
@@ -140,7 +138,7 @@ async def delete_client(client_id: str, request: Request):
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
-    revoked = await run_blocking(revoke_user_client, user_id, client_id)
+    revoked = await revoke_user_client(user_id, client_id)
     if not revoked:
         return jsonify({"error": "対象の認証情報が見つかりません。"}, status_code=404)
     return jsonify({"message": "認証情報を削除しました。"})
@@ -159,7 +157,7 @@ async def patch_client(client_id: str, request: Request):
     label = body.get("label") if body else None
     if not isinstance(label, str):
         return jsonify({"error": "認証情報の名前が不正です。"}, status_code=400)
-    updated = await run_blocking(update_user_client_label, user_id, client_id, label)
+    updated = await update_user_client_label(user_id, client_id, label)
     if not updated:
         return jsonify({"error": "対象の認証情報が見つかりません。"}, status_code=404)
     return jsonify({"message": "認証情報の名前を更新しました。"})
@@ -172,7 +170,7 @@ async def delete_connection(grant_id: str, request: Request):
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
-    revoked = await run_blocking(revoke_connection, user_id, grant_id)
+    revoked = await revoke_connection(user_id, grant_id)
     if not revoked:
         return jsonify({"error": "対象の連携が見つかりません。"}, status_code=404)
     return jsonify({"message": "AIサービス連携を解除しました。"})
@@ -191,7 +189,7 @@ async def patch_connection(grant_id: str, request: Request):
     display_name = body.get("display_name") if body else None
     if not isinstance(display_name, str):
         return jsonify({"error": "AIサービスの表示名が不正です。"}, status_code=400)
-    updated = await run_blocking(update_connection_display_name, user_id, grant_id, display_name)
+    updated = await update_connection_display_name(user_id, grant_id, display_name)
     if not updated:
         return jsonify({"error": "対象の連携が見つかりません。"}, status_code=404)
     return jsonify({"message": "AIサービスの表示名を更新しました。"})

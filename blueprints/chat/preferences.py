@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import Request
 
-from services.async_utils import run_blocking
+from services.chat_service import get_user_preferred_locale, update_user_preferred_locale
 from services.i18n import (
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
@@ -14,10 +14,6 @@ from services.i18n import (
     translate,
 )
 from services.locale_middleware import set_locale_cookie
-from services.repositories.user_preferences_repository import (
-    get_user_preferred_locale,
-    update_user_preferred_locale,
-)
 from services.request_models import LocalePreferenceUpdateRequest
 from services.runtime_config import get_session_same_site, is_production_env
 from services.web import jsonify, require_json_dict, validate_payload_model
@@ -45,7 +41,7 @@ async def _load_explicit_locale(request: Request, user_id: int):
     if request.session.get(PREFERRED_LOCALE_LOADED_SESSION_KEY) is True:
         return None
 
-    preferred_locale = await run_blocking(get_user_preferred_locale, user_id)
+    preferred_locale = await get_user_preferred_locale(user_id)
     request.session[PREFERRED_LOCALE_LOADED_SESSION_KEY] = True
     if preferred_locale is not None:
         request.session[PREFERRED_LOCALE_SESSION_KEY] = preferred_locale
@@ -90,7 +86,7 @@ async def update_user_preferences(request: Request):
         return validation_error
 
     try:
-        updated = await run_blocking(update_user_preferred_locale, user_id, payload.locale)
+        updated = await update_user_preferred_locale(user_id, payload.locale)
     except Exception:
         logger.exception("Failed to update user locale preference.")
         return jsonify(

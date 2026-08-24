@@ -6,7 +6,8 @@ jinja2==3.1.6
 python-multipart==0.0.32
 itsdangerous==2.2.0
 werkzeug==3.1.8
-psycopg2-binary==2.9.12
+psycopg==3.3.4
+psycopg-binary==3.3.4
 SQLAlchemy==2.0.51
 alembic==1.18.5
 google-auth==2.55.2

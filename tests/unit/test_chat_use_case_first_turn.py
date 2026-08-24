@@ -1,8 +1,9 @@
 import asyncio
 import json
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from starlette.responses import JSONResponse
 
@@ -71,9 +72,13 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
 
         # 依存関係モックオブジェクトの作成
         # Create mocked dependency container for the chat post usecase
-        submitted_context_checks = Mock(
-            side_effect=lambda task, *args, **kwargs: task(*args, **kwargs)
-        )
+        def submit_background_task(task, *args, **kwargs):
+            # _run_async_callback owns an event loop, so execute it in a worker thread just
+            # like the production background executor instead of nesting asyncio.run().
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                return executor.submit(task, *args, **kwargs).result()
+
+        submitted_context_checks = Mock(side_effect=submit_background_task)
         deps = ChatPostUseCaseDependencies(
             cleanup_ephemeral_chats=Mock(),
             require_json_dict=require_json_dict,
@@ -111,7 +116,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             build_user_profile_prompt=Mock(return_value=None),
             get_room_summary=Mock(return_value={"summary": "should not load"}),
             list_room_memory_facts=Mock(return_value=["should not load"]),
-            remember_facts_from_message=Mock(return_value=["remembered fact"]),
+            remember_facts_from_message=AsyncMock(return_value=["remembered fact"]),
             rename_chat_room_if_current_title_in=Mock(return_value=False),
             load_project_context=Mock(return_value=None),
             build_context_messages=build_context_messages,
@@ -156,7 +161,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 "services.chat_use_case.maybe_augment_messages_with_web_search",
                 side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
             ),
-            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
+            patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             response = asyncio.run(
                 use_case.execute(
@@ -192,9 +197,9 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         # 記憶抽出と文脈候補抽出の2件がバックグラウンドへ回されること
         # Both memory extraction and context-candidate extraction are backgrounded
         self.assertEqual(submitted_context_checks.call_count, 2)
-        self.assertIs(
-            submitted_context_checks.call_args_list[0].args[0],
-            deps.remember_facts_from_message,
+        self.assertEqual(
+            submitted_context_checks.call_args_list[0].args[0].__name__,
+            "_run_async_callback",
         )
         deps.schedule_context_extraction.assert_called_once_with(
             42,
@@ -208,13 +213,15 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         # Each eligibility gate independently prevents an extraction LLM task.
         deps.schedule_context_extraction.reset_mock()
         deps.should_extract_context.return_value = False
-        use_case._maybe_schedule_context_extraction(
-            user_id=42,
-            room_mode="normal",
-            chat_room_id="room-1",
-            assistant_message_id=2,
-            user_message=user_message,
-            assistant_response="assistant reply",
+        asyncio.run(
+            use_case._maybe_schedule_context_extraction(
+                user_id=42,
+                room_mode="normal",
+                chat_room_id="room-1",
+                assistant_message_id=2,
+                user_message=user_message,
+                assistant_response="assistant reply",
+            )
         )
         deps.schedule_context_extraction.assert_not_called()
 
@@ -236,13 +243,15 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         deps.schedule_context_extraction.assert_not_called()
 
         deps.should_extract_context.side_effect = RuntimeError("settings unavailable")
-        use_case._maybe_schedule_context_extraction(
-            user_id=42,
-            room_mode="normal",
-            chat_room_id="room-1",
-            assistant_message_id=2,
-            user_message=user_message,
-            assistant_response="assistant reply",
+        asyncio.run(
+            use_case._maybe_schedule_context_extraction(
+                user_id=42,
+                room_mode="normal",
+                chat_room_id="room-1",
+                assistant_message_id=2,
+                user_message=user_message,
+                assistant_response="assistant reply",
+            )
         )
         deps.logger.warning.assert_any_call(
             "Failed to schedule context extraction for chat room %s.",
@@ -253,13 +262,15 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         deps.should_extract_context.side_effect = None
         deps.should_extract_context.return_value = True
         deps.schedule_context_extraction.side_effect = RuntimeError("executor unavailable")
-        use_case._maybe_schedule_context_extraction(
-            user_id=42,
-            room_mode="normal",
-            chat_room_id="room-1",
-            assistant_message_id=2,
-            user_message=user_message,
-            assistant_response="assistant reply",
+        asyncio.run(
+            use_case._maybe_schedule_context_extraction(
+                user_id=42,
+                room_mode="normal",
+                chat_room_id="room-1",
+                assistant_message_id=2,
+                user_message=user_message,
+                assistant_response="assistant reply",
+            )
         )
         deps.logger.warning.assert_any_call(
             "Failed to schedule context extraction for chat room %s.",

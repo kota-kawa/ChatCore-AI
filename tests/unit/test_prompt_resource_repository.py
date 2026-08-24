@@ -1,100 +1,70 @@
-import hashlib
 import unittest
+from unittest.mock import AsyncMock, MagicMock
 
+from services.models import PromptResource
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.request_models import SkillResourceInput
 
 
-class FakeCursor:
-    def __init__(self, *, rows=None, row=None):
-        self.executed = []
-        self.rows = rows or []
-        self.row = row
-        self.closed = False
+class _ScalarResult:
+    def __init__(self, values):
+        self._values = values
 
-    def execute(self, sql, params=None):
-        self.executed.append((" ".join(sql.split()), params))
+    def scalars(self):
+        return self
 
-    def fetchall(self):
-        return self.rows
+    def all(self):
+        return self._values
 
-    def fetchone(self):
-        return self.row
-
-    def close(self):
-        self.closed = True
+    def scalar_one_or_none(self):
+        return self._values[0] if self._values else None
 
 
-class FakeConnection:
-    def __init__(self, cursor):
-        self.db_cursor = cursor
-        self.closed = False
-
-    def cursor(self, *args, **kwargs):
-        return self.db_cursor
-
-    def close(self):
-        self.closed = True
-
-
-class PromptResourceRepositoryTestCase(unittest.TestCase):
-    def setUp(self):
-        self.repository = PromptResourceRepository()
-
-    def test_insert_many_records_utf8_size_digest_and_order(self):
-        cursor = FakeCursor()
+class PromptResourceRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_insert_many_uses_orm_and_preserves_digest_order(self):
+        session = AsyncMock()
+        session.add_all = MagicMock()
+        repository = PromptResourceRepository()
         resources = [
             SkillResourceInput(path="scripts/a.py", role="script", content="あ"),
             SkillResourceInput(path="references/a.md", role="reference", content="# A"),
         ]
 
-        self.repository.insert_many(cursor, 9, resources)
+        await repository.insert_many(session, 9, resources)
 
-        self.assertEqual(len(cursor.executed), 2)
-        first_params = cursor.executed[0][1]
-        self.assertEqual(first_params[0:6], (9, "scripts/a.py", "script", "python", "text/x-python", "あ"))
-        self.assertEqual(first_params[6], 3)
-        self.assertEqual(first_params[7], hashlib.sha256("あ".encode("utf-8")).hexdigest())
-        self.assertEqual(first_params[8], 0)
-        self.assertEqual(cursor.executed[1][1][8], 1)
+        rows = session.add_all.call_args.args[0]
+        self.assertEqual(len(rows), 2)
+        self.assertIsInstance(rows[0], PromptResource)
+        self.assertEqual(rows[0].prompt_id, 9)
+        self.assertEqual(rows[0].size_bytes, 3)
+        self.assertEqual(rows[0].sort_order, 0)
+        self.assertEqual(rows[1].sort_order, 1)
+        session.flush.assert_awaited_once()
 
-    def test_replace_deletes_before_inserting(self):
-        cursor = FakeCursor()
-        self.repository.replace_for_prompt(
-            cursor,
-            5,
-            [SkillResourceInput(path="config/settings.json", role="config", content="{}")],
-        )
+    async def test_replace_deletes_then_inserts_inside_same_session(self):
+        session = AsyncMock()
+        session.add_all = MagicMock()
+        repository = PromptResourceRepository()
+        resource = SkillResourceInput(path="config/settings.json", role="config", content="{}")
 
-        self.assertIn("DELETE FROM prompt_resources", cursor.executed[0][0])
-        self.assertIn("INSERT INTO prompt_resources", cursor.executed[1][0])
+        await repository.replace_for_prompt(session, 5, [resource])
 
-    def test_list_and_get_map_text_content_to_content(self):
-        row = {
-            "id": 1,
-            "prompt_id": 3,
-            "path": "scripts/run.py",
-            "content": "print(1)",
-        }
-        list_cursor = FakeCursor(rows=[row])
-        list_connection = FakeConnection(list_cursor)
-        self.assertEqual(
-            self.repository.list_for_prompt(3, connection=list_connection),
-            [row],
-        )
-        self.assertFalse(list_connection.closed)
+        session.execute.assert_awaited_once()
+        self.assertEqual(session.add_all.call_args.args[0][0].prompt_id, 5)
+        session.flush.assert_awaited_once()
 
-        get_cursor = FakeCursor(row=row)
-        get_connection = FakeConnection(get_cursor)
-        self.assertEqual(
-            self.repository.get_for_prompt(
-                3,
-                "scripts/run.py",
-                connection=get_connection,
-            ),
-            row,
-        )
-        self.assertIn("lower(path) = lower(%s)", get_cursor.executed[0][0])
+    async def test_list_and_get_map_text_content_to_public_content_key(self):
+        first = PromptResource(id=1, prompt_id=3, path="scripts/run.py", role="script", text_content="print(1)", language="python", media_type="text/x-python", size_bytes=8, sort_order=0)
+        session = AsyncMock()
+        session.execute.side_effect = [_ScalarResult([first]), _ScalarResult([first])]
+        repository = PromptResourceRepository()
+
+        listed = await repository.list_for_prompt(session, 3)
+        fetched = await repository.get_for_prompt(session, 3, "SCRIPTS/run.py")
+
+        self.assertEqual(listed[0]["content"], "print(1)")
+        self.assertEqual(fetched["path"], "scripts/run.py")
+        self.assertEqual(session.execute.await_count, 2)
 
 
 if __name__ == "__main__":

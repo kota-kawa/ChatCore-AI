@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import inspect
 import logging
 import re
 import unicodedata
@@ -248,7 +250,7 @@ def schedule_context_extraction(
     assistant_response: str,
     locale: Any = None,
     extractor: Callable[..., list[dict[str, Any]]] | None = None,
-    store_candidates: Callable[..., int] | None = None,
+    store_candidates: Callable[..., Any] | None = None,
 ) -> None:
     """Submit extraction without delaying or breaking the completed chat response."""
     source_ref = f"chat:{room_id}:message:{assistant_message_id}"
@@ -266,7 +268,9 @@ def schedule_context_extraction(
                 )
 
                 store = store_extracted_candidates
-            store(user_id, candidates=candidates, source_ref=source_ref)
+            result = store(user_id, candidates=candidates, source_ref=source_ref)
+            if inspect.isawaitable(result):
+                asyncio.run(result)
         except Exception:
             logger.warning(
                 "Failed to extract personal context candidates from chat turn.",

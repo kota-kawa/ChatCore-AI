@@ -1,5 +1,6 @@
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
 
@@ -374,11 +375,12 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         # English: Mock the memo fetch API call
         with patch(
             "blueprints.chat.tasks.fetch_memo_detail",
+            new_callable=AsyncMock,
             return_value={"title": "議事録", "ai_response": '"決定事項: リリース"'},
         ) as mock_fetch:
-            context = _build_ai_agent_memo_context(7, 12)
+            context = asyncio.run(_build_ai_agent_memo_context(7, 12))
 
-        mock_fetch.assert_called_once_with(7, 12)
+        mock_fetch.assert_awaited_once_with(7, 12)
         self.assertIn("議事録", context)
         self.assertIn("決定事項: リリース", context)
 

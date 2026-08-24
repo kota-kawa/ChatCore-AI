@@ -40,9 +40,9 @@ class McpContentToolTestCase(unittest.TestCase):
                 new=AsyncMock(),
             ),
             patch(
-                "services.mcp_tools.shared_content.run_blocking",
+                "services.mcp_tools.shared_content.SharedContentService.list_public_content",
                 new=AsyncMock(return_value=page),
-            ) as run_blocking,
+            ) as list_content,
         ):
             result = asyncio.run(
                 server.call_tool(
@@ -53,8 +53,8 @@ class McpContentToolTestCase(unittest.TestCase):
 
         structured = result[1]
         self.assertEqual(structured["has_next"], False)
-        self.assertEqual(run_blocking.call_args.kwargs["query"], "skill")
-        self.assertEqual(run_blocking.call_args.kwargs["content_format"], "skill")
+        self.assertEqual(list_content.call_args.kwargs["query"], "skill")
+        self.assertEqual(list_content.call_args.kwargs["content_format"], "skill")
 
     def test_publish_skill_uses_resources_as_canonical_input(self):
         server = self._server()
@@ -121,7 +121,7 @@ class McpContentToolTestCase(unittest.TestCase):
                 new=AsyncMock(),
             ),
             patch(
-                "services.mcp_tools.memos.run_blocking",
+                "services.mcp_tools.memos.get_memo",
                 new=AsyncMock(return_value=memo),
             ),
         ):
@@ -163,7 +163,7 @@ class McpContentToolTestCase(unittest.TestCase):
                 new=AsyncMock(),
             ),
             patch(
-                "services.mcp_tools.shared_content.run_blocking",
+                "services.mcp_tools.shared_content.SharedContentService.get_public_content",
                 new=AsyncMock(return_value=detail),
             ),
         ):
@@ -202,7 +202,7 @@ class McpContentToolTestCase(unittest.TestCase):
                 new=AsyncMock(),
             ),
             patch(
-                "services.mcp_tools.shared_content.run_blocking",
+                "services.mcp_tools.shared_content.SharedContentService.list_public_skill_resources",
                 new=AsyncMock(return_value=resources),
             ),
         ):
@@ -236,9 +236,9 @@ class McpContentToolTestCase(unittest.TestCase):
                 new=AsyncMock(),
             ),
             patch(
-                "services.mcp_tools.shared_content.run_blocking",
+                "services.mcp_tools.shared_content.SharedContentService.get_public_skill_resource",
                 new=AsyncMock(return_value=resource),
-            ) as run_blocking,
+            ) as get_resource,
         ):
             result = asyncio.run(
                 server.call_tool(
@@ -257,8 +257,8 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(structured["total_characters"], 10)
         self.assertEqual(structured["next_offset"], 7)
         self.assertEqual(
-            run_blocking.call_args.args[1:],
-            (8, "references/api.md"),
+            get_resource.call_args.args[1:],
+            ("references/api.md",),
         )
 
 

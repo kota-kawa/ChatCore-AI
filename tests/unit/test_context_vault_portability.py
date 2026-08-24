@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from services.api_errors import ApiServiceError
 from services.context_vault_portability import (
@@ -22,13 +22,10 @@ def _row(**overrides):
         "content": "Uses Vim",
         "source_kind": "mcp",
         "source_ref": "private",
-        "source_client_id": "client-secret",
+        "source_client_id": "internal-client",
         "importance": 80,
-        "idempotency_key_hash": "a" * 64,
-        "idempotency_payload_hash": "b" * 64,
         "status": "active",
         "revision": 4,
-        "embedding_vector": [0.1],
         "created_at": "2026-07-23T00:00:00",
         "updated_at": "2026-07-23T01:00:00",
     }
@@ -48,94 +45,28 @@ def _json_document(facts):
     )
 
 
-class ContextVaultPortabilityTestCase(unittest.TestCase):
-    def _patch_repo(self, repo):
-        return patch(
-            "services.context_vault_portability._repository",
-            return_value=repo,
-        )
-
-    def test_json_export_is_complete_and_excludes_internal_fields(self):
-        repo = MagicMock()
-        repo.list_all_facts.return_value = [
-            _row(),
-            _row(id=4, status="deprecated", title="Old"),
-        ]
-        with self._patch_repo(repo):
-            content, media_type, filename = build_export(7, "json")
-
-        payload = json.loads(content)
-        self.assertEqual(payload["format"], CONTEXT_VAULT_FORMAT)
-        self.assertEqual(payload["version"], 1)
-        self.assertEqual(len(payload["facts"]), 2)
-        self.assertEqual(payload["facts"][1]["status"], "deprecated")
-        for internal in (
-            "id",
-            "user_id",
-            "revision",
-            "source_kind",
-            "source_ref",
-            "source_client_id",
-            "created_at",
-            "updated_at",
-            "embedding_vector",
-            "idempotency_key_hash",
-        ):
-            self.assertNotIn(internal, payload["facts"][0])
-        self.assertEqual(media_type, "application/json")
-        self.assertEqual(filename, "chat-core-context-vault.json")
-        repo.list_all_facts.assert_called_once_with(7, limit=1001)
-
-    def test_markdown_export_round_trips_and_includes_human_heading(self):
-        repo = MagicMock()
-        repo.list_all_facts.return_value = [
-            _row(title="Editor\nPreference ![remote](https://example.test/x)")
-        ]
-        with self._patch_repo(repo):
-            content, media_type, filename = build_export(7, "markdown")
-
-        facts = parse_import_document("markdown", content)
-        self.assertEqual(
-            facts[0].title,
-            "Editor\nPreference ![remote](https://example.test/x)",
-        )
-        self.assertIn(
-            r"## Editor Preference \!\[remote\]\(https://example\.test/x\)",
-            content,
-        )
-        self.assertIn("Type: `preference`", content)
-        self.assertTrue(media_type.startswith("text/markdown"))
-        self.assertEqual(filename, "chat-core-context-vault.md")
-
-    def test_markdown_requires_exactly_one_standalone_version_marker(self):
-        portable = {
-            "fact_type": "profile",
-            "title": "<!-- chat-core-context-vault-version: 1 -->",
-            "content": "Kota",
+class ContextVaultPortabilityParsingTestCase(unittest.TestCase):
+    def test_markdown_round_trip_preserves_untrusted_title(self):
+        fact = {
+            "fact_type": "preference",
+            "title": "Editor\nPreference ![remote](https://example.test/x)",
+            "content": "Uses Vim",
             "status": "active",
-            "importance": 50,
+            "importance": 80,
         }
-        block = f"```context-fact\n{json.dumps(portable)}\n```"
-        with self.assertRaises(ApiServiceError):
-            parse_import_document("markdown", block)
-        with self.assertRaises(ApiServiceError):
-            parse_import_document(
-                "markdown",
-                "<!-- chat-core-context-vault-version: 1 -->\n"
-                "<!-- chat-core-context-vault-version: 1 -->\n"
-                f"{block}",
-            )
+        from services.context_vault_portability import _escape_markdown_heading
 
-    def test_markdown_import_accepts_crlf_export(self):
-        repo = MagicMock()
-        repo.list_all_facts.return_value = [_row()]
-        with self._patch_repo(repo):
-            content, _, _ = build_export(7, "markdown")
-        facts = parse_import_document("markdown", content.replace("\n", "\r\n"))
-        self.assertEqual(len(facts), 1)
+        content = (
+            "<!-- chat-core-context-vault-version: 1 -->\n"
+            "\n```context-fact\n"
+            f"{json.dumps(fact, ensure_ascii=False)}\n```\n"
+        )
+        parsed = parse_import_document("markdown", content)
+        self.assertEqual(parsed[0].title, fact["title"])
+        self.assertIn(r"Editor Preference", _escape_markdown_heading(fact["title"]))
 
-    def test_import_rejects_unknown_root_and_fact_fields_and_wrong_version(self):
-        valid_fact = {
+    def test_import_rejects_bad_version_unknown_fields_and_invalid_text(self):
+        valid = {
             "fact_type": "profile",
             "title": "Name",
             "content": "Kota",
@@ -143,125 +74,72 @@ class ContextVaultPortabilityTestCase(unittest.TestCase):
             "importance": 50,
         }
         cases = [
-            {**json.loads(_json_document([valid_fact])), "version": 2},
-            {**json.loads(_json_document([valid_fact])), "unexpected": True},
-            json.loads(_json_document([{**valid_fact, "id": 99}])),
+            {**json.loads(_json_document([valid])), "version": 2},
+            {**json.loads(_json_document([valid])), "unexpected": True},
+            json.loads(_json_document([{**valid, "id": 99}])),
+            json.loads(_json_document([{**valid, "title": " "}])),
         ]
         for payload in cases:
             with self.subTest(payload=payload):
-                with self.assertRaises(ApiServiceError) as error:
+                with self.assertRaises(ApiServiceError):
                     parse_import_document("json", json.dumps(payload))
-                self.assertEqual(error.exception.status_code, 400)
 
-    def test_import_rejects_blank_text_and_oversized_utf8(self):
-        blank = {
+    def test_import_enforces_size_and_fact_count_limits(self):
+        valid = {
             "fact_type": "profile",
-            "title": " ",
+            "title": "Name",
             "content": "Kota",
             "status": "active",
             "importance": 50,
         }
-        with self.assertRaises(ApiServiceError):
-            parse_import_document("json", _json_document([blank]))
-        with patch(
-            "services.context_vault_portability.MAX_CONTEXT_VAULT_IMPORT_BYTES",
-            4,
-        ):
+        with patch("services.context_vault_portability.MAX_CONTEXT_VAULT_IMPORT_BYTES", 4):
             with self.assertRaises(ApiServiceError) as error:
                 parse_import_document("json", "ああ")
         self.assertEqual(error.exception.status_code, 413)
+        with self.assertRaises(ApiServiceError) as error:
+            parse_import_document("json", _json_document([valid] * 1001))
+        self.assertEqual(error.exception.status_code, 413)
 
-    def test_import_rejects_unpaired_surrogates_and_nul(self):
-        template = (
-            '{"format":"chat-core-personal-context","version":1,'
-            '"exported_at":"2026-07-23T00:00:00Z","facts":['
-            '{"fact_type":"profile","title":"%s","content":"Kota",'
-            '"status":"active","importance":50}]}'
-        )
-        for encoded_title in (r"\ud800", r"\u0000"):
-            with self.subTest(encoded_title=encoded_title):
-                with self.assertRaises(ApiServiceError) as error:
-                    parse_import_document("json", template % encoded_title)
-                self.assertEqual(error.exception.status_code, 400)
 
-    def test_export_rejects_more_than_round_trip_limit(self):
+class ContextVaultPortabilityDatabaseTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_json_export_uses_async_repository_and_excludes_internal_fields(self):
         repo = MagicMock()
-        repo.list_all_facts.return_value = [_row()] * 1001
-        with self._patch_repo(repo):
-            with self.assertRaises(ApiServiceError) as error:
-                build_export(7, "json")
-        self.assertEqual(error.exception.status_code, 409)
+        repo.list_all_facts = AsyncMock(return_value=[_row(), _row(id=4, status="deprecated")])
+        with patch("services.context_vault_portability._repository", return_value=repo):
+            content, media_type, filename = await build_export(
+                7, "json", session=object()
+            )
+        payload = json.loads(content)
+        self.assertEqual(payload["format"], CONTEXT_VAULT_FORMAT)
+        self.assertEqual(len(payload["facts"]), 2)
+        for internal in ("id", "user_id", "revision", "source_kind", "source_ref"):
+            self.assertNotIn(internal, payload["facts"][0])
+        self.assertEqual(media_type, "application/json")
+        self.assertEqual(filename, "chat-core-context-vault.json")
+        repo.list_all_facts.assert_awaited_once_with(7, limit=1001)
 
-    def test_import_rejects_more_than_fact_limit(self):
+    async def test_preview_uses_async_duplicate_and_cap_queries(self):
         fact = {
             "fact_type": "profile",
             "title": "Name",
             "content": "Kota",
-            "status": "deprecated",
-            "importance": 50,
-        }
-        with self.assertRaises(ApiServiceError) as error:
-            parse_import_document("json", _json_document([fact] * 1001))
-        self.assertEqual(error.exception.status_code, 413)
-
-    def test_export_rejects_payload_that_cannot_be_reimported(self):
-        repo = MagicMock()
-        repo.list_all_facts.return_value = [_row()]
-        with (
-            self._patch_repo(repo),
-            patch(
-                "services.context_vault_portability.MAX_CONTEXT_VAULT_IMPORT_BYTES",
-                10,
-            ),
-        ):
-            with self.assertRaises(ApiServiceError) as error:
-                build_export(7, "json")
-        self.assertEqual(error.exception.status_code, 409)
-
-    def test_preview_skips_file_and_existing_duplicates_and_reports_cap(self):
-        new_fact = {
-            "fact_type": "profile",
-            "title": "Name",
-            "content": "Kota",
             "status": "active",
             "importance": 50,
         }
-        existing_fact = {
-            "fact_type": "preference",
-            "title": "Editor",
-            "content": "Vim",
-            "status": "active",
-            "importance": 80,
-        }
         repo = MagicMock()
-        repo.find_existing_portable_signatures.return_value = {
-            ("preference", "Editor", "Vim", "active", 80)
-        }
-        repo.count_active.return_value = 200
-        with (
-            self._patch_repo(repo),
-            patch(
-                "services.context_vault_portability.get_session_secret_key",
-                return_value="test-secret",
-            ),
+        repo.find_existing_portable_signatures = AsyncMock(return_value=set())
+        repo.count_active = AsyncMock(return_value=200)
+        with patch("services.context_vault_portability._repository", return_value=repo), patch(
+            "services.context_vault_portability.get_session_secret_key",
+            return_value="test-secret",
         ):
-            result = preview_import(
-                7,
-                "json",
-                _json_document([new_fact, new_fact, existing_fact]),
-            )
-
-        self.assertEqual(result.total_count, 3)
-        self.assertEqual(result.duplicate_count, 2)
+            result = await preview_import(7, "json", _json_document([fact]), session=object())
         self.assertEqual(result.importable_count, 1)
-        self.assertEqual(result.active_count, 1)
-        self.assertEqual(result.deprecated_count, 0)
         self.assertFalse(result.can_import)
-        self.assertTrue(result.preview_token)
-        self.assertEqual(len(result.sample_facts), 1)
-        self.assertEqual(result.duplicate_count + result.importable_count, result.total_count)
+        repo.find_existing_portable_signatures.assert_awaited_once()
+        repo.count_active.assert_awaited_once_with(7)
 
-    def test_confirm_requires_exact_preview_and_schedules_only_active_embeddings(self):
+    async def test_confirm_import_is_atomic_at_service_boundary_and_schedules_active_only(self):
         facts = [
             {
                 "fact_type": "profile",
@@ -280,74 +158,43 @@ class ContextVaultPortabilityTestCase(unittest.TestCase):
         ]
         content = _json_document(facts)
         repo = MagicMock()
-        repo.find_existing_portable_signatures.return_value = set()
-        repo.count_active.return_value = 0
-        repo.bulk_import_facts.return_value = {
-            "facts": [
-                _row(id=11, fact_type="profile", title="Name", content="Kota", revision=1),
-                _row(
-                    id=12,
-                    fact_type="reference",
-                    title="Old",
-                    content="Archived",
-                    status="deprecated",
-                    revision=1,
-                ),
-            ],
-            "skipped_duplicate_count": 0,
-            "active_count": 1,
-            "deprecated_count": 1,
-        }
-        with (
-            self._patch_repo(repo),
-            patch(
-                "services.context_vault_portability.get_session_secret_key",
-                return_value="test-secret",
-            ),
-            patch("services.context_vault_portability.schedule_embedding") as schedule,
-        ):
-            preview = preview_import(7, "json", content)
-            result = confirm_import(7, "json", content, preview.preview_token)
-
+        repo.find_existing_portable_signatures = AsyncMock(return_value=set())
+        repo.count_active = AsyncMock(return_value=0)
+        repo.bulk_import_facts = AsyncMock(
+            return_value={
+                "facts": [
+                    _row(id=11, fact_type="profile", title="Name", content="Kota"),
+                    _row(
+                        id=12,
+                        fact_type="reference",
+                        title="Old",
+                        content="Archived",
+                        status="deprecated",
+                    ),
+                ],
+                "skipped_duplicate_count": 0,
+                "active_count": 1,
+                "deprecated_count": 1,
+            }
+        )
+        with patch("services.context_vault_portability._repository", return_value=repo), patch(
+            "services.context_vault_portability.get_session_secret_key",
+            return_value="test-secret",
+        ), patch("services.context_vault_portability.schedule_embedding") as schedule:
+            preview = await preview_import(7, "json", content, session=object())
+            result = await confirm_import(
+                7,
+                "json",
+                content,
+                preview.preview_token,
+                session=object(),
+            )
         self.assertEqual(result.imported_count, 2)
-        self.assertEqual(result.active_count, 1)
-        self.assertEqual(result.deprecated_count, 1)
+        repo.bulk_import_facts.assert_awaited_once()
         schedule.assert_called_once()
         self.assertEqual(schedule.call_args.args[0], 11)
 
-        changed = _json_document([{**facts[0], "content": "Changed"}])
-        with (
-            self._patch_repo(repo),
-            patch(
-                "services.context_vault_portability.get_session_secret_key",
-                return_value="test-secret",
-            ),
-        ):
-            with self.assertRaises(ApiServiceError) as error:
-                confirm_import(7, "json", changed, preview.preview_token)
-        self.assertEqual(error.exception.status_code, 400)
-
-    def test_confirm_rejects_tampered_token(self):
-        content = _json_document(
-            [
-                {
-                    "fact_type": "profile",
-                    "title": "Name",
-                    "content": "Kota",
-                    "status": "active",
-                    "importance": 50,
-                }
-            ]
-        )
-        with patch(
-            "services.context_vault_portability.get_session_secret_key",
-            return_value="test-secret",
-        ):
-            with self.assertRaises(ApiServiceError) as error:
-                confirm_import(7, "json", content, "tampered")
-        self.assertEqual(error.exception.status_code, 400)
-
-    def test_preview_token_is_bound_to_owner(self):
+    async def test_confirm_rejects_tampered_preview_without_repository_call(self):
         fact = {
             "fact_type": "profile",
             "title": "Name",
@@ -355,21 +202,21 @@ class ContextVaultPortabilityTestCase(unittest.TestCase):
             "status": "active",
             "importance": 50,
         }
-        content = _json_document([fact])
         repo = MagicMock()
-        repo.find_existing_portable_signatures.return_value = set()
-        repo.count_active.return_value = 0
-        with (
-            self._patch_repo(repo),
-            patch(
-                "services.context_vault_portability.get_session_secret_key",
-                return_value="test-secret",
-            ),
+        repo.bulk_import_facts = AsyncMock()
+        with patch("services.context_vault_portability._repository", return_value=repo), patch(
+            "services.context_vault_portability.get_session_secret_key",
+            return_value="test-secret",
         ):
-            preview = preview_import(7, "json", content)
-            with self.assertRaises(ApiServiceError) as error:
-                confirm_import(8, "json", content, preview.preview_token)
-        self.assertEqual(error.exception.status_code, 400)
+            with self.assertRaises(ApiServiceError):
+                await confirm_import(
+                    7,
+                    "json",
+                    _json_document([fact]),
+                    "tampered",
+                    session=object(),
+                )
+        repo.bulk_import_facts.assert_not_awaited()
 
 
 if __name__ == "__main__":

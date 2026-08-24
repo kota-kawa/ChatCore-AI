@@ -1,195 +1,51 @@
+from __future__ import annotations
+
 import os
 import unittest
 from unittest.mock import patch
 
-import services.db as db
+import services.db as database
 
 
-# 日本語: テスト用の擬似Dummy Connectionクラスです。
-# English: Mock Dummy Connection class for testing.
-class DummyConnection:
-    def __init__(self):
-        self.cursor_args = None
-        self.cursor_kwargs = None
-        self.rollback_called = False
-        self.closed = 0
+class AsyncEngineConfigurationTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        database._engine = None
+        database._session_factory = None
 
-    class _DummyCursor:
-        def __init__(self, parent, args, kwargs):
-            self.parent = parent
-            self.parent.cursor_args = args
-            self.parent.cursor_kwargs = kwargs
-        def execute(self, *args, **kwargs):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, _exc_type, _exc_val, _exc_tb):
-            pass
+    def test_database_url_is_built_for_psycopg_three(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "POSTGRES_USER": "user",
+                "POSTGRES_PASSWORD": "password",
+                "POSTGRES_DB": "chatcore",
+                "POSTGRES_HOST": "db",
+                "POSTGRES_PORT": "5432",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                database.resolve_database_url(),
+                "postgresql+psycopg://user:password@db:5432/chatcore",
+            )
 
-    # 日本語: 後処理を実行します。
-    # English: Perform cleanup operations.
-    def cursor(self, *args, **kwargs):
-        return self._DummyCursor(self, args, kwargs)
+    def test_engine_has_a_bounded_async_pool(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": "postgresql+psycopg://user:password@db/chatcore",
+                "DB_POOL_MAX_CONN": "8",
+                "DB_POOL_ACQUIRE_TIMEOUT_SECONDS": "4.5",
+            },
+            clear=True,
+        ), patch("services.db.create_async_engine", return_value=object()) as create_engine:
+            database.get_engine()
 
-    def rollback(self):
-        self.rollback_called = True
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def close(self):
-        self.closed = 1
-
-
-# 日本語: テスト用の擬似Dummy Threaded Connection Poolクラスです。
-# English: Mock Dummy Threaded Connection Pool class for testing.
-class DummyThreadedConnectionPool:
-    def __init__(self, connection, minconn, maxconn, kwargs):
-        self._connection = connection
-        self.minconn = minconn
-        self.maxconn = maxconn
-        self.kwargs = kwargs
-        self.getconn_calls = 0
-        self.putconn_calls = []
-        self.closeall_calls = 0
-
-    def getconn(self):
-        self.getconn_calls += 1
-        return self._connection
-
-    def putconn(self, connection, close=False):
-        self.putconn_calls.append((connection, close))
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def closeall(self):
-        self.closeall_calls += 1
-
-
-# 日本語: テスト用の擬似Dummy Pool Factoryクラスです。
-# English: Mock Dummy Pool Factory class for testing.
-class DummyPoolFactory:
-    def __init__(self, connection):
-        self._connection = connection
-        self.instances = []
-
-    def __call__(self, minconn, maxconn, **kwargs):
-        pool = DummyThreadedConnectionPool(self._connection, minconn, maxconn, kwargs)
-        self.instances.append(pool)
-        return pool
-
-
-# 日本語: テスト用の擬似Dummy Extrasクラスです。
-# English: Mock Dummy Extras class for testing.
-class DummyExtras:
-    # 日本語: テスト用のReal Dict Cursorクラスです。
-# English: Real Dict Cursor class for testing.
-    class RealDictCursor:
-        pass
-
-
-# 日本語: D B Configの機能や仕様を検証するテストクラスです。
-# English: Test case class to verify the functionality and specifications of D B Config.
-class DBConfigTestCase(unittest.TestCase):
-    def setUp(self):
-        db.close_db_pool()
-
-    def tearDown(self):
-        db.close_db_pool()
-
-    # 日本語: poolを使用する場合、getDBconnectionusesPostgreSQLenvことを検証します。
-    # English: Verify that get db connection uses postgres env with pool.
-    def test_get_db_connection_uses_postgres_env_with_pool(self):
-        connection = DummyConnection()
-        pool_factory = DummyPoolFactory(connection)
-        env = {
-            "POSTGRES_HOST": "pg-host",
-            "POSTGRES_USER": "pg-user",
-            "POSTGRES_PASSWORD": "pg-pass",
-            "POSTGRES_DB": "pg-db",
-            "POSTGRES_PORT": "5555",
-            "DB_POOL_MIN_CONN": "2",
-            "DB_POOL_MAX_CONN": "8",
-        }
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, env, clear=True), patch.object(
-            db, "ThreadedConnectionPool", pool_factory
-        ), patch.object(db, "psycopg2", object()), patch.object(db, "extras", DummyExtras):
-            proxy = db.get_db_connection()
-            cursor = proxy.cursor(dictionary=True)
-            proxy.close()
-
-        self.assertIsInstance(cursor, DummyConnection._DummyCursor)
-        self.assertEqual(len(pool_factory.instances), 1)
-        pool = pool_factory.instances[0]
-        self.assertEqual(pool.kwargs["host"], "pg-host")
-        self.assertEqual(pool.kwargs["user"], "pg-user")
-        self.assertEqual(pool.kwargs["password"], "pg-pass")
-        self.assertEqual(pool.kwargs["dbname"], "pg-db")
-        self.assertEqual(pool.kwargs["port"], 5555)
-        self.assertEqual(pool.minconn, 2)
-        self.assertEqual(pool.maxconn, 8)
-        self.assertEqual(connection.cursor_kwargs["cursor_factory"], DummyExtras.RealDictCursor)
-        self.assertTrue(connection.rollback_called)
-        self.assertEqual(len(pool.putconn_calls), 2)
-        self.assertFalse(pool.putconn_calls[-1][1])
-
-    # 日本語: getDBconnectionreusesexistingpoolことを検証します。
-    # English: Verify that get db connection reuses existing pool.
-    def test_get_db_connection_reuses_existing_pool(self):
-        connection = DummyConnection()
-        pool_factory = DummyPoolFactory(connection)
-        env = {
-            "POSTGRES_HOST": "pg-host",
-            "POSTGRES_USER": "pg-user",
-            "POSTGRES_PASSWORD": "pg-pass",
-            "POSTGRES_DB": "pg-db",
-            "POSTGRES_PORT": "5432",
-        }
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, env, clear=True), patch.object(
-            db, "ThreadedConnectionPool", pool_factory
-        ), patch.object(db, "psycopg2", object()), patch.object(db, "extras", DummyExtras):
-            conn1 = db.get_db_connection()
-            conn1.close()
-            conn2 = db.get_db_connection()
-            conn2.close()
-
-        self.assertEqual(len(pool_factory.instances), 1)
-        pool = pool_factory.instances[0]
-        self.assertEqual(pool.getconn_calls, 3)
-        self.assertEqual(len(pool.putconn_calls), 3)
-
-    # 日本語: productionのとき、getDBconnectionusesproductionpoolenvことを検証します。
-    # English: Verify that get db connection uses production pool env when production.
-    def test_get_db_connection_uses_production_pool_env_when_production(self):
-        connection = DummyConnection()
-        pool_factory = DummyPoolFactory(connection)
-        env = {
-            "FASTAPI_ENV": "production",
-            "POSTGRES_HOST": "pg-host",
-            "POSTGRES_USER": "pg-user",
-            "POSTGRES_PASSWORD": "pg-pass",
-            "POSTGRES_DB": "pg-db",
-            "POSTGRES_PORT": "5432",
-            "DB_POOL_MIN_CONN": "1",
-            "DB_POOL_MAX_CONN": "10",
-            "DB_POOL_MIN_CONN_PRODUCTION": "4",
-            "DB_POOL_MAX_CONN_PRODUCTION": "20",
-        }
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, env, clear=True), patch.object(
-            db, "ThreadedConnectionPool", pool_factory
-        ), patch.object(db, "psycopg2", object()), patch.object(db, "extras", DummyExtras):
-            proxy = db.get_db_connection()
-            proxy.close()
-
-        self.assertEqual(len(pool_factory.instances), 1)
-        pool = pool_factory.instances[0]
-        self.assertEqual(pool.minconn, 4)
-        self.assertEqual(pool.maxconn, 20)
+        kwargs = create_engine.call_args.kwargs
+        self.assertEqual(kwargs["pool_size"], 8)
+        self.assertEqual(kwargs["max_overflow"], 0)
+        self.assertEqual(kwargs["pool_timeout"], 4.5)
+        self.assertTrue(kwargs["pool_pre_ping"])
 
 
 if __name__ == "__main__":

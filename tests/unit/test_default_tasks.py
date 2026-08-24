@@ -1,5 +1,7 @@
+import asyncio
 import unittest
-from unittest.mock import patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, patch
 
 from services.default_tasks import (
     CURRENT_SYSTEM_TASK_REVISION,
@@ -10,53 +12,20 @@ from services.default_tasks import (
     load_default_tasks,
     resolve_system_task_key,
 )
-from tests.helpers.db_helpers import TransactionTrackingConnection
+@asynccontextmanager
+async def _session_scope():
+    class _Transaction:
+        async def __aenter__(self):
+            return self
 
+        async def __aexit__(self, _exc_type, _exc, _tb):
+            return False
 
-# 日本語: テスト用の擬似Fake Cursorクラスです。
-# English: Mock Fake Cursor class for testing.
-class FakeCursor:
-    def __init__(self, *, existing_names=None, existing_keys=None):
-        self.existing_names = set(existing_names or [])
-        self.existing_keys = set(existing_keys or [])
-        self.inserted_names = []
-        self.executed_queries = []
-        self._fetchall_result = []
-        self.closed = False
+    class _Session:
+        def begin(self):
+            return _Transaction()
 
-    def execute(self, query, params=None):
-        normalized = " ".join(query.split())
-        self.executed_queries.append((normalized, params))
-
-        # 日本語: 条件に基づいて処理の流れを切り替えます。
-        # English: Switch the execution flow based on the condition.
-        if "SELECT system_task_key, name FROM task_with_examples WHERE user_id IS NULL" in normalized:
-            self._fetchall_result = [
-                (key, name)
-                for key, name in zip(sorted(self.existing_keys), sorted(self.existing_names))
-            ]
-            if not self.existing_keys:
-                self._fetchall_result = [(None, name) for name in sorted(self.existing_names)]
-            return
-
-        # 日本語: 条件に基づいて処理の流れを切り替えます。
-        # English: Switch the execution flow based on the condition.
-        if "INSERT INTO task_with_examples" in normalized:
-            key, _revision, name = params[:3]
-            if key:
-                self.existing_keys.add(key)
-            self.inserted_names.append(name)
-            self.existing_names.add(name)
-
-    def fetchall(self):
-        result = self._fetchall_result
-        self._fetchall_result = []
-        return result
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def close(self):
-        self.closed = True
+    yield _Session()
 
 
 SAMPLE_TASKS = [
@@ -106,82 +75,62 @@ class DefaultTasksTestCase(unittest.TestCase):
     # 日本語: seedinsertsmissingデフォルトtasksことを検証します。
     # English: Verify that seed inserts missing default tasks.
     def test_seed_inserts_missing_default_tasks(self):
-        fake_cursor = FakeCursor(existing_names=[])
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
-            "services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS
+        seed = AsyncMock(return_value=len(SAMPLE_TASKS))
+        with (
+            patch("services.default_tasks.session_scope", new=_session_scope),
+            patch("services.default_tasks.seed_default_tasks", new=seed),
+            patch("services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS),
         ):
-            inserted = ensure_default_tasks_seeded()
+            inserted = asyncio.run(ensure_default_tasks_seeded())
 
         self.assertEqual(inserted, len(SAMPLE_TASKS))
-        self.assertEqual(fake_cursor.inserted_names, ["Task A", "Task B"])
-        self.assertTrue(fake_conn.committed)
-        self.assertFalse(fake_conn.rolled_back)
-        self.assertTrue(fake_cursor.closed)
-        self.assertTrue(fake_conn.closed)
+        seed.assert_awaited_once()
+        self.assertEqual(
+            seed.await_args.args[1][0][2:],
+            ("Task A", "Prompt A", "Rules A", "Skeleton A", "Input A", "Output A", 0),
+        )
 
     # 日本語: デフォルトtasksalreadyexistのとき、seedskipsことを検証します。
     # English: Verify that seed skips when default tasks already exist.
     def test_seed_skips_when_default_tasks_already_exist(self):
-        existing_names = {task["name"] for task in SAMPLE_TASKS}
-        fake_cursor = FakeCursor(existing_names=existing_names)
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
-            "services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS
+        seed = AsyncMock(return_value=0)
+        with (
+            patch("services.default_tasks.session_scope", new=_session_scope),
+            patch("services.default_tasks.seed_default_tasks", new=seed),
+            patch("services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS),
         ):
-            inserted = ensure_default_tasks_seeded()
+            inserted = asyncio.run(ensure_default_tasks_seeded())
 
         self.assertEqual(inserted, 0)
-        self.assertEqual(fake_cursor.inserted_names, [])
-        self.assertFalse(fake_conn.committed)
-        self.assertFalse(fake_conn.rolled_back)
-        self.assertTrue(fake_cursor.closed)
-        self.assertTrue(fake_conn.closed)
+        seed.assert_awaited_once()
 
     def test_seed_prefers_stable_key_over_localized_name(self):
         keyed_tasks = [
             {**SAMPLE_TASKS[0], "system_task_key": "task_a"},
         ]
-        fake_cursor = FakeCursor(existing_names=["Localized A"], existing_keys=["task_a"])
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
-            "services.default_tasks.load_default_tasks", return_value=keyed_tasks
+        seed = AsyncMock(return_value=0)
+        with (
+            patch("services.default_tasks.session_scope", new=_session_scope),
+            patch("services.default_tasks.seed_default_tasks", new=seed),
+            patch("services.default_tasks.load_default_tasks", return_value=keyed_tasks),
         ):
-            inserted = ensure_default_tasks_seeded()
+            inserted = asyncio.run(ensure_default_tasks_seeded())
 
         self.assertEqual(inserted, 0)
+        self.assertEqual(seed.await_args.args[1][0][0], "task_a")
 
     def test_seed_checks_deleted_rows_and_uses_conflict_safe_insert(self):
-        fake_cursor = FakeCursor(existing_names=[])
-        fake_conn = TransactionTrackingConnection(fake_cursor)
-
-        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
-            "services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS[:1]
+        seed = AsyncMock(return_value=1)
+        with (
+            patch("services.default_tasks.session_scope", new=_session_scope),
+            patch("services.default_tasks.seed_default_tasks", new=seed),
+            patch("services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS[:1]),
         ):
-            ensure_default_tasks_seeded()
+            self.assertEqual(asyncio.run(ensure_default_tasks_seeded()), 1)
 
-        select_query = next(
-            query
-            for query, _ in fake_cursor.executed_queries
-            if "SELECT system_task_key, name FROM task_with_examples" in query
-        )
-        insert_query = next(
-            query
-            for query, _ in fake_cursor.executed_queries
-            if "INSERT INTO task_with_examples" in query
-        )
-        self.assertNotIn("deleted_at IS NULL", select_query)
-        self.assertIn("ON CONFLICT DO NOTHING", insert_query)
-        self.assertTrue(
-            any("pg_advisory_xact_lock" in query for query, _ in fake_cursor.executed_queries)
-        )
+        # PostgreSQL-specific advisory locking and ON CONFLICT behavior belong
+        # to the repository boundary, not to this service orchestration test.
+        seed.assert_awaited_once()
 
     def test_customized_system_task_is_not_localized_over_user_content(self):
         task = {

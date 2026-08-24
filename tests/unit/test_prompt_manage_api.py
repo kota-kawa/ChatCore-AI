@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.prompt_share.prompt_manage_api import (
     _serialize_liked_prompt,
@@ -16,41 +16,9 @@ from tests.helpers.request_helpers import build_request
 # いいねしたプロンプトAPIのエンドポイントの挙動や、いいね要素のシリアライズ処理をテストするクラス。
 # Test class to check the behavior of the liked prompts API endpoint and serialization.
 class PromptManageApiTestCase(unittest.TestCase):
-    def test_update_skill_replaces_resources_in_same_transaction(self):
-        class FakeCursor:
-            def __init__(self):
-                self.executed = []
-
-            def execute(self, query, params=None):
-                self.executed.append((query, params))
-
-            def fetchone(self):
-                return (42,)
-
-            def close(self):
-                pass
-
-        class FakeConnection:
-            def __init__(self):
-                self.cursor_value = FakeCursor()
-                self.committed = False
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def cursor(self):
-                return self.cursor_value
-
-            def commit(self):
-                self.committed = True
-
-            def rollback(self):
-                pass
-
-        connection = FakeConnection()
+    def test_update_skill_replaces_resources_through_async_service(self):
+        service = MagicMock()
+        service.update_prompt = AsyncMock(return_value=True)
         payload = PromptUpdateRequest(
             title="Skill",
             category="coding",
@@ -67,22 +35,24 @@ class PromptManageApiTestCase(unittest.TestCase):
             ],
         )
 
-        with (
-            patch(
-                "blueprints.prompt_share.prompt_manage_api.get_db_connection",
-                return_value=connection,
-            ),
-            patch(
-                "blueprints.prompt_share.prompt_manage_api.PromptResourceRepository.replace_for_prompt"
-            ) as replace_resources,
-        ):
-            updated = _update_prompt_for_user(7, 42, payload)
+        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
+            updated = asyncio.run(_update_prompt_for_user(7, 42, payload))
 
         self.assertEqual(updated, 1)
-        self.assertTrue(connection.committed)
-        replace_resources.assert_called_once()
-        self.assertEqual(replace_resources.call_args.args[1], 42)
-        self.assertEqual(replace_resources.call_args.args[2][0].path, "scripts/main.ts")
+        service.update_prompt.assert_awaited_once_with(
+            user_id=7,
+            prompt_id=42,
+            title="Skill",
+            category="coding",
+            content="",
+            description="A skill description",
+            content_format="skill",
+            media_type="text",
+            input_examples="",
+            output_examples="",
+            attributes={"skill_markdown": "# Skill"},
+            resources=payload.resources,
+        )
 
     # いいねしたプロンプト取得APIが、正規化されたJSONレスポンスを返すことを検証します。
     # Verify that the liked prompts API returns a JSON response containing normalized prompt shapes.
@@ -114,7 +84,7 @@ class PromptManageApiTestCase(unittest.TestCase):
 
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_liked_prompts",
-            return_value=sample_entries,
+            new=AsyncMock(return_value=sample_entries),
         ):
             response = asyncio.run(get_liked_prompts(request))
 

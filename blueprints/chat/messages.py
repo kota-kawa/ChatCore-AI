@@ -1,8 +1,9 @@
+import asyncio
 import re
 import json
 import html
 import logging
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from functools import partial
 from typing import Any
 
@@ -18,9 +19,12 @@ from services.attached_files import (
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
-from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
     delete_unanswered_user_messages,
+    fetch_chat_history_page,
+    get_project_context,
+    get_task_prompt_data,
+    get_user_by_id,
     save_message_to_db,
     get_chat_room_messages,
     get_room_web_search_contexts,
@@ -40,7 +44,7 @@ from services.chat_prompt import (
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
-    augment_messages_with_selected_references,
+    augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
@@ -54,7 +58,6 @@ from services.web_search_trace import (
     build_web_search_trace_markdown,
     selected_reference_steps,
 )
-from services.project_service import get_project_context
 from services.generative_ui import (
     build_message_parts_context,
     decide_generative_ui_mode,
@@ -110,7 +113,6 @@ from services.chat_contract import (
     CHAT_HISTORY_PAGE_SIZE_DEFAULT,
     CHAT_HISTORY_PAGE_SIZE_MAX,
 )
-from services.users import get_user_by_id
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -137,14 +139,9 @@ from . import (
 logger = logging.getLogger(__name__)
 
 
-# チャット用リポジトリを取得するヘルパー関数
-# Helper function to retrieve the chat repository instance.
-def _get_chat_repository() -> ChatRepository:
-    """
-    チャットリポジトリのインスタンスを取得します。
-    Retrieves the chat repository instance.
-    """
-    return ChatRepository()
+def _run_async_callback(coroutine_factory: Callable[[], Awaitable[Any]]) -> Any:
+    """Run an async DB callback from the generation worker thread."""
+    return asyncio.run(coroutine_factory())
 
 
 # リクエストから認証制限サービスを解決するヘルパー関数
@@ -315,7 +312,7 @@ def _build_llm_stream_response(
 
 # 返答が付かなかった末尾のユーザー発話を破棄する関数（ルーム自体は残す）
 # Discard the trailing user messages that never got a reply (the room is kept).
-def _discard_unanswered_user_messages(
+async def _discard_unanswered_user_messages(
     chat_room_id: str,
     *,
     user_id: int | None = None,
@@ -327,15 +324,19 @@ def _discard_unanswered_user_messages(
     """
     discarded = False
     if user_id is not None:
-        discarded = delete_unanswered_user_messages(chat_room_id, user_id) or discarded
+        discarded = await delete_unanswered_user_messages(chat_room_id, user_id) or discarded
     if sid is not None:
-        discarded = ephemeral_store.delete_unanswered_user_messages(sid, chat_room_id) or discarded
+        discarded = await run_blocking(
+            ephemeral_store.delete_unanswered_user_messages,
+            sid,
+            chat_room_id,
+        ) or discarded
     return discarded
 
 
 # エラー等で生成に失敗した際、返答が付かなかったユーザー発話を安全に掃除する関数
 # Safely discard the unanswered user messages left behind by a failed generation.
-def _cleanup_unanswered_user_messages(
+async def _cleanup_unanswered_user_messages(
     chat_room_id: str,
     *,
     user_id: int | None = None,
@@ -346,7 +347,7 @@ def _cleanup_unanswered_user_messages(
     Cleans up the user messages of a failed turn. The room is kept so the user can keep chatting.
     """
     try:
-        discarded = _discard_unanswered_user_messages(
+        discarded = await _discard_unanswered_user_messages(
             chat_room_id,
             user_id=user_id,
             sid=sid,
@@ -412,22 +413,6 @@ def _parse_task_launch_message(message: str) -> dict[str, Any] | None:
     return parsed
 
 
-# 特定タスク用のプロンプト定義をDBから取得する関数
-# Fetch prompt-template data for a specific task from the repository.
-def _fetch_prompt_data(
-    task: str,
-    user_id: int | None,
-    task_id: int | None = None,
-) -> dict[str, Any] | None:
-    """
-    特定タスク用のプロンプト定義をDBから取得します。
-    Fetches prompt-template data for a specific task from the repository.
-    """
-    # タスク名に対応するプロンプト定義を取得する
-    # Fetch prompt-template metadata for the selected task.
-    return _get_chat_repository().get_task_prompt_data(task, user_id, task_id)
-
-
 # 特定タスクのプロンプトデータをDBから非同期に読み込む関数
 # Asynchronously load prompt data for a specific task.
 async def _load_task_prompt_data(
@@ -442,10 +427,7 @@ async def _load_task_prompt_data(
     # タスク補助情報の取得失敗ではチャット全体を止めず、ベースプロンプトのみで続行する
     # Do not fail the whole chat request when task metadata lookup fails.
     try:
-        if task_id is None:
-            prompt_data = await run_blocking(_fetch_prompt_data, task, user_id)
-        else:
-            prompt_data = await run_blocking(_fetch_prompt_data, task, user_id, task_id)
+        prompt_data = await get_task_prompt_data(task, user_id, task_id)
     except Exception:
         logger.exception("Failed to load task prompt metadata for task launch: %s", task)
         return None
@@ -472,7 +454,7 @@ async def _load_project_context_for_room(
     if user_id is None or room_mode != "normal":
         return None
     try:
-        project_context = await run_blocking(get_project_context, chat_room_id)
+        project_context = await get_project_context(chat_room_id)
     except Exception:
         logger.warning("Failed to load project context; proceeding without it.")
         return None
@@ -642,7 +624,7 @@ def _ensure_ephemeral_room(sid: str, chat_room_id: str, title: str = "新規チ�
 
 # 認証されたユーザーの対象チャットルームとその所有権・モードを解決する関数
 # Resolve the chat room details, ownership, and mode for authenticated requests.
-def _resolve_authenticated_room_target(
+async def _resolve_authenticated_room_target(
     chat_room_id: str,
     user_id: int,
     forbidden_message: str,
@@ -652,10 +634,10 @@ def _resolve_authenticated_room_target(
     Resolves the chat room details, ownership, and mode for authenticated requests.
     """
     temporary_sid = get_temporary_user_store_key(user_id)
-    if ephemeral_store.room_exists(temporary_sid, chat_room_id):
+    if await run_blocking(ephemeral_store.room_exists, temporary_sid, chat_room_id):
         return "temporary", temporary_sid, None
 
-    owner_result = validate_room_owner(chat_room_id, user_id, forbidden_message)
+    owner_result = await validate_room_owner(chat_room_id, user_id, forbidden_message)
     legacy_response = _legacy_error_response(owner_result)
     if legacy_response is not None:
         return None, None, legacy_response
@@ -668,7 +650,7 @@ def _resolve_authenticated_room_target(
 
 # 指定されたルームIDのチャット履歴（メッセージ配列）を取得する関数
 # Fetch chat messages history for the specified room.
-def _fetch_chat_history(
+async def _fetch_chat_history(
     chat_room_id: str,
     limit: int,
     before_message_id: int | None = None,
@@ -679,7 +661,7 @@ def _fetch_chat_history(
     """
     # API返却向けにチャット履歴をページ単位で整形する
     # Fetch and format paginated chat history for API response.
-    return _get_chat_repository().fetch_chat_history_page(
+    return await fetch_chat_history_page(
         chat_room_id,
         limit,
         before_message_id,
@@ -871,8 +853,7 @@ async def chat_regenerate(
 
     if "user_id" in session:
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームには投稿できません",
@@ -889,8 +870,7 @@ async def chat_regenerate(
             await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            path = await run_blocking(
-                get_active_path,
+            path = await get_active_path(
                 chat_room_id,
                 include_attachment_contents=True,
             )
@@ -945,7 +925,7 @@ async def chat_regenerate(
 
     if user_id is not None:
         try:
-            user = await run_blocking(get_user_by_id, user_id)
+            user = await get_user_by_id(user_id)
             user_profile_prompt = _build_user_profile_prompt(user)
         except Exception:
             logger.warning("Failed to load user profile context for regenerate; proceeding without it.")
@@ -956,12 +936,12 @@ async def chat_regenerate(
 
     if user_id is not None and room_mode == "normal":
         try:
-            summary_payload = await run_blocking(get_room_summary, chat_room_id)
+            summary_payload = await get_room_summary(chat_room_id)
             room_summary = str((summary_payload or {}).get("summary") or "")
         except Exception:
             logger.warning("Failed to load room summary for regenerate; proceeding without it.")
         try:
-            memory_facts = await run_blocking(list_room_memory_facts, chat_room_id)
+            memory_facts = await list_room_memory_facts(chat_room_id)
         except Exception:
             logger.warning("Failed to load memory facts for regenerate; proceeding without them.")
 
@@ -979,7 +959,7 @@ async def chat_regenerate(
     # Load prior-turn search results so regeneration also re-injects them as reference context.
     if user_id is not None and room_mode == "normal":
         prior_web_search_results = deserialize_web_search_results(
-            await run_blocking(get_room_web_search_contexts, chat_room_id)
+            await get_room_web_search_contexts(chat_room_id)
         )
     else:
         prior_web_search_results = extract_prior_web_search_results(all_messages)
@@ -1015,16 +995,13 @@ async def chat_regenerate(
     personal_knowledge_search = selected_references.personal_knowledge
     shared_prompt_search = selected_references.shared_prompt
     selected_reference_trace: list[SelectedReferenceLookupTrace] = []
-    conversation_messages = await run_blocking(
-        partial(
-            augment_messages_with_selected_references,
-            query=selected_reference_query,
-            personal_knowledge_search=personal_knowledge_search,
-            shared_prompt_search=shared_prompt_search,
-            unavailable_sources=selected_references.unavailable_sources,
-            trace_results=selected_reference_trace,
-        ),
+    conversation_messages = await augment_messages_with_selected_references_async(
         conversation_messages,
+        query=selected_reference_query,
+        personal_knowledge_search=personal_knowledge_search,
+        shared_prompt_search=shared_prompt_search,
+        unavailable_sources=selected_references.unavailable_sources,
+        trace_results=selected_reference_trace,
     )
     try:
         ui_mode = await run_blocking(
@@ -1050,23 +1027,29 @@ async def chat_regenerate(
                 message_parts: list[dict[str, Any]] | None = None,
                 web_search_context: list[dict[str, Any]] | None = None,
             ) -> None:
-                save_message_to_db(
-                    chat_room_id,
-                    response,
-                    "assistant",
-                    None,
-                    assistant_parent_id,
-                    message_parts,
-                    None,
-                    web_search_context,
+                _run_async_callback(
+                    lambda: save_message_to_db(
+                        chat_room_id,
+                        response,
+                        "assistant",
+                        None,
+                        assistant_parent_id,
+                        message_parts,
+                        None,
+                        web_search_context,
+                    )
                 )
 
             # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
             # Internal callback executed upon generation completion to update summary/memory.
             def on_finished() -> None:
                 try:
-                    updated_messages = get_chat_room_messages(chat_room_id)
-                    rebuild_room_summary(chat_room_id, updated_messages, model=model)
+                    updated_messages = _run_async_callback(
+                        lambda: get_chat_room_messages(chat_room_id)
+                    )
+                    _run_async_callback(
+                        lambda: rebuild_room_summary(chat_room_id, updated_messages, model=model)
+                    )
                 except Exception:
                     logger.warning(
                         "Failed to rebuild room summary after regeneration for %s.", chat_room_id
@@ -1160,10 +1143,7 @@ async def chat_regenerate(
         ]
         if message_parts:
             save_args.append(message_parts)
-        await run_blocking(
-            save_message_to_db,
-            *save_args,
-        )
+        await save_message_to_db(*save_args)
     elif sid is not None:
         append_args = [sid, chat_room_id, "assistant", bot_reply]
         if message_parts:
@@ -1237,8 +1217,7 @@ async def chat_edit_and_regenerate(
 
     if "user_id" in session:
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームには投稿できません",
@@ -1286,8 +1265,7 @@ async def chat_edit_and_regenerate(
             )
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            path = await run_blocking(
-                get_active_path,
+            path = await get_active_path(
                 chat_room_id,
                 include_attachment_contents=True,
             )
@@ -1305,8 +1283,7 @@ async def chat_edit_and_regenerate(
                 if target_attached_file_contents
                 else {}
             )
-            assistant_parent_id = await run_blocking(
-                save_message_to_db,
+            assistant_parent_id = await save_message_to_db(
                 chat_room_id,
                 formatted_user_message,
                 "user",
@@ -1398,7 +1375,7 @@ async def chat_edit_and_regenerate(
 
     if user_id is not None:
         try:
-            user = await run_blocking(get_user_by_id, user_id)
+            user = await get_user_by_id(user_id)
             user_profile_prompt = _build_user_profile_prompt(user)
         except Exception:
             logger.warning("Failed to load user profile for edit_and_regenerate; proceeding without it.")
@@ -1409,12 +1386,12 @@ async def chat_edit_and_regenerate(
 
     if user_id is not None and room_mode == "normal":
         try:
-            summary_payload = await run_blocking(get_room_summary, chat_room_id)
+            summary_payload = await get_room_summary(chat_room_id)
             room_summary = str((summary_payload or {}).get("summary") or "")
         except Exception:
             logger.warning("Failed to load room summary for edit_and_regenerate; proceeding without it.")
         try:
-            memory_facts = await run_blocking(list_room_memory_facts, chat_room_id)
+            memory_facts = await list_room_memory_facts(chat_room_id)
         except Exception:
             logger.warning("Failed to load memory facts for edit_and_regenerate; proceeding without them.")
 
@@ -1432,7 +1409,7 @@ async def chat_edit_and_regenerate(
     # Load prior-turn search results so regeneration also re-injects them as reference context.
     if user_id is not None and room_mode == "normal":
         prior_web_search_results = deserialize_web_search_results(
-            await run_blocking(get_room_web_search_contexts, chat_room_id)
+            await get_room_web_search_contexts(chat_room_id)
         )
     else:
         prior_web_search_results = extract_prior_web_search_results(all_messages)
@@ -1468,16 +1445,13 @@ async def chat_edit_and_regenerate(
     personal_knowledge_search = selected_references.personal_knowledge
     shared_prompt_search = selected_references.shared_prompt
     selected_reference_trace: list[SelectedReferenceLookupTrace] = []
-    conversation_messages = await run_blocking(
-        partial(
-            augment_messages_with_selected_references,
-            query=new_message,
-            personal_knowledge_search=personal_knowledge_search,
-            shared_prompt_search=shared_prompt_search,
-            unavailable_sources=selected_references.unavailable_sources,
-            trace_results=selected_reference_trace,
-        ),
+    conversation_messages = await augment_messages_with_selected_references_async(
         conversation_messages,
+        query=new_message,
+        personal_knowledge_search=personal_knowledge_search,
+        shared_prompt_search=shared_prompt_search,
+        unavailable_sources=selected_references.unavailable_sources,
+        trace_results=selected_reference_trace,
     )
     try:
         ui_mode = await run_blocking(
@@ -1503,23 +1477,29 @@ async def chat_edit_and_regenerate(
                 message_parts: list[dict[str, Any]] | None = None,
                 web_search_context: list[dict[str, Any]] | None = None,
             ) -> None:
-                save_message_to_db(
-                    chat_room_id,
-                    response,
-                    "assistant",
-                    None,
-                    assistant_parent_id,
-                    message_parts,
-                    None,
-                    web_search_context,
+                _run_async_callback(
+                    lambda: save_message_to_db(
+                        chat_room_id,
+                        response,
+                        "assistant",
+                        None,
+                        assistant_parent_id,
+                        message_parts,
+                        None,
+                        web_search_context,
+                    )
                 )
 
             # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
             # Internal callback executed upon generation completion to update summary/memory.
             def on_finished() -> None:
                 try:
-                    updated_messages = get_chat_room_messages(chat_room_id)
-                    rebuild_room_summary(chat_room_id, updated_messages, model=model)
+                    updated_messages = _run_async_callback(
+                        lambda: get_chat_room_messages(chat_room_id)
+                    )
+                    _run_async_callback(
+                        lambda: rebuild_room_summary(chat_room_id, updated_messages, model=model)
+                    )
                 except Exception:
                     logger.warning(
                         "Failed to rebuild room summary after edit_and_regenerate for %s.", chat_room_id
@@ -1540,10 +1520,12 @@ async def chat_edit_and_regenerate(
                 persist_response=persist_response,
                 on_finished=on_finished,
                 on_error=partial(
-                    _cleanup_unanswered_user_messages,
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
+                    _run_async_callback,
+                    lambda: _cleanup_unanswered_user_messages(
+                        chat_room_id,
+                        user_id=user_id,
+                        sid=sid,
+                    ),
                 ),
                 service=resolved_chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
@@ -1615,10 +1597,7 @@ async def chat_edit_and_regenerate(
         ]
         if message_parts:
             save_args.append(message_parts)
-        await run_blocking(
-            save_message_to_db,
-            *save_args,
-        )
+        await save_message_to_db(*save_args)
     elif sid is not None:
         append_args = [sid, chat_room_id, "assistant", bot_reply]
         if message_parts:
@@ -1666,8 +1645,7 @@ async def chat_switch_branch(request: Request):
         return jsonify({"error": "分岐の切り替えはログイン後のチャットでのみ利用できます"}, status_code=400)
 
     try:
-        room_mode, _sid, legacy_response = await run_blocking(
-            _resolve_authenticated_room_target,
+        room_mode, _sid, legacy_response = await _resolve_authenticated_room_target(
             chat_room_id,
             user_id,
             "他ユーザーのチャットルームは操作できません",
@@ -1696,7 +1674,7 @@ async def chat_switch_branch(request: Request):
         )
 
     try:
-        messages = await run_blocking(switch_chat_branch, chat_room_id, message_id)
+        messages = await switch_chat_branch(chat_room_id, message_id)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
     except Exception:
@@ -1737,8 +1715,7 @@ async def chat_stop(
 
     if user_id is not None:
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームは操作できません",
@@ -1787,8 +1764,7 @@ async def get_chat_history(request: Request):
     if "user_id" in session:
         room_mode = "normal"
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 session["user_id"],
                 "他ユーザーのチャット履歴は見れません",
@@ -1812,7 +1788,7 @@ async def get_chat_history(request: Request):
             return jsonify(payload)
 
         try:
-            payload = await run_blocking(_fetch_chat_history, chat_room_id, limit, before_message_id)
+            payload = await _fetch_chat_history(chat_room_id, limit, before_message_id)
             payload["room_mode"] = room_mode
             # Keep the history endpoint lightweight so the chat view can render immediately.
             payload["summary"] = ""
@@ -1865,8 +1841,7 @@ async def chat_generation_stream(
 
     if user_id is not None:
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",
@@ -1944,8 +1919,7 @@ async def chat_generation_status(
 
     if user_id is not None:
         try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
+            room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",

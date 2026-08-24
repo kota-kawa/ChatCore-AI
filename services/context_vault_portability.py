@@ -5,15 +5,20 @@ from __future__ import annotations
 import html
 import json
 import re
+import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
+from services.db import is_retryable_db_error, session_scope
 from services.error_messages import (
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_TOO_LARGE,
@@ -64,10 +69,33 @@ _MARKDOWN_BLOCK_OPEN_RE = re.compile(r"^```context-fact[ \t]*\r?$", re.MULTILINE
 _TOKEN_SALT = "chat-core.context-vault-import-preview.v1"
 
 ImportFormat = Literal["json", "markdown"]
+MAX_DB_WRITE_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
+T = TypeVar("T")
 
 
-def _repository() -> ContextFactRepository:
-    return ContextFactRepository()
+def _repository(session: AsyncSession) -> ContextFactRepository:
+    return ContextFactRepository(session)
+
+
+async def _transaction(
+    session: AsyncSession | None,
+    operation: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    if session is not None:
+        return await operation(session)
+    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
+        try:
+            async with session_scope() as db:
+                async with db.begin():
+                    return await operation(db)
+        except ApiServiceError:
+            raise
+        except SQLAlchemyError as exc:
+            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
+                raise
+            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
+    raise RuntimeError("Context portability transaction retry loop exhausted.")
 
 
 def _portable_fact(row: dict[str, Any]) -> ContextVaultPortableFact:
@@ -261,11 +289,31 @@ def _verify_preview_token(
         )
 
 
-def build_export(user_id: int, export_format: ImportFormat) -> tuple[str, str, str]:
+async def _preview_database_state(
+    session: AsyncSession,
+    user_id: int,
+    fact_payloads: list[dict[str, Any]],
+) -> tuple[set[tuple[str, str, str, str, int]], int]:
+    repo = _repository(session)
+    return (
+        await repo.find_existing_portable_signatures(user_id, fact_payloads),
+        await repo.count_active(user_id),
+    )
+
+
+async def build_export(
+    user_id: int,
+    export_format: ImportFormat,
+    *,
+    session: AsyncSession | None = None,
+) -> tuple[str, str, str]:
     """Build a complete, non-truncated owner export."""
-    rows = _repository().list_all_facts(
-        user_id,
-        limit=MAX_CONTEXT_VAULT_IMPORT_FACTS + 1,
+    rows = await _transaction(
+        session,
+        lambda db: _repository(db).list_all_facts(
+            user_id,
+            limit=MAX_CONTEXT_VAULT_IMPORT_FACTS + 1,
+        ),
     )
     if len(rows) > MAX_CONTEXT_VAULT_IMPORT_FACTS:
         raise ApiServiceError(
@@ -336,16 +384,20 @@ def build_export(user_id: int, export_format: ImportFormat) -> tuple[str, str, s
     raise ApiServiceError(ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID, 400, status="fail")
 
 
-def preview_import(
+async def preview_import(
     user_id: int,
     import_format: ImportFormat,
     content: str,
+    *,
+    session: AsyncSession | None = None,
 ) -> ContextVaultImportPreviewResponse:
     """Validate and compare an import without changing persistent state."""
     facts = parse_import_document(import_format, content)
-    repo = _repository()
     fact_payloads = [fact.model_dump(mode="python") for fact in facts]
-    existing = repo.find_existing_portable_signatures(user_id, fact_payloads)
+    existing, current_active = await _transaction(
+        session,
+        lambda db: _preview_database_state(db, user_id, fact_payloads),
+    )
 
     unique: list[ContextVaultPortableFact] = []
     seen: set[tuple[str, str, str, str, int]] = set()
@@ -360,7 +412,6 @@ def preview_import(
 
     active_count = sum(1 for fact in unique if fact.status == "active")
     deprecated_count = len(unique) - active_count
-    current_active = repo.count_active(user_id)
     can_import = current_active + active_count <= MAX_ACTIVE_CONTEXT_FACTS
     warnings: list[str] = []
     if duplicate_count:
@@ -385,18 +436,23 @@ def preview_import(
     )
 
 
-def confirm_import(
+async def confirm_import(
     user_id: int,
     import_format: ImportFormat,
     content: str,
     preview_token: str,
+    *,
+    session: AsyncSession | None = None,
 ) -> ContextVaultImportResponse:
     """Append the exact previewed payload in one cap-safe transaction."""
     facts = parse_import_document(import_format, content)
     _verify_preview_token(preview_token, user_id, import_format, facts)
-    result = _repository().bulk_import_facts(
-        user_id,
-        [fact.model_dump(mode="python") for fact in facts],
+    result = await _transaction(
+        session,
+        lambda db: _repository(db).bulk_import_facts(
+            user_id,
+            [fact.model_dump(mode="python") for fact in facts],
+        ),
     )
     for fact in result["facts"]:
         if fact["status"] == "active":

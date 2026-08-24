@@ -46,14 +46,13 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - DB_POOL_MIN_CONN=${DB_POOL_MIN_CONN:-1}
       - DB_POOL_MAX_CONN=${DB_POOL_MAX_CONN:-10}
       - DB_POOL_ACQUIRE_TIMEOUT_SECONDS=${DB_POOL_ACQUIRE_TIMEOUT_SECONDS:-10}
       # uvicorn ワーカー数。WEB_CONCURRENCY * DB_POOL_MAX_CONN < Postgres max_connections を維持すること。
       # uvicorn workers. Keep WEB_CONCURRENCY * DB_POOL_MAX_CONN < Postgres max_connections.
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
-      # 1ワーカーあたりのブロッキングI/O同時実行上限（同期DB・外部HTTPなど）。
-      # Per-worker concurrency budget for blocking I/O (sync DB, outbound HTTP, etc.).
+      # 1ワーカーあたりの外部HTTP・ファイル処理などblocking I/Oの同時実行上限。
+      # Per-worker concurrency budget for blocking non-database I/O.
       - RUN_BLOCKING_MAX_WORKERS=${RUN_BLOCKING_MAX_WORKERS:-64}
       - REDIS_HOST=redis
       - REDIS_PORT=6379

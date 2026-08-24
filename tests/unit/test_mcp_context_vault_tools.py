@@ -52,7 +52,7 @@ class McpContextVaultToolTestCase(unittest.TestCase):
             patch("services.mcp_tools.context_vault.require_actor", return_value=actor),
             patch("services.mcp_tools.context_vault.consume_tool_limit", new=rate_limit),
             patch(
-                "services.mcp_tools.context_vault.run_blocking",
+                "services.mcp_tools.context_vault.build_digest",
                 new=AsyncMock(return_value=ContextDigestResponse()),
             ),
         ):
@@ -73,7 +73,7 @@ class McpContextVaultToolTestCase(unittest.TestCase):
             patch("services.mcp_tools.context_vault.require_actor", return_value=actor),
             patch("services.mcp_tools.context_vault.consume_tool_limit", new=rate_limit),
             patch(
-                "services.mcp_tools.context_vault.run_blocking",
+                "services.mcp_tools.context_vault.search_facts",
                 new=AsyncMock(return_value={"total": 0, "facts": []}),
             ),
         ):
@@ -124,7 +124,11 @@ class McpContextVaultToolTestCase(unittest.TestCase):
                     patch("services.mcp_tools.context_vault.require_actor", return_value=actor),
                     patch("services.mcp_tools.context_vault.consume_tool_limit", new=rate_limit),
                     patch(
-                        "services.mcp_tools.context_vault.run_blocking",
+                        {
+                            "save_context_fact": "services.mcp_tools.context_vault.create_fact",
+                            "update_context_fact": "services.mcp_tools.context_vault.update_fact",
+                            "deprecate_context_fact": "services.mcp_tools.context_vault.deprecate_fact",
+                        }[tool_name],
                         new=AsyncMock(return_value=fact),
                     ),
                     patch("services.mcp_tools.context_vault.audit_tool_success") as audit,

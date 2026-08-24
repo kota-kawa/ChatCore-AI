@@ -109,7 +109,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
                 "services.chat_use_case.maybe_augment_messages_with_web_search",
                 side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
             ),
-            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
+            patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             asyncio.run(
                 use_case.execute(
@@ -293,7 +293,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
                 "services.chat_use_case.maybe_augment_messages_with_web_search",
                 side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
             ),
-            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
+            patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             asyncio.run(
                 ChatPostUseCase(deps, default_model="test-model").execute(

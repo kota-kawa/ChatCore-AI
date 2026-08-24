@@ -7,8 +7,8 @@ from typing import Any
 from services.datetime_serialization import serialize_datetime_iso
 from services.web import frontend_url as default_frontend_url
 
-from .constants import DEFAULT_EXCERPT_LENGTH
-from .helpers import parse_memo_text
+from .memo_constants import DEFAULT_EXCERPT_LENGTH
+from .memo_helpers import parse_memo_text
 
 
 def _frontend_url(path: str) -> str:

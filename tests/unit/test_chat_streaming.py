@@ -2,7 +2,7 @@ import asyncio
 import json
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from starlette.responses import StreamingResponse
 
@@ -2236,7 +2236,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_room_summary", return_value={}),
             patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
             patch("blueprints.chat.messages.rebuild_room_summary"),
-            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
+            patch("services.chat_use_case.generate_chat_room_title", return_value=None),
             patch(
                 "blueprints.chat.messages.consume_llm_daily_quota",
                 return_value=(True, 1, 300),
@@ -2310,10 +2310,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         with (
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
             patch("blueprints.chat.messages.validate_model_name"),
-            patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
             patch(
                 "blueprints.chat.messages.get_active_path",
-                return_value=[
+                new=AsyncMock(return_value=[
                     {
                         "id": 10,
                         "message": "要約して",
@@ -2324,34 +2324,37 @@ class ChatStreamingTestCase(unittest.TestCase):
                         ],
                     },
                     {"id": 11, "message": "old answer", "sender": "assistant"},
-                ],
+                ]),
             ),
-            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
-            patch("blueprints.chat.messages.get_room_summary", return_value={}),
-            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
-            patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
             patch(
                 "blueprints.chat.messages.search_personal_knowledge_for_tool",
-                return_value={
+                new=AsyncMock(return_value={
                     "status": "ok",
                     "memo_count": 1,
                     "context_fact_count": 0,
                     "memos": [{"title": "要約方針", "content": "結論を先に書く"}],
                     "context_facts": [],
-                },
+                }),
             ) as personal_search,
             patch(
                 "blueprints.chat.messages.search_shared_prompts_for_tool",
-                return_value={
+                new=AsyncMock(return_value={
                     "status": "ok",
                     "prompt_count": 1,
                     "prompts": [{"title": "要約テンプレ"}],
-                },
+                }),
             ) as shared_search,
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
-            patch("blueprints.chat.messages.save_message_to_db", return_value=12),
+            patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12)),
         ):
             response = asyncio.run(chat_regenerate(request))
 
@@ -2363,8 +2366,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertFalse(any("old answer" in content for content in contents))
         self.assertTrue(any("要約方針" in content and "要約テンプレ" in content for content in contents))
-        personal_search.assert_called_once_with(42, "要約して")
-        shared_search.assert_called_once_with("要約して")
+        personal_search.assert_awaited_once_with(42, "要約して")
+        shared_search.assert_awaited_once_with("要約して")
 
     # 日本語: メッセージを編集して再生成する際、元の添付ファイル内容が正しく引き継がれることを検証します。
     # English: Verify that editing a message and regenerating it preserves the original attachment contents.
@@ -2395,10 +2398,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         with (
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
             patch("blueprints.chat.messages.validate_model_name"),
-            patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
             patch(
                 "blueprints.chat.messages.get_active_path",
-                return_value=[
+                new=AsyncMock(return_value=[
                     {
                         "id": 10,
                         "message": "要約して",
@@ -2409,26 +2412,32 @@ class ChatStreamingTestCase(unittest.TestCase):
                         ],
                     },
                     {"id": 11, "message": "old answer", "sender": "assistant"},
-                ],
+                ]),
             ),
-            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
-            patch("blueprints.chat.messages.get_room_summary", return_value={}),
-            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
-            patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
             patch(
                 "blueprints.chat.messages.search_personal_knowledge_for_tool",
-                return_value={
+                new=AsyncMock(return_value={
                     "status": "ok",
                     "memo_count": 1,
                     "context_fact_count": 0,
                     "memos": [{"title": "文章方針", "content": "短くまとめる"}],
                     "context_facts": [],
-                },
+                }),
             ) as personal_search,
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
-            patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
+            patch(
+                "blueprints.chat.messages.save_message_to_db",
+                new=AsyncMock(side_effect=save_message),
+            ),
         ):
             response = asyncio.run(chat_edit_and_regenerate(request))
 
@@ -2438,7 +2447,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertTrue(any("文章方針" in content for content in contents))
-        personal_search.assert_called_once_with(42, "この資料を短く要約して")
+        personal_search.assert_awaited_once_with(42, "この資料を短く要約して")
         user_save_args, user_save_kwargs = saved_messages[0]
         self.assertEqual(user_save_args[3], ["sample.pdf"])
         self.assertIn("attached_file_contents", user_save_kwargs)

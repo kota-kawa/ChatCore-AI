@@ -52,7 +52,7 @@ Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** s
 - **Groq / Claude / OpenAI** integrations for LLM responses
 
 ## Tech Stack
-- **Backend**: Python 3.14, FastAPI, psycopg2 connection pool, Alembic
+- **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 18, Redis 7 (server-side sessions and coordination; required for persistent session state)
 - **LLM Providers**: Groq, Anthropic Claude, OpenAI
@@ -102,7 +102,7 @@ alembic upgrade head
 
 **Redis session safety** — Sessions are stored server-side in Redis, while the browser cookie contains only a signed Redis session reference. If Redis is unavailable or a session write fails, the middleware clears the session cookie instead of copying sensitive session data into a signed cookie; the user can authenticate again after Redis recovers.
 
-**DB connection resilience** — In Docker Compose, the backend container sometimes starts before the database is ready. Solved by having the connection pool try multiple host aliases (`db`, `localhost`, `127.0.0.1`) in sequence, validating each candidate before accepting it.
+**DB connection resilience** — In Docker Compose, the backend container sometimes starts before the database is ready. Solved by SQLAlchemy pool pre-ping, bounded pool acquisition, and the Compose/PostgreSQL healthcheck ordering.
 
 **LLM cost control** — Exposing LLM endpoints directly risked runaway API costs. Solved by implementing a centralized daily quota counter (shared across all users) that short-circuits requests at the service layer before any external API call is made.
 
@@ -127,8 +127,7 @@ alembic upgrade head
 
 ## Performance & Scalability
 
-- **Connection pooling**: PostgreSQL connections are managed via `psycopg2.ThreadedConnectionPool` with configurable min/max bounds, avoiding per-request connection overhead.
-  Set `DB_POOL_MIN_CONN` / `DB_POOL_MAX_CONN` for general environments, and `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` to override them only when `FASTAPI_ENV=production`.
+- **Connection pooling**: Each FastAPI worker owns one SQLAlchemy `AsyncEngine` with an `AsyncAdaptedQueuePool`, `pool_pre_ping`, `max_overflow=0`, and a bounded acquisition timeout. Set `DB_POOL_MAX_CONN` (or `DB_POOL_MAX_CONN_PRODUCTION` in production). Keep `WEB_CONCURRENCY × DB_POOL_MAX_CONN` below PostgreSQL `max_connections` with deployment headroom; Blue/Green capacity must account for both colors.
 - **Redis-backed sessions**: Session data is stored server-side in Redis, enabling stateless horizontal scaling of the application tier when Redis is available. Redis is an operational dependency for persistent authenticated sessions; cache and coordination features have separate degraded behavior.
 - **Rate limiting**: Per-day caps on chat LLM API calls and verification email sends, plus a separate monthly support AI agent cap, are enforced at the service layer to protect external API quotas and infrastructure cost.
 - **Health endpoints**: `GET /healthz` returns process liveness; `GET /readyz` checks live DB reachability and reports Redis degradation separately. The database is required for readiness, while Redis is required to persist authenticated sessions.
@@ -242,7 +241,7 @@ ChatGPT などの AI チャットサービスを日常的に使うなかで、�
 - **Groq / Claude / OpenAI 連携**
 
 ## 技術スタック
-- **Backend**: Python 3.14, FastAPI, psycopg2 connection pool, Alembic
+- **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 18, Redis 7（セッション・協調処理に使用。認証セッションの永続化には必須）
 - **LLM Providers**: Groq, Anthropic Claude, OpenAI
@@ -319,7 +318,7 @@ alembic upgrade head
 
 ## パフォーマンスとスケーラビリティ（Performance & Scalability）
 
-- **コネクションプール**: PostgreSQL接続を `psycopg2.ThreadedConnectionPool` で管理し、リクエストごとの接続確立コストを排除。プールサイズは環境変数で調整可能で、`FASTAPI_ENV=production` では `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` で本番向けに上書きできます。
+- **コネクションプール**: FastAPIワーカーごとにSQLAlchemy `AsyncEngine`を1つだけ生成し、`AsyncSession`をユースケース単位で作成します。`DB_POOL_MAX_CONN`（本番は`DB_POOL_MAX_CONN_PRODUCTION`）で上限を設定し、`WEB_CONCURRENCY × DB_POOL_MAX_CONN`がPostgreSQLの`max_connections`と予備枠を超えないようにします。Blue/Green同時稼働時は両色分を見積もります。
 - **Redisセッション**: セッション本体をRedisに保存し、アプリ層をステートレスに保つことで水平スケールに対応。認証セッションの永続化にはRedisが必要で、キャッシュや協調処理は用途ごとに劣化動作します。
 - **レート制限**: LLM API呼び出し・認証メール送信の日次上限に加え、ゲストチャット回数制限（`GUEST_CHAT_DAILY_LIMIT`）もサービス層のサーバー側カウンタで一元管理し、Cookie改ざんによる回避や外部APIコスト増大を防止。
 - **ヘルスエンドポイント**: `GET /healthz` でプロセス生存確認、`GET /readyz` でDB到達性とRedisの劣化状態を分けて返し、ロードバランサーのヘルスチェックに対応。DBはreadinessに必須で、Redisは認証セッションの永続化に必須。

@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.auth import api_send_login_code
 from blueprints.chat.messages import chat
@@ -253,7 +253,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         # English: Mock fetching user prompts and verify serialized datetime format
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_my_prompts",
-            return_value=sample_prompts,
+            new=AsyncMock(return_value=sample_prompts),
         ):
             response = asyncio.run(get_my_prompts(request))
 

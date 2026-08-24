@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.admin import views as admin_views
 from services.security import hash_password
@@ -119,53 +119,25 @@ class AdminApiTestCase(unittest.TestCase):
     # 日本語: ダッシュボードAPIがDBテーブル情報一覧およびプレビュー情報を正しく返すことを検証します。
     # English: Verify that the dashboard API correctly returns the list of database tables and preview information.
     def test_dashboard_returns_tables(self):
-        # 日本語: テスト用のダミーカーソルクラス
-        # English: Dummy cursor class for testing
-        class DummyCursor:
-            # 日本語: カーソルをクローズします。
-            # English: Close the cursor.
-            def close(self):
-                return None
-
-        # 日本語: テスト用のダミーコネクションクラス
-        # English: Dummy connection class for testing
-        class DummyConnection:
-            # 日本語: ダミーカーソルを返却します。
-            # English: Return a dummy cursor.
-            def cursor(self):
-                return DummyCursor()
-
-            # 日本語: コネクションをクローズします。
-            # English: Close the connection.
-            def close(self):
-                return None
-
         request = make_request(session={"is_admin": True}, query_string=b"table=users")
 
-        # 日本語: DB接続とテーブル・列情報取得ヘルパー関数をモックしてレスポンスを検証
-        # English: Mock DB connections and helper functions for tables/columns to verify response
-        with patch("blueprints.admin.views.get_db_connection", return_value=DummyConnection()):
-            with patch("blueprints.admin.views._fetch_tables", return_value=["users"]):
-                with patch(
-                    "blueprints.admin.views._fetch_table_preview",
-                    return_value=(["id"], [(1,)]),
-                ):
-                    with patch(
-                        "blueprints.admin.views._fetch_table_columns",
-                        return_value=[
-                            {
-                                "name": "id",
-                                "type": "int",
-                                "nullable": False,
-                                "key": "PRI",
-                                "default": None,
-                                "extra": "",
-                            }
-                        ],
-                    ):
-                        response = asyncio.run(admin_views.api_dashboard(request))
+        dashboard_data = {
+            "tables": ["users"],
+            "selected_table": "users",
+            "column_names": ["id"],
+            "column_details": [],
+            "existing_columns": ["id"],
+            "rows": [(1,)],
+            "missing_selected_table": False,
+        }
+        with patch(
+            "blueprints.admin.views._load_dashboard_data",
+            new=AsyncMock(return_value=dashboard_data),
+        ) as load_dashboard:
+            response = asyncio.run(admin_views.api_dashboard(request))
 
         self.assertEqual(response.status_code, 200)
+        load_dashboard.assert_awaited_once_with("users")
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["selected_table"], "users")
         self.assertEqual(payload["column_names"], ["id"])
@@ -177,7 +149,9 @@ class AdminApiTestCase(unittest.TestCase):
 
         # 日本語: 不正なテーブル名がフィルタリングされてNoneとしてダッシュボード読み込み関数が呼ばれることをモック
         # English: Mock the dashboard data loading function to expect None due to input filtering
-        with patch("blueprints.admin.views._load_dashboard_data") as mock_load_dashboard_data:
+        with patch(
+            "blueprints.admin.views._load_dashboard_data", new=AsyncMock()
+        ) as mock_load_dashboard_data:
             mock_load_dashboard_data.return_value = {
                 "tables": ["users"],
                 "selected_table": None,
@@ -190,7 +164,7 @@ class AdminApiTestCase(unittest.TestCase):
             response = asyncio.run(admin_views.api_dashboard(request))
 
         self.assertEqual(response.status_code, 200)
-        mock_load_dashboard_data.assert_called_once_with(None)
+        mock_load_dashboard_data.assert_awaited_once_with(None)
         payload = json.loads(response.body.decode())
         self.assertIsNone(payload["selected_table"])
 

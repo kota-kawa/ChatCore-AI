@@ -8,8 +8,11 @@ import logging
 import secrets
 from typing import Any
 
-from services.db import get_db_connection
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from services.db import session_scope
 from services.error_messages import ERROR_GUEST_PROMPT_LIMIT_REACHED
+from services.repositories.shared_content_repository import SharedContentRepository
 from services.request_models import SharedPromptCreateRequest
 from services.runtime_config import get_session_secret_key
 
@@ -76,10 +79,13 @@ def _guest_ip_hash(client_ip: str) -> str:
     return _hash_guest_identifier(f"ip:{client_ip.strip().lower() or 'unknown'}")
 
 
-def create_guest_shared_prompt(
+async def create_guest_shared_prompt(
     guest_token: str,
     client_ip: str,
     payload: SharedPromptCreateRequest,
+    *,
+    repository: SharedContentRepository | None = None,
+    session: AsyncSession | None = None,
 ) -> int:
     """Atomically enforce the guest quota and insert a text-only public prompt."""
     cookie_hash = _guest_cookie_hash(guest_token)
@@ -91,121 +97,58 @@ def create_guest_shared_prompt(
         )
     )
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            # Lock each independent quota key so changing only one identifier cannot
-            # race two requests through the rolling 24-hour limit.
-            for lock_key in lock_keys:
-                cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock_key,))
+    prompt_repository = repository or SharedContentRepository()
 
-            cursor.execute(
-                """
-                SELECT GREATEST(
-                    1,
-                    CEIL(EXTRACT(EPOCH FROM (
-                        MAX(created_at) + INTERVAL '24 hours' - NOW()
-                    )))::INTEGER
-                ) AS retry_after
-                FROM guest_prompt_submissions
-                WHERE created_at > NOW() - INTERVAL '24 hours'
-                  AND (guest_cookie_hash = %s OR client_ip_hash = %s)
-                HAVING MAX(created_at) IS NOT NULL
-                """,
-                (cookie_hash, ip_hash),
-            )
-            existing = cursor.fetchone()
-            if existing:
-                retry_after = int(existing.get("retry_after") or 1)
-                raise GuestPromptLimitExceeded(retry_after)
+    async def operation(active: AsyncSession) -> int:
+        prompt_id, retry_after = await prompt_repository.create_guest_prompt(
+            active,
+            cookie_hash=cookie_hash,
+            ip_hash=ip_hash,
+            title=payload.title,
+            category=payload.category,
+            content=payload.content,
+            input_examples=payload.input_examples,
+            output_examples=payload.output_examples,
+            ai_model=payload.ai_model,
+            description=payload.description,
+            lock_keys=lock_keys,
+        )
+        if retry_after is not None:
+            raise GuestPromptLimitExceeded(retry_after)
+        if prompt_id is None:
+            raise RuntimeError("Guest shared prompt insert did not return an ID.")
+        return prompt_id
 
-            cursor.execute(
-                """
-                INSERT INTO prompts (
-                    title, category, content, author, content_format, media_type,
-                    attributes, attachments, input_examples, output_examples,
-                    ai_model, description, user_id, is_public, created_at, updated_at
-                )
-                VALUES (
-                    %s, %s, %s, 'ゲスト', 'prompt', 'text',
-                    '{}'::jsonb, '[]'::jsonb, %s, %s, %s, %s, NULL, TRUE, NOW(), NOW()
-                )
-                RETURNING id
-                """,
-                (
-                    payload.title,
-                    payload.category,
-                    payload.content,
-                    payload.input_examples,
-                    payload.output_examples,
-                    payload.ai_model or None,
-                    payload.description or None,
-                ),
-            )
-            prompt_row = cursor.fetchone()
-            if not prompt_row:
-                raise RuntimeError("Guest shared prompt insert did not return an ID.")
-            prompt_id = int(prompt_row["id"])
-
-            cursor.execute(
-                """
-                INSERT INTO guest_prompt_submissions (
-                    prompt_id, guest_cookie_hash, client_ip_hash, created_at
-                )
-                VALUES (%s, %s, %s, NOW())
-                """,
-                (prompt_id, cookie_hash, ip_hash),
-            )
-            conn.commit()
-            return prompt_id
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    if session is None:
+        async with session_scope() as owned_session:
+            async with owned_session.begin():
+                return await operation(owned_session)
+    return await operation(session)
 
 
-def claim_guest_prompts_for_user(user_id: int, guest_token: str | None) -> list[int]:
+async def claim_guest_prompts_for_user(
+    user_id: int,
+    guest_token: str | None,
+    *,
+    repository: SharedContentRepository | None = None,
+    session: AsyncSession | None = None,
+) -> list[int]:
     """Assign every unclaimed prompt from this browser cookie to the signed-in user."""
     if not guest_token:
         return []
 
     cookie_hash = _guest_cookie_hash(guest_token)
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                WITH claimed_prompts AS (
-                    UPDATE prompts AS p
-                       SET user_id = %s,
-                           author = (
-                               SELECT COALESCE(username, 'ユーザー')
-                               FROM users
-                               WHERE id = %s
-                           ),
-                           updated_at = NOW()
-                      FROM guest_prompt_submissions AS gps
-                     WHERE gps.prompt_id = p.id
-                       AND gps.guest_cookie_hash = %s
-                       AND gps.claimed_at IS NULL
-                       AND p.user_id IS NULL
-                    RETURNING gps.id, p.id
-                )
-                UPDATE guest_prompt_submissions AS gps
-                   SET claimed_by_user_id = %s,
-                       claimed_at = NOW()
-                  FROM claimed_prompts AS claimed
-                 WHERE gps.id = claimed.id
-                RETURNING gps.prompt_id
-                """,
-                (user_id, user_id, cookie_hash, user_id),
-            )
-            rows = cursor.fetchall() or []
-            conn.commit()
-            return [int(row[0]) for row in rows]
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    prompt_repository = repository or SharedContentRepository()
+
+    async def operation(active: AsyncSession) -> list[int]:
+        return await prompt_repository.claim_guest_prompts(
+            active,
+            user_id=user_id,
+            cookie_hash=cookie_hash,
+        )
+
+    if session is None:
+        async with session_scope() as owned_session:
+            async with owned_session.begin():
+                return await operation(owned_session)
+    return await operation(session)

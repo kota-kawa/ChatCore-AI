@@ -10,7 +10,6 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field, ValidationError
 
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.mcp_memo_service import (
     McpMemoCollectionListResult,
     McpMemoDetail,
@@ -125,8 +124,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_MEMOS_READ_SCOPE)
         await consume_tool_limit(actor, "memo_read", limit=120, window_seconds=60)
         try:
-            return await run_blocking(
-                list_memos,
+            return await list_memos(
                 actor.user_id,
                 limit=limit,
                 offset=offset,
@@ -165,8 +163,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         if mode == "semantic":
             await consume_tool_limit(actor, "memo_semantic_search", limit=30, window_seconds=3600)
         try:
-            return await run_blocking(
-                search_memos,
+            return await search_memos(
                 actor.user_id,
                 query,
                 mode=mode,
@@ -200,7 +197,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_MEMOS_READ_SCOPE)
         await consume_tool_limit(actor, "memo_read", limit=120, window_seconds=60)
         try:
-            memo = await run_blocking(get_memo, actor.user_id, memo_id)
+            memo = await get_memo(actor.user_id, memo_id)
         except Exception as exc:
             raise _tool_error(exc) from exc
         total = len(memo.content)
@@ -233,7 +230,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         actor = require_actor(MCP_MEMOS_READ_SCOPE)
         await consume_tool_limit(actor, "memo_read", limit=120, window_seconds=60)
         try:
-            return await run_blocking(list_collections, actor.user_id)
+            return await list_collections(actor.user_id)
         except Exception as exc:
             raise _tool_error(exc) from exc
 
@@ -263,7 +260,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         await consume_tool_limit(actor, "memo_write", limit=60, window_seconds=3600)
         try:
             payload = McpMemoCreateRequest(title=title, content=content)
-            result = _mutation_result(await run_blocking(create_memo, actor.user_id, payload))
+            result = _mutation_result(await create_memo(actor.user_id, payload))
             audit_tool_success(actor, "create_memo", result.memo_id)
             return result
         except Exception as exc:
@@ -303,7 +300,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
                 content=content,
                 allow_shared_content_change=allow_shared_content_change,
             )
-            result = _mutation_result(await run_blocking(update_memo, actor.user_id, memo_id, payload))
+            result = _mutation_result(await update_memo(actor.user_id, memo_id, payload))
             audit_tool_success(actor, "update_memo", memo_id)
             return result
         except Exception as exc:
@@ -344,7 +341,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
                 separator=separator,
                 allow_shared_content_change=allow_shared_content_change,
             )
-            result = _mutation_result(await run_blocking(append_memo, actor.user_id, memo_id, payload))
+            result = _mutation_result(await append_memo(actor.user_id, memo_id, payload))
             audit_tool_success(actor, "append_memo_content", memo_id)
             return result
         except Exception as exc:

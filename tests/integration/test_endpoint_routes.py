@@ -1,14 +1,14 @@
 import asyncio
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
 from blueprints.auth import auth_bp
 from blueprints.memo import memo_bp
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
-from services.db import Error
+from sqlalchemy.exc import SQLAlchemyError
 from tests.helpers.app_helpers import build_session_test_app
 
 
@@ -269,7 +269,10 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 await self._set_session(client, {"user_id": 7})
                 # 日本語: DBコネクション取得時にエラーを発生させる
                 # English: Raise error when obtaining DB connection
-                with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
+                with patch(
+                    "blueprints.memo._fetch_memo_summaries",
+                    new=AsyncMock(side_effect=SQLAlchemyError("db down")),
+                ):
                     response = await client.get("/memo/api/recent?limit=5")
 
             self.assertEqual(response.status_code, 200)
@@ -287,7 +290,10 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 # 日本語: セッションにユーザーIDを設定
                 # English: Set user_id in session
                 await self._set_session(client, {"user_id": 7})
-                with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
+                with patch(
+                    "blueprints.memo._fetch_memo_summaries",
+                    new=AsyncMock(side_effect=SQLAlchemyError("db down")),
+                ):
                     # 日本語: 並行してリクエストを実行
                     # English: Run requests concurrently
                     responses = await asyncio.gather(
@@ -315,7 +321,10 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 await self._set_session(client, {"user_id": 7})
                 # 日本語: メモ挿入時にエラーを発生させる
                 # English: Raise error when inserting a memo
-                with patch("blueprints.memo._insert_memo", side_effect=Error("tx failed")):
+                with patch(
+                    "blueprints.memo._insert_memo",
+                    new=AsyncMock(side_effect=SQLAlchemyError("tx failed")),
+                ):
                     response = await self._post_with_csrf(
                         client,
                         "/memo/api",

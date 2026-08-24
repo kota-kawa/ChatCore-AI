@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
+from services.async_utils import run_blocking
 from services.chat_prompt import insert_after_leading_system_messages
 from services.reference_query_rewrite import rewrite_reference_query
 
@@ -135,7 +138,7 @@ class CandidateQueryPlan:
                 return
             # 言い換えは、最初の候補が空振りしたときにだけ生成する（＝ここで初めて呼ぶ）。
             # The rewrite is only produced once the first candidate has missed.
-            candidates = group() if callable(group) else group
+            candidates = cast(Iterable[str], group() if callable(group) else group)
             for candidate in candidates:
                 if not candidate or candidate in seen:
                     continue
@@ -242,6 +245,111 @@ def _run_lookups(
         # 提出順に受け取るので、参照元のブロック順は並列実行しても安定する。
         # Results are collected in submission order, so block order stays deterministic.
         return [future.result() for future in futures]
+
+
+async def _maybe_await(value: Any) -> Any:
+    """Await an async repository lookup while keeping pure context tests lightweight."""
+    return await value if inspect.isawaitable(value) else value
+
+
+async def _run_lookup_once_async(
+    search: Callable[[str], Any],
+    query: str,
+    *,
+    source_label: str,
+) -> dict[str, Any]:
+    """Run one selected-reference lookup without moving database work to a worker thread."""
+    try:
+        payload = await _maybe_await(search(query))
+    except Exception:
+        logger.warning("Selected %s lookup failed.", source_label, exc_info=True)
+        return {
+            "status": "failed",
+            "query": query,
+            "message": f"The selected {source_label} lookup failed.",
+        }
+    if isinstance(payload, dict):
+        return payload
+    logger.warning("Selected %s lookup returned a non-object payload.", source_label)
+    return {
+        "status": "failed",
+        "query": query,
+        "message": f"The selected {source_label} lookup returned an invalid result.",
+    }
+
+
+async def _run_lookup_async(
+    search: Callable[[str], Any],
+    candidates: Sequence[str],
+    *,
+    query: str,
+    source_label: str,
+) -> dict[str, Any]:
+    """Run one source's retry plan using its native async lookup when available."""
+    attempted_queries: list[str] = []
+    payload: dict[str, Any] = {}
+    for candidate in candidates:
+        attempted_queries.append(candidate)
+        payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
+        for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
+            if payload.get("status") != "failed":
+                break
+            logger.info("Retrying the selected %s lookup once after a failure.", source_label)
+            payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
+        status = payload.get("status")
+        if status == "failed":
+            break
+        if status != "no_results":
+            break
+
+    return {
+        **payload,
+        "requested_query": query,
+        "attempted_queries": attempted_queries,
+    }
+
+
+async def _run_lookups_async(
+    lookups: Sequence[tuple[str, Callable[[str], Any]]],
+    candidates: Sequence[str],
+    *,
+    query: str,
+) -> list[dict[str, Any]]:
+    """Run selected database lookups concurrently without sharing an AsyncSession."""
+    return list(
+        await asyncio.gather(
+            *(
+                _run_lookup_async(
+                    search,
+                    candidates,
+                    query=query,
+                    source_label=_SOURCE_LABELS[source],
+                )
+                for source, search in lookups
+            )
+        )
+    )
+
+
+async def _load_overview_async(
+    personal_overview: Callable[[], Any] | None,
+) -> dict[str, Any] | None:
+    """Load the personal inventory through the caller's async session boundary."""
+    if personal_overview is None:
+        return None
+    try:
+        overview = await _maybe_await(personal_overview())
+    except Exception:
+        logger.warning(
+            "Failed to load the personal overview after a no-match lookup.",
+            exc_info=True,
+        )
+        return None
+    if not isinstance(overview, dict):
+        return None
+    if not overview.get("recent_memos") and not overview.get("context_facts"):
+        return None
+    return overview
 
 
 def _load_overview_if_unmatched(
@@ -402,6 +510,95 @@ def augment_messages_with_selected_references(
     ]
 
     overview_payload = _load_overview_if_unmatched(lookups, payloads, personal_overview)
+    if overview_payload is not None:
+        overview_block, overview_json = _build_overview_block(overview_payload)
+        result_blocks.append(overview_block)
+        if trace_results is not None:
+            trace_results.append(
+                SelectedReferenceLookupTrace(
+                    source=PERSONAL_KNOWLEDGE_SOURCE,
+                    query=normalized_query,
+                    payload=overview_json,
+                )
+            )
+
+    context = _build_context(
+        result_blocks,
+        [source for source, _ in lookups],
+        unavailable_sources,
+        has_overview=overview_payload is not None,
+    )
+    return insert_after_leading_system_messages(
+        messages,
+        {"role": "system", "content": context},
+    )
+
+
+async def augment_messages_with_selected_references_async(
+    messages: list[dict[str, Any]],
+    *,
+    query: str,
+    personal_knowledge_search: Callable[[str], Any] | None = None,
+    shared_prompt_search: Callable[[str], Any] | None = None,
+    personal_overview: Callable[[], Any] | None = None,
+    unavailable_sources: Sequence[str] = (),
+    trace_results: list[SelectedReferenceLookupTrace] | None = None,
+) -> list[dict[str, Any]]:
+    """Prefetch selected references through native async database callbacks.
+
+    The synchronous function above remains useful for pure prompt-composition tests and
+    non-database callers. Request handlers must use this variant: selected reference
+    lookups create their own AsyncSession and must never be hidden inside run_blocking.
+    """
+    lookups: list[tuple[str, Callable[[str], Any]]] = []
+    if personal_knowledge_search is not None:
+        lookups.append((PERSONAL_KNOWLEDGE_SOURCE, personal_knowledge_search))
+    if shared_prompt_search is not None:
+        lookups.append((SHARED_PROMPT_SOURCE, shared_prompt_search))
+    if not lookups and not unavailable_sources:
+        return messages
+
+    normalized_query = _normalize_query(query)
+    if not normalized_query:
+        return messages
+
+    candidate_plan = CandidateQueryPlan(normalized_query, previous_user_message(messages))
+    candidates: list[str] = await run_blocking(list, candidate_plan)
+    payloads = await _run_lookups_async(lookups, candidates, query=normalized_query)
+
+    if trace_results is not None:
+        trace_results.extend(
+            SelectedReferenceLookupTrace(
+                source=source,
+                query=normalized_query,
+                payload=dict(payload),
+            )
+            for (source, _), payload in zip(lookups, payloads)
+        )
+        trace_results.extend(
+            SelectedReferenceLookupTrace(
+                source=source,
+                query=normalized_query,
+                payload={"status": "unavailable"},
+            )
+            for source in unavailable_sources
+        )
+
+    result_blocks = [
+        f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
+        f"{_safe_json(payload)}"
+        f"</{_SOURCE_RESULT_TAGS[source]}>"
+        for (source, _), payload in zip(lookups, payloads)
+    ]
+
+    overview_payload = None
+    personal_statuses = [
+        payload.get("status")
+        for (source, _), payload in zip(lookups, payloads)
+        if source == PERSONAL_KNOWLEDGE_SOURCE
+    ]
+    if personal_statuses == ["no_results"]:
+        overview_payload = await _load_overview_async(personal_overview)
     if overview_payload is not None:
         overview_block, overview_json = _build_overview_block(overview_payload)
         result_blocks.append(overview_block)

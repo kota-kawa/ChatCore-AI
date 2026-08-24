@@ -13,7 +13,12 @@ from services.auth_limits import (
     consume_auth_email_send_limits,
     get_auth_limit_service,
 )
-from services.db import get_db_connection
+from services.chat_service import (
+    commit_email_change,
+    get_user_by_email,
+    get_user_by_id,
+    update_user_profile,
+)
 from services.email_service import resolve_request_email_locale, send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
@@ -23,7 +28,6 @@ from services.llm_daily_limit import (
 )
 from services.request_models import EmailChangeConfirmRequest, EmailChangeRequest
 from services.security import constant_time_compare, generate_verification_code
-from services.users import get_user_by_email, get_user_by_id
 from services.web import (
     BASE_DIR,
     jsonify,
@@ -257,7 +261,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
 
 # ユーザーのプロフィール情報（メールアドレスを除く）をデータベースに保存する関数
 # Persist updated user profile fields (excluding email) to the database.
-def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_context):
+async def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_context):
     """
     ユーザーのプロフィール情報（ユーザー名、自己紹介、LLM設定、アバターURL）をDBで更新します。
     Updates user profile details (username, bio, LLM context, avatar URL) in the database.
@@ -271,34 +275,13 @@ def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_
     # fixtures but is no longer written to the database.
     _ = email  # intentionally ignored; see docstring above
     
-    # データベースに接続して更新クエリを実行
-    # Connect to the database and run the update query
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                UPDATE users
-                   SET username = %s,
-                       bio = %s,
-                       llm_profile_context = %s,
-                       avatar_url = COALESCE(%s, avatar_url)
-                 WHERE id = %s
-                """,
-                (username, bio, llm_profile_context, avatar_url, user_id),
-            )
-            # コミットして変更を確定
-            # Commit to finalize updates
-            conn.commit()
-        except Exception:
-            # エラー発生時はロールバック
-            # Rollback on database errors
-            conn.rollback()
-            raise
-        finally:
-            # カーソルを閉じる
-            # Close database cursor
-            cursor.close()
+    await update_user_profile(
+        user_id,
+        username=username,
+        bio=bio,
+        avatar_url=avatar_url,
+        llm_profile_context=llm_profile_context,
+    )
 
 
 # --- プロフィール取得 ---
@@ -325,7 +308,7 @@ async def user_profile(request: Request):
     if request.method == 'GET':
         # ユーザー情報をDBから取得
         # Retrieve user details from the database
-        user = await run_blocking(get_user_by_id, user_id)
+        user = await get_user_by_id(user_id)
         if not user:
             return jsonify({'error': 'ユーザーが存在しません'}, status_code=404)
         return jsonify({
@@ -357,7 +340,7 @@ async def user_profile(request: Request):
     # endpoint. Email changes must go through the verification flow so an
     # attacker holding a single authenticated session cannot retarget
     # verification mails to an address they control.
-    current_user = await run_blocking(get_user_by_id, user_id)
+    current_user = await get_user_by_id(user_id)
     current_email = (current_user or {}).get('email', '') if current_user else ''
     if submitted_email and submitted_email.lower() != (current_email or '').lower():
         return jsonify(
@@ -395,8 +378,7 @@ async def user_profile(request: Request):
     # DBにプロフィール更新情報を永続化
     # Persist profile updates to database.
     try:
-        await run_blocking(
-            _update_user_profile,
+        await _update_user_profile(
             user_id,
             username,
             email,
@@ -481,7 +463,7 @@ async def _send_email_change_code(
 
 # 認証完了後に新しいメールアドレスをDBに反映する関数
 # Atomically update users.email in the database after the verification steps.
-def _commit_email_change(user_id: int, new_email: str) -> bool:
+async def _commit_email_change(user_id: int, new_email: str) -> bool:
     """
     DBに対して、新しいメールアドレスを一意性の重複衝突に注意しながら反映します。
     Updates the email address in the database, checking for collisions first.
@@ -490,41 +472,7 @@ def _commit_email_change(user_id: int, new_email: str) -> bool:
     # Returns False if some other account claimed the address between the
     # request and the confirmation step, so the caller can report a clear
     # error instead of leaving the row in an inconsistent state.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            # 既に別アカウントで同じメールアドレスが登録されていないか確認
-            # Check if another account has already claimed the new email
-            cursor.execute(
-                """
-                SELECT id FROM users WHERE LOWER(email) = LOWER(%s)
-                """,
-                (new_email,),
-            )
-            row = cursor.fetchone()
-            if row and row[0] != user_id:
-                # 重複した場合はロールバックして失敗とする
-                # Rollback and return False if duplicate email exists
-                conn.rollback()
-                return False
-            
-            # メールアドレスを更新
-            # Perform the database update for the email
-            cursor.execute(
-                """
-                UPDATE users SET email = %s WHERE id = %s
-                """,
-                (new_email, user_id),
-            )
-            conn.commit()
-            return True
-        except Exception:
-            # 例外時はロールバック
-            # Rollback on database exception
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    return await commit_email_change(user_id, new_email)
 
 
 # メールアドレス変更手続きを開始し、現在のメールアドレス宛に認証コードを送信するAPIエンドポイント
@@ -565,7 +513,7 @@ async def request_email_change(
     new_email = payload.new_email
     # ユーザーが実在するか確認
     # Check if the user exists
-    user = await run_blocking(get_user_by_id, user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         return jsonify({'error': 'ユーザーが存在しません'}, status_code=404)
 
@@ -580,7 +528,7 @@ async def request_email_change(
 
     # 既に他のユーザーがそのメールアドレスを登録していないか確認
     # Ensure the new email is not claimed by another active user
-    existing = await run_blocking(get_user_by_email, new_email)
+    existing = await get_user_by_email(new_email)
     if existing and existing.get('id') != user_id:
         # 不要なユーザー存在の漏洩を防ぐため、メッセージは汎用的なものに留める
         # Keep the error message generic to avoid leaking email existence.
@@ -806,7 +754,7 @@ async def confirm_email_change(
     # 段階2: 変更先アドレスの確認完了。DB更新（コミット）を行う
     # Stage 2: New email verified. Commit the database changes.
     try:
-        committed = await run_blocking(_commit_email_change, user_id, new_email)
+        committed = await _commit_email_change(user_id, new_email)
     except Exception:
         _clear_email_change_session(request.session)
         return log_and_internal_server_error(

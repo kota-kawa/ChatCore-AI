@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.prompt_share.prompt_share_api import (
     _get_public_prompt_by_id,
@@ -10,131 +10,72 @@ from blueprints.prompt_share.prompt_share_api import (
 from services.repositories.prompt_view_repository import PromptViewRepository
 
 
-class FakeCursor:
-    def __init__(self, row):
-        self.row = row
-        self.executed = []
-        self.closed = False
-
-    def execute(self, query, params=None):
-        self.executed.append((" ".join(query.split()), params))
-
-    def fetchone(self):
-        return self.row
-
-    def close(self):
-        self.closed = True
-
-
-class FakeConnection:
-    def __init__(self, cursor):
-        self._cursor = cursor
-        self.commits = 0
-        self.rollbacks = 0
-        self.closed = False
-
-    def cursor(self, *args, **kwargs):
-        return self._cursor
-
-    def commit(self):
-        self.commits += 1
-
-    def rollback(self):
-        self.rollbacks += 1
-
-    def close(self):
-        self.closed = True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, _exc_type, _exc, _tb):
-        self.close()
-        return False
-
-
 class PromptViewCountTestCase(unittest.TestCase):
     def test_prompt_detail_returns_current_view_count_without_incrementing_it(self):
-        fake_cursor = FakeCursor(
-            {
-                "id": 42,
-                "title": "Prompt",
-                "content": "Body",
-                "content_format": "prompt",
-                "media_type": "text",
-                "view_count": 5,
-            }
-        )
-        fake_conn = FakeConnection(fake_cursor)
-
         with patch(
-            "blueprints.prompt_share.prompt_share_api.get_db_connection",
-            return_value=fake_conn,
-        ):
-            prompt = _get_public_prompt_by_id(42)
+            "blueprints.prompt_share.prompt_share_api._service",
+        ) as service_factory:
+            service = service_factory.return_value
+            service.get_public_prompt_detail = AsyncMock(
+                return_value={
+                    "id": 42,
+                    "title": "Prompt",
+                    "content": "Body",
+                    "content_format": "prompt",
+                    "media_type": "text",
+                    "view_count": 5,
+                }
+            )
+            prompt = asyncio.run(_get_public_prompt_by_id(42))
 
         self.assertEqual(prompt["view_count"], 5)
-        query, params = fake_cursor.executed[0]
-        self.assertIn("LEFT JOIN prompt_view_counts AS pvc", query)
-        self.assertNotIn("UPDATE prompts", query)
-        self.assertEqual(params, (42,))
-        self.assertEqual(fake_conn.commits, 0)
+        service.get_public_prompt_detail.assert_awaited_once_with(42)
 
     def test_record_view_atomically_upserts_for_an_active_public_prompt(self):
-        fake_cursor = FakeCursor({"view_count": 6})
-        fake_conn = FakeConnection(fake_cursor)
+        session = MagicMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = 6
+        session.execute = AsyncMock(return_value=result)
 
-        with patch(
-            "services.repositories.prompt_view_repository.get_db_connection",
-            return_value=fake_conn,
-        ):
-            view_count = PromptViewRepository.increment_public_view(42)
+        view_count = asyncio.run(PromptViewRepository().increment_public_view(session, 42))
 
         self.assertEqual(view_count, 6)
-        self.assertEqual(fake_conn.commits, 1)
-        query, params = fake_cursor.executed[0]
-        self.assertIn("INSERT INTO prompt_view_counts AS pvc", query)
-        self.assertIn("p.is_public = TRUE", query)
-        self.assertIn("p.deleted_at IS NULL", query)
-        self.assertIn("ON CONFLICT (prompt_id) DO UPDATE", query)
-        self.assertIn("SET view_count = pvc.view_count + 1", query)
-        self.assertEqual(params, (42,))
-        self.assertTrue(fake_cursor.closed)
-        self.assertTrue(fake_conn.closed)
+        statement = session.execute.call_args.args[0]
+        sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+        self.assertIn("ON CONFLICT", sql)
+        self.assertIn("RETURNING", sql)
+        self.assertIn("prompts.is_public", sql)
+        self.assertIn("prompts.deleted_at", sql)
 
     def test_record_view_does_not_commit_when_prompt_is_not_public_and_active(self):
-        fake_cursor = FakeCursor(None)
-        fake_conn = FakeConnection(fake_cursor)
+        session = MagicMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result)
 
-        with patch(
-            "services.repositories.prompt_view_repository.get_db_connection",
-            return_value=fake_conn,
-        ):
-            view_count = PromptViewRepository.increment_public_view(99)
+        view_count = asyncio.run(PromptViewRepository().increment_public_view(session, 99))
 
         self.assertIsNone(view_count)
-        self.assertEqual(fake_conn.commits, 0)
-        self.assertEqual(fake_conn.rollbacks, 1)
+        session.commit.assert_not_called()
+        session.rollback.assert_not_called()
 
     def test_record_view_endpoint_returns_incremented_count(self):
+        service = MagicMock()
+        service.record_public_view = AsyncMock(return_value=8)
         with patch(
-            "blueprints.prompt_share.prompt_share_api.run_blocking",
-            new=AsyncMock(return_value=8),
-        ) as run_blocking_mock:
+            "blueprints.prompt_share.prompt_share_api._service",
+            return_value=service,
+        ):
             response = asyncio.run(record_prompt_view(42))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.body.decode("utf-8"))["view_count"], 8)
-        run_blocking_mock.assert_awaited_once_with(
-            PromptViewRepository.increment_public_view,
-            42,
-        )
+        service.record_public_view.assert_awaited_once_with(42)
 
     def test_record_view_endpoint_returns_404_for_unavailable_prompt(self):
-        with patch(
-            "blueprints.prompt_share.prompt_share_api.run_blocking",
-            new=AsyncMock(return_value=None),
-        ):
+        service = MagicMock()
+        service.record_public_view = AsyncMock(return_value=None)
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
             response = asyncio.run(record_prompt_view(99))
 
         self.assertEqual(response.status_code, 404)

@@ -4,7 +4,6 @@ from typing import Any
 from fastapi import Request
 
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.error_messages import ERROR_LOGIN_REQUIRED
 from services.project_service import (
     create_project,
@@ -69,7 +68,7 @@ async def create_project_endpoint(request: Request):
         return error_response
 
     try:
-        project = await run_blocking(create_project, user_id, payload.name, payload.instructions)
+        project = await create_project(user_id, payload.name, payload.instructions)
         return jsonify({"project": project}, status_code=201)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -88,7 +87,7 @@ async def list_projects_endpoint(request: Request):
         return error
 
     try:
-        projects = await run_blocking(list_projects, user_id)
+        projects = await list_projects(user_id)
         return jsonify({"projects": projects}, status_code=200)
     except Exception:
         return log_and_internal_server_error(logger, "Failed to list projects.")
@@ -105,7 +104,7 @@ async def get_project_endpoint(request: Request, project_id: int):
         return error
 
     try:
-        project = await run_blocking(get_project, project_id, user_id)
+        project = await get_project(project_id, user_id)
         return jsonify({"project": project}, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -128,8 +127,7 @@ async def update_project_endpoint(request: Request):
         return error_response
 
     try:
-        project = await run_blocking(
-            update_project,
+        project = await update_project(
             payload.project_id,
             user_id,
             name=payload.name,
@@ -157,7 +155,7 @@ async def delete_project_endpoint(request: Request):
         return error_response
 
     try:
-        await run_blocking(delete_project, payload.project_id, user_id)
+        await delete_project(payload.project_id, user_id)
         return jsonify({"message": "プロジェクトを削除しました。"}, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -180,7 +178,7 @@ async def assign_room_project_endpoint(request: Request):
         return error_response
 
     try:
-        await run_blocking(assign_room_to_project, payload.room_id, user_id, payload.project_id)
+        await assign_room_to_project(payload.room_id, user_id, payload.project_id)
         return jsonify({"message": "更新しました。"}, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)

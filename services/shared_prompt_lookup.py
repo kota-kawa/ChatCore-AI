@@ -87,7 +87,7 @@ def _service() -> SharedContentService:
 
 # 公開プロンプトを検索し、上位ヒットは本文まで読み込む
 # Search public prompts, expanding the top hits to their full body
-def search_shared_prompts(
+async def search_shared_prompts(
     query: str,
     *,
     category: str | None = None,
@@ -99,7 +99,7 @@ def search_shared_prompts(
 
     try:
         service = _service()
-        page = service.list_public_content(
+        page = await service.list_public_content(
             query=normalized_query,
             limit=limit,
             category=(category or None),
@@ -122,7 +122,7 @@ def search_shared_prompts(
         }
         if index < FULL_CONTENT_PROMPT_LIMIT:
             try:
-                detail = service.get_public_content(item.prompt_id)
+                detail = await service.get_public_content(item.prompt_id)
             except Exception:
                 detail = None
                 # 本文が読めなくてもスニペットだけで紹介はできる
@@ -179,5 +179,5 @@ def build_shared_prompt_tool_payload(result: SharedPromptResult) -> dict[str, An
 
 # 検索からツール結果ペイロードまでを1呼び出しにまとめる（生成ジョブへ渡す入口）
 # Search and format in one call: the entry point handed to the generation job
-def search_shared_prompts_for_tool(query: str) -> dict[str, Any]:
-    return build_shared_prompt_tool_payload(search_shared_prompts(query))
+async def search_shared_prompts_for_tool(query: str) -> dict[str, Any]:
+    return build_shared_prompt_tool_payload(await search_shared_prompts(query))

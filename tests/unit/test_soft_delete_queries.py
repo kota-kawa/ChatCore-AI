@@ -1,5 +1,6 @@
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.chat.tasks import _delete_task_for_user
 from blueprints.prompt_share.prompt_manage_api import (
@@ -8,111 +9,33 @@ from blueprints.prompt_share.prompt_manage_api import (
 )
 
 
-# テスト用の疑似DBカーソルクラス。
-# Mock database cursor class for testing.
-class FakeCursor:
-    def __init__(self, *, rowcount=1):
-        self.rowcount = rowcount
-        self.executed = []
-        self.closed = False
-
-    # クエリを実行し、実行されたクエリとパラメータを記録します。
-    # Execute a query and record the query string and params.
-    def execute(self, query, params=None):
-        normalized = " ".join(query.split())
-        self.executed.append((normalized, params))
-
-    # カーソルを閉じます。
-    # Close the cursor.
-    def close(self):
-        self.closed = True
-
-
-# テスト用の疑似DBコネクションクラス。
-# Mock database connection class for testing.
-class FakeConnection:
-    def __init__(self, cursor):
-        self._cursor = cursor
-        self.committed = False
-        self.closed = False
-
-    # カーソルを返却します。
-    # Return the cursor.
-    def cursor(self, *args, **kwargs):
-        return self._cursor
-
-    # コミットされたことを記録します。
-    # Commit the current mock transaction.
-    def commit(self):
-        self.committed = True
-
-    # コネクションを閉じます。
-    # Close the connection.
-    def close(self):
-        self.closed = True
-
-    # Prepare the object when entering the context.
-    def __enter__(self):
-        return self
-
-    # Clean up when leaving the context.
-    def __exit__(self, _exc_type, _exc, _tb):
-        self.close()
-        return False
-
-
-# 物理削除(Hard Delete)ではなく論理削除(Soft Delete)が行われているかを検証するテストクラス。
-# Test class to verify that soft deletes are performed instead of hard deletes.
 class SoftDeleteQueryTestCase(unittest.TestCase):
-    # タスクの削除処理において、DELETE文ではなくUPDATE文でdeleted_atカラムを更新することを確認します。
-    # Verify that deleting a task updates the deleted_at column using UPDATE instead of DELETE.
-    def test_delete_task_marks_row_deleted_instead_of_hard_deleting(self):
-        fake_cursor = FakeCursor()
-        fake_conn = FakeConnection(fake_cursor)
+    def test_delete_task_marks_row_deleted_through_async_service(self):
+        with patch("blueprints.chat.tasks.delete_task_record", new=AsyncMock()) as delete_task:
+            asyncio.run(_delete_task_for_user(5, 41))
 
-        # タスク削除関数をモックされたDB接続を利用して呼び出し
-        # Call the delete task function using the mocked DB connection
-        with patch("blueprints.chat.tasks.get_db_connection", return_value=fake_conn):
-            _delete_task_for_user(5, 41)
+        delete_task.assert_awaited_once_with(5, 41)
 
-        query, params = fake_cursor.executed[1]
-        self.assertIn("UPDATE task_with_examples SET deleted_at = CURRENT_TIMESTAMP", query)
-        self.assertNotIn("DELETE FROM task_with_examples", query)
-        self.assertEqual(params, (41, 5))
-        self.assertTrue(fake_conn.committed)
+    def test_delete_saved_prompt_marks_task_row_deleted_through_service(self):
+        service = MagicMock()
+        service.delete_saved_prompt = AsyncMock(return_value=1)
 
-    # 保存されたプロンプト（タスク）の削除処理において、UPDATE文でdeleted_atが更新されることを確認します。
-    # Verify that deleting a saved prompt updates the deleted_at column of the task using UPDATE.
-    def test_delete_saved_prompt_marks_task_row_deleted(self):
-        fake_cursor = FakeCursor(rowcount=1)
-        fake_conn = FakeConnection(fake_cursor)
+        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
+            deleted = asyncio.run(_delete_saved_prompt_for_user(8, 99))
 
-        # 保存プロンプト削除関数をモックされたDB接続を利用して呼び出し
-        # Call the delete saved prompt function using the mocked DB connection
-        with patch("blueprints.prompt_share.prompt_manage_api.get_db_connection", return_value=fake_conn):
-            deleted = _delete_saved_prompt_for_user(8, 99)
-
-        query, params = fake_cursor.executed[0]
         self.assertEqual(deleted, 1)
-        self.assertIn("UPDATE task_with_examples SET deleted_at = CURRENT_TIMESTAMP", query)
-        self.assertEqual(params, (99, 8))
+        service.delete_saved_prompt.assert_awaited_once_with(user_id=8, task_id=99)
 
-    # 共有プロンプトの削除処理において、DELETE文ではなくUPDATE文でdeleted_atが更新されることを確認します。
-    # Verify that deleting a shared prompt updates the deleted_at column of the prompt using UPDATE instead of DELETE.
-    def test_delete_prompt_marks_prompt_row_deleted(self):
-        fake_cursor = FakeCursor(rowcount=1)
-        fake_conn = FakeConnection(fake_cursor)
+    def test_delete_prompt_marks_prompt_row_deleted_through_service(self):
+        service = MagicMock()
+        service.delete_prompt = AsyncMock(return_value=([], 1))
 
-        # プロンプト削除関数をモックされたDB接続を利用して呼び出し
-        # Call the delete prompt function using the mocked DB connection
-        with patch("blueprints.prompt_share.prompt_manage_api.get_db_connection", return_value=fake_conn):
-            deleted = _delete_prompt_for_user(8, 77)
+        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
+            deleted = asyncio.run(_delete_prompt_for_user(8, 77))
 
-        query, params = fake_cursor.executed[0]
         self.assertEqual(deleted, 1)
-        self.assertIn("UPDATE prompts SET deleted_at = CURRENT_TIMESTAMP", query)
-        self.assertNotIn("DELETE FROM prompts", query)
-        self.assertEqual(params, (77, 8))
+        service.delete_prompt.assert_awaited_once_with(user_id=8, prompt_id=77)
+
 
 if __name__ == "__main__":
     unittest.main()

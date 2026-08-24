@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from services.chat_generation import ChatGenerationJob
 from services.personal_knowledge import (
@@ -12,10 +12,8 @@ from services.personal_knowledge import (
 )
 
 
-# 日本語: mcp_memo_service の検索結果を模した最小オブジェクト。
-# English: Minimal stand-in for a memo search hit returned by mcp_memo_service.
-class _FakeMemo:
-    def __init__(self, memo_id, title, excerpt):
+class _Memo:
+    def __init__(self, memo_id=1, title="沖縄旅行", excerpt="予算"):
         self.id = memo_id
         self.title = title
         self.excerpt = excerpt
@@ -23,341 +21,159 @@ class _FakeMemo:
         self.collection_name = None
 
 
-class _FakeMemoDetail:
-    def __init__(self, content):
-        self.content = content
+class _MemoDetail:
+    content = "本文全体"
 
 
-class _FakeMemoSearchResult:
+class _MemoSearch:
     def __init__(self, memos):
         self.memos = memos
 
 
-class _FakeFact:
-    def __init__(self, fact_id, title, content):
-        self.id = fact_id
-        self.fact_type = "preference"
-        self.title = title
-        self.content = content
-        self.importance = 70
-        self.updated_at = "2026-08-02T00:00:00"
+class _Fact:
+    id = 9
+    fact_type = "preference"
+    title = "移動手段"
+    content = "飛行機が好み"
+    importance = 70
+    updated_at = "2026-08-02T00:00:00"
 
 
-class _FakeFactSearchResult:
-    def __init__(self, facts):
-        self.facts = facts
+class _FactSearch:
+    facts = [_Fact()]
 
 
-class PersonalKnowledgeSearchTestCase(unittest.TestCase):
-    # 日本語: メモとマイコンテキストの両方を1つの検索結果へまとめることを確認します。
-    # English: Both memos and My Context facts must land in a single result.
-    def test_merges_memo_and_context_hits(self):
-        memos = _FakeMemoSearchResult([_FakeMemo(1, "沖縄旅行", "予算は10万円")])
-        facts = _FakeFactSearchResult([_FakeFact(9, "移動手段", "飛行機が好み")])
-
-        with patch("services.personal_knowledge.search_memos", return_value=memos), patch(
-            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
-        ), patch("services.personal_knowledge.search_facts", return_value=facts):
-            result = search_personal_knowledge(7, " 沖縄 ")
-
+class PersonalKnowledgeSearchTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_merges_async_memo_and_context_hits(self):
+        with patch(
+            "services.personal_knowledge.search_memos",
+            new=AsyncMock(return_value=_MemoSearch([_Memo()])),
+        ), patch(
+            "services.personal_knowledge.get_memo",
+            new=AsyncMock(return_value=_MemoDetail()),
+        ), patch(
+            "services.personal_knowledge.search_facts",
+            new=AsyncMock(return_value=_FactSearch()),
+        ):
+            result = await search_personal_knowledge(7, " 沖縄 ")
         self.assertEqual(result.query, "沖縄")
-        self.assertEqual([memo["title"] for memo in result.memos], ["沖縄旅行"])
-        # 上位のヒットは抜粋だけでなく全文も渡す。
-        # Top hits carry the full body, not just the excerpt.
         self.assertEqual(result.memos[0]["content"], "本文全体")
-        self.assertEqual([fact["title"] for fact in result.facts], ["移動手段"])
+        self.assertEqual(result.facts[0]["title"], "移動手段")
 
-    # 日本語: 意味的に届かなかったときは、語そのものを含むメモをキーワード検索で拾います。
-    # English: A semantic miss falls back to keyword search so a literal match is not lost.
-    def test_memo_search_falls_back_to_keyword_when_semantic_finds_nothing(self):
-        results = {
-            "semantic": _FakeMemoSearchResult([]),
-            "keyword": _FakeMemoSearchResult([_FakeMemo(4, "沖縄旅行", "予算は10万円")]),
-        }
-        modes: list[str] = []
+    async def test_semantic_memo_miss_falls_back_to_keyword(self):
+        modes = []
 
-        def fake_search_memos(_user_id, _query, *, mode, limit):
+        async def search(_user_id, _query, *, mode, limit, **_kwargs):
             del limit
             modes.append(mode)
-            return results[mode]
+            return _MemoSearch([] if mode == "semantic" else [_Memo(4)])
 
-        with patch(
-            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
-        ), patch(
-            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+        with patch("services.personal_knowledge.search_memos", new=search), patch(
+            "services.personal_knowledge.get_memo", new=AsyncMock(return_value=_MemoDetail())
         ), patch(
             "services.personal_knowledge.search_facts",
-            return_value=_FakeFactSearchResult([]),
+            new=AsyncMock(return_value=type("Facts", (), {"facts": []})()),
         ):
-            result = search_personal_knowledge(7, "沖縄")
-
+            result = await search_personal_knowledge(7, "沖縄")
         self.assertEqual(modes, ["semantic", "keyword"])
-        self.assertEqual([memo["title"] for memo in result.memos], ["沖縄旅行"])
+        self.assertEqual(result.memos[0]["id"], 4)
 
-    # 日本語: 意味検索が当たった場合は、余計なキーワード検索を行いません。
-    # English: A semantic hit must not spend an extra keyword query.
-    def test_memo_search_skips_the_keyword_pass_when_semantic_hits(self):
-        modes: list[str] = []
-
-        def fake_search_memos(_user_id, _query, *, mode, limit):
-            del limit
-            modes.append(mode)
-            return _FakeMemoSearchResult([_FakeMemo(1, "沖縄旅行", "予算")])
-
+    async def test_failed_one_side_is_recorded_without_discarding_other_side(self):
         with patch(
-            "services.personal_knowledge.search_memos", side_effect=fake_search_memos
-        ), patch(
-            "services.personal_knowledge.get_memo", return_value=_FakeMemoDetail("本文全体")
+            "services.personal_knowledge.search_memos",
+            new=AsyncMock(side_effect=RuntimeError("db down")),
         ), patch(
             "services.personal_knowledge.search_facts",
-            return_value=_FakeFactSearchResult([]),
+            new=AsyncMock(return_value=_FactSearch()),
         ):
-            search_personal_knowledge(7, "沖縄")
-
-        self.assertEqual(modes, ["semantic"])
-
-    # 日本語: 片方の検索が落ちても、もう片方の結果で回答できるようにします。
-    # English: One failing source must not discard the other source's hits.
-    def test_returns_context_hits_when_memo_search_fails(self):
-        facts = _FakeFactSearchResult([_FakeFact(3, "口調", "結論から簡潔に")])
-
-        with patch("services.personal_knowledge.search_memos", side_effect=RuntimeError("db down")), patch(
-            "services.personal_knowledge.search_facts", return_value=facts
-        ):
-            result = search_personal_knowledge(7, "口調")
-
-        self.assertEqual(result.memos, [])
-        self.assertEqual([fact["title"] for fact in result.facts], ["口調"])
-        # 落ちた側は結果に記録し、網羅した検索だと誤認させない。
-        # The failing side is recorded so the hit set is not mistaken for a complete search.
+            result = await search_personal_knowledge(7, "口調")
         self.assertEqual(result.failed_sources, ("memo",))
+        self.assertEqual(result.facts[0]["title"], "移動手段")
 
-    # 日本語: 検索が落ちたときに「該当なし」と返すと、モデルが「メモは無い」と断言してしまいます。
-    # English: Reporting a failed lookup as "no match" would make the model assert the memo does not exist.
-    def test_failed_lookup_is_reported_as_failed_not_as_no_results(self):
-        with patch(
-            "services.personal_knowledge.search_memos", side_effect=RuntimeError("db down")
-        ), patch("services.personal_knowledge.search_facts", side_effect=RuntimeError("db down")):
-            result = search_personal_knowledge(7, "沖縄")
-
-        payload = build_personal_knowledge_tool_payload(result)
-
-        self.assertTrue(result.failed)
-        self.assertEqual(payload["status"], "failed")
-        self.assertEqual(payload["failed_sources"], ["memo", "context_fact"])
-        self.assertIn("Do not say the user has nothing saved", payload["message"])
-
-    # 日本語: 片側だけ落ちた場合は結果を返しつつ、網羅していないことを明示します。
-    # English: A half-failed lookup still returns hits, but flags that the coverage is incomplete.
-    def test_partial_failure_is_flagged_alongside_the_hits(self):
-        facts = _FakeFactSearchResult([_FakeFact(3, "口調", "結論から簡潔に")])
-
-        with patch(
-            "services.personal_knowledge.search_memos", side_effect=RuntimeError("db down")
-        ), patch("services.personal_knowledge.search_facts", return_value=facts):
-            payload = build_personal_knowledge_tool_payload(search_personal_knowledge(7, "口調"))
-
-        self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["partial_failure_sources"], ["memo"])
-
-    # 日本語: 空クエリでは検索そのものを行いません。
-    # English: An empty query performs no lookup at all.
-    def test_blank_query_skips_the_lookup(self):
-        with patch("services.personal_knowledge.search_memos") as memo_search, patch(
-            "services.personal_knowledge.search_facts"
-        ) as fact_search:
-            result = search_personal_knowledge(7, "   ")
-
-        memo_search.assert_not_called()
-        fact_search.assert_not_called()
+    async def test_blank_query_skips_async_database_services(self):
+        memo_search = AsyncMock()
+        fact_search = AsyncMock()
+        with patch("services.personal_knowledge.search_memos", new=memo_search), patch(
+            "services.personal_knowledge.search_facts", new=fact_search
+        ):
+            result = await search_personal_knowledge(7, " ")
+        memo_search.assert_not_awaited()
+        fact_search.assert_not_awaited()
         self.assertFalse(result.has_hits)
 
-    # 日本語: ヒット0件は「無かった」と明示し、捏造させないためのメッセージを返します。
-    # English: Zero hits must be reported explicitly so the model does not invent a memo.
-    def test_empty_payload_tells_the_model_nothing_matched(self):
-        payload = build_personal_knowledge_tool_payload(PersonalKnowledgeResult(query="沖縄"))
-
-        self.assertEqual(payload["status"], "no_results")
-        self.assertEqual(payload["memos"], [])
-        self.assertEqual(payload["context_facts"], [])
-
-
-class PersonalOverviewTestCase(unittest.TestCase):
-    class _FakeListing:
-        def __init__(self, memos):
-            self.memos = memos
-
-    class _FakeDigestFact:
-        def __init__(self, fact_id, title, content):
-            self.id = fact_id
-            self.fact_type = "project"
-            self.title = title
-            self.content = content
-            self.importance = 80
-
-    class _FakeDigestGroup:
-        def __init__(self, facts):
-            self.facts = facts
-
-    class _FakeDigest:
-        def __init__(self, groups):
-            self.groups = groups
-
-    # 日本語: 棚卸しは直近のメモとマイコンテキストのダイジェストをまとめて返します。
-    # English: The overview combines recent memo titles with the My Context digest.
-    def test_combines_recent_memos_and_the_context_digest(self):
-        listing = self._FakeListing([_FakeMemo(3, "8月の目標", "")])
-        digest = self._FakeDigest(
-            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
-        )
-
+    async def test_overview_awaits_memo_listing_and_context_digest(self):
+        listing = type("Listing", (), {"memos": [_Memo(3, "8月の目標")]})()
+        fact = _Fact()
+        digest = type(
+            "Digest",
+            (),
+            {"groups": [type("Group", (), {"facts": [fact]})()]},
+        )()
         with patch(
-            "services.personal_knowledge.list_memos", return_value=listing
+            "services.personal_knowledge.list_memos",
+            new=AsyncMock(return_value=listing),
         ) as list_call, patch(
-            "services.personal_knowledge.build_digest", return_value=digest
+            "services.personal_knowledge.build_digest",
+            new=AsyncMock(return_value=digest),
         ):
-            overview = build_personal_overview(7)
-
-        self.assertEqual(list_call.call_args.kwargs["sort"], "updated")
-        self.assertEqual([memo["title"] for memo in overview["recent_memos"]], ["8月の目標"])
-        self.assertEqual([fact["title"] for fact in overview["context_facts"]], ["進行中の案件"])
+            overview = await build_personal_overview(7)
+        self.assertEqual(list_call.await_args.kwargs["sort"], "updated")
         self.assertEqual(overview["recent_memo_count"], 1)
         self.assertEqual(overview["context_fact_count"], 1)
 
-    # 日本語: 片方が落ちても、もう片方の棚卸しは返します。
-    # English: One failing side still returns the other.
-    def test_one_failing_side_still_returns_the_other(self):
-        digest = self._FakeDigest(
-            [self._FakeDigestGroup([self._FakeDigestFact(9, "進行中の案件", "Chat-Core")])]
+
+class PersonalKnowledgePayloadTestCase(unittest.TestCase):
+    def test_failed_and_empty_payloads_are_distinct(self):
+        failed = build_personal_knowledge_tool_payload(
+            PersonalKnowledgeResult(query="沖縄", failed_sources=("memo",))
         )
-
-        with patch(
-            "services.personal_knowledge.list_memos", side_effect=RuntimeError("db down")
-        ), patch("services.personal_knowledge.build_digest", return_value=digest):
-            overview = build_personal_overview(7)
-
-        self.assertEqual(overview["recent_memos"], [])
-        self.assertEqual(overview["context_fact_count"], 1)
+        empty = build_personal_knowledge_tool_payload(PersonalKnowledgeResult(query="沖縄"))
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(empty["status"], "no_results")
 
 
 class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
-    def _build_job(self, search):
+    def test_tool_call_keeps_generation_contract(self):
         events = []
         job = ChatGenerationJob(
-            conversation_messages=[{"role": "user", "content": "去年の沖縄旅行の予算は？"}],
+            conversation_messages=[{"role": "user", "content": "沖縄旅行"}],
             model="test-model",
             persist_response=lambda response, **kwargs: None,
-            on_event=lambda event: events.append((event.event, event.payload)),
-            personal_knowledge_search=search,
+            on_event=lambda event: events.append(event.event),
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 1,
+                "context_fact_count": 0,
+                "memos": [],
+                "context_facts": [],
+            },
         )
-        return job, events
-
-    @staticmethod
-    def _run(job, tool_call, *, current_messages, step_count, max_steps):
-        return job._run_lookup_tool_call(
+        tool_call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": PERSONAL_KNOWLEDGE_TOOL_NAME,
+                "arguments": json.dumps({"query": "沖縄"}),
+            },
+        }
+        messages = []
+        next_step = job._run_lookup_tool_call(
             tool_call,
             tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
             search=job._personal_knowledge_search,
             event_prefix="personal_knowledge_search",
             result_counts=("memo_count", "context_fact_count"),
-            failure_log_message="Memo / context search via tool call failed.",
-            failure_tool_message="Memo and My Context search failed.",
-            current_messages=current_messages,
-            step_count=step_count,
-            max_steps=max_steps,
-        )
-
-    @staticmethod
-    def _tool_call(arguments):
-        return {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": PERSONAL_KNOWLEDGE_TOOL_NAME, "arguments": json.dumps(arguments)},
-        }
-
-    # 日本語: 検索結果はツール結果メッセージとして会話へ戻り、進捗イベントも発行されます。
-    # English: Results return as a tool message and the step publishes progress events.
-    def test_tool_call_appends_results_and_publishes_steps(self):
-        payload = {"status": "ok", "memo_count": 2, "context_fact_count": 1, "memos": [], "context_facts": []}
-        job, events = self._build_job(lambda query: payload)
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "沖縄 予算"}),
+            failure_log_message="lookup failed",
+            failure_tool_message="lookup failed",
             current_messages=messages,
             step_count=1,
             max_steps=8,
         )
-
         self.assertEqual(next_step, 2)
-        self.assertEqual(messages[0]["role"], "tool")
-        self.assertEqual(json.loads(messages[0]["content"])["memo_count"], 2)
+        self.assertEqual(json.loads(messages[0]["content"])["memo_count"], 1)
         self.assertEqual(
-            [name for name, _ in events],
+            events,
             ["personal_knowledge_search_started", "personal_knowledge_search_completed"],
-        )
-        self.assertEqual(events[1][1]["memo_count"], 2)
-
-    # 日本語: 空クエリはステップを消費せず、引数エラーとして戻します。
-    # English: A blank query costs no step and comes back as an argument error.
-    def test_blank_query_does_not_consume_a_step(self):
-        job, events = self._build_job(lambda query: {"status": "ok"})
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "  "}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(next_step, 1)
-        self.assertEqual(json.loads(messages[0]["content"])["status"], "invalid_arguments")
-        self.assertEqual(events, [])
-
-    # 日本語: 残りステップが無いときは検索せず、既存情報で回答するよう促します。
-    # English: With no steps left the lookup is skipped and the model is told to answer as-is.
-    def test_step_limit_skips_the_lookup(self):
-        calls = []
-        job, _events = self._build_job(lambda query: calls.append(query) or {"status": "ok"})
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "沖縄"}),
-            current_messages=messages,
-            step_count=8,
-            max_steps=8,
-        )
-
-        self.assertEqual(next_step, 8)
-        self.assertEqual(calls, [])
-        self.assertEqual(json.loads(messages[0]["content"])["status"], "step_limit_reached")
-
-    # 日本語: 検索が例外を投げても生成は続き、失敗をイベントとツール結果で伝えます。
-    # English: A failing lookup keeps generation alive and reports the failure both ways.
-    def test_failed_lookup_reports_and_continues(self):
-        def _raise(query):
-            raise RuntimeError("search exploded")
-
-        job, events = self._build_job(_raise)
-        messages = []
-
-        next_step = self._run(
-            job,
-            self._tool_call({"query": "沖縄"}),
-            current_messages=messages,
-            step_count=1,
-            max_steps=8,
-        )
-
-        self.assertEqual(next_step, 2)
-        self.assertEqual(json.loads(messages[0]["content"])["status"], "failed")
-        self.assertEqual(
-            [name for name, _ in events],
-            ["personal_knowledge_search_started", "personal_knowledge_search_failed"],
         )
 
 

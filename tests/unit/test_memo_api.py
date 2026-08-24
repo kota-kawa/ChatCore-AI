@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.memo import (
     api_archive_memo,
@@ -24,7 +24,6 @@ from blueprints.memo import (
     api_suggest_memo,
     api_update_collection,
     api_update_memo,
-    _bulk_action,
 )
 from services.api_errors import ResourceNotFoundError
 from tests.helpers.request_helpers import build_request
@@ -47,70 +46,6 @@ async def collect_streaming_body(response):
     async for chunk in response.body_iterator:
         chunks.append(chunk)
     return b"".join(chunks)
-
-
-async def run_blocking_inline(func, *args, **kwargs):
-    return func(*args, **kwargs)
-
-
-# 日本語: テスト用の擬似Fake Bulk Cursorクラスです。
-# English: Mock Fake Bulk Cursor class for testing.
-class FakeBulkCursor:
-    def __init__(self, *, owned_ids=None, collection_exists=True, rowcount=0):
-        self.owned_ids = list(owned_ids or [])
-        self.collection_exists = collection_exists
-        self.rowcount = rowcount
-        self.executed = []
-        self.closed = False
-        self._fetchall_result = []
-        self._fetchone_result = None
-
-    def execute(self, query, params=None):
-        normalized = " ".join(query.split())
-        self.executed.append((normalized, params))
-        # 日本語: 条件に基づいて処理の流れを切り替えます。
-        # English: Switch the execution flow based on the condition.
-        if "SELECT id FROM memo_entries" in normalized:
-            self._fetchall_result = [(memo_id,) for memo_id in self.owned_ids]
-            return
-        # 日本語: 条件に基づいて処理の流れを切り替えます。
-        # English: Switch the execution flow based on the condition.
-        if normalized == "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s":
-            self._fetchone_result = (1,) if self.collection_exists else None
-            return
-
-    def fetchall(self):
-        return self._fetchall_result
-
-    def fetchone(self):
-        return self._fetchone_result
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def close(self):
-        self.closed = True
-
-
-# 日本語: テスト用の擬似Fake Bulk Connectionクラスです。
-# English: Mock Fake Bulk Connection class for testing.
-class FakeBulkConnection:
-    def __init__(self, cursor):
-        self._cursor = cursor
-        self.committed = False
-        self.closed = False
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def cursor(self, *args, **kwargs):
-        return self._cursor
-
-    def commit(self):
-        self.committed = True
-
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
-    def close(self):
-        self.closed = True
 
 
 # 日本語: Memo Apiの機能や仕様を検証するテストクラスです。
@@ -199,8 +134,8 @@ class MemoApiTestCase(unittest.TestCase):
         )
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
-            "blueprints.memo._insert_memo", return_value=42
+        with patch(
+            "blueprints.memo._insert_memo", new=AsyncMock(return_value=42)
         ) as mock_insert, patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_create_memo(request))
 
@@ -252,9 +187,9 @@ class MemoApiTestCase(unittest.TestCase):
         )
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
+        with patch(
             "blueprints.memo._update_memo",
-            return_value={"id": 10, "title": "Updated title"},
+            new=AsyncMock(return_value={"id": 10, "title": "Updated title"}),
         ), patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_update_memo(request, memo_id=10))
         self.assertEqual(response.status_code, 200)
@@ -276,9 +211,9 @@ class MemoApiTestCase(unittest.TestCase):
         )
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
+        with patch(
             "blueprints.memo._update_memo",
-            return_value={"id": 10, "ai_response": "updated answer"},
+            new=AsyncMock(return_value={"id": 10, "ai_response": "updated answer"}),
         ) as mock_update, patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_update_memo(request, memo_id=10))
         self.assertEqual(response.status_code, 200)
@@ -366,11 +301,12 @@ class MemoApiTestCase(unittest.TestCase):
         )
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo._bulk_action", return_value={"affected": 2}) as mock_bulk:
+        with patch("blueprints.memo._bulk_action", new=AsyncMock(return_value={"affected": 2})) as mock_bulk:
             response = asyncio.run(api_bulk_memo(request))
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["affected"], 2)
+        mock_bulk.assert_awaited_once()
         self.assertEqual(mock_bulk.call_args.args[:3], (7, "archive", [10, 11]))
 
     # 日本語: reorderメモ通過するneighborペイロードことを検証します。
@@ -384,9 +320,9 @@ class MemoApiTestCase(unittest.TestCase):
         )
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
+        with patch(
             "blueprints.memo._reorder_memo",
-            return_value={"id": 12, "title": "Moved"},
+            new=AsyncMock(return_value={"id": 12, "title": "Moved"}),
         ) as mock_reorder:
             response = asyncio.run(api_reorder_memo(request))
         self.assertEqual(response.status_code, 200)
@@ -395,31 +331,6 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(mock_reorder.call_args.args[:2], (7, 12))
         self.assertEqual(mock_reorder.call_args.kwargs["before_id"], 10)
         self.assertEqual(mock_reorder.call_args.kwargs["after_id"], 11)
-
-    # 日本語: bulkactionreportsactualaffectedrowsことを検証します。
-    # English: Verify that bulk action reports actual affected rows.
-    def test_bulk_action_reports_actual_affected_rows(self):
-        fake_cursor = FakeBulkCursor(owned_ids=[10, 11], rowcount=2)
-        fake_conn = FakeBulkConnection(fake_cursor)
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.get_db_connection", return_value=fake_conn):
-            result = _bulk_action(7, "archive", [10, 11], collection_id=None)
-        self.assertEqual(result["affected"], 2)
-        self.assertTrue(fake_conn.committed)
-        self.assertTrue(fake_cursor.closed)
-
-    # 日本語: collectionが〜しないownedのとき、bulkaction返却するzeroことを検証します。
-    # English: Verify that bulk action returns zero when collection is not owned.
-    def test_bulk_action_returns_zero_when_collection_is_not_owned(self):
-        fake_cursor = FakeBulkCursor(owned_ids=[10, 11], collection_exists=False, rowcount=2)
-        fake_conn = FakeBulkConnection(fake_cursor)
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch("blueprints.memo.get_db_connection", return_value=fake_conn):
-            result = _bulk_action(7, "set_collection", [10, 11], collection_id=99)
-        self.assertEqual(result["affected"], 0)
-        self.assertTrue(fake_conn.committed)
 
     # 日本語: collectionルーティングreturnpayloadsことを検証します。
     # English: Verify that collection routes return payloads.

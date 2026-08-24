@@ -5,7 +5,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import Request
 
-from blueprints.auth_support import dep
+from blueprints.auth_support import call_dependency, dep
 
 
 def _clear_login_verification_session(session: dict[str, Any]) -> None:
@@ -62,7 +62,7 @@ def _user_id_from_session(session: dict[str, Any]) -> int | None:
 
 async def _copy_default_tasks_after_login(user_id: int, *, context: str) -> None:
     try:
-        await dep("run_blocking")(dep("copy_default_tasks_for_user"), user_id)
+        await call_dependency("copy_default_tasks_for_user", user_id)
     except Exception:
         dep("logger").exception(
             "%s: failed to copy default tasks for user %s",
@@ -83,8 +83,8 @@ async def _claim_guest_prompts_after_login(
         return []
 
     try:
-        return await dep("run_blocking")(
-            dep("claim_guest_prompts_for_user"),
+        return await call_dependency(
+            "claim_guest_prompts_for_user",
             user_id,
             guest_token,
         )

@@ -6,8 +6,8 @@ from typing import Any
 from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
-from blueprints.memo.helpers import parse_memo_text
-from blueprints.memo.repository import fetch_memo_detail
+from services.repositories.memo_helpers import parse_memo_text
+from services.repositories.memo_repository import fetch_memo_detail
 from services.auth_limits import (
     AuthLimitService,
     consume_rate_limit,
@@ -22,16 +22,14 @@ from services.api_errors import (
 )
 from services.async_utils import run_blocking
 from services.agent_capabilities import build_capability_context
-from services.db import Error, get_db_connection
-from services.default_tasks import (
-    default_task_payloads,
-    localize_system_task,
+from services.chat_service import (
+    add_task as add_task_record,
+    delete_task as delete_task_record,
+    edit_task as edit_task_record,
+    fetch_tasks,
+    update_tasks_order as update_tasks_order_record,
 )
-from services.error_messages import (
-    ERROR_TASK_NAME_CONFLICT,
-    ERROR_TASK_NOT_FOUND,
-    ERROR_TASK_ORDER_INVALID,
-)
+from services.default_tasks import default_task_payloads
 from services.llm import (
     GPT_OSS_120B_MODEL,
     LlmAuthenticationError,
@@ -81,9 +79,6 @@ from services.web import (
 from . import chat_bp, get_session_id
 
 logger = logging.getLogger(__name__)
-
-TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307  # "TASK"
-UNIQUE_VIOLATION_PGCODE = "23505"
 
 # プロンプト支援APIのIP/ユーザーあたりのレート制限ウインドウ秒数
 # Rate limit window (seconds) for prompt assist calls.
@@ -340,7 +335,7 @@ def _build_ai_agent_messages(
 
 # 指定されたメモのタイトルと本文をエージェント用コンテキストに組み立てる関数
 # Fetch and format a specific memo's title and content to be used as context for the AI agent.
-def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
+async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
     """
     指定されたメモの詳細を取得し、文字制限を考慮した上で、AIエージェントの背景知識となるテキスト情報に整形します。
     Fetches the memo content, clamps to max length, and formats it for agent context.
@@ -350,7 +345,7 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
 
     # DBからメモ詳細を取得
     # Fetch memo from database
-    memo = fetch_memo_detail(user_id, memo_id)
+    memo = await fetch_memo_detail(user_id, memo_id)
     title = (memo.get("title") or "Saved memo").strip()
     memo_text = parse_memo_text(memo.get("ai_response") or "").strip()
     
@@ -372,7 +367,7 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
 
 # データベースからタスクリストを取得する関数（ログイン時は個別、未ログイン時は共通）
 # Fetch the list of tasks from the database (user-specific when authenticated, generic otherwise).
-def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[str, Any]]:
+async def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[str, Any]]:
     """
     ログインユーザーはDBの個別定義、ゲストは同梱された最新の公式定義を取得します。
     Fetch user-owned tasks from the DB or the current bundled catalog for guests.
@@ -385,154 +380,32 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
             task["task_id"] = None
         return tasks
 
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # ログインユーザーのタスク一覧を取得
-        # Query custom tasks for authenticated user sorted by display order
-        cursor.execute(
-            """
-              SELECT id AS task_id,
-                     system_task_key,
-                     system_task_revision,
-                     is_system_task_customized,
-                     name,
-                     prompt_template,
-                     response_rules,
-                     output_skeleton,
-                     input_examples,
-                     output_examples,
-                     FALSE AS is_default
-                FROM task_with_examples
-               WHERE user_id = %s
-                 AND deleted_at IS NULL
-               ORDER BY COALESCE(display_order, 99999),
-                         id
-            """,
-            (user_id,),
-        )
-
-        rows = cursor.fetchall()
-        return [localize_system_task(dict(row), locale) for row in rows]
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    return await fetch_tasks(user_id, locale)
 
 
 # ユーザーのタスク表示順を更新する関数
 # Update the display order of tasks for a specific user in the database.
-def _lock_user_tasks(cursor: Any, user_id: int) -> None:
-    """Serialize task mutations for one user within the current transaction."""
-    cursor.execute(
-        "SELECT pg_advisory_xact_lock(%s, %s)",
-        (TASK_WRITE_LOCK_NAMESPACE, user_id),
-    )
-
-
-def _raise_task_name_conflict_for_unique_violation(exc: Error) -> None:
-    if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
-        raise ApiServiceError(
-            ERROR_TASK_NAME_CONFLICT,
-            409,
-            code="task_name_conflict",
-        ) from exc
-    raise exc
-
-
-def _update_tasks_order_for_user(user_id: int, new_order: list[int]) -> None:
+async def _update_tasks_order_for_user(user_id: int, new_order: list[int]) -> None:
     """
     渡されたタスク名の順序に合わせて、DB内の各カスタムタスクのdisplay_orderを一括更新します。
     Updates the display order index for custom user tasks in the DB.
     """
-    # 受け取った順序配列で display_order を更新する
-    # Update display_order according to the provided order list.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        _lock_user_tasks(cursor, user_id)
-        cursor.execute(
-            """
-            SELECT id
-              FROM task_with_examples
-             WHERE user_id = %s
-               AND deleted_at IS NULL
-             FOR UPDATE
-            """,
-            (user_id,),
-        )
-        active_ids = {
-            int(row["id"] if isinstance(row, dict) else row[0])
-            for row in cursor.fetchall()
-        }
-        if len(new_order) != len(active_ids) or set(new_order) != active_ids:
-            raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
-
-        for index, task_id in enumerate(new_order):
-            cursor.execute(
-                """
-                UPDATE task_with_examples
-                   SET display_order = %s,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE id = %s
-                   AND user_id = %s
-                   AND deleted_at IS NULL
-                """,
-                (index, task_id, user_id),
-            )
-            if cursor.rowcount != 1:
-                raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
-        conn.commit()
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    await update_tasks_order_record(user_id, new_order)
 
 
 # ユーザーのタスクを論理削除する関数
 # Mark a user's task as deleted (soft delete) in the database.
-def _delete_task_for_user(user_id: int, task_id: int) -> None:
+async def _delete_task_for_user(user_id: int, task_id: int) -> None:
     """
     指定されたタスクのdeleted_atに現在日時を設定し、タスクを論理削除します。
     Applies a soft-delete (sets deleted_at) to a user's custom task by name.
     """
-    # ユーザー所有タスクを1件削除する
-    # Delete a single user-owned task.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        _lock_user_tasks(cursor, user_id)
-        query = """
-            UPDATE task_with_examples
-               SET deleted_at = CURRENT_TIMESTAMP,
-                   updated_at = CURRENT_TIMESTAMP
-             WHERE id = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-        """
-        cursor.execute(query, (task_id, user_id))
-        if cursor.rowcount != 1:
-            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
-        conn.commit()
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    await delete_task_record(user_id, task_id)
 
 
 # ユーザーのタスク内容を更新する関数
 # Update the metadata and configuration details of a user-owned task in the database.
-def _edit_task_for_user(
+async def _edit_task_for_user(
     user_id: int,
     task_id: int,
     new_task: str,
@@ -546,101 +419,21 @@ def _edit_task_for_user(
     ユーザーが所有するカスタムタスクの設定内容（タイトル、テンプレート、ルール、出力形式、入出力例）をDBで更新します。
     Updates user-owned custom task definition fields in the DB.
     """
-    # 対象タスク存在確認後に内容を更新し、更新可否を返す
-    # Update task after existence check and return whether update succeeded.
-    conn = None
-    sel_cursor = None
-    upd_cursor = None
-    try:
-        conn = get_db_connection()
-        sel_cursor = conn.cursor()
-        
-        _lock_user_tasks(sel_cursor, user_id)
-        # まずタスクが存在するか、および所有権を確認
-        # Verify the target task exists and is owned by the current user
-        sel_cursor.execute(
-            """
-            SELECT id
-              FROM task_with_examples
-             WHERE id = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-             FOR UPDATE
-            """,
-            (task_id, user_id),
-        )
-        exists = sel_cursor.fetchone()
-        if not exists:
-            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
-
-        sel_cursor.execute(
-            """
-            SELECT 1
-              FROM task_with_examples
-             WHERE user_id = %s
-               AND id <> %s
-               AND deleted_at IS NULL
-               AND LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
-             LIMIT 1
-            """,
-            (user_id, task_id, new_task),
-        )
-        if sel_cursor.fetchone():
-            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
-
-        # タスクの詳細情報をアップデート
-        # Update metadata for the task
-        upd_cursor = conn.cursor()
-        update_query = """
-            UPDATE task_with_examples
-               SET name            = %s,
-                   prompt_template = COALESCE(%s, prompt_template),
-                   response_rules  = COALESCE(%s, response_rules),
-                   output_skeleton = COALESCE(%s, output_skeleton),
-                   input_examples  = COALESCE(%s, input_examples),
-                   output_examples = COALESCE(%s, output_examples),
-                   is_system_task_customized = CASE
-                       WHEN system_task_key IS NOT NULL THEN TRUE
-                       ELSE is_system_task_customized
-                   END,
-                   updated_at = CURRENT_TIMESTAMP
-             WHERE id = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-            """
-        upd_cursor.execute(
-            update_query,
-            (
-                new_task,
-                prompt_template,
-                response_rules,
-                output_skeleton,
-                input_examples,
-                output_examples,
-                task_id,
-                user_id,
-            ),
-        )
-        if upd_cursor.rowcount != 1:
-            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
-        conn.commit()
-        return True
-    except Error as exc:
-        _raise_task_name_conflict_for_unique_violation(exc)
-    finally:
-        # リソース解放
-        # Resource cleanup
-        if sel_cursor is not None:
-            sel_cursor.close()
-        if upd_cursor is not None:
-            upd_cursor.close()
-        if conn is not None:
-            conn.close()
+    return await edit_task_record(
+        user_id,
+        task_id,
+        new_task,
+        prompt_template,
+        response_rules,
+        output_skeleton,
+        input_examples,
+        output_examples,
+    )
 
 
 # ユーザーのカスタムタスクをDBに新規追加する関数
 # Insert a new custom task configuration for a user in the database.
-def _add_task_for_user(
+async def _add_task_for_user(
     user_id: int,
     title: str,
     prompt_content: str,
@@ -653,77 +446,15 @@ def _add_task_for_user(
     ユーザー個別のカスタムタスク定義をDBのtask_with_examplesテーブルに新規追加（永続化）します。
     Inserts a new custom task definition row for the user.
     """
-    # ユーザー専用タスクを新規追加する
-    # Insert a new user-owned task.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        _lock_user_tasks(cursor, user_id)
-        cursor.execute(
-            """
-            SELECT 1
-              FROM task_with_examples
-             WHERE user_id = %s
-               AND deleted_at IS NULL
-               AND LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
-             LIMIT 1
-            """,
-            (user_id, title),
-        )
-        if cursor.fetchone():
-            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
-        cursor.execute(
-            """
-            SELECT COALESCE(MAX(display_order), -1) + 1 AS next_display_order
-              FROM task_with_examples
-             WHERE user_id = %s
-               AND deleted_at IS NULL
-            """,
-            (user_id,),
-        )
-        order_row = cursor.fetchone()
-        display_order = int(
-            (order_row.get("next_display_order") if isinstance(order_row, dict) else order_row[0])
-            if order_row is not None
-            else 0
-        )
-        query = """
-            INSERT INTO task_with_examples
-                  (
-                      name,
-                      prompt_template,
-                      response_rules,
-                      output_skeleton,
-                      input_examples,
-                      output_examples,
-                      user_id,
-                      display_order
-                  )
-            VALUES (%s,   %s,               %s,             %s,             %s,             %s,             %s,      %s)
-        """
-        cursor.execute(
-            query,
-            (
-                title,
-                prompt_content,
-                response_rules,
-                output_skeleton,
-                input_examples,
-                output_examples,
-                user_id,
-                display_order,
-            ),
-        )
-        conn.commit()
-    except Error as exc:
-        _raise_task_name_conflict_for_unique_violation(exc)
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    await add_task_record(
+        user_id,
+        title,
+        prompt_content,
+        response_rules,
+        output_skeleton,
+        input_examples,
+        output_examples,
+    )
 
 
 # タスクリストを取得するAPIエンドポイント
@@ -748,11 +479,7 @@ async def get_tasks(request: Request):
         try:
             # DBからタスク一覧を取得
             # Load tasks from DB based on user id
-            tasks = await run_blocking(
-                _fetch_tasks_from_db,
-                user_id,
-                get_request_locale(request),
-            )
+            tasks = await _fetch_tasks_from_db(user_id, get_request_locale(request))
 
         except Exception:
             logger.exception("Database error while loading tasks.")
@@ -821,7 +548,7 @@ async def update_tasks_order(request: Request):
     try:
         # DB上の順序インデックスを更新
         # Update index ordering in DB
-        await run_blocking(_update_tasks_order_for_user, user_id, new_order)
+        await _update_tasks_order_for_user(user_id, new_order)
         return jsonify({"message": "Order updated"}, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -865,7 +592,7 @@ async def delete_task(request: Request):
     try:
         # タスクを削除
         # Run DB delete query
-        await run_blocking(_delete_task_for_user, user_id, payload.task_id)
+        await _delete_task_for_user(user_id, payload.task_id)
         return jsonify({"message": "Task deleted"}, status_code=200)
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
@@ -909,8 +636,7 @@ async def edit_task(request: Request):
     try:
         # 編集処理を実行
         # Perform DB update
-        await run_blocking(
-            _edit_task_for_user,
+        await _edit_task_for_user(
             user_id,
             payload.task_id,
             payload.new_task,
@@ -964,8 +690,7 @@ async def add_task(request: Request):
     try:
         # DBに追加登録
         # Register new custom task in DB
-        await run_blocking(
-            _add_task_for_user,
+        await _add_task_for_user(
             user_id,
             payload.title,
             payload.prompt_content,
@@ -1199,11 +924,7 @@ async def ai_agent(
             # Handle memo-focused requests: propose an edit plan or answer questions using the memo as context
             if payload.memo_id is not None:
                 yield _ai_agent_sse("progress", {"message": "メモを読み込んでいます..."})
-                rag_context = await run_blocking(
-                    _build_ai_agent_memo_context,
-                    user_id,
-                    payload.memo_id,
-                )
+                rag_context = await _build_ai_agent_memo_context(user_id, payload.memo_id)
 
                 # 編集依頼なら、実行ボタン付きの編集計画（アクションプラン）を提案する。
                 # ただし本文が切り詰められている場合、全文置換の計画は末尾を消してしまうため生成しない。
