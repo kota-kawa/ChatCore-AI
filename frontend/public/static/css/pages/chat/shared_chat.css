@@ -25,9 +25,8 @@
   background: var(--surface-primary, #ffffff);
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   border-radius: var(--radius-xl, 24px);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.03),
-    0 24px 48px -12px rgba(0, 0, 0, 0.12);
+  /* 角丸の外側へ影を広げると、下端の角で尖った残像が見えるため影を使わない。 */
+  box-shadow: none;
   overflow: hidden;
 }
 
