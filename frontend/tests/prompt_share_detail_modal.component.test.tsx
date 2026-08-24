@@ -73,6 +73,23 @@ describe("プロンプト詳細モーダルのMarkdown整形", () => {
     expect(screen.getByText("会議メモを要約してください。")).toBeInTheDocument();
   });
 
+  it("説明を本文より前にプレーンテキストで表示する", () => {
+    const { container } = renderDetailModal({
+      ...basePrompt,
+      description: "# 説明\n用途を短く紹介",
+      content: "本文"
+    });
+
+    const description = container.querySelector(".prompt-detail-description");
+    const body = screen.getByText("本文");
+    expect(description?.tagName).toBe("P");
+    expect(description?.textContent).toBe("# 説明\n用途を短く紹介");
+    const bodySection = body.closest(".prompt-detail-section--body");
+    expect(description?.closest(".prompt-detail-section")?.compareDocumentPosition(bodySection as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
   it("Skill形式の本文もMarkdownとして整形する", () => {
     renderDetailModal({
       ...basePrompt,

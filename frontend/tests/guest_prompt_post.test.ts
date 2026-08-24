@@ -12,6 +12,7 @@ test("guest prompt payload always uses the text-only contract", () => {
     title: "議事録の要約",
     category: "business",
     content: "以下の議事録を要約してください。",
+    description: "会議後の要点整理に使うプロンプト",
     contentFormat: "skill",
     mediaType: "image",
     inputExamples: "入力例",
@@ -24,6 +25,7 @@ test("guest prompt payload always uses the text-only contract", () => {
 
   assert.equal(formData.get("title"), "議事録の要約");
   assert.equal(formData.get("content"), "以下の議事録を要約してください。");
+  assert.equal(formData.get("description"), "会議後の要点整理に使うプロンプト");
   assert.equal(formData.get("content_format"), "prompt");
   assert.equal(formData.get("media_type"), "text");
   assert.equal(formData.get("category"), "");
@@ -42,6 +44,7 @@ test("signed-in prompt payload preserves the selected type and optional fields",
     title: "画像プロンプト",
     category: "creative",
     content: "夜の都市",
+    description: "夜景の画像生成に使うプロンプト",
     contentFormat: "prompt",
     mediaType: "image",
     inputExamples: "",
@@ -56,6 +59,7 @@ test("signed-in prompt payload preserves the selected type and optional fields",
   assert.equal(formData.get("media_type"), "image");
   assert.equal(formData.get("category"), "creative");
   assert.equal(formData.get("ai_model"), "Midjourney");
+  assert.equal(formData.get("description"), "夜景の画像生成に使うプロンプト");
   assert.equal(formData.get("reference_image"), referenceImageFile);
 });
 

@@ -39,6 +39,7 @@ class FakeCursor:
                     "title": "sample",
                     "category": "business",
                     "content": "body",
+                    "description": "description",
                     "author": "tester",
                     "input_examples": "",
                     "output_examples": "",
@@ -116,6 +117,7 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertNotIn("bookmarked", payload["prompts"][0])
         self.assertNotIn("saved_to_list", payload["prompts"][0])
         self.assertEqual(payload["prompts"][0]["skill_markdown"], "")
+        self.assertEqual(payload["prompts"][0]["description"], "description")
         self.assertEqual(payload["pagination"]["page"], 2)
         self.assertEqual(payload["pagination"]["per_page"], 20)
         self.assertEqual(payload["pagination"]["total"], 55)
@@ -130,7 +132,8 @@ class PromptSearchTestCase(unittest.TestCase):
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("SELECT COUNT(*) AS total", count_query)
         self.assertIn("p.system_prompt_key IS NULL", count_query)
-        self.assertEqual(count_params, ("ja", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertIn("p.description LIKE %s", count_query)
+        self.assertEqual(count_params, ("ja", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
 
         # 本文検索クエリの各種条件とLIMIT / OFFSET指定を検証
         # Verify search query conditions and LIMIT / OFFSET values
@@ -153,7 +156,8 @@ class PromptSearchTestCase(unittest.TestCase):
             search_query,
         )
         self.assertIn("LIMIT %s OFFSET %s", search_query)
-        self.assertEqual(search_params[:6], ("ja", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertIn("p.description LIKE %s", search_query)
+        self.assertEqual(search_params[:7], ("ja", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
         self.assertEqual(search_params[-4:-2], (21, 20))
         self.assertEqual(search_params[-2:], (9, 9))
         self.assertTrue(fake_cursor.closed)
@@ -175,14 +179,14 @@ class PromptSearchTestCase(unittest.TestCase):
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("AND content_format = %s", count_query)
         self.assertIn("AND media_type = %s", count_query)
-        self.assertEqual(count_params, ("ja", "prompt", "image", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertEqual(count_params, ("ja", "prompt", "image", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
 
         # データ取得用の検索クエリ条件とパラメータを検証
         # Verify data retrieval query conditions and parameters
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("AND p.content_format = %s", search_query)
         self.assertIn("AND p.media_type = %s", search_query)
-        self.assertEqual(search_params[:8], ("ja", "prompt", "image", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertEqual(search_params[:9], ("ja", "prompt", "image", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
         self.assertEqual(search_params[-4:-2], (11, 0))
         self.assertEqual(search_params[-2:], (9, 9))
 
@@ -205,12 +209,12 @@ class PromptSearchTestCase(unittest.TestCase):
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("AND content_format = %s", count_query)
         self.assertIn("AND media_type = %s", count_query)
-        self.assertEqual(count_params, ("ja", "skill", "text", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertEqual(count_params, ("ja", "skill", "text", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
 
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("AND p.content_format = %s", search_query)
         self.assertIn("AND p.media_type = %s", search_query)
-        self.assertEqual(search_params[:8], ("ja", "skill", "text", "%sample%", "%sample%", [], "%sample%", "%sample%"))
+        self.assertEqual(search_params[:9], ("ja", "skill", "text", "%sample%", "%sample%", "%sample%", [], "%sample%", "%sample%"))
         self.assertEqual(search_params[-4:-2], (11, 0))
         self.assertEqual(search_params[-2:], (9, 9))
 
@@ -227,11 +231,11 @@ class PromptSearchTestCase(unittest.TestCase):
         # The category condition is an equality match against a key array, not a LIKE
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("p.category = ANY(%s::text[])", count_query)
-        self.assertEqual(count_params[3], ["coding"])
+        self.assertEqual(count_params[4], ["coding"])
 
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("p.category = ANY(%s::text[])", search_query)
-        self.assertEqual(search_params[3], ["coding"])
+        self.assertEqual(search_params[4], ["coding"])
 
     # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
     # Verify that search returns an empty payload immediately without query execution when search query is blank.

@@ -3655,6 +3655,13 @@ body.settings-page :where(
   white-space: pre-wrap;
 }
 
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__description > p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
 /* Markdownの見出し・箇条書き・コードなどを組み直す（グローバルの * リセット対策）
    Restores heading/list/code typography for the Markdown-rendered body (countering the global * reset) */
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown > * {

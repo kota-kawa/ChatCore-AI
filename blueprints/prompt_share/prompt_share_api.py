@@ -144,6 +144,7 @@ def _guest_prompt_validation_error(
 
     text_fields = (
         payload.title,
+        payload.description,
         payload.content,
         payload.input_examples,
         payload.output_examples,
@@ -299,6 +300,7 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # Format created_at to ISO string if it is a datetime object.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
+    prompt["description"] = str(prompt.get("description") or "")
     # 2軸フィールド (content_format/media_type/attributes/attachments) と
     # 後方互換の派生フィールドを付与する。
     # Attach the canonical two-axis fields plus derived legacy fields.
@@ -599,6 +601,7 @@ def _get_prompts_with_flags(
                 p.title,
                 p.category,
                 p.content,
+                p.description,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
                 p.user_id AS author_user_id,
                 COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
@@ -728,6 +731,7 @@ def _get_recommended_prompts(
                 p.title,
                 p.category,
                 p.content,
+                p.description,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
                 p.user_id AS author_user_id,
                 COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
@@ -810,6 +814,7 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 p.title,
                 p.category,
                 p.content,
+                p.description,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
                 p.user_id AS author_user_id,
                 COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
@@ -936,6 +941,7 @@ def _create_prompt_for_user(
     title: str,
     category: str,
     content: str,
+    description: str,
     content_format: str,
     media_type: str,
     input_examples: str,
@@ -953,6 +959,7 @@ def _create_prompt_for_user(
         title=title,
         category=category,
         content=content,
+        description=description,
         content_format=content_format,
         media_type=media_type,
         input_examples=input_examples,
@@ -2181,6 +2188,7 @@ async def create_prompt(request: Request):
             "title": form.get("title", ""),
             "category": form.get("category", ""),
             "content": form.get("content", ""),
+            "description": form.get("description", ""),
             "content_format": form.get("content_format", ""),
             "media_type": form.get("media_type", ""),
             "input_examples": form.get("input_examples", ""),
@@ -2270,6 +2278,7 @@ async def create_prompt(request: Request):
             payload.title,
             payload.category,
             payload.content,
+            payload.description,
             payload.content_format,
             payload.media_type,
             payload.input_examples,

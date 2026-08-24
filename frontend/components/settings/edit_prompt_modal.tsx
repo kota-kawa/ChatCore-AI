@@ -105,6 +105,20 @@ export function EditPromptModal({
                     />
                   </div>
                 </div>
+                <div className="edit-prompt-modal__field">
+                  <label htmlFor="editDescription">{t("promptShare.descriptionLabel")}</label>
+                  <p className="edit-prompt-modal__field-help">{t("promptShare.descriptionPlaceholder")}</p>
+                  <textarea
+                    className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                    id="editDescription"
+                    name="description"
+                    rows={3}
+                    maxLength={300}
+                    value={formState.description}
+                    onChange={onChange}
+                    disabled={saving}
+                  ></textarea>
+                </div>
               </section>
 
               <section className="edit-prompt-modal__section" aria-labelledby="editPromptContentTitle">

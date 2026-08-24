@@ -54,6 +54,7 @@ class PromptManageApiTestCase(unittest.TestCase):
         payload = PromptUpdateRequest(
             title="Skill",
             category="coding",
+            description="A skill description",
             content_format="skill",
             attributes={"skill_markdown": "# Skill"},
             resources=[
@@ -100,6 +101,7 @@ class PromptManageApiTestCase(unittest.TestCase):
                 "title": "title",
                 "category": "cat",
                 "content": "content",
+                "description": "説明",
                 "author": "author",
                 "input_examples": "in",
                 "output_examples": "out",
@@ -123,6 +125,7 @@ class PromptManageApiTestCase(unittest.TestCase):
         self.assertEqual(entry["like_id"], 12)
         self.assertEqual(entry["prompt_id"], 34)
         self.assertEqual(entry["title"], "title")
+        self.assertEqual(entry["description"], "説明")
         self.assertEqual(entry["liked_at"], "2024-01-02T03:04:05")
         self.assertTrue(entry["liked"])
 
@@ -136,6 +139,7 @@ class PromptManageApiTestCase(unittest.TestCase):
                 "title": "title",
                 "category": "cat",
                 "content": "content",
+                "description": "説明",
                 "author": "author",
                 "input_examples": "in",
                 "output_examples": "out",
@@ -150,6 +154,7 @@ class PromptManageApiTestCase(unittest.TestCase):
         self.assertEqual(serialized["liked_at"], "2024-01-02T03:04:05")
         self.assertEqual(serialized["prompt_created_at"], "2024-01-01T10:11:12")
         self.assertEqual(serialized["created_at"], "2024-01-01T10:11:12")
+        self.assertEqual(serialized["description"], "説明")
 
 
 if __name__ == "__main__":

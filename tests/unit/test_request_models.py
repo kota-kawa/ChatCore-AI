@@ -11,6 +11,7 @@ from services.request_models import (
     PromptLikeRequest,
     PromptTaskCreateRequest,
     PromptUpdateRequest,
+    MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
 )
@@ -155,6 +156,25 @@ class RequestModelsTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(result.category, "")
+
+    def test_prompt_description_is_optional_and_limited_to_300_characters(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {"title": "title", "content": "content"},
+        )
+        self.assertEqual(result.description, "")
+
+        result = _validate(
+            PromptUpdateRequest,
+            {"title": "title", "content": "content", "description": "説明"},
+        )
+        self.assertEqual(result.description, "説明")
+
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {"title": "title", "content": "content", "description": "x" * (MAX_SHARED_PROMPT_DESCRIPTION_LENGTH + 1)},
+            )
 
     # prompt フォーマットの場合、本文（content）の指定が必須であることを検証します。
     # Verify that prompt creation requires content for the 'prompt' content format.

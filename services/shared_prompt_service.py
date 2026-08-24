@@ -36,12 +36,12 @@ def create_shared_prompt(
                 INSERT INTO prompts (
                     title, category, content, author, content_format, media_type,
                     attributes, attachments, input_examples, output_examples,
-                    ai_model, user_id, is_public, created_at, updated_at
+                    ai_model, description, user_id, is_public, created_at, updated_at
                 )
                 VALUES (
                     %s, %s, %s,
                     (SELECT COALESCE(username, 'ユーザー') FROM users WHERE id = %s),
-                    %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, TRUE, NOW(), NOW()
+                    %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, TRUE, NOW(), NOW()
                 )
                 RETURNING id
                 """,
@@ -57,6 +57,7 @@ def create_shared_prompt(
                     payload.input_examples,
                     payload.output_examples,
                     payload.ai_model or None,
+                    payload.description or None,
                     user_id,
                 ),
             )

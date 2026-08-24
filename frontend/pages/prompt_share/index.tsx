@@ -158,6 +158,7 @@ export default function PromptSharePage({
   // The category is held as the stable key persisted to the DB; empty means unselected.
   const [postCategory, setPostCategory] = useState(CATEGORY_UNSET);
   const [postContent, setPostContent] = useState("");
+  const [postDescription, setPostDescription] = useState("");
   const [postAiModel, setPostAiModel] = useState("");
   const [guardrailEnabled, setGuardrailEnabled] = useState(false);
   const [postInputExample, setPostInputExample] = useState("");
@@ -884,7 +885,7 @@ export default function PromptSharePage({
         return;
       }
 
-      if (isGuestPost && containsGuestPostUrl(postTitle, postContent)) {
+      if (isGuestPost && containsGuestPostUrl(postTitle, postDescription, postContent)) {
         setPromptPostStatus(t("promptShare.guestPostUrlForbidden"), "error");
         return;
       }
@@ -913,6 +914,7 @@ export default function PromptSharePage({
         title: postTitle,
         category: postCategory,
         content: isSkill ? "" : postContent,
+        description: postDescription,
         contentFormat,
         mediaType,
         inputExamples: includeExamples ? postInputExample : "",
@@ -941,6 +943,7 @@ export default function PromptSharePage({
         setPostTitle("");
         setPostCategory(CATEGORY_UNSET);
         setPostContent("");
+        setPostDescription("");
         setPostAiModel("");
         setGuardrailEnabled(false);
         setPostInputExample("");
@@ -985,6 +988,7 @@ export default function PromptSharePage({
       postAiModel,
       postCategory,
       postContent,
+      postDescription,
       postInputExample,
       postOutputExample,
       postResources,
@@ -1206,6 +1210,8 @@ export default function PromptSharePage({
           setPostCategory={setPostCategory}
           postContent={postContent}
           setPostContent={setPostContent}
+          postDescription={postDescription}
+          setPostDescription={setPostDescription}
           postAiModel={postAiModel}
           setPostAiModel={setPostAiModel}
           guardrailEnabled={guardrailEnabled}

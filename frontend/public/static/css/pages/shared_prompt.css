@@ -243,6 +243,14 @@
   flex-shrink: 0;
 }
 
+.shared-prompt-page .shared-prompt-description > p {
+  margin: 0.85rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  color: var(--sp-text-strong);
+}
+
 /* ---- Markdown本文 / Markdown body ---- */
 .shared-prompt-page .md-content {
   margin: 0.85rem 0 0;

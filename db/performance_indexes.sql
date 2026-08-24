@@ -35,6 +35,10 @@ CREATE INDEX IF NOT EXISTS idx_prompts_public_content_trgm
     ON prompts USING gin (content gin_trgm_ops)
     WHERE is_public = TRUE;
 
+CREATE INDEX IF NOT EXISTS idx_prompts_public_description_trgm
+    ON prompts USING gin (description gin_trgm_ops)
+    WHERE is_public = TRUE AND description IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_prompts_public_category_trgm
     ON prompts USING gin (category gin_trgm_ops)
     WHERE is_public = TRUE;

@@ -76,6 +76,7 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # Serialize datetime object to ISO format string.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
+    prompt["description"] = str(prompt.get("description") or "")
 
     # 2軸フィールド (content_format/media_type/attributes/attachments) を正準化し、
     # 後方互換の派生フィールド (prompt_type/reference_image_url/skill_*) を付与する。
@@ -231,6 +232,7 @@ def _search_public_prompts(
                 p.title,
                 p.category,
                 p.content,
+                p.description,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
                 p.input_examples,
                 p.output_examples,
@@ -281,6 +283,7 @@ def _search_public_prompts(
                 AND (
                   p.title LIKE %s OR
                   p.content LIKE %s OR
+                  p.description LIKE %s OR
                   p.category = ANY(%s::text[]) OR
                   p.author LIKE %s OR
                   u.username LIKE %s
@@ -330,6 +333,7 @@ def _search_public_prompts(
               AND (
                 p.title LIKE %s OR
                 p.content LIKE %s OR
+                p.description LIKE %s OR
                 p.category = ANY(%s::text[]) OR
                 p.author LIKE %s OR
                 u.username LIKE %s
@@ -342,7 +346,7 @@ def _search_public_prompts(
         # Categories are stored as keys, so resolve a label substring match into the matching keys.
         matched_category_keys = category_keys_matching(query)
         count_params = list(count_filter_params)
-        count_params.extend([like_query, like_query, matched_category_keys, like_query, like_query])
+        count_params.extend([like_query, like_query, like_query, matched_category_keys, like_query, like_query])
         total = None
         if include_total:
             # 件数取得は初回ページだけに限定し、追加読み込み時の全件集計を避ける。
@@ -355,6 +359,7 @@ def _search_public_prompts(
         # Build query arguments list.
         search_params = list(search_filter_params)
         search_params.extend([
+            like_query,
             like_query,
             like_query,
             matched_category_keys,

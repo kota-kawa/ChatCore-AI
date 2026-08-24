@@ -22,6 +22,22 @@ export function truncateContent(content: string) {
   return truncateText(content, CONTENT_CHAR_LIMIT);
 }
 
+// 説明がある投稿は説明をカード用のプレビューに優先し、未設定の既存投稿は本文へ戻す。
+// Prefer the optional description for cards and keep legacy posts on their body preview.
+export function getPromptPreviewSource(
+  description: string | undefined,
+  contentFormat: string | undefined,
+  content: string | undefined,
+  skillMarkdown: string | undefined
+) {
+  if (description?.trim()) {
+    return description;
+  }
+  return normalizeContentFormat(contentFormat) === "skill"
+    ? skillMarkdown || ""
+    : content || "";
+}
+
 export function formatPromptDate(createdAt?: string) {
   return formatDate(createdAt);
 }
@@ -97,6 +113,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     ...prompt,
     content_format: contentFormat,
     media_type: mediaType,
+    description: prompt.description || "",
     attributes: prompt.attributes || {},
     attachments: Array.isArray(prompt.attachments) ? prompt.attachments : [],
     resources: normalizeSkillResources(prompt.resources, prompt.skill_python_script || ""),

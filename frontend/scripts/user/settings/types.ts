@@ -35,6 +35,7 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
   id?: string | number;
   title: string;
   content: string;
+  description?: string;
   contentFormat: string;
   mediaType: string;
   attributes: Record<string, string>;
@@ -48,6 +49,7 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
     id: prompt.id ?? undefined,
     title: prompt.title,
     content: prompt.content,
+    description: normalizeNullableString(prompt.description),
     contentFormat: normalizeNullableString(prompt.content_format),
     mediaType: normalizeNullableString(prompt.media_type) || "text",
     attributes: prompt.attributes ?? {},
@@ -67,6 +69,7 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     id: entry.prompt_id,
     title: entry.title,
     content: entry.content,
+    description: entry.description,
     content_format: entry.content_format,
     media_type: entry.media_type,
     attributes: entry.attributes,
@@ -85,6 +88,7 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     content: prompt.content,
     contentFormat: prompt.contentFormat,
     mediaType: prompt.mediaType,
+    ...(prompt.description ? { description: prompt.description } : {}),
     attributes: prompt.attributes,
     skillMarkdown: prompt.skillMarkdown,
     category: prompt.category,
@@ -104,6 +108,7 @@ type PromptUpdateFormValues = {
   title: string;
   category: string;
   content: string;
+  description?: string;
   contentFormat: string;
   mediaType: string;
   attributes: Record<string, string>;
@@ -120,6 +125,7 @@ export function buildPromptUpdatePayload(form: PromptUpdateFormValues) {
     title: form.title,
     category: form.category,
     content: isSkill ? "" : form.content,
+    description: form.description || "",
     content_format: form.contentFormat,
     media_type: form.mediaType,
     attributes: isSkill

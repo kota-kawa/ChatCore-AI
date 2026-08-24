@@ -33,6 +33,7 @@ type SharedPrompt = {
   title?: string;
   category?: string;
   content?: string;
+  description?: string;
   author?: string;
   content_format?: string;
   media_type?: string;
@@ -152,9 +153,9 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   const isSkillPrompt = normalizePromptContentFormat(prompt.content_format || prompt.prompt_type || "") === "skill";
   const skillResources = normalizeSkillResources(prompt.resources, prompt.skill_python_script || "");
   const summarySource =
-    (isSkillPrompt
+    (prompt.description?.trim() || (isSkillPrompt
       ? prompt.skill_markdown || skillResources[0]?.content || ""
-      : prompt.content || prompt.output_examples || prompt.input_examples || "") || "";
+      : prompt.content || prompt.output_examples || prompt.input_examples || "")) || "";
   const normalized = stripMarkdownForPreview(summarySource);
   if (!normalized) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
@@ -165,7 +166,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
 // おすすめカード向けにMarkdownを含む本文から短いプレーンテキスト要約を作る
 // Build a short plain-text summary from Markdown-capable content for recommendation cards.
 function buildRecommendationPreview(prompt: SharedPrompt) {
-  const source = prompt.content || prompt.skill_markdown || "";
+  const source = prompt.description?.trim() || prompt.content || prompt.skill_markdown || "";
   const preview = stripMarkdownForPreview(source);
   return truncateText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
 }
@@ -277,7 +278,7 @@ export default function SharedPromptPage({
   pageUrl,
   defaultOgImageUrl
 }: SharedPromptPageProps) {
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
   const english = locale === "en";
   // 他ページと共通の右下アクションメニューをクライアント側で登録する
   // Register the shared bottom-right action menu on the client.
@@ -423,6 +424,13 @@ export default function SharedPromptPage({
                 {prompt.ai_model ? <span><i className="bi bi-cpu" aria-hidden="true" /> {english ? "AI model" : "使用AI"}: {prompt.ai_model}</span> : null}
               </div>
             </header>
+
+            {prompt.description?.trim() ? (
+              <section className="shared-prompt-section shared-prompt-description" aria-labelledby="shared-prompt-description-title">
+                <h2 id="shared-prompt-description-title"><i className="bi bi-info-circle" aria-hidden="true" /> {t("promptShare.description")}</h2>
+                <p>{prompt.description}</p>
+              </section>
+            ) : null}
 
             {/* 作例メディア（現状は画像プレビュー対応） / Reference media (currently image preview) */}
             {prompt.reference_image_url ? (

@@ -39,6 +39,7 @@ from services.prompt_resources import MAX_SKILL_RESOURCES
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
     MAX_SHARED_PROMPT_CONTENT_LENGTH,
+    MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     MAX_SHARED_PROMPT_TITLE_LENGTH,
     SharedPromptCreateRequest,
     SkillResourceInput,
@@ -63,6 +64,7 @@ class McpPublishResult(BaseModel):
 
     prompt_id: int = Field(description="ID of the public post created in Chat-Core")
     title: str = Field(description="Title of the published post")
+    description: str = Field(default="", description="Optional plain-text description of the published post")
     content_format: str = Field(description="Published format: prompt or skill")
     public_url: AnyHttpUrl = Field(description="URL for opening the published post")
 
@@ -151,6 +153,7 @@ async def _publish(user_id: int, payload: SharedPromptCreateRequest) -> McpPubli
     return McpPublishResult(
         prompt_id=prompt_id,
         title=payload.title,
+        description=payload.description,
         content_format=payload.content_format,
         public_url=build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
     )
@@ -231,6 +234,10 @@ def _create_mcp() -> FastMCP:
             str,
             Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
         ] = "",
+        description: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH, description="Optional plain-text description of the prompt"),
+        ] = "",
         input_examples: Annotated[
             str,
             Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Optional input examples for the prompt"),
@@ -249,6 +256,7 @@ def _create_mcp() -> FastMCP:
                 title=title,
                 content=content,
                 category=category,
+                description=description,
                 input_examples=input_examples,
                 output_examples=output_examples,
                 ai_model=ai_model,
@@ -283,6 +291,10 @@ def _create_mcp() -> FastMCP:
             str,
             Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
         ] = "",
+        description: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH, description="Optional plain-text description of the SKILL"),
+        ] = "",
         resources: Annotated[
             list[SkillResourceInput] | None,
             Field(
@@ -303,6 +315,7 @@ def _create_mcp() -> FastMCP:
             payload = SharedPromptCreateRequest(
                 title=title,
                 category=category,
+                description=description,
                 content_format="skill",
                 media_type="text",
                 ai_model=ai_model,

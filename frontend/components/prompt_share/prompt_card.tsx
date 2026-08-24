@@ -11,6 +11,7 @@ import {
   getPromptFormatLabel,
   getPromptMediaIconClass,
   getPromptMediaLabel,
+  getPromptPreviewSource,
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent,
@@ -116,10 +117,16 @@ function PromptCardComponent({
 
   // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
-  const cardPreview =
-    contentFormatValue === "skill"
-      ? truncateContent(prompt.skill_markdown || t("promptShare.skillOpenHelp"))
-      : truncateContent(prompt.content);
+  const hasDescription = Boolean(prompt.description?.trim());
+  const cardPreviewSource = getPromptPreviewSource(
+    prompt.description,
+    contentFormatValue,
+    prompt.content,
+    prompt.skill_markdown
+  );
+  const cardPreview = truncateContent(
+    cardPreviewSource || (contentFormatValue === "skill" ? t("promptShare.skillOpenHelp") : "")
+  );
 
   return (
     <div
@@ -300,7 +307,11 @@ function PromptCardComponent({
 
       {/* カード内の本文プレビューも詳細モーダルと同じ安全なMarkdownレンダラーで整形する */}
       {/* Render the card preview through the same safe Markdown renderer as the detail modal */}
-      <MarkdownContent text={cardPreview} className="prompt-card__content" />
+      {hasDescription ? (
+        <p className="prompt-card__content">{cardPreview}</p>
+      ) : (
+        <MarkdownContent text={cardPreview} className="prompt-card__content" />
+      )}
 
       <div className="prompt-meta">
         <div className="prompt-actions">

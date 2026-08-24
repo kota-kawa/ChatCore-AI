@@ -47,6 +47,8 @@ type PromptShareComposerModalProps = {
   setMediaType: (value: MediaType) => void;
   postTitle: string;
   setPostTitle: (value: string) => void;
+  postDescription: string;
+  setPostDescription: (value: string) => void;
   postCategory: string;
   setPostCategory: (value: string) => void;
   postContent: string;
@@ -91,6 +93,7 @@ type PromptComposerSelectOption = {
 type ComposerPostType = "text-prompt" | "image-prompt" | "skill";
 
 const MAX_PROMPT_TITLE_LENGTH = 255;
+const MAX_PROMPT_DESCRIPTION_LENGTH = 300;
 const MAX_PROMPT_CONTENT_LENGTH = 30000;
 
 const COMPOSER_POST_TYPES: Array<{
@@ -449,6 +452,8 @@ export function PromptShareComposerModal({
   setMediaType,
   postTitle,
   setPostTitle,
+  postDescription,
+  setPostDescription,
   postCategory,
   setPostCategory,
   postContent,
@@ -676,6 +681,26 @@ export function PromptShareComposerModal({
                   />
                   <span className="composer-character-count" id="prompt-title-counter">
                     {t("promptShare.characterCount", { current: postTitle.length, max: MAX_PROMPT_TITLE_LENGTH })}
+                  </span>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="prompt-description">
+                    {t("promptShare.descriptionLabel")}
+                  </label>
+                  <textarea
+                    id="prompt-description"
+                    rows={3}
+                    placeholder={t("promptShare.descriptionPlaceholder")}
+                    maxLength={MAX_PROMPT_DESCRIPTION_LENGTH}
+                    aria-describedby="prompt-description-counter"
+                    value={postDescription}
+                    onChange={(event) => {
+                      setPostDescription(event.target.value);
+                      updatePromptFeedbackErrorIfNeeded();
+                    }}
+                  ></textarea>
+                  <span className="composer-character-count" id="prompt-description-counter">
+                    {t("promptShare.characterCount", { current: postDescription.length, max: MAX_PROMPT_DESCRIPTION_LENGTH })}
                   </span>
                 </div>
               </div>
