@@ -65,10 +65,13 @@ class HealthServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["components"]["embeddings"]["status"], "error")
 
     def test_readiness_is_error_when_database_is_unavailable(self):
+        async def raise_database_error():
+            raise RuntimeError("db down")
+
         @asynccontextmanager
         async def failing_scope():
-            raise RuntimeError("db down")
-            yield  # pragma: no cover
+            await raise_database_error()
+            yield
 
         with (
             patch("services.health.session_scope", new=failing_scope),
