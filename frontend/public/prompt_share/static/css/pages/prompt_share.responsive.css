@@ -138,6 +138,15 @@
     grid-template-columns: 1fr;
   }
 
+  :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__menu {
+    left: 0;
+    width: auto;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__options {
+    grid-template-columns: 1fr;
+  }
+
   :where(body.prompt-share-page, .prompt-share-page) .composer-hero {
     flex-direction: column;
     gap: 0.9rem;

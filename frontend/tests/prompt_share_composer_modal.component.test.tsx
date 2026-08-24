@@ -167,25 +167,29 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(document.getElementById("prompt-category")).not.toBeRequired();
   });
 
-  it("使用AIモデルは自由入力欄で、投稿タイプに合う候補をdatalistで提示する", () => {
+  it("使用AIモデルは自由入力欄で、右端のアイコンから投稿タイプに合う候補を選べる", async () => {
+    const user = userEvent.setup();
     const { unmount } = render(<ComposerHarness />);
     const aiModelInput = document.getElementById("prompt-ai-model");
     expect(aiModelInput).toBeInstanceOf(HTMLInputElement);
-    expect(aiModelInput).toHaveAttribute("list", "prompt-ai-model-suggestions");
+    expect(aiModelInput).not.toHaveAttribute("list");
 
-    const textModelOptions = Array.from(
-      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model-suggestions option")
-    ).map((option) => option.value);
-    expect(textModelOptions).toContain("ChatGPT (GPT-5.4)");
-    expect(textModelOptions).not.toContain("Midjourney");
+    const modelMenuTrigger = screen.getByRole("button", { name: "候補のAIモデルを選択" });
+    expect(modelMenuTrigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(modelMenuTrigger);
+    expect(modelMenuTrigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menuitemradio", { name: "ChatGPT (GPT-5.4)" })).toBeVisible();
+    expect(screen.queryByRole("menuitemradio", { name: "Midjourney" })).toBeNull();
+
+    await user.click(screen.getByRole("menuitemradio", { name: "ChatGPT (GPT-5.4)" }));
+    expect(aiModelInput).toHaveValue("ChatGPT (GPT-5.4)");
+    expect(modelMenuTrigger).toHaveAttribute("aria-expanded", "false");
 
     unmount();
     render(<ComposerHarness initialType="image" />);
-    const imageModelOptions = Array.from(
-      document.querySelectorAll<HTMLOptionElement>("#prompt-ai-model-suggestions option")
-    ).map((option) => option.value);
-    expect(imageModelOptions).toContain("Midjourney");
-    expect(imageModelOptions).not.toContain("ChatGPT (GPT-5.4)");
+    await user.click(screen.getByRole("button", { name: "候補のAIモデルを選択" }));
+    expect(screen.getByRole("menuitemradio", { name: "Midjourney" })).toBeVisible();
+    expect(screen.queryByRole("menuitemradio", { name: "ChatGPT (GPT-5.4)" })).toBeNull();
   });
 
   it("リストにないモデル名も自由入力できる", async () => {
