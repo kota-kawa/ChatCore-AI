@@ -52,17 +52,12 @@ class User(Base):
     bio: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'/static/user-icon.png'"))
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=True, server_default=text("FALSE"))
-    auth_provider: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'email'"))
-    provider_user_id: Mapped[str | None] = mapped_column(String(255))
-    provider_email: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime | None] = _timestamp()
     llm_profile_context: Mapped[str | None] = mapped_column(Text)
     context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
     preferred_locale: Mapped[str | None] = mapped_column(String(16))
 
     __table_args__ = (
-        Index("uq_users_provider_identity", "auth_provider", "provider_user_id", unique=True,
-              postgresql_where=text("provider_user_id IS NOT NULL")),
         Index("idx_users_username_trgm", "username", postgresql_using="gin",
               postgresql_ops={"username": "gin_trgm_ops"}),
     )
@@ -162,8 +157,8 @@ class MemoryFact(Base):
 
     __table_args__ = (
         CheckConstraint("scope IN ('room', 'user')", name="chk_memory_facts_scope"),
-        Index("idx_memory_facts_room_updated_at", "chat_room_id", "updated_at", postgresql_where=text("is_active = TRUE")),
-        Index("idx_memory_facts_user_updated_at", "user_id", "updated_at", postgresql_where=text("is_active = TRUE")),
+        Index("idx_memory_facts_room_updated_at", "chat_room_id", desc("updated_at"), postgresql_where=text("is_active = TRUE")),
+        Index("idx_memory_facts_user_updated_at", "user_id", desc("updated_at"), postgresql_where=text("is_active = TRUE")),
     )
 
 
@@ -230,7 +225,7 @@ class TaskVersion(Base):
 
     __table_args__ = (
         UniqueConstraint("task_id", "version_number", name="uq_task_versions_task_version"),
-        Index("idx_task_versions_task_created_at", "task_id", "created_at"),
+        Index("idx_task_versions_task_created_at", "task_id", desc("created_at")),
     )
 
 
@@ -247,9 +242,9 @@ class Prompt(Base):
     input_examples: Mapped[str | None] = mapped_column(Text)
     output_examples: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
-    ai_model: Mapped[str | None] = mapped_column(String(100))
+    ai_model: Mapped[str | None] = mapped_column(String(100), server_default=text("NULL::character varying"))
     content_format: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'prompt'"))
     media_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'text'"))
     attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
@@ -257,7 +252,7 @@ class Prompt(Base):
     legacy_category: Mapped[str] = mapped_column(String(50), nullable=False, server_default=text("''"))
     system_prompt_key: Mapped[str | None] = mapped_column(String(64))
     content_locale: Mapped[str | None] = mapped_column(String(16))
-    description: Mapped[str | None] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(String(300), server_default=text("NULL::character varying"))
 
     __table_args__ = (
         Index("idx_prompts_public_created_at", "is_public", desc("created_at")),
@@ -378,8 +373,8 @@ class MemoEntry(Base):
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     ai_response: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime)
     pinned_at: Mapped[datetime | None] = mapped_column(DateTime)
     collection_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("memo_collections.id", ondelete="SET NULL"))
@@ -414,7 +409,7 @@ class MemoCollection(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_memo_collections_user_name"),
+        UniqueConstraint("user_id", "name", name="memo_collections_user_id_name_key"),
         Index("idx_memo_collections_user_created", "user_id", desc("created_at")),
     )
 
