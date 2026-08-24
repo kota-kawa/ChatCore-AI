@@ -1674,13 +1674,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* 補足文の有無によって入力欄が上下にずれないよう、設定欄は同じ行構成にする。 */
-/* Keep the setting controls level even when only one field has helper copy. */
-:where(body.prompt-share-page, .prompt-share-page) .composer-field-grid--settings .form-group {
-  display: grid;
-  grid-template-rows: auto minmax(2.45rem, auto) auto;
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .prompt-type-toggle {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1884,10 +1877,6 @@
   line-height: 1.55;
 }
 
-.prompt-share-page .form-group__hint--placeholder {
-  visibility: hidden;
-}
-
 .prompt-share-page .form-group input[type="text"],
 
 .prompt-share-page .form-group textarea,
@@ -1914,39 +1903,41 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .form-group--ai-model input[type="text"] {
-  padding-right: 3.8rem;
+  padding-right: 2.8rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger {
   position: absolute;
   top: 50%;
-  right: 0.54rem;
-  width: 2.45rem;
-  height: 2.45rem;
-  border: 1px solid rgba(155, 190, 229, 0.72);
-  border-radius: 13px;
-  background: linear-gradient(145deg, #eff6ff, #dceeff);
-  box-shadow: 0 5px 12px rgba(49, 103, 161, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  color: #226cc0;
+  right: 0.92rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #4f7eb6;
+  font-size: 0.82rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transform: translateY(-50%);
-  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: transform 0.2s ease, color 0.16s ease;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger:hover,
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker.is-open .ai-model-picker__trigger {
-  border-color: #7eafe3;
-  background: linear-gradient(145deg, #e1f0ff, #c8e3ff);
-  box-shadow: 0 8px 16px rgba(40, 101, 165, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  transform: translateY(-50%) scale(1.03);
+  background: none;
+  box-shadow: none;
+  color: #1a73e8;
+  transform: translateY(-50%) rotate(180deg);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.18), 0 8px 16px rgba(40, 101, 165, 0.17);
+  border-radius: 5px;
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.14);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__menu {

@@ -165,6 +165,7 @@ describe("新しいプロンプトを投稿モーダル", () => {
 
     expect(document.querySelector('label[for="prompt-category-trigger"]')).toHaveTextContent("カテゴリ 任意");
     expect(document.getElementById("prompt-category")).not.toBeRequired();
+    expect(document.getElementById("prompt-category-help")).toBeNull();
   });
 
   it("使用AIモデルは自由入力欄で、右端のアイコンから投稿タイプに合う候補を選べる", async () => {
@@ -175,6 +176,8 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(aiModelInput).not.toHaveAttribute("list");
 
     const modelMenuTrigger = screen.getByRole("button", { name: "候補のAIモデルを選択" });
+    expect(modelMenuTrigger.querySelector(".bi-chevron-down")).not.toBeNull();
+    expect(modelMenuTrigger.querySelector(".bi-cpu")).toBeNull();
     expect(modelMenuTrigger).toHaveAttribute("aria-expanded", "false");
     await user.click(modelMenuTrigger);
     expect(modelMenuTrigger).toHaveAttribute("aria-expanded", "true");
