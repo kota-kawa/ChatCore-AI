@@ -75,6 +75,7 @@ class SharedContentRepositoryTestCase(unittest.TestCase):
         self.assertIn("p.attributes->>'skill_markdown'", sql)
         self.assertIn("p.title ILIKE %s", sql)
         self.assertIn("p.content ILIKE %s", sql)
+        self.assertIn("p.description ILIKE %s", sql)
         self.assertIn("p.category ILIKE %s", sql)
         self.assertIn("p.author ILIKE %s", sql)
         self.assertIn("u.username ILIKE %s", sql)
@@ -83,7 +84,8 @@ class SharedContentRepositoryTestCase(unittest.TestCase):
         self.assertIn("AS snippet_source", sql)
         self.assertNotIn("p.input_examples", sql)
         self.assertEqual(params[:4], (SNIPPET_SOURCE_MAX_LENGTH, "coding", "skill", "text"))
-        self.assertEqual(params[4:11], (
+        self.assertEqual(params[4:12], (
+            "%helper%",
             "%helper%",
             "%helper%",
             "%helper%",
@@ -92,7 +94,7 @@ class SharedContentRepositoryTestCase(unittest.TestCase):
             "%helper%",
             "%helper%",
         ))
-        self.assertEqual(params[11:13], (created_at, 10))
+        self.assertEqual(params[12:14], (created_at, 10))
         self.assertEqual(params[-1], 3)
         self.assertTrue(cursor.closed)
         self.assertTrue(connection.closed)
@@ -119,8 +121,8 @@ class SharedContentRepositoryTestCase(unittest.TestCase):
 
         sql, params = cursor.executed[0]
         self.assertEqual(sql.count("p.title ILIKE %s"), 2)
-        self.assertEqual(params[1:8], ("%メール%",) * 3 + ([],) + ("%メール%",) * 3)
-        self.assertEqual(params[8:15], ("%返信%",) * 3 + ([],) + ("%返信%",) * 3)
+        self.assertEqual(params[1:9], ("%メール%",) * 4 + ([],) + ("%メール%",) * 3)
+        self.assertEqual(params[9:17], ("%返信%",) * 4 + ([],) + ("%返信%",) * 3)
 
     def test_detail_is_parameterized_and_restricted_to_visible_content(self):
         row = {"id": 12, "title": "detail"}
@@ -186,6 +188,7 @@ class SharedContentServiceTestCase(unittest.TestCase):
                     "id": 21,
                     "title": "Skill helper",
                     "category": "business",
+                    "description": "説明文",
                     "author": "tester",
                     "content_format": "skill",
                     "media_type": "text",
@@ -214,6 +217,7 @@ class SharedContentServiceTestCase(unittest.TestCase):
         self.assertEqual(len(page.items), 1)
         item = page.items[0]
         self.assertEqual(item.prompt_id, 21)
+        self.assertEqual(item.description, "説明文")
         self.assertEqual(str(item.public_url), "https://example.com/shared/prompt/21")
         self.assertNotIn("\n", item.snippet)
         self.assertLessEqual(len(item.snippet), SHARED_CONTENT_SNIPPET_LENGTH)
@@ -286,6 +290,7 @@ class SharedContentServiceTestCase(unittest.TestCase):
                 "title": "Git Skill",
                 "category": "coding",
                 "content": "",
+                "description": "Git操作の手順をまとめた説明",
                 "author": "tester",
                 "content_format": "skill",
                 "media_type": "text",
@@ -324,6 +329,7 @@ class SharedContentServiceTestCase(unittest.TestCase):
 
         self.assertIsNotNone(detail)
         self.assertEqual(detail.skill_markdown, "# Git Skill\n\nFull instructions")
+        self.assertEqual(detail.description, "Git操作の手順をまとめた説明")
         self.assertEqual(detail.skill_python_script, "print('derived resource')")
         self.assertEqual(len(detail.resources), 1)
         self.assertEqual(detail.resources[0].path, "scripts/main.py")

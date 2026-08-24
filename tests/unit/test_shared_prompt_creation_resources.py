@@ -59,6 +59,7 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
         return SharedPromptCreateRequest.model_validate(
             {
                 "title": "Portable skill",
+                "description": "A reusable portable skill.",
                 "content_format": "skill",
                 "attributes": {
                     "skill_markdown": "# Portable skill",
@@ -100,6 +101,7 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
         )
         persisted_attributes = json.loads(connection.db_cursor.executed[0][1][6])
         self.assertEqual(persisted_attributes, {"skill_markdown": "# Portable skill"})
+        self.assertEqual(connection.db_cursor.executed[0][1][11], "A reusable portable skill.")
 
     def test_rolls_back_when_resource_insert_fails(self):
         connection = FakeConnection()

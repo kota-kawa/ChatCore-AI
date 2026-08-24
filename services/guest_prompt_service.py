@@ -124,11 +124,11 @@ def create_guest_shared_prompt(
                 INSERT INTO prompts (
                     title, category, content, author, content_format, media_type,
                     attributes, attachments, input_examples, output_examples,
-                    ai_model, user_id, is_public, created_at, updated_at
+                    ai_model, description, user_id, is_public, created_at, updated_at
                 )
                 VALUES (
                     %s, %s, %s, 'ゲスト', 'prompt', 'text',
-                    '{}'::jsonb, '[]'::jsonb, %s, %s, %s, NULL, TRUE, NOW(), NOW()
+                    '{}'::jsonb, '[]'::jsonb, %s, %s, %s, %s, NULL, TRUE, NOW(), NOW()
                 )
                 RETURNING id
                 """,
@@ -139,6 +139,7 @@ def create_guest_shared_prompt(
                     payload.input_examples,
                     payload.output_examples,
                     payload.ai_model or None,
+                    payload.description or None,
                 ),
             )
             prompt_row = cursor.fetchone()

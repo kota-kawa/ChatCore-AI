@@ -580,6 +580,13 @@
   white-space: pre-wrap;
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-description {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
 /* 本文は枠なし・全文表示。入れ子スクロールを廃止し、モーダル側で一度に送る
    読み幅の上限は残しつつ左右中央に置き、余白が片側に寄らないようにする
    The body is unframed and shown in full; the modal's own scroller handles it.

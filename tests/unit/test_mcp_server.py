@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from services import mcp_server
 from services.request_models import (
     MAX_SHARED_PROMPT_CONTENT_LENGTH,
+    MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     SharedPromptCreateRequest,
 )
 from services.prompt_resources import MAX_SKILL_RESOURCES
@@ -155,6 +156,10 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(
             prompt_definition["inputSchema"]["properties"]["content"]["maxLength"],
             MAX_SHARED_PROMPT_CONTENT_LENGTH,
+        )
+        self.assertEqual(
+            prompt_definition["inputSchema"]["properties"]["description"]["maxLength"],
+            MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
         )
 
     def test_invalid_category_error_includes_allowed_values(self):

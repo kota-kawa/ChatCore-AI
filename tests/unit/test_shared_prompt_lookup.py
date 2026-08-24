@@ -14,10 +14,11 @@ from services.shared_prompt_lookup import (
 # 日本語: SharedContentService の検索結果を模した最小オブジェクト。
 # English: Minimal stand-ins for what SharedContentService returns.
 class _FakeSummary:
-    def __init__(self, prompt_id, title):
+    def __init__(self, prompt_id, title, description=""):
         self.prompt_id = prompt_id
         self.title = title
         self.category = "business"
+        self.description = description
         self.author = "ユーザー"
         self.content_format = "prompt"
         self.snippet = "丁寧なメール返信を書くためのプロンプト"
@@ -30,9 +31,10 @@ class _FakePage:
 
 
 class _FakeDetail:
-    def __init__(self, content, skill_markdown=""):
+    def __init__(self, content, skill_markdown="", description=""):
         self.content = content
         self.skill_markdown = skill_markdown
+        self.description = description
 
 
 class SharedPromptSearchTestCase(unittest.TestCase):
@@ -50,7 +52,7 @@ class SharedPromptSearchTestCase(unittest.TestCase):
     def test_returns_hits_with_full_body_for_top_results(self):
         service = self._service(
             page=_FakePage([_FakeSummary(11, "丁寧なメール返信")]),
-            detail=_FakeDetail("本文テンプレート"),
+            detail=_FakeDetail("本文テンプレート", description="本文の用途を説明"),
         )
 
         with patch("services.shared_prompt_lookup._service", return_value=service):
@@ -59,6 +61,7 @@ class SharedPromptSearchTestCase(unittest.TestCase):
         self.assertEqual(result.query, "メール 返信")
         self.assertEqual(result.prompts[0]["title"], "丁寧なメール返信")
         self.assertEqual(result.prompts[0]["content"], "本文テンプレート")
+        self.assertEqual(result.prompts[0]["description"], "本文の用途を説明")
         self.assertEqual(result.prompts[0]["public_url"], "https://example.test/shared/prompt/11")
         service.list_public_content.assert_called_once()
 

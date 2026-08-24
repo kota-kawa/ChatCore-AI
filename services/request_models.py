@@ -76,6 +76,7 @@ MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH = 500
 MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 256_000
 MAX_SHARED_PROMPT_TITLE_LENGTH = 255
 MAX_SHARED_PROMPT_CONTENT_LENGTH = 256_000
+MAX_SHARED_PROMPT_DESCRIPTION_LENGTH = 300
 MAX_SHARED_PROMPT_AI_MODEL_LENGTH = 100
 MAX_MCP_MEMO_TITLE_LENGTH = 255
 # MCP request bodies have an independent, configurable byte limit. Memo content
@@ -427,6 +428,7 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)]
     category: str = ""
     content: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    description: str = Field(default="", max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH)
     # 2軸モデル: フォーマット軸 (prompt/skill...) × メディア軸 (text/image...)。
     # Two-axis model: content format axis × media type axis. See services/prompt_types.py.
     content_format: str = DEFAULT_CONTENT_FORMAT
@@ -502,6 +504,7 @@ class PromptUpdateRequest(RequestPayloadModel):
     title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)]
     category: str = ""
     content: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    description: str = Field(default="", max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH)
     content_format: str = DEFAULT_CONTENT_FORMAT
     media_type: str = DEFAULT_MEDIA_TYPE
     attributes: dict[str, str] = Field(default_factory=dict)

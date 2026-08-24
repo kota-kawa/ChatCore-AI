@@ -45,6 +45,7 @@ export type PromptData = {
   id?: string | number;
   title: string;
   content: string;
+  description?: string;
   category?: string;
   author?: string;
   // 投稿者のユーザーIDとアイコン画像URL。SNS風のプロフィール導線に使う

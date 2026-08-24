@@ -8,6 +8,7 @@ import { useTranslation } from "../../contexts/locale_context";
 export type PromptPreview = {
   title: string;
   content: string;
+  description?: string;
   contentFormat: string;
   skillMarkdown: string;
   category: string;
@@ -95,6 +96,15 @@ export function PromptPreviewModal({
         </header>
 
         <div className="prompt-preview-modal__body">
+          {prompt.description?.trim() ? (
+            <section className="prompt-preview-modal__section prompt-preview-modal__description" aria-labelledby="promptPreviewDescriptionTitle">
+              <div className="prompt-preview-modal__section-heading">
+                <p id="promptPreviewDescriptionTitle">{t("promptShare.description")}</p>
+              </div>
+              <p>{prompt.description}</p>
+            </section>
+          ) : null}
+
           <section className="prompt-preview-modal__section" aria-labelledby="promptPreviewContentTitle">
             <div className="prompt-preview-modal__section-heading">
               <p>{promptBodyLabel}</p>

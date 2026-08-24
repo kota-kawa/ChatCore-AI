@@ -26,6 +26,7 @@ function ComposerHarness({
   const [postTitle, setPostTitle] = useState("");
   const [postCategory, setPostCategory] = useState("");
   const [postContent, setPostContent] = useState("");
+  const [postDescription, setPostDescription] = useState("");
   const [postAiModel, setPostAiModel] = useState("");
   const [guardrailEnabled, setGuardrailEnabled] = useState(false);
   const [postInputExample, setPostInputExample] = useState("");
@@ -48,6 +49,8 @@ function ComposerHarness({
       setMediaType={setMediaType}
       postTitle={postTitle}
       setPostTitle={setPostTitle}
+      postDescription={postDescription}
+      setPostDescription={setPostDescription}
       postCategory={postCategory}
       setPostCategory={setPostCategory}
       postContent={postContent}

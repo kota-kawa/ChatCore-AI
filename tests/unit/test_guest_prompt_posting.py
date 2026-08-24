@@ -22,6 +22,7 @@ class GuestPromptPostingTestCase(unittest.TestCase):
     def _payload(**overrides):
         payload = {
             "title": "紹介文を作る",
+            "description": "製品紹介文を作るためのプロンプト",
             "category": "",
             "content": "次の製品の紹介文を簡潔に書いてください。",
             "content_format": "prompt",
@@ -56,9 +57,10 @@ class GuestPromptPostingTestCase(unittest.TestCase):
         self.assertIn("guest_prompt_token", request.session)
         create_guest.assert_called_once()
         self.assertEqual(create_guest.call_args.args[1], "203.0.113.10")
+        self.assertEqual(create_guest.call_args.args[2].description, "製品紹介文を作るためのプロンプト")
 
     def test_guest_rejects_url_in_every_free_text_field(self):
-        for field in ("title", "content", "input_examples", "output_examples", "ai_model"):
+        for field in ("title", "description", "content", "input_examples", "output_examples", "ai_model"):
             with self.subTest(field=field):
                 request = make_request(self._payload(**{field: "See https://example.test/path"}), session={})
                 with patch("blueprints.prompt_share.prompt_share_api.create_guest_shared_prompt") as create_guest:

@@ -85,6 +85,7 @@ describe("prompt_share author avatar", () => {
     const onOpenPrompt = vi.fn();
     const onLoadMore = vi.fn();
     const onClose = vi.fn();
+    const profilePrompt = { ...basePrompt, description: "会議の決定事項を短く整理するための説明" };
 
     render(
       <PromptShareAuthorProfileModal
@@ -98,7 +99,7 @@ describe("prompt_share author avatar", () => {
           prompt_count: 2
         }}
         fallbackName="Kota"
-        prompts={[basePrompt]}
+        prompts={[profilePrompt]}
         isLoading={false}
         isLoadingMore={false}
         error={null}
@@ -111,9 +112,10 @@ describe("prompt_share author avatar", () => {
 
     expect(screen.getByText("プロンプトを書くのが好きです。")).toBeInTheDocument();
     expect(screen.getByText("2件の投稿")).toBeInTheDocument();
+    expect(screen.getByText("会議の決定事項を短く整理するための説明")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /会議メモを要点・決定事項・次のアクションに要約する/ }));
-    expect(onOpenPrompt).toHaveBeenCalledWith(basePrompt);
+    expect(onOpenPrompt).toHaveBeenCalledWith(profilePrompt);
 
     fireEvent.click(screen.getByRole("button", { name: "さらに読み込む" }));
     expect(onLoadMore).toHaveBeenCalledOnce();

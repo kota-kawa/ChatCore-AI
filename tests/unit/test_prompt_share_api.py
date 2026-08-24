@@ -22,6 +22,7 @@ class PromptShareApiTestCase(unittest.TestCase):
                 "id": 12,
                 "title": "Skill",
                 "content": "",
+                "description": "Reusable skill description",
                 "content_format": "skill",
                 "media_type": "text",
                 "attributes": {"skill_markdown": "# Skill"},
@@ -40,6 +41,7 @@ class PromptShareApiTestCase(unittest.TestCase):
 
         self.assertEqual(serialized["resources"][0]["path"], "scripts/main.py")
         self.assertEqual(serialized["skill_python_script"], "print(1)")
+        self.assertEqual(serialized["description"], "Reusable skill description")
         self.assertNotIn("resource_python_script", serialized)
 
     # ID指定で正常に公開プロンプトの詳細情報がJSON形式で取得できることを検証します。
@@ -52,6 +54,7 @@ class PromptShareApiTestCase(unittest.TestCase):
             "title": "共有タイトル",
             "category": "business",
             "content": "内容",
+            "description": "説明",
             "author": "tester",
             "input_examples": "input",
             "output_examples": "output",
@@ -77,6 +80,7 @@ class PromptShareApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["prompt"]["id"], 12)
         self.assertEqual(payload["prompt"]["title"], "共有タイトル")
+        self.assertEqual(payload["prompt"]["description"], "説明")
         self.assertEqual(payload["prompt"]["skill_markdown"], "")
 
     # 指定されたプロンプトIDが存在しない場合に、APIが404エラーを返却することを検証します。

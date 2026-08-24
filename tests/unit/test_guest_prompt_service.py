@@ -58,6 +58,7 @@ class GuestPromptServiceTestCase(unittest.TestCase):
         return SharedPromptCreateRequest.model_validate(
             {
                 "title": "Guest text prompt",
+                "description": "A short guest post description.",
                 "content": "Write a concise introduction.",
                 "content_format": "prompt",
                 "media_type": "text",
@@ -84,6 +85,9 @@ class GuestPromptServiceTestCase(unittest.TestCase):
         self.assertEqual(prompt_id, 88)
         self.assertTrue(connection.committed)
         self.assertFalse(connection.rolled_back)
+        prompt_sql, prompt_params = connection.db_cursor.executed[3]
+        self.assertIn("description", prompt_sql)
+        self.assertEqual(prompt_params[-1], "A short guest post description.")
         quota_sql, quota_params = connection.db_cursor.executed[2]
         self.assertIn("guest_cookie_hash = %s OR client_ip_hash = %s", quota_sql)
         self.assertNotIn(token, quota_params)

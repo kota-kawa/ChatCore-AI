@@ -114,6 +114,7 @@ def search_shared_prompts(
             "prompt_id": item.prompt_id,
             "title": item.title,
             "category": item.category,
+            "description": str(getattr(item, "description", "") or ""),
             "author": item.author,
             "content_format": item.content_format,
             "snippet": item.snippet,
@@ -128,6 +129,9 @@ def search_shared_prompts(
                 # The snippet alone still lets the answer point at the prompt
                 logger.warning("Failed to load shared prompt %s.", item.prompt_id)
             if detail is not None:
+                detail_description = str(getattr(detail, "description", "") or "")
+                if detail_description:
+                    entry["description"] = detail_description
                 body = detail.content or detail.skill_markdown
                 entry["content"] = _trim(body, MAX_PROMPT_CONTENT_CHARS)
         prompts.append(entry)

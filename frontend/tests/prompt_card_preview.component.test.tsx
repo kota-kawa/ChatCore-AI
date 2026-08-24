@@ -188,6 +188,19 @@ describe("設定画面のプロンプトカード詳細", () => {
     expect(container.querySelector(".prompt-card__preview-sections")).toBeNull();
   });
 
+  it("説明があるカードはMarkdownとして解釈せず説明をプレビューする", () => {
+    const { container } = render(
+      <PromptCard
+        prompt={{ ...authoredPrompt, description: "# 説明\n用途を短く紹介" }}
+        onPreview={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".prompt-card__content")?.textContent).toContain("# 説明");
+  });
+
   it("SKILL形式のカードにはフォーマットバッジを表示する", () => {
     const { container } = render(
       <PromptCard
@@ -234,6 +247,18 @@ describe("設定画面のプロンプトカード詳細", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "詳細を閉じる" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("閲覧モーダルでは本文の前に説明をプレーンテキストで表示する", () => {
+    const { container } = render(
+      <PromptPreviewModal
+        prompt={{ ...authoredPrompt, description: "# 説明\n用途を短く紹介" }}
+        source="authored"
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".prompt-preview-modal__description > p")?.textContent).toBe("# 説明\n用途を短く紹介");
   });
 
   it("Skill形式ではSKILL定義を本文として表示する", () => {

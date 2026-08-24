@@ -8,6 +8,7 @@ type BuildPromptCreateFormDataOptions = {
   title: string;
   category: string;
   content: string;
+  description?: string;
   contentFormat: ContentFormat;
   mediaType: MediaType;
   inputExamples: string;
@@ -34,6 +35,7 @@ export function buildPromptCreateFormData({
   title,
   category,
   content,
+  description,
   contentFormat,
   mediaType,
   inputExamples,
@@ -50,6 +52,7 @@ export function buildPromptCreateFormData({
   formData.append("title", title);
   formData.append("category", isGuest ? "" : category);
   formData.append("content", content);
+  formData.append("description", description || "");
   formData.append("content_format", resolvedContentFormat);
   formData.append("media_type", resolvedMediaType);
   formData.append("input_examples", isGuest ? "" : inputExamples);

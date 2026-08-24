@@ -5,6 +5,7 @@ import { stripMarkdownForPreview } from "../../scripts/core/markdown_preview";
 import {
   getPromptFormatIconClass,
   getPromptFormatLabel,
+  getPromptPreviewSource,
   normalizePromptContentFormat
 } from "../../scripts/prompt_share/formatters";
 import {
@@ -26,6 +27,7 @@ function SettingsPromptCard({
   title,
   contentSource,
   contentFormat,
+  contentIsPlainText = false,
   categoryLabel,
   dateLabel,
   dateTime,
@@ -36,6 +38,7 @@ function SettingsPromptCard({
   title: string;
   contentSource: string;
   contentFormat: string;
+  contentIsPlainText?: boolean;
   categoryLabel: string;
   dateLabel: string;
   dateTime?: string;
@@ -46,7 +49,9 @@ function SettingsPromptCard({
   const formatValue = normalizePromptContentFormat(contentFormat);
   // 内容にMarkdown記法が含まれていても、カードのプレビューでは記号を残さず読みやすく表示する
   // Even when the content contains Markdown syntax, the card preview strips it for readability
-  const contentPreview = stripMarkdownForPreview(contentSource);
+  const contentPreview = contentIsPlainText
+    ? normalizePreviewText(contentSource)
+    : stripMarkdownForPreview(contentSource);
 
   return (
     <article className="prompt-card cc-press" {...cardAttributes}>
@@ -116,7 +121,6 @@ export function PromptCard({
 }) {
   const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
-  const isSkill = prompt.contentFormat === "skill";
   const categoryLabel = getCategoryLabelOrFallback(normalizePreviewText(prompt.category), undefined, locale);
   const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : t("promptShare.dateUnknown");
 
@@ -124,8 +128,9 @@ export function PromptCard({
     <SettingsPromptCard
       cardAttributes={{ "data-prompt-id": promptId }}
       title={prompt.title}
-      contentSource={isSkill ? prompt.skillMarkdown : prompt.content}
+      contentSource={getPromptPreviewSource(prompt.description, prompt.contentFormat, prompt.content, prompt.skillMarkdown)}
       contentFormat={prompt.contentFormat}
+      contentIsPlainText={Boolean(prompt.description?.trim())}
       categoryLabel={categoryLabel}
       dateLabel={createdAtLabel}
       dateTime={prompt.createdAt}
@@ -171,7 +176,6 @@ export function LikedPromptCard({
 }) {
   const { locale, t } = useTranslation();
   const entryId = asId(entry.id);
-  const isSkill = entry.contentFormat === "skill";
   // カテゴリ未設定時はバッジ自体を出さないため、フォールバックなしでラベルを解決する
   // Resolve the label without a fallback: an unset category hides the badge entirely
   const categoryLabel = getCategoryLabel(normalizePreviewText(entry.category), locale);
@@ -181,8 +185,9 @@ export function LikedPromptCard({
     <SettingsPromptCard
       cardAttributes={{ "data-liked-prompt-id": entryId }}
       title={entry.title}
-      contentSource={isSkill ? entry.skillMarkdown : entry.content}
+      contentSource={getPromptPreviewSource(entry.description, entry.contentFormat, entry.content, entry.skillMarkdown)}
       contentFormat={entry.contentFormat}
+      contentIsPlainText={Boolean(entry.description?.trim())}
       categoryLabel={categoryLabel}
       dateLabel={likedAtLabel}
       dateTime={entry.likedAt}

@@ -356,6 +356,19 @@ export function PromptShareDetailModal({
             className="prompt-detail-panel"
           >
             <div className="prompt-detail-primary">
+              {detailPrompt?.description?.trim() ? (
+                <section className="prompt-detail-section prompt-detail-section--description" aria-labelledby="modalPromptDescriptionTitle">
+                  <div className="prompt-detail-section__header">
+                    <div>
+                      <span className="prompt-detail-section__label" id="modalPromptDescriptionTitle">
+                        {t("promptShare.description")}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="prompt-detail-description">{detailPrompt.description}</p>
+                </section>
+              ) : null}
+
               {/* 作例メディアはURLが存在するプロンプトにのみ表示する（現状は画像プレビュー対応） */}
               {/* Reference media is only rendered when the prompt has a URL (currently image preview) */}
               {detailPrompt?.reference_image_url ? (

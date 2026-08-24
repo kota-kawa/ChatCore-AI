@@ -92,6 +92,7 @@ class PromptRecordApi(ResponsePayloadModel):
     id: int | str | None = None
     title: str
     content: str
+    description: str | None = ""
     category: str | None = ""
     input_examples: str | None = ""
     output_examples: str | None = ""

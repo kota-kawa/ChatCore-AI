@@ -30,6 +30,7 @@ class PublicSharedContentSummary(BaseModel):
     prompt_id: int
     title: str
     category: str = ""
+    description: str = ""
     author: str
     content_format: str
     media_type: str
@@ -62,6 +63,7 @@ class PublicSharedContentDetail(BaseModel):
     prompt_id: int
     title: str
     category: str = ""
+    description: str = ""
     content: str = ""
     author: str
     content_format: str
@@ -172,6 +174,7 @@ class SharedContentService:
             prompt_id=int(row["id"]),
             title=str(row.get("title") or ""),
             category=str(row.get("category") or ""),
+            description=str(row.get("description") or ""),
             content=str(row.get("content") or ""),
             author=str(row.get("author") or "ユーザー"),
             content_format=str(axes["content_format"]),
@@ -387,6 +390,7 @@ class SharedContentService:
             prompt_id=int(row["id"]),
             title=str(row.get("title") or ""),
             category=str(row.get("category") or ""),
+            description=str(row.get("description") or ""),
             author=str(row.get("author") or "ユーザー"),
             content_format=str(axes["content_format"]),
             media_type=str(axes["media_type"]),

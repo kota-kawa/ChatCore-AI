@@ -8,6 +8,7 @@ import {
   getPromptFormatLabel,
   getPromptMediaIconClass,
   getPromptMediaLabel,
+  getPromptPreviewSource,
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent
@@ -61,10 +62,15 @@ function AuthorPromptRow({
   const mediaTypeValue = normalizePromptMediaType(String(prompt.media_type || ""));
   const categoryLabel = getCategoryLabelOrFallback(prompt.category, undefined, locale);
   const createdAtLabel = formatPromptDate(prompt.created_at) || t("promptShare.dateUnavailable");
-  const preview =
-    contentFormatValue === "skill"
-      ? truncateContent(prompt.skill_markdown || t("promptShare.skillOpenHelp"))
-      : truncateContent(prompt.content);
+  const previewSource = getPromptPreviewSource(
+    prompt.description,
+    contentFormatValue,
+    prompt.content,
+    prompt.skill_markdown
+  );
+  const preview = truncateContent(
+    previewSource || (contentFormatValue === "skill" ? t("promptShare.skillOpenHelp") : "")
+  );
 
   return (
     <li className="author-profile-list__item">

@@ -26,6 +26,7 @@ type PromptEditFormState = {
   title: string;
   category: string;
   content: string;
+  description: string;
   contentFormat: string;
   mediaType: string;
   attributes: Record<string, string>;
@@ -62,6 +63,7 @@ function createEditFormState(prompt: PromptRecord): PromptEditFormState {
     title: prompt.title,
     category: prompt.category,
     content: isSkill ? prompt.skillMarkdown : prompt.content,
+    description: prompt.description || "",
     contentFormat: prompt.contentFormat || "prompt",
     mediaType: prompt.mediaType || "text",
     attributes: prompt.attributes,
@@ -126,7 +128,10 @@ type PromptCardProps = {
 function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
-  const displayContent = prompt.contentFormat === "skill" ? prompt.skillMarkdown : prompt.content;
+  const hasDescription = Boolean(prompt.description?.trim());
+  const displayContent = hasDescription
+    ? prompt.description || ""
+    : prompt.contentFormat === "skill" ? prompt.skillMarkdown : prompt.content;
   const truncatedContent = truncateText(displayContent, CONTENT_CHAR_LIMIT);
 
   return (
@@ -254,6 +259,23 @@ function PromptEditModal({
                   disabled={isSaving}
                   onChange={onCategoryChange}
                 />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="editDescription" className="form-label">
+                  {t("promptShare.descriptionLabel")}
+                </label>
+                <textarea
+                  className="form-control input-field"
+                  id="editDescription"
+                  name="description"
+                  rows={3}
+                  maxLength={300}
+                  placeholder={t("promptShare.descriptionPlaceholder")}
+                  value={formState.description}
+                  onChange={onChange}
+                  disabled={isSaving}
+                ></textarea>
               </div>
 
               <div className="form-group">

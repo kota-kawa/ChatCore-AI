@@ -59,6 +59,7 @@ class SharedContentRepository:
                     """(
                     p.title ILIKE %s ESCAPE '\\'
                     OR p.content ILIKE %s ESCAPE '\\'
+                    OR p.description ILIKE %s ESCAPE '\\'
                     OR p.category ILIKE %s ESCAPE '\\'
                     OR p.category = ANY(%s::text[])
                     OR p.author ILIKE %s ESCAPE '\\'
@@ -71,6 +72,7 @@ class SharedContentRepository:
                 )
                 filter_params.extend(
                     [
+                        like_term,
                         like_term,
                         like_term,
                         like_term,
@@ -94,10 +96,13 @@ class SharedContentRepository:
                 p.title,
                 p.category,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.description,
                 p.content_format,
                 p.media_type,
                 LEFT(
                     CASE
+                        WHEN NULLIF(p.description, '') IS NOT NULL
+                            THEN p.description
                         WHEN p.content_format = 'skill'
                             THEN COALESCE(p.attributes->>'skill_markdown', '')
                         ELSE p.content
@@ -143,6 +148,7 @@ class SharedContentRepository:
                     p.title,
                     p.category,
                     p.content,
+                    p.description,
                     COALESCE(u.username, p.author, 'ユーザー') AS author,
                     p.content_format,
                     p.media_type,
