@@ -728,7 +728,7 @@ export const jaMessages = {
   "promptShare.postSettings": "投稿設定",
   "promptShare.categoryOptionalHelp": "用途で見つけやすくするための分類です。画像投稿でも必要に応じて選べます。",
   "promptShare.aiModelOptional": "使用AIモデル（任意）",
-  "promptShare.aiModelPlaceholder": "例: ChatGPT (GPT-5.4)、Midjourney など",
+  "promptShare.aiModelPlaceholder": "例: ChatGPT (GPT-5.6 Sol)、Midjourney V8.2 など",
   "promptShare.chooseAiModel": "候補のAIモデルを選択",
   "promptShare.aiModelMenuHint": "候補から選択、または自由に入力できます。",
   "promptShare.unset": "未設定",

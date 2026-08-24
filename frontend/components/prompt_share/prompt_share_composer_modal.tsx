@@ -121,54 +121,52 @@ const COMPOSER_POST_TYPES: Array<{
   }
 ];
 
-// AIモデルの入力候補（datalist）。固定リストではなく自由入力の補助のため、
-// ここに無いモデル名を入力してもそのまま投稿できる。
-// AI model suggestions for the <datalist>. The field itself is free text, so
-// typing a model that isn't listed here still works fine.
+// AIモデルの候補。固定リストではなく自由入力を補助するため、ここに無いモデル名も
+// そのまま投稿できる。候補は各提供元の公式モデル一覧を確認して更新する。
+// AI model suggestions. The field remains free-form, so model names outside this
+// list are also accepted. Keep these options current using each provider's official model catalog.
 const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOption[] }[] = [
   {
     label: "OpenAI",
     options: [
-      { value: "ChatGPT (GPT-5.4)", label: "ChatGPT (GPT-5.4)" },
-      { value: "ChatGPT (GPT-5.4 mini)", label: "ChatGPT (GPT-5.4 mini)" },
-      { value: "ChatGPT (o3)", label: "ChatGPT (o3)" },
-      { value: "ChatGPT (GPT-4o)", label: "ChatGPT (GPT-4o)" }
+      { value: "ChatGPT (GPT-5.6 Sol)", label: "ChatGPT (GPT-5.6 Sol)" },
+      { value: "ChatGPT (GPT-5.6 Terra)", label: "ChatGPT (GPT-5.6 Terra)" },
+      { value: "ChatGPT (GPT-5.6 Luna)", label: "ChatGPT (GPT-5.6 Luna)" }
     ]
   },
   {
     label: "Anthropic",
     options: [
-      { value: "Claude Opus 4.6", label: "Claude Opus 4.6" },
-      { value: "Claude Sonnet 4.6", label: "Claude Sonnet 4.6" },
-      { value: "Claude Haiku 4.5", label: "Claude Haiku 4.5" },
-      { value: "Claude 3.7 Sonnet", label: "Claude 3.7 Sonnet" }
+      { value: "Claude Fable 5", label: "Claude Fable 5" },
+      { value: "Claude Opus 5", label: "Claude Opus 5" },
+      { value: "Claude Sonnet 5", label: "Claude Sonnet 5" },
+      { value: "Claude Haiku 4.5", label: "Claude Haiku 4.5" }
     ]
   },
   {
-    label: "Meta",
+    label: "Google",
     options: [
-      { value: "Llama 4 Maverick", label: "Llama 4 Maverick" },
-      { value: "Llama 4 Scout", label: "Llama 4 Scout" }
-    ]
-  },
-  {
-    label: "DeepSeek",
-    options: [
-      { value: "DeepSeek-R1", label: "DeepSeek-R1" },
-      { value: "DeepSeek-V3", label: "DeepSeek-V3" }
+      { value: "Gemini 3.7 Flash", label: "Gemini 3.7 Flash" },
+      { value: "Gemini 3.6 Flash", label: "Gemini 3.6 Flash" },
+      { value: "Gemini 3.1 Pro", label: "Gemini 3.1 Pro" }
     ]
   },
   {
     label: "xAI",
-    options: [{ value: "Grok 3", label: "Grok 3" }]
+    options: [{ value: "Grok 4.6", label: "Grok 4.6" }]
   },
   {
     label: "画像生成",
     options: [
-      { value: "Midjourney", label: "Midjourney" },
-      { value: "Stable Diffusion", label: "Stable Diffusion" },
-      { value: "FLUX", label: "FLUX" },
-      { value: "DALL-E 3", label: "DALL-E 3" }
+      { value: "GPT Image 2", label: "GPT Image 2" },
+      { value: "Nano Banana Pro", label: "Nano Banana Pro" },
+      { value: "Nano Banana 2", label: "Nano Banana 2" },
+      { value: "Midjourney V8.2", label: "Midjourney V8.2" },
+      { value: "Niji 7", label: "Niji 7" },
+      { value: "FLUX.2 [max]", label: "FLUX.2 [max]" },
+      { value: "FLUX.2 [pro]", label: "FLUX.2 [pro]" },
+      { value: "Stable Diffusion 3.5 Large", label: "Stable Diffusion 3.5 Large" },
+      { value: "Stable Diffusion 3.5 Large Turbo", label: "Stable Diffusion 3.5 Large Turbo" }
     ]
   }
 ];
