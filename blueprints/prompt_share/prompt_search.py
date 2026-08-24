@@ -101,6 +101,7 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt["liked"] = bool(prompt.get("liked"))
     prompt["used_in_chat"] = bool(prompt.get("used_in_chat"))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
+    prompt["view_count"] = int(prompt.get("view_count") or 0)
     return prompt
 
 
@@ -237,6 +238,7 @@ def _search_public_prompts(
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(pvc.view_count, 0) AS view_count,
                 COALESCE(
                   (
                     SELECT jsonb_agg(
@@ -271,6 +273,8 @@ def _search_public_prompts(
               FROM prompts AS p
               LEFT JOIN users AS u
                 ON u.id = p.user_id
+              LEFT JOIN prompt_view_counts AS pvc
+                ON pvc.prompt_id = p.id
               WHERE p.is_public = TRUE
                 AND p.deleted_at IS NULL
                 {select_axis_condition}
@@ -281,7 +285,7 @@ def _search_public_prompts(
                   p.author LIKE %s OR
                   u.username LIKE %s
                 )
-              ORDER BY p.created_at DESC, p.id DESC
+              ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
               LIMIT %s
               OFFSET %s
             )
@@ -310,7 +314,7 @@ def _search_public_prompts(
                 AND prompt_id = p.id
             ) AS pc
               ON TRUE
-            ORDER BY p.created_at DESC, p.id DESC
+            ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC
         """
         
         # 総ヒット数取得用SQL

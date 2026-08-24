@@ -20,6 +20,7 @@ ERROR_TASK_ORDER_INVALID = "タスクの並び順が最新の一覧と一致し�
 ERROR_MEMO_NOT_FOUND_FOR_SHARE = "共有対象のメモが見つかりません。"
 ERROR_INVALID_PROMPT_FEED_CURSOR = "プロンプト一覧のカーソルが不正です。"
 ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件が不正です。"
+ERROR_PROMPT_NOT_FOUND = "プロンプトが見つかりません"
 ERROR_PROMPT_ATTACHMENT_EMPTY = "空の添付ファイルはアップロードできません。"
 ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"

@@ -6,6 +6,7 @@ import type {
   PromptCreateResponse,
   PromptData,
   PromptFeedResponse,
+  PromptViewResponse,
   PromptType
 } from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
@@ -59,6 +60,19 @@ export function fetchPromptComments(promptId: string | number) {
     undefined,
     {
       defaultMessage: promptShareText("promptShare.loadCommentsFailed")
+    }
+  ).then(({ payload }) => payload);
+}
+
+export function recordPromptView(promptId: string | number) {
+  return promptShareFetchJsonOrThrow<PromptViewResponse>(
+    `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/view`,
+    {
+      method: "POST",
+      credentials: "same-origin"
+    },
+    {
+      defaultMessage: promptShareText("promptShare.loadFailed")
     }
   ).then(({ payload }) => payload);
 }

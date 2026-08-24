@@ -22,6 +22,7 @@ from services.error_messages import (
     ERROR_GUEST_PROMPT_URL_FORBIDDEN,
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
+    ERROR_PROMPT_NOT_FOUND,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
@@ -53,6 +54,7 @@ from services.prompt_types import (
     normalize_content_format,
     serialize_axes,
 )
+from services.repositories.prompt_view_repository import PromptViewRepository
 from services.request_models import (
     PromptCommentCreateRequest,
     PromptCommentReportRequest,
@@ -179,8 +181,8 @@ def _consume_prompt_create_limits(
     return True, None, None
 
 
-def _decode_prompt_feed_cursor(value: str | None) -> tuple[datetime, int] | None:
-    """URL-safe Base64カーソルを(created_at, id)へ復元する。"""
+def _decode_prompt_feed_cursor(value: str | None) -> tuple[int, datetime, int] | None:
+    """URL-safe Base64カーソルを(view_count, created_at, id)へ復元する。"""
     if not value:
         return None
     try:
@@ -189,14 +191,24 @@ def _decode_prompt_feed_cursor(value: str | None) -> tuple[datetime, int] | None
         payload = json.loads(decoded)
         if not isinstance(payload, dict):
             raise ValueError
+        view_count = payload.get("view_count")
         created_at = payload.get("created_at")
         prompt_id = payload.get("id")
-        if not isinstance(created_at, str) or isinstance(prompt_id, bool):
+        if (
+            isinstance(view_count, bool)
+            or isinstance(prompt_id, bool)
+            or not isinstance(created_at, str)
+        ):
             raise ValueError
+        parsed_view_count = int(view_count)
         parsed_id = int(prompt_id)
-        if parsed_id <= 0:
+        if parsed_view_count < 0 or parsed_id <= 0:
             raise ValueError
-        return datetime.fromisoformat(created_at.replace("Z", "+00:00")), parsed_id
+        return (
+            parsed_view_count,
+            datetime.fromisoformat(created_at.replace("Z", "+00:00")),
+            parsed_id,
+        )
     except (
         ValueError,
         TypeError,
@@ -208,13 +220,18 @@ def _decode_prompt_feed_cursor(value: str | None) -> tuple[datetime, int] | None
 
 
 def _encode_prompt_feed_cursor(prompt: dict[str, Any]) -> str | None:
-    """プロンプトの(created_at, id)から次ページ用カーソルを作る。"""
+    """プロンプトの(view_count, created_at, id)から次ページ用カーソルを作る。"""
+    view_count = prompt.get("view_count")
     created_at = prompt.get("created_at")
     prompt_id = prompt.get("id")
-    if not isinstance(created_at, str) or prompt_id is None:
+    if view_count is None or not isinstance(created_at, str) or prompt_id is None:
         return None
     payload = json.dumps(
-        {"created_at": created_at, "id": int(prompt_id)},
+        {
+            "view_count": int(view_count),
+            "created_at": created_at,
+            "id": int(prompt_id),
+        },
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -305,6 +322,7 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
                 break
     prompt.pop("resource_python_script", None)
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
+    prompt["view_count"] = int(prompt.get("view_count") or 0)
     return prompt
 
 
@@ -525,7 +543,7 @@ def _get_prompts_with_flags(
     user_id: int | None,
     *,
     limit: int = PROMPT_FEED_DEFAULT_LIMIT,
-    cursor: tuple[datetime, int] | None = None,
+    cursor: tuple[int, datetime, int] | None = None,
     category: str | None = None,
     content_format: str | None = None,
     media_type: str | None = None,
@@ -562,7 +580,9 @@ def _get_prompts_with_flags(
             conditions.append("AND p.user_id = %s")
             params.append(author_id)
         if cursor is not None:
-            conditions.append("AND (p.created_at, p.id) < (%s, %s)")
+            conditions.append(
+                "AND (COALESCE(pvc.view_count, 0), p.created_at, p.id) < (%s, %s, %s)"
+            )
             params.extend(cursor)
         filter_sql = "\n                ".join(conditions)
         limit = min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
@@ -589,6 +609,7 @@ def _get_prompts_with_flags(
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(pvc.view_count, 0) AS view_count,
                 COALESCE(
                   (
                     SELECT jsonb_agg(
@@ -623,10 +644,12 @@ def _get_prompts_with_flags(
               FROM prompts AS p
               LEFT JOIN users AS u
                 ON u.id = p.user_id
+              LEFT JOIN prompt_view_counts AS pvc
+                ON pvc.prompt_id = p.id
               WHERE p.is_public = TRUE
                 AND p.deleted_at IS NULL
                 {filter_sql}
-              ORDER BY p.created_at DESC, p.id DESC
+              ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
               LIMIT %s
             )
             SELECT
@@ -654,7 +677,7 @@ def _get_prompts_with_flags(
                   AND prompt_id = p.id
             ) AS pc
               ON TRUE
-            ORDER BY p.created_at DESC, p.id DESC
+            ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC
             """,
             tuple(params),
         )
@@ -712,6 +735,7 @@ def _get_recommended_prompts(
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(pvc.view_count, 0) AS view_count,
                 COALESCE(
                   (
                     SELECT jsonb_agg(
@@ -746,6 +770,8 @@ def _get_recommended_prompts(
             FROM prompts AS p
             LEFT JOIN users AS u
               ON u.id = p.user_id
+            LEFT JOIN prompt_view_counts AS pvc
+              ON pvc.prompt_id = p.id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
               AND (p.system_prompt_key IS NULL OR p.content_locale = %s)
@@ -775,8 +801,8 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        # サブクエリで有効コメント数を含めてプロンプト詳細を1行取得
-        # Query details and count comments.
+        # サブクエリで有効コメント数と現在のビュー数を含めて詳細を取得する。
+        # Query details with the active comment count and current view count.
         cursor.execute(
             """
             SELECT
@@ -794,6 +820,7 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(pvc.view_count, 0) AS view_count,
                 COALESCE(
                   (
                     SELECT jsonb_agg(
@@ -836,6 +863,8 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
             FROM prompts AS p
             LEFT JOIN users AS u
               ON u.id = p.user_id
+            LEFT JOIN prompt_view_counts AS pvc
+              ON pvc.prompt_id = p.id
             WHERE p.id = %s
               AND p.is_public = TRUE
               AND p.deleted_at IS NULL
@@ -1838,6 +1867,28 @@ async def get_recommended_prompts(request: Request, exclude_id: int | None = Non
         )
 
 
+# プロンプト詳細を実際に開いたクライアントからビューを1件記録するエンドポイント
+# Endpoint to record one view from a client that opened prompt details.
+@prompt_share_api_bp.post(
+    "/prompts/{prompt_id}/view",
+    name="prompt_share_api.record_prompt_view",
+)
+async def record_prompt_view(prompt_id: int):
+    try:
+        view_count = await run_blocking(
+            PromptViewRepository.increment_public_view,
+            prompt_id,
+        )
+        if view_count is None:
+            return jsonify({"error": ERROR_PROMPT_NOT_FOUND}, status_code=404)
+        return jsonify({"status": "success", "view_count": view_count})
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to record public prompt view.",
+        )
+
+
 # プロンプト詳細を取得するエンドポイント
 # Endpoint to retrieve details of a specific public prompt.
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
@@ -1851,7 +1902,7 @@ async def get_prompt_detail(prompt_id: int):
         # Run database query in a separate thread.
         prompt = await run_blocking(_get_public_prompt_by_id, prompt_id)
         if not prompt:
-            return jsonify({"error": "プロンプトが見つかりません"}, status_code=404)
+            return jsonify({"error": ERROR_PROMPT_NOT_FOUND}, status_code=404)
         return jsonify({"status": "success", "prompt": prompt})
     except Exception:
         # エラー発生時はログに記録し、500内部サーバーエラーを返却

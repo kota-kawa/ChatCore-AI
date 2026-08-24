@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPrompt, fetchPromptAuthorProfile, fetchPromptList, savePromptAsMemo } from "../scripts/prompt_share/api";
+import {
+  createPrompt,
+  fetchPromptAuthorProfile,
+  fetchPromptList,
+  recordPromptView,
+  savePromptAsMemo
+} from "../scripts/prompt_share/api";
 
 const originalFetch = globalThis.fetch;
 
@@ -99,6 +105,28 @@ test("fetchPromptAuthorProfile requests the author profile endpoint by user ID",
 
   assert.equal(requestedUrl, "/prompt_share/api/users/42");
   assert.equal(payload.user?.username, "Kota");
+});
+
+test("recordPromptView posts to the prompt detail view endpoint", async () => {
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return jsonResponse({ status: "success", view_count: 6 });
+  }) as typeof fetch;
+
+  let payload;
+  try {
+    payload = await recordPromptView(42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestedUrl, "/prompt_share/api/prompts/42/view");
+  assert.equal(requestedInit?.method, "POST");
+  assert.equal(requestedInit?.credentials, "same-origin");
+  assert.equal(payload.view_count, 6);
 });
 
 test("createPrompt returns the guest-post marker from the API", async () => {

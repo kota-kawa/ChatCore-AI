@@ -18,22 +18,26 @@ from tests.helpers.request_helpers import build_request
 
 
 class PromptFeedPaginationTestCase(unittest.TestCase):
-    def test_cursor_round_trip_preserves_timestamp_and_id(self):
+    def test_cursor_round_trip_preserves_view_count_timestamp_and_id(self):
         cursor = _encode_prompt_feed_cursor(
-            {"created_at": "2026-07-16T12:34:56", "id": 42}
+            {"view_count": 17, "created_at": "2026-07-16T12:34:56", "id": 42}
         )
 
         self.assertIsInstance(cursor, str)
         self.assertEqual(
             _decode_prompt_feed_cursor(cursor),
-            (datetime(2026, 7, 16, 12, 34, 56), 42),
+            (17, datetime(2026, 7, 16, 12, 34, 56), 42),
         )
 
     def test_cursor_rejects_malformed_payloads(self):
+        negative_view_cursor = _encode_prompt_feed_cursor(
+            {"view_count": -1, "created_at": "2026-07-16T12:34:56", "id": 42}
+        )
         malformed_cursors = (
             "invalid",
             "e30",
             "eyJjcmVhdGVkX2F0Ijoibm90LWEtZGF0ZSIsImlkIjoxfQ",
+            negative_view_cursor,
         )
         for cursor in malformed_cursors:
             with self.subTest(cursor=cursor), self.assertRaises(ApiServiceError) as raised:
@@ -60,7 +64,7 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
 
     def test_route_passes_cursor_and_filters_to_blocking_query(self):
         cursor = _encode_prompt_feed_cursor(
-            {"created_at": "2026-07-16T12:34:56", "id": 42}
+            {"view_count": 17, "created_at": "2026-07-16T12:34:56", "id": 42}
         )
         request = build_request(
             method="GET",
@@ -90,7 +94,7 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
             unittest.mock.ANY,
             7,
             limit=12,
-            cursor=(datetime(2026, 7, 16, 12, 34, 56), 42),
+            cursor=(17, datetime(2026, 7, 16, 12, 34, 56), 42),
             category="business",
             content_format="prompt",
             media_type="text",

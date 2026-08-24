@@ -99,7 +99,15 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         # CTEでページを確定し、相関サブクエリで付加状態を取得することを検証
         # Verify the page-first CTE and correlated metadata lookups.
         self.assertIn("WITH page_prompts AS", query)
-        self.assertIn("ORDER BY p.created_at DESC, p.id DESC", query)
+        self.assertIn(
+            "ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC",
+            query,
+        )
+        self.assertIn(
+            "ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC",
+            query,
+        )
+        self.assertIn("LEFT JOIN prompt_view_counts AS pvc", query)
         self.assertIn("LIMIT %s", query)
         self.assertIn("LEFT JOIN LATERAL", query)
         self.assertIn("EXISTS ( SELECT 1 FROM prompt_likes AS pl", query)
@@ -127,6 +135,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
                 "media_type": "image",
                 "attributes": {},
                 "attachments": [],
+                "view_count": 12,
                 "created_at": datetime(2026, 7, 16, 10, 0, prompt_id),
                 "liked": False,
                 "used_in_chat": False,
@@ -136,7 +145,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         ]
         fake_cursor = FakeCursor(rows)
         fake_conn = FakeConnection(fake_cursor)
-        page_cursor = (datetime(2026, 7, 16, 11, 0, 0), 10)
+        page_cursor = (12, datetime(2026, 7, 16, 11, 0, 0), 10)
 
         with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
             payload = _get_prompts_with_flags(
@@ -152,7 +161,10 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("AND p.category = %s", query)
         self.assertIn("AND p.content_format = %s", query)
         self.assertIn("AND p.media_type = %s", query)
-        self.assertIn("AND (p.created_at, p.id) < (%s, %s)", query)
+        self.assertIn(
+            "AND (COALESCE(pvc.view_count, 0), p.created_at, p.id) < (%s, %s, %s)",
+            query,
+        )
         self.assertEqual(
             params,
             ("ja", "business", "prompt", "image", *page_cursor, 3, 7, 7),
@@ -162,7 +174,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIsNotNone(payload["pagination"]["next_cursor"])
         self.assertEqual(
             _decode_prompt_feed_cursor(payload["pagination"]["next_cursor"]),
-            (datetime(2026, 7, 16, 10, 0, 8), 8),
+            (12, datetime(2026, 7, 16, 10, 0, 8), 8),
         )
 
     # SNS風プロフィール表示向けに、author_idを指定すると投稿者本人の投稿だけへ絞られることを検証します。
@@ -228,6 +240,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("COALESCE(p.id <> %s, TRUE)", query)
         self.assertIn("ORDER BY RANDOM()", query)
         self.assertIn("LIMIT %s", query)
+        self.assertIn("LEFT JOIN prompt_view_counts AS pvc", query)
         self.assertIn("p.system_prompt_key IS NULL", query)
         self.assertEqual(params, ("ja", 7, 3))
         self.assertEqual(prompts[0]["id"], 8)
