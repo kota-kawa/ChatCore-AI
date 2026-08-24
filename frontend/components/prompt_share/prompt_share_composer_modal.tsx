@@ -121,54 +121,52 @@ const COMPOSER_POST_TYPES: Array<{
   }
 ];
 
-// AIモデルの入力候補（datalist）。固定リストではなく自由入力の補助のため、
-// ここに無いモデル名を入力してもそのまま投稿できる。
-// AI model suggestions for the <datalist>. The field itself is free text, so
-// typing a model that isn't listed here still works fine.
+// AIモデルの候補。固定リストではなく自由入力を補助するため、ここに無いモデル名も
+// そのまま投稿できる。候補は各提供元の公式モデル一覧を確認して更新する。
+// AI model suggestions. The field remains free-form, so model names outside this
+// list are also accepted. Keep these options current using each provider's official model catalog.
 const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOption[] }[] = [
   {
     label: "OpenAI",
     options: [
-      { value: "ChatGPT (GPT-5.4)", label: "ChatGPT (GPT-5.4)" },
-      { value: "ChatGPT (GPT-5.4 mini)", label: "ChatGPT (GPT-5.4 mini)" },
-      { value: "ChatGPT (o3)", label: "ChatGPT (o3)" },
-      { value: "ChatGPT (GPT-4o)", label: "ChatGPT (GPT-4o)" }
+      { value: "ChatGPT (GPT-5.6 Sol)", label: "ChatGPT (GPT-5.6 Sol)" },
+      { value: "ChatGPT (GPT-5.6 Terra)", label: "ChatGPT (GPT-5.6 Terra)" },
+      { value: "ChatGPT (GPT-5.6 Luna)", label: "ChatGPT (GPT-5.6 Luna)" }
     ]
   },
   {
     label: "Anthropic",
     options: [
-      { value: "Claude Opus 4.6", label: "Claude Opus 4.6" },
-      { value: "Claude Sonnet 4.6", label: "Claude Sonnet 4.6" },
-      { value: "Claude Haiku 4.5", label: "Claude Haiku 4.5" },
-      { value: "Claude 3.7 Sonnet", label: "Claude 3.7 Sonnet" }
+      { value: "Claude Fable 5", label: "Claude Fable 5" },
+      { value: "Claude Opus 5", label: "Claude Opus 5" },
+      { value: "Claude Sonnet 5", label: "Claude Sonnet 5" },
+      { value: "Claude Haiku 4.5", label: "Claude Haiku 4.5" }
     ]
   },
   {
-    label: "Meta",
+    label: "Google",
     options: [
-      { value: "Llama 4 Maverick", label: "Llama 4 Maverick" },
-      { value: "Llama 4 Scout", label: "Llama 4 Scout" }
-    ]
-  },
-  {
-    label: "DeepSeek",
-    options: [
-      { value: "DeepSeek-R1", label: "DeepSeek-R1" },
-      { value: "DeepSeek-V3", label: "DeepSeek-V3" }
+      { value: "Gemini 3.7 Flash", label: "Gemini 3.7 Flash" },
+      { value: "Gemini 3.6 Flash", label: "Gemini 3.6 Flash" },
+      { value: "Gemini 3.1 Pro", label: "Gemini 3.1 Pro" }
     ]
   },
   {
     label: "xAI",
-    options: [{ value: "Grok 3", label: "Grok 3" }]
+    options: [{ value: "Grok 4.6", label: "Grok 4.6" }]
   },
   {
     label: "画像生成",
     options: [
-      { value: "Midjourney", label: "Midjourney" },
-      { value: "Stable Diffusion", label: "Stable Diffusion" },
-      { value: "FLUX", label: "FLUX" },
-      { value: "DALL-E 3", label: "DALL-E 3" }
+      { value: "GPT Image 2", label: "GPT Image 2" },
+      { value: "Nano Banana Pro", label: "Nano Banana Pro" },
+      { value: "Nano Banana 2", label: "Nano Banana 2" },
+      { value: "Midjourney V8.2", label: "Midjourney V8.2" },
+      { value: "Niji 7", label: "Niji 7" },
+      { value: "FLUX.2 [max]", label: "FLUX.2 [max]" },
+      { value: "FLUX.2 [pro]", label: "FLUX.2 [pro]" },
+      { value: "Stable Diffusion 3.5 Large", label: "Stable Diffusion 3.5 Large" },
+      { value: "Stable Diffusion 3.5 Large Turbo", label: "Stable Diffusion 3.5 Large Turbo" }
     ]
   }
 ];
@@ -505,11 +503,48 @@ export function PromptShareComposerModal({
     ...option,
     label: option.value ? getCategoryLabelOrFallback(option.value, option.label, locale) : t("promptShare.notSelected")
   }));
-  // 投稿タイプ（テキスト/画像）に合わせて、datalistに出す候補モデル名だけ絞り込む
-  // Narrow the datalist suggestions to models relevant to the current post type (text vs image)
-  const aiModelSuggestions = AI_MODEL_OPTION_GROUPS.filter((group) =>
+  // 自由入力は残しつつ、よく使うモデルをアイコンから明示的に選べるようにする。
+  // Keep free-form entry while making the prepared model choices discoverable from an icon.
+  const aiModelOptionGroups = AI_MODEL_OPTION_GROUPS.filter((group) =>
     resolvedMediaType === "image" ? group.label === "画像生成" : group.label !== "画像生成"
-  ).flatMap((group) => group.options.map((option) => option.value));
+  );
+  const aiModelMenuRef = useRef<HTMLDivElement | null>(null);
+  const aiModelMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [isAiModelMenuOpen, setIsAiModelMenuOpen] = useState(false);
+
+  // モーダルを閉じた後に候補メニューだけが開いた状態で残らないようにする。
+  // Reset the menu when the composer closes so the next opening starts cleanly.
+  useEffect(() => {
+    if (!isOpen) {
+      setIsAiModelMenuOpen(false);
+    }
+  }, [isOpen]);
+
+  // メニューが開いている間だけ外側クリックを監視し、自然に閉じられるようにする。
+  // Watch click-away only while open so the picker behaves like a regular menu.
+  useEffect(() => {
+    if (!isAiModelMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!aiModelMenuRef.current?.contains(event.target as Node)) {
+        setIsAiModelMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isAiModelMenuOpen]);
+
+  const selectAiModelOption = (modelName: string) => {
+    setPostAiModel(modelName);
+    updatePromptFeedbackErrorIfNeeded();
+    setIsAiModelMenuOpen(false);
+    aiModelMenuTriggerRef.current?.focus();
+  };
 
   // SKILLの説明パネルの開閉状態を管理し、フォーマットが切り替わると自動で閉じる
   // Manage the SKILL info panel toggle; reset it whenever the content format changes
@@ -743,7 +778,7 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
-              <div className="composer-field-grid composer-field-grid--two">
+              <div className="composer-field-grid composer-field-grid--two composer-field-grid--settings">
                 <div className="form-group">
                   <label htmlFor="prompt-category-trigger">
                     {t("promptShare.category")} <span className="composer-optional">{t("common.optional")}</span>
@@ -760,31 +795,82 @@ export function PromptShareComposerModal({
                     isModalOpen={isOpen}
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group form-group--ai-model">
                   <label htmlFor="prompt-ai-model">{t("promptShare.aiModelOptional")}</label>
-                  {/* 固定リストのプルダウンではなく自由入力にし、リストにないモデルも
-                      そのまま入力できるようにする。datalistは代表的なモデル名を補助として示すだけ。 */}
-                  {/* Free text instead of a fixed dropdown, so models not on the list can still be
-                      entered as-is. The datalist only offers common model names as a convenience. */}
-                  <input
-                    type="text"
-                    id="prompt-ai-model"
-                    list="prompt-ai-model-suggestions"
-                    autoComplete="off"
-                    placeholder={t("promptShare.aiModelPlaceholder")}
-                    maxLength={100}
-                    ref={promptPostAiModelSelectRef}
-                    value={postAiModel}
-                    onChange={(event) => {
-                      setPostAiModel(event.target.value);
-                      updatePromptFeedbackErrorIfNeeded();
-                    }}
-                  />
-                  <datalist id="prompt-ai-model-suggestions">
-                    {aiModelSuggestions.map((modelName) => (
-                      <option key={modelName} value={modelName} />
-                    ))}
-                  </datalist>
+                  <span className="form-group__hint form-group__hint--placeholder" aria-hidden="true"></span>
+                  <div ref={aiModelMenuRef} className={`ai-model-picker${isAiModelMenuOpen ? " is-open" : ""}`.trim()}>
+                    <input
+                      type="text"
+                      id="prompt-ai-model"
+                      autoComplete="off"
+                      placeholder={t("promptShare.aiModelPlaceholder")}
+                      maxLength={100}
+                      ref={promptPostAiModelSelectRef}
+                      value={postAiModel}
+                      onChange={(event) => {
+                        setPostAiModel(event.target.value);
+                        updatePromptFeedbackErrorIfNeeded();
+                      }}
+                    />
+                    <button
+                      ref={aiModelMenuTriggerRef}
+                      type="button"
+                      className="ai-model-picker__trigger"
+                      aria-label={t("promptShare.chooseAiModel")}
+                      aria-haspopup="menu"
+                      aria-expanded={isAiModelMenuOpen ? "true" : "false"}
+                      aria-controls="prompt-ai-model-menu"
+                      onClick={() => setIsAiModelMenuOpen((previous) => !previous)}
+                    >
+                      <i className="bi bi-cpu" aria-hidden="true"></i>
+                    </button>
+                    <div
+                      id="prompt-ai-model-menu"
+                      className="ai-model-picker__menu"
+                      role="menu"
+                      aria-label={t("promptShare.chooseAiModel")}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setIsAiModelMenuOpen(false);
+                          aiModelMenuTriggerRef.current?.focus();
+                        }
+                      }}
+                    >
+                      <div className="ai-model-picker__menu-heading">
+                        <span className="ai-model-picker__menu-icon" aria-hidden="true"><i className="bi bi-cpu"></i></span>
+                        <span>
+                          <strong>{t("promptShare.chooseAiModel")}</strong>
+                          <small>{t("promptShare.aiModelMenuHint")}</small>
+                        </span>
+                      </div>
+                      <div className="ai-model-picker__groups">
+                        {aiModelOptionGroups.map((group) => (
+                          <section className="ai-model-picker__group" key={group.label}>
+                            <h4>{group.label}</h4>
+                            <div className="ai-model-picker__options">
+                              {group.options.map((option) => {
+                                const isSelected = postAiModel === option.value;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={isSelected ? "true" : "false"}
+                                    className={`ai-model-picker__option${isSelected ? " is-selected" : ""}`.trim()}
+                                    onClick={() => selectAiModelOption(option.value)}
+                                  >
+                                    <span>{option.label}</span>
+                                    {isSelected ? <i className="bi bi-check-lg" aria-hidden="true"></i> : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
