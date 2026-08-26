@@ -17,10 +17,14 @@ def make_request(path, json_body, session=None):
 # 登録確認メールやログインコードの有効期限、試行回数上限（ブルートフォース保護）、セッションIDローテーションなどの挙動を検証するテストクラス。
 # Test class to check verification/login code limits, expiration, maximum attempts, and session ID rotation.
 class VerificationCodeLimitsTestCase(unittest.TestCase):
-    # 新規登録メール送信時に、セッション内にコード、発行時刻(issued_at)、および初期試行回数(attempts)が記録されることを検証します。
-    # Verify that sending a registration email records the generated code, issued_at timestamp, and attempts count in the session.
-    def test_send_verification_email_stores_issued_at_and_attempts(self):
-        session = {"_seed": True}
+    # 新規登録メール送信時に、認証コードが一般セッションではなく専用トランザクションへ分離されることを検証します。
+    # Verify that a registration code is isolated in a dedicated transaction instead of the general session.
+    def test_send_verification_email_uses_dedicated_transaction(self):
+        session = {
+            "_seed": True,
+            "login_verification_code": "stale-login-code",
+            "login_temp_user_id": 99,
+        }
         request = make_request(
             "/api/send_verification_email",
             {"email": "new-user@example.com"},
@@ -35,13 +39,18 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
                     with patch("blueprints.verification.create_user", return_value=10):
                         with patch("blueprints.verification.generate_verification_code", return_value="123456"):
                             with patch("blueprints.verification.time.time", return_value=1000):
-                                with patch("blueprints.verification.send_email"):
-                                    response = asyncio.run(api_send_verification_email(request))
+                                with patch(
+                                    "blueprints.verification.store_email_auth_transaction",
+                                    return_value="registration-transaction",
+                                ):
+                                    with patch("blueprints.verification.send_email"):
+                                        response = asyncio.run(api_send_verification_email(request))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(session["verification_code"], "123456")
-        self.assertEqual(session["verification_code_issued_at"], 1000)
-        self.assertEqual(session["verification_code_attempts"], 0)
+        self.assertNotIn("verification_code", session)
+        self.assertNotIn("verification_code_issued_at", session)
+        self.assertNotIn("verification_code_attempts", session)
+        self.assertIn("email_auth_transaction=registration-transaction", response.headers["set-cookie"])
 
     # 登録確認コードの有効期限が切れた場合に、検証が拒否されセッションから認証情報がクリアされることを検証します。
     # Verify that registration verification fails if the code has expired, clearing temporary verification data from the session.
@@ -97,10 +106,14 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("verification_code_issued_at", session)
         self.assertNotIn("verification_code_attempts", session)
 
-    # ログインコード送信時に、セッション内にログインコード、発行時刻(issued_at)、および初期試行回数(attempts)が記録されることを検証します。
-    # Verify that sending a login code records the generated login code, issued_at timestamp, and attempts count in the session.
-    def test_send_login_code_stores_issued_at_and_attempts(self):
-        session = {"_seed": True}
+    # ログインコード送信時に、認証コードが一般セッションではなく専用トランザクションへ分離されることを検証します。
+    # Verify that a login code is isolated in a dedicated transaction instead of the general session.
+    def test_send_login_code_uses_dedicated_transaction(self):
+        session = {
+            "_seed": True,
+            "verification_code": "stale-registration-code",
+            "temp_user_id": 99,
+        }
         request = make_request(
             "/api/send_login_code",
             {"email": "user@example.com"},
@@ -117,13 +130,18 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
                 with patch("blueprints.auth.consume_auth_email_daily_quota", return_value=(True, 1, 50)):
                     with patch("blueprints.auth.generate_verification_code", return_value="654321"):
                         with patch("blueprints.auth.time.time", return_value=3000):
-                            with patch("blueprints.auth.send_email"):
-                                response = asyncio.run(api_send_login_code(request))
+                            with patch(
+                                "blueprints.auth.store_email_auth_transaction",
+                                return_value="login-transaction",
+                            ):
+                                with patch("blueprints.auth.send_email"):
+                                    response = asyncio.run(api_send_login_code(request))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(session["login_verification_code"], "654321")
-        self.assertEqual(session["login_verification_code_issued_at"], 3000)
-        self.assertEqual(session["login_verification_code_attempts"], 0)
+        self.assertNotIn("login_verification_code", session)
+        self.assertNotIn("login_verification_code_issued_at", session)
+        self.assertNotIn("login_verification_code_attempts", session)
+        self.assertIn("email_auth_transaction=login-transaction", response.headers["set-cookie"])
 
     # ログインコードの有効期限が切れた場合に、検証が拒否されセッションから認証情報がクリアされることを検証します。
     # Verify that login verification fails if the code has expired, clearing temporary login data from the session.
