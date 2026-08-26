@@ -7,6 +7,7 @@ permanently invisible. This script fills them in.
 Usage (from the repository root):
 
     python3 scripts/backfill_embeddings.py --dry-run
+    python3 scripts/backfill_embeddings.py --fail-on-pending
     python3 scripts/backfill_embeddings.py
     python3 scripts/backfill_embeddings.py --target memos --limit 500
 
@@ -94,12 +95,13 @@ class BackfillStats:
     def __init__(self, label: str) -> None:
         self.label = label
         self.embedded = 0
+        self.pending = 0
         self.skipped_empty = 0
         self.failed = 0
 
     def report(self) -> str:
         return (
-            f"{self.label}: embedded={self.embedded} "
+            f"{self.label}: pending={self.pending} embedded={self.embedded} "
             f"skipped_empty={self.skipped_empty} failed={self.failed}"
         )
 
@@ -118,6 +120,7 @@ async def _backfill_table(
 ) -> BackfillStats:
     stats = BackfillStats(label)
     pending = await _count_pending(table, include_existing=include_existing)
+    stats.pending = pending
     logger.info("%s: %s row(s) to process.", label, pending)
     if dry_run or pending == 0:
         return stats
@@ -219,12 +222,20 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Only report how many rows would be processed.",
     )
+    parser.add_argument(
+        "--fail-on-pending",
+        action="store_true",
+        help="Only report pending rows and exit non-zero when any remain.",
+    )
     return parser.parse_args(argv)
 
 
 async def _async_main(argv: list[str] | None = None) -> int:
     configure_logging()
     args = _parse_args(argv if argv is not None else sys.argv[1:])
+
+    if args.fail_on_pending:
+        args.dry_run = True
 
     if not args.dry_run and not embeddings_available():
         logger.error(
@@ -261,6 +272,7 @@ async def _async_main(argv: list[str] | None = None) -> int:
 
     logger.info("Backfilling embeddings with model %s.", EMBEDDING_MODEL)
     failed = 0
+    pending = 0
     for target in targets:
         stats = await _backfill_table(
             label=str(target["label"]),
@@ -275,9 +287,13 @@ async def _async_main(argv: list[str] | None = None) -> int:
         )
         logger.info("%s", stats.report())
         failed += stats.failed
+        pending += stats.pending
 
     if failed:
         logger.error("Backfill finished with %s failed row(s); re-run to retry them.", failed)
+        return 1
+    if args.fail_on_pending and pending:
+        logger.error("Embedding backfill still has %s pending row(s).", pending)
         return 1
     return 0
 
