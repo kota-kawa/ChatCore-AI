@@ -358,6 +358,14 @@
   line-height: var(--chat-font-user-leading, 1.6);
 }
 
+/* 吹き出しが緑地×白文字のため、既定の緑系ハイライトを重ねると同系色で見えなくなる。
+   白の半透明オーバーレイにして選択範囲を視認できるようにする。
+   The bubble is solid brand green with white text, so the site-wide green selection
+   tint would nearly disappear on top of it. Use a translucent white overlay instead. */
+:where(body.chat-page, .chat-page-shell) .user-message ::selection {
+  background: rgba(255, 255, 255, 0.22);
+}
+
 @keyframes userMessageAppear {
   from {
     opacity: 0;
