@@ -69,6 +69,7 @@ flowchart LR
 - `blueprints/`: HTTP のルート、認証・CSRF の境界、入力の受け取り、レスポンスへの変換を担当します。チャット、プロンプト共有、メモ、コンテキスト金庫、管理、認証を機能単位に分割しています。
 - `services/`: 複数のルートから使う業務処理、外部連携、共通エラー、セキュリティ、キャッシュ、バックグラウンド処理を担当します。ルートから直接呼ぶ必要がある場合も、処理をサービスへ寄せてハンドラを薄く保ちます。
 - `services/repositories/`: 複数機能で共有する DB アクセスの配置先です。既存コードには機能配下のデータアクセス（例: `blueprints/memo/repository.py`）もあるため、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
+- `services/repositories/auth_identity_repository.py`: メール・Google・Passkey認証が参照するユーザーと認証プロバイダーの専用永続化境界です。一般ユーザー機能のRepositoryへ認証情報の読み書きを追加しません。
 - `services/request_models.py` / `services/response_models.py`: API 契約を定義します。フロントエンドの型を手書きで先行変更しないでください。
 - `services/api_errors.py` / `services/error_messages.py`: API エラーの型と利用者向け文言を集約します。
 - `services/csrf.py`: 状態変更リクエストに対する CSRF 検証の共通境界です。ルートごとに独自実装を増やしません。
@@ -91,7 +92,7 @@ flowchart LR
 
 ### PostgreSQL とマイグレーション
 
-`services/db.py` はワーカーごとにSQLAlchemy 2.0の`AsyncEngine`と`async_sessionmaker`を遅延生成します。Repositoryは`AsyncSession`を受け取り、Serviceがtransaction境界を管理します。通常のCRUDはORM、検索・CTE・JSONB・pgvector・PostgreSQL固有処理はSQLAlchemy Coreまたは`text()`を使います。`AsyncSession`は並列Task間で共有しません。
+`services/db.py` はワーカーごとにSQLAlchemy 2.0の`AsyncEngine`と`async_sessionmaker`を遅延生成します。Repositoryは`AsyncSession`を受け取り、Serviceがtransaction境界を管理します。通常のCRUDはORM、検索・CTE・JSONB・pgvector・PostgreSQL固有処理はSQLAlchemy Coreまたは`text()`を使います。`AsyncSession`は並列Task間で共有しません。認証プロバイダー情報の正本は`user_auth_providers`であり、`users`へプロバイダー列を重複保存しません。この契約は認証専用RepositoryとそのSQL契約テストで固定します。
 
 スキーマ変更は Alembic の新しい revision として追加します。適用済み revision の書き換えや、アプリ起動時だけの暗黙の ALTER は行いません。インデックスだけの直接 SQL フォールバックとして `db/performance_indexes.sql` が存在しますが、通常のスキーマ履歴の代替ではありません。
 
@@ -151,7 +152,7 @@ npm --prefix frontend run generate:api-schemas
 | --- | --- | --- |
 | API の入出力 | 対応する `blueprints/` と `services/*_models.py` | 生成 Zod、フロントの API 正規化、ルートテスト |
 | チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_research_notes.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
-| 認証・セッション・CSRF | `blueprints/auth*`、`services/session_middleware.py`、`services/csrf.py` | Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
+| 認証・セッション・CSRF | `blueprints/auth*`、`services/repositories/auth_identity_repository.py`、`services/session_middleware.py`、`services/csrf.py` | `user_auth_providers`契約、Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |
 | プロンプト画像 | `services/prompt_attachment_processing.py` と storage | `docs/architecture/prompt_attachment_storage.md`、添付テスト |
 | UI と CSS | 対応 `pages/`・`components/` | `frontend/STYLING_STRATEGY.md`、typecheck、対象 component test |

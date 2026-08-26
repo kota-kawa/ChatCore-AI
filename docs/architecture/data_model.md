@@ -38,7 +38,7 @@ erDiagram
 
 | 領域 | 主要テーブル | 関係・注意点 |
 | --- | --- | --- |
-| Identity | `users`, `user_passkeys`, `user_auth_providers` | ほとんどのユーザー所有データは `users.id` に紐づく。言語設定は `users.preferred_locale` に保存される。 |
+| Identity | `users`, `user_passkeys`, `user_auth_providers` | ほとんどのユーザー所有データは `users.id` に紐づく。認証プロバイダー情報の正本は`user_auth_providers`のみで、`services/repositories/auth_identity_repository.py`がメール・Google・Passkey向けの永続化契約を所有する。言語設定は `users.preferred_locale` に保存される。 |
 | Chat | `chat_rooms`, `chat_history`, `shared_chat_rooms`, `chat_room_summaries`, `memory_facts` | 部屋削除は履歴・要約・ルーム内メモリへ cascade する。`chat_rooms.mode` は `normal`／`temporary`。 |
 | Projects | `projects`, `project_files` | プロジェクトはユーザー所有。チャット部屋から project を参照する。 |
 | Tasks | `task_with_examples`, `task_versions` | system task とユーザー task を同じ主テーブルで扱い、論理削除・revision・source prompt を追加情報として持つ。version 行は旧列に加えて、現在の task 全体を `snapshot` JSONB に保存する。 |
