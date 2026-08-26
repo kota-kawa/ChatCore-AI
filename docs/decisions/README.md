@@ -8,6 +8,7 @@
 - [0002: セッション本体を Redis に保存する](0002-redis-backed-sessions.md)
 - [0003: プロンプト添付画像の処理と保存先を分離する](0003-prompt-attachment-storage-boundary.md)
 - [0004: DB スキーマ変更を Alembic の履歴で管理する](0004-alembic-schema-history.md)
+- [0005: 認証IDの永続化境界を一般ユーザー機能から分離する](0005-auth-identity-persistence-boundary.md)
 
 ## 追加・更新の基準
 

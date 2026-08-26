@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from blueprints.chat.profile import _update_user_profile, user_profile
 from services.models import User
+from services.repositories.auth_identity_repository import _serialize_auth_user
 from services.repositories.chat_repository import ChatRepository
-from services.repositories.user_repository import _serialize_user
 from tests.helpers.request_helpers import build_request
 
 
@@ -106,7 +106,7 @@ class UserSerializerSchemaBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("provider_user_id", payload)
 
     def test_email_lookup_serializer_does_not_read_removed_provider_columns(self):
-        payload = _serialize_user(self._user(), google_provider_lookup=True)
+        payload = _serialize_auth_user(self._user(), google_provider_lookup=True)
 
         self.assertIsNone(payload["auth_provider"])
         self.assertIsNone(payload["provider_user_id"])
