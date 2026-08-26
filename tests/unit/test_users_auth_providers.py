@@ -40,7 +40,7 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         expected = {"id": 7, "email": "user@example.com", "preferred_locale": "en"}
         repository.get_by_id.return_value = expected
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope",
             side_effect=lambda: fake_session_scope(session),
         ):
@@ -54,7 +54,7 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         session, repository = repository_harness()
         repository.create.return_value = 321
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope", return_value=fake_session_scope(session)
         ):
             user_id = await create_user("user@example.com")
@@ -77,7 +77,7 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         repository.create.return_value = 322
         long_avatar_url = "https://example.com/" + ("a" * 260)
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope", return_value=fake_session_scope(session)
         ):
             user_id = await create_user(
@@ -98,7 +98,7 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_link_google_account_commits_upsert(self):
         session, repository = repository_harness()
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope", return_value=fake_session_scope(session)
         ):
             await link_google_account(7, "google-user-123", "user@example.com")
@@ -117,7 +117,7 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         repository.get_by_email.return_value = email_user
         repository.get_by_google_id.return_value = google_user
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope",
             side_effect=lambda: fake_session_scope(session),
         ):

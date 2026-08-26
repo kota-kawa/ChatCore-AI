@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import session_scope
 from .i18n import Locale, normalize_locale
+from .repositories.auth_identity_repository import AuthIdentityRepository
 from .repositories.user_repository import UserRepository
 
 
@@ -70,6 +71,21 @@ async def _run(
         return result
 
 
+async def _run_auth(
+    operation: Callable[[AuthIdentityRepository], Awaitable[Any]],
+    *,
+    session: AsyncSession | None,
+    commit: bool = False,
+) -> Any:
+    """Run authentication persistence through its dedicated schema boundary."""
+
+    async with _managed_session(session) as db_session:
+        result = await operation(AuthIdentityRepository(db_session))
+        if session is None and commit:
+            await db_session.commit()
+        return result
+
+
 async def copy_default_tasks_for_user(
     user_id: int,
     *,
@@ -89,7 +105,7 @@ async def get_user_by_email(
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any] | None:
-    return await _run(
+    return await _run_auth(
         lambda repository: repository.get_by_email(email),
         session=session,
     )
@@ -100,7 +116,7 @@ async def get_user_by_google_id(
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any] | None:
-    return await _run(
+    return await _run_auth(
         lambda repository: repository.get_by_google_id(google_user_id),
         session=session,
     )
@@ -111,7 +127,7 @@ async def get_user_by_id(
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any] | None:
-    return await _run(
+    return await _run_auth(
         lambda repository: repository.get_by_id(int(user_id)),
         session=session,
     )
@@ -140,7 +156,7 @@ async def create_user(
         provider_user_id,
         provider_email,
     )
-    return await _run(
+    return await _run_auth(
         lambda repository: repository.create(
             email=email,
             username=normalized_username,
@@ -167,7 +183,7 @@ async def link_google_account(
     if not normalized_google_user_id:
         raise ValueError("google_user_id is required")
     normalized_provider_email = (provider_email or "").strip() or None
-    await _run(
+    await _run_auth(
         lambda repository: repository.link_google_account(
             user_id=int(user_id),
             google_user_id=normalized_google_user_id,
@@ -189,7 +205,7 @@ async def update_user_profile_from_google_if_unset(
     normalized_picture = (picture or "").strip() or None
     if normalized_picture:
         normalized_picture = _normalize_avatar_url(normalized_picture)
-    await _run(
+    await _run_auth(
         lambda repository: repository.update_profile_from_google_if_unset(
             user_id=int(user_id),
             username=normalized_name,
@@ -219,7 +235,7 @@ async def set_user_verified(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    await _run(
+    await _run_auth(
         lambda repository: repository.set_verified(int(user_id)),
         session=session,
         commit=True,

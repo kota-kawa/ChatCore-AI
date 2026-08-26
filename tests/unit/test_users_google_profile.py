@@ -17,7 +17,7 @@ class GoogleProfileSyncTestCase(unittest.IsolatedAsyncioTestCase):
         repository = Mock()
         repository.update_profile_from_google_if_unset = AsyncMock()
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope", return_value=fake_session_scope(session)
         ):
             await update_user_profile_from_google_if_unset(
@@ -41,7 +41,7 @@ class GoogleProfileSyncTestCase(unittest.IsolatedAsyncioTestCase):
         repository = Mock()
         repository.update_profile_from_google_if_unset = AsyncMock()
 
-        with patch("services.users.UserRepository", return_value=repository), patch(
+        with patch("services.users.AuthIdentityRepository", return_value=repository), patch(
             "services.users.session_scope", return_value=fake_session_scope(session)
         ):
             await update_user_profile_from_google_if_unset(
