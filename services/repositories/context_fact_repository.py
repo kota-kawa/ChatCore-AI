@@ -51,6 +51,7 @@ _FACT_COLUMNS = (
     "idempotency_payload_hash",
     "status",
     "revision",
+    "embedding_status",
     "created_at",
     "updated_at",
 )
@@ -471,6 +472,8 @@ class ContextFactRepository:
                     raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
         changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
+        if title is not None or content is not None or fact_type is not None:
+            changes["embedding_status"] = "pending"
         if title is not None:
             changes["title"] = title
         if content is not None:
@@ -516,6 +519,9 @@ class ContextFactRepository:
         statement = (
             update(ContextFact)
             .where(*conditions)
-            .values(embedding_vector=[float(value) for value in embedding])
+            .values(
+                embedding_vector=[float(value) for value in embedding],
+                embedding_status="ready",
+            )
         )
         await self.session.execute(statement)

@@ -371,6 +371,11 @@ async def update_memo(
                 background_color=resolved_background_color,
                 revision=MemoEntry.revision + 1,
                 updated_at=func.current_timestamp(),
+                **(
+                    {"embedding_status": "pending"}
+                    if title is not None or ai_response is not None
+                    else {}
+                ),
             )
             .returning(MemoEntry.revision)
         )

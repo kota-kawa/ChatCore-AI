@@ -114,6 +114,17 @@ class BackfillMainTestCase(unittest.TestCase):
         ):
             self.assertEqual(backfill_embeddings.main([]), 1)
 
+    def test_fail_on_pending_reports_work_without_provider_access(self):
+        with (
+            patch.object(backfill_embeddings, "configure_logging"),
+            patch.object(
+                backfill_embeddings,
+                "_count_pending",
+                new=AsyncMock(return_value=1),
+            ),
+        ):
+            self.assertEqual(backfill_embeddings.main(["--fail-on-pending"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

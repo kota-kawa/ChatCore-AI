@@ -49,12 +49,37 @@ flowchart LR
 
 1. `deploy/blue_green_deploy.sh` が非アクティブ色を決定する。
 2. 必要な PostgreSQL／upload volume の移行を行う。
-3. 対象色の app を使って `alembic upgrade head` を明示実行する。
-4. 対象色の app、frontend の healthcheck を待つ。
-5. Nginx の active upstream を対象色へ切り替え、旧色を停止する。
-6. トラフィック切り替え後に破壊的 migration 用の cleanup 段階を実行できる。
+3. 対象色の app で `scripts/check_migration_safety.py` を実行し、旧色との互換性を壊す migration が混入していないことを確認する。
+4. 対象色の app を使って `alembic upgrade head` を明示実行する。
+5. 対象色の app、frontend の healthcheck を待つ。
+6. Nginx の active upstream を対象色へ切り替え、旧色を停止する。
+7. トラフィック切り替え後に embedding の未処理件数を出力する。
+8. 必要な場合のみ `POST_DEPLOY_CLEANUP_COMMAND` を Contract 段階として実行する。
 
 本番コンテナは `FASTAPI_ENV=production` のため、起動時に自動 migration を実行しません。これにより、migration の適用とトラフィック切り替えをデプロイ手順で制御します。
+
+`MIGRATION_SAFETY_BASELINE`（既定値 `20260824_03`）より後の revision は、
+`DROP COLUMN`、`DELETE FROM`、`SET NOT NULL`、一意 index の追加などを
+pre-deploy の upgrade に含められません。データ backfill が必要な場合は、
+監査済みであることを migration 内に明示し、旧色が停止した後の Contract 手順へ
+分離してください。Contract 用のコマンドは環境変数から明示的に設定し、通常の
+`alembic upgrade head` に破壊的変更を隠さないでください。
+
+## Embedding の復旧と監視
+
+`memo_entries.embedding_status` と `context_facts.embedding_status` は、
+`pending`（未生成・再生成待ち）または `ready`（現在の vector が保存済み）を表します。
+旧 migration が不正な JSON／次元の embedding を NULL として無視した行も、
+`scripts/backfill_embeddings.py --dry-run` で件数を確認できます。
+
+```sh
+python3 scripts/backfill_embeddings.py --dry-run
+python3 scripts/backfill_embeddings.py --fail-on-pending
+python3 scripts/backfill_embeddings.py --target memos --limit 500
+```
+
+本番デプロイ後には dry-run の件数を自動出力します。provider が復旧した後に
+backfill を実行し、`--fail-on-pending` が成功することを運用完了条件にします。
 
 ## スケール時の制約
 

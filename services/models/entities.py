@@ -221,6 +221,11 @@ class TaskVersion(Base):
     source_created_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
@@ -277,7 +282,7 @@ class PromptVersion(Base):
     prompt_id: Mapped[int] = mapped_column(Integer, ForeignKey("prompts.id", ondelete="CASCADE"), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     operation: Mapped[str] = mapped_column(String(16), nullable=False)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -288,6 +293,11 @@ class PromptVersion(Base):
     source_created_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
@@ -380,11 +390,20 @@ class MemoEntry(Base):
     collection_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("memo_collections.id", ondelete="SET NULL"))
     embedding: Mapped[str | None] = mapped_column(Text)
     embedding_vector: Mapped[list[float] | None] = mapped_column(Vector(768))
+    embedding_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'pending'"),
+    )
     sort_order: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
     background_color: Mapped[str | None] = mapped_column(String(20))
     revision: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
 
     __table_args__ = (
+        CheckConstraint(
+            "embedding_status IN ('pending', 'ready')",
+            name="ck_memo_entries_embedding_status",
+        ),
         Index("idx_memo_entries_created_at", desc("created_at")),
         Index("idx_memo_entries_user_created_at", "user_id", desc("created_at")),
         Index("idx_memo_entries_collection_id", "user_id", "collection_id", postgresql_where=text("collection_id IS NOT NULL")),
@@ -467,6 +486,11 @@ class ContextFact(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'active'"))
     revision: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
     embedding_vector: Mapped[list[float] | None] = mapped_column(Vector(768))
+    embedding_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'pending'"),
+    )
     created_at: Mapped[datetime | None] = _timestamp()
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     source_kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'manual'"))
@@ -477,6 +501,10 @@ class ContextFact(Base):
     idempotency_payload_hash: Mapped[str | None] = mapped_column(CHAR(64))
 
     __table_args__ = (
+        CheckConstraint(
+            "embedding_status IN ('pending', 'ready')",
+            name="ck_context_facts_embedding_status",
+        ),
         CheckConstraint("fact_type IN ('preference', 'profile', 'project', 'decision', 'reference')", name="chk_context_facts_fact_type"),
         CheckConstraint("char_length(title) >= 1", name="chk_context_facts_title"),
         CheckConstraint("char_length(content) BETWEEN 1 AND 2000", name="chk_context_facts_content"),
