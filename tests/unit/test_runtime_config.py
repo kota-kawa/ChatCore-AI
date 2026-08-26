@@ -55,13 +55,13 @@ class RuntimeConfigTestCase(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             self.assertIsNone(get_session_secret_key())
 
-    # 本番環境において、セッションのSameSite属性のデフォルト設定値が 'lax' になることを検証します。
-    # Verify that get session same site defaults to 'lax' in production.
-    def test_get_session_same_site_defaults_to_lax_in_production(self):
+    # 本番環境では、Google OAuthコールバックに対応するためSameSite属性の初期値が 'none' になることを検証します。
+    # Verify that get session same site defaults to 'none' in production for Google OAuth callbacks.
+    def test_get_session_same_site_defaults_to_none_in_production(self):
         # 本番環境（production）の想定でSameSite属性の初期値を確認
         # Test SameSite default value in production environment
         with patch.dict("os.environ", {"FASTAPI_ENV": "production"}, clear=True):
-            self.assertEqual(get_session_same_site(), "lax")
+            self.assertEqual(get_session_same_site(), "none")
 
     # 開発環境において、セッションのSameSite属性のデフォルト設定値が 'lax' になることを検証します。
     # Verify that get session same site defaults to 'lax' in development.
@@ -83,17 +83,17 @@ class RuntimeConfigTestCase(unittest.TestCase):
         ):
             self.assertEqual(get_session_same_site(), "strict")
 
-    # 上書き指定されたSameSite属性の値が無効な文字列の場合、デフォルトの 'lax' にフォールバックすることを検証します。
-    # Verify that get session same site falls back to 'lax' when override settings are invalid.
+    # 上書き指定されたSameSite属性の値が無効な文字列の場合、本番のデフォルト 'none' にフォールバックすることを検証します。
+    # Verify that get session same site falls back to production's 'none' default when the override is invalid.
     def test_get_session_same_site_falls_back_when_override_is_invalid(self):
         # 無効な設定値（invalid）を指定した場合にデフォルト値へ戻るか検証
-        # Verify that get_session_same_site falls back to 'lax' when given an invalid override value
+        # Verify that get_session_same_site falls back to production's 'none' default when given an invalid override value
         with patch.dict(
             "os.environ",
             {"FASTAPI_ENV": "production", "FASTAPI_SESSION_SAMESITE": "invalid"},
             clear=True,
         ):
-            self.assertEqual(get_session_same_site(), "lax")
+            self.assertEqual(get_session_same_site(), "none")
 
     # 本番環境以外（開発環境など）において SameSite 'none' を指定した際、セキュアな本番環境専用設定であるため適用が拒否され 'lax' になることを検証します。
     # Verify that get session same site rejects 'none' outside production and falls back to 'lax'.
