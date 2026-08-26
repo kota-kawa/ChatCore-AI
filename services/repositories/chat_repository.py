@@ -1006,6 +1006,10 @@ class ChatRepository:
 
     @staticmethod
     def _serialize_user(user: User) -> dict[str, Any]:
+        # Authentication-provider metadata lives in ``user_auth_providers``.
+        # The legacy provider columns were removed from ``users`` when the ORM
+        # was aligned with the normalized schema, so keep this chat-facing
+        # payload limited to fields owned by the User entity.
         return {
             "id": user.id,
             "email": user.email,
@@ -1016,7 +1020,4 @@ class ChatRepository:
             "avatar_url": user.avatar_url,
             "llm_profile_context": user.llm_profile_context,
             "preferred_locale": user.preferred_locale,
-            "auth_provider": user.auth_provider,
-            "provider_user_id": user.provider_user_id,
-            "provider_email": user.provider_email,
         }
