@@ -167,14 +167,20 @@ def _redirect_to_login_after_google_failure(
     session: dict[str, Any],
     *,
     redirect_uri: str | None = None,
+    next_path: str | None = None,
+    use_session_next: bool = True,
 ) -> Any:
-    next_path = _google_next_path(session)
+    resolved_next_path = (
+        _google_next_path(session)
+        if use_session_next
+        else (dep("sanitize_next_path")(next_path, default="/") if next_path else None)
+    )
     target_url = _google_callback_redirect_target(
         request,
         "/login",
         redirect_uri=redirect_uri,
     )
-    if next_path:
-        target_url = _append_query_params(target_url, next=next_path)
+    if resolved_next_path:
+        target_url = _append_query_params(target_url, next=resolved_next_path)
     _clear_google_oauth_state(session)
     return dep("RedirectResponse")(target_url, status_code=302)

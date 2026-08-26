@@ -11,6 +11,34 @@ from services.auth_session import establish_authenticated_session
 from services.session_middleware import REDIS_BACKEND, PermanentSessionMiddleware
 
 
+class DummyRedisPipeline:
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.commands = []
+
+    def watch(self, key):
+        return None
+
+    def get(self, key):
+        return self.redis_client.get(key)
+
+    def multi(self):
+        return None
+
+    def set(self, key, value, ex=None):
+        self.commands.append((key, value, ex))
+        return self
+
+    def execute(self):
+        results = []
+        for key, value, ex in self.commands:
+            results.append(self.redis_client.set(key, value, ex=ex))
+        return results
+
+    def reset(self):
+        self.commands = []
+
+
 # 日本語: テスト用のRedisクライアントのモッククラス。
 # English: Mock class for the Redis client used in testing.
 class DummyRedis:
@@ -45,6 +73,9 @@ class DummyRedis:
             del self.store[key]
             return 1
         return 0
+
+    def pipeline(self):
+        return DummyRedisPipeline(self)
 
 
 # 日本語: テスト用のFastAPIアプリケーションインスタンスを構築します。

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from copy import deepcopy
 from http.cookies import SimpleCookie
 from typing import Any
 
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 # Define constants
 REDIS_BACKEND = "redis"
 SESSION_IDS_TO_DELETE_SCOPE_KEY = "_session_ids_to_delete"
+SESSION_RESTORE_STATUS_SCOPE_KEY = "_session_restore_status"
+SESSION_ORIGINAL_DATA_SCOPE_KEY = "_session_original_data"
+SESSION_ORIGINAL_ID_SCOPE_KEY = "_session_original_id"
+
+SESSION_RESTORE_NEW = "new"
+SESSION_RESTORE_RESTORED = "restored"
+SESSION_RESTORE_MISSING = "missing"
+SESSION_RESTORE_REDIS_UNAVAILABLE = "redis_unavailable"
 
 
 def rotate_session_identifier(request: Request) -> None:
@@ -111,7 +120,15 @@ class HybridSessionMiddleware:
         # Cookieからセッション状態をロードし、Redisからデータを復元する
         # Load session state from cookie and restore data from Redis
         cookie_state = self._load_cookie_state(scope)
-        session_data, session_id = await run_blocking(self._restore_session, cookie_state)
+        session_data, session_id, restore_status = await run_blocking(
+            self._restore_session,
+            cookie_state,
+        )
+        scope[SESSION_RESTORE_STATUS_SCOPE_KEY] = restore_status
+        scope[SESSION_ORIGINAL_DATA_SCOPE_KEY] = (
+            deepcopy(session_data) if restore_status == SESSION_RESTORE_RESTORED else None
+        )
+        scope[SESSION_ORIGINAL_ID_SCOPE_KEY] = session_id
         # CSRFトークンが存在しない場合は新規生成してセッションに格納する
         # Generate and store a CSRF token in the session if it doesn't exist
         if CSRF_SESSION_KEY not in session_data:
@@ -171,39 +188,39 @@ class HybridSessionMiddleware:
 
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
-    ) -> tuple[dict[str, Any], str | None]:
+    ) -> tuple[dict[str, Any], str | None, str]:
         # Redisからセッションデータを取得してロードする
         # Fetch and load session data from Redis
         if not cookie_state:
-            return {}, None
+            return {}, None, SESSION_RESTORE_NEW
 
         if cookie_state.get("backend") != REDIS_BACKEND:
-            return {}, None
+            return {}, None, SESSION_RESTORE_NEW
 
         session_id = cookie_state.get("id")
         if not isinstance(session_id, str) or not session_id:
-            return {}, None
+            return {}, None, SESSION_RESTORE_NEW
 
         redis_client = get_redis_client()
         if redis_client is None:
-            return {}, None
+            return {}, session_id, SESSION_RESTORE_REDIS_UNAVAILABLE
 
         try:
             payload = redis_client.get(self._redis_key(session_id))
         except Exception as exc:
             mark_redis_unavailable(exc)
-            return {}, None
+            return {}, session_id, SESSION_RESTORE_REDIS_UNAVAILABLE
 
         if not payload:
-            return {}, None
+            return {}, session_id, SESSION_RESTORE_MISSING
 
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
-            return {}, None
+            return {}, session_id, SESSION_RESTORE_MISSING
         if isinstance(data, dict):
-            return data, session_id
-        return {}, None
+            return data, session_id, SESSION_RESTORE_RESTORED
+        return {}, session_id, SESSION_RESTORE_MISSING
 
     def _commit_session(self, scope: Scope, headers: MutableHeaders) -> None:
         # セッションの変更内容をコミットし、必要に応じてCookieやRedisを更新する
@@ -211,6 +228,17 @@ class HybridSessionMiddleware:
         session = scope.get("session") or {}
         session_id = scope.get("session_id")
         pending_delete_ids = scope.get(SESSION_IDS_TO_DELETE_SCOPE_KEY) or set()
+        restore_status = scope.get(SESSION_RESTORE_STATUS_SCOPE_KEY)
+        original_session = scope.get(SESSION_ORIGINAL_DATA_SCOPE_KEY)
+        original_session_id = scope.get(SESSION_ORIGINAL_ID_SCOPE_KEY)
+
+        if restore_status == SESSION_RESTORE_MISSING and session:
+            # ローテーション済みIDを読んだ古いGETが未認証セッションを再発行しないようにする。
+            # Do not let a stale read-only request recreate an unauthenticated session.
+            if not self._has_application_session_changes(session, original_session or {}):
+                return
+            session_id = None
+            scope["session_id"] = None
 
         if not session:
             # 空セッションは「ログアウト/無効化済み」とみなし、現在IDと rotation 前IDの両方を消す。
@@ -236,7 +264,18 @@ class HybridSessionMiddleware:
                 self._delete_session(stale_session_id)
         scope[SESSION_IDS_TO_DELETE_SCOPE_KEY] = set()
 
-        if self._save_session(session_id, session):
+        compare_with_original = (
+            restore_status == SESSION_RESTORE_RESTORED
+            and isinstance(original_session, dict)
+            and session_id == original_session_id
+            and not pending_delete_ids
+        )
+        save_result = self._save_session(
+            session_id,
+            session,
+            original_session=original_session if compare_with_original else None,
+        )
+        if save_result is True:
             # Cookie には Redis の参照IDだけを入れる。セッション本体は Redis 側に置く。
             # Store only the Redis reference ID in the cookie. The session body is kept in Redis.
             self._set_cookie(
@@ -244,6 +283,12 @@ class HybridSessionMiddleware:
                 self.serializer.dumps({"backend": REDIS_BACKEND, "id": session_id}),
                 cookie_max_age,
             )
+            return
+
+        if save_result is None:
+            # 競合した古いリクエストはRedis上の新しい認証状態を保ち、Cookieも触らない。
+            # Preserve the newer Redis state and avoid overwriting its browser cookie.
+            logger.info("Skipped stale session write after an optimistic concurrency conflict.")
             return
 
         # Redis is unavailable: refuse to persist the session. We previously
@@ -261,7 +306,13 @@ class HybridSessionMiddleware:
         scope["session_id"] = None
         self._set_cookie(headers, "", max_age=0)
 
-    def _save_session(self, session_id: str, session: dict[str, Any]) -> bool:
+    def _save_session(
+        self,
+        session_id: str,
+        session: dict[str, Any],
+        *,
+        original_session: dict[str, Any] | None = None,
+    ) -> bool | None:
         # セッションデータをRedisに保存する
         # Save session data to Redis
         redis_client = get_redis_client()
@@ -269,6 +320,14 @@ class HybridSessionMiddleware:
             return False
 
         payload = json.dumps(session, ensure_ascii=False)
+        if original_session is not None:
+            return self._save_session_if_unchanged(
+                redis_client,
+                session_id,
+                payload,
+                original_session,
+            )
+
         try:
             if self.max_age is not None:
                 redis_client.set(self._redis_key(session_id), payload, ex=self.max_age)
@@ -278,6 +337,65 @@ class HybridSessionMiddleware:
             mark_redis_unavailable(exc)
             return False
         return True
+
+    def _save_session_if_unchanged(
+        self,
+        redis_client: Any,
+        session_id: str,
+        payload: str,
+        original_session: dict[str, Any],
+    ) -> bool | None:
+        pipeline_factory = getattr(redis_client, "pipeline", None)
+        if not callable(pipeline_factory):
+            logger.error("Redis client does not support optimistic session writes.")
+            return False
+
+        key = self._redis_key(session_id)
+        pipeline = None
+        try:
+            pipeline = pipeline_factory()
+            pipeline.watch(key)
+            current_payload = pipeline.get(key)
+            if not current_payload:
+                return None
+            try:
+                current_session = json.loads(current_payload)
+            except (TypeError, json.JSONDecodeError):
+                return None
+            if not isinstance(current_session, dict) or current_session != original_session:
+                return None
+
+            pipeline.multi()
+            if self.max_age is not None:
+                pipeline.set(key, payload, ex=self.max_age)
+            else:
+                pipeline.set(key, payload)
+            pipeline.execute()
+        except Exception as exc:
+            if exc.__class__.__name__ == "WatchError":
+                return None
+            mark_redis_unavailable(exc)
+            return False
+        finally:
+            if pipeline is not None:
+                try:
+                    pipeline.reset()
+                except Exception:
+                    pass
+        return True
+
+    @staticmethod
+    def _has_application_session_changes(
+        session: dict[str, Any],
+        original_session: dict[str, Any],
+    ) -> bool:
+        current_without_csrf = {
+            key: value for key, value in session.items() if key != CSRF_SESSION_KEY
+        }
+        original_without_csrf = {
+            key: value for key, value in original_session.items() if key != CSRF_SESSION_KEY
+        }
+        return current_without_csrf != original_without_csrf
 
     def _delete_session(self, session_id: str) -> None:
         # 指定されたセッションIDのデータをRedisから削除する
