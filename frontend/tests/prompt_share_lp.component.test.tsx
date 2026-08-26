@@ -35,6 +35,20 @@ describe("Prompt share LP scope section", () => {
     const chips = Array.from(container.querySelectorAll(".pslp-chips li")).map((chip) => chip.textContent);
     expect(chips).toContain("Writing");
   });
+
+  it("explains that reusable SKILLs and generated images can be shared", () => {
+    const { container } = renderWithLocale(
+      "ja",
+      <>
+        <PromptShareLpValue />
+        <PromptShareLpScope />
+      </>
+    );
+    const copy = container.textContent ?? "";
+    expect(copy).toContain("SKILL");
+    expect(copy).toContain("画像生成で作成した画像");
+    expect(copy).toContain("共有できます");
+  });
 });
 
 // 見出しは狭い画面用の改行 (.lp-br-sp) を挟むため、英語では単語が連結しないことを確認する

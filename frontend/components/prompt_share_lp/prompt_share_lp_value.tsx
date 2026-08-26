@@ -38,7 +38,7 @@ const VALUE_ITEMS_JA: ValueItem[] = [
     points: [
       "プロンプト本文、またはSKILL定義（Markdown）を投稿する",
       "入力例・出力例・想定しているAIモデルを添える",
-      "参考画像やSKILLの補助ファイルを一緒に載せる",
+      "画像生成で作成した画像を作例として添付し、SKILLの補助ファイルも一緒に載せる",
       "投稿した内容は管理画面から編集・削除できる"
     ]
   }
@@ -73,7 +73,7 @@ const VALUE_ITEMS_EN: ValueItem[] = [
     points: [
       "Post a prompt body or a SKILL definition written in Markdown",
       "Attach input examples, output examples, and the model you had in mind",
-      "Include a reference image, or supporting files for a SKILL",
+      "Attach an image created with AI image generation, or supporting files for a SKILL",
       "Edit or delete your posts from the management page"
     ]
   }

@@ -11,14 +11,14 @@ import {
 const LIMITS_JA = [
   "投稿はすべて公開です。非公開のまま下書きを溜める機能はありません。",
   "生成対象はテキストと画像の2種類です。動画・音声向けの投稿区分は現時点でありません。",
-  "添付できるのは参考画像（PNG・JPEG・WebP・GIF、1件5MBまで）です。",
+  "添付できるのは画像生成の作例画像（PNG・JPEG・WebP・GIF、1件5MBまで）です。",
   "「チャットで使う」で読み込んだプロンプトは、ChatCore-AIのチャットで実行します。ほかのAIツールで使う場合は本文をコピーしてください。"
 ];
 
 const LIMITS_EN = [
   "Every post is public. There is no private draft area.",
   "Output types are text and image. There is no video or audio category yet.",
-  "The only attachment is a reference image (PNG, JPEG, WebP, or GIF, up to 5MB each).",
+  "You can attach an image-generation example image (PNG, JPEG, WebP, or GIF, up to 5MB each).",
   "“Use in chat” runs the prompt inside ChatCore-AI. To use it elsewhere, copy the body instead."
 ];
 
@@ -79,8 +79,8 @@ export function PromptShareLpScope() {
                 <span className="pslp-axis__label">{isEn ? "Image" : "画像"}</span>
                 <span className="pslp-axis__note">
                   {isEn
-                    ? "Prompts for image generation. You can attach a reference image so readers see what the prompt produces."
-                    : "画像生成向けのプロンプト。仕上がりが伝わるように参考画像を添付できます。"}
+                    ? "Share image-generation prompts with an example image created by image generation."
+                    : "画像生成向けのプロンプトと、画像生成で作成した作例画像を共有できます。"}
                 </span>
               </li>
             </ul>
