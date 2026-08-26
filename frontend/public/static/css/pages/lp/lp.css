@@ -44,6 +44,16 @@
   --lp-shadow-card: 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 
+/* ドラッグ選択のハイライトも各LPのブランドカラーに合わせる。
+   --lp-green は cslp/mslp/pslp などの派生ページで上書きされるため、
+   このルール1つで各ページ固有の色に自動追従する（重複定義しない）。
+   Tint text selection with each LP's own brand hue instead of the generic
+   site default. --lp-green is redefined per LP variant (teal/amber/blue),
+   so this single rule follows automatically without per-page duplication. */
+.lp-page ::selection {
+  background: color-mix(in srgb, var(--lp-green) 24%, transparent);
+}
+
 /* ---- 共通パーツ / Shared building blocks ---- */
 
 .lp-container {
