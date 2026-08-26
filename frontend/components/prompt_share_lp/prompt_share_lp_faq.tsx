@@ -24,9 +24,9 @@ export const PROMPT_SHARE_LP_FAQ_ITEMS = [
       "本文をコピーして使えます。「チャットで使う」はChatCore-AIのチャットにタスクとして取り込む機能なので、外部のツールで使う場合はコピーしてお使いください。"
   },
   {
-    question: "画像生成のプロンプトも扱えますか？",
+    question: "画像生成のプロンプトや、生成した画像も共有できますか？",
     answer:
-      "扱えます。生成対象を「画像」にすると、仕上がりが伝わるように参考画像（PNG・JPEG・WebP・GIF、1件5MBまで）を添付できます。動画・音声向けの投稿区分は現時点ではありません。"
+      "共有できます。生成対象を「画像」にすると、画像生成プロンプトと、そのプロンプトで作成した画像を作例として添付できます（PNG・JPEG・WebP・GIF、1件5MBまで）。動画・音声向けの投稿区分は現時点ではありません。"
   }
 ] as const;
 
@@ -52,9 +52,9 @@ export const PROMPT_SHARE_LP_FAQ_ITEMS_EN = [
       "Yes, copy the body and use it wherever you like. “Use in chat” specifically loads the prompt as a task inside ChatCore-AI, so copying is the route for external tools."
   },
   {
-    question: "Are image generation prompts supported?",
+    question: "Can I share image-generation prompts and generated images?",
     answer:
-      "Yes. Set the output type to image and attach a reference image (PNG, JPEG, WebP, or GIF, up to 5MB each) so readers can see the result. There is no video or audio category yet."
+      "Yes. Set the output type to image to share an image-generation prompt and attach an image created with that prompt as an example (PNG, JPEG, WebP, or GIF, up to 5MB each). There is no video or audio category yet."
   }
 ] as const;
 

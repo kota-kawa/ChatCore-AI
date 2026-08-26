@@ -81,8 +81,8 @@ export function PromptShareLpHero() {
           </h1>
           <p className="pslp-hero__lead">
             {isEn
-              ? "Browse prompts and SKILLs that other people actually use, filtered by category, format, and output type. Press “Use in chat” and the prompt is loaded into ChatCore-AI as a ready-to-run task. Reading requires no account."
-              : "ほかの人が実際に使っているプロンプトとSKILLを、カテゴリ・形式・生成対象で絞り込んで探せます。気に入ったものは「チャットで使う」を押すだけで、ChatCore-AIのチャットにタスクとして読み込まれます。閲覧にアカウントは必要ありません。"}
+              ? "Browse prompts and SKILLs that other people actually use, plus image-generation posts with AI-generated examples. Filter by category, format, and output type. Press “Use in chat” and a prompt is loaded into ChatCore-AI as a ready-to-run task. Reading requires no account."
+              : "ほかの人が実際に使っているプロンプトやSKILL、AI画像生成で作成された作例画像付きの投稿を、カテゴリ・形式・生成対象で絞り込んで探せます。気に入ったプロンプトは「チャットで使う」を押すだけで、ChatCore-AIのチャットにタスクとして読み込まれます。閲覧にアカウントは必要ありません。"}
           </p>
           <div className="pslp-hero__cta">
             <Link href="/prompt_share" className="lp-btn lp-btn--primary lp-btn--large">

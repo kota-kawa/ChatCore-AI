@@ -58,6 +58,8 @@ test("prompt share layout renders crawlable page content before client API data 
 
   assert.match(html, /公開プロンプトライブラリ/);
   assert.match(html, /Chat Coreのプロンプト共有/);
+  assert.match(html, /SKILL（スキル）/);
+  assert.match(html, /AI画像生成で作成した画像も作例として添付・共有できます/);
   assert.match(html, /文章作成/);
   assert.match(html, /調査/);
   assert.match(html, /title="文章作成"/);

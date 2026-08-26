@@ -19,7 +19,7 @@ export type PromptSharePageProps = {
 // SEO向けのページ説明文。検索エンジンのスニペットとして表示される
 // Page description for SEO; displayed as the search engine snippet
 export const promptShareDescription =
-  "Chat Coreのプロンプト共有ページです。文章作成、調査、画像生成などに使える日本語AIプロンプトを探して、保存して、共有できます。";
+  "Chat Coreのプロンプト共有ページです。文章作成・調査・画像生成に使えるAIプロンプト、再利用できるSKILL（スキル）、AI画像生成で作成した画像を探して、保存・共有できます。";
 
 // 構造化データ（JSON-LD）。Googleがリッチリザルトとしてページを解釈できるようにする
 // Structured data (JSON-LD) that helps Google understand and display this page as a rich result
