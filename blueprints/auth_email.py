@@ -17,7 +17,105 @@ from blueprints.auth_support import (
     get_auth_limit_service_dependency,
     get_llm_daily_limit_service_dependency,
 )
+from blueprints.email_auth_support import (
+    clear_legacy_email_auth_session,
+    email_auth_failure_response,
+    email_auth_unavailable_response,
+    load_dedicated_email_auth_transaction,
+)
 from services.email_service import resolve_request_email_locale
+
+
+async def _verify_dedicated_login_code(
+    request: Request,
+    auth_code: Any,
+    transaction: Any,
+    auth_limit_service: Any | None,
+) -> Any:
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    allowed, limit_error = await dep("run_blocking")(
+        dep("consume_verification_attempt_limit"),
+        request,
+        transaction.email,
+        service=resolved_auth_limit_service,
+    )
+    if not allowed:
+        return dep("jsonify_rate_limited")(
+            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=dep("parse_retry_after_seconds")(
+                limit_error,
+                default=dep("DEFAULT_RETRY_AFTER_SECONDS"),
+            ),
+            status="fail",
+        )
+
+    result = await dep("run_blocking")(
+        dep("verify_email_auth_transaction"),
+        transaction.transaction_id,
+        str(auth_code or ""),
+    )
+    if result.status == dep("EMAIL_AUTH_RESULT_SUCCESS"):
+        user = await call_dependency("get_user_by_id", transaction.user_id)
+        if not user or not user.get("is_verified"):
+            clear_legacy_email_auth_session(request.session)
+            request.session.pop("user_id", None)
+            request.session.pop("user_email", None)
+            return email_auth_failure_response(
+                "ユーザーが存在しないか、認証されていません",
+                status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+                clear_cookie=True,
+            )
+
+        dep("establish_authenticated_session")(
+            request,
+            int(transaction.user_id),
+            user["email"],
+        )
+        clear_legacy_email_auth_session(request.session)
+        await _copy_default_tasks_after_login(
+            int(transaction.user_id),
+            context="Email login verification",
+        )
+        await _claim_guest_prompts_after_login(
+            request,
+            int(transaction.user_id),
+            context="Email login verification",
+        )
+        response = dep("jsonify")(
+            {
+                "status": "success",
+                "message": "ログインに成功しました",
+                "flow": "login",
+                "offer_passkey_setup": False,
+            }
+        )
+        return dep("clear_email_auth_transaction_cookie")(response)
+
+    if result.status == dep("EMAIL_AUTH_RESULT_INVALID"):
+        return email_auth_failure_response(
+            "認証コードが一致しません。",
+            status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+            clear_cookie=False,
+        )
+    if result.status == dep("EMAIL_AUTH_RESULT_EXHAUSTED"):
+        return email_auth_failure_response(
+            "認証コードの試行回数が上限に達しました。",
+            status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+            clear_cookie=True,
+        )
+    if result.status == dep("EMAIL_AUTH_RESULT_EXPIRED"):
+        return email_auth_failure_response(
+            "認証コードの有効期限が切れています。",
+            status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+            clear_cookie=True,
+        )
+    if result.status == dep("EMAIL_AUTH_RESULT_MISSING"):
+        return email_auth_failure_response(
+            "セッション情報がありません。最初からやり直してください",
+            status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+            clear_cookie=True,
+        )
+    return email_auth_unavailable_response()
 
 
 async def api_send_email_code(
@@ -59,6 +157,32 @@ async def api_send_email_code(
 
 
 async def api_verify_email_code(request: Request):
+    transaction_id = request.cookies.get(dep("EMAIL_AUTH_TRANSACTION_COOKIE_NAME"))
+    if transaction_id is not None:
+        transaction = await dep("run_blocking")(
+            dep("get_email_auth_transaction"),
+            transaction_id,
+        )
+        if transaction is None:
+            return email_auth_failure_response(
+                "セッション情報がありません。最初からやり直してください",
+                status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+                clear_cookie=True,
+            )
+        if transaction.flow not in {
+            dep("EMAIL_AUTH_TRANSACTION_FLOW_LOGIN"),
+            dep("EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION"),
+        }:
+            return email_auth_failure_response(
+                dep("EMAIL_AUTH_UNAVAILABLE_ERROR"),
+                status_code=503,
+                clear_cookie=True,
+            )
+        request.scope[dep("EMAIL_AUTH_TRANSACTION_SCOPE_KEY")] = transaction
+        if transaction.flow == dep("EMAIL_AUTH_TRANSACTION_FLOW_LOGIN"):
+            return await dep("api_verify_login_code")(request)
+        return await dep("api_verify_registration_code")(request)
+
     session = request.session
     if session.get("login_verification_code") and session.get("login_temp_user_id"):
         return await dep("api_verify_login_code")(request)
@@ -132,15 +256,20 @@ async def api_send_login_code(
             status="fail",
         )
 
-    code = dep("generate_verification_code")()
-    request.session["login_verification_code"] = code
-    request.session["login_temp_user_id"] = user["id"]
-    request.session["login_temp_email"] = email
-    request.session["login_verification_code_issued_at"] = int(dep("time").time())
-    request.session["login_verification_code_attempts"] = 0
-
     locale = resolve_request_email_locale(request)
-    request.session["login_verification_locale"] = locale
+    code = dep("generate_verification_code")()
+    transaction_id = await dep("run_blocking")(
+        dep("store_email_auth_transaction"),
+        flow=dep("EMAIL_AUTH_TRANSACTION_FLOW_LOGIN"),
+        user_id=int(user["id"]),
+        email=email,
+        code=code,
+        locale=locale,
+    )
+    if not transaction_id:
+        return email_auth_unavailable_response()
+
+    clear_legacy_email_auth_session(request.session)
     try:
         await dep("run_blocking")(
             dep("send_email"),
@@ -149,8 +278,17 @@ async def api_send_login_code(
             code=code,
             locale=locale,
         )
-        return dep("jsonify")({"status": "success", "message": "認証コードを送信しました"})
+        response = dep("jsonify")({"status": "success", "message": "認証コードを送信しました"})
+        return dep("set_email_auth_transaction_cookie")(
+            response,
+            transaction_id,
+            secure=bool(dep("is_production_env")()),
+        )
     except Exception:
+        await dep("run_blocking")(
+            dep("delete_email_auth_transaction"),
+            transaction_id,
+        )
         return dep("log_and_internal_server_error")(
             dep("logger"),
             "Failed to send login verification code email.",
@@ -176,6 +314,24 @@ async def api_verify_login_code(
         return validation_error
 
     auth_code = payload.authCode
+    dedicated_transaction, dedicated_requested = await load_dedicated_email_auth_transaction(
+        request,
+        dep("EMAIL_AUTH_TRANSACTION_FLOW_LOGIN"),
+    )
+    if dedicated_requested:
+        if dedicated_transaction is None:
+            return email_auth_failure_response(
+                "セッション情報がありません。最初からやり直してください",
+                status_code=dep("AUTH_FAILURE_STATUS_CODE"),
+                clear_cookie=True,
+            )
+        return await _verify_dedicated_login_code(
+            request,
+            auth_code,
+            dedicated_transaction,
+            auth_limit_service,
+        )
+
     session = request.session
     session_code = session.get("login_verification_code")
     user_id = session.get("login_temp_user_id")
