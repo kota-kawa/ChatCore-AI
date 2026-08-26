@@ -15,6 +15,8 @@ PROMPT_SHARE_UPLOAD_VOLUME="${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_sha
 PROMPT_SHARE_LEGACY_UPLOAD_DIR="/app/frontend/public/static/uploads/prompt_share"
 PROMPT_SHARE_UPLOAD_MIGRATION_MARKER=".legacy_container_migration_complete"
 UPLOAD_MIGRATION_IMAGE="alpine:3.24.1"
+MIGRATION_SAFETY_BASELINE="${MIGRATION_SAFETY_BASELINE:-20260824_03}"
+POST_DEPLOY_CLEANUP_COMMAND="${POST_DEPLOY_CLEANUP_COMMAND:-}"
 
 is_empty_or_unresolved() {
   local value="${1:-}"
@@ -500,6 +502,10 @@ build_runtime_images() {
 
 run_migrations() {
   local color="$1"
+  echo "Checking migration compatibility against baseline ${MIGRATION_SAFETY_BASELINE}..."
+  compose run --rm "app_${color}" \
+    python3 scripts/check_migration_safety.py \
+    --baseline "${MIGRATION_SAFETY_BASELINE}"
   echo "Running backward-compatible pre-deployment migrations (Expand)..."
   compose run --rm "app_${color}" alembic upgrade head
 }
@@ -509,8 +515,18 @@ run_post_deploy_cleanup() {
   # [JP] トラフィック切替と旧バージョンの停止が完了した後に実行する破壊的変更用。
   # [EN] Destructive changes (Contract) to be run after traffic switch and old version stop.
   echo "Checking for post-deployment cleanup migrations (Contract)..."
-  # 必要に応じて特定のタグやスクリプトを実行できるように拡張可能
-  # Can be extended to run specific cleanup scripts or alembic branches
+  echo "Reporting embedding rows that still need regeneration..."
+  compose run --rm "app_${color}" \
+    python3 scripts/backfill_embeddings.py --dry-run
+
+  if [ -z "${POST_DEPLOY_CLEANUP_COMMAND}" ]; then
+    echo "No post-deployment Contract command configured."
+    return 0
+  fi
+
+  echo "Running configured post-deployment Contract command..."
+  compose run --rm "app_${color}" \
+    sh -ceu "${POST_DEPLOY_CLEANUP_COMMAND}"
 }
 
 deploy_color() {

@@ -116,6 +116,24 @@ class DeployHardeningTest(unittest.TestCase):
         self.assertIn('local mcp_enabled="${MCP_ENABLED:-false}"', script_text)
         self.assertIn("required_vars+=(MCP_OAUTH_ENCRYPTION_KEYS)", script_text)
 
+    def test_deploy_checks_expand_safety_and_runs_contract_after_switch(self):
+        script_text = DEPLOY_SCRIPT.read_text()
+
+        self.assertIn("scripts/check_migration_safety.py", script_text)
+        self.assertIn(
+            'MIGRATION_SAFETY_BASELINE="${MIGRATION_SAFETY_BASELINE:-20260824_03}"',
+            script_text,
+        )
+        self.assertIn("POST_DEPLOY_CLEANUP_COMMAND", script_text)
+        self.assertLess(
+            script_text.index("scripts/check_migration_safety.py"),
+            script_text.index("alembic upgrade head"),
+        )
+        self.assertLess(
+            script_text.index("stop_color \"${CURRENT_COLOR}\""),
+            script_text.index("run_post_deploy_cleanup \"${TARGET_COLOR}\""),
+        )
+
     # 日本語: OAuth discovery のルート版とMCPリソース版を両方バックエンドへ転送することを確認します。
     # English: Verify nginx forwards both root and MCP-resource OAuth discovery paths.
     def test_nginx_forwards_both_mcp_protected_resource_metadata_paths(self):

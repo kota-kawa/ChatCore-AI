@@ -129,6 +129,11 @@ jobs:
           set -euo pipefail
           python -m ruff check app.py blueprints services tests
 
+      - name: Verify migration expand/contract safety
+        run: |
+          set -euo pipefail
+          python scripts/check_migration_safety.py --baseline 20260824_03
+
   dead_code:
     name: Dead Code Check (Vulture)
     runs-on: ubuntu-latest
@@ -255,8 +260,24 @@ jobs:
     name: Integration Tests (Python 3.14)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.5-pg18
+        env:
+          POSTGRES_DB: chatcore_ci
+          POSTGRES_USER: chatcore_ci
+          POSTGRES_PASSWORD: chatcore_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chatcore_ci -d chatcore_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       PYTHONFAULTHANDLER: "1"
+      DATABASE_URL: postgresql+psycopg://chatcore_ci:chatcore_ci@localhost:5432/chatcore_ci
+      FASTAPI_SECRET_KEY: integration-test-secret
 
     steps:
       - uses: actions/checkout@v6
@@ -279,6 +300,7 @@ jobs:
       - name: Run integration tests
         run: |
           set -euo pipefail
+          python -m alembic upgrade head
           python -m unittest discover -s tests/integration -p "test_*.py" -t . -v
 
   coverage:

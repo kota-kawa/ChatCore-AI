@@ -43,3 +43,33 @@ DB の変更は、適用済み履歴を保つ新しい Alembic revision とし�
 - migration は DB の状態を変えるため、テスト対象を限定し、既存のローカル DB に適用する前に対象と順序を確認する。
 - 一意制約、外部キー、soft delete、ページング用インデックスは、migration の SQL だけでなくルートの所有者確認・競合時のエラー変換まで確認する。
 - 生成スキーマと migration を混同しない。前者は API の型、後者は永続化構造の履歴です。
+
+## Blue/Green と expand/contract
+
+Blue/Green では migration の適用中も旧色が DB を読み書きします。したがって、
+新しい revision の pre-deploy upgrade は「旧色が見ても壊れない追加」に限定します。
+`scripts/check_migration_safety.py --baseline 20260824_03` が後続 revision を検査し、
+列・表・制約の削除、`SET NOT NULL`、`DELETE`、一意 index の追加、未承認の data
+`UPDATE` を検出します。
+
+削除や厳格化が必要な変更は次の二段階に分けます。
+
+1. Expand: 新列／新テーブルを追加し、両バージョンが読める期間を作る。
+2. Contract: トラフィックを切り替え、旧色を停止し、`POST_DEPLOY_CLEANUP_COMMAND`
+   でバックアップ確認済みの削除・制約強化を実行する。
+
+適用済み revision の downgrade は、データを完全に復元できる保証がない限り実装
+しません。今回追加した `20260826_01` は履歴 snapshot と embedding 状態を失うため、
+自動 downgrade を明示的に拒否します。過去の downgrade に残るデータ削除・縮退復元は
+変更せず、実行前に PostgreSQL の論理バックアップと復元検証を必須とします。
+
+## Data-changing migration の事前確認
+
+重複整理、provenance の付与、名前の suffix 付与のような migration は、SQL が成功
+しても行の意味を変えます。適用前に対象件数・候補件数・変更後の一意性を SELECT で
+確認し、バックアップの revision と rollback 手順を記録します。レビュー済みの
+backfill だけが `# migration-review: approved-data-backfill` を付けられます。
+
+既存データを再生成する embedding migration は NULL を成功扱いにして終わらせず、
+`embedding_status = 'pending'` として `scripts/backfill_embeddings.py` の対象に残します。
+`--dry-run` は件数監視、`--fail-on-pending` はリリース後の完了確認に使います。
