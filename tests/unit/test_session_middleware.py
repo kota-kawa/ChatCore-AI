@@ -8,9 +8,41 @@ from starlette.datastructures import MutableHeaders
 
 from services.session_middleware import (
     REDIS_BACKEND,
+    SESSION_ORIGINAL_DATA_SCOPE_KEY,
+    SESSION_ORIGINAL_ID_SCOPE_KEY,
+    SESSION_RESTORE_RESTORED,
+    SESSION_RESTORE_STATUS_SCOPE_KEY,
     SESSION_IDS_TO_DELETE_SCOPE_KEY,
     PermanentSessionMiddleware,
 )
+
+
+class DummyRedisPipeline:
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.commands = []
+
+    def watch(self, key):
+        return None
+
+    def get(self, key):
+        return self.redis_client.get(key)
+
+    def multi(self):
+        return None
+
+    def set(self, key, value, ex=None):
+        self.commands.append((key, value, ex))
+        return self
+
+    def execute(self):
+        results = []
+        for key, value, ex in self.commands:
+            results.append(self.redis_client.set(key, value, ex=ex))
+        return results
+
+    def reset(self):
+        self.commands = []
 
 
 # 日本語: テスト用の擬似Dummy Redisクラスです。
@@ -41,6 +73,9 @@ class DummyRedis:
             del self.store[key]
             return 1
         return 0
+
+    def pipeline(self):
+        return DummyRedisPipeline(self)
 
 
 # 日本語: テスト用のFailing Redisクラスです。
@@ -306,6 +341,34 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertIsInstance(scope["session_id"], str)
         self.assertNotEqual(scope["session_id"], "old-session")
         self.assertIn('"foo": "fresh"', dummy_redis.get(f"session:{scope['session_id']}"))
+
+    def test_stale_session_write_does_not_overwrite_newer_state(self):
+        class WatchError(Exception):
+            pass
+
+        class ConflictingPipeline(DummyRedisPipeline):
+            def execute(self):
+                raise WatchError("session changed while writing")
+
+        dummy_redis = DummyRedis()
+        dummy_redis.set("session:shared-session", '{"foo": "new"}')
+        middleware = PermanentSessionMiddleware(lambda *_: None, secret_key="secret", max_age=60)
+        message = {"type": "http.response.start", "headers": []}
+        headers = MutableHeaders(scope=message)
+        scope = {
+            "session": {"foo": "stale"},
+            "session_id": "shared-session",
+            SESSION_RESTORE_STATUS_SCOPE_KEY: SESSION_RESTORE_RESTORED,
+            SESSION_ORIGINAL_DATA_SCOPE_KEY: {"foo": "old"},
+            SESSION_ORIGINAL_ID_SCOPE_KEY: "shared-session",
+        }
+
+        with patch("services.session_middleware.get_redis_client", return_value=dummy_redis):
+            with patch.object(dummy_redis, "pipeline", return_value=ConflictingPipeline(dummy_redis)):
+                middleware.inner._commit_session(scope, headers)
+
+        self.assertEqual(dummy_redis.get("session:shared-session"), '{"foo": "new"}')
+        self.assertEqual(message["headers"], [])
 
 
 if __name__ == "__main__":

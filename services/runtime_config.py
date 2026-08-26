@@ -31,18 +31,18 @@ def get_session_secret_key() -> str | None:
 # 日本語: クッキーのSameSite属性の設定値を取得・バリデーションします。
 # English: Retrieve and validate the SameSite attribute configuration for cookies.
 def get_session_same_site() -> str:
-    # 日本語: SameSite=Lax を既定にして、フレーム内やサブリソースのクロスサイト送信を抑えます。
-    # English: Default to SameSite=Lax to avoid cross-site iframe/subresource session sends.
+    # 日本語: 本番ではGoogle OAuthの外部サイトからのコールバックでセッションを維持するためNoneを既定にします。
+    # English: Default to None in production so the session survives Google OAuth callbacks from the external IdP.
     configured = (os.getenv("FASTAPI_SESSION_SAMESITE") or "").strip().lower()
     if not configured:
-        return "lax"
+        return "none" if is_production_env() else "lax"
 
     if configured not in VALID_SESSION_SAMESITE_VALUES:
         logger.warning(
             "Invalid FASTAPI_SESSION_SAMESITE=%r. Falling back to the environment default.",
             configured,
         )
-        return "lax"
+        return "none" if is_production_env() else "lax"
 
     if configured == "none" and not is_production_env():
         logger.warning(

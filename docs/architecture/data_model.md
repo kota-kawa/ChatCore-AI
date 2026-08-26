@@ -52,6 +52,7 @@ erDiagram
 ## 永続化されない状態
 
 - セッション本体は Redis の `session:<id>`。Cookie は署名済み参照 ID のみです。
+- Google OAuth の短命トランザクションは Redis の `google_oauth_transaction:<state>` に保存し、stateを専用HttpOnly Cookieと照合してコールバックで一度だけ消費します。OAuth状態は一般セッションへ保存しません。
 - キャッシュ、日次・月次クォータ、single-flight lock、チャット生成のイベント協調は Redis を使います。
 - プロンプト共有画像の表示用・カード用 WebP は `PROMPT_SHARE_UPLOAD_DIR` の永続 Docker volume に保存されます。DB は添付 descriptor と参照関係の source of truth です。
 - エフェメラルチャットの削除、添付ファイルの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。

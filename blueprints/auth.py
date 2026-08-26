@@ -126,6 +126,12 @@ from services.guest_prompt_service import (  # noqa: E402
     claim_guest_prompts_for_user,
     get_guest_prompt_token,
 )
+from services.google_oauth_transaction import (  # noqa: E402
+    GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME,
+    GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS,
+    consume_google_oauth_transaction,
+    store_google_oauth_transaction,
+)
 from services.llm_daily_limit import (  # noqa: E402
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -234,6 +240,8 @@ __all__ = [
     "GOOGLE_CODE_VERIFIER_SESSION_KEY",
     "GOOGLE_LOGIN_UNAVAILABLE_ERROR",
     "GOOGLE_NEXT_PATH_SESSION_KEY",
+    "GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME",
+    "GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS",
     "GOOGLE_SCOPES",
     "GoogleAuthError",
     "LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS",
@@ -287,6 +295,7 @@ __all__ = [
     "bytes_to_base64url",
     "clear_passkey_session",
     "constant_time_compare",
+    "consume_google_oauth_transaction",
     "consume_auth_email_daily_quota",
     "consume_auth_email_send_limits",
     "consume_passkey_auth_options_limit",
@@ -345,6 +354,7 @@ __all__ = [
     "set_user_verified",
     "store_passkey_authentication_ceremony",
     "store_passkey_registration_ceremony",
+    "store_google_oauth_transaction",
     "time",
     "update_passkey_usage",
     "update_user_profile_from_google_if_unset",

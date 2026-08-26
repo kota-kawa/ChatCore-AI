@@ -267,9 +267,9 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
 
-    # 日本語: ログイン成功時のリダイレクト先(nextパラメータ)がクリーンアップされ、セッションに保存されることを検証します。
-    # English: Verify that the next parameter is sanitized and stored in the session.
-    def test_google_login_stores_sanitized_next_path_in_session(self):
+    # 日本語: OAuth一時状態が一般セッションではなく専用トランザクションへ保存されることを検証します。
+    # English: Verify that OAuth transient state is stored outside the general session.
+    def test_google_login_stores_sanitized_next_path_in_oauth_transaction(self):
         request = make_google_login_request(query_string=b"next=%2Fmemo%3Ftab%3Drecent")
         fake_flow = Mock()
         fake_flow.code_verifier = "google-pkce-code-verifier"
@@ -288,17 +288,34 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                     "blueprints.auth.url_for",
                     return_value="https://chatcore-ai.com/google-callback",
                 ):
-                    response = asyncio.run(google_login(request))
+                    with patch(
+                        "blueprints.auth.store_google_oauth_transaction",
+                        return_value=True,
+                    ) as mock_store:
+                        with patch(
+                            "blueprints.auth.run_blocking",
+                            new=immediate_run_blocking,
+                        ):
+                            response = asyncio.run(google_login(request))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.headers["location"],
             "https://accounts.google.com/o/oauth2/auth?state=google-state",
         )
-        self.assertEqual(request.session["google_login_next_path"], "/memo?tab=recent")
-        self.assertEqual(
-            request.session[GOOGLE_CODE_VERIFIER_SESSION_KEY],
-            "google-pkce-code-verifier",
+        mock_store.assert_called_once_with(
+            state="google-state",
+            code_verifier="google-pkce-code-verifier",
+            redirect_uri="https://chatcore-ai.com/google-callback",
+            next_path="/memo?tab=recent",
+        )
+        self.assertNotIn("google_oauth_state", request.session)
+        self.assertNotIn("google_redirect_uri", request.session)
+        self.assertNotIn(GOOGLE_CODE_VERIFIER_SESSION_KEY, request.session)
+        self.assertNotIn("google_login_next_path", request.session)
+        self.assertIn(
+            "google_oauth_transaction=google-state",
+            response.headers["set-cookie"],
         )
 
     # 日本語: トークン交換に失敗した場合、ログイン画面へリダイレクトされることを検証します。
@@ -358,6 +375,111 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("user_id", request.session)
+
+    # 日本語: 一般セッションにOAuth状態がなくても専用トランザクションからログインを完了できることを検証します。
+    # English: Verify that login completes from the dedicated transaction without OAuth state in the session.
+    def test_google_callback_uses_dedicated_transaction_instead_of_general_session(self):
+        request = build_request(
+            method="GET",
+            path="/google-callback",
+            query_string=b"code=abc&state=google-state",
+            headers=[(b"cookie", b"google_oauth_transaction=google-state")],
+            session={},
+            scheme="https",
+            host_header="chatcore-ai.com",
+            server_host="chatcore-ai.com",
+            server_port=443,
+        )
+        fake_flow = FakeFlow()
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.return_value = fake_flow
+        transaction = SimpleNamespace(
+            state="google-state",
+            code_verifier="google-pkce-code-verifier",
+            redirect_uri="https://chatcore-ai.com/google-callback",
+            next_path="/memo",
+        )
+        existing_google_user = {
+            "id": 12,
+            "email": "user@example.com",
+            "is_verified": True,
+            "provider_user_id": "google-user-123",
+        }
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth.consume_google_oauth_transaction",
+                        return_value=transaction,
+                    ) as mock_consume:
+                        with patch(
+                            "blueprints.auth._fetch_google_user_info",
+                            return_value={
+                                "id": "google-user-123",
+                                "email": "user@example.com",
+                                "verified_email": True,
+                                "name": "Alice Example",
+                                "picture": "https://example.com/alice.png",
+                            },
+                        ):
+                            with patch(
+                                "blueprints.auth.get_user_by_google_id",
+                                return_value=existing_google_user,
+                            ):
+                                with patch("blueprints.auth.link_google_account"):
+                                    with patch(
+                                        "blueprints.auth.update_user_profile_from_google_if_unset"
+                                    ):
+                                        with patch("blueprints.auth.copy_default_tasks_for_user"):
+                                            with patch(
+                                                "blueprints.auth.get_user_by_id",
+                                                return_value={
+                                                    "id": 12,
+                                                    "email": "user@example.com",
+                                                },
+                                            ):
+                                                response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/memo")
+        mock_consume.assert_called_once_with("google-state")
+        self.assertEqual(request.session["user_id"], 12)
+        self.assertNotIn("google_oauth_state", request.session)
+        self.assertNotIn(GOOGLE_CODE_VERIFIER_SESSION_KEY, request.session)
+        self.assertTrue(
+            any(
+                key.lower() == b"set-cookie" and b'google_oauth_transaction=""' in value
+                for key, value in response.raw_headers
+            )
+        )
+
+    # 日本語: 専用CookieとGoogleから返ったstateが一致しない場合にトランザクションを消費しないことを検証します。
+    # English: Verify that a mismatched transaction cookie and callback state are rejected without consuming Redis state.
+    def test_google_callback_rejects_dedicated_transaction_state_mismatch(self):
+        request = build_request(
+            method="GET",
+            path="/google-callback",
+            query_string=b"code=abc&state=other-state",
+            headers=[(b"cookie", b"google_oauth_transaction=google-state")],
+            session={},
+            scheme="https",
+            host_header="chatcore-ai.com",
+            server_host="chatcore-ai.com",
+            server_port=443,
+        )
+
+        with patch(
+            "blueprints.auth.consume_google_oauth_transaction"
+        ) as mock_consume:
+            response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
+        mock_consume.assert_not_called()
 
     # 日本語: 初回ログインの際、Googleのプロフィール情報をもとに新規ユーザーが作成されることを検証します。
     # English: Verify that a new user is created using Google profile fields on first login.

@@ -122,6 +122,33 @@ def _oauth_error_classes() -> tuple[type[BaseException], ...]:
     )
 
 
+def _clear_google_oauth_transaction_cookie(response: Any) -> Any:
+    response.delete_cookie(
+        dep("GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME"),
+        path="/",
+    )
+    return response
+
+
+def _google_oauth_failure_response(
+    request: Request,
+    session: dict[str, Any],
+    *,
+    redirect_uri: str | None = None,
+    next_path: str | None = None,
+    dedicated_transaction: bool = False,
+) -> Any:
+    response = _redirect_to_login_after_google_failure(
+        request,
+        session,
+        redirect_uri=redirect_uri,
+        next_path=next_path,
+        use_session_next=not dedicated_transaction,
+    )
+    _clear_google_oauth_session(session)
+    return _clear_google_oauth_transaction_cookie(response)
+
+
 async def google_login(request: Request):
     if dep("Flow") is None:
         dep("logger").error(
@@ -170,27 +197,57 @@ async def google_login(request: Request):
         dep("logger").error("Google OAuth login initialization did not produce a PKCE code verifier.")
         return _google_login_unavailable_response()
 
-    request.session["google_oauth_state"] = state
-    request.session["google_redirect_uri"] = redirect_uri
-    request.session[dep("GOOGLE_CODE_VERIFIER_SESSION_KEY")] = code_verifier
-    if safe_next_path:
-        request.session[dep("GOOGLE_NEXT_PATH_SESSION_KEY")] = safe_next_path
-    else:
-        request.session.pop(dep("GOOGLE_NEXT_PATH_SESSION_KEY"), None)
+    if not isinstance(state, str) or not state:
+        dep("logger").error("Google OAuth login initialization did not produce a state value.")
+        return _google_login_unavailable_response()
+
+    stored = await dep("run_blocking")(
+        dep("store_google_oauth_transaction"),
+        state=state,
+        code_verifier=code_verifier,
+        redirect_uri=redirect_uri,
+        next_path=safe_next_path,
+    )
+    if not stored:
+        dep("logger").error(
+            "Google OAuth login could not persist its short-lived transaction."
+        )
+        return _google_login_unavailable_response()
+
+    # OAuth一時状態は一般セッションへ保存しない。古いフローの残骸だけを除去する。
+    # Keep OAuth transient state out of the general session; remove legacy leftovers.
+    _clear_google_oauth_session(request.session)
 
     dep("logger").info(
-        "Google OAuth login started. State: %s, Redirect URI: %s, Session ID: %s",
+        "Google OAuth login started. State: %s, Redirect URI: %s",
         state[:16] + "..." if state else "None",
         redirect_uri,
-        request.scope.get("session_id", "unknown"),
     )
-    return dep("RedirectResponse")(authorization_url, status_code=302)
+    response = dep("RedirectResponse")(authorization_url, status_code=302)
+    is_production = bool(dep("is_production_env")())
+    response.set_cookie(
+        dep("GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME"),
+        state,
+        max_age=dep("GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS"),
+        path="/",
+        httponly=True,
+        secure=is_production,
+        samesite="none" if is_production else "lax",
+    )
+    return response
 
 
 async def google_callback(request: Request):
     session = request.session
+    transaction_cookie = request.cookies.get(dep("GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME"))
+    dedicated_transaction = transaction_cookie is not None
+
     if dep("Flow") is None:
-        return _redirect_to_login_after_google_failure(request, session)
+        return _google_oauth_failure_response(
+            request,
+            session,
+            dedicated_transaction=dedicated_transaction,
+        )
 
     google_error = request.query_params.get("error")
     if google_error:
@@ -198,38 +255,124 @@ async def google_callback(request: Request):
             "Google OAuth callback: authorization error from Google: %s",
             google_error,
         )
-        return _redirect_to_login_after_google_failure(request, session)
+        return _google_oauth_failure_response(
+            request,
+            session,
+            dedicated_transaction=dedicated_transaction,
+        )
 
-    state = session.get("google_oauth_state")
-    dep("logger").info(
-        "Google OAuth callback received. Session ID: %s, Has state: %s, Session keys: %s",
-        request.scope.get("session_id", "unknown"),
-        bool(state),
-        list(session.keys()),
-    )
+    callback_state = request.query_params.get("state")
+    state: str | None = None
+    code_verifier: str | None = None
+    redirect_uri: str | None = None
+    next_path: str | None = None
 
-    if not state:
-        dep("logger").warning(
-            "Google OAuth callback: session state missing. "
-            "Session keys: %s, Request host: %s",
+    if dedicated_transaction:
+        if (
+            not isinstance(transaction_cookie, str)
+            or not isinstance(callback_state, str)
+            or not dep("constant_time_compare")(transaction_cookie, callback_state)
+        ):
+            dep("logger").warning(
+                "Google OAuth callback rejected because the transaction cookie and state differ."
+            )
+            return _google_oauth_failure_response(
+                request,
+                session,
+                dedicated_transaction=True,
+            )
+
+        transaction = await dep("run_blocking")(
+            dep("consume_google_oauth_transaction"),
+            callback_state,
+        )
+        if transaction is None:
+            dep("logger").warning(
+                "Google OAuth callback transaction was missing, expired, or already consumed."
+            )
+            return _google_oauth_failure_response(
+                request,
+                session,
+                dedicated_transaction=True,
+            )
+
+        state = transaction.state
+        code_verifier = transaction.code_verifier
+        redirect_uri = transaction.redirect_uri
+        raw_next_path = transaction.next_path
+        next_path = (
+            dep("sanitize_next_path")(raw_next_path, default="/")
+            if raw_next_path
+            else None
+        )
+        dep("logger").info("Google OAuth callback transaction consumed.")
+    else:
+        # デプロイ前に開始したフローだけ、旧セッション保存形式で完了できるようにする。
+        # Keep a compatibility path for OAuth flows started before this deployment.
+        state_value = session.get("google_oauth_state")
+        state = state_value if isinstance(state_value, str) else None
+        dep("logger").info(
+            "Google OAuth callback received through the legacy session path. "
+            "Has state: %s, Session keys: %s",
+            bool(state),
             list(session.keys()),
-            request.headers.get("host"),
         )
-        return _redirect_to_login_after_google_failure(request, session)
 
-    code_verifier = session.get(dep("GOOGLE_CODE_VERIFIER_SESSION_KEY"))
-    if not isinstance(code_verifier, str) or not code_verifier:
-        dep("logger").warning(
-            "Google OAuth callback: PKCE code verifier missing. Session ID: %s",
-            request.scope.get("session_id", "unknown"),
+        if not state:
+            dep("logger").warning(
+                "Google OAuth callback: session state missing. "
+                "Session keys: %s, Request host: %s",
+                list(session.keys()),
+                request.headers.get("host"),
+            )
+            return _google_oauth_failure_response(request, session)
+
+        if (
+            isinstance(callback_state, str)
+            and not dep("constant_time_compare")(state, callback_state)
+        ):
+            dep("logger").warning(
+                "Google OAuth callback rejected because the callback state differs from the session state."
+            )
+            return _google_oauth_failure_response(request, session)
+
+        code_verifier_value = session.get(dep("GOOGLE_CODE_VERIFIER_SESSION_KEY"))
+        code_verifier = code_verifier_value if isinstance(code_verifier_value, str) else None
+        if not code_verifier:
+            dep("logger").warning(
+                "Google OAuth callback: PKCE code verifier missing. Session ID: %s",
+                request.scope.get("session_id", "unknown"),
+            )
+            return _google_oauth_failure_response(request, session)
+
+        redirect_uri_value = session.get("google_redirect_uri") or dep("os").getenv(
+            "GOOGLE_REDIRECT_URI"
         )
-        return _redirect_to_login_after_google_failure(request, session)
+        redirect_uri = redirect_uri_value if isinstance(redirect_uri_value, str) else None
+        if not redirect_uri:
+            redirect_uri = dep("url_for")(request, "auth.google_callback", _external=True)
 
-    redirect_uri = session.get("google_redirect_uri") or dep("os").getenv("GOOGLE_REDIRECT_URI")
-    if not redirect_uri:
-        redirect_uri = dep("url_for")(request, "auth.google_callback", _external=True)
+        next_path = _google_next_path(session)
 
-    next_path = _google_next_path(session)
+    if not isinstance(state, str) or not state or not code_verifier or not redirect_uri:
+        dep("logger").warning("Google OAuth callback transaction data was invalid.")
+        return _google_oauth_failure_response(
+            request,
+            session,
+            redirect_uri=redirect_uri,
+            next_path=next_path,
+            dedicated_transaction=dedicated_transaction,
+        )
+
+    def failure_response() -> Any:
+        return _google_oauth_failure_response(
+            request,
+            session,
+            redirect_uri=redirect_uri,
+            next_path=next_path,
+            dedicated_transaction=dedicated_transaction,
+        )
+
     client_config = dep("_google_client_config")()
     settings_error = dep("_validate_google_oauth_settings")(client_config)
     if settings_error:
@@ -237,19 +380,7 @@ async def google_callback(request: Request):
             "Google OAuth callback aborted due to configuration error: %s",
             settings_error,
         )
-        return _redirect_to_login_after_google_failure(
-            request,
-            session,
-            redirect_uri=redirect_uri,
-        )
-
-    login_redirect_url = _google_callback_redirect_target(
-        request,
-        "/login",
-        redirect_uri=redirect_uri,
-    )
-    if next_path:
-        login_redirect_url = _append_query_params(login_redirect_url, next=next_path)
+        return failure_response()
 
     success_redirect_url = _google_callback_redirect_target(
         request,
@@ -269,19 +400,14 @@ async def google_callback(request: Request):
         )
     except _oauth_error_classes():
         dep("logger").exception("Failed to initialize Google OAuth callback flow.")
-        return _redirect_to_login_after_google_failure(
-            request,
-            session,
-            redirect_uri=redirect_uri,
-        )
+        return failure_response()
 
     authorization_response = dep("_build_google_authorization_response")(request, redirect_uri)
     try:
         await dep("run_blocking")(flow.fetch_token, authorization_response=authorization_response)
     except _oauth_error_classes():
         dep("logger").exception("Google OAuth token exchange failed.")
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(login_redirect_url, status_code=302)
+        return failure_response()
 
     _clear_google_oauth_state(session)
 
@@ -289,15 +415,13 @@ async def google_callback(request: Request):
     access_token = getattr(credentials, "token", "")
     if not isinstance(access_token, str) or not access_token:
         dep("logger").error("Google OAuth callback completed without an access token.")
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(login_redirect_url, status_code=302)
+        return failure_response()
 
     try:
         user_info = await dep("run_blocking")(dep("_fetch_google_user_info"), access_token)
     except dep("requests").RequestException:
         dep("logger").exception("Failed to fetch Google user info.")
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(login_redirect_url, status_code=302)
+        return failure_response()
 
     email = _clean_google_field(user_info, "email")
     google_user_id = _clean_google_field(user_info, "id") or _clean_google_field(user_info, "sub")
@@ -317,8 +441,7 @@ async def google_callback(request: Request):
             "Google OAuth callback: required fields missing: %s",
             ", ".join(missing),
         )
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(login_redirect_url, status_code=302)
+        return failure_response()
 
     try:
         user = await call_dependency("get_user_by_google_id", google_user_id)
@@ -336,8 +459,7 @@ async def google_callback(request: Request):
                         "Google OAuth callback: conflicting google_user_id for email %s",
                         email,
                     )
-                    _clear_google_oauth_session(session)
-                    return dep("RedirectResponse")(login_redirect_url, status_code=302)
+                    return failure_response()
                 user_id = user["id"]
                 await call_dependency("link_google_account", user_id, google_user_id, email)
                 should_mark_verified = not user.get("is_verified")
@@ -357,14 +479,12 @@ async def google_callback(request: Request):
                         "Google OAuth callback: user creation returned no id for email %s",
                         email,
                     )
-                    _clear_google_oauth_session(session)
-                    return dep("RedirectResponse")(login_redirect_url, status_code=302)
+                    return failure_response()
     except Exception:
         dep("logger").exception(
             "Google OAuth callback: unexpected error during user lookup/creation."
         )
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(login_redirect_url, status_code=302)
+        return failure_response()
 
     dep("establish_authenticated_session")(request, int(user_id), email)
 
@@ -400,8 +520,10 @@ async def google_callback(request: Request):
 
     _clear_google_oauth_session(session)
     if next_path:
-        return dep("RedirectResponse")(success_redirect_url, status_code=302)
-    return dep("RedirectResponse")(
+        return _clear_google_oauth_transaction_cookie(
+            dep("RedirectResponse")(success_redirect_url, status_code=302)
+        )
+    return _clear_google_oauth_transaction_cookie(dep("RedirectResponse")(
         _append_query_params(success_redirect_url, auth="success"),
         status_code=302,
-    )
+    ))
