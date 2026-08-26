@@ -122,6 +122,28 @@ from services.auth_limits import (  # noqa: E402
 from services.auth_session import establish_authenticated_session  # noqa: E402
 from services.csrf import require_csrf  # noqa: E402
 from services.email_service import send_email  # noqa: E402
+from services.email_auth_transaction import (  # noqa: E402
+    EMAIL_AUTH_RESULT_CONFLICT,
+    EMAIL_AUTH_RESULT_EXHAUSTED,
+    EMAIL_AUTH_RESULT_EXPIRED,
+    EMAIL_AUTH_RESULT_INVALID,
+    EMAIL_AUTH_RESULT_MISSING,
+    EMAIL_AUTH_RESULT_SUCCESS,
+    EMAIL_AUTH_RESULT_UNAVAILABLE,
+    EMAIL_AUTH_TRANSACTION_COOKIE_NAME,
+    EMAIL_AUTH_TRANSACTION_FLOW_LOGIN,
+    EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION,
+    EMAIL_AUTH_TRANSACTION_MAX_ATTEMPTS,
+    EMAIL_AUTH_TRANSACTION_SCOPE_KEY,
+    EMAIL_AUTH_TRANSACTION_TTL_SECONDS,
+    EMAIL_AUTH_UNAVAILABLE_ERROR,
+    clear_email_auth_transaction_cookie,
+    delete_email_auth_transaction,
+    get_email_auth_transaction,
+    set_email_auth_transaction_cookie,
+    store_email_auth_transaction,
+    verify_email_auth_transaction,
+)
 from services.guest_prompt_service import (  # noqa: E402
     claim_guest_prompts_for_user,
     get_guest_prompt_token,
@@ -203,8 +225,8 @@ GOOGLE_SCOPES = [
 auth_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
-LOGIN_VERIFICATION_CODE_TTL_SECONDS = 300
-LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS = 5
+LOGIN_VERIFICATION_CODE_TTL_SECONDS = EMAIL_AUTH_TRANSACTION_TTL_SECONDS
+LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS = EMAIL_AUTH_TRANSACTION_MAX_ATTEMPTS
 GOOGLE_CODE_VERIFIER_SESSION_KEY = "google_oauth_code_verifier"
 GOOGLE_NEXT_PATH_SESSION_KEY = "google_login_next_path"
 AUTH_FAILURE_STATUS_CODE = 401
@@ -235,6 +257,20 @@ __all__ = [
     "AuthenticatorSelectionCriteria",
     "DEFAULT_RETRY_AFTER_SECONDS",
     "EmailRequest",
+    "EMAIL_AUTH_RESULT_CONFLICT",
+    "EMAIL_AUTH_RESULT_EXHAUSTED",
+    "EMAIL_AUTH_RESULT_EXPIRED",
+    "EMAIL_AUTH_RESULT_INVALID",
+    "EMAIL_AUTH_RESULT_MISSING",
+    "EMAIL_AUTH_RESULT_SUCCESS",
+    "EMAIL_AUTH_RESULT_UNAVAILABLE",
+    "EMAIL_AUTH_TRANSACTION_COOKIE_NAME",
+    "EMAIL_AUTH_TRANSACTION_FLOW_LOGIN",
+    "EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION",
+    "EMAIL_AUTH_TRANSACTION_MAX_ATTEMPTS",
+    "EMAIL_AUTH_TRANSACTION_SCOPE_KEY",
+    "EMAIL_AUTH_TRANSACTION_TTL_SECONDS",
+    "EMAIL_AUTH_UNAVAILABLE_ERROR",
     "Flow",
     "GOOGLE_AUTH_PROVIDER",
     "GOOGLE_CODE_VERIFIER_SESSION_KEY",
@@ -295,6 +331,7 @@ __all__ = [
     "bytes_to_base64url",
     "clear_passkey_session",
     "constant_time_compare",
+    "clear_email_auth_transaction_cookie",
     "consume_google_oauth_transaction",
     "consume_auth_email_daily_quota",
     "consume_auth_email_send_limits",
@@ -307,6 +344,7 @@ __all__ = [
     "create_user",
     "delete_passkey",
     "delete_user_account",
+    "delete_email_auth_transaction",
     "establish_authenticated_session",
     "frontend_login_url",
     "frontend_url",
@@ -314,6 +352,7 @@ __all__ = [
     "generate_registration_options",
     "generate_verification_code",
     "get_auth_limit_service",
+    "get_email_auth_transaction",
     "get_credential_lookup_id",
     "get_guest_prompt_token",
     "get_llm_daily_limit_service",
@@ -352,9 +391,11 @@ __all__ = [
     "send_email",
     "set_session_permanent",
     "set_user_verified",
+    "set_email_auth_transaction_cookie",
     "store_passkey_authentication_ceremony",
     "store_passkey_registration_ceremony",
     "store_google_oauth_transaction",
+    "store_email_auth_transaction",
     "time",
     "update_passkey_usage",
     "update_user_profile_from_google_if_unset",
@@ -362,4 +403,5 @@ __all__ = [
     "validate_payload_model",
     "verify_authentication_response",
     "verify_registration_response",
+    "verify_email_auth_transaction",
 ]

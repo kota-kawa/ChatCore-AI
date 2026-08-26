@@ -1,9 +1,16 @@
 import logging
 import time
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
 from blueprints.auth_common import _claim_guest_prompts_after_login
+from blueprints.email_auth_support import (
+    clear_legacy_email_auth_session,
+    email_auth_failure_response,
+    email_auth_unavailable_response,
+    load_dedicated_email_auth_transaction,
+)
 from blueprints.auth_support import await_result
 
 from services.async_utils import run_blocking
@@ -17,6 +24,21 @@ from services.auth_limits import (
 from services.auth_session import establish_authenticated_session
 from services.csrf import require_csrf
 from services.email_service import resolve_request_email_locale, send_email
+from services.email_auth_transaction import (
+    EMAIL_AUTH_RESULT_EXHAUSTED,
+    EMAIL_AUTH_RESULT_EXPIRED,
+    EMAIL_AUTH_RESULT_INVALID,
+    EMAIL_AUTH_RESULT_MISSING,
+    EMAIL_AUTH_RESULT_SUCCESS,
+    EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION,
+    EMAIL_AUTH_TRANSACTION_MAX_ATTEMPTS,
+    EMAIL_AUTH_TRANSACTION_TTL_SECONDS,
+    clear_email_auth_transaction_cookie,
+    delete_email_auth_transaction,
+    set_email_auth_transaction_cookie,
+    store_email_auth_transaction,
+    verify_email_auth_transaction,
+)
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -32,6 +54,7 @@ from services.users import (
     get_user_by_id,
     copy_default_tasks_for_user,
 )
+from services.runtime_config import is_production_env
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -47,15 +70,98 @@ logger = logging.getLogger(__name__)
 
 # 認証コードの有効期限（秒）
 # Time-To-Live (TTL) in seconds for the verification code.
-VERIFICATION_CODE_TTL_SECONDS = 300
+VERIFICATION_CODE_TTL_SECONDS = EMAIL_AUTH_TRANSACTION_TTL_SECONDS
 
 # 認証コード入力の最大試行回数
 # Maximum number of attempts allowed for entering the verification code.
-VERIFICATION_CODE_MAX_ATTEMPTS = 5
+VERIFICATION_CODE_MAX_ATTEMPTS = EMAIL_AUTH_TRANSACTION_MAX_ATTEMPTS
 
 # 認証失敗時の HTTP ステータスコード (401 Unauthorized)
 # HTTP status code for authentication failure (401 Unauthorized).
 AUTH_FAILURE_STATUS_CODE = 401
+
+
+async def _verify_dedicated_registration_code(
+    request: Request,
+    user_code: Any,
+    transaction: Any,
+    auth_limit_service: AuthLimitService | None,
+) -> Any:
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    allowed, limit_error = await run_blocking(
+        consume_verification_attempt_limit,
+        request,
+        transaction.email,
+        service=resolved_auth_limit_service,
+    )
+    if not allowed:
+        return jsonify_rate_limited(
+            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
+
+    result = await run_blocking(
+        verify_email_auth_transaction,
+        transaction.transaction_id,
+        str(user_code or ""),
+    )
+    if result.status == EMAIL_AUTH_RESULT_SUCCESS:
+        user = await await_result(get_user_by_id(transaction.user_id))
+        if not user:
+            clear_legacy_email_auth_session(request.session)
+            return email_auth_failure_response(
+                "ユーザーが存在しません",
+                status_code=AUTH_FAILURE_STATUS_CODE,
+                clear_cookie=True,
+            )
+
+        await await_result(set_user_verified(transaction.user_id))
+        await await_result(copy_default_tasks_for_user(transaction.user_id))
+        establish_authenticated_session(request, int(transaction.user_id), user["email"])
+        await _claim_guest_prompts_after_login(
+            request,
+            int(transaction.user_id),
+            context="Email registration verification",
+        )
+        clear_legacy_email_auth_session(request.session)
+        response = jsonify(
+            {
+                "status": "success",
+                "flow": "register",
+                "offer_passkey_setup": True,
+            }
+        )
+        return clear_email_auth_transaction_cookie(response)
+
+    if result.status == EMAIL_AUTH_RESULT_INVALID:
+        return email_auth_failure_response(
+            "認証コードが一致しません。",
+            status_code=AUTH_FAILURE_STATUS_CODE,
+            clear_cookie=False,
+        )
+    if result.status == EMAIL_AUTH_RESULT_EXHAUSTED:
+        return email_auth_failure_response(
+            "認証コードの試行回数が上限に達しました。",
+            status_code=AUTH_FAILURE_STATUS_CODE,
+            clear_cookie=True,
+        )
+    if result.status == EMAIL_AUTH_RESULT_EXPIRED:
+        return email_auth_failure_response(
+            "認証コードの有効期限が切れています。",
+            status_code=AUTH_FAILURE_STATUS_CODE,
+            clear_cookie=True,
+        )
+    if result.status == EMAIL_AUTH_RESULT_MISSING:
+        return email_auth_failure_response(
+            "セッション情報がありません。最初からやり直してください",
+            status_code=AUTH_FAILURE_STATUS_CODE,
+            clear_cookie=True,
+        )
+    return email_auth_unavailable_response()
 
 
 # セッションから登録・認証用の一時データを削除する
@@ -124,13 +230,14 @@ async def api_send_verification_email(
     register.html から「確認メール送信」ボタン押下で呼ばれる
     - メールアドレスをDBに登録 (is_verified=False)
     - 6桁のコードを生成し、メールプロバイダ経由で送信
-    - コードは session["verification_code"] に一時的に保存 (本番ではDBでもOK)
-    - session["temp_user_id"] に仮保存
+    - コード、対象ユーザー、試行回数は一般セッションから分離した短命Redisトランザクションに保存
+    - 専用HttpOnly Cookieでトランザクションを参照
 
     Called when the "Send verification email" button is clicked on register.html.
     - Create/ensure a user exists with is_verified=False
     - Generate a 6-digit verification code and send it via email provider
-    - Temporarily store the code and temporary user ID in session
+    - Store the code, user ID, and attempt count in a short-lived Redis transaction
+    - Bind the transaction to a dedicated HttpOnly cookie
     """
     # リクエストボディをJSONとして取得。不正な場合はエラーレスポンスを返却
     # Retrieve the request body as JSON. Return an error response if invalid.
@@ -199,17 +306,22 @@ async def api_send_verification_email(
     else:
         user_id = user["id"]
 
-    # 6桁コード生成→セッションへ
-    # Generate a six-digit code and keep it in session temporarily.
+    # 6桁コードを一般セッションから分離した短命Redisトランザクションへ保存する。
+    # Store the six-digit code in a short-lived Redis transaction, not the general session.
     code = generate_verification_code()
-    request.session["verification_code"] = code
-    request.session["temp_user_id"] = user_id  # どのユーザーか紐付け
-    request.session["temp_email"] = email  # rate-limit key (cross-session)
-    request.session["verification_code_issued_at"] = int(time.time())
-    request.session["verification_code_attempts"] = 0
-
     locale = resolve_request_email_locale(request)
-    request.session["verification_locale"] = locale
+    transaction_id = await run_blocking(
+        store_email_auth_transaction,
+        flow=EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION,
+        user_id=int(user_id),
+        email=email,
+        code=code,
+        locale=locale,
+    )
+    if not transaction_id:
+        return email_auth_unavailable_response()
+
+    clear_legacy_email_auth_session(request.session)
     try:
         # メール送信を実行
         # Attempt to send the email with verification code.
@@ -220,10 +332,16 @@ async def api_send_verification_email(
             code=code,
             locale=locale,
         )
-        # 成功レスポンスを返却
-        # Return a success response.
-        return jsonify({"status": "success"})
+        # 成功レスポンスに専用トランザクションCookieを付与する。
+        # Bind the dedicated transaction to the successful response with an HttpOnly cookie.
+        response = jsonify({"status": "success"})
+        return set_email_auth_transaction_cookie(
+            response,
+            transaction_id,
+            secure=bool(is_production_env()),
+        )
     except Exception:
+        await run_blocking(delete_email_auth_transaction, transaction_id)
         # 送信失敗時はログを記録して500エラーを返却
         # Log error and return 500 server error response on failure.
         return log_and_internal_server_error(
@@ -245,12 +363,12 @@ async def api_verify_registration_code(
     API endpoint to verify the registration verification code submitted by the user.
 
     register.html の「認証する」ボタンで呼ばれる。
-    ・セッション保存の認証コードと照合
+    ・専用Redisトランザクション、または旧クライアントのセッション保存コードと照合
     ・一致すればユーザーを is_verified=True にしログイン状態へ
     ・このタイミングで初期タスクをユーザー専用に複製
 
     Called by the "Verify" action on register page.
-    - Compare submitted code with session code
+    - Compare the submitted code with the dedicated Redis transaction (or legacy session fallback)
     - Mark user as verified and log them in
     - Copy default tasks for the verified user
     """
@@ -274,6 +392,24 @@ async def api_verify_registration_code(
     # リクエストされたコード、セッション情報、仮ユーザーIDを取得
     # Retrieve the submitted code, session information, and temporary user ID.
     user_code = payload.authCode
+    dedicated_transaction, dedicated_requested = await load_dedicated_email_auth_transaction(
+        request,
+        EMAIL_AUTH_TRANSACTION_FLOW_REGISTRATION,
+    )
+    if dedicated_requested:
+        if dedicated_transaction is None:
+            return email_auth_failure_response(
+                "セッション情報がありません。最初からやり直してください",
+                status_code=AUTH_FAILURE_STATUS_CODE,
+                clear_cookie=True,
+            )
+        return await _verify_dedicated_registration_code(
+            request,
+            user_code,
+            dedicated_transaction,
+            auth_limit_service,
+        )
+
     session = request.session
     session_code = session.get("verification_code")
     user_id = session.get("temp_user_id")
