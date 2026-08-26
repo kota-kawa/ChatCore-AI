@@ -31,5 +31,6 @@ class MemoEmbeddingRepository:
             .values(
                 embedding=json.dumps([float(value) for value in embedding]),
                 embedding_vector=[float(value) for value in embedding],
+                embedding_status="ready",
             )
         )

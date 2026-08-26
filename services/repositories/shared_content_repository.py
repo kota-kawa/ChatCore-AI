@@ -1421,13 +1421,13 @@ class SharedContentRepository:
                        AND gps.guest_cookie_hash = :cookie_hash
                        AND gps.claimed_at IS NULL
                        AND p.user_id IS NULL
-                    RETURNING gps.id, p.id
+                    RETURNING gps.id AS submission_id, p.id AS prompt_id
                 )
                 UPDATE guest_prompt_submissions AS gps
                    SET claimed_by_user_id = :user_id,
                        claimed_at = NOW()
                   FROM claimed_prompts AS claimed
-                 WHERE gps.id = claimed.id
+                 WHERE gps.id = claimed.submission_id
                 RETURNING gps.prompt_id
                 """
             ),

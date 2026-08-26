@@ -6,7 +6,17 @@ from sqlalchemy.dialects.postgresql import JSONB, dialect as postgresql_dialect
 from sqlalchemy.schema import CreateIndex
 from sqlalchemy.types import Text
 
-from services.models import Base, ChatHistory, MemoEntry, Prompt, User, UserAuthProvider
+from services.models import (
+    Base,
+    ChatHistory,
+    ContextFact,
+    MemoEntry,
+    Prompt,
+    PromptVersion,
+    TaskVersion,
+    User,
+    UserAuthProvider,
+)
 from services.models.types import Vector
 
 
@@ -52,6 +62,11 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertTrue(MemoEntry.created_at.nullable)
         self.assertTrue(Prompt.updated_at.nullable)
         self.assertFalse(UserAuthProvider.created_at.nullable)
+        self.assertTrue(PromptVersion.user_id.nullable)
+        self.assertFalse(PromptVersion.snapshot.nullable)
+        self.assertFalse(TaskVersion.snapshot.nullable)
+        self.assertFalse(MemoEntry.embedding_status.nullable)
+        self.assertFalse(ContextFact.embedding_status.nullable)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)
