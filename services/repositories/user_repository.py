@@ -57,7 +57,7 @@ def _serialize_user(
         # join.  Do not leak the email provider's legacy identity into the
         # Google-conflict check when no Google row exists.
         payload.update(
-            auth_provider=user.auth_provider,
+            auth_provider=None,
             provider_user_id=None,
             provider_email=None,
         )
