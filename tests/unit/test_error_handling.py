@@ -106,11 +106,15 @@ class ErrorHandlingTestCase(unittest.TestCase):
                 return_value=(True, 49, 50),
             ):
                 with patch(
-                    "blueprints.auth.send_email",
-                    side_effect=RuntimeError("smtp auth failed"),
+                    "blueprints.auth.store_email_auth_transaction",
+                    return_value="email-transaction",
                 ):
-                    with patch("blueprints.auth.logger.exception") as mock_log:
-                        response = asyncio.run(api_send_login_code(request))
+                    with patch(
+                        "blueprints.auth.send_email",
+                        side_effect=RuntimeError("smtp auth failed"),
+                    ):
+                        with patch("blueprints.auth.logger.exception") as mock_log:
+                            response = asyncio.run(api_send_login_code(request))
 
         # 日本語: 500エラーが返り、SMTP詳細がペイロードに含まれないことを確認
         # English: Confirm 500 error response and SMTP details are not in the payload
