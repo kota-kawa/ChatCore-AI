@@ -351,6 +351,49 @@ async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession
     return await _read(lambda repo: repo.fetch_tasks(user_id, locale), session)
 
 
+async def list_user_skills(user_id: int, *, session: AsyncSession | None = None):
+    return await _read(lambda repo: repo.list_user_skills(user_id), session)
+
+
+async def list_enabled_user_skills(user_id: int, *, session: AsyncSession | None = None):
+    return await _read(lambda repo: repo.list_enabled_user_skills(user_id), session)
+
+
+async def create_user_skill(
+    user_id: int,
+    name: str,
+    instructions: str,
+    *,
+    session: AsyncSession | None = None,
+):
+    return await _write(
+        lambda repo: repo.create_user_skill(user_id, name, instructions),
+        session,
+    )
+
+
+async def set_user_skill_enabled(
+    user_id: int,
+    skill_id: int,
+    is_enabled: bool,
+    *,
+    session: AsyncSession | None = None,
+):
+    return await _write(
+        lambda repo: repo.set_user_skill_enabled(user_id, skill_id, is_enabled),
+        session,
+    )
+
+
+async def delete_user_skill(
+    user_id: int,
+    skill_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    await _write(lambda repo: repo.delete_user_skill(user_id, skill_id), session)
+
+
 async def update_tasks_order(user_id: int, new_order: list[int], *, session: AsyncSession | None = None) -> None:
     await _write(lambda repo: repo.update_tasks_order(user_id, new_order), session)
 

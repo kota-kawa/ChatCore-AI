@@ -1,0 +1,533 @@
+/* Compact personal Skill controls that sit below the task cards. */
+:where(body.chat-page, .chat-page-shell) .skill-section {
+  width: 100%;
+  margin-top: 0.15rem;
+  padding: 0.78rem 0.9rem 0.82rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 18px;
+  background: rgba(248, 252, 250, 0.72);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__heading {
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__title {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin: 0;
+  color: var(--success-strong, #134e4a);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__title i {
+  color: #0f766e;
+  font-size: 1rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__description {
+  margin: 0.2rem 0 0;
+  color: #55716a;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__add {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f766e;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: none;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__add:hover {
+  border-color: rgba(15, 118, 110, 0.55);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__add:focus-visible,
+:where(body.chat-page, .chat-page-shell) .skill-chip:focus-visible,
+:where(body.chat-page, .chat-page-shell) .skill-chip__delete:focus-visible,
+:where(body.chat-page, .chat-page-shell) .skill-section__empty:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.56);
+  outline-offset: 2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__list {
+  display: flex;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.62rem;
+  padding: 0.15rem 0.1rem 0.22rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip-row {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(130, 155, 146, 0.3);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip-row.is-enabled {
+  border-color: rgba(13, 148, 136, 0.38);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+  max-width: 16rem;
+  height: 36px;
+  padding: 0 0.6rem 0 0.7rem;
+  border: 0;
+  border-radius: 999px 0 0 999px;
+  color: #29463e;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip:disabled,
+:where(body.chat-page, .chat-page-shell) .skill-chip__delete:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #9aaea8;
+}
+
+:where(body.chat-page, .chat-page-shell) .is-enabled .skill-chip__dot {
+  background: #0f9f8f;
+  box-shadow: 0 0 0 3px rgba(15, 159, 143, 0.12);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__state {
+  color: #6b817a;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+:where(body.chat-page, .chat-page-shell) .is-enabled .skill-chip__state {
+  color: #0f766e;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__switch {
+  position: relative;
+  width: 25px;
+  height: 15px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #b9c8c3;
+  transition: background 160ms ease;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 160ms ease;
+}
+
+:where(body.chat-page, .chat-page-shell) .is-enabled .skill-chip__switch {
+  background: #0f9f8f;
+}
+
+:where(body.chat-page, .chat-page-shell) .is-enabled .skill-chip__switch span {
+  transform: translateX(10px);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__delete {
+  width: 30px;
+  height: 30px;
+  margin-right: 3px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid rgba(130, 155, 146, 0.2);
+  border-radius: 0 999px 999px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #78908a;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.68rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__delete:hover {
+  color: #b42318;
+  background: rgba(254, 242, 242, 0.9);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__status,
+:where(body.chat-page, .chat-page-shell) .skill-section__error {
+  margin: 0.65rem 0 0.1rem;
+  color: #617a72;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  color: #9b2c2c;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__error button {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.62rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px dashed rgba(15, 118, 110, 0.28);
+  border-radius: 12px;
+  color: #41635a;
+  background: rgba(255, 255, 255, 0.52);
+  text-align: left;
+  box-shadow: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty:hover {
+  border-color: rgba(15, 118, 110, 0.52);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f766e;
+  font-size: 1.15rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty strong,
+:where(body.chat-page, .chat-page-shell) .skill-section__empty small {
+  display: block;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty strong {
+  font-size: 0.78rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-section__empty small {
+  margin-top: 0.12rem;
+  color: #6b817a;
+  font-size: 0.7rem;
+}
+
+/* The add dialog intentionally uses the same soft modal language as the task editor. */
+:where(body.chat-page, .chat-page-shell) .skill-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-priority, 85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: rgba(8, 18, 14, 0.5);
+  backdrop-filter: blur(6px) saturate(110%);
+  -webkit-backdrop-filter: blur(6px) saturate(110%);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal.is-open {
+  display: flex;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__content {
+  width: min(560px, 100%);
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+  padding: clamp(1.2rem, 3vw, 1.8rem);
+  border: 1px solid rgba(211, 231, 222, 0.9);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(16, 44, 35, 0.22);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__eyebrow {
+  margin: 0 0 0.3rem;
+  color: #0f766e;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__header h2 {
+  margin: 0;
+  color: #123d32;
+  font-size: clamp(1.25rem, 3vw, 1.55rem);
+  line-height: 1.25;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__close {
+  flex: 0 0 auto;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__lead {
+  margin: 0.8rem 0 1.1rem;
+  color: #58736b;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__field {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__field label {
+  color: #31584d;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__field input,
+:where(body.chat-page, .chat-page-shell) .skill-modal__field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.68rem 0.76rem;
+  border: 1px solid #cfe0d8;
+  border-radius: 12px;
+  color: #173d32;
+  background: #fbfdfc;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__field input:focus,
+:where(body.chat-page, .chat-page-shell) .skill-modal__field textarea:focus {
+  border-color: #0f9f8f;
+  outline: 2px solid rgba(15, 159, 143, 0.16);
+  outline-offset: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__counter {
+  justify-self: end;
+  margin-top: -0.1rem;
+  color: #759087;
+  font-size: 0.68rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__hint {
+  margin: -0.15rem 0 0;
+  color: #71877f;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__cancel {
+  min-height: 42px;
+  padding: 0 0.95rem;
+  border: 1px solid #cfe0d8;
+  border-radius: 10px;
+  color: #43645b;
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__submit {
+  min-height: 42px;
+  gap: 0.4rem;
+  border-radius: 10px;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-modal__spinner {
+  animation: skill-modal-spin 800ms linear infinite;
+}
+
+@keyframes skill-modal-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 576px) {
+  :where(body.chat-page, .chat-page-shell) .skill-section {
+    padding: 0.7rem 0.72rem 0.74rem;
+    border-radius: 15px;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-section__description {
+    max-width: 23rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-section__add {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-chip {
+    max-width: 14rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-modal__content {
+    max-height: min(90vh, 720px);
+    border-radius: 22px 22px 0 0;
+    padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section {
+  border-color: rgba(94, 234, 212, 0.18);
+  background: rgba(15, 36, 31, 0.74);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__title,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-chip,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__empty strong {
+  color: #c4f5e7;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__description,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__empty small,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__status {
+  color: #91b8ab;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__add,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__empty,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-chip-row {
+  border-color: rgba(94, 234, 212, 0.26);
+  color: #bce9dc;
+  background: rgba(20, 48, 41, 0.82);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-chip-row.is-enabled {
+  border-color: rgba(94, 234, 212, 0.42);
+  background: rgba(17, 72, 60, 0.68);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .is-enabled .skill-chip__state,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__add,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__empty-icon {
+  color: #5eead4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__content {
+  border-color: rgba(94, 234, 212, 0.2);
+  background: #10241f;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__header h2,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__field label {
+  color: #d5f7ed;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__lead,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__hint {
+  color: #9bbcb1;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__field input,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__field textarea {
+  border-color: #315b50;
+  color: #e1faf2;
+  background: #122c25;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__cancel {
+  border-color: #315b50;
+  color: #b8d8ce;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .skill-section__add,
+  :where(body.chat-page, .chat-page-shell) .skill-chip__switch,
+  :where(body.chat-page, .chat-page-shell) .skill-chip__switch span,
+  :where(body.chat-page, .chat-page-shell) .skill-modal__spinner {
+    transition: none;
+    animation: none;
+  }
+}

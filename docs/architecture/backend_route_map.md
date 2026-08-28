@@ -18,7 +18,7 @@
 | --- | --- | --- | --- |
 | `auth_bp` | `/login`, `/register`, `/logout`, `/api/current_user`, `/api/auth/*`, `/api/passkeys/*`, `/google-*` | `blueprints/auth.py`, `auth_account.py`, `auth_email.py`, `auth_google.py`, `auth_passkeys.py` | メール、Google、Passkey 認証とアカウント操作 |
 | `verification_bp` | `/api/send_verification_email`, `/api/verify_registration_code` | `blueprints/verification.py` | 登録メール確認コード |
-| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,projects,profile,preferences}.py` | チャット、部屋、SSE、タスク、プロジェクト、プロフィール、設定 |
+| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定 |
 | `prompt_share_bp` | `/prompt_share/*` | `blueprints/prompt_share/__init__.py` | Next.js のプロンプト共有画面へのリダイレクト |
 | `prompt_share_api_bp` | `/prompt_share/api/*` | `blueprints/prompt_share/prompt_share_api.py` | 公開プロンプト、詳細、投稿、コメント、いいね、メディア |
 | `search_bp` | `/search/prompts` | `blueprints/prompt_share/prompt_search.py` | 公開プロンプト検索 |
@@ -40,6 +40,10 @@
 6. `POST /api/chat_switch_branch`: 現在表示する履歴ブランチを切り替え。
 
 ジョブの実行・永続化・Redis 協調は `services/chat_generation.py`、LLM provider の振り分けは `services/llm.py` に置き、ルートへ重複実装しません。
+
+個人Skillは `GET /api/skills` で一覧を取得し、`POST /api/skills` で追加、
+`PATCH /api/skills/{skill_id}` で有効状態を切り替え、`DELETE /api/skills/{skill_id}`
+で削除します。すべて所有ユーザーに限定され、状態変更は `chat_bp` のCSRF境界を継承します。
 
 ## 共通のルート境界
 

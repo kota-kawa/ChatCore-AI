@@ -48,6 +48,8 @@ from services.request_models import (  # noqa: E402
     ShareMemoRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
+    CreateUserSkillRequest,
+    UpdateUserSkillStateRequest,
 )
 from services.response_models import (  # noqa: E402
     ApiDetailObject,
@@ -78,6 +80,9 @@ from services.response_models import (  # noqa: E402
     PromptManageMutationApiResponse,
     ShareChatRoomResponse,
     StoredChatHistoryEntry,
+    UserSkillApi,
+    UserSkillsApiResponse,
+    UserSkillMutationApiResponse,
 )
 FRONTEND_GENERATED_DIR = REPO_ROOT / "frontend" / "types" / "generated"
 GENERATED_FILE = FRONTEND_GENERATED_DIR / "api_schemas.ts"
@@ -99,6 +104,8 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("DeleteTaskRequest", DeleteTaskRequest),
     ("EditTaskRequest", EditTaskRequest),
     ("AddTaskRequest", AddTaskRequest),
+    ("CreateUserSkillRequest", CreateUserSkillRequest),
+    ("UpdateUserSkillStateRequest", UpdateUserSkillStateRequest),
     ("PromptAssistRequest", PromptAssistRequest),
     ("SharedPromptCreateRequest", SharedPromptCreateRequest),
     ("PromptTaskCreateRequest", PromptTaskCreateRequest),
@@ -130,6 +137,9 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ChatHistoryResponse", ChatHistoryResponse),
     ("ShareChatRoomResponse", ShareChatRoomResponse),
     ("StoredChatHistoryEntry", StoredChatHistoryEntry),
+    ("UserSkillApi", UserSkillApi),
+    ("UserSkillsApiResponse", UserSkillsApiResponse),
+    ("UserSkillMutationApiResponse", UserSkillMutationApiResponse),
     ("PromptRecordApi", PromptRecordApi),
     ("LikedPromptApi", LikedPromptApi),
     ("MyPromptsApiResponse", MyPromptsApiResponse),

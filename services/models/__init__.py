@@ -32,6 +32,7 @@ from .entities import (
     User,
     UserAuthProvider,
     UserPasskey,
+    UserSkill,
 )
 from .types import Vector
 
@@ -41,6 +42,7 @@ __all__ = [
     "User",
     "UserPasskey",
     "UserAuthProvider",
+    "UserSkill",
     "ChatRoom",
     "ChatHistory",
     "SharedChatRoom",

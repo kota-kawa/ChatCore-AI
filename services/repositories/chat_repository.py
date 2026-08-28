@@ -22,19 +22,38 @@ from services.default_tasks import localize_system_task, resolve_system_task_key
 from services.error_messages import (
     ERROR_CHAT_ROOM_NOT_FOUND,
     ERROR_SHARED_LINK_NOT_FOUND,
+    ERROR_SKILL_LIMIT_REACHED,
+    ERROR_SKILL_NAME_CONFLICT,
+    ERROR_SKILL_NOT_FOUND,
     ERROR_TASK_NAME_CONFLICT,
     ERROR_TASK_NOT_FOUND,
     ERROR_TASK_ORDER_INVALID,
 )
 from services.generative_ui import decode_message_parts, encode_message_parts
 from services.i18n import get_current_locale
-from services.models import ChatHistory, ChatRoom, ChatRoomSummary, MemoryFact, Project, SharedChatRoom, Task, User
+from services.models import (
+    ChatHistory,
+    ChatRoom,
+    ChatRoomSummary,
+    MemoryFact,
+    Project,
+    SharedChatRoom,
+    Task,
+    User,
+    UserSkill,
+)
+from services.user_skills import (
+    MAX_USER_SKILLS,
+    normalize_user_skill_instructions,
+    normalize_user_skill_name,
+)
 
 UNIQUE_VIOLATION_PGCODE = "23505"
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307
+USER_SKILL_WRITE_LOCK_NAMESPACE = 1_413_567_308
 
 
 def _decode_web_search_context(raw: Any) -> list[dict[str, Any]] | None:
@@ -502,6 +521,86 @@ class ChatRepository:
         await self.session.execute(statement)
         return summary
 
+    # User skills ------------------------------------------------------------
+
+    async def list_user_skills(self, user_id: int) -> list[dict[str, Any]]:
+        skills = (
+            await self.session.execute(
+                select(UserSkill)
+                .where(UserSkill.user_id == user_id)
+                .order_by(UserSkill.created_at, UserSkill.id)
+            )
+        ).scalars().all()
+        return [self._serialize_user_skill(skill) for skill in skills]
+
+    async def list_enabled_user_skills(self, user_id: int) -> list[dict[str, Any]]:
+        skills = (
+            await self.session.execute(
+                select(UserSkill)
+                .where(UserSkill.user_id == user_id, UserSkill.is_enabled.is_(True))
+                .order_by(UserSkill.created_at, UserSkill.id)
+            )
+        ).scalars().all()
+        return [self._serialize_user_skill(skill) for skill in skills]
+
+    async def create_user_skill(
+        self,
+        user_id: int,
+        name: str,
+        instructions: str,
+    ) -> dict[str, Any]:
+        normalized_name = normalize_user_skill_name(name)
+        normalized_instructions = normalize_user_skill_instructions(instructions)
+        await self._lock_user_skills(user_id)
+        skill_count = await self.session.scalar(
+            select(func.count(UserSkill.id)).where(UserSkill.user_id == user_id)
+        )
+        if int(skill_count or 0) >= MAX_USER_SKILLS:
+            raise ApiServiceError(ERROR_SKILL_LIMIT_REACHED, 409, code="skill_limit_reached")
+
+        duplicate = await self.session.scalar(
+            select(UserSkill.id)
+            .where(
+                UserSkill.user_id == user_id,
+                func.lower(func.btrim(UserSkill.name)) == func.lower(func.btrim(normalized_name)),
+            )
+            .limit(1)
+        )
+        if duplicate is not None:
+            raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict")
+
+        skill = UserSkill(
+            user_id=user_id,
+            name=normalized_name,
+            instructions=normalized_instructions,
+            is_enabled=True,
+        )
+        self.session.add(skill)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            if _is_unique_violation(exc):
+                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
+            raise
+        return self._serialize_user_skill(skill)
+
+    async def set_user_skill_enabled(
+        self,
+        user_id: int,
+        skill_id: int,
+        is_enabled: bool,
+    ) -> dict[str, Any]:
+        skill = await self._owned_user_skill(skill_id, user_id, lock=True)
+        skill.is_enabled = is_enabled
+        skill.updated_at = datetime.utcnow()
+        await self.session.flush()
+        return self._serialize_user_skill(skill)
+
+    async def delete_user_skill(self, user_id: int, skill_id: int) -> None:
+        skill = await self._owned_user_skill(skill_id, user_id, lock=True)
+        await self.session.delete(skill)
+        await self.session.flush()
+
     # Tasks ------------------------------------------------------------------
 
     async def fetch_tasks(self, user_id: int | None, locale: str) -> list[dict[str, Any]]:
@@ -863,10 +962,26 @@ class ChatRepository:
             raise ForbiddenOperationError("他ユーザーのプロジェクトは操作できません")
         return project
 
+    async def _owned_user_skill(self, skill_id: int, user_id: int, *, lock: bool = False) -> UserSkill:
+        stmt = select(UserSkill).where(UserSkill.id == skill_id, UserSkill.user_id == user_id)
+        if lock:
+            stmt = stmt.with_for_update()
+        skill = (await self.session.execute(stmt)).scalar_one_or_none()
+        if skill is None:
+            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND, code="skill_not_found")
+        return skill
+
     async def _lock_user_tasks(self, user_id: int) -> None:
         await self.session.execute(
             text("SELECT pg_advisory_xact_lock(:namespace, :user_id)").bindparams(
                 namespace=TASK_WRITE_LOCK_NAMESPACE, user_id=user_id
+            )
+        )
+
+    async def _lock_user_skills(self, user_id: int) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :user_id)").bindparams(
+                namespace=USER_SKILL_WRITE_LOCK_NAMESPACE, user_id=user_id
             )
         )
 
@@ -983,6 +1098,17 @@ class ChatRepository:
             "instructions": str(project.instructions or ""),
             "createdAt": serialize_datetime_iso(project.created_at),
             "updatedAt": serialize_datetime_iso(project.updated_at),
+        }
+
+    @staticmethod
+    def _serialize_user_skill(skill: UserSkill) -> dict[str, Any]:
+        return {
+            "id": skill.id,
+            "name": str(skill.name or ""),
+            "instructions": str(skill.instructions or ""),
+            "is_enabled": bool(skill.is_enabled),
+            "created_at": serialize_datetime_iso(skill.created_at),
+            "updated_at": serialize_datetime_iso(skill.updated_at),
         }
 
     @staticmethod
