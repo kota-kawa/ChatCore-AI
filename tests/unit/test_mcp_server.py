@@ -12,6 +12,7 @@ from services.request_models import (
     MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     SharedPromptCreateRequest,
 )
+from services.mcp_prompt_publishing import MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH
 from services.prompt_resources import MAX_SKILL_RESOURCES
 
 
@@ -161,6 +162,13 @@ class McpServerTestCase(unittest.TestCase):
             prompt_definition["inputSchema"]["properties"]["description"]["maxLength"],
             MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
         )
+        prompt_properties = prompt_definition["inputSchema"]["properties"]
+        self.assertEqual(prompt_properties["media_type"]["enum"], ["text", "image"])
+        self.assertEqual(
+            prompt_properties["image_base64"]["maxLength"],
+            MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
+        )
+        self.assertIn("not a remote URL", prompt_definition["description"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:

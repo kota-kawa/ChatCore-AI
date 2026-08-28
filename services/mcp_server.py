@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from cryptography.fernet import Fernet
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
@@ -14,6 +14,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
 
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit
+from services.error_messages import ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA
 from services.mcp_config import (
     get_mcp_allowed_hosts,
     get_mcp_allowed_origins,
@@ -29,12 +30,18 @@ from services.mcp_oauth import (
     MCP_DEFAULT_SCOPES,
     MCP_PROMPTS_WRITE_SCOPE,
 )
+from services.mcp_prompt_publishing import (
+    MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
+    MCP_PROMPT_IMAGE_FILENAME_MAX_LENGTH,
+    save_mcp_prompt_image,
+)
 from services.mcp_request_protection import McpRequestProtectionMiddleware
 from services.mcp_tools.common import TOOL_REQUIRED_SCOPES, audit_tool_success, require_actor
 from services.mcp_tools.context_vault import register_context_vault_tools
 from services.mcp_tools.memos import register_memo_tools
 from services.mcp_tools.shared_content import register_shared_content_tools
 from services.prompt_categories import PROMPT_CATEGORIES
+from services.prompt_attachment_storage import delete_prompt_attachment
 from services.prompt_resources import MAX_SKILL_RESOURCES
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
@@ -66,6 +73,7 @@ class McpPublishResult(BaseModel):
     title: str = Field(description="Title of the published post")
     description: str = Field(default="", description="Optional plain-text description of the published post")
     content_format: str = Field(description="Published format: prompt or skill")
+    media_type: str = Field(default="text", description="Published media type: text or image")
     public_url: AnyHttpUrl = Field(description="URL for opening the published post")
 
 
@@ -147,16 +155,50 @@ async def _consume_publish_limit(user_id: int) -> None:
         raise ToolError(f"1日の投稿上限に達しました。約{retry_after}秒後に再試行してください。")
 
 
-async def _publish(user_id: int, payload: SharedPromptCreateRequest) -> McpPublishResult:
+async def _publish(
+    user_id: int,
+    payload: SharedPromptCreateRequest,
+    *,
+    image_base64: str = "",
+    image_filename: str = "",
+    image_mime_type: str = "",
+) -> McpPublishResult:
     await _consume_publish_limit(user_id)
-    prompt_id = await create_shared_prompt(user_id, payload)
-    return McpPublishResult(
-        prompt_id=prompt_id,
-        title=payload.title,
-        description=payload.description,
-        content_format=payload.content_format,
-        public_url=build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
-    )
+    attachments: list[dict[str, str]] = []
+    try:
+        if image_base64.strip():
+            attachments.append(
+                await run_blocking(
+                    save_mcp_prompt_image,
+                    image_base64,
+                    user_id,
+                    filename=image_filename,
+                    mime_type=image_mime_type,
+                )
+            )
+        elif image_filename.strip() or image_mime_type.strip():
+            raise ValueError(ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA)
+        if attachments:
+            prompt_id = await create_shared_prompt(user_id, payload, attachments=attachments)
+        else:
+            prompt_id = await create_shared_prompt(user_id, payload)
+        result = McpPublishResult(
+            prompt_id=prompt_id,
+            title=payload.title,
+            description=payload.description,
+            content_format=payload.content_format,
+            media_type=payload.media_type,
+            public_url=build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
+        )
+    except Exception:
+        for attachment in attachments:
+            try:
+                await run_blocking(delete_prompt_attachment, attachment)
+            except Exception:
+                # The original publication error is more useful to the MCP client.
+                pass
+        raise
+    return result
 
 
 def _validation_tool_error(exc: ValidationError, subject: str) -> ToolError:
@@ -213,11 +255,16 @@ def _create_mcp() -> FastMCP:
         openWorldHint=True,
     )
 
-    # 日本語: テキストプロンプトを公開共有へ投稿するMCPツール説明。
+    # 日本語: テキストまたは画像生成プロンプトを公開共有へ投稿するMCPツール説明。
     @mcp.tool(
         name="publish_prompt",
         title="Publish a public prompt",
-        description="Publish a text prompt to Chat-Core's public prompt sharing immediately. Repeating the call creates another post.",
+        description=(
+            "Publish a text or image-generation prompt to Chat-Core's public prompt sharing immediately. "
+            "Set media_type to image for an image prompt. Optionally provide image_base64 as a reference image; "
+            "the image must be Base64 data (a data URL is also accepted), not a remote URL. "
+            "Repeating the call creates another post."
+        ),
         annotations=annotations,
         structured_output=True,
     )
@@ -234,6 +281,7 @@ def _create_mcp() -> FastMCP:
             str,
             Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
         ] = "",
+        media_type: Literal["text", "image"] = "text",
         description: Annotated[
             str,
             Field(max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH, description="Optional plain-text description of the prompt"),
@@ -250,7 +298,29 @@ def _create_mcp() -> FastMCP:
             str,
             Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="Optional AI model used to create or validate it"),
         ] = "",
+        image_base64: Annotated[
+            str,
+            Field(
+                max_length=MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
+                description=(
+                    "Optional Base64-encoded reference image, up to 5MB decoded. "
+                    "PNG, JPEG, WebP, and GIF are accepted; data:image/...;base64,... is also accepted."
+                ),
+            ),
+        ] = "",
+        image_filename: Annotated[
+            str,
+            Field(
+                max_length=MCP_PROMPT_IMAGE_FILENAME_MAX_LENGTH,
+                description="Optional image filename used to validate the extension, for example reference.png",
+            ),
+        ] = "",
+        image_mime_type: Annotated[
+            Literal["", "image/png", "image/jpeg", "image/webp", "image/gif"],
+            Field(description="Optional image MIME type; omit it when the filename or data URL identifies it"),
+        ] = "",
     ) -> McpPublishResult:
+        resolved_media_type = "image" if image_base64.strip() else media_type
         try:
             payload = SharedPromptCreateRequest(
                 title=title,
@@ -261,12 +331,21 @@ def _create_mcp() -> FastMCP:
                 output_examples=output_examples,
                 ai_model=ai_model,
                 content_format="prompt",
-                media_type="text",
+                media_type=resolved_media_type,
             )
         except ValidationError as exc:
             raise _validation_tool_error(exc, "投稿") from exc
         actor = require_actor(MCP_PROMPTS_WRITE_SCOPE)
-        result = await _publish(actor.user_id, payload)
+        try:
+            result = await _publish(
+                actor.user_id,
+                payload,
+                image_base64=image_base64,
+                image_filename=image_filename,
+                image_mime_type=image_mime_type,
+            )
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
         audit_tool_success(actor, "publish_prompt", result.prompt_id)
         return result
 

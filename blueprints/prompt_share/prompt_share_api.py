@@ -18,7 +18,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse
-from werkzeug.utils import secure_filename
 
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
@@ -30,7 +29,6 @@ from services.error_messages import (
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
-    ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
     ERROR_PROMPT_NOT_FOUND,
 )
@@ -40,13 +38,11 @@ from services.guest_prompt_service import (
     get_or_create_guest_prompt_token,
 )
 from services.i18n import get_request_locale
-from services.prompt_attachment_processing import process_prompt_attachment
+from services.prompt_attachment_upload import save_prompt_attachment
 from services.prompt_attachment_storage import (
     PROMPT_ATTACHMENT_MAX_BYTES,
     PROMPT_ATTACHMENT_MAX_REQUEST_BYTES,
-    build_prompt_attachment_public_url,
     delete_prompt_attachment,
-    get_prompt_attachment_storage,
     prompt_attachment_content_type,
     resolve_legacy_prompt_attachment_path,
     resolve_prompt_attachment_path,
@@ -55,7 +51,6 @@ from services.prompt_categories import normalize_category
 from services.prompt_types import (
     CONTENT_FORMATS,
     MEDIA_TYPES,
-    get_attachment_rule,
     media_allows_attachment,
     serialize_axes,
 )
@@ -318,19 +313,8 @@ def _delete_prompt_attachments(attachments: Any) -> None:
 
 
 def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> dict[str, str]:
-    rule = get_attachment_rule(media_type)
-    if rule is None:
-        raise ValueError("このメディアタイプはファイル添付に対応していません。")
-    filename = secure_filename(getattr(upload_file, "filename", "") or "")
-    if not filename:
-        raise ValueError("添付ファイル名が不正です。")
-    extension = os.path.splitext(filename)[1].lower()
-    if extension not in rule.accepted_ext:
-        allowed = " / ".join(sorted({ext.lstrip(".").upper() for ext in rule.accepted_ext}))
-        raise ValueError(f"添付は {allowed} のいずれかを指定してください。")
-    content_type = str(getattr(upload_file, "content_type", "") or "").lower()
-    if content_type and content_type not in rule.accepted_mime:
-        raise ValueError("許可されていない形式の添付ファイルです。")
+    filename = getattr(upload_file, "filename", "") or ""
+    content_type = getattr(upload_file, "content_type", "") or ""
     file_obj = upload_file.file
     chunks: list[bytes] = []
     total_size = 0
@@ -342,19 +326,18 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
             if not chunk:
                 break
             total_size += len(chunk)
-            if total_size > min(rule.max_bytes, PROMPT_ATTACHMENT_MAX_BYTES):
-                raise ValueError(f"添付ファイルのサイズは{rule.max_bytes // (1024 * 1024)}MB以下にしてください。")
+            if total_size > PROMPT_ATTACHMENT_MAX_BYTES:
+                raise ValueError(f"添付ファイルのサイズは{PROMPT_ATTACHMENT_MAX_BYTES // (1024 * 1024)}MB以下にしてください。")
             chunks.append(chunk)
         if total_size == 0:
             raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
         source = b"".join(chunks)
-        if not _prompt_attachment_signature_matches(extension, source[:16]):
-            raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
-        processed = process_prompt_attachment(source)
-        stored = get_prompt_attachment_storage().save_variants(
+        return save_prompt_attachment(
+            source,
             user_id,
-            processed.display_bytes,
-            processed.thumbnail_bytes,
+            media_type,
+            filename=filename,
+            content_type=content_type,
         )
     finally:
         if hasattr(file_obj, "seek"):
@@ -362,27 +345,6 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
                 file_obj.seek(0)
             except Exception:
                 pass
-    return {
-        "url": build_prompt_attachment_public_url(stored.display_filename),
-        "thumbnail_url": build_prompt_attachment_public_url(stored.thumbnail_filename),
-        "role": rule.role,
-        "media_type": prompt_attachment_content_type(stored.display_filename),
-        "width": str(processed.width),
-        "height": str(processed.height),
-        "size_bytes": str(stored.display_size_bytes),
-    }
-
-
-def _prompt_attachment_signature_matches(extension: str, prefix: bytes) -> bool:
-    if extension == ".png":
-        return prefix.startswith(b"\x89PNG\r\n\x1a\n")
-    if extension in {".jpg", ".jpeg"}:
-        return prefix.startswith(b"\xff\xd8\xff")
-    if extension == ".gif":
-        return prefix.startswith((b"GIF87a", b"GIF89a"))
-    if extension == ".webp":
-        return len(prefix) >= 12 and prefix[:4] == b"RIFF" and prefix[8:12] == b"WEBP"
-    return False
 
 
 async def _get_prompts_with_flags(
