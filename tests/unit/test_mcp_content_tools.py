@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 from services import mcp_server
 from services.mcp_memo_service import McpMemoDetail
+from services.request_models import SharedPromptCreateRequest
 from services.shared_content_service import (
     PublicSharedContentDetail,
     PublicSharedContentPage,
@@ -99,6 +100,79 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(payload.resources[0].path, "scripts/run.ts")
         self.assertEqual(payload.resources[0].language, "typescript")
         self.assertEqual(payload.attributes, {"skill_markdown": "# TypeScript Skill"})
+
+    def test_publish_prompt_forwards_a_reference_image_and_selects_image_media(self):
+        server = self._server()
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=92,
+            title="Image prompt",
+            content_format="prompt",
+            media_type="image",
+            public_url="https://example.test/shared/prompt/92",
+        )
+        with (
+            patch(
+                "services.mcp_server.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(return_value=publish_result),
+            ) as publish,
+            patch("services.mcp_server.audit_tool_success"),
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "publish_prompt",
+                    {
+                        "title": "Image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "image_base64": "cG5nLWJ5dGVz",
+                        "image_filename": "example.png",
+                        "image_mime_type": "image/png",
+                    },
+                )
+            )
+
+        structured = result[1]
+        self.assertEqual(structured["prompt_id"], 92)
+        payload = publish.call_args.args[1]
+        self.assertEqual(payload.media_type, "image")
+        self.assertEqual(publish.call_args.kwargs["image_base64"], "cG5nLWJ5dGVz")
+        self.assertEqual(publish.call_args.kwargs["image_filename"], "example.png")
+        self.assertEqual(publish.call_args.kwargs["image_mime_type"], "image/png")
+
+    def test_publish_removes_saved_image_when_database_write_fails(self):
+        payload = SharedPromptCreateRequest(
+            title="Image prompt",
+            content="Generate a watercolor landscape.",
+            media_type="image",
+        )
+        attachment = {
+            "url": "/prompt_share/api/media/user_7_image.webp",
+            "thumbnail_url": "/prompt_share/api/media/user_7_image_card.webp",
+        }
+        with (
+            patch("services.mcp_server._consume_publish_limit", new=AsyncMock()),
+            patch("services.mcp_server.save_mcp_prompt_image", return_value=attachment),
+            patch(
+                "services.mcp_server.create_shared_prompt",
+                new=AsyncMock(side_effect=RuntimeError("database unavailable")),
+            ),
+            patch("services.mcp_server.delete_prompt_attachment") as delete_attachment,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "database unavailable"):
+                asyncio.run(
+                    mcp_server._publish(
+                        7,
+                        payload,
+                        image_base64="encoded-image",
+                        image_filename="image.png",
+                        image_mime_type="image/png",
+                    )
+                )
+
+        delete_attachment.assert_called_once_with(attachment)
 
     def test_get_memo_returns_only_the_requested_content_slice(self):
         server = self._server()

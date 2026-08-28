@@ -23,7 +23,21 @@ ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件�
 ERROR_PROMPT_NOT_FOUND = "プロンプトが見つかりません"
 ERROR_PROMPT_ATTACHMENT_EMPTY = "空の添付ファイルはアップロードできません。"
 ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
+ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED = "このメディアタイプはファイル添付に対応していません。"
+ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID = "添付ファイル名が不正です。"
+ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED = "許可されていない形式の添付ファイルです。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
+ERROR_MCP_PROMPT_IMAGE_BASE64_INVALID = "画像のBase64データを読み取れませんでした。"
+ERROR_MCP_PROMPT_IMAGE_DATA_URL_INVALID = "画像データURLはBase64形式で指定してください。"
+ERROR_MCP_PROMPT_IMAGE_MIME_UNSUPPORTED = "対応していない画像のMIMEタイプです。"
+ERROR_MCP_PROMPT_IMAGE_TOO_LARGE = "画像データが大きすぎます。5MB以下の画像を指定してください。"
+ERROR_MCP_PROMPT_IMAGE_FORMAT_UNKNOWN = (
+    "画像形式を判別できませんでした。PNG、JPEG、WebP、GIFを指定してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_METADATA_MISMATCH = "画像データURLとimage_mime_typeの指定が一致しません。"
+ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA = (
+    "image_base64を指定せずに画像のファイル名やMIMEタイプは指定できません。"
+)
 ERROR_GUEST_PROMPT_TEXT_ONLY = (
     "ゲスト投稿ではテキストプロンプトのみ投稿できます。"
 )

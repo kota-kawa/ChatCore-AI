@@ -20,6 +20,12 @@ Docker volume. Its per-user quota lock is shared by the concurrently running
 Blue/Green containers on the same host. The database remains the source of
 truth for the periodic orphan reconciler.
 
+`services.prompt_attachment_upload` owns filename, MIME, signature, and size
+validation before calling the processing and storage boundaries. Both the
+browser multipart endpoint and the MCP `publish_prompt` tool use this service.
+MCP accepts Base64 input (including an image data URL) and does not fetch
+remote URLs.
+
 ## Future object-storage migration
 
 To move to S3-compatible storage/CDN without changing the image-processing or
