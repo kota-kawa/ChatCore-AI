@@ -16,6 +16,7 @@ from services.models import (
     TaskVersion,
     User,
     UserAuthProvider,
+    UserSkill,
 )
 from services.models.types import Vector
 
@@ -30,6 +31,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "shared_chat_rooms",
             "chat_room_summaries",
             "memory_facts",
+            "user_skills",
             "task_with_examples",
             "task_versions",
             "prompts",
@@ -67,6 +69,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(TaskVersion.snapshot.nullable)
         self.assertFalse(MemoEntry.embedding_status.nullable)
         self.assertFalse(ContextFact.embedding_status.nullable)
+        self.assertFalse(UserSkill.is_enabled.nullable)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)

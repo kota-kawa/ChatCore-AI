@@ -33,6 +33,10 @@ from services.prompt_types import (
     sanitize_attributes,
     validate_attributes,
 )
+from services.user_skills import (
+    MAX_USER_SKILL_INSTRUCTIONS_LENGTH,
+    MAX_USER_SKILL_NAME_LENGTH,
+)
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 TaskNameStr = Annotated[str, Field(min_length=1, max_length=255)]
@@ -298,6 +302,19 @@ class AddTaskRequest(RequestPayloadModel):
     output_skeleton: str = ""
     input_examples: str = ""
     output_examples: str = ""
+
+
+# 日本語: 個人Skillを追加する際のリクエストペイロード。
+# English: Request payload for creating a personal skill.
+class CreateUserSkillRequest(RequestPayloadModel):
+    name: str = Field(min_length=1, max_length=MAX_USER_SKILL_NAME_LENGTH)
+    instructions: str = Field(min_length=1, max_length=MAX_USER_SKILL_INSTRUCTIONS_LENGTH)
+
+
+# 日本語: 個人Skillの有効状態を切り替えるリクエストペイロード。
+# English: Request payload for toggling a personal skill.
+class UpdateUserSkillStateRequest(RequestPayloadModel):
+    is_enabled: bool = Field(strict=True)
 
 
 # 日本語: プロンプトAIアシストに入力される、各フォームフィールドの値を表すモデル。

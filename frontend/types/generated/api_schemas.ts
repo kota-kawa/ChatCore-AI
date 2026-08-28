@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 93b1227f7e105dbc94d1056b86f479b78e1f7d1a169cbac21c5bb6bdb31db30c
+// Schema fingerprint: 82ceabd844360076c8f267717c83cb9f6a2a5b3de8e472d4da61c8e6a6fabeba
 
 import { z } from "zod";
 
@@ -46,6 +46,12 @@ export type EditTaskRequest = z.infer<typeof EditTaskRequestSchema>;
 
 export const AddTaskRequestSchema = z.object({ "title": z.string().min(1).max(255), "prompt_content": z.string().min(1), "response_rules": z.string().default(""), "output_skeleton": z.string().default(""), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type AddTaskRequest = z.infer<typeof AddTaskRequestSchema>;
+
+export const CreateUserSkillRequestSchema = z.object({ "name": z.string().min(1).max(100), "instructions": z.string().min(1).max(12000) });
+export type CreateUserSkillRequest = z.infer<typeof CreateUserSkillRequestSchema>;
+
+export const UpdateUserSkillStateRequestSchema = z.object({ "is_enabled": z.boolean() });
+export type UpdateUserSkillStateRequest = z.infer<typeof UpdateUserSkillStateRequestSchema>;
 
 export const PromptAssistRequestSchema = z.object({ "target": z.enum(["task_modal","shared_prompt_modal"]), "action": z.enum(["generate_draft","improve","shorten","expand","generate_examples"]), "instruction": z.string().max(4000).default(""), "fields": z.object({ "title": z.string().max(256).default(""), "content": z.string().max(4000).default(""), "prompt_content": z.string().max(4000).default(""), "skill_markdown": z.string().max(256000).default(""), "category": z.string().max(256).default(""), "author": z.string().max(256).default(""), "prompt_type": z.string().default("text"), "input_examples": z.string().max(4000).default(""), "output_examples": z.string().max(4000).default(""), "ai_model": z.string().max(256).default("") }).optional() });
 export type PromptAssistRequest = z.infer<typeof PromptAssistRequestSchema>;
@@ -136,6 +142,15 @@ export type ShareChatRoomResponse = z.infer<typeof ShareChatRoomResponseSchema>;
 
 export const StoredChatHistoryEntrySchema = z.object({ "text": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type StoredChatHistoryEntry = z.infer<typeof StoredChatHistoryEntrySchema>;
+
+export const UserSkillApiSchema = z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export type UserSkillApi = z.infer<typeof UserSkillApiSchema>;
+
+export const UserSkillsApiResponseSchema = z.object({ "skills": z.array(z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
+export type UserSkillsApiResponse = z.infer<typeof UserSkillsApiResponseSchema>;
+
+export const UserSkillMutationApiResponseSchema = z.object({ "skill": z.union([z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export type UserSkillMutationApiResponse = z.infer<typeof UserSkillMutationApiResponseSchema>;
 
 export const PromptRecordApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "description": z.union([z.string(), z.null()]).default(""), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "content_format": z.union([z.string(), z.null()]).default("prompt"), "media_type": z.union([z.string(), z.null()]).default("text"), "attributes": z.record(z.string(), z.string()).optional(), "skill_markdown": z.union([z.string(), z.null()]).default("") }).catchall(z.any());
 export type PromptRecordApi = z.infer<typeof PromptRecordApiSchema>;

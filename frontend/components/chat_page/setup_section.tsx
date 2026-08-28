@@ -17,6 +17,7 @@ import {
   getAttachmentIconClass,
 } from "../../lib/chat_page/file_attachments";
 import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
+import { SkillSection } from "./skill_section";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useTaskReorderDrag } from "../../hooks/chat_page/use_task_reorder_drag";
 import type { NormalizedTask } from "../../lib/chat_page/types";
@@ -858,6 +859,8 @@ function SetupSectionComponent() {
             </button>
           )}
         </div>
+
+        <SkillSection loggedIn={loggedIn} />
 
         {/* ログイン済みユーザーのみ過去チャット履歴へのアクセスボタンを表示 / Chat history button is only shown to logged-in users */}
         <div className="setup-access-chat">

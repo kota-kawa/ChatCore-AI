@@ -20,7 +20,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 
 | URL | ページ入口 | 主な UI／状態 | 主な Backend 境界 |
 | --- | --- | --- | --- |
-| `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/` | `/api/chat`、チャット部屋・タスク・プロジェクト API、SSE |
+| `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE |
 | `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `register.tsx`, `oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
 | `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like` |
 | `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`lib/memo/`、`contexts/locale_context.tsx` | `/memo/api/*`、`/api/context-facts/*` |

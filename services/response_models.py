@@ -72,6 +72,26 @@ class ChatHistoryResponse(ApiErrorPayload):
     pagination: ChatHistoryPagination | None = None
 
 
+# 日本語: 個人Skillの一覧・更新結果を表すAPIモデル。
+# English: API models for personal skill records and list/mutation results.
+class UserSkillApi(ResponsePayloadModel):
+    id: int
+    name: str
+    instructions: str
+    is_enabled: bool = True
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class UserSkillsApiResponse(ResponsePayloadModel):
+    skills: list[UserSkillApi] = Field(default_factory=list)
+
+
+class UserSkillMutationApiResponse(ResponsePayloadModel):
+    skill: UserSkillApi | None = None
+    message: str | None = None
+
+
 # 日本語: チャットルームの共有リンク生成結果を返す応答モデル。
 # English: Response model returning shared link generation results.
 class ShareChatRoomResponse(ApiErrorPayload):

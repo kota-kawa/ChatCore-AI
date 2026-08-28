@@ -6,6 +6,7 @@ import re
 
 from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.web_search import strip_web_search_citation_html
+from services.user_skills import USER_SKILLS_TOKEN_BUDGET
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
@@ -494,6 +495,7 @@ def build_context_messages(
     memory_facts: list[str],
     recent_messages: list[dict[str, str]],
     project_instructions: str | None = None,
+    user_skills_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     mandatory_messages = [
         {"role": "system", "content": base_system_prompt},
@@ -537,6 +539,10 @@ def build_context_messages(
         append_optional_system_message(
             project_instructions_message["content"], PROJECT_INSTRUCTIONS_TOKEN_BUDGET
         )
+
+    # ユーザーが有効化したSkillをプロジェクト指示とタスク定義の間に追加する。
+    # Add enabled user skills between project instructions and task guidance.
+    append_optional_system_message(user_skills_prompt, USER_SKILLS_TOKEN_BUDGET)
 
     # タスクテンプレートプロンプトを追加
     # Add task template prompt if specified

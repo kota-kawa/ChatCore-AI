@@ -20,6 +20,7 @@ from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
 from services.chat_service import (
+    list_enabled_user_skills,
     delete_unanswered_user_messages,
     fetch_chat_history_page,
     get_project_context,
@@ -41,6 +42,7 @@ from services.chat_prompt import (
     build_task_prompt as _build_task_prompt,
     build_user_profile_prompt as _build_user_profile_prompt,
 )
+from services.user_skills import build_enabled_user_skills_prompt
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
@@ -770,6 +772,8 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             submit_background_task=submit_background_task,
             get_session_id=get_session_id,
             logger=logger,
+            load_enabled_user_skills=list_enabled_user_skills,
+            build_user_skills_prompt=build_enabled_user_skills_prompt,
         ),
         default_model=CLAUDE_DEFAULT_MODEL,
         locale=locale,
@@ -919,11 +923,18 @@ async def chat_regenerate(
             prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
+    user_skills_prompt = None
     room_summary = ""
     memory_facts: list[str] = []
     user_profile_prompt = None
 
     if user_id is not None:
+        try:
+            user_skills_prompt = build_enabled_user_skills_prompt(
+                await list_enabled_user_skills(user_id)
+            )
+        except Exception:
+            logger.warning("Failed to load enabled user skills; proceeding without them.")
         try:
             user = await get_user_by_id(user_id)
             user_profile_prompt = _build_user_profile_prompt(user)
@@ -953,6 +964,7 @@ async def chat_regenerate(
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
+        user_skills_prompt=user_skills_prompt,
     )
 
     # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
@@ -1369,11 +1381,18 @@ async def chat_edit_and_regenerate(
             prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
+    user_skills_prompt = None
     room_summary = ""
     memory_facts: list[str] = []
     user_profile_prompt = None
 
     if user_id is not None:
+        try:
+            user_skills_prompt = build_enabled_user_skills_prompt(
+                await list_enabled_user_skills(user_id)
+            )
+        except Exception:
+            logger.warning("Failed to load enabled user skills; proceeding without them.")
         try:
             user = await get_user_by_id(user_id)
             user_profile_prompt = _build_user_profile_prompt(user)
@@ -1403,6 +1422,7 @@ async def chat_edit_and_regenerate(
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
+        user_skills_prompt=user_skills_prompt,
     )
 
     # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する

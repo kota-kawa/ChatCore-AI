@@ -16,6 +16,7 @@ erDiagram
     projects ||--o{ chat_rooms : groups
     users ||--o{ task_with_examples : owns
     task_with_examples ||--o{ task_versions : versions
+    users ||--o{ user_skills : owns
     users ||--o{ prompts : authors
     prompts ||--o{ prompt_versions : versions
     prompts ||--o{ prompt_resources : contains
@@ -39,7 +40,7 @@ erDiagram
 | 領域 | 主要テーブル | 関係・注意点 |
 | --- | --- | --- |
 | Identity | `users`, `user_passkeys`, `user_auth_providers` | ほとんどのユーザー所有データは `users.id` に紐づく。認証プロバイダー情報の正本は`user_auth_providers`のみで、`services/repositories/auth_identity_repository.py`がメール・Google・Passkey向けの永続化契約を所有する。言語設定は `users.preferred_locale` に保存される。 |
-| Chat | `chat_rooms`, `chat_history`, `shared_chat_rooms`, `chat_room_summaries`, `memory_facts` | 部屋削除は履歴・要約・ルーム内メモリへ cascade する。`chat_rooms.mode` は `normal`／`temporary`。 |
+| Chat | `chat_rooms`, `chat_history`, `shared_chat_rooms`, `chat_room_summaries`, `memory_facts`, `user_skills` | 部屋削除は履歴・要約・ルーム内メモリへ cascade する。`chat_rooms.mode` は `normal`／`temporary`。`user_skills` はユーザーがトップページで登録する再利用指示で、有効行だけがチャット生成時の追加システム文脈になる。 |
 | Projects | `projects`, `project_files` | プロジェクトはユーザー所有。チャット部屋から project を参照する。 |
 | Tasks | `task_with_examples`, `task_versions` | system task とユーザー task を同じ主テーブルで扱い、論理削除・revision・source prompt を追加情報として持つ。version 行は旧列に加えて、現在の task 全体を `snapshot` JSONB に保存する。 |
 | Prompt sharing | `prompts`, `guest_prompt_submissions`, `prompt_versions`, `prompt_view_counts`, `prompt_list_entries`, `prompt_likes`, `prompt_comments`, `prompt_comment_reports`, `prompt_resources` | 公開プロンプト、ゲスト投稿のCookie/IPハッシュと引継ぎ状態、バージョン、ビュー数、いいね、コメント、Skill resources を分離する。未引継ぎゲストの `prompts.user_id` と `prompt_versions.user_id` は NULL を許容し、version 行は `snapshot` JSONB に現在の prompt 全体を保存する。ビュー数は編集日時・履歴を更新しない専用カウンターで保持し、画像本体は DB ではなく attachment storage 境界へ委譲する。 |

@@ -20,6 +20,7 @@ from services.attached_files import (
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
+from services.user_skills import build_enabled_user_skills_prompt
 from services.generative_ui import normalize_response_with_artifact_retry
 from services.message_parts_display import normalize_message_parts_for_display
 from services.llm import (
@@ -126,6 +127,9 @@ class ChatPostUseCaseDependencies:
     submit_background_task: Callable[..., Any]
     get_session_id: Callable[[dict], str]
     logger: Any
+    # Optional defaults keep focused unit-test doubles backward compatible.
+    load_enabled_user_skills: Callable[..., Any] | None = None
+    build_user_skills_prompt: Callable[..., Any] = build_enabled_user_skills_prompt
 
 
 # チャット投稿処理（メッセージ保存、RAG/Web検索、LLM呼び出し/ストリーミング、タイトル生成、要約更新）を担うユースケースクラス
@@ -490,6 +494,7 @@ class ChatPostUseCase:
                 )
 
         task_prompt = deps.build_task_prompt(prompt_data) if prompt_data else None
+        user_skills_prompt = None
         room_summary = ""
         memory_facts: list[str] = []
         user_profile_prompt = None
@@ -498,6 +503,12 @@ class ChatPostUseCase:
         # ユーザープロフィールプロンプトの構築
         # Build the user profile prompt
         if user_id is not None:
+            try:
+                if deps.load_enabled_user_skills is not None:
+                    enabled_skills = await _maybe_await(deps.load_enabled_user_skills(user_id))
+                    user_skills_prompt = deps.build_user_skills_prompt(enabled_skills or [])
+            except Exception:
+                deps.logger.warning("Failed to load enabled user skills; proceeding without them.")
             try:
                 user = await _maybe_await(deps.get_user_by_id(user_id))
                 user_profile_prompt = deps.build_user_profile_prompt(user)
@@ -561,6 +572,7 @@ class ChatPostUseCase:
             memory_facts=memory_facts,
             recent_messages=normalized_all_messages,
             project_instructions=project_instructions,
+            user_skills_prompt=user_skills_prompt,
         )
 
         # 過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
