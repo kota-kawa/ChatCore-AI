@@ -59,9 +59,10 @@ body.prompt-share-page,
   background: var(--ps-bg);
 }
 
-body.prompt-share-page {
-  overflow-x: hidden;
-}
+/* body に overflow を付けるとスクロールコンテナ扱いになり、ヘッダーの position: sticky が
+   効かなくなる。横方向のはみ出しは global.css の html { overflow-x: hidden } が既に抑えている */
+/* Setting overflow on body makes it a scroll container and breaks the sticky header;
+   horizontal overflow is already clipped by html { overflow-x: hidden } in global.css */
 
 html.ps-modal-open,
 
@@ -177,96 +178,93 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   box-shadow: 0 6px 14px rgba(32, 33, 36, 0.22);
 }
 
+/* ヘッダーは写真ヒーローではなく、ブランド・検索・投稿だけを載せた薄いツールバー。
+   下のカード群と同じ白面・同じ最大幅に揃えてページ全体となじませる */
+/* The header is a thin toolbar (brand + search + post), not a photo hero;
+   it reuses the same white surface and max width as the cards below */
 :where(body.prompt-share-page, .prompt-share-page) .prompts-header {
-  min-height: clamp(250px, 38vw, 360px);
-  border-radius: 0 0 24px 24px;
-  overflow: hidden;
-  position: relative;
-  color: #ffffff;
-  background:
-    linear-gradient(180deg, rgba(32, 33, 36, 0.45) 0%, rgba(32, 33, 36, 0.62) 100%),
-    url('prompt_share.webp') center / cover no-repeat;
-  box-shadow: var(--ps-shadow-soft);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header, 10);
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(69, 128, 196, 0.16);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  /* 右上に固定表示されるユーザーアイコン（幅3rem + right:10px）ぶんの退避幅 */
+  /* Reserve for the user icon pinned to the top right (3rem wide + right:10px) */
+  --ps-header-safe-right: 80px;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .prompts-header::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.3) 100%);
-  pointer-events: none;
+/* 未ログイン時は「ログイン / 登録」ボタンが並ぶぶん、退避幅を広げる */
+/* Guests see the wider "log in / sign up" button, so the reserve grows */
+:where(body.prompt-share-page, .prompt-share-page) .prompts-header--guest {
+  --ps-header-safe-right: 184px;
 }
 
+/* カード（min(1280px)）と左右の端を揃えるため、内側の余白ぶんだけ広い幅にする */
+/* Width = card width (1280px) + the inline padding, so edges line up with the cards */
 :where(body.prompt-share-page, .prompt-share-page) .prompts-header__inner {
-  width: min(1240px, 100%);
+  width: min(1344px, 100%);
   margin: 0 auto;
-  padding: clamp(1.6rem, 2vw + 1rem, 2.8rem) 1rem;
+  min-height: 72px;
+  padding: 0.6rem clamp(0.9rem, 2vw, 2rem);
+  /* 左右の余白が既に足りている広い画面では追加の退避をしない */
+  /* Wide viewports already clear the fixed controls, so no extra reserve is added there */
+  padding-right: max(
+    clamp(0.9rem, 2vw, 2rem),
+    calc(var(--ps-header-safe-right) - (100vw - min(1344px, 100vw)) / 2)
+  );
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 0.75rem;
-  position: relative;
-  z-index: 1;
+  gap: clamp(0.7rem, 1.6vw, 1.4rem);
 }
 
 /* ロゴとサービス名を横並びにするブランドロックアップ。
    サービス名の表記を保つため大文字変換は行わない */
 /* Brand lockup placing the logo beside the service name;
    no uppercase transform so the service name keeps its own casing */
-:where(body.prompt-share-page, .prompt-share-page) .hero-kicker {
+:where(body.prompt-share-page, .prompt-share-page) .hero-brand {
   margin: 0;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
+  gap: 0.55rem;
+  font-size: 1.02rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--ps-text-strong);
+  white-space: nowrap;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .hero-kicker__logo {
-  width: 26px;
-  height: 26px;
+:where(body.prompt-share-page, .prompt-share-page) .hero-brand__logo {
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .hero-title {
-  margin: 0;
-  font-size: clamp(1.8rem, 1.8vw + 1.2rem, 2.6rem);
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-  text-wrap: balance;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-description {
-  margin: 0;
-  max-width: 64ch;
-  font-size: clamp(0.94rem, 0.35vw + 0.86rem, 1.02rem);
-  color: rgba(255, 255, 255, 0.92);
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .hero-actions {
+  flex-shrink: 0;
   display: flex;
-  justify-content: center;
-  margin-top: 0.2rem;
+  align-items: center;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .hero-action {
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--ps-primary);
   color: #ffffff;
   min-height: 40px;
-  padding: 0.52rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 1.05rem;
+  font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.42rem;
+  gap: 0.4rem;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
 }
@@ -275,80 +273,46 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   font-size: 0.95rem;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .hero-action--primary {
-  position: relative;
-  isolation: isolate;
-  background: linear-gradient(135deg, #3b8eff 0%, #2272e8 52%, #1655d0 100%);
-  border-color: rgba(255, 255, 255, 0.72);
-  color: #ffffff;
-  padding: 0.62rem 1.2rem;
-  box-shadow:
-    0 14px 30px rgba(18, 72, 172, 0.52),
-    0 2px 8px rgba(15, 50, 140, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.52);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-action--primary::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 58%);
-  pointer-events: none;
-  z-index: -1;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-action--primary:hover {
-  filter: saturate(1.1) brightness(1.05);
-  box-shadow:
-    0 20px 36px rgba(15, 62, 158, 0.52),
-    0 4px 12px rgba(12, 40, 120, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transform: translateY(-2px);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-action--secondary {
-  background: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-action--secondary:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .hero-highlights {
-  display: none;
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .search-section {
-  width: min(680px, 100%);
-  margin-top: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
 }
 
+/* 検索欄は静かなグレー面から始め、ホバーとフォーカスで白面＋青リングへ持ち上げる */
+/* The field rests as a quiet grey pill and lifts to a white surface with a blue ring on focus */
 :where(body.prompt-share-page, .prompt-share-page) .search-box {
-  position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  width: min(560px, 100%);
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(12px);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  background: var(--ps-surface-muted);
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .search-box:hover {
+  background: var(--ps-surface);
+  border-color: var(--ps-border);
+  box-shadow: 0 1px 4px rgba(32, 33, 36, 0.14);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .search-box:focus-within {
-  border-color: rgba(174, 203, 250, 0.85);
-  box-shadow: 0 8px 32px rgba(26, 115, 232, 0.22);
+  background: var(--ps-surface);
+  border-color: rgba(26, 115, 232, 0.55);
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.14);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .search-box input {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   border: none;
   background: transparent;
   color: var(--ps-text-strong);
-  font-size: 0.98rem;
-  padding: 0.9rem 3.5rem 0.9rem 1.1rem;
+  font-size: 0.94rem;
+  line-height: 1.4;
+  padding: 0.58rem 0.2rem 0.58rem 1.05rem;
   outline: none;
 }
 
@@ -356,40 +320,35 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   color: #80868b;
 }
 
+/* 検索ボタンは投稿ボタンと青を奪い合わないよう、地味なアイコンボタンにする */
+/* Keep the search button quiet so the post button owns the single blue accent */
 :where(body.prompt-share-page, .prompt-share-page) .search-box button {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  width: 42px;
-  height: 42px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-right: 4px;
   border: none;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f9dff 0%, #2f7ded 52%, #1f64dc 100%);
-  color: #ffffff;
+  background: transparent;
+  color: var(--ps-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow:
-    0 10px 22px rgba(23, 86, 188, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  transition: filter 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .search-box button:hover {
-  filter: saturate(1.1) brightness(1.05);
-  box-shadow:
-    0 14px 28px rgba(19, 79, 176, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  background: rgba(26, 115, 232, 0.12);
+  color: var(--ps-primary);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .search-box button:active {
+  background: rgba(26, 115, 232, 0.2);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .search-box button i {
   font-size: 1rem;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .search-box button:active {
-  transform: translateY(-50%) scale(0.97);
 }
 
 .prompt-share-page .search-box button:focus-visible,

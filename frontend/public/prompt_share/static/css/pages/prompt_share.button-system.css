@@ -2,7 +2,6 @@
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
   .hero-action,
-  .search-box button,
   .category-card,
   .prompt-type-filter-btn,
   .prompt-action-btn,
@@ -31,22 +30,30 @@
     border-color 0.2s ease;
 }
 
-.prompt-share-page :where(
-  .submit-btn,
-  .search-box button
-) {
+.prompt-share-page .submit-btn {
   --ps-button-base: var(--ps-primary);
   --ps-button-accent: var(--ps-primary-strong);
   --ps-button-shadow-color: rgba(24, 90, 188, 0.28);
   color: #ffffff;
 }
 
+/* 投稿ボタンは他のプライマリーボタンと同じ青にそろえ、影は細いツールバーに合う軽さにする */
+/* The post button uses the same primary blue as other primary buttons, with a lighter shadow for the toolbar */
 .prompt-share-page .hero-action--primary {
-  --ps-button-base: #3b8eff;
+  --ps-button-base: var(--ps-primary);
   --ps-button-accent: var(--ps-primary-strong);
-  --ps-button-shadow-color: rgba(18, 72, 172, 0.42);
-  border-color: rgba(255, 255, 255, 0.72);
+  --ps-button-shadow-color: rgba(24, 90, 188, 0.26);
+  border-color: transparent;
   color: #ffffff;
+  box-shadow:
+    0 6px 14px var(--ps-button-shadow-color),
+    var(--cc-button-edge-highlight);
+}
+
+.prompt-share-page .hero-action--primary:hover:not(:disabled) {
+  box-shadow:
+    0 10px 20px var(--ps-button-shadow-color),
+    var(--cc-button-edge-highlight);
 }
 
 .prompt-share-page .hero-action--secondary {
@@ -98,14 +105,6 @@
   .prompt-actions-dropdown .dropdown-item
 ):active:not(:disabled) {
   transform: scale(0.97);
-}
-
-.prompt-share-page .search-box button:hover:not(:disabled) {
-  transform: translateY(-50%) translateY(-1px);
-}
-
-.prompt-share-page .search-box button:active:not(:disabled) {
-  transform: translateY(-50%) scale(0.97);
 }
 
 .prompt-share-page .prompt-action-btn.like-btn,
@@ -167,11 +166,5 @@
     .prompt-actions-dropdown .dropdown-item
   ):active:not(:disabled) {
     transform: none;
-  }
-
-  .prompt-share-page .search-box button:hover:not(:disabled),
-
-  .prompt-share-page .search-box button:active:not(:disabled) {
-    transform: translateY(-50%);
   }
 }
