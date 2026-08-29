@@ -10,10 +10,13 @@ import type { ModalKey } from "./prompt_share_page_types";
 import { getModalFocusableElements } from "./prompt_share_page_utils";
 
 type UsePromptModalManagerOptions = {
+  isEditSaving: boolean;
   isPostSubmitting: boolean;
+  onCloseEdit: () => void;
   onCloseDetail: () => void;
   onClosePost: () => void;
   onCloseProfile: () => void;
+  editModalRef: MutableRefObject<HTMLDivElement | null>;
   postModalRef: MutableRefObject<HTMLDivElement | null>;
   promptDetailModalRef: MutableRefObject<HTMLDivElement | null>;
   promptShareModalRef: MutableRefObject<HTMLDivElement | null>;
@@ -23,10 +26,13 @@ type UsePromptModalManagerOptions = {
 // モーダルの開閉、フォーカス復元、スクロールロック、Escape/Tab操作を管理する
 // Manages modal open/close state, focus restoration, scroll lock, and Escape/Tab keyboard behavior
 export function usePromptModalManager({
+  isEditSaving,
   isPostSubmitting,
+  onCloseEdit,
   onCloseDetail,
   onClosePost,
   onCloseProfile,
+  editModalRef,
   postModalRef,
   promptDetailModalRef,
   promptShareModalRef,
@@ -46,11 +52,12 @@ export function usePromptModalManager({
   // モーダルキーからDOMのref要素へのマッピングを提供する
   // Maps a modal key to its corresponding DOM ref element
   const getModalElement = useCallback((modal: Exclude<ModalKey, null>) => {
+    if (modal === "edit") return editModalRef.current;
     if (modal === "post") return postModalRef.current;
     if (modal === "detail") return promptDetailModalRef.current;
     if (modal === "profile") return promptAuthorProfileModalRef.current;
     return promptShareModalRef.current;
-  }, [postModalRef, promptAuthorProfileModalRef, promptDetailModalRef, promptShareModalRef]);
+  }, [editModalRef, postModalRef, promptAuthorProfileModalRef, promptDetailModalRef, promptShareModalRef]);
 
   // モーダル内のフォーカス可能な要素を取得し、優先要素または先頭要素へフォーカスを移す
   // Finds focusable elements inside a modal and moves focus to the preferred or first element
@@ -98,6 +105,8 @@ export function usePromptModalManager({
       setActiveModal(null);
       if (modal === "post") {
         onClosePost();
+      } else if (modal === "edit") {
+        onCloseEdit();
       } else if (modal === "detail") {
         onCloseDetail();
       } else if (modal === "profile") {
@@ -105,7 +114,7 @@ export function usePromptModalManager({
       }
       return true;
     },
-    [onCloseDetail, onCloseProfile, onClosePost]
+    [onCloseDetail, onCloseEdit, onCloseProfile, onClosePost]
   );
 
   // モーダルを開く前にトリガー要素を記録しておき、閉じた後にフォーカスを元の位置へ戻せるようにする
@@ -179,7 +188,10 @@ export function usePromptModalManager({
       if (event.key === "Escape") {
         // 投稿送信中はEscapeキーでモーダルを閉じない
         // Prevent closing the modal with Escape while a post submission is in progress
-        if (activeModal === "post" && isPostSubmitting) {
+        if (
+          (activeModal === "post" && isPostSubmitting) ||
+          (activeModal === "edit" && isEditSaving)
+        ) {
           return;
         }
         event.preventDefault();
@@ -223,7 +235,7 @@ export function usePromptModalManager({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeModal, closeModal, getModalElement, isPostSubmitting]);
+  }, [activeModal, closeModal, getModalElement, isEditSaving, isPostSubmitting]);
 
   return {
     activeModal,

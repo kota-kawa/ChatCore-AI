@@ -5,16 +5,20 @@ import { describe, expect, it, vi } from "vitest";
 import { usePromptModalManager } from "../components/prompt_share/use_prompt_modal_manager";
 import { getModalFocusableElements } from "../components/prompt_share/prompt_share_page_utils";
 
-function PromptModalManagerHarness() {
+function PromptModalManagerHarness({ isEditSaving = false }: { isEditSaving?: boolean }) {
+  const editModalRef = useRef<HTMLDivElement | null>(null);
   const postModalRef = useRef<HTMLDivElement | null>(null);
   const promptDetailModalRef = useRef<HTMLDivElement | null>(null);
   const promptShareModalRef = useRef<HTMLDivElement | null>(null);
   const promptAuthorProfileModalRef = useRef<HTMLDivElement | null>(null);
   const { activeModal, closeModal, openModal } = usePromptModalManager({
+    isEditSaving,
     isPostSubmitting: false,
+    onCloseEdit: vi.fn(),
     onCloseDetail: vi.fn(),
     onClosePost: vi.fn(),
     onCloseProfile: vi.fn(),
+    editModalRef,
     postModalRef,
     promptDetailModalRef,
     promptShareModalRef,
@@ -26,6 +30,10 @@ function PromptModalManagerHarness() {
       <button type="button" onClick={() => openModal("detail")}>
         詳細を開く
       </button>
+      <button type="button" onClick={() => openModal("edit")}>
+        編集を開く
+      </button>
+      <output>{activeModal || "none"}</output>
       <div
         aria-hidden={activeModal === "detail" ? "false" : "true"}
         ref={promptDetailModalRef}
@@ -35,6 +43,9 @@ function PromptModalManagerHarness() {
         </button>
       </div>
       <div ref={postModalRef} />
+      <div ref={editModalRef}>
+        <button type="button">編集フォーム</button>
+      </div>
       <div ref={promptShareModalRef} />
     </>
   );
@@ -84,5 +95,17 @@ describe("usePromptModalManager", () => {
     expect(focusedElementWhenHidden).toBe(opener);
     expect(opener).toHaveFocus();
     expect(modal).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("保存中の編集モーダルはEscapeキーで閉じない", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    render(<PromptModalManagerHarness isEditSaving />);
+
+    fireEvent.click(screen.getByRole("button", { name: "編集を開く" }));
+    expect(screen.getByText("edit")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.getByText("edit")).toBeInTheDocument();
   });
 });

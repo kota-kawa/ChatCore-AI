@@ -1,5 +1,5 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { PromptCard, type PromptRecord } from "../components/prompt_share/prompt_card";
 
@@ -25,18 +25,24 @@ const basePrompt: PromptRecord = {
 
 function renderCard(
   overrides: Partial<PromptRecord> = {},
-  options: { isPriorityImage?: boolean } = {}
+  options: {
+    isDropdownOpen?: boolean;
+    isPriorityImage?: boolean;
+    isOwnPrompt?: boolean;
+    onEdit?: (prompt: PromptRecord) => void;
+  } = {}
 ) {
   const view = render(
     <PromptCard
       prompt={{ ...basePrompt, ...overrides }}
       isPriorityImage={options.isPriorityImage}
-      isDropdownOpen={false}
+      isDropdownOpen={Boolean(options.isDropdownOpen)}
       isLikePending={false}
       isLikeEffectActive={false}
       isAddAsTaskPending={false}
       isMemoSavePending={false}
       isUseInChatEffectActive={false}
+      isOwnPrompt={options.isOwnPrompt}
       onOpenDetail={noop}
       onOpenComments={noop}
       onOpenShare={noop}
@@ -46,6 +52,7 @@ function renderCard(
       onSaveAsMemo={noop}
       onToggleLike={noop}
       onOpenAuthorProfile={noop}
+      onEdit={options.onEdit}
     />
   );
   return view.container;
@@ -73,6 +80,21 @@ describe("prompt_share card badges", () => {
 
     expect(container.querySelector(".prompt-card__type-pill--image")).toBeInTheDocument();
     expect(container.querySelector(".prompt-card__type-pill--format")).not.toBeInTheDocument();
+  });
+
+  it("本人の投稿だけに編集操作を表示し、カードの投稿を渡す", () => {
+    const onEdit = vi.fn();
+    renderCard({}, { isDropdownOpen: true, isOwnPrompt: true, onEdit });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "プロンプト編集" }));
+
+    expect(onEdit).toHaveBeenCalledWith(basePrompt);
+  });
+
+  it("他ユーザーの投稿には編集操作を表示しない", () => {
+    renderCard({}, { isOwnPrompt: false, onEdit: vi.fn() });
+
+    expect(screen.queryByRole("menuitem", { name: "プロンプト編集" })).not.toBeInTheDocument();
   });
 
   it("管理対象の作例画像はNext Imageで遅延・サイズ最適化される", () => {

@@ -1634,6 +1634,16 @@ body.settings-page,
   font-family: 'Roboto', sans-serif;
 }
 
+/* 共有ページでは編集モーダルだけに設定画面の共通フォームスタイルを適用する。 */
+/* On Prompt Share, apply the shared settings form styles only to the edit modal subtree. */
+.prompt-share-page .prompt-share-edit-modal-scope.user-settings-page {
+  display: contents;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+}
+
 :where(body.settings-page, .user-settings-page) .user-settings-layout {
   display: flex;
   min-height: 100vh;

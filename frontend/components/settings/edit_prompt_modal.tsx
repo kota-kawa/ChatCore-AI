@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, RefObject } from "react";
 
 import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
@@ -12,7 +12,8 @@ export function EditPromptModal({
   onClose,
   onCategoryChange,
   onChange,
-  onSubmit
+  onSubmit,
+  modalRef
 }: {
   formState: EditPromptFormState;
   saving: boolean;
@@ -20,6 +21,7 @@ export function EditPromptModal({
   onCategoryChange: (value: string) => void;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  modalRef?: RefObject<HTMLDivElement | null>;
 }) {
   const { t, locale } = useTranslation();
   const isSkill = formState.contentFormat === "skill";
@@ -32,6 +34,7 @@ export function EditPromptModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="editPromptModalTitle"
+      ref={modalRef}
       onClick={(event) => {
         // モーダル背景クリックでも閉じられるが、保存中は誤操作を防ぐためブロックする
         // Allow closing by clicking the backdrop, but block it during save to prevent accidental dismissal

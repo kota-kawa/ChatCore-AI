@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,10 +9,21 @@ import { PromptSharePageLayout } from "../components/prompt_share/prompt_share_p
 
 const noop = () => {};
 
+test("prompt share modal lock keeps the inline edit modal interactive", () => {
+  const css = readFileSync(
+    new URL("../public/prompt_share/static/css/pages/prompt_share.foundation.css", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(css, /:not\(#promptEditModalScope\)/);
+  assert.match(css, /ps-modal-open #promptEditModalScope[\s\S]*?pointer-events: auto;/);
+});
+
 test("prompt share layout renders crawlable page content before client API data loads", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptSharePageLayout, {
       authUiReady: true,
+      currentUserId: null,
       isLoggedIn: false,
       searchInput: "",
       onSearchInputChange: noop,
@@ -52,7 +64,8 @@ test("prompt share layout renders crawlable page content before client API data 
       onAddAsTask: noop,
       onSaveAsMemo: noop,
       onToggleLike: noop,
-      onOpenAuthorProfile: noop
+      onOpenAuthorProfile: noop,
+      onEditPrompt: noop
     })
   );
 
@@ -69,6 +82,7 @@ test("prompt share layout places load more after the final prompt card", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptSharePageLayout, {
       authUiReady: true,
+      currentUserId: null,
       isLoggedIn: true,
       searchInput: "",
       onSearchInputChange: noop,
@@ -115,7 +129,8 @@ test("prompt share layout places load more after the final prompt card", () => {
       onAddAsTask: noop,
       onSaveAsMemo: noop,
       onToggleLike: noop,
-      onOpenAuthorProfile: noop
+      onOpenAuthorProfile: noop,
+      onEditPrompt: noop
     })
   );
 

@@ -36,6 +36,7 @@ import type {
   PromptType
 } from "../../scripts/prompt_share/types";
 import { PromptShareAuthorProfileModal } from "../../components/prompt_share/prompt_share_author_profile_modal";
+import { EditPromptModal } from "../../components/settings/edit_prompt_modal";
 import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
 import { PromptShareDetailModal } from "../../components/prompt_share/prompt_share_detail_modal";
 import {
@@ -72,6 +73,7 @@ import { usePromptImageSelection } from "../../components/prompt_share/use_promp
 import { usePromptAuthorProfile } from "../../components/prompt_share/use_prompt_author_profile";
 import { usePromptCardActions } from "../../components/prompt_share/use_prompt_card_actions";
 import { usePromptComments } from "../../components/prompt_share/use_prompt_comments";
+import { usePromptInlineEdit } from "../../components/prompt_share/use_prompt_inline_edit";
 import { usePromptModalManager } from "../../components/prompt_share/use_prompt_modal_manager";
 import { usePromptShareActionEffects } from "../../components/prompt_share/use_prompt_share_action_effects";
 import { usePromptShareAuth } from "../../components/prompt_share/use_prompt_share_auth";
@@ -100,7 +102,7 @@ export default function PromptSharePage({
     return buildInitialPromptRecords(initialPrompts);
   }, [initialPrompts]);
 
-  const { authUiReady, isLoggedIn } = usePromptShareAuth();
+  const { authUiReady, currentUserId, isLoggedIn } = usePromptShareAuth();
   const isGuestPost = !isLoggedIn;
 
   // 検索・フィルタ関連の状態
@@ -182,6 +184,7 @@ export default function PromptSharePage({
   // モーダルのDOM要素への参照。フォーカス管理とアクセシビリティのために使用する
   // Refs to modal DOM elements for focus management and accessibility
   const postModalRef = useRef<HTMLDivElement | null>(null);
+  const editModalRef = useRef<HTMLDivElement | null>(null);
   const promptDetailModalRef = useRef<HTMLDivElement | null>(null);
   const promptCommentsSectionRef = useRef<HTMLElement | null>(null);
   const promptCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -375,8 +378,41 @@ export default function PromptSharePage({
     resetAuthorProfile
   } = usePromptAuthorProfile({ toPromptRecords });
 
+  // 単一のプロンプトレコードを更新する。
+  // Update a single prompt record.
+  const updatePromptRecord = useCallback(
+    (clientId: string, updater: (prompt: PromptRecord) => PromptRecord) => {
+      setPrompts((current) => {
+        return current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt));
+      });
+      setDetailPrompt((current) => {
+        if (!current || current.clientId !== clientId) {
+          return current;
+        }
+        return updater(current);
+      });
+    },
+    []
+  );
+
+  const {
+    beginEditPrompt,
+    editPromptForm,
+    handleEditPromptCategoryChange,
+    handleEditPromptChange,
+    handleEditPromptSubmit: saveEditedPrompt,
+    isEditSaving,
+    resetEditPrompt
+  } = usePromptInlineEdit({
+    currentUserId,
+    promptsRef,
+    updatePromptRecord
+  });
+
   const { activeModal, closeModal, hasModalLockRef, openModal } = usePromptModalManager({
+    isEditSaving,
     isPostSubmitting,
+    onCloseEdit: resetEditPrompt,
     onCloseDetail: () => {
       setDetailModalView("detail");
       setDetailPrompt(null);
@@ -384,6 +420,7 @@ export default function PromptSharePage({
     },
     onClosePost: resetPostModalState,
     onCloseProfile: resetAuthorProfile,
+    editModalRef,
     postModalRef,
     promptDetailModalRef,
     promptShareModalRef,
@@ -406,21 +443,28 @@ export default function PromptSharePage({
     postCloseTimerRef
   });
 
-  // 単一のプロンプトレコードを更新する。
-  // Update a single prompt record.
-  const updatePromptRecord = useCallback(
-    (clientId: string, updater: (prompt: PromptRecord) => PromptRecord) => {
-      setPrompts((current) => {
-        return current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt));
-      });
-      setDetailPrompt((current) => {
-        if (!current || current.clientId !== clientId) {
-          return current;
-        }
-        return updater(current);
-      });
+  // 本人のカードから編集モーダルを開き、現在の投稿内容をフォームへ移す。
+  // Open the edit modal from an owned card and populate it with the current post values.
+  const openPromptEditModal = useCallback(
+    (prompt: PromptRecord) => {
+      if (!beginEditPrompt(prompt)) {
+        return;
+      }
+      setOpenDropdownPromptId(null);
+      openModal("edit");
     },
-    []
+    [beginEditPrompt, openModal]
+  );
+
+  // 更新成功時だけ一覧と開いている詳細の同一レコードを置き換え、再読込なしで反映する。
+  // Replace the matching feed/detail record only after success so edits appear without a page reload.
+  const handleEditPromptSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      if (await saveEditedPrompt(event)) {
+        closeModal("edit");
+      }
+    },
+    [closeModal, saveEditedPrompt]
   );
 
   const recordOpenedPromptView = usePromptViewRecorder({ updatePromptRecord });
@@ -1143,6 +1187,7 @@ export default function PromptSharePage({
       {/* プロンプト一覧・検索・フィルタを含むページレイアウト / Page layout containing the prompt list, search bar, and filters */}
       <PromptSharePageLayout
         authUiReady={authUiReady}
+        currentUserId={currentUserId}
         isLoggedIn={isLoggedIn}
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -1185,7 +1230,31 @@ export default function PromptSharePage({
         onSaveAsMemo={handleSavePromptAsMemo}
         onToggleLike={handleTogglePromptLike}
         onOpenAuthorProfile={openAuthorProfile}
+        onEditPrompt={openPromptEditModal}
       >
+
+        {/* 本人のカードから開くインライン編集。設定画面と同じフォーム契約を再利用する。 */}
+        {/* Inline editing opened from an owned card, reusing the settings form contract. */}
+        {editPromptForm ? (
+          <div
+            id="promptEditModalScope"
+            className="prompt-share-edit-modal-scope user-settings-page"
+          >
+            <EditPromptModal
+              formState={editPromptForm}
+              saving={isEditSaving}
+              modalRef={editModalRef}
+              onClose={() => {
+                if (!isEditSaving) {
+                  closeModal("edit");
+                }
+              }}
+              onCategoryChange={handleEditPromptCategoryChange}
+              onChange={handleEditPromptChange}
+              onSubmit={handleEditPromptSubmit}
+            />
+          </div>
+        ) : null}
 
         {/* プロンプト投稿フォーム。ゲスト時はテキスト専用の制限付き Composer を表示する。 */}
         {/* Prompt composer. Guests receive a restricted text-only composer. */}
