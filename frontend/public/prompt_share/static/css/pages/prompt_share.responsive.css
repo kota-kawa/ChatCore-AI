@@ -1,8 +1,4 @@
 @media (max-width: 1024px) {
-  :where(body.prompt-share-page, .prompt-share-page) .prompts-header {
-    min-height: clamp(240px, 46vw, 330px);
-  }
-
   .prompt-share-page .prompt-cards {
     grid-template-columns: 1fr 1fr;
   }
@@ -37,39 +33,60 @@
     display: none;
   }
 
+  /* 画面高が貴重なスマホでは追従をやめ、ブランド行と検索行の2段に折り返す */
+  /* On phones the toolbar stops sticking and wraps into a brand row plus a search row */
   :where(body.prompt-share-page, .prompt-share-page) .prompts-header {
-    border-radius: 0 0 18px 18px;
+    position: static;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .prompts-header__inner {
-    padding: 1.4rem 0.86rem 1.55rem;
-    gap: 0.68rem;
+    flex-wrap: wrap;
+    min-height: 0;
+    padding: 0.6rem 0.7rem 0.7rem;
+    padding-right: 0.7rem;
+    gap: 0.5rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .hero-title {
-    font-size: clamp(1.45rem, 6.5vw, 2rem);
+  /* ブランド行だけ右上のユーザーアイコンを避け、検索行には全幅を渡す */
+  /* Only the brand row dodges the user icon so the search row keeps the full width */
+  :where(body.prompt-share-page, .prompt-share-page) .hero-brand {
+    flex: 1 0 100%;
+    /* 1段目の高さを右上コントロールぶん確保し、2段目が潜り込まないようにする */
+    /* Keep the first row tall enough that the second row clears the pinned control */
+    min-height: 42px;
+    padding-right: 56px;
+    font-size: 0.98rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .hero-description {
-    font-size: 0.88rem;
+  :where(body.prompt-share-page, .prompt-share-page) .search-section {
+    flex: 1 1 auto;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .hero-actions {
+  :where(body.prompt-share-page, .prompt-share-page) .search-box {
     width: 100%;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .hero-action {
-    width: min(250px, 100%);
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .search-box input {
     font-size: 0.94rem;
-    padding: 0.8rem 3.2rem 0.8rem 0.95rem;
+    padding: 0.62rem 0.2rem 0.62rem 0.95rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .search-box button {
-    width: 38px;
-    height: 38px;
+  /* 投稿ボタンはラベルを畳んで丸アイコンにし、検索欄に幅を譲る */
+  /* The post button collapses to a round icon so the search field keeps the width */
+  :where(body.prompt-share-page, .prompt-share-page) .hero-action--primary {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .hero-action--primary span {
+    display: none;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .hero-action--primary i {
+    font-size: 1.1rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) main {
@@ -282,7 +299,7 @@
 
 @media (max-width: 480px) {
   :where(body.prompt-share-page, .prompt-share-page) .prompts-header__inner {
-    padding: 1.2rem 0.72rem 1.35rem;
+    padding: 0.55rem 0.55rem 0.65rem;
   }
 
   /* スマホでは外側の余白を最小限にし、カテゴリとプロンプト一覧に画面幅を渡す */
@@ -305,29 +322,24 @@
     padding: 0.72rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .hero-kicker {
-    font-size: 0.86rem;
-    letter-spacing: 0.03em;
-    gap: 0.4rem;
+  :where(body.prompt-share-page, .prompt-share-page) .hero-brand {
+    font-size: 0.92rem;
+    letter-spacing: 0.01em;
+    gap: 0.45rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .hero-kicker__logo {
-    width: 22px;
-    height: 22px;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .hero-description {
-    font-size: 0.84rem;
+  :where(body.prompt-share-page, .prompt-share-page) .hero-brand__logo {
+    width: 24px;
+    height: 24px;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .search-box input {
-    padding-right: 3rem;
+    padding-left: 0.85rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .search-box button {
-    width: 36px;
-    height: 36px;
-    right: 5px;
+    width: 34px;
+    height: 34px;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .category-card {

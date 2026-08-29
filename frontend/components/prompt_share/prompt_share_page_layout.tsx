@@ -189,20 +189,21 @@ export function PromptSharePageLayout({
       {/* User icon Web Component is hidden until auth is confirmed */}
       <user-icon id="userIcon" style={authUiReady && isLoggedIn ? undefined : { display: "none" }}></user-icon>
 
-      <header className="prompts-header" aria-labelledby="promptShareHeroTitle">
+      {/* ブランド・検索・投稿だけを載せた上部固定ツールバー。
+          未ログイン時は右上の「ログイン / 登録」ボタンが幅を取るため、退避幅を切り替える */}
+      {/* Sticky top toolbar carrying only the brand, search, and post action;
+          guests need a wider right-hand reserve because the login button sits there */}
+      <header
+        className={`prompts-header${authUiReady && !isLoggedIn ? " prompts-header--guest" : ""}`}
+        aria-labelledby="promptShareHeroTitle"
+      >
         <div className="prompts-header__inner">
           {/* ロゴ＋サービス名のブランドロックアップ。ロゴは装飾なのでalt空＋aria-hiddenにする */}
           {/* Brand lockup of logo + service name; the logo is decorative so alt is empty and aria-hidden */}
-          <p className="hero-kicker">
-            <img className="hero-kicker__logo" src="/static/chatcore-share.png" alt="" aria-hidden="true" />
-            <span>ChatCore Share</span>
-          </p>
-          <h1 id="promptShareHeroTitle" className="hero-title">
-            {t("promptShare.heroTitle")}
+          <h1 id="promptShareHeroTitle" className="hero-brand">
+            <img className="hero-brand__logo" src="/static/chatcore-share.png" alt="" aria-hidden="true" />
+            <span className="hero-brand__name">ChatCore Share</span>
           </h1>
-          <p className="hero-description">
-            {t("promptShare.heroDescription")}
-          </p>
 
           {/* role="search"でランドマークとして検索UIをスクリーンリーダーに認識させる */}
           {/* role="search" exposes the search region as a landmark for screen readers */}
@@ -234,15 +235,18 @@ export function PromptSharePageLayout({
             </div>
           </div>
 
+          {/* 狭い画面ではラベルを隠してアイコンだけにするため、aria-labelを常に付与する */}
+          {/* Keep an aria-label at all widths because the label text is hidden on narrow screens */}
           <div className="hero-actions">
             <button
               type="button"
               id="heroOpenPostModal"
               data-agent-id="prompt.open-composer"
               className="hero-action hero-action--primary cc-press"
+              aria-label={t("promptShare.post")}
               onClick={onOpenComposerModal}
             >
-              <i className="bi bi-plus-lg"></i>
+              <i className="bi bi-plus-lg" aria-hidden="true"></i>
               <span>{t("promptShare.post")}</span>
             </button>
           </div>
@@ -255,6 +259,10 @@ export function PromptSharePageLayout({
         <section className="prompt-crawl-summary" aria-labelledby="prompt-crawl-summary-title">
           <h2 id="prompt-crawl-summary-title">{t("promptShare.publicLibrary")}</h2>
           <p>{t("promptShare.publicLibraryDescription")}</p>
+          {/* ヘッダーから外した紹介文はSEO用にここへ残す */}
+          {/* Keep the copy removed from the header here so crawlers still see it */}
+          <p>{t("promptShare.heroTitle")}</p>
+          <p>{t("promptShare.heroDescription")}</p>
           <ul>
             {categories.slice(0, 6).map((category) => (
               <li key={category.value}>{getCategoryLabel(category)}</li>
