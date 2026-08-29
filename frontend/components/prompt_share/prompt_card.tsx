@@ -107,6 +107,7 @@ function PromptCardComponent({
   const isUsedInChat = Boolean(prompt.used_in_chat);
   const isSkillFormat = contentFormatValue === "skill";
   const isAddedToSkills = Boolean(prompt.added_to_skills);
+  const isPrimaryActionActive = isSkillFormat ? isAddedToSkills : isUsedInChat;
   const isPrimaryActionPending = isAddAsTaskPending;
   const primaryActionLabel = isSkillFormat
     ? isPrimaryActionPending
@@ -401,7 +402,7 @@ function PromptCardComponent({
               void onAddAsTask(prompt);
             }}
           >
-            <i className={`bi ${isUsedInChat ? "bi-plus-square-fill" : "bi-plus-square"}`}></i>
+            <i className={`bi ${isPrimaryActionActive ? "bi-plus-square-fill" : "bi-plus-square"}`}></i>
           </button>
         </div>
       </div>

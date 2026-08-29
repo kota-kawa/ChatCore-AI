@@ -575,23 +575,37 @@
   font-family: "bootstrap-icons" !important;
 }
 
-.prompt-share-page .use-in-chat-btn.used-in-chat,
-.prompt-share-page .use-in-chat-btn.added-to-skills {
+.prompt-share-page .use-in-chat-btn.used-in-chat {
   color: var(--ps-use-in-chat);
   background: transparent;
   box-shadow: none;
 }
 
-.prompt-share-page .use-in-chat-btn.used-in-chat i,
-.prompt-share-page .use-in-chat-btn.added-to-skills i {
+.prompt-share-page .use-in-chat-btn.used-in-chat i {
   color: var(--ps-use-in-chat) !important;
   font-family: "bootstrap-icons" !important;
+}
+
+.prompt-share-page .add-to-skill-btn.added-to-skills {
+  color: var(--ps-skill-added);
+  background: transparent;
+  box-shadow: none;
+}
+
+.prompt-share-page .add-to-skill-btn.added-to-skills i {
+  color: var(--ps-skill-added) !important;
+  font-family: "bootstrap-icons" !important;
+}
+
+.prompt-share-page .prompt-action-btn.add-to-skill-btn.added-to-skills:hover {
+  background: transparent;
+  color: var(--ps-skill-added);
 }
 
 .prompt-share-page .like-btn.liked.is-celebrating i,
 
 .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating i,
-.prompt-share-page .use-in-chat-btn.added-to-skills.is-celebrating i {
+.prompt-share-page .add-to-skill-btn.added-to-skills.is-celebrating i {
   animation: prompt-action-icon-pop 520ms cubic-bezier(0.2, 1.72, 0.36, 1) both;
 }
 
@@ -607,8 +621,7 @@
   animation: prompt-action-burst 640ms ease-out both;
 }
 
-.prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating::after,
-.prompt-share-page .use-in-chat-btn.added-to-skills.is-celebrating::after {
+.prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating::after {
   background: var(--ps-use-in-chat);
   box-shadow:
     0 -21px 0 var(--ps-use-in-chat),
@@ -617,6 +630,18 @@
     3px 20px 0 #91a7ff,
     -16px 11px 0 var(--ps-use-in-chat),
     -18px -9px 0 #74c0fc;
+  animation: prompt-action-burst 640ms ease-out both;
+}
+
+.prompt-share-page .add-to-skill-btn.added-to-skills.is-celebrating::after {
+  background: var(--ps-skill-added);
+  box-shadow:
+    0 -21px 0 var(--ps-skill-added),
+    17px -12px 0 #86efac,
+    19px 8px 0 #4ade80,
+    3px 20px 0 #bbf7d0,
+    -16px 11px 0 var(--ps-skill-added),
+    -18px -9px 0 #86efac;
   animation: prompt-action-burst 640ms ease-out both;
 }
 
@@ -656,11 +681,11 @@
 
   .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating i,
 
-  .prompt-share-page .use-in-chat-btn.added-to-skills.is-celebrating i,
+  .prompt-share-page .add-to-skill-btn.added-to-skills.is-celebrating i,
 
   .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating::after,
 
-  .prompt-share-page .use-in-chat-btn.added-to-skills.is-celebrating::after {
+  .prompt-share-page .add-to-skill-btn.added-to-skills.is-celebrating::after {
     animation: none;
   }
 }
@@ -675,15 +700,13 @@
   color: #ff7675 !important;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.added-to-skills {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat {
   background: transparent;
   color: #74c0fc;
   box-shadow: none;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat i,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.added-to-skills i {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat i {
   color: #74c0fc !important;
 }
 
