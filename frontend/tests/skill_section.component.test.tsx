@@ -104,6 +104,17 @@ describe("SkillSection", () => {
     expect(openAddModal).toHaveBeenCalledOnce();
   });
 
+  it("keeps the add modal controls as real buttons", () => {
+    mockedUseHomePageSkills.mockReturnValue(state({ isAddModalOpen: true }));
+    renderSection();
+
+    const addButtons = screen.getAllByRole("button", { name: "Skillを追加" });
+    expect(addButtons).toHaveLength(2);
+    expect(addButtons.every((button) => button.tagName === "BUTTON")).toBe(true);
+    expect(addButtons.some((button) => button.getAttribute("type") === "submit")).toBe(true);
+    expect(screen.getByRole("button", { name: "キャンセル" })).toHaveClass("custom-btn-secondary");
+  });
+
   it("marks the default Skill and does not expose delete", () => {
     mockedUseHomePageSkills.mockReturnValue(state({
       skills: [{

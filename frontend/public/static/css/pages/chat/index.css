@@ -387,10 +387,18 @@ body.chat-page .chat-share-modal,
 
 body.chat-page #io-modal,
 
-body.chat-page #taskEditModal.custom-modal {
+body.chat-page #taskEditModal.custom-modal,
+
+body.chat-page .skill-modal.custom-modal,
+
+body.chat-page .skill-detail-modal.custom-modal {
   background: var(--chat-modal-overlay);
   backdrop-filter: var(--chat-modal-backdrop-filter);
   -webkit-backdrop-filter: var(--chat-modal-backdrop-filter);
+}
+
+body.chat-page :where(.skill-modal.custom-modal, .skill-detail-modal.custom-modal) {
+  padding: clamp(1rem, 3.2vw, 2.2rem);
 }
 
 body.chat-page .new-prompt-modal-content,
@@ -941,7 +949,11 @@ html[data-cc-auth="in"] .setup-form-subtitle {
 
 [data-theme="dark"] body.chat-page #io-modal,
 
-[data-theme="dark"] body.chat-page #taskEditModal.custom-modal {
+[data-theme="dark"] body.chat-page #taskEditModal.custom-modal,
+
+[data-theme="dark"] body.chat-page .skill-modal.custom-modal,
+
+[data-theme="dark"] body.chat-page .skill-detail-modal.custom-modal {
   background:
     radial-gradient(130% 110% at 50% 0%, rgba(15, 118, 110, 0.14), transparent 54%),
     linear-gradient(180deg, rgba(2, 6, 18, 0.55) 0%, rgba(2, 6, 18, 0.8) 100%);
