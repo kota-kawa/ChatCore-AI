@@ -15,6 +15,10 @@ const skill: UserSkill = {
   name: "短く答える",
   instructions: "結論から書く",
   is_enabled: true,
+  system_skill_key: null,
+  is_default: false,
+  can_edit: true,
+  can_delete: true,
   created_at: null,
   updated_at: null,
 };
@@ -84,5 +88,24 @@ describe("SkillSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /最初のSkillを追加/ }));
     expect(openAddModal).toHaveBeenCalledOnce();
+  });
+
+  it("marks the default Skill and does not expose delete", () => {
+    mockedUseHomePageSkills.mockReturnValue(state({
+      skills: [{
+        ...skill,
+        id: 0,
+        name: "生成UI",
+        system_skill_key: "generative_ui",
+        is_default: true,
+        can_edit: false,
+        can_delete: false,
+      }],
+    }));
+    renderSection();
+
+    expect(screen.getByText("デフォルト")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成UIを削除" })).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /生成UIをオフ/ })).toBeInTheDocument();
   });
 });

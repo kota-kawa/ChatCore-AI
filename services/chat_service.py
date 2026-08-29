@@ -10,11 +10,17 @@ from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .api_errors import ForbiddenOperationError
 from .db import is_retryable_db_error, session_scope
+from .error_messages import ERROR_DEFAULT_SKILL_IMMUTABLE
 from .repositories.chat_repository import (
     DB_RETRY_BACKOFF_SECONDS,
     DB_WRITE_MAX_ATTEMPTS,
     ChatRepository,
+)
+from .user_skills import (
+    build_generative_ui_system_skill,
+    is_generative_ui_skill_id,
 )
 
 T = TypeVar("T")
@@ -352,7 +358,15 @@ async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession
 
 
 async def list_user_skills(user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.list_user_skills(user_id), session)
+    async def operation(repo: ChatRepository):
+        is_enabled = await repo.get_generative_ui_skill_enabled(user_id)
+        personal_skills = await repo.list_user_skills(user_id)
+        return [
+            build_generative_ui_system_skill(is_enabled=is_enabled),
+            *personal_skills,
+        ]
+
+    return await _read(operation, session)
 
 
 async def list_enabled_user_skills(user_id: int, *, session: AsyncSession | None = None):
@@ -379,6 +393,13 @@ async def set_user_skill_enabled(
     *,
     session: AsyncSession | None = None,
 ):
+    if is_generative_ui_skill_id(skill_id):
+        next_enabled = bool(is_enabled)
+        stored_enabled = await _write(
+            lambda repo: repo.set_generative_ui_skill_enabled(user_id, next_enabled),
+            session,
+        )
+        return build_generative_ui_system_skill(is_enabled=stored_enabled)
     return await _write(
         lambda repo: repo.set_user_skill_enabled(user_id, skill_id, is_enabled),
         session,
@@ -391,6 +412,11 @@ async def delete_user_skill(
     *,
     session: AsyncSession | None = None,
 ) -> None:
+    if is_generative_ui_skill_id(skill_id):
+        raise ForbiddenOperationError(
+            ERROR_DEFAULT_SKILL_IMMUTABLE,
+            code="default_skill_immutable",
+        )
     await _write(lambda repo: repo.delete_user_skill(user_id, skill_id), session)
 
 

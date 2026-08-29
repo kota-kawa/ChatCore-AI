@@ -1,6 +1,6 @@
 import unittest
 
-from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.generative_ui import (
     MAX_ARTIFACT_CSS_CHARS,
     MAX_ARTIFACT_HEIGHT,

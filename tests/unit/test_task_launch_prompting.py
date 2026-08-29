@@ -8,9 +8,12 @@ from unittest.mock import AsyncMock, patch
 from blueprints.chat.messages import chat
 from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
-    GENERATIVE_UI_EXECUTION_CONTRACT,
     build_base_system_prompt as _build_base_system_prompt,
     build_user_profile_prompt as _build_user_profile_prompt,
+)
+from services.user_skills import (
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    GENERATIVE_UI_SKILL_INSTRUCTIONS,
 )
 from tests.helpers.request_helpers import build_request
 
@@ -175,21 +178,21 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             1,
         )
 
-    # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
-    # English: Verify that base system prompt includes generative ui stability rules.
-    def test_base_system_prompt_includes_generative_ui_stability_rules(self):
-        self.assertIn("UI_MODE = NONE", BASE_SYSTEM_PROMPT)
-        self.assertIn("latest user request explicitly asks", BASE_SYSTEM_PROMPT)
-        self.assertIn("exactly one complete ```chatcore-artifact", BASE_SYSTEM_PROMPT)
-        self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
-        self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
-        self.assertIn("text only", BASE_SYSTEM_PROMPT)
+    # 日本語: 生成UIの回答方針がデフォルトSkillへ分離され、共通の画像制約だけがベースに残ることを検証します。
+    # English: Verify Generative UI behavior lives in the default Skill while shared visual constraints stay in the base.
+    def test_default_skill_contains_generative_ui_stability_rules(self):
+        self.assertIn("UI_MODE = NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("Do not turn comparisons", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("text only", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("single turn may show either a generated UI or web-search images", BASE_SYSTEM_PROMPT)
         self.assertIn(
             "Images must never be a trailing footer added only after all prose",
             BASE_SYSTEM_PROMPT,
         )
-        self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
+        self.assertEqual(GENERATIVE_UI_SKILL_INSTRUCTIONS.count("```chatcore-artifact"), 1)
 
     # 日本語: 画像を求められたときにリンクの羅列で代替させないルールが入っていることを検証します。
     # English: Verify the prompt forbids answering a "show me" request with a list of links.

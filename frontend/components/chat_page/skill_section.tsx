@@ -76,7 +76,7 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
             const isPending = pendingSkillId === skill.id;
             const stateLabel = skill.is_enabled ? t("home.skillOn") : t("home.skillOff");
             return (
-              <div className={`skill-chip-row ${skill.is_enabled ? "is-enabled" : "is-disabled"}`.trim()} key={skill.id} role="listitem">
+              <div className={`skill-chip-row ${skill.is_enabled ? "is-enabled" : "is-disabled"} ${skill.is_default ? "is-default" : ""}`.trim()} key={skill.id} role="listitem">
                 <button
                   type="button"
                   className="skill-chip"
@@ -89,18 +89,26 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
                 >
                   <span className="skill-chip__dot" aria-hidden="true"></span>
                   <span className="skill-chip__name" title={skill.name}>{skill.name}</span>
+                  {skill.is_default ? (
+                    <span className="skill-chip__default" title={t("home.skillDefaultDescription")}>
+                      <i className="bi bi-lock-fill" aria-hidden="true"></i>
+                      {t("home.skillDefault")}
+                    </span>
+                  ) : null}
                   <span className="skill-chip__state">{stateLabel}</span>
                   <span className="skill-chip__switch" aria-hidden="true"><span></span></span>
                 </button>
-                <button
-                  type="button"
-                  className="skill-chip__delete"
-                  aria-label={locale === "en" ? `Delete ${skill.name}` : `${skill.name}を削除`}
-                  disabled={pendingSkillId !== null}
-                  onClick={() => { void handleDelete(skill); }}
-                >
-                  <i className="bi bi-x-lg" aria-hidden="true"></i>
-                </button>
+                {skill.can_delete ? (
+                  <button
+                    type="button"
+                    className="skill-chip__delete"
+                    aria-label={locale === "en" ? `Delete ${skill.name}` : `${skill.name}を削除`}
+                    disabled={pendingSkillId !== null}
+                    onClick={() => { void handleDelete(skill); }}
+                  >
+                    <i className="bi bi-x-lg" aria-hidden="true"></i>
+                  </button>
+                ) : null}
               </div>
             );
           })}

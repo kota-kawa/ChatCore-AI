@@ -20,7 +20,10 @@ from services.attached_files import (
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
-from services.user_skills import build_enabled_user_skills_prompt
+from services.user_skills import (
+    build_chat_skills_context,
+    build_enabled_user_skills_prompt,
+)
 from services.generative_ui import normalize_response_with_artifact_retry
 from services.message_parts_display import normalize_message_parts_for_display
 from services.llm import (
@@ -494,9 +497,10 @@ class ChatPostUseCase:
                 )
 
         task_prompt = deps.build_task_prompt(prompt_data) if prompt_data else None
-        user_skills_prompt = None
+        enabled_user_skills: list[dict[str, Any]] = []
         room_summary = ""
         memory_facts: list[str] = []
+        user = None
         user_profile_prompt = None
         project_instructions: str | None = None
 
@@ -505,8 +509,9 @@ class ChatPostUseCase:
         if user_id is not None:
             try:
                 if deps.load_enabled_user_skills is not None:
-                    enabled_skills = await _maybe_await(deps.load_enabled_user_skills(user_id))
-                    user_skills_prompt = deps.build_user_skills_prompt(enabled_skills or [])
+                    enabled_user_skills = list(
+                        await _maybe_await(deps.load_enabled_user_skills(user_id)) or []
+                    )
             except Exception:
                 deps.logger.warning("Failed to load enabled user skills; proceeding without them.")
             try:
@@ -514,6 +519,13 @@ class ChatPostUseCase:
                 user_profile_prompt = deps.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
+
+        user_skills_prompt, generative_ui_enabled = build_chat_skills_context(
+            enabled_user_skills,
+            user,
+            locale=self.locale,
+            prompt_builder=deps.build_user_skills_prompt,
+        )
 
         # 通常のユーザーセッションの場合、所属プロジェクトの指示を読み込む
         # For normal user sessions, load the owning project's instructions.
@@ -573,6 +585,7 @@ class ChatPostUseCase:
             recent_messages=normalized_all_messages,
             project_instructions=project_instructions,
             user_skills_prompt=user_skills_prompt,
+            generative_ui_enabled=generative_ui_enabled,
         )
 
         # 過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
@@ -661,18 +674,21 @@ class ChatPostUseCase:
         )
         # UI_MODE is a structured semantic decision made by the selected
         # conversation model. Do not infer it from the user's text here.
-        try:
-            ui_mode = await run_blocking(
-                deps.decide_generative_ui_mode,
-                conversation_messages,
-                model,
-            )
-        except Exception:
-            deps.logger.warning(
-                "Failed to decide generative UI mode; continuing without intent recovery.",
-                exc_info=True,
-            )
-            ui_mode = None
+        if generative_ui_enabled:
+            try:
+                ui_mode = await run_blocking(
+                    deps.decide_generative_ui_mode,
+                    conversation_messages,
+                    model,
+                )
+            except Exception:
+                deps.logger.warning(
+                    "Failed to decide generative UI mode; continuing without intent recovery.",
+                    exc_info=True,
+                )
+                ui_mode = None
+        else:
+            ui_mode = "NONE"
 
         # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
         # Start a background generation job if the model supports streaming

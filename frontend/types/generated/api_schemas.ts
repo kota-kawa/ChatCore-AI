@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: f54205adde693769977a2491c123d9037f3a71747b728c9c5f770329283f9a43
+// Schema fingerprint: 69d9bb5f6891fee9d832b5b6321edd8b31826b0bbea6f201457579955da41e33
 
 import { z } from "zod";
 
@@ -143,13 +143,13 @@ export type ShareChatRoomResponse = z.infer<typeof ShareChatRoomResponseSchema>;
 export const StoredChatHistoryEntrySchema = z.object({ "text": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type StoredChatHistoryEntry = z.infer<typeof StoredChatHistoryEntrySchema>;
 
-export const UserSkillApiSchema = z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export const UserSkillApiSchema = z.object({ "id": z.number().int(), "system_skill_key": z.union([z.string(), z.null()]).default(null), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "is_default": z.boolean().default(false), "can_edit": z.boolean().default(true), "can_delete": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type UserSkillApi = z.infer<typeof UserSkillApiSchema>;
 
-export const UserSkillsApiResponseSchema = z.object({ "skills": z.array(z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
+export const UserSkillsApiResponseSchema = z.object({ "skills": z.array(z.object({ "id": z.number().int(), "system_skill_key": z.union([z.string(), z.null()]).default(null), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "is_default": z.boolean().default(false), "can_edit": z.boolean().default(true), "can_delete": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
 export type UserSkillsApiResponse = z.infer<typeof UserSkillsApiResponseSchema>;
 
-export const UserSkillMutationApiResponseSchema = z.object({ "skill": z.union([z.object({ "id": z.number().int(), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export const UserSkillMutationApiResponseSchema = z.object({ "skill": z.union([z.object({ "id": z.number().int(), "system_skill_key": z.union([z.string(), z.null()]).default(null), "name": z.string(), "instructions": z.string(), "is_enabled": z.boolean().default(true), "is_default": z.boolean().default(false), "can_edit": z.boolean().default(true), "can_delete": z.boolean().default(true), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type UserSkillMutationApiResponse = z.infer<typeof UserSkillMutationApiResponseSchema>;
 
 export const PromptRecordApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "description": z.union([z.string(), z.null()]).default(""), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "content_format": z.union([z.string(), z.null()]).default("prompt"), "media_type": z.union([z.string(), z.null()]).default("text"), "attributes": z.record(z.string(), z.string()).optional(), "attachments": z.array(z.record(z.string(), z.string())).optional(), "reference_image_url": z.union([z.string(), z.null()]).default(null), "skill_markdown": z.union([z.string(), z.null()]).default("") }).catchall(z.any());

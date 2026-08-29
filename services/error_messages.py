@@ -20,6 +20,7 @@ ERROR_TASK_ORDER_INVALID = "タスクの並び順が最新の一覧と一致し�
 ERROR_SKILL_NOT_FOUND = "対象のSkillが見つかりません。"
 ERROR_SKILL_NAME_CONFLICT = "同じ名前のSkillがすでに存在します。"
 ERROR_SKILL_LIMIT_REACHED = "追加できるSkillは20件までです。"
+ERROR_DEFAULT_SKILL_IMMUTABLE = "デフォルトSkillは削除・編集できません。"
 ERROR_SHARED_SKILL_NOT_FOUND = "対象の公開Skillが見つかりませんでした。"
 ERROR_SHARED_SKILL_INVALID_TYPE = "指定された投稿はSkillではありません。"
 ERROR_SHARED_SKILL_CONTENT_MISSING = "追加できるSkill本文がありません。"

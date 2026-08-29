@@ -4,12 +4,12 @@ from blueprints.chat import messages as chat_messages
 from services import chat_context
 from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
-    GENERATIVE_UI_EXECUTION_CONTRACT,
     build_base_system_prompt,
     build_task_prompt,
     build_user_profile_prompt,
     insert_after_leading_system_messages,
 )
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 
 
 class ChatPromptManagementTestCase(unittest.TestCase):

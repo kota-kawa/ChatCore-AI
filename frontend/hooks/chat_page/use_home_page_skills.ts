@@ -92,6 +92,7 @@ export function useHomePageSkills({ loggedIn }: UseHomePageSkillsOptions) {
   }, [mutate, pendingSkillId, skills]);
 
   const handleDelete = useCallback(async (skill: UserSkill) => {
+    if (!skill.can_delete) return;
     const confirmed = await showConfirmModal(
       locale === "en" ? `Delete “${skill.name}”?` : `「${skill.name}」を削除しますか？`,
     );
