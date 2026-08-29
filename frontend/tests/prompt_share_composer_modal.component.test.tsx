@@ -13,13 +13,17 @@ function ComposerHarness({
   isGuest = false,
   isPostSubmitting = false,
   statusMessage = "",
-  onClose = vi.fn()
+  onClose = vi.fn(),
+  promptImagePreviewUrl = "",
+  promptImagePreviewName = ""
 }: {
   initialType?: ComposerType;
   isGuest?: boolean;
   isPostSubmitting?: boolean;
   statusMessage?: string;
   onClose?: () => void;
+  promptImagePreviewUrl?: string;
+  promptImagePreviewName?: string;
 }) {
   const [contentFormat, setContentFormat] = useState<ContentFormat>(initialType === "skill" ? "skill" : "prompt");
   const [mediaType, setMediaType] = useState<MediaType>(initialType === "image" ? "image" : "text");
@@ -89,8 +93,8 @@ function ComposerHarness({
       promptPostOutputExamplesRef={createRef<HTMLTextAreaElement>()}
       promptImageInputRef={createRef<HTMLInputElement>()}
       promptAssistRootRef={createRef<HTMLDivElement>()}
-      promptImagePreviewUrl=""
-      promptImagePreviewName=""
+      promptImagePreviewUrl={promptImagePreviewUrl}
+      promptImagePreviewName={promptImagePreviewName}
       onReferenceImageChange={vi.fn()}
       onClearReferenceImage={vi.fn()}
     />
@@ -133,6 +137,32 @@ describe("新しいプロンプトを投稿モーダル", () => {
     expect(document.getElementById("prompt-content")).toBeVisible();
     expect(document.getElementById("prompt-reference-image")).toBeVisible();
     expect(getExamplesSection()).toHaveAttribute("hidden");
+  });
+
+  // ファイル名の装飾を子孫セレクタ（.prompt-image-preview__meta span）に頼ると、
+  // 解除ボタンのラベルまでチップ扱いになってスマホで崩れる。専用クラスで固定する。
+  // Styling the file name through a descendant selector also hit the clear button's
+  // label and broke the layout on phones, so the class binding is pinned here.
+  it("添付ファイル名を専用クラスのチップで表示し、解除ボタンのラベルには当てない", () => {
+    render(
+      <ComposerHarness
+        initialType="image"
+        promptImagePreviewUrl="blob:preview"
+        promptImagePreviewName="generated-example-2026-08-29.png"
+      />
+    );
+
+    const fileName = document.getElementById("promptImagePreviewName");
+    expect(fileName).toHaveClass("prompt-image-preview__name");
+    // 省略表示になっても全体を確認できるようにツールチップへ残す
+    // The full name stays available as a tooltip even when the chip truncates it
+    expect(fileName).toHaveAttribute("title", "generated-example-2026-08-29.png");
+    expect(fileName?.querySelector(".prompt-image-preview__name-text")).toHaveTextContent(
+      "generated-example-2026-08-29.png"
+    );
+
+    const clearButton = document.getElementById("promptImageClearButton");
+    expect(clearButton?.querySelector(".prompt-image-preview__name")).toBeNull();
   });
 
   it("SKILLでは定義と追加リソースを表示し、本文・画像・入出力例を非表示にする", async () => {
