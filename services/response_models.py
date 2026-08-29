@@ -124,6 +124,12 @@ class PromptRecordApi(ResponsePayloadModel):
     content_format: str | None = "prompt"
     media_type: str | None = "text"
     attributes: dict[str, str] = Field(default_factory=dict)
+    # 設定画面でも投稿時の作例画像を表示できるよう、正準の添付情報と
+    # 後方互換URLを通常のプロンプトレコードにも含める。
+    # Include canonical attachments and the compatibility URL on regular prompt
+    # records so settings views can render the published example image.
+    attachments: list[dict[str, str]] = Field(default_factory=list)
+    reference_image_url: str | None = None
     skill_markdown: str | None = ""
 
 

@@ -5,6 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.prompt_share.prompt_manage_api import (
+    _fetch_my_prompts,
     _serialize_liked_prompt,
     _update_prompt_for_user,
     get_liked_prompts,
@@ -16,6 +17,31 @@ from tests.helpers.request_helpers import build_request
 # いいねしたプロンプトAPIのエンドポイントの挙動や、いいね要素のシリアライズ処理をテストするクラス。
 # Test class to check the behavior of the liked prompts API endpoint and serialization.
 class PromptManageApiTestCase(unittest.TestCase):
+    def test_my_prompts_keeps_reference_attachment_urls(self):
+        attachments = [{
+            "role": "reference",
+            "url": "/prompt_share/api/media/example.webp",
+            "thumbnail_url": "/prompt_share/api/media/example-card.webp",
+        }]
+        service = MagicMock()
+        service.list_my_prompts = AsyncMock(return_value=[{
+            "id": 42,
+            "title": "Image prompt",
+            "content": "Draw a city at night",
+            "content_format": "prompt",
+            "media_type": "image",
+            "attachments": attachments,
+        }])
+
+        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
+            prompts = asyncio.run(_fetch_my_prompts(7))
+
+        self.assertEqual(prompts[0]["attachments"], attachments)
+        self.assertEqual(
+            prompts[0]["reference_image_url"],
+            "/prompt_share/api/media/example.webp",
+        )
+
     def test_update_skill_replaces_resources_through_async_service(self):
         service = MagicMock()
         service.update_prompt = AsyncMock(return_value=True)
@@ -111,6 +137,11 @@ class PromptManageApiTestCase(unittest.TestCase):
                 "content": "content",
                 "description": "説明",
                 "author": "author",
+                "attachments": [{
+                    "role": "reference",
+                    "url": "/prompt_share/api/media/example.webp",
+                    "thumbnail_url": "/prompt_share/api/media/example-card.webp",
+                }],
                 "input_examples": "in",
                 "output_examples": "out",
                 "liked_at": datetime(2024, 1, 2, 3, 4, 5),
@@ -125,6 +156,10 @@ class PromptManageApiTestCase(unittest.TestCase):
         self.assertEqual(serialized["prompt_created_at"], "2024-01-01T10:11:12")
         self.assertEqual(serialized["created_at"], "2024-01-01T10:11:12")
         self.assertEqual(serialized["description"], "説明")
+        self.assertEqual(
+            serialized["attachments"][0]["thumbnail_url"],
+            "/prompt_share/api/media/example-card.webp",
+        )
 
 
 if __name__ == "__main__":

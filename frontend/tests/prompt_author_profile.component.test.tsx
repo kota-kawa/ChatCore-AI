@@ -85,7 +85,15 @@ describe("prompt_share author avatar", () => {
     const onOpenPrompt = vi.fn();
     const onLoadMore = vi.fn();
     const onClose = vi.fn();
-    const profilePrompt = { ...basePrompt, description: "会議の決定事項を短く整理するための説明" };
+    const profilePrompt = {
+      ...basePrompt,
+      description: "会議の決定事項を短く整理するための説明",
+      attachments: [{
+        role: "reference",
+        url: "/prompt_share/api/media/profile-example.webp",
+        thumbnail_url: "/prompt_share/api/media/profile-example-card.webp"
+      }]
+    };
 
     render(
       <PromptShareAuthorProfileModal
@@ -113,6 +121,10 @@ describe("prompt_share author avatar", () => {
     expect(screen.getByText("プロンプトを書くのが好きです。")).toBeInTheDocument();
     expect(screen.getByText("2件の投稿")).toBeInTheDocument();
     expect(screen.getByText("会議の決定事項を短く整理するための説明")).toBeInTheDocument();
+    expect(screen.getByAltText("会議メモを要点・決定事項・次のアクションに要約する の作例画像")).toHaveAttribute(
+      "src",
+      "/prompt_share/api/media/profile-example-card.webp"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /会議メモを要点・決定事項・次のアクションに要約する/ }));
     expect(onOpenPrompt).toHaveBeenCalledWith(profilePrompt);

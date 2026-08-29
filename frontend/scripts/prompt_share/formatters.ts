@@ -87,23 +87,54 @@ export function getPromptMediaIconClass(mediaType?: string) {
   return getMediaType(mediaType || "").icon;
 }
 
-// APIが返す明示的な参照画像URLを優先し、移行中のレスポンスではreference添付から補完する。
-// Prefer the API's explicit reference image URL and fall back to a reference attachment
-// for responses produced during the attachments migration.
-function resolveReferenceImageUrl(prompt: PromptData): string {
-  const explicitUrl = String(prompt.reference_image_url || "").trim();
-  const referenceAttachment = Array.isArray(prompt.attachments)
-    ? prompt.attachments.find(
-        (attachment) => attachment.role === "reference" && String(attachment.url || "").trim()
-      )
-    : undefined;
-  const attachmentUrl = String(referenceAttachment?.url || "").trim();
-  const url = explicitUrl || attachmentUrl;
+type PromptImageSource = {
+  attachments?: readonly unknown[];
+  reference_image_url?: string | null;
+  referenceImageUrl?: string | null;
+};
+
+function normalizePromptImageUrl(value: unknown): string {
+  const url = typeof value === "string" ? value.trim() : "";
 
   if (!url || url.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(url)) {
     return url;
   }
   return `/${url}`;
+}
+
+function getReferenceAttachment(attachments: readonly unknown[] | undefined) {
+  if (!Array.isArray(attachments)) {
+    return undefined;
+  }
+  return attachments.find((attachment): attachment is Record<string, unknown> => (
+    Boolean(attachment) &&
+    typeof attachment === "object" &&
+    (attachment as Record<string, unknown>).role === "reference" &&
+    Boolean(
+      normalizePromptImageUrl((attachment as Record<string, unknown>).url) ||
+      normalizePromptImageUrl((attachment as Record<string, unknown>).thumbnail_url)
+    )
+  ));
+}
+
+// 一覧カードでは軽量なthumbnail_urlを優先し、詳細表示では表示用urlを優先する。
+// legacyレスポンスはreference_image_url（camelCaseの設定画面型を含む）へフォールバックする。
+// Prefer thumbnail_url for compact list cards and the display url for detail views.
+// Legacy responses fall back to reference_image_url, including the settings camelCase shape.
+export function getPromptReferenceImageUrl(
+  prompt: PromptImageSource,
+  variant: "display" | "thumbnail" = "display"
+): string {
+  const attachment = getReferenceAttachment(prompt.attachments);
+  const displayUrl = normalizePromptImageUrl(attachment?.url);
+  const thumbnailUrl = normalizePromptImageUrl(attachment?.thumbnail_url);
+  const explicitUrl = normalizePromptImageUrl(
+    prompt.reference_image_url ?? prompt.referenceImageUrl
+  );
+
+  return variant === "thumbnail"
+    ? thumbnailUrl || displayUrl || explicitUrl
+    : explicitUrl || displayUrl || thumbnailUrl;
 }
 
 export function normalizePromptData(prompt: PromptData): PromptData {
@@ -118,7 +149,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     attachments: Array.isArray(prompt.attachments) ? prompt.attachments : [],
     resources: normalizeSkillResources(prompt.resources, prompt.skill_python_script || ""),
     prompt_type: normalizePromptType(prompt.prompt_type),
-    reference_image_url: resolveReferenceImageUrl(prompt),
+    reference_image_url: getPromptReferenceImageUrl(prompt),
     skill_markdown: prompt.skill_markdown || "",
     skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),

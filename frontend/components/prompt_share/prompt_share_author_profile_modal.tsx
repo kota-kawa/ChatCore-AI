@@ -9,6 +9,7 @@ import {
   getPromptMediaIconClass,
   getPromptMediaLabel,
   getPromptPreviewSource,
+  getPromptReferenceImageUrl,
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent
@@ -71,6 +72,7 @@ function AuthorPromptRow({
   const preview = truncateContent(
     previewSource || (contentFormatValue === "skill" ? t("promptShare.skillOpenHelp") : "")
   );
+  const imageUrl = getPromptReferenceImageUrl(prompt, "thumbnail");
 
   return (
     <li className="author-profile-list__item">
@@ -99,6 +101,16 @@ function AuthorPromptRow({
         {/* 文字数で切らず、CSSの2行クランプに任せて幅いっぱいまで見せる */}
         {/* No character cap here: the CSS two-line clamp lets the title use the full width */}
         <h4 className="author-profile-prompt__title">{prompt.title}</h4>
+        {imageUrl ? (
+          <span className="author-profile-prompt__image">
+            <img
+              src={imageUrl}
+              alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
+              loading="lazy"
+              decoding="async"
+            />
+          </span>
+        ) : null}
         <p className="author-profile-prompt__content">{preview}</p>
         <div className="author-profile-prompt__meta">
           <span>

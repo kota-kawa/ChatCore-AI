@@ -1,5 +1,6 @@
 import MarkdownContent from "../MarkdownContent";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { getPromptReferenceImageUrl } from "../../scripts/prompt_share/formatters";
 import { toDisplayDate } from "../../scripts/user/settings/utils";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -10,6 +11,8 @@ export type PromptPreview = {
   content: string;
   description?: string;
   contentFormat: string;
+  attachments: Record<string, string>[];
+  referenceImageUrl: string;
   skillMarkdown: string;
   category: string;
   inputExamples: string;
@@ -34,6 +37,7 @@ export function PromptPreviewModal({
   const isSkill = prompt.contentFormat === "skill";
   const promptBody = isSkill ? prompt.skillMarkdown : prompt.content;
   const promptBodyLabel = isSkill ? t("promptShare.skillDefinition") : t("promptShare.body");
+  const imageUrl = getPromptReferenceImageUrl(prompt);
   const hasExamples = !isSkill && Boolean(prompt.inputExamples.trim() || prompt.outputExamples.trim());
   const sourceLabel = source === "authored" ? t("settings.prompts") : t("settings.likedPrompts");
 
@@ -96,6 +100,16 @@ export function PromptPreviewModal({
         </header>
 
         <div className="prompt-preview-modal__body">
+          {imageUrl ? (
+            <figure className="prompt-preview-modal__image">
+              <img
+                src={imageUrl}
+                alt={t("promptShare.exampleImageAlt", { title: prompt.title })}
+                decoding="async"
+              />
+            </figure>
+          ) : null}
+
           {prompt.description?.trim() ? (
             <section className="prompt-preview-modal__section prompt-preview-modal__description" aria-labelledby="promptPreviewDescriptionTitle">
               <div className="prompt-preview-modal__section-heading">

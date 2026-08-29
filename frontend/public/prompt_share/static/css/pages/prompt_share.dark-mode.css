@@ -636,6 +636,11 @@
   color: #f9fafb;
 }
 
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__image {
+  border-color: #374151;
+  background: #111827;
+}
+
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__content {
   color: #d1d5db;
 }

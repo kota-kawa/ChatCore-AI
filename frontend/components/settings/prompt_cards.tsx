@@ -6,6 +6,7 @@ import {
   getPromptFormatIconClass,
   getPromptFormatLabel,
   getPromptPreviewSource,
+  getPromptReferenceImageUrl,
   normalizePromptContentFormat
 } from "../../scripts/prompt_share/formatters";
 import {
@@ -27,6 +28,7 @@ function SettingsPromptCard({
   title,
   contentSource,
   contentFormat,
+  imageUrl,
   contentIsPlainText = false,
   categoryLabel,
   dateLabel,
@@ -38,6 +40,7 @@ function SettingsPromptCard({
   title: string;
   contentSource: string;
   contentFormat: string;
+  imageUrl: string;
   contentIsPlainText?: boolean;
   categoryLabel: string;
   dateLabel: string;
@@ -95,6 +98,16 @@ function SettingsPromptCard({
         {/* 文字数で切らず、CSSの2行クランプに任せてカード幅いっぱいまで見せる */}
         {/* No character cap here: the CSS two-line clamp lets the title use the card's full width */}
         <h3 className="prompt-card__title" title={title}>{title}</h3>
+        {imageUrl ? (
+          <span className="prompt-card__image">
+            <img
+              src={imageUrl}
+              alt={t("promptShare.exampleImageAlt", { title })}
+              loading="lazy"
+              decoding="async"
+            />
+          </span>
+        ) : null}
         <p className="prompt-card__content" title={contentSource}>
           {contentPreview || t("promptShare.noContent")}
         </p>
@@ -130,6 +143,7 @@ export function PromptCard({
       title={prompt.title}
       contentSource={getPromptPreviewSource(prompt.description, prompt.contentFormat, prompt.content, prompt.skillMarkdown)}
       contentFormat={prompt.contentFormat}
+      imageUrl={getPromptReferenceImageUrl(prompt, "thumbnail")}
       contentIsPlainText={Boolean(prompt.description?.trim())}
       categoryLabel={categoryLabel}
       dateLabel={createdAtLabel}
@@ -187,6 +201,7 @@ export function LikedPromptCard({
       title={entry.title}
       contentSource={getPromptPreviewSource(entry.description, entry.contentFormat, entry.content, entry.skillMarkdown)}
       contentFormat={entry.contentFormat}
+      imageUrl={getPromptReferenceImageUrl(entry, "thumbnail")}
       contentIsPlainText={Boolean(entry.description?.trim())}
       categoryLabel={categoryLabel}
       dateLabel={likedAtLabel}
