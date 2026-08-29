@@ -48,7 +48,7 @@ export function NewSkillModal({
     <div
       ref={modalRef}
       id="newUserSkillModal"
-      className={`skill-modal modal-base ${isOpen ? "is-open show" : ""}`.trim()}
+      className={`skill-modal custom-modal modal-base ${isOpen ? "is-open" : ""}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="new-user-skill-modal-title"
@@ -58,65 +58,71 @@ export function NewSkillModal({
         if (event.target === event.currentTarget && !isSaving) onClose();
       }}
     >
-      <div className="skill-modal__content">
-        <div className="skill-modal__header">
-          <div>
-            <p className="skill-modal__eyebrow">{locale === "en" ? "PERSONAL SKILL" : "個人Skill"}</p>
-            <h2 id="new-user-skill-modal-title">{t("home.newSkill")}</h2>
-          </div>
-          <ModalCloseButton
-            className="skill-modal__close"
-            id="closeNewUserSkillModal"
-            label={t("chat.closeModal")}
-            onClick={onClose}
-          />
-        </div>
-
-        <p className="skill-modal__lead">{t("home.newSkillDescription")}</p>
-
-        <form className="skill-modal__form" onSubmit={onSubmit}>
-          <div className="skill-modal__field">
-            <label htmlFor="new-user-skill-name">{t("home.skillName")}</label>
-            <input
-              id="new-user-skill-name"
-              type="text"
-              required
-              maxLength={MAX_USER_SKILL_NAME_LENGTH}
-              autoComplete="off"
-              placeholder={t("home.skillNamePlaceholder")}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+      <div className="custom-modal-dialog">
+        <div className="custom-modal-content">
+          <header className="custom-modal-header">
+            <div>
+              <p className="task-detail-modal-eyebrow">{locale === "en" ? "PERSONAL SKILL" : "個人Skill"}</p>
+              <h2 className="custom-modal-title" id="new-user-skill-modal-title">{t("home.newSkill")}</h2>
+            </div>
+            <ModalCloseButton
+              className="custom-modal-close"
+              id="closeNewUserSkillModal"
+              label={t("chat.closeModal")}
+              onClick={onClose}
             />
+          </header>
+
+          <div className="custom-modal-body">
+            <form id="newUserSkillForm" className="skill-add-modal__form" onSubmit={onSubmit}>
+              <p className="custom-form-text skill-add-modal__lead">{t("home.newSkillDescription")}</p>
+
+              <div className="custom-form-group">
+                <label className="custom-form-label" htmlFor="new-user-skill-name">{t("home.skillName")}</label>
+                <input
+                  id="new-user-skill-name"
+                  className="custom-form-control"
+                  type="text"
+                  required
+                  maxLength={MAX_USER_SKILL_NAME_LENGTH}
+                  autoComplete="off"
+                  placeholder={t("home.skillNamePlaceholder")}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </div>
+
+              <div className="custom-form-group">
+                <label className="custom-form-label" htmlFor="new-user-skill-instructions">{t("home.skillInstructions")}</label>
+                <textarea
+                  id="new-user-skill-instructions"
+                  className="custom-form-control"
+                  required
+                  rows={7}
+                  maxLength={MAX_USER_SKILL_INSTRUCTIONS_LENGTH}
+                  placeholder={t("home.skillInstructionsPlaceholder")}
+                  value={instructions}
+                  onChange={(event) => setInstructions(event.target.value)}
+                />
+                <span className="skill-add-modal__counter">
+                  {instructions.length.toLocaleString()} / {MAX_USER_SKILL_INSTRUCTIONS_LENGTH.toLocaleString()}
+                </span>
+              </div>
+
+              <p className="custom-form-text skill-add-modal__hint">{t("home.skillModalHint")}</p>
+            </form>
           </div>
 
-          <div className="skill-modal__field">
-            <label htmlFor="new-user-skill-instructions">{t("home.skillInstructions")}</label>
-            <textarea
-              id="new-user-skill-instructions"
-              required
-              rows={7}
-              maxLength={MAX_USER_SKILL_INSTRUCTIONS_LENGTH}
-              placeholder={t("home.skillInstructionsPlaceholder")}
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-            />
-            <span className="skill-modal__counter">
-              {instructions.length.toLocaleString()} / {MAX_USER_SKILL_INSTRUCTIONS_LENGTH.toLocaleString()}
-            </span>
-          </div>
-
-          <p className="skill-modal__hint">{t("home.skillModalHint")}</p>
-
-          <div className="skill-modal__actions">
-            <button type="button" className="skill-modal__cancel" onClick={onClose} disabled={isSaving}>
+          <footer className="custom-modal-footer">
+            <button type="button" className="custom-btn-secondary cc-press" onClick={onClose} disabled={isSaving}>
               {t("common.cancel")}
             </button>
-            <button type="submit" className="primary-button skill-modal__submit" disabled={isSaving}>
-              {isSaving ? <i className="bi bi-arrow-repeat skill-modal__spinner" aria-hidden="true"></i> : <i className="bi bi-plus-lg" aria-hidden="true"></i>}
+            <button type="submit" form="newUserSkillForm" className="primary-button cc-press" disabled={isSaving}>
+              {isSaving ? <i className="bi bi-arrow-repeat skill-add-modal__spinner" aria-hidden="true"></i> : <i className="bi bi-plus-lg" aria-hidden="true"></i>}
               <span>{isSaving ? t("home.skillAdding") : t("home.addSkill")}</span>
             </button>
-          </div>
-        </form>
+          </footer>
+        </div>
       </div>
     </div>
   );
