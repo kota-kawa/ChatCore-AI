@@ -17,6 +17,7 @@ import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_ca
 // Defines all state, filters, and event handlers passed into the page layout component
 type PromptSharePageLayoutProps = {
   authUiReady: boolean;
+  currentUserId: number | null;
   isLoggedIn: boolean;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
@@ -55,6 +56,7 @@ type PromptSharePageLayoutProps = {
   onSaveAsMemo: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
+  onEditPrompt: (prompt: PromptRecord) => void;
   // モーダルなど追加UIを差し込める拡張スロット
   // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
@@ -97,6 +99,7 @@ function PromptCardSkeletonGrid() {
 // Pure layout component for the prompt share page: header, filters, and card grid
 export function PromptSharePageLayout({
   authUiReady,
+  currentUserId,
   isLoggedIn,
   searchInput,
   onSearchInputChange,
@@ -135,6 +138,7 @@ export function PromptSharePageLayout({
   onSaveAsMemo,
   onToggleLike,
   onOpenAuthorProfile,
+  onEditPrompt,
   children
 }: PromptSharePageLayoutProps) {
   const { locale, t } = useTranslation();
@@ -379,6 +383,9 @@ export function PromptSharePageLayout({
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
                   isMemoSavePending={memoSavePendingIds.has(promptId)}
                   isUseInChatEffectActive={actionEffectIds.has(`${promptId}:use-in-chat`)}
+                  isOwnPrompt={
+                    currentUserId !== null && Number(prompt.author_user_id || 0) === currentUserId
+                  }
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
                   onOpenShare={onOpenShare}
@@ -388,6 +395,7 @@ export function PromptSharePageLayout({
                   onSaveAsMemo={onSaveAsMemo}
                   onToggleLike={onToggleLike}
                   onOpenAuthorProfile={onOpenAuthorProfile}
+                  onEdit={onEditPrompt}
                 />
               );
             })}

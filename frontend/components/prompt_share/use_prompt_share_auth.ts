@@ -11,6 +11,7 @@ import {
 // Auth state management: shows UI immediately from cache, then syncs with the API
 export function usePromptShareAuth() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [authUiReady, setAuthUiReady] = useState(false);
 
   useEffect(() => {
@@ -27,12 +28,14 @@ export function usePromptShareAuth() {
     const timerId = window.setTimeout(() => {
       void resilientFetch("/api/current_user", { credentials: "same-origin" })
         .then((res) => (res.ok ? res.json() : { logged_in: false }))
-        .then((data: { logged_in?: boolean }) => {
+        .then((data: { logged_in?: boolean; user?: { id?: number | string } }) => {
           if (cancelled) {
             return;
           }
           const loggedIn = Boolean(data.logged_in);
+          const userId = Number(data.user?.id || 0);
           setIsLoggedIn(loggedIn);
+          setCurrentUserId(loggedIn && userId > 0 ? userId : null);
           setLoggedInState(loggedIn);
           setAuthUiReady(true);
           writeCachedAuthState(loggedIn);
@@ -43,6 +46,7 @@ export function usePromptShareAuth() {
           }
           console.error("Error checking login status:", error);
           setIsLoggedIn(false);
+          setCurrentUserId(null);
           setLoggedInState(false);
           setAuthUiReady(true);
         });
@@ -56,6 +60,7 @@ export function usePromptShareAuth() {
 
   return {
     authUiReady,
+    currentUserId,
     isLoggedIn
   };
 }

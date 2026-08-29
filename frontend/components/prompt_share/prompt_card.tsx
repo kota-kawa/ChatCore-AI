@@ -39,6 +39,7 @@ type PromptCardProps = {
   isAddAsTaskPending: boolean;
   isMemoSavePending: boolean;
   isUseInChatEffectActive: boolean;
+  isOwnPrompt?: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event: MouseEvent<HTMLButtonElement>) => void;
@@ -48,6 +49,7 @@ type PromptCardProps = {
   onSaveAsMemo: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
+  onEdit?: (prompt: PromptRecord) => void;
 };
 
 // アバター画像の読み込みに失敗した場合、デフォルト画像へ差し替える
@@ -77,6 +79,7 @@ function PromptCardComponent({
   isAddAsTaskPending,
   isMemoSavePending,
   isUseInChatEffectActive,
+  isOwnPrompt = false,
   onOpenDetail,
   onOpenComments,
   onOpenShare,
@@ -86,6 +89,7 @@ function PromptCardComponent({
   onSaveAsMemo,
   onToggleLike,
   onOpenAuthorProfile,
+  onEdit,
 }: PromptCardProps) {
   const { locale, t } = useTranslation();
   // サーバー値を正規化し、未設定時のフォールバックを確保する
@@ -217,6 +221,20 @@ function PromptCardComponent({
           event.stopPropagation();
         }}
       >
+        {isOwnPrompt && onEdit ? (
+          <button
+            className="dropdown-item cc-press"
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onCloseDropdown();
+              onEdit(prompt);
+            }}
+          >
+            <i className="bi bi-pencil-square"></i>
+            <span>{t("promptShare.editPrompt")}</span>
+          </button>
+        ) : null}
         <button
           className="dropdown-item cc-press"
           type="button"
