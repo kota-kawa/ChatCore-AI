@@ -13,6 +13,7 @@
   --ps-border: rgba(148, 163, 184, 0.2);
   --ps-primary: #3b82f6;
   --ps-primary-strong: #2563eb;
+  --ps-skill-added: #4ade80;
   --ps-shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.4);
   --ps-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.5);
   --ps-fab-blue-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
@@ -315,6 +316,18 @@
 
 [data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn.used-in-chat i {
   color: #74c0fc !important;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.add-to-skill-btn.added-to-skills,
+
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.add-to-skill-btn.added-to-skills:hover {
+  background: transparent;
+  color: var(--ps-skill-added);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.add-to-skill-btn.added-to-skills i {
+  color: var(--ps-skill-added) !important;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .post-modal-content {

@@ -89,6 +89,14 @@ describe("prompt_share card badges", () => {
     expect(addedButton).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("SKILL追加済みは通常の追加済み状態と同じ塗りつぶしアイコンを使う", () => {
+    const container = renderCard({ content_format: "skill", skill_markdown: "# SKILL", added_to_skills: true });
+    const addedButton = screen.getByRole("button", { name: "Skillに追加済み" });
+
+    expect(addedButton).toHaveClass("add-to-skill-btn", "added-to-skills");
+    expect(container.querySelector(".add-to-skill-btn i")).toHaveClass("bi-plus-square-fill");
+  });
+
   it("通常プロンプトの主操作はチャット利用のまま維持する", () => {
     renderCard();
 

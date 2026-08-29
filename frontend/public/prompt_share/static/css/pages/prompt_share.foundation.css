@@ -23,6 +23,7 @@ body.prompt-share-page,
   --ps-primary: #1a73e8;
   --ps-primary-strong: #185abc;
   --ps-success: #188038;
+  --ps-skill-added: var(--ps-success);
   --ps-danger: #d93025;
   --ps-like: #c05d74;
   --ps-like-strong: #a44b61;
