@@ -37,6 +37,7 @@ class PromptSearchTestCase(unittest.TestCase):
             "created_at": "2024-01-01T00:00:00",
             "liked": True,
             "used_in_chat": True,
+            "added_to_skills": True,
             "comment_count": 2,
         }
         row.update(overrides)
@@ -57,6 +58,7 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertEqual(prompt["id"], 11)
         self.assertTrue(prompt["liked"])
         self.assertTrue(prompt["used_in_chat"])
+        self.assertTrue(prompt["added_to_skills"])
         self.assertEqual(prompt["view_count"], 9)
         self.assertEqual(prompt["comment_count"], 2)
         self.assertEqual(payload["pagination"]["total"], 55)

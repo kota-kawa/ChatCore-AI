@@ -290,7 +290,12 @@ class SharedContentRepository:
                          WHERE used_tasks.user_id = :actor_user_id
                            AND used_tasks.deleted_at IS NULL
                            AND used_tasks.source_prompt_id = p.id
-                       ) AS used_in_chat
+                       ) AS used_in_chat,
+                       EXISTS (
+                         SELECT 1 FROM user_skills AS added_skills
+                         WHERE added_skills.user_id = :actor_user_id
+                           AND added_skills.source_prompt_id = p.id
+                       ) AS added_to_skills
                 FROM matched_prompts AS p
                 LEFT JOIN LATERAL (
                   SELECT COUNT(*) AS comment_count
@@ -422,7 +427,12 @@ class SharedContentRepository:
                       WHERE used_tasks.user_id = :actor_user_id
                         AND used_tasks.deleted_at IS NULL
                         AND used_tasks.source_prompt_id = p.id
-                    ) AS used_in_chat
+                    ) AS used_in_chat,
+                    EXISTS (
+                      SELECT 1 FROM user_skills AS added_skills
+                      WHERE added_skills.user_id = :actor_user_id
+                        AND added_skills.source_prompt_id = p.id
+                    ) AS added_to_skills
                 FROM page_prompts AS p
                 LEFT JOIN LATERAL (
                     SELECT COUNT(*) AS comment_count

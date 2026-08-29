@@ -167,6 +167,10 @@ class UserSkill(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    source_prompt_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("prompts.id", ondelete="SET NULL"),
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     instructions: Mapped[str] = mapped_column(Text, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
@@ -178,6 +182,7 @@ class UserSkill(Base):
         CheckConstraint("char_length(btrim(instructions)) BETWEEN 1 AND 12000", name="chk_user_skills_instructions_length"),
         Index("idx_user_skills_user_created_at", "user_id", "created_at", "id"),
         Index("idx_user_skills_user_enabled", "user_id", "is_enabled", "id"),
+        Index("idx_user_skills_user_source_prompt", "user_id", "source_prompt_id"),
         Index(
             "uq_user_skills_user_normalized_name",
             "user_id",

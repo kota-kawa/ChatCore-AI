@@ -31,6 +31,7 @@ from services.error_messages import (
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
     ERROR_PROMPT_NOT_FOUND,
+    MESSAGE_SHARED_SKILL_ADDED,
 )
 from services.guest_prompt_service import (
     GuestPromptLimitExceeded,
@@ -255,6 +256,8 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
         prompt["liked"] = bool(prompt["liked"])
     if "used_in_chat" in prompt:
         prompt["used_in_chat"] = bool(prompt["used_in_chat"])
+    if "added_to_skills" in prompt:
+        prompt["added_to_skills"] = bool(prompt["added_to_skills"])
     return prompt
 
 
@@ -760,6 +763,36 @@ async def add_prompt_as_task(request: Request):
         return jsonify(response_payload, status_code=status_code)
     except Exception:
         return log_and_internal_server_error(logger, "Failed to add prompt as task.")
+
+
+@prompt_share_api_bp.post("/skill", name="prompt_share_api.add_prompt_as_skill")
+async def add_prompt_as_skill(request: Request):
+    if "user_id" not in request.session:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        PromptTaskCreateRequest,
+        error_message="必要なフィールドが不足しています",
+    )
+    if validation_error is not None:
+        return validation_error
+    try:
+        response_payload, status_code = await _service().import_prompt_as_skill(
+            user_id=int(request.session["user_id"]),
+            prompt_id=payload.prompt_id,
+        )
+        if status_code in {200, 201} and "error" not in response_payload:
+            response_payload = {
+                **response_payload,
+                "message": response_payload.get("message") or MESSAGE_SHARED_SKILL_ADDED,
+                "added_to_skills": True,
+            }
+        return jsonify(response_payload, status_code=status_code)
+    except Exception:
+        return log_and_internal_server_error(logger, "Failed to add prompt as Skill.")
 
 
 @prompt_share_api_bp.delete("/task", name="prompt_share_api.remove_prompt_as_task")

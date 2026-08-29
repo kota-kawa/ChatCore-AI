@@ -105,6 +105,20 @@ function PromptCardComponent({
   const safeCreatedAt = formatPromptDate(prompt.created_at) || t("promptShare.dateUnavailable");
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);
+  const isSkillFormat = contentFormatValue === "skill";
+  const isAddedToSkills = Boolean(prompt.added_to_skills);
+  const isPrimaryActionPending = isAddAsTaskPending;
+  const primaryActionLabel = isSkillFormat
+    ? isPrimaryActionPending
+      ? t("promptShare.addingSkill")
+      : isAddedToSkills
+        ? t("promptShare.skillAdded")
+        : t("promptShare.addSkill")
+    : isPrimaryActionPending
+      ? t("promptShare.updatingChat")
+      : isUsedInChat
+        ? t("promptShare.removeFromChat")
+        : t("promptShare.useInChat");
   const menuId = `prompt-actions-menu-${promptId}`;
   const authorName = prompt.author || t("promptShare.authorMissing");
   const authorUserId = Number(prompt.author_user_id || 0);
@@ -366,25 +380,22 @@ function PromptCardComponent({
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
           </button>
 
-          {/* チャットで使う操作も二重送信を防ぐ */}
-          {/* Guard the use-in-chat action against duplicate API requests */}
+          {/* 共有プロンプトの主操作も二重送信を防ぐ */}
+          {/* Guard the shared-prompt primary action against duplicate API requests */}
           <button
-            className={`prompt-action-btn use-in-chat-btn cc-press${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
+            className={`prompt-action-btn use-in-chat-btn cc-press${isSkillFormat ? " add-to-skill-btn" : ""}${isSkillFormat && isAddedToSkills ? " added-to-skills" : isUsedInChat ? " used-in-chat" : ""}${isPrimaryActionPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label={isUsedInChat ? t("promptShare.removeFromChat") : t("promptShare.useInChat")}
-            aria-pressed={isUsedInChat ? "true" : "false"}
-            aria-disabled={isAddAsTaskPending ? "true" : "false"}
+            aria-label={primaryActionLabel}
+            aria-pressed={isSkillFormat ? (isAddedToSkills ? "true" : "false") : isUsedInChat ? "true" : "false"}
+            aria-disabled={isPrimaryActionPending || (isSkillFormat && isAddedToSkills) ? "true" : "false"}
+            disabled={isPrimaryActionPending || (isSkillFormat && isAddedToSkills)}
             data-tooltip={
-              isAddAsTaskPending
-                ? t("promptShare.updatingChat")
-                : isUsedInChat
-                  ? t("promptShare.removeFromChat")
-                  : t("promptShare.useInChat")
+              primaryActionLabel
             }
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
-              if (isAddAsTaskPending) {
+              if (isPrimaryActionPending || (isSkillFormat && isAddedToSkills)) {
                 return;
               }
               void onAddAsTask(prompt);

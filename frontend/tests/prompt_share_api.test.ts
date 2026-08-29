@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createPrompt,
+  addPromptAsSkill,
   fetchPromptAuthorProfile,
   fetchPromptList,
   recordPromptView,
@@ -178,6 +179,52 @@ test("savePromptAsMemo saves the shared prompt title and body through the memo A
     ai_response: "設計をレビューして、懸念点を列挙してください。",
     title: "設計レビューの観点"
   });
+});
+
+test("addPromptAsSkill posts only the shared prompt ID to the Skill endpoint", async () => {
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return jsonResponse({ message: "added", skill_id: 22, added_to_skills: true });
+  }) as typeof fetch;
+
+  try {
+    await addPromptAsSkill({
+      id: 8,
+      title: "レビュー Skill",
+      content: "",
+      content_format: "skill",
+      skill_markdown: "# Review"
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestedUrl, "/prompt_share/api/skill");
+  assert.equal(requestedInit?.method, "POST");
+  assert.equal(requestedInit?.credentials, "same-origin");
+  assert.deepEqual(JSON.parse(String(requestedInit?.body)), { prompt_id: 8 });
+});
+
+test("addPromptAsSkill fails before fetch when the shared prompt ID is missing", async () => {
+  let called = false;
+  globalThis.fetch = (async () => {
+    called = true;
+    return jsonResponse({});
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      addPromptAsSkill({ title: "Missing", content: "", content_format: "skill" }),
+      /追加するSkillのプロンプトIDが見つかりません/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(called, false);
 });
 
 test("savePromptAsMemo prefers skill_markdown for SKILL posts", async () => {

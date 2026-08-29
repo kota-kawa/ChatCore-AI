@@ -25,6 +25,7 @@ from services.error_messages import (
     ERROR_SKILL_LIMIT_REACHED,
     ERROR_SKILL_NAME_CONFLICT,
     ERROR_SKILL_NOT_FOUND,
+    ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_TASK_NAME_CONFLICT,
     ERROR_TASK_NOT_FOUND,
     ERROR_TASK_ORDER_INVALID,
@@ -43,6 +44,7 @@ from services.models import (
     UserSkill,
 )
 from services.user_skills import (
+    MAX_USER_SKILL_NAME_LENGTH,
     MAX_USER_SKILLS,
     normalize_user_skill_instructions,
     normalize_user_skill_name,
@@ -584,6 +586,80 @@ class ChatRepository:
             raise
         return self._serialize_user_skill(skill)
 
+    async def import_user_skill(
+        self,
+        user_id: int,
+        source_prompt_id: int,
+        name: str,
+        instructions: str,
+    ) -> tuple[dict[str, Any], bool]:
+        """Create or return a Skill imported from a shared prompt.
+
+        The same per-user advisory lock as the regular Skill editor is used so
+        the limit and normalized-name allocation remain atomic across both
+        entry points.  ``source_prompt_id`` is deliberately nullable at the
+        schema level so manually-created Skills and deleted shared prompts are
+        still supported, but imported rows are identified by this value while
+        their source remains public.
+        """
+        normalized_name = normalize_user_skill_name(name) or "共有Skill"
+        normalized_instructions = normalize_user_skill_instructions(instructions)
+        if not normalized_instructions:
+            raise ApiServiceError(ERROR_SHARED_SKILL_CONTENT_MISSING, 400, code="skill_content_missing")
+
+        await self._lock_user_skills(user_id)
+        existing = (
+            await self.session.execute(
+                select(UserSkill)
+                .where(
+                    UserSkill.user_id == int(user_id),
+                    UserSkill.source_prompt_id == int(source_prompt_id),
+                )
+                .order_by(UserSkill.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return self._serialize_user_skill(existing), False
+
+        skill_count = await self.session.scalar(
+            select(func.count(UserSkill.id)).where(UserSkill.user_id == int(user_id))
+        )
+        if int(skill_count or 0) >= MAX_USER_SKILLS:
+            raise ApiServiceError(ERROR_SKILL_LIMIT_REACHED, 409, code="skill_limit_reached")
+
+        skill_name = await self._available_imported_skill_name(
+            user_id=int(user_id),
+            name=normalized_name,
+        )
+        skill = UserSkill(
+            user_id=int(user_id),
+            source_prompt_id=int(source_prompt_id),
+            name=skill_name,
+            instructions=normalized_instructions,
+            is_enabled=True,
+        )
+        self.session.add(skill)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            if _is_unique_violation(exc):
+                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
+            raise
+        return self._serialize_user_skill(skill), True
+
+    async def delete_user_skill_by_source_prompt(self, user_id: int, source_prompt_id: int) -> bool:
+        """Delete the Skill imported from a shared prompt, if it exists."""
+        await self._lock_user_skills(user_id)
+        result = await self.session.execute(
+            delete(UserSkill).where(
+                UserSkill.user_id == int(user_id),
+                UserSkill.source_prompt_id == int(source_prompt_id),
+            )
+        )
+        await self.session.flush()
+        return bool(result.rowcount or 0)
+
     async def set_user_skill_enabled(
         self,
         user_id: int,
@@ -984,6 +1060,26 @@ class ChatRepository:
                 namespace=USER_SKILL_WRITE_LOCK_NAMESPACE, user_id=user_id
             )
         )
+
+    async def _available_imported_skill_name(self, *, user_id: int, name: str) -> str:
+        """Allocate a deterministic Skill name without colliding with manual Skills."""
+        base_name = normalize_user_skill_name(name) or "共有Skill"
+        candidate = base_name
+        suffix_number = 1
+        while True:
+            existing = await self.session.scalar(
+                select(UserSkill.id)
+                .where(
+                    UserSkill.user_id == int(user_id),
+                    func.lower(func.btrim(UserSkill.name)) == func.lower(func.btrim(candidate)),
+                )
+                .limit(1)
+            )
+            if existing is None:
+                return candidate
+            suffix_number += 1
+            suffix = f" ({suffix_number})"
+            candidate = f"{base_name[: MAX_USER_SKILL_NAME_LENGTH - len(suffix)]}{suffix}"
 
     @staticmethod
     def _trailing_unanswered_user_ids(path: list[dict[str, Any]], children: dict[int | None, list[int]]) -> list[int]:

@@ -382,7 +382,10 @@ export function PromptSharePageLayout({
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
                   isMemoSavePending={memoSavePendingIds.has(promptId)}
-                  isUseInChatEffectActive={actionEffectIds.has(`${promptId}:use-in-chat`)}
+                  isUseInChatEffectActive={
+                    actionEffectIds.has(`${promptId}:use-in-chat`) ||
+                    actionEffectIds.has(`${promptId}:add-skill`)
+                  }
                   isOwnPrompt={
                     currentUserId !== null && Number(prompt.author_user_id || 0) === currentUserId
                   }

@@ -29,6 +29,7 @@ function renderCard(
     isDropdownOpen?: boolean;
     isPriorityImage?: boolean;
     isOwnPrompt?: boolean;
+    isAddAsTaskPending?: boolean;
     onEdit?: (prompt: PromptRecord) => void;
   } = {}
 ) {
@@ -39,7 +40,7 @@ function renderCard(
       isDropdownOpen={Boolean(options.isDropdownOpen)}
       isLikePending={false}
       isLikeEffectActive={false}
-      isAddAsTaskPending={false}
+      isAddAsTaskPending={Boolean(options.isAddAsTaskPending)}
       isMemoSavePending={false}
       isUseInChatEffectActive={false}
       isOwnPrompt={options.isOwnPrompt}
@@ -73,6 +74,34 @@ describe("prompt_share card badges", () => {
 
     expect(container.querySelector(".prompt-card__type-pill--skill")).toBeInTheDocument();
     expect(container.querySelector(".prompt-card__type-pill--media")).not.toBeInTheDocument();
+  });
+
+  it("SKILL投稿の主操作をSkill追加として表示し、追加済みは再送信できない", () => {
+    const container = renderCard({ content_format: "skill", skill_markdown: "# SKILL" });
+    const addButton = screen.getByRole("button", { name: "Skillに追加" });
+    expect(addButton).toBeInTheDocument();
+    expect(addButton).not.toBeDisabled();
+
+    container.remove();
+    renderCard({ content_format: "skill", skill_markdown: "# SKILL", added_to_skills: true });
+    const addedButton = screen.getByRole("button", { name: "Skillに追加済み" });
+    expect(addedButton).toBeDisabled();
+    expect(addedButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("通常プロンプトの主操作はチャット利用のまま維持する", () => {
+    renderCard();
+
+    expect(screen.getByRole("button", { name: "チャットで使う" })).toBeInTheDocument();
+  });
+
+  it("SKILL追加中は専用の状態ラベルを表示する", () => {
+    renderCard(
+      { content_format: "skill", skill_markdown: "# SKILL" },
+      { isAddAsTaskPending: true }
+    );
+
+    expect(screen.getByRole("button", { name: "Skillに追加中…" })).toBeDisabled();
   });
 
   it("画像投稿ではメディアバッジのみを追加する", () => {

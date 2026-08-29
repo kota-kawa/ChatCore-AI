@@ -70,6 +70,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(MemoEntry.embedding_status.nullable)
         self.assertFalse(ContextFact.embedding_status.nullable)
         self.assertFalse(UserSkill.is_enabled.nullable)
+        self.assertTrue(UserSkill.source_prompt_id.nullable)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)
@@ -86,6 +87,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         }
         self.assertTrue(any("USING hnsw" in statement for statement in index_sql))
         self.assertTrue(any("WHERE" in statement for statement in index_sql))
+        self.assertTrue(any("idx_user_skills_user_source_prompt" in statement for statement in index_sql))
 
 
 if __name__ == "__main__":
