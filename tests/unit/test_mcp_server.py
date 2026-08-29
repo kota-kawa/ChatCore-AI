@@ -170,14 +170,31 @@ class McpServerTestCase(unittest.TestCase):
             prompt_properties["image_base64"]["maxLength"],
             MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
         )
-        self.assertIn("not a remote URL", prompt_definition["description"])
+        self.assertEqual(prompt_definition["_meta"]["openai/fileParams"], ["image_file"])
+        self.assertEqual(
+            prompt_properties["image_file"]["$ref"],
+            "#/$defs/OpenAIFileInput",
+        )
+        file_schema = prompt_definition["inputSchema"]["$defs"]["OpenAIFileInput"]
+        self.assertEqual(
+            set(file_schema["properties"]),
+            {"download_url", "file_id", "mime_type", "file_name"},
+        )
+        self.assertEqual(set(file_schema["required"]), {"download_url", "file_id"})
+        self.assertFalse(file_schema["additionalProperties"])
+        self.assertIn("Arbitrary remote URLs", prompt_definition["description"])
 
         image_prompt_definition = next(
             tool.model_dump(by_alias=True)
             for tool in tools
             if tool.name == "publish_image_prompt"
         )
-        self.assertIn("image_base64", image_prompt_definition["inputSchema"]["required"])
+        self.assertNotIn("image_base64", image_prompt_definition["inputSchema"].get("required", []))
+        self.assertEqual(
+            image_prompt_definition["_meta"]["openai/fileParams"],
+            ["image_file"],
+        )
+        self.assertIn("exactly one", image_prompt_definition["description"])
         self.assertIn("never reports success", image_prompt_definition["description"])
 
     def test_invalid_category_error_includes_allowed_values(self):

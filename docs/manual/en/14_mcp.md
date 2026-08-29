@@ -20,11 +20,13 @@ Disconnect an integration from Settings when it is no longer needed. If authoriz
 ## Publish image prompts
 
 The `publish_prompt` tool accepts `media_type` values `text` and `image`. To include a reference image,
-send `image_base64` with a PNG, JPEG, WebP, or GIF encoded in Base64 (up to 5 MB decoded). You may also
+use `image_file` from a supported client's file picker, or send `image_base64` with a PNG, JPEG, WebP, or GIF
+encoded in Base64 (up to 5 MB decoded). You may also
 provide `image_filename` and `image_mime_type`; a `data:image/...;base64,...` value is supported as well.
 Remote image URLs are not fetched. Images go through the same validation, metadata stripping, and WebP
 normalization as browser uploads before they are saved.
 
-When posting an image from ChatGPT, use `publish_image_prompt`. Its `image_base64` argument is required, so
-it cannot silently create a post without the requested image. A successful result reports
-`image_attached: true` after the image has actually been saved.
+When posting an image from ChatGPT, use `publish_image_prompt`. It requires exactly one of `image_file` or
+`image_base64`, so it cannot silently create a post without the requested image. A successful result reports
+`image_attached: true` after the image has actually been saved. File-upload download URLs are accepted only
+from ChatGPT's HTTPS file host, redirects are not followed, and streaming stops at the 5 MB limit.

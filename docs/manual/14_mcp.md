@@ -62,15 +62,19 @@ MCPツールからファイルの書き出しや一括読み込みを開始す�
 メモ本文は最大12,000文字ずつ分割して取得できます。
 
 `publish_prompt` は `media_type` に `text` または `image` を指定できます。画像プロンプトへ
-作例画像を添付する場合は、`image_base64` に5MB以下のPNG／JPEG／WebP／GIFをBase64で渡し、
+作例画像を添付する場合は、ChatGPTなど対応クライアントのファイル選択から `image_file` を渡すか、
+`image_base64` に5MB以下のPNG／JPEG／WebP／GIFをBase64で渡し、
 必要に応じて `image_filename`（例: `reference.png`）と `image_mime_type` を指定してください。
 `data:image/...;base64,...` 形式も利用できます。画像を指定すると `media_type` は `image` として
-保存されます。サーバーは外部URLから画像を取得せず、Web投稿と同じ検査・メタデータ除去・WebP変換を
-行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、運用環境で変更する場合もこの
+保存されます。サーバーはfile upload用のChatGPT一時URL以外の外部URLから画像を取得せず、Web投稿と
+同じ検査・メタデータ除去・WebP変換を行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、
+運用環境で変更する場合もこの
 Base64転送分を含むサイズを確保してください。
 ChatGPTから作例画像も含めて投稿するときは、画像が必須入力になっている
 `publish_image_prompt` を使用します。このツールは画像が渡されない限り投稿を実行せず、成功結果の
-`image_attached` で画像が実際に保存されたことを確認できます。
+`image_attached` で画像が実際に保存されたことを確認できます。`image_file` と `image_base64` は
+同時に指定できません。file uploadで渡された一時URLはChatGPTのファイル配信ホストだけを許可し、
+リダイレクトを追跡せず、5MBを超えた時点で取得を中止します。
 
 メモの更新・追記には、直前の読込結果に含まれる `revision` が必要です。Web画面や別のMCP接続で
 先に変更されていた場合は更新せず、再読込を求めます。共有中のメモは公開内容も変わるため、
