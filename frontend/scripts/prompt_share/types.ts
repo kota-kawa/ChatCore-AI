@@ -70,6 +70,9 @@ export type PromptData = {
   ai_model?: string;
   liked?: boolean;
   used_in_chat?: boolean;
+  // 共有SkillをユーザーのSkill一覧へ追加済みかどうか。
+  // Whether a shared Skill has already been imported into the user's Skill list.
+  added_to_skills?: boolean;
   comment_count?: number;
   view_count?: number;
   created_at?: string;

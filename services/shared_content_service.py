@@ -12,12 +12,22 @@ from typing import Any, Mapping, TypeVar
 from pydantic import AnyHttpUrl, BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api_errors import ApiServiceError
 from services.db import session_scope
 from services.prompt_categories import category_keys_matching, normalize_category
 from services.prompt_types import CONTENT_FORMATS, CONTENT_FORMAT_SKILL, MEDIA_TYPES, serialize_axes
 from services.repositories.prompt_resource_repository import PromptResourceRepository
+from services.repositories.chat_repository import ChatRepository
 from services.repositories.shared_content_repository import SharedContentRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
+from services.error_messages import (
+    ERROR_SHARED_SKILL_CONTENT_MISSING,
+    ERROR_SHARED_SKILL_INVALID_TYPE,
+    ERROR_SHARED_SKILL_NOT_FOUND,
+    MESSAGE_SHARED_SKILL_ADDED,
+    MESSAGE_SHARED_SKILL_ALREADY_ADDED,
+)
+from services.user_skills import normalize_user_skill_instructions
 from services.web_urls import build_frontend_url
 
 
@@ -591,6 +601,50 @@ class SharedContentService:
                 prompt_id=prompt_id,
                 prompt_template=prompt_template,
             )
+
+        return await self._write(session, operation)
+
+    async def import_prompt_as_skill(
+        self,
+        *,
+        user_id: int,
+        prompt_id: int,
+        session: AsyncSession | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        """Import a public SKILL post into the user's reusable Skills."""
+
+        async def operation(active: AsyncSession) -> tuple[dict[str, Any], int]:
+            prompt = await self._repository.get_prompt_for_import(
+                active,
+                prompt_id=prompt_id,
+            )
+            if prompt is None:
+                return {"error": ERROR_SHARED_SKILL_NOT_FOUND}, 404
+            if str(prompt.get("content_format") or "").strip().lower() != CONTENT_FORMAT_SKILL:
+                return {"error": ERROR_SHARED_SKILL_INVALID_TYPE}, 400
+
+            # Keep the published definition and its text resources together in
+            # the user Skill.  ``normalize_user_skill_instructions`` enforces
+            # the same 12,000-character contract as manually-created Skills.
+            instructions = normalize_user_skill_instructions(self._compose_task_prompt_template(prompt))
+            if not instructions:
+                return {"error": ERROR_SHARED_SKILL_CONTENT_MISSING}, 400
+
+            try:
+                skill, created = await ChatRepository(active).import_user_skill(
+                    user_id=int(user_id),
+                    source_prompt_id=int(prompt_id),
+                    name=str(prompt.get("title") or "共有Skill"),
+                    instructions=instructions,
+                )
+            except ApiServiceError as exc:
+                return exc.to_payload(), exc.status_code
+
+            return {
+                "message": MESSAGE_SHARED_SKILL_ADDED if created else MESSAGE_SHARED_SKILL_ALREADY_ADDED,
+                "skill_id": int(skill["id"]),
+                "added_to_skills": True,
+            }, 201 if created else 200
 
         return await self._write(session, operation)
 

@@ -21,7 +21,8 @@ export function buildInitialPromptRecords(items: PromptData[]) {
     ...normalizePromptData(item),
     clientId: `prompt-initial-${String(item.id ?? index)}`,
     liked: Boolean(item.liked),
-    used_in_chat: Boolean(item.used_in_chat)
+    used_in_chat: Boolean(item.used_in_chat),
+    added_to_skills: Boolean(item.added_to_skills)
   }));
 }
 

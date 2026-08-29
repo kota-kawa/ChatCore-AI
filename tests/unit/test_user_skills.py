@@ -1,10 +1,11 @@
 import asyncio
 import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.chat.skills import add_user_skill, get_user_skills, update_user_skill_state
 from services.chat_context import build_context_messages
+from services.repositories.chat_repository import ChatRepository
 from services.request_models import CreateUserSkillRequest, UpdateUserSkillStateRequest
 from services.user_skills import build_enabled_user_skills_prompt
 from tests.helpers.request_helpers import build_request
@@ -49,6 +50,33 @@ class UserSkillPromptTests(unittest.TestCase):
         contents = [message["content"] for message in messages]
         self.assertLess(contents.index("<project_instructions>\nThe following are instructions specific to this project. Follow them with priority in every conversation inside the project.\nproject\n</project_instructions>"), contents.index("<enabled_user_skills>skill</enabled_user_skills>"))
         self.assertLess(contents.index("<enabled_user_skills>skill</enabled_user_skills>"), contents.index("task"))
+
+    def test_import_user_skill_allocates_a_non_conflicting_name_and_keeps_source(self):
+        session = MagicMock()
+        session.execute = AsyncMock(side_effect=[
+            MagicMock(),  # advisory lock
+            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+        ])
+        session.scalar = AsyncMock(side_effect=[0, None])
+        session.flush = AsyncMock()
+        repository = ChatRepository(session)
+
+        skill, created = asyncio.run(
+            repository.import_user_skill(
+                user_id=7,
+                source_prompt_id=42,
+                name="  レビュー Skill  ",
+                instructions="  結論から確認する  ",
+            )
+        )
+
+        self.assertTrue(created)
+        added_skill = session.add.call_args.args[0]
+        self.assertEqual(added_skill.user_id, 7)
+        self.assertEqual(added_skill.source_prompt_id, 42)
+        self.assertEqual(added_skill.name, "レビュー Skill")
+        self.assertEqual(added_skill.instructions, "結論から確認する")
+        self.assertIsNone(skill["id"])
 
 
 class UserSkillRouteTests(unittest.TestCase):

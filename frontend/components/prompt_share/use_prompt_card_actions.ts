@@ -3,11 +3,13 @@ import { useCallback, useRef, useState } from "react";
 import { showToast } from "../../scripts/core/toast";
 import {
   addPromptAsTask,
+  addPromptAsSkill,
   removePromptAsTask,
   removePromptLike,
   savePromptAsMemo,
   savePromptLike
 } from "../../scripts/prompt_share/api";
+import { normalizePromptContentFormat } from "../../scripts/prompt_share/formatters";
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -101,52 +103,68 @@ export function usePromptCardActions({
     [closePromptDropdown, isLoggedIn, setMemoSavePending, t]
   );
 
-  // プロンプトのチャット利用状態をトグルするAPIを呼び出す。未ログインの場合はトーストで案内する
-  // Calls the use-in-chat toggle API; shows a toast guide if the user is not logged in
+  // プロンプトのチャット利用状態、またはSkill追加を更新する。未ログインの場合はトーストで案内する
+  // Updates either the use-in-chat toggle or shared-Skill import; guides anonymous users with a toast
   const handleAddPromptAsTask = useCallback(
     async (prompt: PromptRecord) => {
       const promptId = prompt.clientId;
       closePromptDropdown();
 
+      const isSkill = normalizePromptContentFormat(String(prompt.content_format || "")) === "skill";
       if (!isLoggedIn) {
-        showToast(t("promptShare.loginToUse"), { variant: "error" });
+        showToast(t(isSkill ? "promptShare.loginToAddSkill" : "promptShare.loginToUse"), { variant: "error" });
+        return;
+      }
+
+      if (isSkill && prompt.added_to_skills) {
         return;
       }
 
       const wasUsedInChat = Boolean(prompt.used_in_chat);
+      const wasAddedToSkills = Boolean(prompt.added_to_skills);
       const nextUsedInChat = !wasUsedInChat;
-      updatePromptRecord(promptId, (currentPrompt) => ({
-        ...currentPrompt,
-        used_in_chat: nextUsedInChat
-      }));
-      if (nextUsedInChat) {
-        triggerActionEffect(`${promptId}:use-in-chat`);
-      }
-
-      setAddAsTaskPending(promptId, true);
-      try {
-        const response = nextUsedInChat
-          ? await addPromptAsTask(prompt)
-          : await removePromptAsTask(prompt);
-        const serverMessage =
-          typeof response.message === "string" && response.message.trim()
-            ? response.message
-            : "";
-        const fallbackMessage = nextUsedInChat
-          ? t("promptShare.addedToChat")
-          : t("promptShare.removedFromChat");
+      if (isSkill) {
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          added_to_skills: true
+        }));
+        triggerActionEffect(`${promptId}:add-skill`);
+      } else {
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           used_in_chat: nextUsedInChat
         }));
+        if (nextUsedInChat) {
+          triggerActionEffect(`${promptId}:use-in-chat`);
+        }
+      }
+
+      setAddAsTaskPending(promptId, true);
+      try {
+        const response = isSkill
+          ? await addPromptAsSkill(prompt)
+          : nextUsedInChat
+            ? await addPromptAsTask(prompt)
+            : await removePromptAsTask(prompt);
+        const serverMessage =
+          typeof response.message === "string" && response.message.trim()
+            ? response.message
+            : "";
+        const fallbackMessage = isSkill
+          ? t("promptShare.addedToSkills")
+          : nextUsedInChat
+            ? t("promptShare.addedToChat")
+            : t("promptShare.removedFromChat");
+        updatePromptRecord(promptId, (currentPrompt) => isSkill
+          ? { ...currentPrompt, added_to_skills: true }
+          : { ...currentPrompt, used_in_chat: nextUsedInChat });
         showToast(serverMessage || fallbackMessage, { variant: "success" });
       } catch (error) {
-        console.error("チャット利用状態の更新中にエラーが発生しました:", error);
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          used_in_chat: wasUsedInChat
-        }));
-        showToast(t("promptShare.updateChatFailed"), { variant: "error" });
+        console.error(isSkill ? "Skill追加中にエラーが発生しました:" : "チャット利用状態の更新中にエラーが発生しました:", error);
+        updatePromptRecord(promptId, (currentPrompt) => isSkill
+          ? { ...currentPrompt, added_to_skills: wasAddedToSkills }
+          : { ...currentPrompt, used_in_chat: wasUsedInChat });
+        showToast(error instanceof Error && error.message ? error.message : t(isSkill ? "promptShare.addSkillFailed" : "promptShare.updateChatFailed"), { variant: "error" });
       } finally {
         setAddAsTaskPending(promptId, false);
       }

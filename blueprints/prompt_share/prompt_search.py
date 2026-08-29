@@ -56,6 +56,7 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt.pop("resource_python_script", None)
     prompt["liked"] = bool(prompt.get("liked"))
     prompt["used_in_chat"] = bool(prompt.get("used_in_chat"))
+    prompt["added_to_skills"] = bool(prompt.get("added_to_skills"))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     prompt["view_count"] = int(prompt.get("view_count") or 0)
     return prompt

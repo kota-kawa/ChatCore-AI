@@ -154,6 +154,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),
     used_in_chat: Boolean(prompt.used_in_chat),
+    added_to_skills: Boolean(prompt.added_to_skills),
     comment_count: Number(prompt.comment_count || 0)
   };
 }

@@ -41,6 +41,7 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
                 "view_count": 12,
                 "liked": True,
                 "used_in_chat": True,
+                "added_to_skills": True,
                 "comment_count": 2,
             }
         ]
@@ -53,6 +54,7 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
             payload = await _get_prompts_with_flags(7, limit=25, locale="ja")
         self.assertTrue(payload["prompts"][0]["liked"])
         self.assertTrue(payload["prompts"][0]["used_in_chat"])
+        self.assertTrue(payload["prompts"][0]["added_to_skills"])
         self.assertFalse(payload["pagination"]["has_next"])
         self.assertEqual(service.feed_calls[0]["user_id"], 7)
 

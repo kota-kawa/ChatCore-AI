@@ -88,12 +88,20 @@ test("getFilterEmptyMessage includes active axis labels", () => {
 
 test("initial records and cache data keep client-only fields separated", () => {
   const records = buildInitialPromptRecords([
-    { id: 42, title: "Saved", content: "Saved prompt", liked: true, used_in_chat: true },
+    {
+      id: 42,
+      title: "Saved",
+      content: "Saved prompt",
+      liked: true,
+      used_in_chat: true,
+      added_to_skills: true
+    },
   ]);
 
   assert.equal(records[0]?.clientId, "prompt-initial-42");
   assert.equal(records[0]?.liked, true);
   assert.equal(records[0]?.used_in_chat, true);
+  assert.equal(records[0]?.added_to_skills, true);
 
   const cachedPrompt = toCachedPromptData(records)[0];
   assert.equal("clientId" in (cachedPrompt || {}), false);
@@ -101,6 +109,7 @@ test("initial records and cache data keep client-only fields separated", () => {
   assert.equal(cachedPrompt?.title, "Saved");
   assert.equal(cachedPrompt?.liked, true);
   assert.equal(cachedPrompt?.used_in_chat, true);
+  assert.equal(cachedPrompt?.added_to_skills, true);
 });
 
 test("appendUniquePromptRecords keeps cursor page order and removes duplicate IDs", () => {
