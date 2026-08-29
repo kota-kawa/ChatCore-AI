@@ -932,7 +932,16 @@ export function PromptShareComposerModal({
                   <div id="promptImagePreview" className="prompt-image-preview">
                     <img id="promptImagePreviewImg" src={promptImagePreviewUrl} alt={t("promptShare.uploadPreview")} />
                     <div className="prompt-image-preview__meta">
-                      <span id="promptImagePreviewName">{promptImagePreviewName}</span>
+                      {/* ファイル名は専用クラスで装飾する。子孫セレクタだと解除ボタンのラベルにも当たってしまう。 */}
+                      {/* The file name carries its own class; a descendant selector would also hit the clear button's label. */}
+                      <span
+                        id="promptImagePreviewName"
+                        className="prompt-image-preview__name"
+                        title={promptImagePreviewName}
+                      >
+                        <i className="bi bi-paperclip" aria-hidden="true"></i>
+                        <span className="prompt-image-preview__name-text">{promptImagePreviewName}</span>
+                      </span>
                       <button
                         type="button"
                         id="promptImageClearButton"
