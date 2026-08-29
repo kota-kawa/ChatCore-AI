@@ -42,7 +42,10 @@ from services.chat_prompt import (
     build_task_prompt as _build_task_prompt,
     build_user_profile_prompt as _build_user_profile_prompt,
 )
-from services.user_skills import build_enabled_user_skills_prompt
+from services.user_skills import (
+    build_chat_skills_context,
+    build_enabled_user_skills_prompt,
+)
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
@@ -923,16 +926,15 @@ async def chat_regenerate(
             prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
-    user_skills_prompt = None
+    enabled_user_skills: list[dict[str, Any]] = []
     room_summary = ""
     memory_facts: list[str] = []
+    user = None
     user_profile_prompt = None
 
     if user_id is not None:
         try:
-            user_skills_prompt = build_enabled_user_skills_prompt(
-                await list_enabled_user_skills(user_id)
-            )
+            enabled_user_skills = list(await list_enabled_user_skills(user_id))
         except Exception:
             logger.warning("Failed to load enabled user skills; proceeding without them.")
         try:
@@ -940,6 +942,13 @@ async def chat_regenerate(
             user_profile_prompt = _build_user_profile_prompt(user)
         except Exception:
             logger.warning("Failed to load user profile context for regenerate; proceeding without it.")
+
+    request_locale = get_request_locale(request)
+    user_skills_prompt, generative_ui_enabled = build_chat_skills_context(
+        enabled_user_skills,
+        user,
+        locale=request_locale,
+    )
 
     project_instructions = await _load_project_context_for_room(
         user_id, room_mode, chat_room_id
@@ -957,7 +966,7 @@ async def chat_regenerate(
             logger.warning("Failed to load memory facts for regenerate; proceeding without them.")
 
     conversation_messages = build_context_messages(
-        base_system_prompt=_build_base_system_prompt(locale=get_request_locale(request)),
+        base_system_prompt=_build_base_system_prompt(locale=request_locale),
         user_profile_prompt=user_profile_prompt,
         task_prompt=task_prompt,
         room_summary=room_summary,
@@ -965,6 +974,7 @@ async def chat_regenerate(
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
         user_skills_prompt=user_skills_prompt,
+        generative_ui_enabled=generative_ui_enabled,
     )
 
     # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
@@ -1015,18 +1025,21 @@ async def chat_regenerate(
         unavailable_sources=selected_references.unavailable_sources,
         trace_results=selected_reference_trace,
     )
-    try:
-        ui_mode = await run_blocking(
-            decide_generative_ui_mode,
-            conversation_messages,
-            model,
-        )
-    except Exception:
-        logger.warning(
-            "Failed to decide generative UI mode for regeneration; continuing without intent recovery.",
-            exc_info=True,
-        )
-        ui_mode = None
+    if generative_ui_enabled:
+        try:
+            ui_mode = await run_blocking(
+                decide_generative_ui_mode,
+                conversation_messages,
+                model,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to decide generative UI mode for regeneration; continuing without intent recovery.",
+                exc_info=True,
+            )
+            ui_mode = None
+    else:
+        ui_mode = "NONE"
 
     if is_streaming_model(model):
         on_finished = None
@@ -1381,16 +1394,15 @@ async def chat_edit_and_regenerate(
             prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
-    user_skills_prompt = None
+    enabled_user_skills: list[dict[str, Any]] = []
     room_summary = ""
     memory_facts: list[str] = []
+    user = None
     user_profile_prompt = None
 
     if user_id is not None:
         try:
-            user_skills_prompt = build_enabled_user_skills_prompt(
-                await list_enabled_user_skills(user_id)
-            )
+            enabled_user_skills = list(await list_enabled_user_skills(user_id))
         except Exception:
             logger.warning("Failed to load enabled user skills; proceeding without them.")
         try:
@@ -1398,6 +1410,13 @@ async def chat_edit_and_regenerate(
             user_profile_prompt = _build_user_profile_prompt(user)
         except Exception:
             logger.warning("Failed to load user profile for edit_and_regenerate; proceeding without it.")
+
+    request_locale = get_request_locale(request)
+    user_skills_prompt, generative_ui_enabled = build_chat_skills_context(
+        enabled_user_skills,
+        user,
+        locale=request_locale,
+    )
 
     project_instructions = await _load_project_context_for_room(
         user_id, room_mode, chat_room_id
@@ -1415,7 +1434,7 @@ async def chat_edit_and_regenerate(
             logger.warning("Failed to load memory facts for edit_and_regenerate; proceeding without them.")
 
     conversation_messages = build_context_messages(
-        base_system_prompt=_build_base_system_prompt(locale=get_request_locale(request)),
+        base_system_prompt=_build_base_system_prompt(locale=request_locale),
         user_profile_prompt=user_profile_prompt,
         task_prompt=task_prompt,
         room_summary=room_summary,
@@ -1423,6 +1442,7 @@ async def chat_edit_and_regenerate(
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
         user_skills_prompt=user_skills_prompt,
+        generative_ui_enabled=generative_ui_enabled,
     )
 
     # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
@@ -1473,18 +1493,21 @@ async def chat_edit_and_regenerate(
         unavailable_sources=selected_references.unavailable_sources,
         trace_results=selected_reference_trace,
     )
-    try:
-        ui_mode = await run_blocking(
-            decide_generative_ui_mode,
-            conversation_messages,
-            model,
-        )
-    except Exception:
-        logger.warning(
-            "Failed to decide generative UI mode for edit_and_regenerate; continuing without intent recovery.",
-            exc_info=True,
-        )
-        ui_mode = None
+    if generative_ui_enabled:
+        try:
+            ui_mode = await run_blocking(
+                decide_generative_ui_mode,
+                conversation_messages,
+                model,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to decide generative UI mode for edit_and_regenerate; continuing without intent recovery.",
+                exc_info=True,
+            )
+            ui_mode = None
+    else:
+        ui_mode = "NONE"
 
     if is_streaming_model(model):
         on_finished = None

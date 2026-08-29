@@ -4,9 +4,11 @@ import html
 import math
 import re
 
-from services.chat_prompt import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.web_search import strip_web_search_citation_html
-from services.user_skills import USER_SKILLS_TOKEN_BUDGET
+from services.user_skills import (
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    USER_SKILLS_TOKEN_BUDGET,
+)
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
@@ -496,11 +498,13 @@ def build_context_messages(
     recent_messages: list[dict[str, str]],
     project_instructions: str | None = None,
     user_skills_prompt: str | None = None,
+    generative_ui_enabled: bool = True,
 ) -> list[dict[str, str]]:
-    mandatory_messages = [
-        {"role": "system", "content": base_system_prompt},
-        {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT},
-    ]
+    mandatory_messages = [{"role": "system", "content": base_system_prompt}]
+    if generative_ui_enabled:
+        mandatory_messages.append(
+            {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT}
+        )
     mandatory_tokens = sum(
         estimate_token_count(str(message.get("content", "")))
         for message in mandatory_messages
@@ -566,7 +570,9 @@ def build_context_messages(
     # Re-state the generative UI completion criteria after variable system
     # context. This becomes a developer message for OpenAI Responses and remains
     # a system prompt for the Claude API.
-    messages = [mandatory_messages[0], *optional_messages, mandatory_messages[1]]
+    messages = [mandatory_messages[0], *optional_messages]
+    if generative_ui_enabled:
+        messages.append(mandatory_messages[1])
 
     # システムメッセージ群で使用されたトークン数を算出して直近履歴に使えるトークン予算を決定する
     # Calculate tokens used by system messages to determine the remaining budget for recent history

@@ -940,6 +940,28 @@ class ChatRepository:
         user = await self.session.get(User, user_id)
         return self._serialize_user(user) if user is not None else None
 
+    async def get_generative_ui_skill_enabled(self, user_id: int) -> bool:
+        enabled = await self.session.scalar(
+            select(User.generative_ui_skill_enabled).where(User.id == int(user_id))
+        )
+        if enabled is None:
+            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)
+        return bool(enabled)
+
+    async def set_generative_ui_skill_enabled(
+        self,
+        user_id: int,
+        is_enabled: bool,
+    ) -> bool:
+        result = await self.session.execute(
+            update(User)
+            .where(User.id == int(user_id))
+            .values(generative_ui_skill_enabled=bool(is_enabled))
+        )
+        if not result.rowcount:
+            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)
+        return bool(is_enabled)
+
     async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         user = await self.session.scalar(select(User).where(User.email == email).limit(1))
         return self._serialize_user(user) if user is not None else None
@@ -1200,9 +1222,13 @@ class ChatRepository:
     def _serialize_user_skill(skill: UserSkill) -> dict[str, Any]:
         return {
             "id": skill.id,
+            "system_skill_key": None,
             "name": str(skill.name or ""),
             "instructions": str(skill.instructions or ""),
             "is_enabled": bool(skill.is_enabled),
+            "is_default": False,
+            "can_edit": True,
+            "can_delete": True,
             "created_at": serialize_datetime_iso(skill.created_at),
             "updated_at": serialize_datetime_iso(skill.updated_at),
         }
@@ -1241,5 +1267,6 @@ class ChatRepository:
             "bio": user.bio,
             "avatar_url": user.avatar_url,
             "llm_profile_context": user.llm_profile_context,
+            "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
             "preferred_locale": user.preferred_locale,
         }

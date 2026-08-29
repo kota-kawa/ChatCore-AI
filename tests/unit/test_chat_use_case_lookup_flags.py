@@ -158,6 +158,15 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         self.assertIsNone(lookup)
 
+    def test_disabled_generative_ui_skill_skips_mode_decision(self):
+        deps = self._build_deps(Mock())
+        deps.get_user_by_id.return_value = {"generative_ui_skill_enabled": False}
+
+        self._run(deps, body_extra={}, session={"user_id": 42})
+
+        deps.decide_generative_ui_mode.assert_not_called()
+        self.assertEqual(deps.start_generation_job.call_args.kwargs["ui_mode"], "NONE")
+
     # 日本語: メモは本人のデータなので、ゲストにはフラグがあっても渡しません。
     # English: Memos are owner-only data, so a guest never gets the lookup even with the flag.
     def test_guest_request_never_gets_the_lookup(self):

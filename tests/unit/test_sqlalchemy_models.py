@@ -71,6 +71,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(ContextFact.embedding_status.nullable)
         self.assertFalse(UserSkill.is_enabled.nullable)
         self.assertTrue(UserSkill.source_prompt_id.nullable)
+        self.assertFalse(User.generative_ui_skill_enabled.nullable)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)

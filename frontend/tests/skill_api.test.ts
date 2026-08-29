@@ -19,7 +19,15 @@ test("fetchUserSkills validates and returns the list", async () => {
   });
 
   assert.equal(request, "/api/skills");
-  assert.deepEqual(result, skills.map((item) => ({ ...item, created_at: null, updated_at: null })));
+  assert.deepEqual(result, skills.map((item) => ({
+    ...item,
+    system_skill_key: null,
+    is_default: false,
+    can_edit: true,
+    can_delete: true,
+    created_at: null,
+    updated_at: null,
+  })));
 });
 
 test("create and toggle use the user-skill endpoints", async () => {

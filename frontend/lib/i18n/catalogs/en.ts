@@ -53,6 +53,8 @@ export const enMessages = {
   "home.skillAdding": "Adding…",
   "home.skillOn": "ON",
   "home.skillOff": "OFF",
+  "home.skillDefault": "Default",
+  "home.skillDefaultDescription": "Default Skills cannot be edited or deleted.",
   "home.skillsLoading": "Loading skills…",
   "home.skillsLoadFailed": "We could not load your skills.",
   "home.skillsEmpty": "Add your first skill",

@@ -9,10 +9,8 @@ from services.chat_context import (
     select_recent_messages,
     trim_text_to_token_budget,
 )
-from services.chat_prompt import (
-    GENERATIVE_UI_EXECUTION_CONTRACT,
-    build_base_system_prompt as _build_base_system_prompt,
-)
+from services.chat_prompt import build_base_system_prompt as _build_base_system_prompt
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 
 
 # 日本語: チャットのコンテキスト構築と状態管理ロジックをテストするクラス。
@@ -71,6 +69,22 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             context_messages[6]["content"],
         )
         self.assertEqual(context_messages[-1]["content"], "third")
+
+    def test_build_context_messages_omits_ui_contract_when_skill_is_disabled(self):
+        context_messages = build_context_messages(
+            base_system_prompt="base",
+            user_profile_prompt=None,
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[{"role": "user", "content": "question"}],
+            generative_ui_enabled=False,
+        )
+
+        self.assertEqual(
+            [message["content"] for message in context_messages],
+            ["base", "question"],
+        )
 
     def test_latest_user_request_survives_long_fetched_url_context(self):
         question = "この資料を読んで、最も重要な結論を3点で教えてください。"

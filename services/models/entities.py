@@ -55,6 +55,7 @@ class User(Base):
     created_at: Mapped[datetime | None] = _timestamp()
     llm_profile_context: Mapped[str | None] = mapped_column(Text)
     context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
+    generative_ui_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     preferred_locale: Mapped[str | None] = mapped_column(String(16))
 
     __table_args__ = (

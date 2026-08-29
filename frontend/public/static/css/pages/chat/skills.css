@@ -118,6 +118,10 @@
   cursor: pointer;
 }
 
+:where(body.chat-page, .chat-page-shell) .skill-chip-row.is-default .skill-chip {
+  border-radius: 999px;
+}
+
 :where(body.chat-page, .chat-page-shell) .skill-chip:disabled,
 :where(body.chat-page, .chat-page-shell) .skill-chip__delete:disabled {
   cursor: wait;
@@ -146,6 +150,21 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__default {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+  color: #52736a;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__default i {
+  font-size: 0.58rem;
 }
 
 :where(body.chat-page, .chat-page-shell) .skill-chip__state {

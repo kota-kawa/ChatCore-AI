@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from services.chat_prompt import BASE_SYSTEM_PROMPT
+from services.user_skills import GENERATIVE_UI_SKILL_INSTRUCTIONS
 from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
@@ -265,13 +265,13 @@ document.getElementById('app').textContent = 'ready';
         self.assertEqual(normalized.validation_errors, [])
         self.assertIsNone(normalized.parts)
 
-    def test_base_prompt_keeps_ui_contract_compact_and_explicit(self):
+    def test_default_skill_keeps_ui_contract_compact_and_explicit(self):
         """通常回答をUI化せず、明示依頼だけで専用フェンスを使う契約を検証する。"""
-        self.assertIn("UI_MODE = NONE` by default", BASE_SYSTEM_PROMPT)
-        self.assertIn("latest user request explicitly asks", BASE_SYSTEM_PROMPT)
-        self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
-        self.assertIn("exactly one complete ```chatcore-artifact", BASE_SYSTEM_PROMPT)
-        self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
+        self.assertIn("UI_MODE = NONE` by default", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertEqual(GENERATIVE_UI_SKILL_INSTRUCTIONS.count("```chatcore-artifact"), 1)
 
     def test_normalize_response_does_not_create_fallback_for_short_display_intent(self):
         """短い表示宣言だけではUIを自動生成しない。"""

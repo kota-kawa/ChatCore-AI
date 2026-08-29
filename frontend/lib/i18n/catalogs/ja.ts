@@ -103,6 +103,8 @@ export const jaMessages = {
   "home.skillAdding": "追加中…",
   "home.skillOn": "ON",
   "home.skillOff": "OFF",
+  "home.skillDefault": "デフォルト",
+  "home.skillDefaultDescription": "デフォルトSkillは編集・削除できません。",
   "home.skillsLoading": "Skillを読み込んでいます…",
   "home.skillsLoadFailed": "Skillを読み込めませんでした。",
   "home.skillsEmpty": "最初のSkillを追加",

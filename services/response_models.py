@@ -72,13 +72,17 @@ class ChatHistoryResponse(ApiErrorPayload):
     pagination: ChatHistoryPagination | None = None
 
 
-# 日本語: 個人Skillの一覧・更新結果を表すAPIモデル。
-# English: API models for personal skill records and list/mutation results.
+# 日本語: デフォルトSkillと個人Skillの一覧・更新結果を表すAPIモデル。
+# English: API models for default and personal Skill records and mutation results.
 class UserSkillApi(ResponsePayloadModel):
     id: int
+    system_skill_key: str | None = None
     name: str
     instructions: str
     is_enabled: bool = True
+    is_default: bool = False
+    can_edit: bool = True
+    can_delete: bool = True
     created_at: str | None = None
     updated_at: str | None = None
 
