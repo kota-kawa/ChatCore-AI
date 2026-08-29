@@ -170,3 +170,28 @@ test("the sticky body header keeps clear of the close button", () => {
     "the right padding must clear the 2.45rem close button",
   );
 });
+
+// Prompt Shareの編集モーダルは、設定画面の緑ではなくページ本体の青系で統一する。
+// The Prompt Share edit modal uses the page's blue palette instead of the settings page green.
+test("the Prompt Share edit modal uses the page blue palette", () => {
+  assert.match(
+    promptShareModalCss,
+    /#promptEditModalScope\s*\{[\s\S]*?--prompt-edit-accent:\s*var\(--ps-primary/,
+  );
+  assert.match(
+    promptShareModalCss,
+    /#promptEditModalScope \.edit-prompt-modal__header\s*\{[\s\S]*?rgba\(var\(--prompt-edit-accent-rgb\),\s*0\.2\)/,
+  );
+  assert.match(
+    promptShareModalCss,
+    /#promptEditModalScope \.edit-prompt-modal__button--primary\s*\{[\s\S]*?linear-gradient\(135deg,\s*var\(--prompt-edit-accent\),\s*var\(--prompt-edit-accent-strong\)\)/,
+  );
+  assert.match(
+    promptShareModalCss,
+    /#promptEditModalScope \.prompt-category-select__option\.is-selected\s*\{[\s\S]*?linear-gradient\(135deg,\s*#3b8eff,\s*var\(--prompt-edit-accent-strong\)\)/,
+  );
+  assert.match(
+    promptShareModalCss,
+    /\[data-theme="dark"\] #promptEditModalScope\s*\{[\s\S]*?--prompt-edit-accent:\s*#60a5fa;/,
+  );
+});
