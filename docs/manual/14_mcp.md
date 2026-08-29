@@ -32,7 +32,7 @@ MCPクライアント（ChatGPTなど）はRFC 8707の `resource` インジケ�
 利用できる主なツールは次のとおりです。
 
 - 公開コンテンツ: `list_shared_content`、`search_shared_content`、`get_shared_content`、
-  `list_prompt_categories`、`publish_prompt`、`publish_skill`
+  `list_prompt_categories`、`publish_prompt`、`publish_image_prompt`、`publish_skill`
 - メモ読取: `list_memos`、`search_memos`、`get_memo`、`list_memo_collections`
 - メモ書込: `create_memo`、`update_memo`、`append_memo_content`
 - コンテキスト読取: `get_personal_context`、`search_context`
@@ -68,6 +68,9 @@ MCPツールからファイルの書き出しや一括読み込みを開始す�
 保存されます。サーバーは外部URLから画像を取得せず、Web投稿と同じ検査・メタデータ除去・WebP変換を
 行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、運用環境で変更する場合もこの
 Base64転送分を含むサイズを確保してください。
+ChatGPTから作例画像も含めて投稿するときは、画像が必須入力になっている
+`publish_image_prompt` を使用します。このツールは画像が渡されない限り投稿を実行せず、成功結果の
+`image_attached` で画像が実際に保存されたことを確認できます。
 
 メモの更新・追記には、直前の読込結果に含まれる `revision` が必要です。Web画面や別のMCP接続で
 先に変更されていた場合は更新せず、再読込を求めます。共有中のメモは公開内容も変わるため、

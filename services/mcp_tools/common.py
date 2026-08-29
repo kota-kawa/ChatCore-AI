@@ -24,6 +24,7 @@ audit_logger = logging.getLogger("chat_core.mcp.audit")
 
 TOOL_REQUIRED_SCOPES: dict[str, str] = {
     "publish_prompt": MCP_PROMPTS_WRITE_SCOPE,
+    "publish_image_prompt": MCP_PROMPTS_WRITE_SCOPE,
     "publish_skill": MCP_PROMPTS_WRITE_SCOPE,
     "list_shared_content": MCP_PROMPTS_READ_SCOPE,
     "search_shared_content": MCP_PROMPTS_READ_SCOPE,

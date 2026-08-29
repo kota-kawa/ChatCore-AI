@@ -5,6 +5,8 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from mcp.server.fastmcp.exceptions import ToolError
+
 from services import mcp_server
 from services.mcp_memo_service import McpMemoDetail
 from services.request_models import SharedPromptCreateRequest
@@ -141,6 +143,51 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(publish.call_args.kwargs["image_base64"], "cG5nLWJ5dGVz")
         self.assertEqual(publish.call_args.kwargs["image_filename"], "example.png")
         self.assertEqual(publish.call_args.kwargs["image_mime_type"], "image/png")
+
+    def test_publish_image_prompt_requires_and_forwards_reference_image(self):
+        server = self._server()
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=93,
+            title="Image prompt",
+            content_format="prompt",
+            media_type="image",
+            image_attached=True,
+            public_url="https://example.test/shared/prompt/93",
+        )
+        with (
+            patch(
+                "services.mcp_server.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(return_value=publish_result),
+            ) as publish,
+            patch("services.mcp_server.audit_tool_success") as audit,
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "publish_image_prompt",
+                    {
+                        "title": "Image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "image_base64": "cG5nLWJ5dGVz",
+                    },
+                )
+            )
+
+        self.assertTrue(result[1]["image_attached"])
+        self.assertEqual(publish.call_args.args[1].media_type, "image")
+        self.assertEqual(publish.call_args.kwargs["image_base64"], "cG5nLWJ5dGVz")
+        audit.assert_called_once_with(unittest.mock.ANY, "publish_image_prompt", 93)
+
+        with self.assertRaises(ToolError):
+            asyncio.run(
+                server.call_tool(
+                    "publish_image_prompt",
+                    {"title": "Image prompt", "content": "Generate a watercolor landscape."},
+                )
+            )
 
     def test_publish_removes_saved_image_when_database_write_fails(self):
         payload = SharedPromptCreateRequest(

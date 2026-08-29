@@ -74,6 +74,10 @@ class McpPublishResult(BaseModel):
     description: str = Field(default="", description="Optional plain-text description of the published post")
     content_format: str = Field(description="Published format: prompt or skill")
     media_type: str = Field(default="text", description="Published media type: text or image")
+    image_attached: bool = Field(
+        default=False,
+        description="Whether the reference image was actually saved with the post",
+    )
     public_url: AnyHttpUrl = Field(description="URL for opening the published post")
 
 
@@ -188,6 +192,7 @@ async def _publish(
             description=payload.description,
             content_format=payload.content_format,
             media_type=payload.media_type,
+            image_attached=bool(attachments),
             public_url=build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
         )
     except Exception:
@@ -347,6 +352,88 @@ def _create_mcp() -> FastMCP:
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         audit_tool_success(actor, "publish_prompt", result.prompt_id)
+        return result
+
+    # Keep image transfer separate from the optional-image tool. ChatGPT can
+    # otherwise omit the large optional Base64 argument and still receive a
+    # successful text-only publication result.
+    @mcp.tool(
+        name="publish_image_prompt",
+        title="Publish a public image prompt with its reference image",
+        description=(
+            "Publish an image-generation prompt and attach the supplied reference image. "
+            "Use this tool whenever the user asks to post an image. image_base64 is required, "
+            "so the tool never reports success after silently publishing without the image. "
+            "The image must be Base64 data (a data URL is also accepted), not a remote URL."
+        ),
+        annotations=annotations,
+        structured_output=True,
+    )
+    async def publish_image_prompt(
+        title: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="Title of the prompt to publish"),
+        ],
+        content: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Body of the image-generation prompt"),
+        ],
+        image_base64: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
+                description=(
+                    "Required Base64-encoded reference image, up to 5MB decoded. "
+                    "PNG, JPEG, WebP, and GIF are accepted; data:image/...;base64,... is also accepted."
+                ),
+            ),
+        ],
+        category: Annotated[
+            str,
+            Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
+        ] = "",
+        description: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_DESCRIPTION_LENGTH, description="Optional plain-text description of the prompt"),
+        ] = "",
+        ai_model: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="Optional AI model used to create or validate it"),
+        ] = "",
+        image_filename: Annotated[
+            str,
+            Field(max_length=MCP_PROMPT_IMAGE_FILENAME_MAX_LENGTH, description="Optional image filename, for example reference.png"),
+        ] = "",
+        image_mime_type: Annotated[
+            Literal["", "image/png", "image/jpeg", "image/webp", "image/gif"],
+            Field(description="Optional image MIME type; omit it when the filename or data URL identifies it"),
+        ] = "",
+    ) -> McpPublishResult:
+        try:
+            payload = SharedPromptCreateRequest(
+                title=title,
+                content=content,
+                category=category,
+                description=description,
+                ai_model=ai_model,
+                content_format="prompt",
+                media_type="image",
+            )
+        except ValidationError as exc:
+            raise _validation_tool_error(exc, "投稿") from exc
+        actor = require_actor(MCP_PROMPTS_WRITE_SCOPE)
+        try:
+            result = await _publish(
+                actor.user_id,
+                payload,
+                image_base64=image_base64,
+                image_filename=image_filename,
+                image_mime_type=image_mime_type,
+            )
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
+        audit_tool_success(actor, "publish_image_prompt", result.prompt_id)
         return result
 
     # 日本語: SKILLを公開共有へ投稿するMCPツール説明。

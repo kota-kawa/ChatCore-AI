@@ -32,6 +32,7 @@ class McpServerTestCase(unittest.TestCase):
             set(by_name),
             {
                 "publish_prompt",
+                "publish_image_prompt",
                 "publish_skill",
                 "list_shared_content",
                 "search_shared_content",
@@ -61,6 +62,7 @@ class McpServerTestCase(unittest.TestCase):
 
         expected_scopes = {
             "publish_prompt": "prompts:write",
+            "publish_image_prompt": "prompts:write",
             "publish_skill": "prompts:write",
             "list_shared_content": "prompts:read",
             "search_shared_content": "prompts:read",
@@ -121,7 +123,7 @@ class McpServerTestCase(unittest.TestCase):
             tools = asyncio.run(mcp_server._create_mcp().list_tools())
 
         for tool in tools:
-            if tool.name not in {"publish_prompt", "publish_skill"}:
+            if tool.name not in {"publish_prompt", "publish_image_prompt", "publish_skill"}:
                 continue
             definition = tool.model_dump(by_alias=True)
             category = definition["inputSchema"]["properties"]["category"]
@@ -169,6 +171,14 @@ class McpServerTestCase(unittest.TestCase):
             MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
         )
         self.assertIn("not a remote URL", prompt_definition["description"])
+
+        image_prompt_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "publish_image_prompt"
+        )
+        self.assertIn("image_base64", image_prompt_definition["inputSchema"]["required"])
+        self.assertIn("never reports success", image_prompt_definition["description"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:
