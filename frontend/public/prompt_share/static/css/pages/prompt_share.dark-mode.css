@@ -1030,7 +1030,7 @@
   border-color: rgba(148, 163, 184, 0.15);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__meta span {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name {
   background: rgba(30, 41, 59, 0.9);
   color: #93c5fd;
 }

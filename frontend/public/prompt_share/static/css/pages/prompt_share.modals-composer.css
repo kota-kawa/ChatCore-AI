@@ -1909,18 +1909,25 @@
   min-width: 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .form-group--ai-model input[type="text"] {
-  padding-right: 2.8rem;
+/* `.prompt-share-page .form-group input[type="text"]` の padding ショートハンドに
+   カスケードで負けないよう、同等以上の詳細度でパディングを確保する。
+   負けると入力文字がシェブロンの下に潜り込む。
+   Specific enough to outrank the `.prompt-share-page .form-group input[type="text"]`
+   padding shorthand; otherwise the typed text slides underneath the chevron. */
+.prompt-share-page .form-group.form-group--ai-model input[type="text"] {
+  padding-right: 3.15rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger {
   position: absolute;
   top: 50%;
-  right: 0.92rem;
-  width: 1.2rem;
-  height: 1.2rem;
+  right: 0.3rem;
+  /* タップ領域を確保する。見た目のサイズはアイコンの font-size で保つ。
+     A finger-sized hit area; the icon's font-size keeps the visual weight unchanged. */
+  width: 2.6rem;
+  height: 2.6rem;
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   background: none;
   box-shadow: none;
   color: #4f7eb6;
@@ -1943,8 +1950,7 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__trigger:focus-visible {
   outline: none;
-  border-radius: 5px;
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.14);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.2);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__menu {
@@ -2497,11 +2503,15 @@
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy strong {
   color: #20354a;
   font-size: 0.92rem;
+  /* 狭い画面で末尾1文字だけが次行に落ちるのを避ける
+     Keeps a lone trailing character from dropping to its own line on narrow screens */
+  text-wrap: balance;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy small {
   color: #64788d;
   font-size: 0.8rem;
+  text-wrap: pretty;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview {
@@ -2543,19 +2553,40 @@
   padding: 0.1rem 0.1rem 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__meta span {
-  display: inline-flex;
+/* ファイル名チップ。長いファイル名でも2行までに抑え、角丸は控えめにして
+   縦に伸びた楕円にならないようにする。
+   File name chip: clamped to two lines with a modest corner radius so a long
+   name never inflates it into a tall ellipse. */
+:where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name {
+  display: flex;
   flex: 1 1 12rem;
   min-width: 0;
   max-width: 100%;
   align-items: center;
+  gap: 0.4rem;
   min-height: 34px;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  border-radius: 12px;
   background: #eef5fc;
   color: #476176;
   font-size: 0.81rem;
   font-weight: 700;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name > i {
+  flex-shrink: 0;
+  font-size: 0.86rem;
+  opacity: 0.75;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 

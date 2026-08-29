@@ -167,8 +167,21 @@
     padding: 0.8rem 0.82rem;
   }
 
+  /* アイコンを一回り小さくして、狭い画面でも見出しが不自然に折り返さない幅を本文に渡す
+     A slightly smaller icon hands the copy enough width to avoid awkward heading breaks */
   :where(body.prompt-share-page, .prompt-share-page) .image-upload-field {
+    gap: 0.7rem;
     padding: 0.86rem;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 13px;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy {
+    flex: 1 1 auto;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__meta {
@@ -176,8 +189,17 @@
     flex-direction: column;
   }
 
+  /* 縦積みでは flex-basis が高さになるため、12rem のままだと
+     ファイル名チップが縦長の楕円に膨らむ。内容の高さに戻す。
+     Stacked, the flex-basis becomes a height, so a 12rem basis would inflate the
+     file name chip into a tall blob. Fall back to its content height. */
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name {
+    flex: 0 0 auto;
+  }
+
   :where(body.prompt-share-page, .prompt-share-page) .prompt-image-clear-btn {
     width: 100%;
+    min-height: 44px;
     justify-content: center;
   }
 
