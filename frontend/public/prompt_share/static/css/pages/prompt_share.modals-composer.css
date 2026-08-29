@@ -1205,6 +1205,25 @@
   overflow-wrap: anywhere;
 }
 
+/* 投稿者プロフィールの一覧では保存済みサムネイルをカード幅に合わせて表示する。 */
+/* Author-profile rows use the stored thumbnail and keep it inside the card width. */
+:where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid #dce7f3;
+  border-radius: 11px;
+  background: #f5f9ff;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__content {
   margin: 0;
   color: #4a5568;
@@ -1857,6 +1876,10 @@
 }
 
 @media (max-width: 640px) {
+  :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__image {
+    aspect-ratio: 4 / 3;
+  }
+
   :where(body.prompt-share-page, .prompt-share-page) .prompt-axis-toggle--post-types {
     grid-template-columns: minmax(0, 1fr);
   }

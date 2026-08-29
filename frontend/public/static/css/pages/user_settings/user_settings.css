@@ -1490,6 +1490,23 @@
   overflow-wrap: anywhere;
 }
 
+:where(body.settings-page, .user-settings-page) .prompt-card__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid #d6e2ef;
+  border-radius: 12px;
+  background: #f2f8f5;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-card__image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 :where(body.settings-page, .user-settings-page) .prompt-card__content {
   margin: 0;
   color: #4a5568;
@@ -1569,6 +1586,10 @@
 
   :where(body.settings-page, .user-settings-page) .prompt-card {
     padding: 0.82rem;
+  }
+
+  :where(body.settings-page, .user-settings-page) .prompt-card__image {
+    aspect-ratio: 4 / 3;
   }
 }
 
@@ -2934,6 +2955,11 @@ body.settings-page :where(
   color: #f9fafb;
 }
 
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__image {
+  border-color: #374151;
+  background: #111827;
+}
+
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__content {
   color: #d1d5db;
 }
@@ -3582,6 +3608,26 @@ body.settings-page :where(
   scrollbar-gutter: stable;
 }
 
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__image {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-height: min(50dvh, 520px);
+  margin: 0 0 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(200, 220, 210, 0.8);
+  border-radius: 16px;
+  background: #f2f8f5;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__image img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: min(50dvh, 520px);
+  object-fit: contain;
+}
+
 /* 本文は枠の入れ子をやめ、カード自体を読む面にする（プロンプト共有の詳細モーダルと同じ組み）
    The body drops the box-in-box and becomes the reading surface, as in the prompt share detail modal */
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
@@ -3830,6 +3876,11 @@ body.settings-page :where(
   :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example-grid {
     grid-template-columns: 1fr;
   }
+
+  :where(body.settings-page, .user-settings-page) .prompt-preview-modal__image,
+  :where(body.settings-page, .user-settings-page) .prompt-preview-modal__image img {
+    max-height: 38dvh;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3896,6 +3947,11 @@ body.settings-page :where(
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
   border-color: rgba(71, 101, 88, 0.62);
   background: rgba(15, 23, 42, 0.72);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__image {
+  border-color: rgba(71, 101, 88, 0.62);
+  background: #020617;
 }
 
 [data-theme="dark"]

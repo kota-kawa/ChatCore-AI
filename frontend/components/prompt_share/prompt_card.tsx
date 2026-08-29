@@ -12,6 +12,7 @@ import {
   getPromptMediaIconClass,
   getPromptMediaLabel,
   getPromptPreviewSource,
+  getPromptReferenceImageUrl,
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent,
@@ -104,11 +105,7 @@ function PromptCardComponent({
   const authorName = prompt.author || t("promptShare.authorMissing");
   const authorUserId = Number(prompt.author_user_id || 0);
   const hasAuthorProfile = authorUserId > 0;
-  const referenceAttachment = Array.isArray(prompt.attachments)
-    ? prompt.attachments.find((attachment) => attachment.role === "reference")
-    : undefined;
-  const referenceImageUrl = prompt.reference_image_url || "";
-  const cardImageUrl = referenceAttachment?.thumbnail_url || referenceImageUrl;
+  const cardImageUrl = getPromptReferenceImageUrl(prompt, "thumbnail");
   // 管理対象の相対URLだけNext Imageの最適化対象にする。
   // Keep external/legacy URLs on a native img for backwards compatibility.
   const canOptimizeReferenceImage =

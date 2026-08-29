@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizePromptData } from "../scripts/prompt_share/formatters";
+import {
+  getPromptReferenceImageUrl,
+  normalizePromptData
+} from "../scripts/prompt_share/formatters";
 import type { PromptData } from "../scripts/prompt_share/types";
 
 function promptData(overrides: Partial<PromptData> = {}): PromptData {
@@ -64,4 +67,24 @@ test("normalizePromptData leaves legacy upload paths unchanged", () => {
   }));
 
   assert.equal(normalized.reference_image_url, "/static/uploads/prompt_share/legacy.png");
+});
+
+test("getPromptReferenceImageUrl selects the thumbnail only for card rendering", () => {
+  const prompt = promptData({
+    reference_image_url: "/prompt_share/api/media/example.webp",
+    attachments: [{
+      role: "reference",
+      url: "/prompt_share/api/media/example.webp",
+      thumbnail_url: "/prompt_share/api/media/example-card.webp"
+    }]
+  });
+
+  assert.equal(
+    getPromptReferenceImageUrl(prompt, "thumbnail"),
+    "/prompt_share/api/media/example-card.webp"
+  );
+  assert.equal(
+    getPromptReferenceImageUrl(prompt),
+    "/prompt_share/api/media/example.webp"
+  );
 });

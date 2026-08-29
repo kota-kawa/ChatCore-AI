@@ -39,6 +39,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
   contentFormat: string;
   mediaType: string;
   attributes: Record<string, string>;
+  attachments: Record<string, string>[];
+  referenceImageUrl: string;
   skillMarkdown: string;
   category: string;
   inputExamples: string;
@@ -53,6 +55,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
     contentFormat: normalizeNullableString(prompt.content_format),
     mediaType: normalizeNullableString(prompt.media_type) || "text",
     attributes: prompt.attributes ?? {},
+    attachments: prompt.attachments ?? [],
+    referenceImageUrl: normalizeNullableString(prompt.reference_image_url),
     skillMarkdown: normalizeNullableString(prompt.skill_markdown),
     category: normalizeNullableString(prompt.category),
     inputExamples: normalizeNullableString(prompt.input_examples),
@@ -73,6 +77,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     content_format: entry.content_format,
     media_type: entry.media_type,
     attributes: entry.attributes,
+    attachments: entry.attachments,
+    reference_image_url: entry.reference_image_url,
     skill_markdown: entry.skill_markdown,
     category: entry.category,
     input_examples: entry.input_examples,
@@ -90,6 +96,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     mediaType: prompt.mediaType,
     ...(prompt.description ? { description: prompt.description } : {}),
     attributes: prompt.attributes,
+    attachments: prompt.attachments,
+    referenceImageUrl: prompt.referenceImageUrl,
     skillMarkdown: prompt.skillMarkdown,
     category: prompt.category,
     inputExamples: prompt.inputExamples,

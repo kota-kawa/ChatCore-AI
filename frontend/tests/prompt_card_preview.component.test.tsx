@@ -19,6 +19,8 @@ const authoredPrompt: PromptRecord = {
   contentFormat: "prompt",
   mediaType: "text",
   attributes: {},
+  attachments: [],
+  referenceImageUrl: "",
   skillMarkdown: "",
   inputExamples: "会議メモの本文",
   outputExamples: "要点: ...",
@@ -36,6 +38,8 @@ const likedPrompt: LikedPrompt = {
   contentFormat: authoredPrompt.contentFormat,
   mediaType: authoredPrompt.mediaType,
   attributes: authoredPrompt.attributes,
+  attachments: authoredPrompt.attachments,
+  referenceImageUrl: authoredPrompt.referenceImageUrl,
   skillMarkdown: authoredPrompt.skillMarkdown,
   inputExamples: authoredPrompt.inputExamples,
   outputExamples: authoredPrompt.outputExamples,
@@ -96,6 +100,12 @@ describe("設定画面のプロンプトカード詳細", () => {
         content_format: "prompt",
         media_type: "image",
         attributes: { aspect_ratio: "16:9" },
+        attachments: [{
+          role: "reference",
+          url: "/prompt_share/api/media/image-1.webp",
+          thumbnail_url: "/prompt_share/api/media/image-1-card.webp",
+        }],
+        reference_image_url: "/prompt_share/api/media/image-1.webp",
       }],
     });
 
@@ -103,6 +113,12 @@ describe("設定画面のプロンプトカード詳細", () => {
       contentFormat: "prompt",
       mediaType: "image",
       attributes: { aspect_ratio: "16:9" },
+      attachments: [{
+        role: "reference",
+        url: "/prompt_share/api/media/image-1.webp",
+        thumbnail_url: "/prompt_share/api/media/image-1-card.webp",
+      }],
+      referenceImageUrl: "/prompt_share/api/media/image-1.webp",
     });
   });
 
@@ -188,6 +204,44 @@ describe("設定画面のプロンプトカード詳細", () => {
     expect(container.querySelector(".prompt-card__preview-sections")).toBeNull();
   });
 
+  it("投稿・いいねカードでは添付画像のサムネイルを表示する", () => {
+    const imagePrompt = {
+      ...authoredPrompt,
+      mediaType: "image",
+      attachments: [{
+        role: "reference",
+        url: "/prompt_share/api/media/example.webp",
+        thumbnail_url: "/prompt_share/api/media/example-card.webp",
+      }],
+      referenceImageUrl: "/prompt_share/api/media/example.webp",
+    };
+    const imageLikedPrompt = {
+      ...likedPrompt,
+      prompt: imagePrompt,
+      mediaType: "image",
+      attachments: imagePrompt.attachments,
+      referenceImageUrl: imagePrompt.referenceImageUrl,
+    };
+    const { container } = render(
+      <>
+        <PromptCard
+          prompt={imagePrompt}
+          onPreview={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />
+        <LikedPromptCard entry={imageLikedPrompt} onPreview={vi.fn()} onDelete={vi.fn()} />
+      </>
+    );
+
+    const images = container.querySelectorAll(".prompt-card__image img");
+    expect(images).toHaveLength(2);
+    images.forEach((image) => {
+      expect(image).toHaveAttribute("src", "/prompt_share/api/media/example-card.webp");
+      expect(image).toHaveAttribute("loading", "lazy");
+    });
+  });
+
   it("説明があるカードはMarkdownとして解釈せず説明をプレビューする", () => {
     const { container } = render(
       <PromptCard
@@ -259,6 +313,29 @@ describe("設定画面のプロンプトカード詳細", () => {
     );
 
     expect(container.querySelector(".prompt-preview-modal__description > p")?.textContent).toBe("# 説明\n用途を短く紹介");
+  });
+
+  it("閲覧モーダルではサムネイルではなく表示用画像を表示する", () => {
+    const { container } = render(
+      <PromptPreviewModal
+        prompt={{
+          ...authoredPrompt,
+          attachments: [{
+            role: "reference",
+            url: "/prompt_share/api/media/example.webp",
+            thumbnail_url: "/prompt_share/api/media/example-card.webp",
+          }],
+          referenceImageUrl: "/prompt_share/api/media/example.webp",
+        }}
+        source="authored"
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".prompt-preview-modal__image img")).toHaveAttribute(
+      "src",
+      "/prompt_share/api/media/example.webp"
+    );
   });
 
   it("Skill形式ではSKILL定義を本文として表示する", () => {
