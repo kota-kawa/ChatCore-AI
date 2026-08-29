@@ -41,6 +41,16 @@ ERROR_MCP_PROMPT_IMAGE_METADATA_MISMATCH = "画像データURLとimage_mime_type
 ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA = (
     "image_base64を指定せずに画像のファイル名やMIMEタイプは指定できません。"
 )
+ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT = (
+    "image_fileとimage_base64は同時に指定できません。どちらか一方を指定してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_REQUIRED = "image_fileまたはimage_base64で画像を指定してください。"
+ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_URL_INVALID = (
+    "画像ファイルのダウンロードURLが許可されていません。ChatGPTから画像を選び直してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED = (
+    "画像ファイルを取得できませんでした。ChatGPTから画像を選び直して再試行してください。"
+)
 ERROR_GUEST_PROMPT_TEXT_ONLY = (
     "ゲスト投稿ではテキストプロンプトのみ投稿できます。"
 )

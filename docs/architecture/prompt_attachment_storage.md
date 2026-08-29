@@ -22,9 +22,11 @@ truth for the periodic orphan reconciler.
 
 `services.prompt_attachment_upload` owns filename, MIME, signature, and size
 validation before calling the processing and storage boundaries. Both the
-browser multipart endpoint and the MCP `publish_prompt` tool use this service.
-MCP accepts Base64 input (including an image data URL) and does not fetch
-remote URLs.
+browser multipart endpoint and the MCP prompt-publishing tools use this service.
+MCP accepts Base64 input (including an image data URL) and ChatGPT file inputs
+declared through `_meta["openai/fileParams"]`. ChatGPT file inputs are fetched
+only from its HTTPS `files.oaiusercontent.com` download host, without redirects,
+and with the same 5 MB streaming limit. Arbitrary remote URLs are not fetched.
 
 ## Future object-storage migration
 

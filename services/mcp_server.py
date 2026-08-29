@@ -14,7 +14,11 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
 
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit
-from services.error_messages import ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA
+from services.error_messages import (
+    ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA,
+    ERROR_MCP_PROMPT_IMAGE_REQUIRED,
+    ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT,
+)
 from services.mcp_config import (
     get_mcp_allowed_hosts,
     get_mcp_allowed_origins,
@@ -33,6 +37,8 @@ from services.mcp_oauth import (
 from services.mcp_prompt_publishing import (
     MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
     MCP_PROMPT_IMAGE_FILENAME_MAX_LENGTH,
+    OpenAIFileInput,
+    save_mcp_prompt_file,
     save_mcp_prompt_image,
 )
 from services.mcp_request_protection import McpRequestProtectionMiddleware
@@ -164,12 +170,15 @@ async def _publish(
     payload: SharedPromptCreateRequest,
     *,
     image_base64: str = "",
+    image_file: OpenAIFileInput | None = None,
     image_filename: str = "",
     image_mime_type: str = "",
 ) -> McpPublishResult:
     await _consume_publish_limit(user_id)
     attachments: list[dict[str, str]] = []
     try:
+        if image_base64.strip() and image_file is not None:
+            raise ValueError(ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT)
         if image_base64.strip():
             attachments.append(
                 await run_blocking(
@@ -179,6 +188,12 @@ async def _publish(
                     filename=image_filename,
                     mime_type=image_mime_type,
                 )
+            )
+        elif image_file is not None:
+            if image_filename.strip() or image_mime_type.strip():
+                raise ValueError(ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT)
+            attachments.append(
+                await run_blocking(save_mcp_prompt_file, image_file, user_id)
             )
         elif image_filename.strip() or image_mime_type.strip():
             raise ValueError(ERROR_MCP_PROMPT_IMAGE_METADATA_WITHOUT_DATA)
@@ -266,11 +281,12 @@ def _create_mcp() -> FastMCP:
         title="Publish a public prompt",
         description=(
             "Publish a text or image-generation prompt to Chat-Core's public prompt sharing immediately. "
-            "Set media_type to image for an image prompt. Optionally provide image_base64 as a reference image; "
-            "the image must be Base64 data (a data URL is also accepted), not a remote URL. "
+            "Set media_type to image for an image prompt. Optionally provide image_file through the client's "
+            "file picker, or provide image_base64 as a reference image. Arbitrary remote URLs are not accepted. "
             "Repeating the call creates another post."
         ),
         annotations=annotations,
+        meta={"openai/fileParams": ["image_file"]},
         structured_output=True,
     )
     async def publish_prompt(
@@ -313,6 +329,10 @@ def _create_mcp() -> FastMCP:
                 ),
             ),
         ] = "",
+        image_file: Annotated[
+            OpenAIFileInput,
+            Field(description="Optional image selected through the ChatGPT file picker."),
+        ] = None,
         image_filename: Annotated[
             str,
             Field(
@@ -325,7 +345,7 @@ def _create_mcp() -> FastMCP:
             Field(description="Optional image MIME type; omit it when the filename or data URL identifies it"),
         ] = "",
     ) -> McpPublishResult:
-        resolved_media_type = "image" if image_base64.strip() else media_type
+        resolved_media_type = "image" if image_base64.strip() or image_file is not None else media_type
         try:
             payload = SharedPromptCreateRequest(
                 title=title,
@@ -346,6 +366,7 @@ def _create_mcp() -> FastMCP:
                 actor.user_id,
                 payload,
                 image_base64=image_base64,
+                image_file=image_file,
                 image_filename=image_filename,
                 image_mime_type=image_mime_type,
             )
@@ -354,19 +375,20 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "publish_prompt", result.prompt_id)
         return result
 
-    # Keep image transfer separate from the optional-image tool. ChatGPT can
-    # otherwise omit the large optional Base64 argument and still receive a
+    # Keep image transfer separate from the optional-image tool. MCP clients can
+    # otherwise omit the optional image argument and still receive a
     # successful text-only publication result.
     @mcp.tool(
         name="publish_image_prompt",
         title="Publish a public image prompt with its reference image",
         description=(
             "Publish an image-generation prompt and attach the supplied reference image. "
-            "Use this tool whenever the user asks to post an image. image_base64 is required, "
-            "so the tool never reports success after silently publishing without the image. "
-            "The image must be Base64 data (a data URL is also accepted), not a remote URL."
+            "Use this tool whenever the user asks to post an image. Supply exactly one of image_file "
+            "from the client's file picker or image_base64 (a data URL is also accepted). The tool never "
+            "reports success after silently publishing without the image. Arbitrary remote URLs are not accepted."
         ),
         annotations=annotations,
+        meta={"openai/fileParams": ["image_file"]},
         structured_output=True,
     )
     async def publish_image_prompt(
@@ -381,14 +403,17 @@ def _create_mcp() -> FastMCP:
         image_base64: Annotated[
             str,
             Field(
-                min_length=1,
                 max_length=MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
                 description=(
-                    "Required Base64-encoded reference image, up to 5MB decoded. "
+                    "Base64-encoded reference image, up to 5MB decoded. "
                     "PNG, JPEG, WebP, and GIF are accepted; data:image/...;base64,... is also accepted."
                 ),
             ),
-        ],
+        ] = "",
+        image_file: Annotated[
+            OpenAIFileInput,
+            Field(description="Image selected through the ChatGPT file picker."),
+        ] = None,
         category: Annotated[
             str,
             Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
@@ -410,6 +435,8 @@ def _create_mcp() -> FastMCP:
             Field(description="Optional image MIME type; omit it when the filename or data URL identifies it"),
         ] = "",
     ) -> McpPublishResult:
+        if not image_base64.strip() and image_file is None:
+            raise ToolError(ERROR_MCP_PROMPT_IMAGE_REQUIRED)
         try:
             payload = SharedPromptCreateRequest(
                 title=title,
@@ -428,6 +455,7 @@ def _create_mcp() -> FastMCP:
                 actor.user_id,
                 payload,
                 image_base64=image_base64,
+                image_file=image_file,
                 image_filename=image_filename,
                 image_mime_type=image_mime_type,
             )

@@ -189,6 +189,50 @@ class McpContentToolTestCase(unittest.TestCase):
                 )
             )
 
+    def test_publish_image_prompt_forwards_a_chatgpt_file_parameter(self):
+        server = self._server()
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=94,
+            title="Uploaded image prompt",
+            content_format="prompt",
+            media_type="image",
+            image_attached=True,
+            public_url="https://example.test/shared/prompt/94",
+        )
+        image_file = {
+            "download_url": "https://files.oaiusercontent.com/file-123/download?token=signed",
+            "file_id": "file-123",
+            "mime_type": "image/png",
+            "file_name": "reference.png",
+        }
+        with (
+            patch(
+                "services.mcp_server.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(return_value=publish_result),
+            ) as publish,
+            patch("services.mcp_server.audit_tool_success"),
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "publish_image_prompt",
+                    {
+                        "title": "Uploaded image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "image_file": image_file,
+                    },
+                )
+            )
+
+        self.assertTrue(result[1]["image_attached"])
+        forwarded_file = publish.call_args.kwargs["image_file"]
+        self.assertEqual(str(forwarded_file.download_url), image_file["download_url"])
+        self.assertEqual(forwarded_file.file_id, "file-123")
+        self.assertEqual(forwarded_file.file_name, "reference.png")
+
     def test_publish_removes_saved_image_when_database_write_fails(self):
         payload = SharedPromptCreateRequest(
             title="Image prompt",
