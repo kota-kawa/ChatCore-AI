@@ -81,6 +81,20 @@ describe("SkillSection", () => {
     expect(handleToggle).toHaveBeenCalledWith(skill);
   });
 
+  it("opens the full Skill instructions from the chip body", () => {
+    mockedUseHomePageSkills.mockReturnValue(state());
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "短く答えるの内容を表示" }));
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "短く答える" })).toBeInTheDocument();
+    expect(screen.getByText("結論から書く")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "モーダルを閉じる" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("opens the add flow from the empty state", () => {
     const openAddModal = vi.fn();
     mockedUseHomePageSkills.mockReturnValue(state({ skills: [], openAddModal }));
