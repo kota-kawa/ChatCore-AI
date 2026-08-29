@@ -69,6 +69,7 @@
 
 :where(body.chat-page, .chat-page-shell) .skill-section__add:focus-visible,
 :where(body.chat-page, .chat-page-shell) .skill-chip:focus-visible,
+:where(body.chat-page, .chat-page-shell) .skill-chip__toggle:focus-visible,
 :where(body.chat-page, .chat-page-shell) .skill-chip__delete:focus-visible,
 :where(body.chat-page, .chat-page-shell) .skill-section__empty:focus-visible {
   outline: 2px solid rgba(15, 118, 110, 0.56);
@@ -118,11 +119,8 @@
   cursor: pointer;
 }
 
-:where(body.chat-page, .chat-page-shell) .skill-chip-row.is-default .skill-chip {
-  border-radius: 999px;
-}
-
 :where(body.chat-page, .chat-page-shell) .skill-chip:disabled,
+:where(body.chat-page, .chat-page-shell) .skill-chip__toggle:disabled,
 :where(body.chat-page, .chat-page-shell) .skill-chip__delete:disabled {
   cursor: wait;
   opacity: 0.65;
@@ -165,6 +163,25 @@
 
 :where(body.chat-page, .chat-page-shell) .skill-chip__default i {
   font-size: 0.58rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  height: 36px;
+  padding: 0 0.62rem 0 0.55rem;
+  border: 0;
+  border-left: 1px solid rgba(130, 155, 146, 0.2);
+  border-radius: 0;
+  color: #6b817a;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-chip-row.is-default .skill-chip__toggle {
+  border-radius: 0 999px 999px 0;
 }
 
 :where(body.chat-page, .chat-page-shell) .skill-chip__state {
@@ -440,6 +457,135 @@
   animation: skill-modal-spin 800ms linear infinite;
 }
 
+/* Read-only Skill details opened from the chip body. */
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal-priority, 85) + 1);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: rgba(8, 18, 14, 0.5);
+  backdrop-filter: blur(6px) saturate(110%);
+  -webkit-backdrop-filter: blur(6px) saturate(110%);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal.is-open {
+  display: flex;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__content {
+  width: min(720px, 100%);
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  padding: clamp(1.2rem, 3vw, 1.8rem);
+  border: 1px solid rgba(211, 231, 222, 0.9);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(16, 44, 35, 0.22);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__heading {
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__eyebrow {
+  margin: 0 0 0.3rem;
+  color: #0f766e;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__header h2 {
+  margin: 0;
+  color: #123d32;
+  font-size: clamp(1.25rem, 3vw, 1.55rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__close {
+  flex: 0 0 auto;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.24rem 0.48rem;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  color: #52736a;
+  background: rgba(236, 253, 245, 0.76);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__lead {
+  margin: 0.9rem 0 1.15rem;
+  color: #58736b;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__section-heading h3 {
+  margin: 0;
+  color: #31584d;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__section-heading span {
+  flex: 0 0 auto;
+  color: #759087;
+  font-size: 0.68rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__instructions {
+  max-height: min(56vh, 480px);
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  overflow: auto;
+  border: 1px solid #d9e7e0;
+  border-radius: 13px;
+  color: #1c4035;
+  background: #f8fcfa;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @keyframes skill-modal-spin {
   to { transform: rotate(360deg); }
 }
@@ -472,6 +618,17 @@
 
   :where(body.chat-page, .chat-page-shell) .skill-modal__content {
     max-height: min(90vh, 720px);
+    border-radius: 22px 22px 0 0;
+    padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-detail-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-detail-modal__content {
+    max-height: min(90vh, 760px);
     border-radius: 22px 22px 0 0;
     padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
   }
@@ -513,7 +670,21 @@
   color: #5eead4;
 }
 
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-chip__toggle {
+  border-left-color: rgba(94, 234, 212, 0.22);
+  color: #91b8ab;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-chip__state {
+  color: #91b8ab;
+}
+
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__content {
+  border-color: rgba(94, 234, 212, 0.2);
+  background: #10241f;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__content {
   border-color: rgba(94, 234, 212, 0.2);
   background: #10241f;
 }
@@ -523,9 +694,31 @@
   color: #d5f7ed;
 }
 
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__header h2,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__section-heading h3 {
+  color: #d5f7ed;
+}
+
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__lead,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__hint {
   color: #9bbcb1;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__lead,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__section-heading span {
+  color: #9bbcb1;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__meta span {
+  border-color: rgba(94, 234, 212, 0.22);
+  color: #a6d6c8;
+  background: rgba(17, 72, 60, 0.68);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__instructions {
+  border-color: #315b50;
+  color: #e1faf2;
+  background: #122c25;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-modal__field input,

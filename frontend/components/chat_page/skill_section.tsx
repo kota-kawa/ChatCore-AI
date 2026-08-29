@@ -1,8 +1,10 @@
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 
 import { useHomePageSkills } from "../../hooks/chat_page/use_home_page_skills";
 import { useTranslation } from "../../contexts/locale_context";
 import { NewSkillModal } from "./modals/new_skill_modal";
+import { SkillDetailModal } from "./modals/skill_detail_modal";
+import type { UserSkill } from "../../lib/chat_page/skill_api";
 
 type SkillSectionProps = {
   loggedIn: boolean;
@@ -11,6 +13,15 @@ type SkillSectionProps = {
 function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
   const { locale, t } = useTranslation();
   const skillsState = useHomePageSkills({ loggedIn });
+  const [selectedSkill, setSelectedSkill] = useState<UserSkill | null>(null);
+
+  const openSkillDetails = useCallback((skill: UserSkill) => {
+    setSelectedSkill(skill);
+  }, []);
+
+  const closeSkillDetails = useCallback(() => {
+    setSelectedSkill(null);
+  }, []);
 
   if (!loggedIn) return null;
 
@@ -80,12 +91,11 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
                 <button
                   type="button"
                   className="skill-chip"
-                  role="switch"
-                  aria-checked={skill.is_enabled}
-                  aria-label={locale === "en" ? `${skill.name}: ${skill.is_enabled ? "turn off" : "turn on"}` : `${skill.name}を${skill.is_enabled ? "オフ" : "オン"}`}
+                  aria-haspopup="dialog"
+                  aria-label={t("home.skillViewDetails", { name: skill.name })}
                   aria-busy={isPending ? "true" : undefined}
                   disabled={pendingSkillId !== null}
-                  onClick={() => { void handleToggle(skill); }}
+                  onClick={() => openSkillDetails(skill)}
                 >
                   <span className="skill-chip__dot" aria-hidden="true"></span>
                   <span className="skill-chip__name" title={skill.name}>{skill.name}</span>
@@ -95,6 +105,17 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
                       {t("home.skillDefault")}
                     </span>
                   ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="skill-chip__toggle"
+                  role="switch"
+                  aria-checked={skill.is_enabled}
+                  aria-label={locale === "en" ? `${skill.name}: ${skill.is_enabled ? "turn off" : "turn on"}` : `${skill.name}を${skill.is_enabled ? "オフ" : "オン"}`}
+                  aria-busy={isPending ? "true" : undefined}
+                  disabled={pendingSkillId !== null}
+                  onClick={() => { void handleToggle(skill); }}
+                >
                   <span className="skill-chip__state">{stateLabel}</span>
                   <span className="skill-chip__switch" aria-hidden="true"><span></span></span>
                 </button>
@@ -125,6 +146,7 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
         setName={setSkillName}
         setInstructions={setSkillInstructions}
       />
+      <SkillDetailModal skill={selectedSkill} onClose={closeSkillDetails} />
     </section>
   );
 }
