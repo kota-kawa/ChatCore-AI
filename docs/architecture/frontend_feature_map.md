@@ -43,6 +43,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 - `lib/chat_page/api_contract.ts`: チャット履歴・生成 UI パーツ・検索画像などの実行時正規化を担当します。
 - `types/generated/api_schemas.ts`: Backend Pydantic model から生成される契約です。直接編集しません。
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。
+- `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。
 
 ## 変更時の境界
 

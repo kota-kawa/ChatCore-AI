@@ -433,14 +433,8 @@
     align-items: flex-start;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn {
-    min-width: 0;
-    padding-inline: 0.62rem;
-  }
-
-  /* 固定見出しが2段になると読める行数が減るため、本文側はコピーをアイコンだけにして1段に収める
-     A two-row sticky header costs reading lines, so the body's copy button goes
-     icon-only to keep it on one row. The label stays for assistive tech. */
+  /* 固定見出しが2段にならないよう、狭い画面ではコピーボタンを1段に収める
+     Keep the copy button on one row so the sticky header does not wrap on narrow screens. */
   :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header--sticky {
     flex-wrap: nowrap;
     /* 右側は閉じるボタンの逃げを残したまま、左だけ詰める
@@ -457,21 +451,8 @@
   :where(body.prompt-share-page, .prompt-share-page)
     .prompt-detail-section__header--sticky
     .prompt-detail-copy-btn {
-    width: 40px;
-    min-height: 38px;
-    padding-inline: 0;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page)
-    .prompt-detail-section__header--sticky
-    .prompt-detail-copy-btn span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+    width: 38px;
+    height: 38px;
   }
 
   .prompt-share-page .form-group input[type="text"],

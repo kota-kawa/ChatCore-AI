@@ -223,9 +223,7 @@ export default function HomePage() {
             shareLineUrl={shareLineUrl}
             shareFacebookUrl={shareFacebookUrl}
             closeShareModal={closeShareModal}
-            copyShareLink={() => {
-              void copyShareLink();
-            }}
+            copyShareLink={copyShareLink}
             shareWithNativeSheet={() => {
               void shareWithNativeSheet();
             }}

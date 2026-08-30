@@ -8,11 +8,13 @@
 // registered and only the copy source differs per button. Delegation keeps the
 // listener valid while the streamed body is patched over and over.
 
+import {
+  COPY_ERROR_ICON,
+  COPY_FEEDBACK_RESET_MS,
+  COPY_IDLE_ICON,
+  COPY_SUCCESS_ICON,
+} from "../../lib/copy_feedback";
 import { copyTextToClipboard } from "./message_utils";
-
-// アイコンの復帰と一時ラベルの表示時間。CSS のフィードバック表示と揃えている。
-// How long the icon and temporary label stay in their feedback state.
-const FEEDBACK_RESET_MS = 2000;
 
 type CopyButtonSource = {
   // クリック対象のボタン / The clickable button
@@ -47,29 +49,20 @@ function readCopySourceText(button: Element): string | null {
   return textElement ? textElement.textContent || "" : "";
 }
 
-// 成功・失敗をアイコンとラベルで一時的に知らせ、一定時間後に元へ戻す。
-// Show the outcome on the icon and label for a moment, then restore them.
+// 成功・失敗をアイコンの差し替えだけで一時的に知らせ、一定時間後に元へ戻す。
+// コピーボタンはアイコンのみ（ラベル文字なし）で統一しているため、テキストは扱わない。
+// Signal the outcome purely by swapping the icon for a moment, then restore it.
+// Copy buttons are icon-only (no text label), so there is no label to update.
 function showCopyFeedback(button: Element, succeeded: boolean) {
   const icon = button.querySelector("i");
-  const textSpan = button.querySelector("span");
-  const defaultLabel = textSpan ? textSpan.dataset.defaultLabel || textSpan.textContent || "" : "";
-  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
+  if (!icon) return;
 
-  if (icon) {
-    icon.classList.remove("bi-clipboard", "bi-check-lg", "bi-x-lg");
-    icon.classList.add(succeeded ? "bi-check-lg" : "bi-x-lg");
-    window.setTimeout(() => {
-      icon.classList.remove("bi-check-lg", "bi-x-lg");
-      icon.classList.add("bi-clipboard");
-    }, FEEDBACK_RESET_MS);
-  }
-
-  if (textSpan) {
-    textSpan.textContent = succeeded ? "Copied!" : "Failed";
-    window.setTimeout(() => {
-      textSpan.textContent = defaultLabel;
-    }, FEEDBACK_RESET_MS);
-  }
+  icon.classList.remove(COPY_IDLE_ICON, COPY_SUCCESS_ICON, COPY_ERROR_ICON);
+  icon.classList.add(succeeded ? COPY_SUCCESS_ICON : COPY_ERROR_ICON);
+  window.setTimeout(() => {
+    icon.classList.remove(COPY_SUCCESS_ICON, COPY_ERROR_ICON);
+    icon.classList.add(COPY_IDLE_ICON);
+  }, COPY_FEEDBACK_RESET_MS);
 }
 
 function onMessageCopyButtonClick(event: Event) {

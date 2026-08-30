@@ -1,6 +1,4 @@
-import { useCallback, useRef, useState } from "react";
-
-import { copyTextToClipboard } from "../../scripts/chat/message_utils";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 // コピーアクションボタンのprops型定義
@@ -9,55 +7,20 @@ type CopyActionButtonProps = {
   getText: () => string;
 };
 
-// メッセージをクリップボードにコピーするアクションボタン（成功・失敗のフィードバックアニメーション付き）
-// Action button to copy a message to the clipboard, with success/failure feedback animation
+// チャットメッセージ下部のコピーボタン。共通の CopyButton にチャット用のクラスとラベルを与えるだけ。
+// The copy button under a chat message: just the shared CopyButton wired with the chat classes and labels.
 export function CopyActionButton({ getText }: CopyActionButtonProps) {
-  const { locale, t } = useTranslation();
-  // アイコンクラスとステータスクラスでコピー結果を視覚的に表現する
-  // Visually represent the copy result using icon and status classes
-  const [iconClass, setIconClass] = useState("bi-clipboard");
-  const [statusClass, setStatusClass] = useState("");
-  const [disabled, setDisabled] = useState(false);
-  const copyInFlightRef = useRef(false);
-
-  // コピーの実行と結果フィードバックを管理するコールバック
-  // Callback that handles copying and manages result feedback
-  const handleClick = useCallback(async () => {
-    if (copyInFlightRef.current) return;
-    copyInFlightRef.current = true;
-    setDisabled(true);
-    try {
-      await copyTextToClipboard(getText());
-      setIconClass("bi-check-lg");
-      setStatusClass("copy-btn--success");
-    } catch {
-      setIconClass("bi-x-lg");
-      setStatusClass("copy-btn--error");
-    } finally {
-      // 2秒後にアイコンを元の状態にリセットする
-      // Reset the icon to its original state after 2 seconds
-      window.setTimeout(() => {
-        setIconClass("bi-clipboard");
-        setStatusClass("");
-        setDisabled(false);
-        copyInFlightRef.current = false;
-      }, 2000);
-    }
-  }, [getText]);
+  const { locale } = useTranslation();
 
   return (
-    <button
-      type="button"
-      className={`copy-btn message-action-btn ${statusClass}`.trim()}
-      aria-label={locale === "en" ? "Copy message" : "メッセージをコピー"}
-      data-tooltip={t("chat.copy")}
-      data-tooltip-placement="top"
-      disabled={disabled}
-      onClick={() => {
-        void handleClick();
-      }}
-    >
-      <i className={`bi ${iconClass}`}></i>
-    </button>
+    <CopyButton
+      getText={getText}
+      label={locale === "en" ? "Copy message" : "メッセージをコピー"}
+      tooltip="data-tooltip"
+      tooltipPlacement="top"
+      className="copy-btn message-action-btn"
+      successClassName="copy-btn--success"
+      errorClassName="copy-btn--error"
+    />
   );
 }

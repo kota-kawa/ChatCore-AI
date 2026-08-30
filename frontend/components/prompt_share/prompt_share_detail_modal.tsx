@@ -22,6 +22,7 @@ import {
 } from "../../scripts/prompt_share/skill_resources";
 import type { PromptRecord } from "./prompt_card";
 import { PromptShareDetailImage } from "./prompt_share_detail_image";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -183,25 +184,29 @@ export function PromptShareDetailModal({
     ? normalizeSkillResources(detailPrompt?.resources, detailPrompt?.skill_python_script || "")
     : [];
 
-  const copyPromptBody = async () => {
+  const copyPromptBody = async (): Promise<boolean> => {
     if (!promptBody.trim()) {
       showToast(t("promptShare.nothingToCopy"), { variant: "error" });
-      return;
+      return false;
     }
     try {
       await copyTextToClipboard(promptBody);
       showToast(t("promptShare.bodyCopied"), { variant: "success" });
+      return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
+      return false;
     }
   };
 
-  const copyResource = async (path: string, content: string) => {
+  const copyResource = async (path: string, content: string): Promise<boolean> => {
     try {
       await copyTextToClipboard(content);
       showToast(t("promptShare.resourceCopied", { path }), { variant: "success" });
+      return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
+      return false;
     }
   };
 
@@ -393,17 +398,13 @@ export function PromptShareDetailModal({
                     </span>
                   </div>
                   <div className="prompt-detail-section__actions">
-                    <button
-                      type="button"
+                    <CopyButton
+                      onCopy={copyPromptBody}
+                      label={t("common.copy")}
+                      copiedLabel={t("common.copied")}
                       className="prompt-detail-copy-btn"
-                      onClick={() => {
-                        void copyPromptBody();
-                      }}
                       disabled={!promptBody.trim()}
-                    >
-                      <i className="bi bi-clipboard" aria-hidden="true"></i>
-                      <span>{t("common.copy")}</span>
-                    </button>
+                    />
                   </div>
                 </div>
                 {/* 本文はMarkdown記法を含む可能性があるため、フォーマット軸に関わらず常にMarkdownとして整形する */}
@@ -480,16 +481,12 @@ export function PromptShareDetailModal({
                             {resource.language ? ` · ${resource.language}` : ""}
                           </span>
                         </div>
-                        <button
-                          type="button"
+                        <CopyButton
+                          onCopy={() => copyResource(resource.path, resource.content)}
+                          label={t("common.copy")}
+                          copiedLabel={t("common.copied")}
                           className="prompt-detail-copy-btn"
-                          onClick={() => {
-                            void copyResource(resource.path, resource.content);
-                          }}
-                        >
-                          <i className="bi bi-clipboard" aria-hidden="true"></i>
-                          <span>{t("common.copy")}</span>
-                        </button>
+                        />
                       </div>
                       <pre className="prompt-detail-code">
                         <code>{resource.content}</code>

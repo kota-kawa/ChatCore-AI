@@ -138,7 +138,6 @@ export default function MemoPage() {
   const [detailEditBackgroundColor, setDetailEditBackgroundColor] = useState<string | null>(null);
   const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
   const [detailSaveError, setDetailSaveError] = useState("");
-  const [detailCopied, setDetailCopied] = useState(false);
   const [isMemoAgentOpen, setIsMemoAgentOpen] = useState(false);
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const memoDetailCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -172,7 +171,6 @@ export default function MemoPage() {
   // Memo item dropdown menu
   const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
   const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);
-  const [copiedMemoId, setCopiedMemoId] = useState<string>("");
   const [copyingMemoId, setCopyingMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
   const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
@@ -915,7 +913,9 @@ export default function MemoPage() {
     });
   }, [mutate, selectedMemo?.id, showFlash, startMemoDetailCloseAnimation, updateMemoListOptimistically, withActionLoading]);
 
-  const copyMemoFullText = useCallback(async (memo: MemoSummary) => {
+  // コピー成否は共通の CopyButton がアイコン表示に使う。取得中のスピナーだけここで面倒を見る。
+  // The shared CopyButton uses the returned success flag for its icon; only the "loading" spinner is tracked here.
+  const copyMemoFullText = useCallback(async (memo: MemoSummary): Promise<boolean> => {
     const memoId = String(memo.id);
     setCopyingMemoId(memoId);
     try {
@@ -923,22 +923,24 @@ export default function MemoPage() {
       const fullText = detail?.ai_response || memo.excerpt || "";
       const content = `${detail?.title || memo.title || t("memo.savedMemo")}\n\n${parseMemoText(fullText)}`;
       await copyTextToClipboard(content.trim());
-      setCopiedMemoId(memoId);
-      setTimeout(() => {
-        setCopiedMemoId((current) => (current === memoId ? "" : current));
-      }, 1400);
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed")); }
+      return true;
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed"));
+      return false;
+    }
     finally { setCopyingMemoId(""); }
   }, [showFlash]);
 
-  const copyDetailFullText = useCallback(async () => {
+  const copyDetailFullText = useCallback(async (): Promise<boolean> => {
     const fullText = detailEditAiResponse || selectedMemo?.ai_response || "";
     const content = `${detailEditTitle || selectedMemo?.title || t("memo.savedMemo")}\n\n${parseMemoText(fullText)}`;
     try {
       await copyTextToClipboard(content.trim());
-      setDetailCopied(true);
-      setTimeout(() => setDetailCopied(false), 1400);
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed")); }
+      return true;
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed"));
+      return false;
+    }
   }, [detailEditAiResponse, detailEditTitle, selectedMemo?.ai_response, selectedMemo?.title, showFlash]);
 
   const toggleMemoActionMenu = useCallback((memoId: string, trigger: HTMLElement) => {
@@ -1260,13 +1262,15 @@ export default function MemoPage() {
     setShareState(null);
   }, []);
 
-  const copyShareLink = useCallback(async () => {
-    if (!shareUrl) { setShareStatus({ type: "error", text: t("memo.createShareLinkFirst") }); return; }
+  const copyShareLink = useCallback(async (): Promise<boolean> => {
+    if (!shareUrl) { setShareStatus({ type: "error", text: t("memo.createShareLinkFirst") }); return false; }
     try {
       await copyTextToClipboard(shareUrl);
       setShareStatus({ type: "success", text: t("memo.shareLinkCopied") });
+      return true;
     } catch (error) {
       setShareStatus({ type: "error", text: error instanceof Error ? error.message : t("memo.copyLinkFailed") });
+      return false;
     }
   }, [shareUrl]);
 
@@ -1531,7 +1535,6 @@ export default function MemoPage() {
               openMenuMemoId={openMenuMemoId}
               actionLoadingId={actionLoadingId}
               selectedIds={selectedIds}
-              copiedMemoId={copiedMemoId}
               copyingMemoId={copyingMemoId}
               canDragMemos={canDragMemos}
               draggedMemoId={draggedMemoId}
@@ -1574,7 +1577,6 @@ export default function MemoPage() {
           collections={collections}
           detailEditCollectionId={detailEditCollectionId}
           setDetailEditCollectionId={setDetailEditCollectionId}
-          detailCopied={detailCopied}
           copyDetailFullText={copyDetailFullText}
           isMemoAgentOpen={isMemoAgentOpen}
           setIsMemoAgentOpen={setIsMemoAgentOpen}

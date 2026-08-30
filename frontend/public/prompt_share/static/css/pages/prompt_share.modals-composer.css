@@ -532,21 +532,20 @@
   line-height: 1.35;
 }
 
-/* ── コピーボタン ────────────────────────────────────────────────── */
+/* ── コピーボタン（アイコンのみ。成功時はチェックマークへ差し替わる） ──────── */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.32rem;
-  min-height: 34px;
-  padding: 0.36rem 0.78rem;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 1px solid rgba(26, 115, 232, 0.2);
   border-radius: 999px;
   background: rgba(26, 115, 232, 0.1);
   color: #185abc;
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: background 0.16s ease, transform 0.16s ease, color 0.16s ease;
 }
@@ -559,6 +558,14 @@
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn:disabled {
   cursor: not-allowed;
   opacity: 0.56;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn .bi-check-lg {
+  color: #1e8e3e;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn .bi-x-lg {
+  color: #d93025;
 }
 
 /* ── 読む面（本文・入出力例・コード） ─────────────────────────────── */

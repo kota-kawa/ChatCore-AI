@@ -33,7 +33,9 @@ describe("BotMessageHtml wires the in-message copy buttons", () => {
       expect(button.querySelector("i")).toHaveClass("bi-check-lg");
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("print(1)");
-    expect(button.querySelector("span")).toHaveTextContent("Copied!");
+    // コピーボタンはアイコンのみ。ラベル文字は持たない。
+    // The copy button is icon-only and carries no text label.
+    expect(button.querySelector("span")).toBeNull();
   });
 
   it("makes a copy card button work without any page-level setup", async () => {

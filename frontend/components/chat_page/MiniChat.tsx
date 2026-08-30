@@ -38,6 +38,7 @@ import {
 } from "../../lib/chat_page/mini_chat_runtime";
 import { writeSessionJson } from "../../lib/utils";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { CopyButton } from "../ui/copy_button";
 import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -100,7 +101,6 @@ export function MiniChat({
   // ハイドレーション完了フラグ — SSR とクライアント状態の不一致を防ぐ
   // Hydration flag prevents rendering stale server-side state before client storage is read
   const [hydrated, setHydrated] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   // 詳細を開いているステップのキー集合 — 実行前に何が動くかをユーザーが確認できるようにする
   // Keys of steps whose detail panel is open, letting users inspect what a step will run
   const [expandedStepKeys, setExpandedStepKeys] = useState<Set<string>>(new Set());
@@ -316,18 +316,6 @@ export function MiniChat({
       return next;
     });
   }, []);
-
-  // テキストをクリップボードにコピーし、2 秒後にアイコンを元に戻す
-  // Copies text to the clipboard and resets the copied state after 2 seconds
-  const handleCopy = async (text: string, index: number) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedIndex(index);
-      setTimeout(() => setCopiedIndex((prev) => (prev === index ? null : prev)), 2000);
-    } catch {
-      // clipboard API unavailable
-    }
-  };
 
   // Re-observe the current page and ask the model for a fresh, executable plan. Used both
   // when a step fails mid-flight and when post-navigation targets can't be found.
@@ -682,15 +670,13 @@ export function MiniChat({
               {/* Shows copy and (on error) retry actions beneath each assistant message */}
               {msg.sender === "assistant" && (
                 <div className="mini-chat-message-toolbar">
-                  <button
-                    type="button"
+                  <CopyButton
+                    getText={() => msg.text}
+                    label={t("chat.copy")}
+                    copiedLabel={t("common.copied")}
                     className="mini-chat-copy-btn"
-                    onClick={() => void handleCopy(msg.text, i)}
-                    aria-label={t("chat.copy")}
-                  >
-                    <i className={`bi ${copiedIndex === i ? "bi-check2" : "bi-copy"}`}></i>
-                    {copiedIndex === i ? t("common.copied") : t("common.copy")}
-                  </button>
+                    idleIcon="bi-copy"
+                  />
                   {msg.isError && (
                     <button
                       type="button"

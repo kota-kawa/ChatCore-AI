@@ -1,4 +1,5 @@
 import type { FlashState } from "../../lib/memo/types";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 type MemoShareModalProps = {
@@ -6,7 +7,7 @@ type MemoShareModalProps = {
   closeShareModal: () => void;
   shareUrl: string;
   shareStatus: FlashState | null;
-  copyShareLink: () => Promise<void>;
+  copyShareLink: () => Promise<boolean>;
   openNativeShareSheet: () => Promise<void>;
   shareLoading: boolean;
   supportsNativeShare: boolean;
@@ -60,16 +61,14 @@ export function MemoShareModal({
                   value={shareUrl}
                   placeholder={t("memo.preparingShareLink")}
                 />
-                <button
-                  type="button"
+                <CopyButton
+                  onCopy={copyShareLink}
+                  label={t("memo.copyLink")}
+                  copiedLabel={t("common.copied")}
                   className="cc-share-modal__copy"
-                  aria-label={t("memo.copyLink")}
-                  title={t("memo.copyLink")}
-                  onClick={() => { void copyShareLink(); }}
+                  idleIcon="bi-files"
                   disabled={shareLoading || !shareUrl}
-                >
-                  <i className="bi bi-files" aria-hidden="true"></i>
-                </button>
+                />
               </div>
               {shareStatus && <p className={`memo-share-modal__status cc-share-modal__status memo-share-modal__status--${shareStatus.type}${shareStatus.type === "error" ? " cc-share-modal__status--error" : ""}`}>{shareStatus.text}</p>}
               {/* 共有先（X / LINE / Facebook / 端末共有） / Share destinations (X / LINE / Facebook / device share) */}

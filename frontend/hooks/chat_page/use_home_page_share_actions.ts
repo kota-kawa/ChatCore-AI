@@ -107,20 +107,24 @@ export function useHomePageShareActions({
     void createShareLink(false);
   }, [createShareLink, currentRoomMode, t]);
 
-  const copyShareLink = useCallback(async () => {
+  // 戻り値でコピー成否を返し、呼び出し側がコピーボタンのアイコンをチェックマークへ切り替えられるようにする。
+  // Returns whether the copy succeeded so the caller can flip the copy button icon to a check mark.
+  const copyShareLink = useCallback(async (): Promise<boolean> => {
     if (!shareUrl.trim()) {
       setShareStatus({ message: locale === "en" ? "Create a share link first." : "先に共有リンクを生成してください。", error: true });
-      return;
+      return false;
     }
 
     try {
       await copyTextToClipboard(shareUrl);
       setShareStatus({ message: t("common.copied"), error: false });
+      return true;
     } catch (error) {
       setShareStatus({
         message: error instanceof Error ? error.message : t("chat.copyLinkFailed"),
         error: true,
       });
+      return false;
     }
   }, [locale, shareUrl, t]);
 
