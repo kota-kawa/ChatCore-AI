@@ -87,7 +87,12 @@ describe("SkillSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "短く答えるの内容を表示" }));
 
-    expect(screen.getByRole("dialog")).toBeVisible();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeVisible();
+    // モーダルは body 直下へポータルする。生成UIページの .chat-page-stage は
+    // perspective を持ち position: fixed の包含ブロックを作るため、section の
+    // 内側に留めるとオーバーレイが画面全体を覆えない。
+    expect(dialog.parentElement).toBe(document.body);
     expect(screen.getByRole("heading", { name: "短く答える" })).toBeInTheDocument();
     expect(screen.getByText("結論から書く")).toBeInTheDocument();
 
