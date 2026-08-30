@@ -17,13 +17,18 @@ def _mock_openai_response(text):
     )
 
 
-def _mock_stream_chunk(text):
+def _mock_stream_chunk(text, *, finish_reason=None):
     """
     テスト用にOpenAI APIのストリーミング応答のチャンク（差分）オブジェクトをモックします。
     Mock a streaming OpenAI API response chunk object for testing.
     """
     return SimpleNamespace(
-        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))]
+        choices=[
+            SimpleNamespace(
+                delta=SimpleNamespace(content=text),
+                finish_reason=finish_reason,
+            )
+        ]
     )
 
 
@@ -455,6 +460,31 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(mock_stream.closed)
         self.assertTrue(mock_claude.messages.create.call_args.kwargs["stream"])
 
+    def test_get_claude_response_stream_raises_for_max_tokens(self):
+        mock_claude = MagicMock()
+        mock_stream = _MockStream(
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(type="text_delta", text="partial"),
+            ),
+            SimpleNamespace(
+                type="message_delta",
+                delta=SimpleNamespace(stop_reason="max_tokens"),
+            ),
+        )
+        mock_claude.messages.create.return_value = mock_stream
+
+        with patch.object(llm, "claude_client", mock_claude):
+            stream = llm.get_claude_response_stream(
+                [{"role": "user", "content": "hello"}],
+                llm.CLAUDE_HAIKU_4_5_MODEL,
+            )
+            self.assertEqual(next(stream), "partial")
+            with self.assertRaises(llm.LlmOutputLimitError):
+                next(stream)
+
+        self.assertTrue(mock_stream.closed)
+
     def test_get_claude_response_stream_converts_function_tools(self):
         """
         OpenAI形式の関数ツールがClaude形式へ変換されることを検証します。
@@ -526,6 +556,25 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertFalse(request_kwargs["extra_body"]["include_reasoning"])
         self.assertNotIn("reasoning_effort", request_kwargs["extra_body"])
 
+    def test_get_groq_response_stream_raises_after_yielding_token_limited_text(self):
+        mock_groq = MagicMock()
+        mock_stream = _MockStream(
+            _mock_stream_chunk("partial"),
+            _mock_stream_chunk(None, finish_reason="length"),
+        )
+        mock_groq.chat.completions.create.return_value = mock_stream
+
+        with patch.object(llm, "groq_client", mock_groq):
+            stream = llm.get_groq_response_stream(
+                [{"role": "user", "content": "hello"}],
+                llm.GROQ_MODEL,
+            )
+            self.assertEqual(next(stream), "partial")
+            with self.assertRaises(llm.LlmOutputLimitError):
+                next(stream)
+
+        self.assertTrue(mock_stream.closed)
+
     def test_get_qwen_response_stream_hides_reasoning_without_disabling_it(self):
         mock_groq = MagicMock()
         mock_stream = _MockStream(_mock_stream_chunk("qwen-stream"))
@@ -545,6 +594,25 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(request_kwargs["extra_body"]["reasoning_format"], "hidden")
         self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
         self.assertTrue(mock_stream.closed)
+
+    def test_final_answer_phase_reduces_groq_reasoning_budget(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _MockStream(
+            _mock_stream_chunk("answer")
+        )
+
+        with patch.object(llm, "groq_client", mock_groq):
+            list(
+                llm.get_groq_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GROQ_MODEL,
+                    generation_phase="final_answer",
+                )
+            )
+
+        extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
+        self.assertEqual(extra_body["reasoning_effort"], "low")
+        self.assertEqual(extra_body["reasoning_format"], "hidden")
 
     def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
         """
@@ -652,6 +720,36 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(
             passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
         )
+
+    def test_get_openai_response_stream_raises_for_max_output_tokens(self):
+        mock_openai = MagicMock()
+        delta_event = SimpleNamespace(
+            type="response.output_text.delta",
+            delta="partial",
+        )
+        incomplete_event = SimpleNamespace(
+            type="response.incomplete",
+            response=SimpleNamespace(
+                incomplete_details=SimpleNamespace(reason="max_output_tokens")
+            ),
+        )
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(
+            return_value=iter([delta_event, incomplete_event])
+        )
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__enter__.return_value = mock_stream
+        mock_stream_ctx.__exit__.return_value = None
+        mock_openai.responses.stream.return_value = mock_stream_ctx
+
+        with patch.object(llm, "openai_client", mock_openai):
+            stream = llm.get_openai_response_stream(
+                [{"role": "user", "content": "hello"}],
+                llm.GPT_5_6_LUNA_MODEL,
+            )
+            self.assertEqual(next(stream), "partial")
+            with self.assertRaises(llm.LlmOutputLimitError):
+                next(stream)
 
     def test_get_openai_response_stream_with_tools_uses_chat_completions_stream(self):
         """

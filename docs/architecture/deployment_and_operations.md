@@ -88,6 +88,12 @@ backfill を実行し、`--fail-on-pending` が成功することを運用完了
 - prompt upload volume は同一ホストの blue／green が共有します。マルチホスト化には object storage/CDN の実装が必要です。
 - `app` の `/healthz` はプロセス生存、`/readyz` は依存先を含む準備状態、frontend の `/api/healthz` は Next.js 側の healthcheck です。
 
+## 長時間チャットストリーム
+
+`/api/chat`、`/api/chat_regenerate`、`/api/chat_edit_and_regenerate`、`/api/chat_generation_stream` は同じ SSE 用 Nginx location で処理します。この location は HTTP/1.1、`proxy_buffering off`、`proxy_cache off`、`proxy_read_timeout 3600s` を適用します。アプリは本文イベントがない待機中にイベントIDなしのコメント keepalive を送るため、プロキシは接続を維持できますが、Redis のイベント履歴や再接続カーソルは増えません。
+
+最終回答の継続回数は `LLM_FINAL_ANSWER_MAX_CONTINUATIONS` で設定し、通常構成と Blue/Green 構成の両方からアプリへ渡します。既定値は2、0は無効です。値を増やすと長文の完了率は上がりますが、LLM 呼び出し時間と費用の上限も増えます。
+
 ## 運用時に確認するファイル
 
 - Compose のサービス・環境変数・volume: `docker-compose.yml`

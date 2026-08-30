@@ -203,6 +203,35 @@ describe("failed chat turns", () => {
     expect(readStoredHistory("room-1")).toEqual([]);
   });
 
+  it("keeps a server-persisted partial answer when the stream ends incomplete", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createStreamResponse([
+        `id: 1\nevent: chunk\ndata: ${JSON.stringify({ text: "途中までの回答" })}\n\n`,
+        `id: 2\nevent: incomplete\ndata: ${JSON.stringify({
+          response: "途中までの回答",
+          partial: true,
+          retryable: true,
+          message: "途中までの回答を保存しました。",
+        })}\n\n`,
+      ]),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("長い調査をして", "model", "room-1");
+    });
+
+    const assistantMessages = result.current.state.messages.filter(
+      (message) => message.sender === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages[0].text).toBe("途中までの回答");
+    expect(assistantMessages[0].streaming).toBe(false);
+    expect(assistantMessages[1].error).toBe(true);
+    expect(assistantMessages[1].text).toContain("保存");
+  });
+
   it("recreates a chat room that no longer exists and sends the message again", async () => {
     resilientFetchMock
       .mockResolvedValueOnce(

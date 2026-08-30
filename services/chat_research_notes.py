@@ -19,10 +19,12 @@ STEP_NOTE_CLOSE_TAG = "</step_note>"
 STEP_NOTES_OPEN_TAG = "<step_notes>"
 STEP_NOTES_CLOSE_TAG = "</step_notes>"
 
-RESEARCH_SUMMARY_MAX_FACTS = 5
-RESEARCH_SUMMARY_MAX_UNCERTAINTIES = 3
+RESEARCH_SUMMARY_MAX_REQUIREMENTS = 8
+RESEARCH_SUMMARY_MAX_FACTS = 12
+RESEARCH_SUMMARY_MAX_UNCERTAINTIES = 5
 RESEARCH_SUMMARY_FIELD_MAX_CHARS = 360
-RESEARCH_SUMMARY_MAX_CHARS = 2400
+RESEARCH_SUMMARY_ANSWER_PLAN_MAX_CHARS = 800
+RESEARCH_SUMMARY_MAX_CHARS = 7000
 
 # ステップメモは1〜2文の短い根拠に限定し、直近分だけを次のステップへ引き継ぐ。
 # A step note is limited to one or two short sentences, and only the most recent
@@ -47,8 +49,12 @@ _INTERNAL_NOTE_MARKERS = (
 FINAL_ANSWER_SYSTEM_PROMPT = (
     "The search and reasoning phase for this turn is complete. Produce the final user-facing "
     "answer to the original request now. Use the evidence and tool results already present in "
-    "the conversation. Do not describe internal reasoning, do not mention this instruction, "
-    "and do not ask to search again. Write only the answer in the required language and format."
+    "the conversation. The compact research note is an index, not a limit on answer scope: "
+    "re-read the original request and relevant tool results, cover every requested requirement, "
+    "and do not shorten the answer merely because the research phase was long. Before finishing, "
+    "silently check that no requested section or important supported finding was omitted. Do not "
+    "describe internal reasoning, mention this instruction, or ask to search again. Write only "
+    "the answer in the required language and format."
 )
 RESEARCH_LOOP_SYSTEM_PROMPT = (
     "You are in the research and tool-selection phase, not the user-facing answer phase. "
@@ -60,10 +66,12 @@ RESEARCH_LOOP_SYSTEM_PROMPT = (
     "never shown to the user, and may be skipped whenever the tool call speaks for itself. "
     "If the evidence is sufficient, respond with exactly "
     "one compact internal completion envelope in this form: "
-    f'{RESEARCH_COMPLETE_OPEN_TAG}{{"facts":["..."],"uncertainties":["..."],"answer_plan":"..."}}'
-    f"{RESEARCH_COMPLETE_CLOSE_TAG}. Include at most 5 short facts, 3 uncertainties, and a brief "
-    "answer plan. Do not draft or explain the final answer in this phase, and do not include any "
-    "prose outside these envelopes."
+    f'{RESEARCH_COMPLETE_OPEN_TAG}{{"requirements":["..."],"facts":["..."],'
+    f'"uncertainties":["..."],"answer_plan":"..."}}{RESEARCH_COMPLETE_CLOSE_TAG}. '
+    "Include at most 8 original requirements, 12 supported findings, 5 uncertainties, and a "
+    "concrete answer plan. Preserve important distinctions and coverage obligations even after "
+    "many tool calls. Do not draft or explain the final answer in this phase, and do not include "
+    "any prose outside these envelopes."
 )
 
 
@@ -108,8 +116,8 @@ def normalize_research_summary_items(value: Any, *, max_items: int) -> list[str]
     return normalized
 
 
-def normalize_research_summary_text(value: Any) -> str:
-    return _normalize_note_text(value, max_chars=RESEARCH_SUMMARY_FIELD_MAX_CHARS)
+def normalize_research_summary_text(value: Any, *, max_chars: int) -> str:
+    return _normalize_note_text(value, max_chars=max_chars)
 
 
 def parse_research_summary(step_chunks: Sequence[str]) -> dict[str, Any] | None:
@@ -133,6 +141,10 @@ def parse_research_summary(step_chunks: Sequence[str]) -> dict[str, Any] | None:
         return None
 
     summary: dict[str, Any] = {}
+    requirements = normalize_research_summary_items(
+        parsed.get("requirements"),
+        max_items=RESEARCH_SUMMARY_MAX_REQUIREMENTS,
+    )
     facts = normalize_research_summary_items(
         parsed.get("facts"),
         max_items=RESEARCH_SUMMARY_MAX_FACTS,
@@ -141,7 +153,12 @@ def parse_research_summary(step_chunks: Sequence[str]) -> dict[str, Any] | None:
         parsed.get("uncertainties"),
         max_items=RESEARCH_SUMMARY_MAX_UNCERTAINTIES,
     )
-    answer_plan = normalize_research_summary_text(parsed.get("answer_plan"))
+    answer_plan = normalize_research_summary_text(
+        parsed.get("answer_plan"),
+        max_chars=RESEARCH_SUMMARY_ANSWER_PLAN_MAX_CHARS,
+    )
+    if requirements:
+        summary["requirements"] = requirements
     if facts:
         summary["facts"] = facts
     if uncertainties:

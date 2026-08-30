@@ -208,6 +208,14 @@ class LlmRetryableProviderError(LlmProviderError):
     retryable = True
 
 
+class LlmOutputLimitError(LlmServiceError):
+    """The provider ended a valid stream because its output budget was exhausted."""
+
+    def __init__(self, message: str, *, reason: str = "output_limit") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 # レート制限によるLLMプロバイダエラーに関する例外クラス。
 # Exception class for LLM provider rate limit errors.
 class LlmRateLimitError(LlmRetryableProviderError):
@@ -389,17 +397,32 @@ def _openai_responses_reasoning_kwargs(model_name: str) -> dict[str, Any]:
     return {}
 
 
-def _groq_reasoning_kwargs(model_name: str) -> dict[str, Any]:
+def _groq_reasoning_kwargs(
+    model_name: str,
+    *,
+    generation_phase: str = "default",
+) -> dict[str, Any]:
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
+    is_answer_phase = generation_phase in {"final_answer", "continuation"}
     if model_name == QWEN_3_6_27B_MODEL:
         reasoning_options = {
-            "reasoning_effort": "default",
+            "reasoning_effort": "none" if is_answer_phase else "default",
             "reasoning_format": "hidden",
         }
     elif model_name in GPT_OSS_MODELS:
-        # Do not set reasoning_effort: Groq's current default effort remains in effect.
-        reasoning_options = {"include_reasoning": False}
+        if is_answer_phase:
+            reasoning_options = {
+                "reasoning_effort": "low",
+                "reasoning_format": "hidden",
+            }
+        elif generation_phase == "research":
+            reasoning_options = {
+                "reasoning_effort": "medium",
+                "reasoning_format": "hidden",
+            }
+        else:
+            reasoning_options = {"include_reasoning": False}
 
     # The application uses the OpenAI SDK against Groq's compatible endpoint.
     # Groq-specific fields are not accepted as top-level SDK keyword arguments,
@@ -597,6 +620,7 @@ def _get_openai_compatible_response_stream(
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
+    output_limit_reason: str | None = None
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
@@ -623,6 +647,7 @@ def _get_openai_compatible_response_stream(
                     model_name,
                     LLM_MAX_TOKENS,
                 )
+                output_limit_reason = "length"
             delta = choice.delta
             if getattr(delta, "content", None):
                 yield delta.content
@@ -657,6 +682,11 @@ def _get_openai_compatible_response_stream(
                     if arguments:
                         part["function"]["arguments"] += arguments
 
+        if output_limit_reason is not None:
+            raise LlmOutputLimitError(
+                f"LLM output reached the configured token limit for {model_name}.",
+                reason=output_limit_reason,
+            )
         if tool_call_parts:
             yield json.dumps(
                 [
@@ -666,6 +696,8 @@ def _get_openai_compatible_response_stream(
                 ],
                 ensure_ascii=False,
             )
+    except LlmServiceError:
+        raise
     except Exception as exc:
         provider_name = "provider"
         if "Groq" in provider_error_message:
@@ -689,6 +721,7 @@ def get_groq_response_stream(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> Iterator[str]:
     # Groq のストリーム応答を逐次テキスト片として返します。
     # Yield Groq response chunks incrementally.
@@ -699,7 +732,10 @@ def get_groq_response_stream(
         missing_key_message="GROQ_API_KEY が未設定です。",
         provider_error_message="Groq streaming API call failed.",
         tools=tools,
-        reasoning_kwargs=_groq_reasoning_kwargs(model_name),
+        reasoning_kwargs=_groq_reasoning_kwargs(
+            model_name,
+            generation_phase=generation_phase,
+        ),
     )
 
 
@@ -870,6 +906,7 @@ def get_claude_response_stream(
     system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
+    output_limit_reason: str | None = None
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
@@ -909,17 +946,26 @@ def get_claude_response_stream(
                         )
             elif event_type == "message_delta":
                 delta = getattr(event, "delta", None)
-                if getattr(delta, "stop_reason", None) == "max_tokens":
+                stop_reason = getattr(delta, "stop_reason", None)
+                if stop_reason in {"max_tokens", "model_context_window_exceeded"}:
                     logger.warning(
                         "Claude stream truncated by token limit (model=%s, max_tokens=%s).",
                         model_name,
                         LLM_MAX_TOKENS,
                     )
+                    output_limit_reason = str(stop_reason)
+        if output_limit_reason is not None:
+            raise LlmOutputLimitError(
+                f"Claude output reached its configured limit for {model_name}.",
+                reason=output_limit_reason,
+            )
         if tool_call_parts:
             yield json.dumps(
                 [tool_call_parts[index] for index in sorted(tool_call_parts)],
                 ensure_ascii=False,
             )
+    except LlmServiceError:
+        raise
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1003,6 +1049,7 @@ def get_openai_response_stream(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> Iterator[str]:
     # OpenAI Responses APIのストリーム断片を逐次返します。
     # Yield OpenAI Responses API text deltas incrementally.
@@ -1026,6 +1073,7 @@ def get_openai_response_stream(
             )
             return
 
+        output_limit_reason: str | None = None
         with openai_client.responses.stream(
             model=model_name,
             input=sanitized_messages,
@@ -1046,6 +1094,22 @@ def get_openai_response_stream(
                         model_name,
                         LLM_MAX_TOKENS,
                     )
+                    response = getattr(event, "response", None)
+                    incomplete_details = getattr(response, "incomplete_details", None)
+                    output_limit_reason = str(
+                        getattr(incomplete_details, "reason", None) or "incomplete"
+                    )
+        if output_limit_reason in {"max_output_tokens", "max_tokens"}:
+            raise LlmOutputLimitError(
+                f"OpenAI output reached the configured token limit for {model_name}.",
+                reason=output_limit_reason,
+            )
+        if output_limit_reason is not None:
+            raise LlmProviderError(
+                f"OpenAI returned an incomplete response ({output_limit_reason})."
+            )
+    except LlmServiceError:
+        raise
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1227,6 +1291,7 @@ def get_llm_response_stream(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> Iterator[str]:
     # 指定モデル名でストリーム可能なプロバイダを振り分けます。
     # Route streaming providers by model name and raise on invalid models.
@@ -1234,7 +1299,15 @@ def get_llm_response_stream(
     if is_claude_model(model_name):
         return get_claude_response_stream(conversation_messages, model_name, tools=tools)
     if is_groq_model(model_name):
-        return get_groq_response_stream(conversation_messages, model_name, tools=tools)
+        if generation_phase == "default":
+            return get_groq_response_stream(conversation_messages, model_name, tools=tools)
+        return get_groq_response_stream(
+            conversation_messages, model_name, tools=tools, generation_phase=generation_phase
+        )
     if is_openai_model(model_name):
-        return get_openai_response_stream(conversation_messages, model_name, tools=tools)
+        if generation_phase == "default":
+            return get_openai_response_stream(conversation_messages, model_name, tools=tools)
+        return get_openai_response_stream(
+            conversation_messages, model_name, tools=tools, generation_phase=generation_phase
+        )
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response_stream.")

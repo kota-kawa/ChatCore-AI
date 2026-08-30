@@ -1010,6 +1010,26 @@ export function useHomePageGenerationActions({
           return;
         }
 
+        if (parsed.event === "incomplete") {
+          streamState.completed = true;
+          const incompletePayload = normalizeChatResponsePayload(parsed.data);
+          const finalText = incompletePayload.response ?? streamedText;
+          applyRoomTitleUpdate(roomId, parsed.data.room_title);
+          finalizeStreamingMessage(finalText, false, incompletePayload.parts);
+          appendAssistantErrorMessage(
+            roomId,
+            typeof parsed.data.message === "string"
+              ? parsed.data.message
+              : localize(
+                  "回答の生成が途中で終了しました。途中までの回答は保存されています。",
+                  "The response ended early. The partial answer was saved.",
+                ),
+          );
+          streamLastEventIdByRoomRef.current.delete(roomId);
+          clearStoredGenerationState(roomId);
+          return;
+        }
+
         if (parsed.event === "aborted") {
           streamState.completed = true;
           // 停止時にサーバーが保存した生成途中のテキストを優先して表示する。

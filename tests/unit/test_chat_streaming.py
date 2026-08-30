@@ -12,6 +12,7 @@ from blueprints.chat.messages import (
     chat_edit_and_regenerate,
     chat_regenerate,
     _iter_llm_stream_events,
+    _iter_serialized_stream_events,
     chat_generation_status,
     chat_generation_stream,
     get_chat_history,
@@ -22,6 +23,7 @@ from services.chat_generation import (
     _budgeted_web_search_result_tool_payload,
     _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
+    ChatGenerationEvent,
     ChatGenerationService,
     build_generation_key,
     clear_generation_job_state,
@@ -37,7 +39,7 @@ from services.chat_research_notes import (
     parse_step_note,
     strip_internal_notes,
 )
-from services.llm import LlmConfigurationError, LlmTimeoutError
+from services.llm import LlmConfigurationError, LlmOutputLimitError, LlmTimeoutError
 from services.selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
     SHARED_PROMPT_SOURCE,
@@ -247,12 +249,28 @@ class ChatStreamingTestCase(unittest.TestCase):
         self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
 
+    def test_serialized_stream_emits_comment_keepalive_without_event_id(self):
+        payload = b"".join(
+            _iter_serialized_stream_events(
+                iter(
+                    [
+                        None,
+                        ChatGenerationEvent(1, "done", {"response": "ok"}),
+                    ]
+                )
+            )
+        ).decode("utf-8")
+
+        self.assertTrue(payload.startswith(": keepalive\n\n"))
+        self.assertIn("id: 1\nevent: done", payload)
+
     # 日本語: 研究完了メモが構造化・短文化され、許可された項目だけが残ることを検証します。
     # English: Verify that a research-complete note is structured, bounded, and limited to allowed fields.
     def test_parse_research_summary_accepts_bounded_structured_note(self):
         payload = {
-            "facts": [f"事実{i}" for i in range(8)],
-            "uncertainties": [f"不確実性{i}" for i in range(5)],
+            "requirements": [f"要件{i}" for i in range(10)],
+            "facts": [f"事実{i}" for i in range(15)],
+            "uncertainties": [f"不確実性{i}" for i in range(7)],
             "answer_plan": "  要点を整理して回答する。  ",
             "unexpected": "破棄する",
         }
@@ -265,8 +283,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(summary["facts"], [f"事実{i}" for i in range(5)])
-        self.assertEqual(summary["uncertainties"], [f"不確実性{i}" for i in range(3)])
+        self.assertEqual(summary["requirements"], [f"要件{i}" for i in range(8)])
+        self.assertEqual(summary["facts"], [f"事実{i}" for i in range(12)])
+        self.assertEqual(summary["uncertainties"], [f"不確実性{i}" for i in range(5)])
         self.assertEqual(summary["answer_plan"], "要点を整理して回答する。")
         self.assertNotIn("unexpected", summary)
 
@@ -276,7 +295,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIsNone(
             parse_research_summary(["<research_complete>not-json</research_complete>"])
         )
-        oversized = json.dumps({"answer_plan": "x" * 2401}, ensure_ascii=False)
+        oversized = json.dumps({"answer_plan": "x" * 7001}, ensure_ascii=False)
         self.assertIsNone(
             parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
         )
@@ -1448,7 +1467,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
         }
 
-        def stream_side_effect(_messages, _model, *, tools=None):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
@@ -1619,7 +1638,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             "answer_plan": "2か所を分けて簡潔に説明し、違いを補足する。",
         }
 
-        def stream_side_effect(_messages, _model, *, tools=None):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
@@ -1735,7 +1754,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         step_note = "検索前で見頃の年次データが無い。次はWeb検索で今年の見頃を確認する。"
         stream_call_count = 0
 
-        def stream_side_effect(_messages, _model, *, tools=None):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
@@ -1840,7 +1859,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
         )
 
-        def stream_side_effect(_messages, _model, *, tools=None):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count <= 2:
@@ -1904,7 +1923,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         stream_tools: list[bool] = []
         search_index = 0
 
-        def stream_side_effect(_messages, _model, *, tools=None):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             stream_tools.append(bool(tools))
             if tools:
                 query = f"loop search {len(stream_tools)}"
@@ -2094,33 +2113,137 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertIn('"response": "こんにちは"', body)
 
-    # 日本語: すでにチャンクが一部出力された後にエラーが発生した場合は、重複出力を防ぐためリトライを行わないことを検証します。
-    # English: Verify that retries are not attempted if an error occurs after chunks have already been emitted.
-    def test_background_generation_job_does_not_retry_after_chunk_emitted(self):
+    # 日本語: 非表示の調査ステップは途中出力を破棄して先頭から安全に再試行できることを検証します。
+    # English: Verify that hidden research steps discard partial output and safely retry from the start.
+    def test_background_generation_job_retries_buffered_research_after_chunk(self):
         attempts = {"count": 0}
 
-        def flaky_stream(*_args, **_kwargs):
-            attempts["count"] += 1
-            yield "partial"
-            raise LlmTimeoutError("provider timed out mid-stream")
+        def flaky_stream(_messages, _model, *, tools=None, generation_phase="default"):
+            if generation_phase == "research":
+                attempts["count"] += 1
+                if attempts["count"] == 1:
+                    def interrupted():
+                        yield "discarded research draft"
+                        raise LlmTimeoutError("provider timed out mid-stream")
+                    return interrupted()
+                return iter(["<research_complete>{}</research_complete>"])
+            return iter(["final answer"])
 
-        with patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0):
-            with patch(
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "hi"}],
+                    status="failed",
+                ),
+            ),
+            patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
+            patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=flaky_stream,
-            ):
-                job = start_generation_job(
-                    "guest:sid-1:default",
-                    conversation_messages=[{"role": "user", "content": "hi"}],
-                    model="openai/gpt-oss-120b",
-                    persist_response=lambda _: None,
-                )
-                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "hi"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        # 日本語: 既に出力済みの内容に対してリトライを実行すると、出力が重複するためリトライしません。
-        # English: Already-emitted output must not trigger a retry that would duplicate it.
-        self.assertEqual(attempts["count"], 1)
-        self.assertIn("event: error", body)
+        self.assertEqual(attempts["count"], 2)
+        self.assertNotIn("discarded research draft", body)
+        self.assertIn("final answer", body)
+        self.assertIn("event: done", body)
+
+    def test_background_generation_job_continues_token_limited_final_answer(self):
+        persisted = []
+        phases = []
+
+        def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
+            phases.append(generation_phase)
+            if generation_phase == "research":
+                return iter(["<research_complete>{}</research_complete>"])
+            if generation_phase == "final_answer":
+                def limited_answer():
+                    yield "first half"
+                    raise LlmOutputLimitError("limit", reason="max_output_tokens")
+                return limited_answer()
+            self.assertEqual(messages[-2]["role"], "assistant")
+            self.assertEqual(messages[-2]["content"], "first half")
+            # The repeated prefix is removed only because it exactly overlaps.
+            return iter(["first half and second half"])
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "long answer"}],
+                    status="failed",
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-continuation:default",
+                conversation_messages=[{"role": "user", "content": "long answer"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted), 1)
+        self.assertTrue(persisted[0].endswith("first half and second half"))
+        self.assertEqual(phases, ["research", "final_answer", "continuation"])
+        self.assertIn('"phase": "continuation"', body)
+        self.assertIn("event: done", body)
+        self.assertNotIn("event: incomplete", body)
+
+    def test_background_generation_job_persists_partial_after_continuation_limit(self):
+        persisted = []
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            if generation_phase == "research":
+                return iter(["<research_complete>{}</research_complete>"])
+
+            def limited_answer():
+                yield "part one" if generation_phase == "final_answer" else " and part two"
+                raise LlmOutputLimitError("limit", reason="max_output_tokens")
+
+            return limited_answer()
+
+        with (
+            patch.dict("os.environ", {"LLM_FINAL_ANSWER_MAX_CONTINUATIONS": "1"}),
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "very long answer"}],
+                    status="failed",
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-incomplete:default",
+                conversation_messages=[
+                    {"role": "user", "content": "very long answer"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted), 1)
+        self.assertTrue(persisted[0].endswith("part one and part two"))
+        self.assertIn("event: incomplete", body)
+        self.assertIn('"partial": true', body)
+        self.assertNotIn("event: done", body)
 
     # 日本語: ジョブが完了した後、そのジョブキーに対するアクティブ生成フラグがFalseになることを検証します。
     # English: Verify that the active generation flag for a job key becomes False after job completion.
