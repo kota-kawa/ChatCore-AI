@@ -445,8 +445,34 @@
     min-height: 36px;
   }
 
+  /* スマホでは横スクロールの一列ではなく、1行ずつの縦積みにする */
+  /* On phones, stack each skill on its own row instead of a horizontally scrolling strip */
+  :where(body.chat-page, .chat-page-shell) .skill-section__list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding-inline: 0;
+    overflow-x: visible;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-chip-row {
+    width: 100%;
+  }
+
   :where(body.chat-page, .chat-page-shell) .skill-chip {
-    max-width: 14rem;
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  /* トグルと削除ボタンは縮めず、名前だけが余白を伸縮する */
+  /* Keep the toggle and delete controls at their natural size; only the name flexes */
+  :where(body.chat-page, .chat-page-shell) .skill-chip__toggle,
+  :where(body.chat-page, .chat-page-shell) .skill-chip__delete {
+    flex: 0 0 auto;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .skill-chip__state {
+    white-space: nowrap;
   }
 
 }
