@@ -1,11 +1,11 @@
-import { useCallback, useRef, type FormEvent } from "react";
+import { type FormEvent } from "react";
 
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import {
   MAX_USER_SKILL_INSTRUCTIONS_LENGTH,
   MAX_USER_SKILL_NAME_LENGTH,
 } from "../../../lib/chat_page/skill_api";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 type NewSkillModalProps = {
@@ -30,33 +30,16 @@ export function NewSkillModal({
   setInstructions,
 }: NewSkillModalProps) {
   const { locale, t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
-
-  const getInitialFocus = useCallback(
-    () => modalRef.current?.querySelector<HTMLElement>("#new-user-skill-name") ?? modalRef.current,
-    [],
-  );
-
-  useModalFocusTrap({
-    isOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: onClose,
-  });
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
       id="newUserSkillModal"
-      className={`skill-modal custom-modal modal-base ${isOpen ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="new-user-skill-modal-title"
-      aria-hidden={isOpen ? "false" : "true"}
-      tabIndex={-1}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isSaving) onClose();
-      }}
+      className="skill-modal custom-modal"
+      labelledBy="new-user-skill-modal-title"
+      dismissDisabled={isSaving}
+      initialFocusSelector="#new-user-skill-name"
     >
       <div className="custom-modal-dialog">
         <div className="custom-modal-content">
@@ -124,6 +107,6 @@ export function NewSkillModal({
           </footer>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

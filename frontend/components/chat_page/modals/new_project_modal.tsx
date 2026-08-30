@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import { useHomePageProjectContext } from "../../../contexts/chat_page/home_page_context";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 const MAX_PROJECT_NAME_LENGTH = 255;
@@ -19,7 +19,6 @@ export function NewProjectModal() {
     closeNewProjectModal,
   } = useHomePageProjectContext();
 
-  const modalRef = useRef<HTMLDivElement | null>(null);
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
 
@@ -32,17 +31,6 @@ export function NewProjectModal() {
     }
   }, [isProjectModalOpen]);
 
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("#new-project-name-input") ?? null;
-  }, []);
-
-  useModalFocusTrap({
-    isOpen: isProjectModalOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: closeNewProjectModal,
-  });
-
   const canSubmit = name.trim().length > 0 && !isSavingProject;
 
   const handleSubmit = useCallback(() => {
@@ -51,20 +39,13 @@ export function NewProjectModal() {
   }, [canSubmit, createProject, instructions, name]);
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={isProjectModalOpen}
+      onClose={closeNewProjectModal}
       id="new-project-modal"
-      className={`new-project-modal modal-base ${isProjectModalOpen ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-hidden={isProjectModalOpen ? "false" : "true"}
-      aria-labelledby="new-project-title"
-      tabIndex={-1}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          closeNewProjectModal();
-        }
-      }}
+      className="new-project-modal"
+      labelledBy="new-project-title"
+      initialFocusSelector="#new-project-name-input"
     >
       <div className="new-project-modal__content" tabIndex={-1}>
         <ModalCloseButton
@@ -134,6 +115,6 @@ export function NewProjectModal() {
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

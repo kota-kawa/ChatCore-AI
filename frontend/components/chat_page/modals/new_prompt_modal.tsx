@@ -1,8 +1,8 @@
-import { useCallback, useRef, type FormEvent, type MutableRefObject } from "react";
+import { useCallback, type FormEvent, type MutableRefObject } from "react";
 
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { PromptStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 // 新規プロンプト作成モーダルのprops型定義
@@ -55,42 +55,22 @@ export function NewPromptModal({
   setNewPromptOutputExample,
 }: NewPromptModalProps) {
   const { locale, t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
 
-  // 初期フォーカスをタイトル入力欄またはモーダルコンテナに設定する
-  // Set initial focus to the title input field or modal container
-  const getInitialFocus = useCallback(() => titleInputRef.current ?? modalRef.current, [titleInputRef]);
-
-  // 送信中はEscキーでの閉じる動作を無効化する
-  // Disable Escape key close behavior while submitting
-  const closeWithEscape = useCallback(() => {
-    if (isPromptSubmitting) return;
-    onClose();
-  }, [isPromptSubmitting, onClose]);
-
-  useModalFocusTrap({
-    isOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: closeWithEscape,
-  });
+  // 初期フォーカスをタイトル入力欄に設定する（null のときはフォーカストラップが
+  // 最初のフォーカス可能要素へフォールバックする）
+  // Set initial focus to the title input (the focus trap falls back to the first
+  // focusable element when this returns null)
+  const getInitialFocus = useCallback(() => titleInputRef.current, [titleInputRef]);
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
       id="newPromptModal"
-      className={`new-prompt-modal modal-base ${isOpen ? "is-open show" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="new-prompt-modal-title"
-      aria-hidden={isOpen ? "false" : "true"}
-      tabIndex={-1}
-      // 送信中でなければ背景クリックで閉じる / Close on backdrop click unless submitting
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isPromptSubmitting) {
-          onClose();
-        }
-      }}
+      className="new-prompt-modal"
+      labelledBy="new-prompt-modal-title"
+      dismissDisabled={isPromptSubmitting}
+      getInitialFocus={getInitialFocus}
     >
       <div className="new-prompt-modal-content">
         <ModalCloseButton
@@ -257,6 +237,6 @@ export function NewPromptModal({
         </form>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

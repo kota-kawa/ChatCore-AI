@@ -1,8 +1,6 @@
-import { useCallback, useRef } from "react";
-
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { NormalizedTask } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 // タスク詳細モーダルのprops型定義
@@ -16,22 +14,6 @@ type TaskDetailModalProps = {
 // Modal component that displays task details (prompt template, response rules, examples, etc.)
 export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
   const { locale, t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
-
-  // 初期フォーカスを閉じるボタンに設定する
-  // Set initial focus to the close button
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("[data-close-task-detail]") ?? null;
-  }, []);
-
-  // フォーカストラップを有効化してキーボード操作でモーダル内に留まるようにする
-  // Enable focus trap so keyboard navigation stays within the modal
-  useModalFocusTrap({
-    isOpen: Boolean(taskDetail),
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: onClose,
-  });
 
   // 複数行テキストを改行を保持して表示するヘルパー
   // Helper to display multi-line text with preserved line breaks
@@ -42,22 +24,12 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
   );
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={Boolean(taskDetail)}
+      onClose={onClose}
       id="io-modal"
-      className={`modal-base ${taskDetail ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="taskDetailTitle"
-      aria-hidden={taskDetail ? "false" : "true"}
-      tabIndex={-1}
-      // モーダル背景クリックで閉じる
-      // Close on backdrop click
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      labelledBy="taskDetailTitle"
+      initialFocusSelector="[data-close-task-detail]"
     >
       <div
         className="io-modal-content"
@@ -139,6 +111,6 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
           </div>
         )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,9 +1,7 @@
-import { useCallback, useRef } from "react";
-
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { UserSkill } from "../../../lib/chat_page/skill_api";
 import { useTranslation } from "../../../contexts/locale_context";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 
 type SkillDetailModalProps = {
   skill: UserSkill | null;
@@ -14,33 +12,15 @@ type SkillDetailModalProps = {
 // Read-only modal for reviewing the full Skill instructions from the home page
 export function SkillDetailModal({ skill, onClose }: SkillDetailModalProps) {
   const { t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
-  const isOpen = Boolean(skill);
-
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("[data-close-skill-detail]") ?? null;
-  }, []);
-
-  useModalFocusTrap({
-    isOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: onClose,
-  });
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={Boolean(skill)}
+      onClose={onClose}
       id="skillDetailModal"
-      className={`skill-detail-modal custom-modal modal-base ${isOpen ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-hidden={isOpen ? "false" : "true"}
-      aria-labelledby="skill-detail-modal-title"
-      tabIndex={-1}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      className="skill-detail-modal custom-modal"
+      labelledBy="skill-detail-modal-title"
+      initialFocusSelector="[data-close-skill-detail]"
     >
       {skill ? (
         <div className="custom-modal-dialog">
@@ -86,6 +66,6 @@ export function SkillDetailModal({ skill, onClose }: SkillDetailModalProps) {
           </div>
         </div>
       ) : null}
-    </div>
+    </ModalShell>
   );
 }
