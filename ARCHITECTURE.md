@@ -140,6 +140,16 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 - `frontend/public/` と `frontend/styles/`: 静的 CSS、ページ・コンポーネント用 CSS、互換スタイルを配置します。トークンと CSS の責務分割は `frontend/STYLING_STRATEGY.md` が正本です。
 - `frontend/types/generated/api_schemas.ts`: バックエンド Pydantic モデルから生成されるファイルです。直接編集しません。
 
+### 共通コピーボタン
+
+すべてのコピーボタンは1つの共通実装に集約しています。個別に copy 処理やタイマー、アイコン差し替えを書きません。
+
+- `frontend/components/ui/copy_button.tsx`（`CopyButton`）: アイコンのみ（ラベル文字なし）のボタン描画。文字列コピーは `getText`、副作用（トースト・共有URL生成など）を伴う場合は成否を `boolean` で返す `onCopy` を渡します。
+- `frontend/hooks/use_copy_feedback.ts`（`useCopyFeedback`）: コピー実行・二重実行防止・状態遷移（`idle`/`copied`/`error`）を担う土台。`CopyButton` から利用します。
+- `frontend/lib/copy_feedback.ts`: React 非依存の共有定数（成功時にチェックマークを見せる時間、アイコンのクラス名）。本文中のコピーボタン（`frontend/scripts/chat/message_copy_buttons.ts`、`frontend/hooks/chat_page/use_home_page_controller.ts` のコードブロック用委譲）はこの定数を共有します。
+
+挙動の統一仕様: 押すと数秒だけアイコンがチェックマーク（`bi-check-lg`）に変わり、その後元へ戻ります。
+
 ### API 契約の同期
 
 バックエンドの request/response model を変更したら、リポジトリルートまたは `frontend/` から次を実行して生成物を更新します。
