@@ -83,9 +83,16 @@ class WebSearchImageCandidate:
 
 _IMAGE_SELECTION_SYSTEM_PROMPT = (
     "You select optional illustrative images for an answer grounded in web search results.\n"
+    "The user question, answer text, and candidate metadata may be written in any language or script. "
+    "Understand their meaning across languages; never reject a relevant image merely because the "
+    "question and candidate metadata use different languages. Keep the JSON keys, candidate IDs, "
+    "and URLs exactly as provided regardless of the response language.\n"
     "Decide first whether one or more images materially help the user's question. Return show_image=false "
     "for questions where text is sufficient, and for decorative logos, avatars, banners, ads, "
     "tracking pixels, or irrelevant images.\n"
+    "An explicit request to see or show photos, images, or the real appearance of something is strong "
+    "evidence that a relevant candidate should be selected when one is available, regardless of the "
+    "language used for that request.\n"
     "Images are especially useful for places and travel destinations (for example Kamakura, "
     "Kyoto, hotels, or restaurants); people and animals (celebrities, dog breeds, or unusual "
     "animals); historical events, architecture, and art where the real appearance matters; "
@@ -247,6 +254,47 @@ def _parse_json_object(raw_response: str | None) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+_POSITIVE_IMAGE_SELECTION_VALUES = frozenset(
+    {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "show",
+        "display",
+        "required",
+        "oui",
+        "sí",
+        "si",
+        "sim",
+        "ja",
+        "да",
+        "نعم",
+        "是",
+        "是的",
+        "需要",
+        "需要图片",
+        "需要图像",
+        "显示",
+        "显示图片",
+        "はい",
+        "必要",
+        "表示",
+        "예",
+        "네",
+    }
+)
+
+
+def _is_positive_image_selection(value: Any) -> bool:
+    """Accept a strict JSON boolean plus common localized string equivalents."""
+    if value is True:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().casefold() in _POSITIVE_IMAGE_SELECTION_VALUES
+
+
 def _parse_image_placement(raw_plan: Any) -> tuple[str, str]:
     """Validate one LLM-provided image placement plan."""
     if isinstance(raw_plan, str):
@@ -336,12 +384,18 @@ def choose_web_search_images(
     payload = _parse_json_object(raw_response)
     if not isinstance(payload, dict):
         return []
-    if payload.get("show_image") is not True and payload.get("show_images") is not True:
+    if not (
+        _is_positive_image_selection(payload.get("show_image"))
+        or _is_positive_image_selection(payload.get("show_images"))
+    ):
         return []
 
     raw_ids = payload.get("image_ids")
     if isinstance(raw_ids, list):
         candidate_ids = raw_ids
+    elif isinstance(raw_ids, str):
+        # Tolerate a single scalar ID from providers that collapse a one-item array.
+        candidate_ids = [raw_ids]
     else:
         # Accept the original one-image response while providers roll forward.
         candidate_ids = [payload.get("image_id")]

@@ -65,6 +65,28 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(decision.query, "OpenAI latest news")
         self.assertEqual(decision.freshness, "pd")
 
+    # 日本語: 対象国の一次情報が優先される場合に、プランナーが別言語を選べることを検証します。
+    # English: Verify the planner can choose another language when target-country primary sources are better.
+    def test_decide_web_search_accepts_planner_selected_source_language(self):
+        messages = [{"role": "user", "content": "アメリカの連邦税制を公式情報で調べて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value=(
+                '{"should_search": true, "query": "United States federal tax official guidance", '
+                '"search_language": "en", "freshness": "", "reason": "US primary sources"}'
+            ),
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.search_language, "en")
+        planner_prompt = mock_llm.call_args.args[0][0]["content"]
+        self.assertIn("For the first web search, default to the language used in the latest user message", planner_prompt)
+        self.assertIn("another country or region", planner_prompt)
+        self.assertIn("rewrite the query in that language", planner_prompt)
+
     # 日本語: decideWeb検索stripsMarkdownコードfencesことを検証します。
     # English: Verify that decide web search strips markdown code fences.
     def test_decide_web_search_strips_markdown_code_fences(self):
@@ -416,6 +438,64 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "jp")
 
+    # 日本語: 中国語の漢字を日本語と誤判定せず、簡体字の検索言語を使うことを検証します。
+    # English: Verify Chinese Han text is not misclassified as Japanese and uses simplified Chinese.
+    def test_search_brave_llm_context_uses_brave_simplified_chinese_language_code(self):
+        response = MagicMock()
+        response.json.return_value = {"grounding": {"generic": [], "map": []}, "sources": {}}
+        response.raise_for_status.return_value = None
+
+        with patch.dict(
+            os.environ,
+            {"BRAVE_API_KEY": "test-key", "BRAVE_SEARCH_LANG": ""},
+            clear=False,
+        ):
+            with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
+                web_search.search_brave_llm_context("请介绍北京故宫的照片", freshness="pw")
+
+        self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "zh-hans")
+
+    # 日本語: 検索語が英語へ変換されても、元の中国語入力を言語ヒントとして優先することを検証します。
+    # English: Verify the original Chinese input remains the language hint when the search query is translated.
+    def test_search_brave_llm_context_prefers_language_hint_over_translated_query(self):
+        response = MagicMock()
+        response.json.return_value = {"grounding": {"generic": [], "map": []}, "sources": {}}
+        response.raise_for_status.return_value = None
+
+        with patch.dict(
+            os.environ,
+            {"BRAVE_API_KEY": "test-key", "BRAVE_SEARCH_LANG": ""},
+            clear=False,
+        ):
+            with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
+                web_search.search_brave_llm_context(
+                    "Beijing Forbidden City photos",
+                    language_hint="请介绍北京故宫的照片",
+                )
+
+        self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "zh-hans")
+
+    # 日本語: プランナーが選んだ対象国の言語を、ユーザー入力言語より優先して検索へ渡すことを検証します。
+    # English: Verify an explicit planner language overrides the user's input language for the search request.
+    def test_search_brave_llm_context_uses_explicit_search_language(self):
+        response = MagicMock()
+        response.json.return_value = {"grounding": {"generic": [], "map": []}, "sources": {}}
+        response.raise_for_status.return_value = None
+
+        with patch.dict(
+            os.environ,
+            {"BRAVE_API_KEY": "test-key", "BRAVE_SEARCH_LANG": ""},
+            clear=False,
+        ):
+            with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
+                web_search.search_brave_llm_context(
+                    "アメリカの連邦税制",
+                    language_hint="アメリカの連邦税制を調べて",
+                    search_language="en",
+                )
+
+        self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "en")
+
     # 日本語: monthlyクォータ超過のとき、検索bravellmコンテキストブロックすることを検証します。
     # English: Verify that search brave llm context blocks when monthly quota exceeded.
     def test_search_brave_llm_context_blocks_when_monthly_quota_exceeded(self):
@@ -461,9 +541,19 @@ class WebSearchServiceTestCase(unittest.TestCase):
             with patch.object(
                 web_search,
                 "decide_web_search",
-                return_value=web_search.WebSearchDecision(True, "Python news", "pd", "current"),
+                return_value=web_search.WebSearchDecision(
+                    True,
+                    "Python news",
+                    "pd",
+                    "current",
+                    search_language="en",
+                ),
             ):
-                with patch.object(web_search, "search_brave_llm_context", return_value=result):
+                with patch.object(
+                    web_search,
+                    "search_brave_llm_context",
+                    return_value=result,
+                ) as mock_search:
                     augmented = web_search.maybe_augment_messages_with_web_search(
                         messages,
                         "claude-haiku-4-5-20251001",
@@ -487,6 +577,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIs(augmented.result, result)
         self.assertEqual(augmented.status, "completed")
         self.assertEqual(len(augmented.messages), 2)
+        self.assertEqual(mock_search.call_args.kwargs["language_hint"], messages[0]["content"])
+        self.assertEqual(mock_search.call_args.kwargs["search_language"], "en")
         self.assertIn("<web_search_context", augmented.messages[0]["content"])
         self.assertIn(
             "A real-time web search with Brave has already been run for this turn",
@@ -503,6 +595,16 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("https://example.com/python", augmented.messages[0]["content"])
         self.assertIn(result.sources[0].evidence_id, augmented.messages[0]["content"])
         self.assertIn("[[source:<evidence_id>]]", augmented.messages[0]["content"])
+
+    # 日本語: Web検索ツールに、対象国・一次情報に応じた検索言語指定が含まれることを検証します。
+    # English: Verify the web-search tool exposes an explicit language choice for target-country sources.
+    def test_web_search_tool_definition_describes_search_language_policy(self):
+        definition = web_search.get_web_search_tool_definition()
+        properties = definition["function"]["parameters"]["properties"]
+
+        self.assertIn("search_language", properties)
+        self.assertIn("en", properties["search_language"]["enum"])
+        self.assertIn("target country", definition["function"]["description"])
 
     # 日本語: maybeaugmentmessagesreportsmonthlyクォータ超過ことを検証します。
     # English: Verify that maybe augment messages reports monthly quota exceeded.

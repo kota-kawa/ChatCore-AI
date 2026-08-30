@@ -162,6 +162,64 @@ _BRAVE_SEARCH_LANG_ALIASES = {
     "zh-cn": "zh-hans",
     "zh-tw": "zh-hant",
 }
+_BRAVE_SEARCH_LANGUAGE_CODES = tuple(sorted(_BRAVE_SEARCH_LANG_VALUES))
+_SEARCH_LANGUAGE_POLICY = (
+    "Search-language policy:\n"
+    "For the first web search, default to the language used in the latest user message. "
+    "Write the query in that language and set search_language to the corresponding Brave Search code.\n"
+    "Before choosing a different language, reason about the subject's country or region and the likely source landscape. "
+    "When the user asks about another country or region, local laws or regulators, local news, an official local service, "
+    "or a local proper noun, a local language may provide materially better primary sources. In those cases, choose the "
+    "target or otherwise best source language.\n"
+    "If you choose another language, rewrite the query in that language and set search_language to its Brave Search code. "
+    "Do not change language merely because translation is possible; keep the user's language when there is no concrete "
+    "source-quality benefit. For mixed-language requests, use the language of the target sources unless the user's "
+    "language is still the best source language. Apply the same policy to every later search.\n"
+    f"Supported Brave Search language codes: {', '.join(_BRAVE_SEARCH_LANGUAGE_CODES)}.\n"
+)
+_CJK_UNIFIED_RANGES = (
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0x20000, 0x2FA1F),
+)
+_JAPANESE_RANGES = (
+    (0x3040, 0x309F),  # Hiragana
+    (0x30A0, 0x30FF),  # Katakana
+    (0x31F0, 0x31FF),  # Katakana phonetic extensions
+    (0xFF66, 0xFF9D),  # Halfwidth Katakana
+)
+_KOREAN_RANGES = (
+    (0x1100, 0x11FF),
+    (0x3130, 0x318F),
+    (0xAC00, 0xD7AF),
+)
+_SCRIPT_LANGUAGE_RANGES = (
+    ("ar", ((0x0600, 0x06FF), (0x0750, 0x077F), (0x08A0, 0x08FF))),
+    ("he", ((0x0590, 0x05FF),)),
+    ("el", ((0x0370, 0x03FF),)),
+    ("th", ((0x0E00, 0x0E7F),)),
+    ("bn", ((0x0980, 0x09FF),)),
+    ("gu", ((0x0A80, 0x0AFF),)),
+    ("pa", ((0x0A00, 0x0A7F),)),
+    ("hi", ((0x0900, 0x097F),)),
+    ("ta", ((0x0B80, 0x0BFF),)),
+    ("te", ((0x0C00, 0x0C7F),)),
+    ("kn", ((0x0C80, 0x0CFF),)),
+    ("ml", ((0x0D00, 0x0D7F),)),
+    ("ru", ((0x0400, 0x04FF),)),
+)
+_JAPANESE_HAN_HINTS = frozenset("観覧駅円験経済発働塩辺図広転売帰戦説読関気歳県変対楽")
+_TRADITIONAL_CHINESE_HINTS = frozenset("臺灣體學國與專覺樂萬")
+_UKRAINIAN_HINTS = frozenset("іїєґІЇЄҐ")
+_SERBIAN_HINTS = frozenset("ђјљњћџЂЈЉЊЋЏ")
+_VIETNAMESE_HINTS = frozenset("ăâđêôơưĂÂĐÊÔƠƯ")
+_TURKISH_HINTS = frozenset("ğışİĞŞ")
+_SPANISH_HINTS = frozenset("ñÑ¿¡")
+_PORTUGUESE_HINTS = frozenset("ãõÃÕ")
+_GERMAN_HINTS = frozenset("ßẞ")
+_DANISH_HINTS = frozenset("æøåÆØÅ")
+_SWEDISH_HINTS = frozenset("åäöÅÄÖ")
 
 WebSearchEventPublisher = Callable[[str, dict[str, Any]], None]
 
@@ -195,6 +253,7 @@ class WebSearchDecision:
     query: str = ""
     freshness: str = ""
     reason: str = ""
+    search_language: str = ""
 
 
 @dataclass(frozen=True)
@@ -274,6 +333,7 @@ class WebSearchAugmentation:
     messages: list[dict[str, str]]
     result: WebSearchResult | None = None
     status: str = ""
+    search_language: str = ""
 
 
 @dataclass(frozen=True)
@@ -787,6 +847,10 @@ def _parse_decision_payload(
     should_search = loaded["should_search"]
     needs_web_images = _coerce_search_flag(loaded.get("needs_web_images"))
     query = _normalize_text(_redact_secretish_text(loaded.get("query", "")), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
+    search_language_value = loaded.get("search_language")
+    if search_language_value is None:
+        search_language_value = loaded.get("search_lang")
+    search_language = _normalize_requested_search_language(search_language_value)
     freshness = str(loaded.get("freshness") or "").strip()
     if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
         freshness = ""
@@ -807,6 +871,7 @@ def _parse_decision_payload(
         query=query,
         freshness=freshness,
         reason=reason,
+        search_language=search_language,
     )
 
 
@@ -827,7 +892,8 @@ _PLANNER_SYSTEM_PROMPT = (
     "You are an advanced web search planner. Judge strictly whether real-time external information (Brave Search) is required to answer the user's question.\n"
     "Always make this decision from the semantic meaning and conversational context, in any language. "
     "Do not use keyword matching or a fixed phrase list as a substitute for understanding the request.\n"
-    "When any of the following applies, you **must** set should_search to true and generate the best search query:\n"
+    + _SEARCH_LANGUAGE_POLICY
+    + "When any of the following applies, you **must** set should_search to true and generate the best search query:\n"
     "- **Current affairs and news**: recent events, politics, economics, social news, sports results, entertainment news\n"
     "- **Dynamic data**: stock prices, exchange rates, cryptocurrencies, weather, traffic information, product prices or stock levels\n"
     "- **Time-dependent**: the message contains words such as \"latest\", \"today\", \"current\", \"now\", \"just now\", \"recently\", \"yesterday\", or \"tomorrow\"\n"
@@ -844,8 +910,9 @@ _PLANNER_SYSTEM_PROMPT = (
     "- The user only asks for translation, proofreading, summarization, or creative writing (poems, stories)\n"
     "**When in doubt, always run a search.** Confirming the facts by searching is worth more than guessing while information is missing.\n"
     "Output a JSON object only. Schema:\n"
-    '{"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": "search query", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that"}\n'
+    '{"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": "search query", "search_language": "Brave Search language code", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that"}\n'
     "Always include needs_web_images. When it is true, decision must be search, should_search must be true, and query must be non-empty.\n"
+    "Always include search_language when searching. Use a valid supported code and make it match the language of query; if the field is missing or invalid, the application falls back to the user's input language.\n"
     'For the latest information, set freshness to "pd" (within 24 hours) or "pw" (within a week).'
 )
 
@@ -856,9 +923,12 @@ _PLANNER_REPAIR_SYSTEM_PROMPT = (
     "criteria whether a search is required."
     "Do not judge the user's text by fixed keywords; judge it from meaning and context, including "
     "whether seeing the real appearance of an external subject would materially help."
-    "Output a JSON object only."
-    'Schema: {"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": string, "freshness": string, "reason": string}.'
+    + "\n"
+    + _SEARCH_LANGUAGE_POLICY
+    + "Output a JSON object only."
+    'Schema: {"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": string, "search_language": string, "freshness": string, "reason": string}. '
     "Always include needs_web_images. When it is true, require a web search and a non-empty query."
+    "When searching, always include a valid search_language code and write query in that language."
     "Do not leave query empty when a search is required. When in doubt, choose search."
 )
 
@@ -1047,7 +1117,7 @@ def _infer_search_language(query: str) -> str:
     configured = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
     if configured:
         return _normalize_brave_search_lang(configured)
-    return "jp" if _contains_japanese(query) else "en"
+    return _detect_search_language(query)
 
 
 def _normalize_brave_search_lang(value: str) -> str:
@@ -1058,13 +1128,79 @@ def _normalize_brave_search_lang(value: str) -> str:
     return normalized if normalized in _BRAVE_SEARCH_LANG_VALUES else "en"
 
 
-def _contains_japanese(value: str) -> bool:
-    # 文字列に日本語（ひらがな、カタカナ、漢字）が含まれているか判定する
-    # Check if the string contains Japanese characters.
+def _normalize_requested_search_language(value: Any) -> str:
+    """Normalize an optional planner/tool language without inventing a fallback."""
+    normalized = str(value or "").strip().casefold()
+    if normalized in {"", "auto", "user", "input", "same", "same-as-user", "same_as_user"}:
+        return ""
+    normalized = _BRAVE_SEARCH_LANG_ALIASES.get(normalized, normalized)
+    return normalized if normalized in _BRAVE_SEARCH_LANG_VALUES else ""
+
+
+def _contains_codepoint_in_ranges(
+    value: str,
+    ranges: tuple[tuple[int, int], ...],
+) -> bool:
     return any(
-        ("\u3040" <= char <= "\u30ff") or ("\u3400" <= char <= "\u9fff")
-        for char in value
+        start <= ord(character) <= end
+        for character in value
+        for start, end in ranges
     )
+
+
+def _contains_japanese(value: str) -> bool:
+    # ひらがな・カタカナを判定する。漢字は中国語にも共通するため含めない。
+    # Detect Hiragana and Katakana only; Han characters are shared with Chinese.
+    return _contains_codepoint_in_ranges(value, _JAPANESE_RANGES)
+
+
+def _contains_han(value: str) -> bool:
+    # 中国語・日本語で共通利用される漢字の範囲を判定する。
+    # Detect the Han ranges shared by Chinese and Japanese.
+    return _contains_codepoint_in_ranges(value, _CJK_UNIFIED_RANGES)
+
+
+def _detect_search_language(value: str) -> str:
+    """Infer a Brave Search language from the user's script without misclassifying Han text."""
+    if _contains_japanese(value):
+        return "jp"
+    if _contains_codepoint_in_ranges(value, _KOREAN_RANGES):
+        return "ko"
+    if _contains_han(value):
+        if any(character in _JAPANESE_HAN_HINTS for character in value):
+            return "jp"
+        return (
+            "zh-hant"
+            if any(character in _TRADITIONAL_CHINESE_HINTS for character in value)
+            else "zh-hans"
+        )
+    for language, ranges in _SCRIPT_LANGUAGE_RANGES:
+        if _contains_codepoint_in_ranges(value, ranges):
+            if language == "ru":
+                if any(character in _UKRAINIAN_HINTS for character in value):
+                    return "uk"
+                if any(character in _SERBIAN_HINTS for character in value):
+                    return "sr"
+            return language
+
+    # Latin-script languages need lexical context for reliable detection. These
+    # distinctive characters cover the common cases without adding a dependency
+    # or treating every ASCII query as English-only in the image flow.
+    if any(character in _VIETNAMESE_HINTS for character in value):
+        return "vi"
+    if any(character in _TURKISH_HINTS for character in value):
+        return "tr"
+    if any(character in _SPANISH_HINTS for character in value):
+        return "es"
+    if any(character in _PORTUGUESE_HINTS for character in value):
+        return "pt-br"
+    if any(character in _GERMAN_HINTS for character in value):
+        return "de"
+    if any(character in _DANISH_HINTS for character in value):
+        return "da"
+    if any(character in _SWEDISH_HINTS for character in value):
+        return "sv"
+    return "en"
 
 
 def _source_age_text(raw_age: Any) -> str:
@@ -1708,6 +1844,8 @@ def search_brave_llm_context(
     *,
     freshness: str = "",
     page_fetch_budget: WebPageFetchBudget | None = None,
+    language_hint: str = "",
+    search_language: str = "",
 ) -> WebSearchResult:
     # Brave LLM Context APIを使用して検索を実行し、結果を加工して返す
     # Perform Brave Search and enrich results.
@@ -1719,7 +1857,19 @@ def search_brave_llm_context(
     if not normalized_query:
         raise ValueError("Search query is empty.")
 
-    language = _infer_search_language(normalized_query)
+    # 明示的な運用設定を最優先し、次にプランナーが意味判断した検索言語を使う。
+    # Keep the explicit deployment override first, then honor the planner's semantic language choice.
+    configured_language = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
+    requested_language = _normalize_requested_search_language(search_language)
+    if configured_language:
+        language = _normalize_brave_search_lang(configured_language)
+    elif requested_language:
+        language = requested_language
+    else:
+        # プランナーが検索語を別言語へ要約しても、ユーザーの入力言語を既定の優先言語に使う。
+        # Prefer the user's language when the planner summarizes the query without an override.
+        language_source = str(language_hint or "").strip() or normalized_query
+        language = _infer_search_language(language_source)
     country = os.environ.get("BRAVE_SEARCH_COUNTRY", "JP").strip() or "JP"
     key = _cache_key(normalized_query, freshness, language, country)
     cached = _get_cached_search(key)
@@ -2494,7 +2644,14 @@ def get_web_search_tool_definition() -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web in real time with Brave Search. Every result includes a stable evidence_id derived from its URL. Review the results and call this again with different search terms when the information is not enough. When you cite evidence in your answer, use a real ID in the form [[source:<evidence_id>]].",
+            "description": (
+                "Search the web in real time with Brave Search. Every result includes a stable evidence_id derived from its URL. "
+                "Review the results and call this again with different search terms when the information is not enough. "
+                "When you cite evidence in your answer, use a real ID in the form [[source:<evidence_id>]].\n"
+                + _SEARCH_LANGUAGE_POLICY
+                + "For this tool, omit search_language only when the user's input language remains the best search language. "
+                "When a target country, local source, or another language is better, set search_language explicitly and write query in that language."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2506,6 +2663,11 @@ def get_web_search_tool_definition() -> dict[str, Any]:
                         "type": "string",
                         "description": "How fresh the information must be. One of an empty string, 'pd' (within 24 hours), 'pw' (within a week), 'pm' (within a month), or 'py' (within a year).",
                         "enum": ["", "pd", "pw", "pm", "py"],
+                    },
+                    "search_language": {
+                        "type": "string",
+                        "description": "Brave Search language code for this query. Use the user's input language by default; use a different valid code only when the target country, local sources, or another language is likely to produce better results, and write query in that language.",
+                        "enum": ["", *_BRAVE_SEARCH_LANGUAGE_CODES],
                     },
                 },
                 "required": ["query"],
@@ -2582,6 +2744,8 @@ def maybe_augment_messages_with_web_search(
             decision.query,
             freshness=decision.freshness,
             page_fetch_budget=page_fetch_budget,
+            language_hint=_latest_user_message(conversation_messages),
+            search_language=decision.search_language,
         )
     except WebSearchQuotaExceeded as exc:
         logger.warning(
@@ -2686,4 +2850,5 @@ def maybe_augment_messages_with_web_search(
         messages=insert_after_leading_system_messages(conversation_messages, context_message),
         result=result,
         status="completed",
+        search_language=decision.search_language,
     )

@@ -1473,7 +1473,12 @@ class ChatStreamingTestCase(unittest.TestCase):
                             "type": "function",
                             "function": {
                                 "name": "web_search",
-                                "arguments": json.dumps({"query": "Python release details"}),
+                                "arguments": json.dumps(
+                                    {
+                                        "query": "Python release details",
+                                        "search_language": "en",
+                                    }
+                                ),
                             },
                         }
                     ]
@@ -1549,6 +1554,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             mock_search.call_args_list[0].kwargs["page_fetch_budget"],
             mock_search.call_args_list[1].kwargs["page_fetch_budget"],
         )
+        self.assertEqual(mock_search.call_args_list[0].kwargs["search_language"], "")
+        self.assertEqual(mock_search.call_args_list[1].kwargs["search_language"], "en")
         self.assertIn("検索結果を踏まえた回答", body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertIn("https://example.com/release", persisted_messages[0])
@@ -1882,6 +1889,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(stream_call_count, 4)
         self.assertEqual(mock_search.call_args.args, ("OpenAI news",))
         self.assertEqual(mock_search.call_args.kwargs["freshness"], "")
+        self.assertEqual(mock_search.call_args.kwargs["language_hint"], "OpenAIニュース")
+        self.assertEqual(mock_search.call_args.kwargs["search_language"], "")
         self.assertEqual(mock_search.call_args.kwargs["page_fetch_budget"].max_attempts, 10)
         self.assertIn('"cached": true', body)
         self.assertIn('<span class="web-search-sources__step-title">検索結果を再利用</span>', persisted_messages[0])
