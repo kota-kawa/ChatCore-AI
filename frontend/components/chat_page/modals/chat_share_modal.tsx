@@ -1,8 +1,6 @@
-import { useCallback, useRef } from "react";
-
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { ShareStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 // チャット共有モーダルのprops型定義
@@ -37,39 +35,15 @@ export function ChatShareModal({
   shareWithNativeSheet,
 }: ChatShareModalProps) {
   const { locale, t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
-
-  // 初期フォーカスをコピーボタンに設定する
-  // Set initial focus to the copy button
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("#chat-share-copy-btn") ?? null;
-  }, []);
-
-  // フォーカストラップとEscキーでの閉じる動作を設定する
-  // Set up focus trap and close behavior on Escape key
-  useModalFocusTrap({
-    isOpen: shareModalOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: closeShareModal,
-  });
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={shareModalOpen}
+      onClose={closeShareModal}
       id="chat-share-modal"
-      className={`chat-share-modal modal-base cc-share-modal ${shareModalOpen ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-hidden={shareModalOpen ? "false" : "true"}
-      aria-labelledby="chat-share-title"
-      tabIndex={-1}
-      // 背景クリックでモーダルを閉じる / Close modal on backdrop click
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          closeShareModal();
-        }
-      }}
+      className="chat-share-modal cc-share-modal"
+      labelledBy="chat-share-title"
+      initialFocusSelector="#chat-share-copy-btn"
     >
       <div className="chat-share-modal__content cc-share-modal__content" tabIndex={-1}>
         <ModalCloseButton
@@ -174,6 +148,6 @@ export function ChatShareModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

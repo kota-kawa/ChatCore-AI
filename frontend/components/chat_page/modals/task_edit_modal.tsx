@@ -1,8 +1,8 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction } from "react";
 
-import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { TaskEditFormState } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
 
 // タスク編集モーダルのprops型定義
@@ -25,39 +25,15 @@ export function TaskEditModal({
   onSave,
 }: TaskEditModalProps) {
   const { locale, t } = useTranslation();
-  const modalRef = useRef<HTMLDivElement | null>(null);
-
-  // 初期フォーカスをタスク名入力欄に設定する
-  // Set initial focus to the task name input field
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("#taskName") ?? null;
-  }, []);
-
-  // Escキーでモーダルを閉じるフォーカストラップを設定する
-  // Set up focus trap with Escape key closing behavior
-  useModalFocusTrap({
-    isOpen: taskEditModalOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: closeTaskEditModal,
-  });
 
   return (
-    <div
-      ref={modalRef}
+    <ModalShell
+      isOpen={taskEditModalOpen}
+      onClose={closeTaskEditModal}
       id="taskEditModal"
-      className={`custom-modal modal-base ${taskEditModalOpen ? "is-open" : ""}`.trim()}
-      role="dialog"
-      aria-modal="true"
-      aria-hidden={taskEditModalOpen ? "false" : "true"}
-      aria-labelledby="taskEditModalTitle"
-      tabIndex={-1}
-      // 背景クリックでモーダルを閉じる / Close modal on backdrop click
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          closeTaskEditModal();
-        }
-      }}
+      className="custom-modal"
+      labelledBy="taskEditModalTitle"
+      initialFocusSelector="#taskName"
     >
       <div className="custom-modal-dialog">
         <div className="custom-modal-content">
@@ -234,6 +210,6 @@ export function TaskEditModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
