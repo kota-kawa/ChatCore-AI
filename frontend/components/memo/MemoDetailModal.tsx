@@ -10,6 +10,7 @@ import type { Collection, DetailSaveStatus, MemoDetail } from "../../lib/memo/ty
 import { formatDateTime } from "../../lib/datetime";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 type MemoDetailModalProps = {
@@ -25,8 +26,7 @@ type MemoDetailModalProps = {
   collections: Collection[];
   detailEditCollectionId: number | null;
   setDetailEditCollectionId: Dispatch<SetStateAction<number | null>>;
-  detailCopied: boolean;
-  copyDetailFullText: () => Promise<void>;
+  copyDetailFullText: () => Promise<boolean>;
   isMemoAgentOpen: boolean;
   setIsMemoAgentOpen: Dispatch<SetStateAction<boolean>>;
   openMemoAgent: () => Promise<void>;
@@ -53,7 +53,6 @@ export function MemoDetailModal({
   collections,
   detailEditCollectionId,
   setDetailEditCollectionId,
-  detailCopied,
   copyDetailFullText,
   isMemoAgentOpen,
   setIsMemoAgentOpen,
@@ -165,16 +164,16 @@ export function MemoDetailModal({
                         </button>
                       ))}
                     </div>
-                    <button
-                      type="button"
-                      className={`memo-modal__icon-btn${detailCopied ? " is-copied" : ""}`}
-                      onClick={() => { void copyDetailFullText(); }}
-                      aria-label={detailCopied ? t("common.copied") : t("memo.copyFullText")}
-                      data-tooltip={detailCopied ? t("common.copied") : t("memo.copyFullText")}
-                      data-tooltip-placement="bottom"
-                    >
-                      <i className={`bi ${detailCopied ? "bi-check2" : "bi-files"}`} aria-hidden="true"></i>
-                    </button>
+                    <CopyButton
+                      onCopy={copyDetailFullText}
+                      label={t("memo.copyFullText")}
+                      copiedLabel={t("common.copied")}
+                      className="memo-modal__icon-btn"
+                      copiedClassName="is-copied"
+                      idleIcon="bi-files"
+                      tooltip="data-tooltip"
+                      tooltipPlacement="bottom"
+                    />
                     <button
                       type="button"
                       className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}

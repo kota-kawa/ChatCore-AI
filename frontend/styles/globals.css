@@ -1887,9 +1887,20 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 .global-ai-agent-modal .mini-chat-copy-btn {
+  gap: 0;
+  padding: 0.32rem;
   border: 1px solid rgba(34, 211, 238, 0.18);
   background: transparent;
   color: #7aa8b3;
+}
+
+.global-ai-agent-modal .mini-chat-copy-btn i {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.global-ai-agent-modal .mini-chat-copy-btn .bi-check-lg {
+  color: #34d399;
 }
 
 .global-ai-agent-modal .mini-chat-copy-btn:hover {

@@ -454,18 +454,19 @@
   background: var(--md-accent);
 }
 
+/* コピーボタンはアイコンのみ。成功時は数秒だけチェックマークへ差し替わる（message_copy_buttons.ts） */
+/* The copy button is icon-only; on success it swaps to a check mark for a few seconds (message_copy_buttons.ts) */
 :where(body.chat-page, .chat-page-shell) .code-block-copy-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.28rem 0.6rem;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 999px;
   background: transparent;
   color: var(--md-block-muted);
-  font-family: inherit;
-  font-size: 0.6875rem;
-  letter-spacing: 0.02em;
   cursor: pointer;
   transition:
     border-color var(--transition-fast, 0.15s ease),
@@ -485,7 +486,18 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .code-block-copy-btn i {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+/* コピー結果はアイコンの形と色の両方で伝える（色だけ／形だけに頼らない） */
+/* The copy result is carried by both the icon shape and its colour */
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn .bi-check-lg {
+  color: color-mix(in srgb, var(--primary-color, #19c37d) 60%, #ffffff);
+}
+
+:where(body.chat-page, .chat-page-shell) .code-block-copy-btn .bi-x-lg {
+  color: #f87171;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message pre {
@@ -685,12 +697,6 @@
 
   :where(body.chat-page, .chat-page-shell) .bot-message pre {
     padding: 0.85rem 0.9rem;
-  }
-
-  /* 狭い画面ではコピーボタンをアイコンだけにして、言語名の場所を確保する */
-  /* On narrow screens the copy button drops to its icon so the language keeps its room */
-  :where(body.chat-page, .chat-page-shell) .code-block-copy-btn span {
-    display: none;
   }
 }
 

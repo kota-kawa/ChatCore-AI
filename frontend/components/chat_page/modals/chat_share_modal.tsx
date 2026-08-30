@@ -1,4 +1,5 @@
 import type { ShareStatus } from "../../../lib/chat_page/types";
+import { CopyButton } from "../../ui/copy_button";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
@@ -15,7 +16,7 @@ type ChatShareModalProps = {
   shareLineUrl: string;
   shareFacebookUrl: string;
   closeShareModal: () => void;
-  copyShareLink: () => void;
+  copyShareLink: () => Promise<boolean>;
   shareWithNativeSheet: () => void;
 };
 
@@ -70,17 +71,15 @@ export function ChatShareModal({
               placeholder={locale === "en" ? "Preparing share link" : "共有リンクを準備しています"}
               value={shareUrl}
             />
-            <button
-              type="button"
+            <CopyButton
               id="chat-share-copy-btn"
+              onCopy={copyShareLink}
+              label={t("chat.copyLink")}
+              copiedLabel={t("common.copied")}
               className="cc-share-modal__copy"
-              aria-label={t("chat.copyLink")}
-              title={t("chat.copyLink")}
+              idleIcon="bi-files"
               disabled={shareLoading}
-              onClick={copyShareLink}
-            >
-              <i className="bi bi-files" aria-hidden="true"></i>
-            </button>
+            />
           </div>
 
           {/* 共有状態のステータスメッセージ / Share status message */}

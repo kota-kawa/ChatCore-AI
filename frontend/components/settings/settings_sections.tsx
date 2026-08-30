@@ -27,6 +27,7 @@ import type {
 } from "../../scripts/user/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
 import { SettingsProfileSkeleton, SettingsPromptCardSkeletonGrid } from "./settings_skeletons";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 import type { Locale } from "../../lib/i18n/config";
 
@@ -530,19 +531,6 @@ function SecurityCredentialField({
   placeholder?: string;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-
-  const copyValue = async () => {
-    if (!navigator.clipboard) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   return (
     <div className="form-group security-credential-field">
@@ -556,18 +544,15 @@ function SecurityCredentialField({
           readOnly
           autoComplete={secret ? "off" : undefined}
         />
-        <button
-          type="button"
-          className={`security-copy-button${copied ? " is-copied" : ""}`}
-          aria-label={copied ? t("settings.copiedField", { label }) : t("settings.copyField", { label })}
-          title={copied ? t("common.copied") : t("common.copy")}
+        <CopyButton
+          getText={() => value}
+          label={t("settings.copyField", { label })}
+          copiedLabel={t("settings.copiedField", { label })}
+          className="security-copy-button"
+          copiedClassName="is-copied"
+          idleIcon="bi-copy"
           disabled={!value}
-          onClick={() => {
-            void copyValue();
-          }}
-        >
-          <i className={`bi ${copied ? "bi-check2" : "bi-copy"}`} aria-hidden="true"></i>
-        </button>
+        />
       </div>
     </div>
   );

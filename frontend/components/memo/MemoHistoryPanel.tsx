@@ -12,6 +12,7 @@ import { formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 type MemoHistoryPanelProps = {
@@ -25,7 +26,6 @@ type MemoHistoryPanelProps = {
   openMenuMemoId: string;
   actionLoadingId: string;
   selectedIds: Set<string>;
-  copiedMemoId: string;
   copyingMemoId: string;
   canDragMemos: boolean;
   draggedMemoId: string;
@@ -38,7 +38,7 @@ type MemoHistoryPanelProps = {
   toggleSelectMemo: (memoId: string) => void;
   handleTogglePin: (memo: MemoSummary) => Promise<void>;
   openMemoDetail: (memoId: string | number) => Promise<void>;
-  copyMemoFullText: (memo: MemoSummary) => Promise<void>;
+  copyMemoFullText: (memo: MemoSummary) => Promise<boolean>;
   handleToggleArchive: (memo: MemoSummary) => Promise<void>;
   toggleMemoActionMenu: (memoId: string, trigger: HTMLElement) => void;
   openShareModal: (memo: MemoSummary) => Promise<void>;
@@ -61,7 +61,6 @@ export function MemoHistoryPanel({
   openMenuMemoId,
   actionLoadingId,
   selectedIds,
-  copiedMemoId,
   copyingMemoId,
   canDragMemos,
   draggedMemoId,
@@ -112,7 +111,6 @@ export function MemoHistoryPanel({
                   const isMenuOpen = openMenuMemoId === memoId;
                   const isBusy = actionLoadingId === memoId;
                   const isSelected = selectedIds.has(memoId);
-                  const isCopied = copiedMemoId === memoId;
                   const isCopying = copyingMemoId === memoId;
                   const canDragMemo = canDragMemos && !isBusy;
                   const isDragging = draggedMemoId === memoId;
@@ -188,17 +186,19 @@ export function MemoHistoryPanel({
 
                           {!isBulkMode && (
                             <div className="memo-item__actions">
-                              <button
-                                type="button"
-                                className={`memo-item__action${isCopied ? " is-copied" : ""}`}
-                                onClick={() => { void copyMemoFullText(memo); }}
-                                disabled={isBusy || isCopying}
-                                aria-label={isCopied ? t("common.copied") : t("memo.copyFullText")}
-                                data-tooltip={isCopied ? t("common.copied") : t("memo.copyFullText")}
-                                data-tooltip-placement="top"
-                              >
-                                <i className={`bi ${isCopied ? "bi-check2" : isCopying ? "bi-arrow-repeat memo-spin" : "bi-files"}`}></i>
-                              </button>
+                              <CopyButton
+                                onCopy={() => copyMemoFullText(memo)}
+                                label={t("memo.copyFullText")}
+                                copiedLabel={t("common.copied")}
+                                className="memo-item__action"
+                                copiedClassName="is-copied"
+                                idleIcon="bi-files"
+                                tooltip="data-tooltip"
+                                tooltipPlacement="top"
+                                busy={isCopying}
+                                busyIconClass="bi-arrow-repeat memo-spin"
+                                disabled={isBusy}
+                              />
                               <button
                                 type="button"
                                 className="memo-item__action"

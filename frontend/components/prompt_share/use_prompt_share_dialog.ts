@@ -89,18 +89,20 @@ export function usePromptShareDialog() {
 
   // 共有URLをクリップボードにコピーし、結果をステータスメッセージとして表示する
   // Copies the share URL to the clipboard and reflects the outcome in the status message
-  const handleCopyShareLink = useCallback(async () => {
+  const handleCopyShareLink = useCallback(async (): Promise<boolean> => {
     const currentShareUrl = shareUrl.trim();
     if (!currentShareUrl) {
       setPromptShareStatus(t("promptShare.showLinkFirst"), true);
-      return;
+      return false;
     }
 
     try {
       await copyTextToClipboard(currentShareUrl);
       setPromptShareStatus(t("promptShare.linkCopied"));
+      return true;
     } catch (error) {
       setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
+      return false;
     }
   }, [setPromptShareStatus, shareUrl, t]);
 

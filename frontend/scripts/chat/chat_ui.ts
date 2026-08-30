@@ -557,9 +557,8 @@ function ensureMarkedParser() {
           <div class="code-block-container">
             <div class="code-block-header">
               <span class="code-block-lang">${language}</span>
-              <button class="code-block-copy-btn" type="button">
+              <button class="code-block-copy-btn" type="button" aria-label="Copy code" title="Copy code">
                 <i class="bi bi-clipboard"></i>
-                <span>Copy code</span>
               </button>
             </div>
             <pre><code class="hljs language-${language}">${highlighted}</code></pre>

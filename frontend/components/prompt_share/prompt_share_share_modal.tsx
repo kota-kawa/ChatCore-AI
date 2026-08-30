@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 
 // SNSシェアリンクのURL一式（X・LINE・Facebook）
@@ -26,7 +27,7 @@ type PromptShareShareModalProps = {
   shareStatus: PromptShareStatus;
   shareActionLoading: boolean;
   promptShareCopyButtonRef: RefObject<HTMLButtonElement | null>;
-  onCopyLink: () => Promise<void> | void;
+  onCopyLink: () => Promise<boolean>;
   supportsNativeShare: boolean;
   onNativeShare: () => Promise<void> | void;
   shareSnsLinks: PromptShareLinks;
@@ -95,20 +96,16 @@ export function PromptShareShareModal({
               aria-label={t("promptShare.shareUrl")}
               value={shareUrl}
             />
-            <button
-              type="button"
+            <CopyButton
               id="prompt-share-copy-btn"
+              buttonRef={promptShareCopyButtonRef}
+              onCopy={onCopyLink}
+              label={t("promptShare.copyLink")}
+              copiedLabel={t("common.copied")}
               className="cc-share-modal__copy"
-              aria-label={t("promptShare.copyLink")}
-              title={t("promptShare.copyLink")}
-              ref={promptShareCopyButtonRef}
+              idleIcon="bi-files"
               disabled={shareActionLoading}
-              onClick={() => {
-                void onCopyLink();
-              }}
-            >
-              <i className="bi bi-files" aria-hidden="true"></i>
-            </button>
+            />
           </div>
 
           {/* コピー・シェア操作のフィードバックメッセージ / Feedback message for copy/share actions */}
