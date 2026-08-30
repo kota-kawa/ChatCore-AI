@@ -51,12 +51,16 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 ### 確認順序
 
 1. ブラウザで `/api/chat` の開始リクエストと `/api/chat_generation_stream` のストリームを分けて確認する。
-2. SSE の event 名、連番、`done`／`aborted`／`error` を確認する。本文が途中で止まっただけか、ジョブ自体が終了したかを区別する。
+2. SSE の event 名、連番、`done`／`aborted`／`error`／`incomplete` を確認する。本文が途中で止まっただけか、ジョブ自体が終了したかを区別する。`: keepalive` はイベントIDを持たない接続維持コメントであり、生成進捗やアイドルタイムアウトのリセットには数えない。
 3. `services/chat_generation.py` のジョブ状態、キャンセル要求、イベント履歴、永続化の一度きり制御を確認する。
 4. `blueprints/chat/messages.py` の再接続・ステータス・停止ルートと、`frontend/hooks/chat_page/use_home_page_generation_actions.ts` の Abort／再接続処理を照合する。
 5. 外部 LLM の実通信の前に、生成ストリームをモックして「接続切断」「再接続」「途中停止」「プロバイダエラー」をテストする。
 
 完了通知と停止通知の競合で二重保存しやすいため、永続化処理をルートへ追加せず `ChatGenerationJob` の一度きり制御を通します。フロントの表示だけを直す場合も、サーバーが返すイベント契約を先に確認します。
+
+長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`web_search_count`、`continuation_count`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は2です。
+
+開始経路だけ正常で再生成・再接続だけ切れる場合は、`deploy/chatcore-ai.conf` の4つの SSE 経路が同じ location に入り、`proxy_buffering off` と長い `proxy_read_timeout` が適用されているか確認します。
 
 ## API 契約・フロント同期エラー
 
