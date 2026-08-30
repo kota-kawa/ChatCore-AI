@@ -147,6 +147,22 @@ class DeployHardeningTest(unittest.TestCase):
         self.assertIn("location = /prompt_share/api/prompts", config_text)
         self.assertIn("client_max_body_size 6m;", config_text)
 
+    def test_nginx_disables_buffering_for_every_chat_stream_endpoint(self):
+        config_text = NGINX_CONFIG.read_text()
+
+        self.assertIn(
+            "location ~ ^/api/(chat|chat_regenerate|chat_edit_and_regenerate|chat_generation_stream)$",
+            config_text,
+        )
+        streaming_block = re.search(
+            r"location ~ \^/api/\(chat\|chat_regenerate\|chat_edit_and_regenerate\|chat_generation_stream\)\$ \{(.*?)\n    \}",
+            config_text,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(streaming_block)
+        self.assertIn("proxy_buffering off;", streaming_block.group(1))
+        self.assertIn("proxy_read_timeout 3600s;", streaming_block.group(1))
+
     # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
     # English: Verify that workflow forwards nginx test command to remote deploy.
     def test_workflow_forwards_nginx_test_command_to_remote_deploy(self):
