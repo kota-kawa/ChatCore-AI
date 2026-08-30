@@ -234,12 +234,17 @@ def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     return tool_calls or None
 
 
-# 検索クエリと日付フィルタ（freshness）を正規化したキーを生成する
-# Generate a normalized key from the search query and freshness parameter
-def _normalized_search_key(query: Any, freshness: Any = "") -> tuple[str, str]:
+# 検索クエリ・日付フィルタ・検索言語を正規化したキーを生成する
+# Generate a normalized key from the query, freshness filter, and search language
+def _normalized_search_key(
+    query: Any,
+    freshness: Any = "",
+    search_language: Any = "",
+) -> tuple[str, str, str]:
     normalized_query = " ".join(str(query or "").split())
     normalized_freshness = str(freshness or "").strip()
-    return (normalized_query.casefold(), normalized_freshness)
+    normalized_language = str(search_language or "").strip().casefold()
+    return (normalized_query.casefold(), normalized_freshness, normalized_language)
 
 
 # ツール呼び出しオブジェクトに必要なIDやデフォルト値などを設定して正規化する
@@ -930,7 +935,7 @@ class ChatGenerationJob:
         chunks = self._chunks
         last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
-        web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
+        web_search_results_by_key: dict[tuple[str, str, str], WebSearchResult] = {}
         web_search_trace_steps: list[TraceStep] = selected_reference_steps(
             self._selected_reference_trace
         )
@@ -1149,6 +1154,7 @@ class ChatGenerationJob:
                     _normalized_search_key(
                         augmentation.result.query,
                         augmentation.result.freshness,
+                        augmentation.search_language,
                     )
                 ] = augmentation.result
                 collect_web_search_image_selections(augmentation.result)
@@ -1358,6 +1364,7 @@ class ChatGenerationJob:
 
                     query = args.get("query")
                     freshness = args.get("freshness", "")
+                    search_language = args.get("search_language", "")
                     if not query:
                         current_messages.append(
                             _tool_result_message(
@@ -1388,7 +1395,11 @@ class ChatGenerationJob:
                     step_count += 1
                     query_text = str(query)
                     freshness_text = str(freshness or "")
-                    search_key = _normalized_search_key(query_text, freshness_text)
+                    search_key = _normalized_search_key(
+                        query_text,
+                        freshness_text,
+                        search_language,
+                    )
                     cached_result = web_search_results_by_key.get(search_key)
 
                     self._publish(
@@ -1436,6 +1447,8 @@ class ChatGenerationJob:
                             query_text,
                             freshness=freshness_text,
                             page_fetch_budget=page_fetch_budget,
+                            language_hint=latest_user_message,
+                            search_language=search_language,
                         )
                         web_search_results_by_key[search_key] = result
                         web_search_trace_steps.extend(

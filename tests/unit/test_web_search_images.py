@@ -153,6 +153,7 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("sufficient quality", system_prompt)
         self.assertIn("non-duplication", system_prompt)
         self.assertIn("large watermarks", system_prompt)
+        self.assertIn("any language or script", system_prompt)
         self.assertEqual(mock_llm.call_args.args[1], SELECTED_MODEL)
 
     def test_llm_can_select_up_to_five_relevant_images(self):
@@ -184,6 +185,26 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(selections[0]["alt"], "嵐山")
         self.assertEqual(selections[2]["alt"], "古寺")
         self.assertEqual(selections[1]["alt"], "渡月橋の紅葉")
+
+    # 日本語: 中国語の選定応答で真偽値や画像IDが文字列になっても、適切な画像を表示できることを検証します。
+    # English: Verify a Chinese selection response still renders an image when flags and IDs are strings.
+    def test_llm_can_select_image_from_localized_string_response(self):
+        with patch(
+            "services.web_search_images.get_llm_json_response",
+            return_value=(
+                '{"show_image": "是", "image_ids": "image-1", '
+                '"alt_texts": {"image-1": "北京故宫的照片"}}'
+            ),
+        ):
+            selections = choose_web_search_images(
+                "请展示北京故宫的照片",
+                _result(),
+                model=SELECTED_MODEL,
+            )
+
+        self.assertEqual(len(selections), 1)
+        self.assertEqual(selections[0]["url"], "https://example.com/images/maple.jpg")
+        self.assertEqual(selections[0]["alt"], "北京故宫的照片")
 
     def test_placeholder_and_site_furniture_candidates_never_reach_the_llm(self):
         # 空の枠になる素材（noimage 等）とロゴは、選定LLMへ渡す前に落とす。
