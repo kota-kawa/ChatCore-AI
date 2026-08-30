@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import Request
 
 from .background_executor import submit_background_task
+from .chat_answer_continuation import stream_final_answer_with_recovery
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
@@ -45,6 +46,7 @@ from .selected_reference_context import (
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
+    LlmOutputLimitError,
     LlmRateLimitError,
     LlmRetryableProviderError,
     LlmServiceError,
@@ -108,6 +110,7 @@ logger = logging.getLogger(__name__)
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
+DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
 DEFAULT_CHAT_AGENT_MAX_STEPS = 10
 CHAT_AGENT_MAX_STEPS_LIMIT = 10
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
@@ -128,7 +131,7 @@ _CANCEL_REQUEST_KEY_PREFIX = "chat_generation:cancel"
 _CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
-_TERMINAL_EVENTS = {"done", "error", "aborted"}
+_TERMINAL_EVENTS = {"done", "error", "aborted", "incomplete"}
 
 
 def _decode_redis_text(raw: Any) -> str | None:
@@ -628,9 +631,17 @@ class ChatGenerationJob:
 
     # 生成中のイベントを発生順にストリーミング（イテレート）する
     # Stream (iterate) generation events in chronological order
-    def iter_events(self, *, after_sequence_id: int = 0) -> Iterator[ChatGenerationEvent]:
+    def iter_events(
+        self,
+        *,
+        after_sequence_id: int = 0,
+        heartbeat_seconds: float = DEFAULT_SSE_HEARTBEAT_SECONDS,
+    ) -> Iterator[ChatGenerationEvent | None]:
         cursor = 0
+        heartbeat_interval = max(float(heartbeat_seconds), 0.0)
+        next_heartbeat_at = time.monotonic() + heartbeat_interval
         while True:
+            heartbeat_due = False
             with self._condition:
                 while (
                     cursor < len(self._events)
@@ -639,11 +650,29 @@ class ChatGenerationJob:
                     cursor += 1
 
                 while cursor >= len(self._events) and not self.is_done:
-                    self._condition.wait(timeout=0.5)
+                    wait_timeout = 0.5
+                    if heartbeat_interval:
+                        wait_timeout = min(
+                            wait_timeout,
+                            max(next_heartbeat_at - time.monotonic(), 0.0),
+                        )
+                    self._condition.wait(timeout=wait_timeout)
+                    if (
+                        heartbeat_interval
+                        and cursor >= len(self._events)
+                        and not self.is_done
+                        and time.monotonic() >= next_heartbeat_at
+                    ):
+                        heartbeat_due = True
+                        next_heartbeat_at = time.monotonic() + heartbeat_interval
+                        break
 
-                if cursor < len(self._events):
+                if heartbeat_due:
+                    event = None
+                elif cursor < len(self._events):
                     event = self._events[cursor]
                     cursor += 1
+                    next_heartbeat_at = time.monotonic() + heartbeat_interval
                 elif self.is_done:
                     break
                 else:
@@ -725,6 +754,9 @@ class ChatGenerationJob:
         self,
         current_messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
+        *,
+        generation_phase: str = "default",
+        discard_partial_on_retry: bool = False,
     ) -> Iterator[str]:
         # 出力開始前の一時的なプロバイダ障害のみ再試行し、内部エラー表示を抑制する。
         # 一度でもチャンクを送出した後は重複出力を避けるため再試行しない。
@@ -735,21 +767,36 @@ class ChatGenerationJob:
         attempt = 0
         while True:
             emitted = False
+            attempt_chunks: list[str] = []
             try:
                 for chunk in get_llm_response_stream(
-                    current_messages, self._model, tools=tools
+                    current_messages,
+                    self._model,
+                    tools=tools,
+                    generation_phase=generation_phase,
                 ):
+                    if self._should_stop():
+                        return
                     emitted = True
-                    yield chunk
+                    if discard_partial_on_retry:
+                        attempt_chunks.append(chunk)
+                        self._pending_stream_chunks[:] = attempt_chunks
+                    else:
+                        yield chunk
+                if discard_partial_on_retry:
+                    self._pending_stream_chunks.clear()
+                    yield from attempt_chunks
                 return
             except LlmRetryableProviderError as exc:
                 if (
-                    emitted
+                    (emitted and not discard_partial_on_retry)
                     or isinstance(exc, LlmRateLimitError)
                     or attempt >= max_retries
                     or self._cancelled
                 ):
                     raise
+                if discard_partial_on_retry:
+                    self._pending_stream_chunks.clear()
                 delay = _llm_stream_retry_delay(exc, attempt)
                 attempt += 1
                 logger.warning(
@@ -933,6 +980,8 @@ class ChatGenerationJob:
         # キャンセル時に保存できるよう、インスタンス側のチャンクリストへ蓄積する。
         # Accumulate into the instance chunk list so a cancel can persist the partial text.
         chunks = self._chunks
+        final_answer_incomplete: BaseException | None = None
+        continuation_count = 0
         last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str, str], WebSearchResult] = {}
@@ -1129,6 +1178,23 @@ class ChatGenerationJob:
             if chunk:
                 publish_completed_answer_step([chunk])
 
+        def stream_final_answer(answer_messages: list[dict[str, Any]]) -> BaseException | None:
+            nonlocal continuation_count
+            result = stream_final_answer_with_recovery(
+                answer_messages,
+                model=self._model,
+                iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
+                    messages,
+                    tools=None,
+                    generation_phase=phase,
+                ),
+                publish_chunk=publish_answer_chunk,
+                publish_event=self._publish,
+                should_stop=self._should_stop,
+            )
+            continuation_count = result.continuation_count
+            return result.error
+
         try:
             # ウェブ検索によるコンテキスト拡張の判定
             # Determine context augmentation using web search
@@ -1242,17 +1308,18 @@ class ChatGenerationJob:
                         if research_phase_used
                         else current_messages
                     )
-                    for chunk in self._iter_llm_stream_with_retry(answer_messages, tools=None):
-                        if self._should_stop():
-                            return
-                        if chunk:
-                            publish_answer_chunk(chunk)
+                    final_answer_incomplete = stream_final_answer(answer_messages)
                     break
 
                 tool_calls_buffer: list[dict[str, Any]] = []
                 step_chunks: list[str] = []
                 self._pending_stream_chunks = step_chunks
-                for chunk in self._iter_llm_stream_with_retry(research_messages, tools=tools):
+                for chunk in self._iter_llm_stream_with_retry(
+                    research_messages,
+                    tools=tools,
+                    generation_phase="research",
+                    discard_partial_on_retry=True,
+                ):
                     if self._should_stop():
                         return
                     if not chunk:
@@ -1263,6 +1330,9 @@ class ChatGenerationJob:
                         tool_calls_buffer.extend(parsed_tool_calls)
                         continue
                     step_chunks.append(chunk)
+
+                if self._should_stop():
+                    return
 
                 if not tool_calls_buffer:
                     self._pending_stream_chunks = []
@@ -1565,14 +1635,7 @@ class ChatGenerationJob:
                     research_summary=research_summary,
                 )
                 answer_stream_started = True
-                for chunk in self._iter_llm_stream_with_retry(
-                    final_answer_messages,
-                    tools=None,
-                ):
-                    if self._should_stop():
-                        return
-                    if chunk:
-                        publish_answer_chunk(chunk)
+                final_answer_incomplete = stream_final_answer(final_answer_messages)
 
             if streaming_citation_buffer:
                 streaming_evidence = combine_web_search_results(
@@ -1669,14 +1732,21 @@ class ChatGenerationJob:
                 separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
                 bot_reply = f"{trace_block}{separator}{bot_reply}"
         latest_user_message = _latest_user_message_text(self._conversation_messages)
-        normalized_response = normalize_response_with_artifact_retry(
-            bot_reply,
-            conversation_messages=current_messages,
-            model=self._model,
-            generate_response=get_llm_response,
-            user_request=latest_user_message,
-            ui_mode=self._ui_mode,
-        )
+        if final_answer_incomplete is not None:
+            normalized_response = normalize_response_with_artifacts(
+                bot_reply,
+                recover_truncated=True,
+                ui_mode=self._ui_mode,
+            )
+        else:
+            normalized_response = normalize_response_with_artifact_retry(
+                bot_reply,
+                conversation_messages=current_messages,
+                model=self._model,
+                generate_response=get_llm_response,
+                user_request=latest_user_message,
+                ui_mode=self._ui_mode,
+            )
         if normalized_response.validation_errors:
             logger.warning(
                 "One or more generated UI artifacts failed validation and were omitted.",
@@ -1791,6 +1861,51 @@ class ChatGenerationJob:
             done_payload["parts"] = message_parts
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
+        if final_answer_incomplete is not None:
+            if isinstance(final_answer_incomplete, LlmOutputLimitError):
+                message = (
+                    "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
+                )
+            else:
+                message = (
+                    "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+                )
+            incomplete_payload = {
+                **done_payload,
+                "message": message,
+                "partial": True,
+                "retryable": (
+                    isinstance(final_answer_incomplete, LlmOutputLimitError)
+                    or is_retryable_llm_error(final_answer_incomplete)
+                ),
+                "continuations": continuation_count,
+            }
+            logger.info(
+                "Chat generation ended with a persisted partial answer.",
+                extra={
+                    "terminal_event": "incomplete",
+                    "model": self._model,
+                    "agent_steps": step_count,
+                    "web_search_count": len(web_search_results),
+                    "continuation_count": continuation_count,
+                    "output_chars": len(bot_reply),
+                    "duration_seconds": round(time.monotonic() - self.started_at, 3),
+                },
+            )
+            self._publish("incomplete", incomplete_payload, done=True)
+            return
+        logger.info(
+            "Chat generation completed.",
+            extra={
+                "terminal_event": "done",
+                "model": self._model,
+                "agent_steps": step_count,
+                "web_search_count": len(web_search_results),
+                "continuation_count": continuation_count,
+                "output_chars": len(bot_reply),
+                "duration_seconds": round(time.monotonic() - self.started_at, 3),
+            },
+        )
         self._publish("done", done_payload, done=True)
 
 
@@ -1831,6 +1946,7 @@ class ChatGenerationService:
         distributed_stream_idle_timeout_seconds: float = (
             DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS
         ),
+        sse_heartbeat_seconds: float = DEFAULT_SSE_HEARTBEAT_SECONDS,
         remote_cancel_timeout_seconds: float = DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS,
         redis_client_getter: Callable[[], Any | None] | None = None,
     ) -> None:
@@ -1840,6 +1956,7 @@ class ChatGenerationService:
             float(distributed_stream_idle_timeout_seconds),
             0.0,
         )
+        self._sse_heartbeat_seconds = max(float(sse_heartbeat_seconds), 0.0)
         self._remote_cancel_timeout_seconds = max(float(remote_cancel_timeout_seconds), 0.0)
         self._redis_client_getter = redis_client_getter
         self._jobs: dict[str, ChatGenerationJob] = {}
@@ -2307,10 +2424,13 @@ return 0
         job_key: str,
         *,
         after_sequence_id: int = 0,
-    ) -> Iterator[ChatGenerationEvent]:
+    ) -> Iterator[ChatGenerationEvent | None]:
         job = self.get_generation_job(job_key)
         if job is not None:
-            yield from job.iter_events(after_sequence_id=after_sequence_id)
+            yield from job.iter_events(
+                after_sequence_id=after_sequence_id,
+                heartbeat_seconds=self._sse_heartbeat_seconds,
+            )
             return
 
         # ローカルにジョブがない場合でも、Redis のイベント履歴があれば再接続として扱う。
@@ -2336,6 +2456,7 @@ return 0
         channel = self._event_channel_name(job_key)
         pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
         idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
+        next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
         try:
             pubsub.subscribe(channel)
 
@@ -2362,9 +2483,17 @@ return 0
                                 time.monotonic() + self._distributed_stream_idle_timeout_seconds
                             )
                             yield deserialized_event
+                            next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
                             if deserialized_event.event in _TERMINAL_EVENTS:
                                 return
                     continue
+
+                if (
+                    self._sse_heartbeat_seconds
+                    and time.monotonic() >= next_heartbeat_at
+                ):
+                    next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
+                    yield None
 
                 if not self.has_active_generation(job_key):
                     # ロック消滅直後は pub/sub の最後の通知がまだ届かないことがあるため、
@@ -2571,7 +2700,7 @@ def iter_generation_events(
     *,
     after_sequence_id: int = 0,
     service: ChatGenerationService | None = None,
-) -> Iterator[ChatGenerationEvent]:
+) -> Iterator[ChatGenerationEvent | None]:
     target = (
         service
         if isinstance(service, ChatGenerationService)

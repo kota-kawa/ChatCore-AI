@@ -75,6 +75,7 @@ from services.chat_state import (
     remember_facts_from_message,
 )
 from services.chat_generation import (
+    DEFAULT_SSE_HEARTBEAT_SECONDS,
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
@@ -265,6 +266,7 @@ def _iter_llm_stream_events(
     job: ChatGenerationJob,
     *,
     after_sequence_id: int = 0,
+    heartbeat_seconds: float = DEFAULT_SSE_HEARTBEAT_SECONDS,
 ) -> Iterator[bytes]:
     """
     バックグラウンドの生成ジョブイベントを Server-Sent Event (SSE) ペイロードとして順次読み込みます。
@@ -272,14 +274,20 @@ def _iter_llm_stream_events(
     """
     # 生成ジョブのイベント列を SSE として配信する
     # Convert background generation job events into SSE payloads.
-    for event in job.iter_events(after_sequence_id=after_sequence_id):
+    for event in job.iter_events(
+        after_sequence_id=after_sequence_id,
+        heartbeat_seconds=heartbeat_seconds,
+    ):
+        if event is None:
+            yield b": keepalive\n\n"
+            continue
         yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
 
 
 # シリアライズされた生成ストリームイベントを Server-Sent Event (SSE) として送出するジェネレータ
 # Yield serialized generation events formatted as SSE byte streams.
 def _iter_serialized_stream_events(
-    events: Iterator[ChatGenerationEvent],
+    events: Iterator[ChatGenerationEvent | None],
 ) -> Iterator[bytes]:
     """
     シリアライズされた生成ストリームイベントを Server-Sent Event (SSE) ペイロードとして送出します。
@@ -287,6 +295,9 @@ def _iter_serialized_stream_events(
     """
     try:
         for event in events:
+            if event is None:
+                yield b": keepalive\n\n"
+                continue
             yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
     except ChatGenerationStreamTimeoutError as exc:
         yield _sse_event("error", exc.payload)

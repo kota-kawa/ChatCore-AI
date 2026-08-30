@@ -189,8 +189,8 @@ class _FakePipeline:
 
 # 日本語: 生成を模擬し、キャンセルされるまでチャンクを送り続けるストリームを返します。
 # English: Return a stream that keeps emitting chunks until the job is cancelled.
-def _endless_stream(messages, model, tools=None):
-    del messages, model, tools
+def _endless_stream(messages, model, tools=None, generation_phase="default"):
+    del messages, model, tools, generation_phase
     for index in range(2000):
         time.sleep(0.01)
         yield f"chunk-{index} "
