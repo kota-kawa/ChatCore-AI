@@ -133,6 +133,32 @@ type ChatMessageListRow =
   | { kind: "load-more" }
   | { kind: "message"; message: UiChatMessage };
 
+// エラー通知行は同じターンの回答行の後ろに追加されるため、アクション対象の最後の
+// アシスタント行を判定するときは除外する。これで保存済み途中回答の「続き」を隠さない。
+// Incomplete turns append an error notice after the saved answer, so error rows must not hide
+// the last actionable assistant row and its continuation affordance.
+export function isLastActionableAssistantMessage(
+  rows: ReadonlyArray<ChatMessageListRow>,
+  index: number,
+): boolean {
+  const row = rows[index];
+  if (
+    !row ||
+    row.kind !== "message" ||
+    row.message.sender !== "assistant" ||
+    row.message.error
+  ) {
+    return false;
+  }
+
+  return !rows.slice(index + 1).some(
+    (candidate) =>
+      candidate.kind === "message" &&
+      candidate.message.sender === "assistant" &&
+      !candidate.message.error,
+  );
+}
+
 // ChatMessageRow に渡す共有プロパティ群。react-window の rowProps 経由で全行に届く。
 // Shared props passed to every ChatMessageRow via react-window's rowProps mechanism.
 type ChatMessageRowProps = {
@@ -324,11 +350,9 @@ function ChatMessageRow({
     );
   }
 
-  // 直後にアシスタントメッセージが無い場合のみ再生成ボタンを表示する。
-  // Show the regenerate button only on the last assistant message in the list.
-  const isLastAssistantMessage =
-    message.sender === "assistant" &&
-    !rows.slice(index + 1).some((r) => r.kind === "message" && r.message.sender === "assistant");
+  // 直後にアクション対象のアシスタントメッセージが無い場合のみ操作ボタンを表示する。
+  // Show action buttons only on the last actionable assistant message in the list.
+  const isLastAssistantMessage = isLastActionableAssistantMessage(rows, index);
   // ストリーミング中はアクションボタンを非表示にして誤操作を防ぐ。
   // Hide action buttons during active streaming to prevent accidental interactions.
   const isActivelyStreaming = Boolean(message.streaming && isGenerating);
