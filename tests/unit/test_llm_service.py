@@ -148,6 +148,184 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(messages[1]["role"], "user")
         self.assertEqual(messages[1]["content"][0]["type"], "tool_result")
 
+    # 日本語: ツール結果の user ターン直後にテキストの user ターンを足しても、Claude 側で
+    # 同ロールが連続せず1ターンへマージされることを検証します。
+    # English: Verify a text user turn appended right after tool results merges into the same
+    # Claude turn instead of producing two consecutive user turns.
+    def test_prepare_claude_messages_merges_consecutive_same_role_turns(self):
+        _, messages = llm._prepare_claude_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "function": {"name": "web_search", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": "{}"},
+                {"role": "user", "content": "answer contract"},
+            ]
+        )
+
+        roles = [message["role"] for message in messages]
+        self.assertEqual(roles, ["assistant", "user"])
+        self.assertEqual(
+            [block["type"] for block in messages[1]["content"]],
+            ["tool_result", "text"],
+        )
+        self.assertEqual(messages[1]["content"][1]["text"], "answer contract")
+
+    # 日本語: 連続するテキストの同ロールも1ターンへまとめられることを検証します。
+    # English: Verify consecutive plain-text turns of the same role are merged as well.
+    def test_prepare_claude_messages_merges_consecutive_text_turns(self):
+        _, messages = llm._prepare_claude_messages(
+            [
+                {"role": "user", "content": "first"},
+                {"role": "user", "content": "second"},
+            ]
+        )
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["content"], "first\n\nsecond")
+
+    # 日本語: 入力（コンテキスト長）超過を出力上限と混同しないことを検証します。継続生成へ
+    # 回すと入力がさらに増えて必ず再失敗するため、別の例外である必要があります。
+    # English: Verify an input/context overflow is never confused with an output limit: routing
+    # it into continuation only grows the request and guarantees another failure.
+    def test_get_claude_response_stream_raises_input_limit_for_context_overflow(self):
+        mock_claude = MagicMock()
+        mock_stream = _MockStream(
+            SimpleNamespace(
+                type="message_delta",
+                delta=SimpleNamespace(stop_reason="model_context_window_exceeded"),
+            ),
+        )
+        mock_claude.messages.create.return_value = mock_stream
+
+        with patch.object(llm, "claude_client", mock_claude):
+            stream = llm.get_claude_response_stream(
+                [{"role": "user", "content": "hello"}],
+                llm.CLAUDE_HAIKU_4_5_MODEL,
+            )
+            with self.assertRaises(llm.LlmInputLimitError):
+                list(stream)
+
+        self.assertTrue(mock_stream.closed)
+
+    # 日本語: OpenAI互換APIが返す context_length_exceeded (400) を入力超過として分類し、
+    # 汎用の「内部エラー」に落とさないことを検証します。
+    # English: Verify an OpenAI-compatible context_length_exceeded (400) is classified as an
+    # input limit rather than collapsing into a generic internal error.
+    def test_provider_error_mapping_detects_context_length_exceeded(self):
+        class _FakeStatusError(Exception):
+            status_code = 400
+            body = {
+                "error": {
+                    "code": "context_length_exceeded",
+                    "message": "This model's maximum context length is 131072 tokens.",
+                }
+            }
+
+        with patch.object(llm, "APIStatusError", _FakeStatusError):
+            mapped = llm._map_provider_exception(
+                _FakeStatusError("bad request"),
+                provider_name="Groq",
+                fallback_message="Groq streaming API call failed.",
+            )
+
+        self.assertIsInstance(mapped, llm.LlmInputLimitError)
+
+    # 日本語: 出力枠がフェーズごとに分かれ、本文を書く回答フェーズが最大になることを検証します。
+    # English: Verify the output budget is split per phase and the answer phase gets the largest.
+    def test_output_token_budget_is_split_by_generation_phase(self):
+        self.assertEqual(
+            llm.max_output_tokens_for_phase("research"),
+            llm.LLM_RESEARCH_MAX_TOKENS,
+        )
+        self.assertEqual(
+            llm.max_output_tokens_for_phase("research_wrapup"),
+            llm.LLM_RESEARCH_MAX_TOKENS,
+        )
+        for phase in ("final_answer", "final_answer_deep", "continuation", "continuation_deep"):
+            self.assertEqual(
+                llm.max_output_tokens_for_phase(phase),
+                llm.LLM_ANSWER_MAX_TOKENS,
+            )
+        self.assertEqual(llm.max_output_tokens_for_phase("default"), llm.LLM_MAX_TOKENS)
+        # 本文を書くフェーズは調査ステップより大きくなければならない。
+        # The answer phase must be larger than a research step.
+        self.assertGreater(llm.LLM_ANSWER_MAX_TOKENS, llm.LLM_RESEARCH_MAX_TOKENS)
+
+    # 日本語: Claudeにも生成フェーズが伝わり、回答フェーズの出力枠が適用されることを検証します。
+    # English: Verify the generation phase reaches Claude so the answer budget applies there too.
+    def test_claude_stream_applies_phase_specific_output_budget(self):
+        mock_claude = MagicMock()
+        mock_claude.messages.create.return_value = _MockStream()
+
+        with patch.object(llm, "claude_client", mock_claude):
+            list(
+                llm.get_llm_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.CLAUDE_HAIKU_4_5_MODEL,
+                    generation_phase="final_answer_deep",
+                )
+            )
+
+        self.assertEqual(
+            mock_claude.messages.create.call_args.kwargs["max_tokens"],
+            llm.LLM_ANSWER_MAX_TOKENS,
+        )
+
+    # 日本語: 出力上限で打ち切られても、収集済みのツール呼び出しを例外より先に流すことを検証します。
+    # English: Verify tool calls collected before an output cut-off are emitted before raising.
+    def test_output_limited_stream_emits_tool_calls_before_raising(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _MockStream(
+            _mock_tool_call_chunk(
+                call_id="call-1",
+                name="web_search",
+                arguments='{"query":"x"}',
+            ),
+            _mock_stream_chunk(None, finish_reason="length"),
+        )
+
+        emitted = []
+        with patch.object(llm, "groq_client", mock_groq):
+            stream = llm.get_groq_response_stream(
+                [{"role": "user", "content": "hello"}],
+                llm.GROQ_MODEL,
+                generation_phase="research",
+            )
+            with self.assertRaises(llm.LlmOutputLimitError):
+                for chunk in stream:
+                    emitted.append(chunk)
+
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(json.loads(emitted[0])[0]["function"]["name"], "web_search")
+
+    # 日本語: 調査を伴うターンの回答フェーズでは、思考量を最小へ落とさないことを検証します。
+    # English: Verify the answer phase of a research turn does not run on the smallest budget.
+    def test_deep_answer_phase_keeps_a_larger_groq_reasoning_budget(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _MockStream(
+            _mock_stream_chunk("answer")
+        )
+
+        with patch.object(llm, "groq_client", mock_groq):
+            list(
+                llm.get_groq_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GROQ_MODEL,
+                    generation_phase="final_answer_deep",
+                )
+            )
+
+        extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
+        self.assertEqual(extra_body["reasoning_effort"], "medium")
+
     def test_model_constants_ignore_model_environment_variables(self):
         with patch.dict(
             llm.os.environ,
