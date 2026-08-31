@@ -2645,8 +2645,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             input_sizes.append(sum(len(str(m.get("content") or "")) for m in messages))
             if attempts["count"] == 1:
                 def rejected():
+                    yield from ()  # pragma: no cover - generator marker
                     raise LlmInputLimitError("too long")
-                    yield  # pragma: no cover - generator marker
 
                 return rejected()
             return iter(["圧縮後に生成した回答"])

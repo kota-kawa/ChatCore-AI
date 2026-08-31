@@ -228,8 +228,8 @@ class FinalAnswerRecoveryTestCase(unittest.TestCase):
 
     def test_input_limit_without_any_output_is_raised_to_the_caller(self):
         def first_pass():
+            yield from ()  # pragma: no cover - generator marker
             raise LlmInputLimitError("too long")
-            yield  # pragma: no cover - generator marker
 
         with self.assertRaises(LlmInputLimitError):
             _run_recovery([first_pass])
