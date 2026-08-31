@@ -92,7 +92,7 @@ backfill を実行し、`--fail-on-pending` が成功することを運用完了
 
 `/api/chat`、`/api/chat_regenerate`、`/api/chat_edit_and_regenerate`、`/api/chat_generation_stream` は同じ SSE 用 Nginx location で処理します。この location は HTTP/1.1、`proxy_buffering off`、`proxy_cache off`、`proxy_read_timeout 3600s` を適用します。アプリは本文イベントがない待機中にイベントIDなしのコメント keepalive を送るため、プロキシは接続を維持できますが、Redis のイベント履歴や再接続カーソルは増えません。
 
-最終回答の継続回数は `LLM_FINAL_ANSWER_MAX_CONTINUATIONS` で設定し、通常構成と Blue/Green 構成の両方からアプリへ渡します。既定値は2、0は無効です。値を増やすと長文の完了率は上がりますが、LLM 呼び出し時間と費用の上限も増えます。
+最終回答の継続回数は `LLM_FINAL_ANSWER_MAX_CONTINUATIONS` で設定し、通常構成と Blue/Green 構成の両方からアプリへ渡します。既定値は3、0は無効です。値を増やすと長文の完了率は上がりますが、LLM 呼び出し時間と費用の上限も増えます。長い調査ターンでは回答契約を会話末尾へ再掲し、入力超過時は古い検索根拠を段階的に圧縮します。
 
 ## 運用時に確認するファイル
 
