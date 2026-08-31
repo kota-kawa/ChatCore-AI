@@ -166,6 +166,14 @@ function ChatMainSectionComponent() {
     notifyAttachmentError,
   });
 
+  // 途中保存された回答の続きを、通常の送信経路でそのまま依頼する。保存済み本文は
+  // すでに履歴の assistant 発話なので、モデルは続きだけを書けばよい。
+  // Ask for the rest of a partially saved answer through the ordinary send path. The saved
+  // body is already the assistant turn in history, so the model only writes the remainder.
+  const handleContinuePartialAnswer = useCallback(() => {
+    handleSendMessage(t("chat.continueAnswerPrompt"));
+  }, [handleSendMessage, t]);
+
   // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
   const chatFooterRef = useChatFooterHeight<HTMLDivElement>();
@@ -727,6 +735,7 @@ function ChatMainSectionComponent() {
             loadOlderChatHistory={loadOlderChatHistory}
             messages={messages}
             onRegenerate={handleRegenerateMessage}
+            onContinue={handleContinuePartialAnswer}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}
             tasks={tasks}

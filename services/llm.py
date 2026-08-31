@@ -87,6 +87,43 @@ CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
 # against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
 # code) mid-stream, so raise the default (well within every provider's 65536 output cap).
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
+# 出力枠はフェーズごとに分ける。単一の上限を全フェーズで共有すると、調査ステップに
+# 過剰な枠を与えたまま、本文を書く最終回答フェーズが足りなくなる。
+# フェーズ別の値は LLM_MAX_TOKENS から派生させない。運用環境が古い LLM_MAX_TOKENS
+# （例: 4096）を残していても、本文を書くフェーズが道連れで枯渇しないようにするため。
+# Split the output budget by phase. One shared cap over-provisions research steps while
+# starving the phase that actually writes the answer. The per-phase values deliberately do
+# not derive from LLM_MAX_TOKENS so that a stale deployment value cannot starve the answer.
+# 調査ステップが書くのはツール呼び出しと1〜2文の内部ノートだけなので、枠は小さくてよい。
+# A research step only emits tool calls and a one-or-two sentence internal note.
+LLM_RESEARCH_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_RESEARCH", 8192)
+# 最終回答と継続は本文そのものを書く。長い調査の後でも1パスで書き切れる枠を確保する。
+# The final answer and its continuations write the body itself, so they need room to finish
+# a long research answer in a single pass.
+LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
+
+# 調査（ツール選択）フェーズと、本文を書く回答フェーズを名前で区別する。
+# Distinguish the tool-selecting research phases from the answer-writing phases by name.
+RESEARCH_GENERATION_PHASES = frozenset({"research", "research_wrapup"})
+ANSWER_GENERATION_PHASES = frozenset(
+    {"final_answer", "continuation", "final_answer_deep", "continuation_deep"}
+)
+# 調査を伴うターンの回答フェーズ。長い調査の後の統合は、そのターンで最も難しい作業なので、
+# 思考量を最小に落としたままにしない。調査のない雑談は従来どおり低遅延を優先する。
+# The answer phase of a turn that did research. Synthesising after a long research phase is
+# the hardest work in the turn, so it must not run on the smallest reasoning budget; a turn
+# with no research keeps the low-latency baseline.
+DEEP_REASONING_PHASES = frozenset({"final_answer_deep", "continuation_deep"})
+
+
+# 生成フェーズに応じた出力トークン上限を返す
+# Return the output-token cap that applies to a generation phase.
+def max_output_tokens_for_phase(generation_phase: str = "default") -> int:
+    if generation_phase in ANSWER_GENERATION_PHASES:
+        return LLM_ANSWER_MAX_TOKENS
+    if generation_phase in RESEARCH_GENERATION_PHASES:
+        return LLM_RESEARCH_MAX_TOKENS
+    return LLM_MAX_TOKENS
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
 # Retry transient connection failures by default; configurable via env var.
@@ -216,6 +253,21 @@ class LlmOutputLimitError(LlmServiceError):
         self.reason = reason
 
 
+class LlmInputLimitError(LlmServiceError):
+    """The provider rejected the request because the input exceeded its context window.
+
+    これは出力上限とは回復方法が正反対である。出力上限は「続きを生成」で回復できるが、
+    入力超過で続きを渡すと入力がさらに増えて必ず再失敗する。回復は入力の圧縮だけ。
+    Recovery is the opposite of an output limit: continuing an output-limited answer works,
+    but feeding the partial answer back after an input overflow only grows the request and
+    fails again. The only recovery is to shrink the input.
+    """
+
+    def __init__(self, message: str, *, reason: str = "input_limit") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 # レート制限によるLLMプロバイダエラーに関する例外クラス。
 # Exception class for LLM provider rate limit errors.
 class LlmRateLimitError(LlmRetryableProviderError):
@@ -291,6 +343,31 @@ def _extract_retry_after_seconds(exc: BaseException) -> int | None:
     return retry_after if retry_after >= 0 else None
 
 
+# プロバイダが返す「入力（コンテキスト長）超過」を、文面と本文から判別する。
+# 各プロバイダで文言もエラーコードも異なるため、既知の表現をまとめて照合する。
+# Detect a provider's input/context-length overflow from its message and body. The wording
+# and error codes differ per provider, so match the known phrasings together.
+_INPUT_LIMIT_ERROR_PATTERN = re.compile(
+    r"context[_ ]length|context[_ ]window|maximum context|too many (?:input )?tokens|"
+    r"input (?:is )?too long|prompt (?:is )?too long|reduce the length of the messages|"
+    r"request too large|exceeds the (?:model|maximum) context",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_input_limit_error(exc: BaseException) -> bool:
+    candidates: list[str] = [str(exc)]
+    for attribute in ("message", "code", "body"):
+        value = getattr(exc, attribute, None)
+        if value is not None:
+            candidates.append(str(value))
+    return any(
+        _INPUT_LIMIT_ERROR_PATTERN.search(candidate)
+        for candidate in candidates
+        if candidate
+    )
+
+
 # 外部OpenAI/Groq/Claudeクライアントの例外をアプリケーション独自のLlmProviderError派生例外にマッピングする
 # Map raw exceptions from OpenAI/Groq/Claude SDKs to application-specific LlmProviderError sub-classes.
 # LLMプロバイダSDK独自の例外を、アプリケーション共通のLLM例外にマッピングします。
@@ -300,8 +377,8 @@ def _map_provider_exception(
     *,
     provider_name: str,
     fallback_message: str,
-) -> LlmProviderError:
-    if isinstance(exc, LlmProviderError):
+) -> LlmServiceError:
+    if isinstance(exc, LlmServiceError):
         return exc
 
     if isinstance(exc, (RateLimitError, AnthropicRateLimitError)):
@@ -328,7 +405,19 @@ def _map_provider_exception(
             )
         if isinstance(status_code, int) and status_code >= 500:
             return LlmUpstreamServiceError(f"{provider_name} API is temporarily unavailable.")
+        # 入力超過は 400／413 で返る。再試行しても同じ入力では必ず失敗するため、
+        # 一時障害ではなく入力側の問題として分類する。
+        # Input overflow arrives as 400/413. Retrying the same input always fails again, so
+        # classify it as an input problem rather than a transient provider failure.
+        if status_code in (400, 413) and _looks_like_input_limit_error(exc):
+            return LlmInputLimitError(
+                f"{provider_name} API rejected the request: input exceeds the context window."
+            )
 
+    if _looks_like_input_limit_error(exc):
+        return LlmInputLimitError(
+            f"{provider_name} API rejected the request: input exceeds the context window."
+        )
     return LlmProviderError(fallback_message)
 
 
@@ -377,10 +466,15 @@ def _raise_invalid_model_error(model_name: str) -> None:
 # Resolve parameter name and value for limiting output tokens based on the model (e.g. max_completion_tokens for OpenAI).
 # モデルファミリーに合わせて、最大トークン数制限を指定する引数辞書を構築します。
 # Construct the keyword arguments dictionary for max token limits based on the model family.
-def _chat_completion_token_limit_kwargs(model_name: str) -> dict[str, int]:
+def _chat_completion_token_limit_kwargs(
+    model_name: str,
+    *,
+    generation_phase: str = "default",
+) -> dict[str, int]:
+    max_tokens = max_output_tokens_for_phase(generation_phase)
     if is_openai_model(model_name):
-        return {"max_completion_tokens": LLM_MAX_TOKENS}
-    return {"max_tokens": LLM_MAX_TOKENS}
+        return {"max_completion_tokens": max_tokens}
+    return {"max_tokens": max_tokens}
 
 
 def _openai_reasoning_kwargs(model_name: str) -> dict[str, Any]:
@@ -404,19 +498,20 @@ def _groq_reasoning_kwargs(
 ) -> dict[str, Any]:
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
-    is_answer_phase = generation_phase in {"final_answer", "continuation"}
+    is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
+    is_deep_phase = generation_phase in DEEP_REASONING_PHASES
     if model_name == QWEN_3_6_27B_MODEL:
         reasoning_options = {
-            "reasoning_effort": "none" if is_answer_phase else "default",
+            "reasoning_effort": "none" if (is_answer_phase and not is_deep_phase) else "default",
             "reasoning_format": "hidden",
         }
     elif model_name in GPT_OSS_MODELS:
         if is_answer_phase:
             reasoning_options = {
-                "reasoning_effort": "low",
+                "reasoning_effort": "medium" if is_deep_phase else "low",
                 "reasoning_format": "hidden",
             }
-        elif generation_phase == "research":
+        elif generation_phase in RESEARCH_GENERATION_PHASES:
             reasoning_options = {
                 "reasoning_effort": "medium",
                 "reasoning_format": "hidden",
@@ -611,6 +706,7 @@ def _get_openai_compatible_response_stream(
     provider_error_message: str,
     tools: list[dict[str, Any]] | None = None,
     reasoning_kwargs: dict[str, Any] | None = None,
+    generation_phase: str = "default",
 ) -> Iterator[str]:
     # OpenAI互換APIのストリーム断片を順次返し、最後に確実に close します。
     # Yield OpenAI-compatible stream deltas and always close the stream.
@@ -625,7 +721,10 @@ def _get_openai_compatible_response_stream(
         request_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": sanitized_messages,
-            **_chat_completion_token_limit_kwargs(model_name),
+            **_chat_completion_token_limit_kwargs(
+                model_name,
+                generation_phase=generation_phase,
+            ),
             **_openai_reasoning_kwargs(model_name),
             **(reasoning_kwargs or {}),
             "stream": True,
@@ -643,9 +742,10 @@ def _get_openai_compatible_response_stream(
                 # Record that output was cut off at the token cap (a main cause of broken
                 # generative UI JSON).
                 logger.warning(
-                    "LLM stream truncated by token limit (model=%s, max_tokens=%s).",
+                    "LLM stream truncated by token limit (model=%s, phase=%s, max_tokens=%s).",
                     model_name,
-                    LLM_MAX_TOKENS,
+                    generation_phase,
+                    max_output_tokens_for_phase(generation_phase),
                 )
                 output_limit_reason = "length"
             delta = choice.delta
@@ -682,11 +782,10 @@ def _get_openai_compatible_response_stream(
                     if arguments:
                         part["function"]["arguments"] += arguments
 
-        if output_limit_reason is not None:
-            raise LlmOutputLimitError(
-                f"LLM output reached the configured token limit for {model_name}.",
-                reason=output_limit_reason,
-            )
+        # 打ち切られたステップでも、すでに要求されたツール呼び出しは先に流す。
+        # 例外を先に投げると、収集済みのツール呼び出しごと捨ててしまう。
+        # Emit the tool calls the model already requested before raising: raising first would
+        # discard the tool calls collected during the truncated step.
         if tool_call_parts:
             yield json.dumps(
                 [
@@ -695,6 +794,11 @@ def _get_openai_compatible_response_stream(
                     if tool_call_parts[index]["function"]["name"]
                 ],
                 ensure_ascii=False,
+            )
+        if output_limit_reason is not None:
+            raise LlmOutputLimitError(
+                f"LLM output reached the configured token limit for {model_name}.",
+                reason=output_limit_reason,
             )
     except LlmServiceError:
         raise
@@ -736,11 +840,38 @@ def get_groq_response_stream(
             model_name,
             generation_phase=generation_phase,
         ),
+        generation_phase=generation_phase,
     )
 
 
 # Claude Messages API向けに会話履歴を変換する
 # Convert conversation history for the Claude Messages API.
+# Claude Messages API はロールが交互に並ぶことを前提とする。ツール結果は user ターンへ
+# 畳まれるため、その直後にテキストの user メッセージを足すと同ロールが連続してしまう。
+# 同ロールが続く場合は1ターンへマージし、テキストは content ブロックとして追加する。
+# The Claude Messages API expects alternating roles. Tool results are folded into a user
+# turn, so appending a text user message right after would produce two consecutive user
+# turns. Merge same-role neighbours into one turn, adding text as a content block.
+def _append_claude_text_message(
+    claude_messages: ConversationMessages,
+    role: str,
+    text_content: str,
+) -> None:
+    if not claude_messages or claude_messages[-1].get("role") != role:
+        claude_messages.append({"role": role, "content": text_content})
+        return
+
+    previous_content = claude_messages[-1].get("content")
+    if isinstance(previous_content, list):
+        if text_content:
+            previous_content.append({"type": "text", "text": text_content})
+        return
+
+    previous_text = "" if previous_content is None else str(previous_content)
+    merged = "\n\n".join(part for part in (previous_text, text_content) if part)
+    claude_messages[-1]["content"] = merged
+
+
 def _prepare_claude_messages(
     conversation_messages: ConversationMessages,
 ) -> tuple[str | None, ConversationMessages]:
@@ -798,14 +929,20 @@ def _prepare_claude_messages(
                         "input": tool_input,
                     }
                 )
-            claude_messages.append({"role": "assistant", "content": blocks})
+            if (
+                claude_messages
+                and claude_messages[-1].get("role") == "assistant"
+                and isinstance(claude_messages[-1].get("content"), list)
+            ):
+                claude_messages[-1]["content"].extend(blocks)
+            else:
+                claude_messages.append({"role": "assistant", "content": blocks})
             continue
 
-        claude_messages.append(
-            {
-                "role": "assistant" if role == "assistant" else "user",
-                "content": text_content,
-            }
+        _append_claude_text_message(
+            claude_messages,
+            "assistant" if role == "assistant" else "user",
+            text_content,
         )
 
     return ("\n\n".join(system_messages) or None), claude_messages
@@ -899,6 +1036,7 @@ def get_claude_response_stream(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> Iterator[str]:
     if claude_client is None:
         raise LlmConfigurationError("ANTHROPIC_API_KEY が未設定です。")
@@ -907,11 +1045,12 @@ def get_claude_response_stream(
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
+    input_limit_reason: str | None = None
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": claude_messages,
-            "max_tokens": LLM_MAX_TOKENS,
+            "max_tokens": max_output_tokens_for_phase(generation_phase),
             "stream": True,
         }
         if system_prompt is not None:
@@ -947,22 +1086,43 @@ def get_claude_response_stream(
             elif event_type == "message_delta":
                 delta = getattr(event, "delta", None)
                 stop_reason = getattr(delta, "stop_reason", None)
-                if stop_reason in {"max_tokens", "model_context_window_exceeded"}:
+                if stop_reason == "max_tokens":
                     logger.warning(
-                        "Claude stream truncated by token limit (model=%s, max_tokens=%s).",
+                        "Claude stream truncated by token limit "
+                        "(model=%s, phase=%s, max_tokens=%s).",
                         model_name,
-                        LLM_MAX_TOKENS,
+                        generation_phase,
+                        max_output_tokens_for_phase(generation_phase),
                     )
                     output_limit_reason = str(stop_reason)
-        if output_limit_reason is not None:
-            raise LlmOutputLimitError(
-                f"Claude output reached its configured limit for {model_name}.",
-                reason=output_limit_reason,
-            )
+                elif stop_reason == "model_context_window_exceeded":
+                    # 入力側の超過。続きを生成すると入力がさらに伸びて必ず再失敗するため、
+                    # 出力上限とは別の例外にして、入力の圧縮で回復させる。
+                    # This is an input overflow. Continuing would only grow the request and
+                    # fail again, so raise a distinct error and recover by shrinking input.
+                    logger.warning(
+                        "Claude stream stopped because the input exceeded the context window "
+                        "(model=%s, phase=%s).",
+                        model_name,
+                        generation_phase,
+                    )
+                    input_limit_reason = str(stop_reason)
+        # 打ち切られたステップでも、すでに要求されたツール呼び出しは先に流す。
+        # Emit the tool calls the model already requested before raising.
         if tool_call_parts:
             yield json.dumps(
                 [tool_call_parts[index] for index in sorted(tool_call_parts)],
                 ensure_ascii=False,
+            )
+        if input_limit_reason is not None:
+            raise LlmInputLimitError(
+                f"Claude rejected the request for {model_name}: input exceeds the context window.",
+                reason=input_limit_reason,
+            )
+        if output_limit_reason is not None:
+            raise LlmOutputLimitError(
+                f"Claude output reached its configured limit for {model_name}.",
+                reason=output_limit_reason,
             )
     except LlmServiceError:
         raise
@@ -1070,6 +1230,7 @@ def get_openai_response_stream(
                 missing_key_message="OPENAI_API_KEY が未設定です。",
                 provider_error_message="OpenAI streaming API call failed.",
                 tools=tools,
+                generation_phase=generation_phase,
             )
             return
 
@@ -1077,7 +1238,7 @@ def get_openai_response_stream(
         with openai_client.responses.stream(
             model=model_name,
             input=sanitized_messages,
-            max_output_tokens=LLM_MAX_TOKENS,
+            max_output_tokens=max_output_tokens_for_phase(generation_phase),
             **_openai_responses_reasoning_kwargs(model_name),
         ) as stream:
             for event in stream:
@@ -1090,9 +1251,11 @@ def get_openai_response_stream(
                     # Record that output was cut off at the token cap (a main cause of
                     # broken generative UI JSON).
                     logger.warning(
-                        "OpenAI Responses stream incomplete (model=%s, max_output_tokens=%s).",
+                        "OpenAI Responses stream incomplete "
+                        "(model=%s, phase=%s, max_output_tokens=%s).",
                         model_name,
-                        LLM_MAX_TOKENS,
+                        generation_phase,
+                        max_output_tokens_for_phase(generation_phase),
                     )
                     response = getattr(event, "response", None)
                     incomplete_details = getattr(response, "incomplete_details", None)
@@ -1297,7 +1460,12 @@ def get_llm_response_stream(
     # Route streaming providers by model name and raise on invalid models.
     validate_model_name(model_name)
     if is_claude_model(model_name):
-        return get_claude_response_stream(conversation_messages, model_name, tools=tools)
+        return get_claude_response_stream(
+            conversation_messages,
+            model_name,
+            tools=tools,
+            generation_phase=generation_phase,
+        )
     if is_groq_model(model_name):
         if generation_phase == "default":
             return get_groq_response_stream(conversation_messages, model_name, tools=tools)

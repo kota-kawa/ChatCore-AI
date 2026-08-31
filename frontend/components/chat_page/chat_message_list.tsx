@@ -24,6 +24,7 @@ import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
 import { GenerativeUiLoader } from "./generative_ui_loader";
 import { MemoSaveActionButton } from "./memo_save_action_button";
+import { ContinueActionButton } from "./continue_action_button";
 import { RegenerateActionButton } from "./regenerate_action_button";
 import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
@@ -132,6 +133,32 @@ type ChatMessageListRow =
   | { kind: "load-more" }
   | { kind: "message"; message: UiChatMessage };
 
+// エラー通知行は同じターンの回答行の後ろに追加されるため、アクション対象の最後の
+// アシスタント行を判定するときは除外する。これで保存済み途中回答の「続き」を隠さない。
+// Incomplete turns append an error notice after the saved answer, so error rows must not hide
+// the last actionable assistant row and its continuation affordance.
+export function isLastActionableAssistantMessage(
+  rows: ReadonlyArray<ChatMessageListRow>,
+  index: number,
+): boolean {
+  const row = rows[index];
+  if (
+    !row ||
+    row.kind !== "message" ||
+    row.message.sender !== "assistant" ||
+    row.message.error
+  ) {
+    return false;
+  }
+
+  return !rows.slice(index + 1).some(
+    (candidate) =>
+      candidate.kind === "message" &&
+      candidate.message.sender === "assistant" &&
+      !candidate.message.error,
+  );
+}
+
 // ChatMessageRow に渡す共有プロパティ群。react-window の rowProps 経由で全行に届く。
 // Shared props passed to every ChatMessageRow via react-window's rowProps mechanism.
 type ChatMessageRowProps = {
@@ -140,6 +167,7 @@ type ChatMessageRowProps = {
   isLoadingOlder: boolean;
   loadOlderChatHistory: () => Promise<void>;
   onRegenerate: () => void;
+  onContinue: () => void;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
@@ -170,6 +198,7 @@ function ChatMessageRow({
   isLoadingOlder,
   loadOlderChatHistory,
   onRegenerate,
+  onContinue,
   editingMessageId,
   onEditStart,
   onEditCancel,
@@ -321,11 +350,9 @@ function ChatMessageRow({
     );
   }
 
-  // 直後にアシスタントメッセージが無い場合のみ再生成ボタンを表示する。
-  // Show the regenerate button only on the last assistant message in the list.
-  const isLastAssistantMessage =
-    message.sender === "assistant" &&
-    !rows.slice(index + 1).some((r) => r.kind === "message" && r.message.sender === "assistant");
+  // 直後にアクション対象のアシスタントメッセージが無い場合のみ操作ボタンを表示する。
+  // Show action buttons only on the last actionable assistant message in the list.
+  const isLastAssistantMessage = isLastActionableAssistantMessage(rows, index);
   // ストリーミング中はアクションボタンを非表示にして誤操作を防ぐ。
   // Hide action buttons during active streaming to prevent accidental interactions.
   const isActivelyStreaming = Boolean(message.streaming && isGenerating);
@@ -368,6 +395,11 @@ function ChatMessageRow({
               }}
             />
           )}
+          {/* 途中保存された回答は、作り直すより続きを書かせるほうが失われる情報がない。 */}
+          {/* For a partial answer, continuing loses nothing, unlike regenerating from scratch. */}
+          {!message.error && message.partial && isLastAssistantMessage && (
+            <ContinueActionButton onContinue={onContinue} disabled={isGenerating} />
+          )}
           {!message.error && isLastAssistantMessage && (
             <RegenerateActionButton
               onRegenerate={onRegenerate}
@@ -396,6 +428,7 @@ type ChatMessageListProps = {
   loadOlderChatHistory: () => Promise<void>;
   messages: UiChatMessage[];
   onRegenerate: () => void;
+  onContinue: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   tasks: NormalizedTask[];
@@ -417,6 +450,7 @@ function ChatMessageListComponent({
   loadOlderChatHistory,
   messages,
   onRegenerate,
+  onContinue,
   onEditAndRegenerate,
   onSwitchBranch,
   tasks,
@@ -514,6 +548,7 @@ function ChatMessageListComponent({
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
+      onContinue,
       editingMessageId,
       onEditStart: handleEditStart,
       onEditCancel: handleEditCancel,
@@ -527,6 +562,7 @@ function ChatMessageListComponent({
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
+      onContinue,
       editingMessageId,
       handleEditStart,
       handleEditCancel,

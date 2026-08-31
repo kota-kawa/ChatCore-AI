@@ -67,6 +67,8 @@ export const enMessages = {
   "chat.new": "New chat", "chat.search": "Search chats", "chat.inputPlaceholder": "Type a message",
   "chat.inputPlaceholderTemporary": "Temporary mode",
   "chat.stop": "Stop generating", "chat.regenerate": "Regenerate response", "chat.copy": "Copy response",
+  "chat.continueAnswer": "Continue the answer",
+  "chat.continueAnswerPrompt": "The previous answer stopped partway. Write only the continuation from where it stopped. Do not repeat what you already wrote, and cover every part of the original request through to the end.",
   "chat.edit": "Edit message", "chat.saveMemo": "Save as memo", "chat.share": "Share chat", "chat.thinking": "Thinking…",
   "chat.loadOlder": "Load earlier messages", "chat.loadingOlder": "Loading", "chat.preparing": "AI is preparing a response",
   "chat.preparingRoom": "Preparing chat…", "chat.messagesLabel": "Chat messages", "chat.newProject": "New project",

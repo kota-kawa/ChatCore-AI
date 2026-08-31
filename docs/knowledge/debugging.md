@@ -58,7 +58,7 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 完了通知と停止通知の競合で二重保存しやすいため、永続化処理をルートへ追加せず `ChatGenerationJob` の一度きり制御を通します。フロントの表示だけを直す場合も、サーバーが返すイベント契約を先に確認します。
 
-長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`web_search_count`、`continuation_count`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は2です。
+長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`llm_turns`、`tool_calls`、`web_search_count`、`continuation_count`、`continuation_stalled`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は3です。`continuation_stalled=true` は継続が重複部分だけで終わった状態なので、本文は保存済みですが完了扱いではありません。
 
 開始経路だけ正常で再生成・再接続だけ切れる場合は、`deploy/chatcore-ai.conf` の4つの SSE 経路が同じ location に入り、`proxy_buffering off` と長い `proxy_read_timeout` が適用されているか確認します。
 

@@ -50,11 +50,27 @@ WEB_SEARCH_DEFAULT_TIMEOUT_SECONDS = 12.0
 WEB_SEARCH_DEFAULT_MAX_RESULTS = 6
 WEB_SEARCH_DEFAULT_MAX_TOKENS = 4096
 WEB_SEARCH_MAX_QUERY_CHARS = 240
-WEB_SEARCH_MAX_CONTEXT_CHARS = 24000
-# 1回答では初回検索が最大1回、エージェントによる追加検索が最大4回発生する。
-# Reserve a bounded share for each message so their combined Web evidence stays <= 24k.
+# 1回答あたりのWeb根拠の絶対上限。実際の予算はツール呼び出し上限から算出するため、
+# ここは「どれだけステップ上限を上げても超えない天井」として機能する。初回検索8,000文字、
+# 最大10回のツール検索4,000文字、タグやJSONの端数2,000文字を収容できる値にする。
+# Absolute ceiling for one answer's web evidence. The working budget is derived from the
+# tool-call limit, so this value is the cap that no step-limit increase can exceed. It covers
+# the initial 8,000 characters, ten 4,000-character tool-search shares, and a 2,000-character margin.
+WEB_SEARCH_MAX_CONTEXT_CHARS = 50000
+# 初回検索とツール検索それぞれの取り分。予算は許可されたツール呼び出し回数分を必ず賄う。
+# 取り分の合計が予算を超えると、後半の検索が「中身ゼロで成功した検索結果」になり、
+# モデルは根拠がないまま回答を書くことになる。
+# Per-message shares. The budget always covers every permitted tool call: if the shares can
+# outrun it, later searches degrade into "successful" results with no content at all and the
+# model writes its answer with no evidence behind them.
 WEB_SEARCH_INITIAL_CONTEXT_MAX_CHARS = 8000
 WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS = 4000
+WEB_SEARCH_DEFAULT_MAX_TOOL_CALLS = 6
+# 初回コンテキストは source ブロックを途中で切らないため、要求上限をわずかに超える。
+# その端数を予算へ足しておかないと、最後のツール実行だけ取り分が削られる。
+# The initial context slightly overruns its requested cap because it never splits a source
+# block. Without room for that remainder the last tool call would get a reduced share.
+WEB_SEARCH_CONTEXT_OVERFLOW_ALLOWANCE = 2000
 # 過去ターンの検索結果をまとめて再注入する際の文字数上限
 # Character budget for re-injecting prior-turn search results in a single context block.
 WEB_SEARCH_PRIOR_CONTEXT_MAX_CHARS = 16000
@@ -254,6 +270,11 @@ class WebSearchDecision:
     freshness: str = ""
     reason: str = ""
     search_language: str = ""
+    # 依頼が必ず答えるべき項目。回答契約へ載せてカバレッジ欠落を防ぐ。任意フィールドで、
+    # プランナーが出さなくても検索判定そのものには影響しない。
+    # Items the request must answer, carried into the answer contract to prevent coverage
+    # gaps. Optional: the search decision itself never depends on it.
+    answer_requirements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -334,6 +355,7 @@ class WebSearchAugmentation:
     result: WebSearchResult | None = None
     status: str = ""
     search_language: str = ""
+    answer_requirements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -495,9 +517,16 @@ def create_web_page_fetch_budget() -> WebPageFetchBudget:
     )
 
 
-def create_web_evidence_context_budget() -> WebEvidenceContextBudget:
-    """Create the Web-evidence context budget used for a single answer."""
-    return WebEvidenceContextBudget()
+def create_web_evidence_context_budget(
+    max_tool_calls: int = WEB_SEARCH_DEFAULT_MAX_TOOL_CALLS,
+) -> WebEvidenceContextBudget:
+    """Create the Web-evidence context budget that covers every permitted tool call."""
+    permitted_calls = max(1, int(max_tool_calls))
+    return WebEvidenceContextBudget(
+        WEB_SEARCH_INITIAL_CONTEXT_MAX_CHARS
+        + permitted_calls * WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
+        + WEB_SEARCH_CONTEXT_OVERFLOW_ALLOWANCE
+    )
 
 
 # Web検索結果（タイトル・スニペット・本文）は外部の信頼できないデータであり、
@@ -834,6 +863,34 @@ def _is_iso_date(value: str) -> bool:
     return year.isdigit() and month.isdigit() and day.isdigit()
 
 
+# プランナーが任意で返す「回答が満たすべき項目」を正規化する。欠落・不正でも検索判定は
+# 成立させ、要件だけを空にする。プランナーは既に修復リトライを持つため、必須項目を
+# 増やして失敗経路を増やさない。
+# Normalize the optional "requirements the answer must satisfy" list. A missing or malformed
+# value leaves the search decision intact and only empties the requirements: the planner
+# already has repair retries, so this must not add another way for it to fail.
+WEB_SEARCH_ANSWER_REQUIREMENT_MAX_ITEMS = 8
+WEB_SEARCH_ANSWER_REQUIREMENT_MAX_CHARS = 300
+
+
+def _normalize_answer_requirements(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        cleaned = _normalize_text(
+            _redact_secretish_text(item),
+            max_chars=WEB_SEARCH_ANSWER_REQUIREMENT_MAX_CHARS,
+        )
+        if cleaned:
+            normalized.append(cleaned)
+        if len(normalized) >= WEB_SEARCH_ANSWER_REQUIREMENT_MAX_ITEMS:
+            break
+    return tuple(normalized)
+
+
 def _parse_decision_payload(
     loaded: dict[str, Any],
     user_message: str,
@@ -855,6 +912,7 @@ def _parse_decision_payload(
     if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
         freshness = ""
     reason = _normalize_text(loaded.get("reason", ""), max_chars=240)
+    answer_requirements = _normalize_answer_requirements(loaded.get("answer_requirements"))
 
     if needs_web_images is True:
         # 画像の有用性はプランナーLLMの意味判断を正とし、文字列一致では推定しない。
@@ -872,6 +930,7 @@ def _parse_decision_payload(
         freshness=freshness,
         reason=reason,
         search_language=search_language,
+        answer_requirements=answer_requirements,
     )
 
 
@@ -910,8 +969,12 @@ _PLANNER_SYSTEM_PROMPT = (
     "- The user only asks for translation, proofreading, summarization, or creative writing (poems, stories)\n"
     "**When in doubt, always run a search.** Confirming the facts by searching is worth more than guessing while information is missing.\n"
     "Output a JSON object only. Schema:\n"
-    '{"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": "search query", "search_language": "Brave Search language code", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that"}\n'
+    '{"decision": "search"|"skip", "should_search": true|false, "needs_web_images": true|false, "query": "search query", "search_language": "Brave Search language code", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "why you decided that", "answer_requirements": ["..."]}\n'
     "Always include needs_web_images. When it is true, decision must be search, should_search must be true, and query must be non-empty.\n"
+    "answer_requirements lists what a complete answer to this request must cover: at most 8 short "
+    "items, written in the user's language, one per distinct thing the user asked for. It is used "
+    "only to keep the final answer complete and never changes the search decision, so omit it or "
+    "leave it empty when the request asks for exactly one thing.\n"
     "Always include search_language when searching. Use a valid supported code and make it match the language of query; if the field is missing or invalid, the application falls back to the user's input language.\n"
     'For the latest information, set freshness to "pd" (within 24 hours) or "pw" (within a week).'
 )
@@ -2695,7 +2758,10 @@ def maybe_augment_messages_with_web_search(
 
     decision = decide_web_search(conversation_messages, model)
     if not decision.should_search or not decision.query:
-        return WebSearchAugmentation(messages=conversation_messages)
+        return WebSearchAugmentation(
+            messages=conversation_messages,
+            answer_requirements=decision.answer_requirements,
+        )
 
     if not os.environ.get("BRAVE_API_KEY", "").strip():
         message = "Web検索が必要ですが、Brave Search APIキーが未設定です。"
@@ -2728,6 +2794,7 @@ def maybe_augment_messages_with_web_search(
                 },
             ),
             status="failed",
+            answer_requirements=decision.answer_requirements,
         )
 
     if publish_event is not None:
@@ -2779,6 +2846,7 @@ def maybe_augment_messages_with_web_search(
                 },
             ),
             status="failed",
+            answer_requirements=decision.answer_requirements,
         )
     except Exception:
         logger.exception("Brave web search failed.")
@@ -2807,6 +2875,7 @@ def maybe_augment_messages_with_web_search(
                 },
             ),
             status="failed",
+            answer_requirements=decision.answer_requirements,
         )
 
     if publish_event is not None:
@@ -2843,6 +2912,7 @@ def maybe_augment_messages_with_web_search(
             ),
             result=None,
             status="no_sources",
+            answer_requirements=decision.answer_requirements,
         )
     if evidence_context_budget is not None:
         evidence_context_budget.consume(len(context_message["content"]))
@@ -2851,4 +2921,5 @@ def maybe_augment_messages_with_web_search(
         result=result,
         status="completed",
         search_language=decision.search_language,
+        answer_requirements=decision.answer_requirements,
     )

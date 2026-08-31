@@ -168,7 +168,11 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         prompt = _build_base_system_prompt(locale="ja")
 
         self.assertIn("real-time web search powered by Brave", prompt)
-        self.assertIn("search-and-review loop allows at most 10 steps", prompt)
+        # ステップ上限は環境変数で変わるため、プロンプトへ固定の数値を書かない。
+        # The step budget is configurable, so the prompt must not hard-code a number.
+        self.assertIn("bounded", prompt)
+        self.assertIn("when the tools stop being offered, answer", prompt)
+        self.assertNotIn("at most 10 steps", prompt)
         self.assertIn("Never ask permission to search or fetch", prompt)
         self.assertIn("never announce a future search or estimated", prompt)
         self.assertIn("Without that context, do not claim current facts were verified", prompt)

@@ -16,7 +16,27 @@ from typing import Any
 from fastapi import Request
 
 from .background_executor import submit_background_task
-from .chat_answer_continuation import stream_final_answer_with_recovery
+from .chat_agent_budget import (
+    DEFAULT_MAX_LLM_TURNS,
+    DEFAULT_MAX_TOOL_CALLS,
+    MAX_LLM_TURNS_LIMIT,
+    MAX_TOOL_CALLS_LIMIT,
+    AgentStepBudget,
+)
+from .chat_answer_continuation import (
+    FinalAnswerContinuationStalledError,
+    looks_like_restarted_answer,
+    splice_restarted_answer,
+    stream_final_answer_with_recovery,
+    strip_continuation_overlap,
+)
+from .chat_generation_telemetry import ChatGenerationTelemetry
+from .chat_input_budget import (
+    compact_tool_messages,
+    estimate_messages_chars,
+    estimate_messages_tokens,
+    get_final_answer_input_token_budget,
+)
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
@@ -46,6 +66,7 @@ from .selected_reference_context import (
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
+    LlmInputLimitError,
     LlmOutputLimitError,
     LlmRateLimitError,
     LlmRetryableProviderError,
@@ -58,6 +79,8 @@ from .chat_research_notes import (
     append_step_note,
     build_final_answer_messages,
     build_research_loop_messages,
+    build_research_wrapup_messages,
+    extract_research_draft,
     parse_research_summary,
     parse_step_note,
     strip_internal_notes,
@@ -111,8 +134,8 @@ JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
-DEFAULT_CHAT_AGENT_MAX_STEPS = 10
-CHAT_AGENT_MAX_STEPS_LIMIT = 10
+DEFAULT_CHAT_AGENT_MAX_STEPS = DEFAULT_MAX_LLM_TURNS + DEFAULT_MAX_TOOL_CALLS
+CHAT_AGENT_MAX_STEPS_LIMIT = MAX_LLM_TURNS_LIMIT + MAX_TOOL_CALLS_LIMIT
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
 # Retry budget and backoff for transient provider failures before any output is emitted.
 DEFAULT_LLM_STREAM_MAX_RETRIES = 2
@@ -174,17 +197,10 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
     }
 
 
-# 環境変数からチャットエージェントの最大実行ステップ数を取得する
-# Retrieve the maximum step count for the chat agent from environment variables
+# 表示用の合計ステップ上限を取得する
+# Retrieve the displayed total step budget.
 def _get_chat_agent_max_steps() -> int:
-    raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
-    if raw is None:
-        return DEFAULT_CHAT_AGENT_MAX_STEPS
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_CHAT_AGENT_MAX_STEPS
-    return min(max(value, 1), CHAT_AGENT_MAX_STEPS_LIMIT)
+    return AgentStepBudget.from_environment().max_steps
 
 
 # 環境変数からLLMストリーミング接続の最大再試行回数を取得する
@@ -365,6 +381,33 @@ def _web_search_result_tool_payload(
     if len(json.dumps(payload, ensure_ascii=False)) > max_chars:
         payload["query"] = ""
         payload["searched_at"] = ""
+
+    # 予算を使い切ると本文もスニペットも残らない。それを "completed" のまま返すと、
+    # モデルは「検索は成功したが何も書いていない」根拠を受け取り、出典IDだけを引用しかねない。
+    # 状態を明示し、追加検索ではなく既存の根拠で答えるよう伝える。
+    # An exhausted budget leaves neither page text nor snippets. Returning that as
+    # "completed" hands the model evidence that succeeded yet says nothing, and invites it to
+    # cite bare source IDs. Say so explicitly and steer it back to the evidence it already has.
+    if detailed_count and not any(
+        item.get("page_text") or item.get("snippets") for item in sources
+    ):
+        payload["status"] = "evidence_truncated"
+        payload["message"] = (
+            "This answer's evidence budget is exhausted, so the source text was omitted. "
+            "Answer from the evidence already gathered and do not request another search."
+        )
+        # The status explanation is added after optional metadata has been trimmed. Keep the
+        # explanation within the requested budget whenever the required evidence IDs leave room;
+        # for an impossibly tiny budget, preserving IDs and the explicit status is safer than
+        # silently returning a misleading successful result.
+        while len(json.dumps(payload, ensure_ascii=False)) > max_chars:
+            message = payload.get("message")
+            if not isinstance(message, str) or not message:
+                break
+            overflow = len(json.dumps(payload, ensure_ascii=False)) - max_chars
+            if len(message) <= overflow + 8:
+                break
+            payload["message"] = f"{message[: len(message) - overflow - 8].rstrip()}..."
     return payload
 
 
@@ -373,6 +416,7 @@ def _budgeted_web_search_result_tool_payload(
     budget: WebEvidenceContextBudget,
     *,
     cached: bool = False,
+    telemetry: ChatGenerationTelemetry | None = None,
 ) -> dict[str, Any]:
     limit = budget.message_limit(WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS)
     payload = _web_search_result_tool_payload(
@@ -381,6 +425,12 @@ def _budgeted_web_search_result_tool_payload(
         max_chars=limit,
     )
     budget.consume(len(json.dumps(payload, ensure_ascii=False)))
+    if telemetry is not None:
+        truncated = payload.get("status") == "evidence_truncated"
+        telemetry.record_evidence_payload(
+            empty=truncated and not payload.get("query"),
+            truncated=truncated,
+        )
     return payload
 
 
@@ -469,11 +519,22 @@ class ChatGenerationJob:
         # Buffer the current model step until tool-call presence is known; use it as a partial
         # response only when the user cancels generation.
         self._pending_stream_chunks: list[str] = []
+        # 調査の締めステップなど、ユーザー向け本文にならない一時バッファであることの印。
+        # Marks a pending buffer that is internal-only and must never be saved as the answer.
+        self._pending_stream_is_internal = False
+        # 継続中に全文を書き直しているかどうか。停止時は全文をそのまま足さず接合する。
+        # Whether a continuation is rewriting the full answer; cancellation must splice it.
+        self._pending_stream_is_rewrite = False
         # Search-image selections are made as soon as search results arrive so a
         # cancellation can still persist images that were already revealed.
         self._selected_web_search_images: list[dict[str, str]] = []
         self._finalize_lock = threading.Lock()
         self._response_persisted = False
+        # 1ターン分の生成テレメトリ。長いステップのターンで「短い（不足生成）」と
+        # 「切れた（打ち切り）」を運用ログから切り分けるために集計する。
+        # Per-turn telemetry so operations can separate under-generation from truncation on
+        # long, many-step turns straight from the structured logs.
+        self._telemetry = ChatGenerationTelemetry(model=model)
         self.response = ""
         self.error_message: str | None = None
         self.started_at = time.monotonic()
@@ -546,11 +607,31 @@ class ChatGenerationJob:
             return
         self._cancelled = True
 
-        if self._pending_stream_chunks:
+        if self._pending_stream_chunks and not self._pending_stream_is_internal:
             # 調査ステップの途中で停止した場合、内部メモが本文として残らないよう取り除く。
             # A stop during a research step must not leave internal notes in the saved body.
             pending_text = strip_internal_notes("".join(self._pending_stream_chunks))
+            existing_text = "".join(self._chunks)
+            # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
+            # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
+            # Use the existing tail as an anchor even if cancellation races the rewrite-mode
+            # flag. The same splice handles normal boundary overlap; the window covers short text.
+            should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
+                existing_text,
+                pending_text,
+            )
+            if should_splice:
+                spliced_pending = splice_restarted_answer(existing_text, pending_text)
+                if spliced_pending is not None:
+                    pending_text = spliced_pending
+                else:
+                    # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+                    # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+                    pending_text = ""
+            else:
+                pending_text = strip_continuation_overlap(existing_text, pending_text)
             self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
             if pending_text:
                 self._chunks.append(pending_text)
                 self._publish("chunk", {"text": pending_text})
@@ -757,6 +838,7 @@ class ChatGenerationJob:
         *,
         generation_phase: str = "default",
         discard_partial_on_retry: bool = False,
+        tolerate_output_limit: bool = False,
     ) -> Iterator[str]:
         # 出力開始前の一時的なプロバイダ障害のみ再試行し、内部エラー表示を抑制する。
         # 一度でもチャンクを送出した後は重複出力を避けるため再試行しない。
@@ -787,6 +869,27 @@ class ChatGenerationJob:
                     self._pending_stream_chunks.clear()
                     yield from attempt_chunks
                 return
+            except LlmOutputLimitError as exc:
+                # 調査ステップが出力上限に当たっただけでターン全体を落とさない。プロバイダは
+                # 例外の前に収集済みのツール呼び出しを流すので、それを使って調査を続ける。
+                # A research step hitting its output cap must not fail the whole turn. The
+                # provider emits the tool calls it collected before raising, so use them and
+                # let the loop carry on.
+                if not tolerate_output_limit:
+                    raise
+                logger.warning(
+                    "Tolerating an output-limited stream and using its partial result "
+                    "(model=%s, phase=%s, reason=%s).",
+                    self._model,
+                    generation_phase,
+                    getattr(exc, "reason", exc.__class__.__name__),
+                )
+                self._telemetry.research_output_limit_recoveries += 1
+                if discard_partial_on_retry:
+                    buffered = list(attempt_chunks)
+                    self._pending_stream_chunks.clear()
+                    yield from buffered
+                return
             except LlmRetryableProviderError as exc:
                 if (
                     (emitted and not discard_partial_on_retry)
@@ -813,10 +916,10 @@ class ChatGenerationJob:
 
     # バックグラウンドスレッドで実行されるチャット応答生成のメインループ
     # The main loop for chat response generation executed in the background thread
-    # 検索系ツールの呼び出しを1件実行し、更新後のステップ数を返す。
+    # 検索系ツールの呼び出しを1件実行する。ステップ会計は共有の予算オブジェクトが持つ。
     # メモ検索と共有プロンプト検索は進行管理が同じなので、1つの実行部を共有する。
-    # Execute one lookup tool call and return the updated step count. The memo and shared
-    # prompt tools share this runner because their step handling is identical.
+    # Execute one lookup tool call. Step accounting lives in the shared budget object. The
+    # memo and shared prompt tools share this runner because their handling is identical.
     def _run_lookup_tool_call(
         self,
         tool_call: dict[str, Any],
@@ -828,10 +931,9 @@ class ChatGenerationJob:
         failure_log_message: str,
         failure_tool_message: str,
         current_messages: list[dict[str, Any]],
-        step_count: int,
-        max_steps: int,
+        budget: AgentStepBudget,
         trace_steps: list[TraceStep] | None = None,
-    ) -> int:
+    ) -> None:
         if search is None:
             current_messages.append(
                 _tool_result_message(
@@ -842,7 +944,7 @@ class ChatGenerationJob:
                     },
                 )
             )
-            return step_count
+            return
 
         args_raw = tool_call.get("function", {}).get("arguments", "{}")
         try:
@@ -863,9 +965,9 @@ class ChatGenerationJob:
                     },
                 )
             )
-            return step_count
+            return
 
-        if max_steps - step_count <= 1:
+        if budget.tool_calls_exhausted:
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -878,12 +980,14 @@ class ChatGenerationJob:
                     },
                 )
             )
-            return step_count
+            return
 
-        step_count += 1
+        step = budget.start_tool_call()
+        self._telemetry.tool_calls = budget.tool_calls
+        self._telemetry.lookup_call_count += 1
         self._publish(
             f"{event_prefix}_started",
-            {"query": query, "step": step_count, "max_steps": max_steps},
+            {"query": query, "step": step, "max_steps": budget.max_steps},
         )
         try:
             payload = search(query)
@@ -898,7 +1002,7 @@ class ChatGenerationJob:
             logger.exception(failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step_count, "max_steps": max_steps},
+                {"query": query, "step": step, "max_steps": budget.max_steps},
             )
             current_messages.append(
                 _tool_result_message(
@@ -921,7 +1025,7 @@ class ChatGenerationJob:
                         query=query,
                     )
                 )
-            return step_count
+            return
 
         # 参照元が「検索できなかった」と返した場合も障害として扱う。0件として通すと、
         # UI もモデルも「該当なし」と伝えてしまう。
@@ -932,7 +1036,7 @@ class ChatGenerationJob:
             logger.warning("%s (status=failed)", failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step_count, "max_steps": max_steps},
+                {"query": query, "step": step, "max_steps": budget.max_steps},
             )
             current_messages.append(_tool_result_message(tool_call, payload))
             if trace_steps is not None:
@@ -947,7 +1051,7 @@ class ChatGenerationJob:
                         query=query,
                     )
                 )
-            return step_count
+            return
 
         self._publish(
             f"{event_prefix}_completed",
@@ -955,8 +1059,8 @@ class ChatGenerationJob:
                 "query": query,
                 "status": status,
                 **{key: int(payload.get(key) or 0) for key in result_counts},
-                "step": step_count,
-                "max_steps": max_steps,
+                "step": step,
+                "max_steps": budget.max_steps,
             },
         )
         current_messages.append(_tool_result_message(tool_call, payload))
@@ -974,7 +1078,7 @@ class ChatGenerationJob:
                     query=query,
                 )
             )
-        return step_count
+        return
 
     def _run(self) -> None:
         # キャンセル時に保存できるよう、インスタンス側のチャンクリストへ蓄積する。
@@ -996,10 +1100,16 @@ class ChatGenerationJob:
             current_messages, self._prior_web_search_results
         )
         suppress_next_generation_started = False
-        max_steps = _get_chat_agent_max_steps()
-        step_count = 0
+        budget = AgentStepBudget.from_environment()
+        telemetry = self._telemetry
         page_fetch_budget = create_web_page_fetch_budget()
-        evidence_context_budget = create_web_evidence_context_budget()
+        # 根拠の予算は許可されたツール実行回数から算出する。予算が回数に足りないと、
+        # 後半の検索が「中身ゼロで成功した検索結果」に化けてモデルを誤誘導する。
+        # Size the evidence budget from the permitted tool calls: a budget that cannot cover
+        # them turns later searches into "successful" results with no content at all.
+        evidence_context_budget = create_web_evidence_context_budget(budget.max_tool_calls)
+        telemetry.evidence_budget_max_chars = evidence_context_budget.max_chars
+        coverage_requirements: tuple[str, ...] = ()
         latest_user_message = _latest_user_message_text(self._conversation_messages)
         selected_web_search_images = self._selected_web_search_images
         revealed_image_indices: list[int] = []
@@ -1178,21 +1288,62 @@ class ChatGenerationJob:
             if chunk:
                 publish_completed_answer_step([chunk])
 
-        def stream_final_answer(answer_messages: list[dict[str, Any]]) -> BaseException | None:
+        def adopt_continuation_buffer(buffer: list[str]) -> None:
+            # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
+            # Hand the continuation pass's undelivered buffer to the job so a stop or a
+            # disconnect still routes it through the persistence path.
+            self._pending_stream_chunks = buffer
+            self._pending_stream_is_rewrite = False
+
+        def set_continuation_buffer_mode(is_rewrite: bool) -> None:
+            # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
+            # Tell the cancellation path when a continuation has switched to a full rewrite.
+            self._pending_stream_is_rewrite = is_rewrite
+
+        def stream_final_answer(
+            answer_messages: list[dict[str, Any]],
+            *,
+            deep_reasoning: bool = False,
+        ) -> BaseException | None:
             nonlocal continuation_count
-            result = stream_final_answer_with_recovery(
-                answer_messages,
-                model=self._model,
-                iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
-                    messages,
-                    tools=None,
-                    generation_phase=phase,
-                ),
-                publish_chunk=publish_answer_chunk,
-                publish_event=self._publish,
-                should_stop=self._should_stop,
-            )
+            try:
+                result = stream_final_answer_with_recovery(
+                    answer_messages,
+                    model=self._model,
+                    iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
+                        messages,
+                        tools=None,
+                        generation_phase=phase,
+                    ),
+                    publish_chunk=publish_answer_chunk,
+                    publish_event=self._publish,
+                    should_stop=self._should_stop,
+                    adopt_buffer=adopt_continuation_buffer,
+                    adopt_buffer_mode=set_continuation_buffer_mode,
+                    answer_phase="final_answer_deep" if deep_reasoning else "final_answer",
+                    continuation_phase=(
+                        "continuation_deep" if deep_reasoning else "continuation"
+                    ),
+                )
+            finally:
+                # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
+                # バッファや書き直しモードを誤って拾わないようにする。
+                # Clear shared state on every exit so later persistence cannot adopt a stale
+                # continuation buffer or rewrite mode.
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             continuation_count = result.continuation_count
+            self._telemetry.continuation_count = result.continuation_count
+            for reason in result.reasons:
+                self._telemetry.record_continuation_reason(reason)
+            self._telemetry.continuation_stalled = result.stalled
+            self._telemetry.continuation_restart_trimmed = result.restart_trimmed
+            if result.error is not None:
+                self._telemetry.first_pass_finish_reason = getattr(
+                    result.error, "reason", result.error.__class__.__name__
+                )
+            else:
+                self._telemetry.first_pass_finish_reason = "stop"
             return result.error
 
         try:
@@ -1224,15 +1375,24 @@ class ChatGenerationJob:
                     )
                 ] = augmentation.result
                 collect_web_search_image_selections(augmentation.result)
-                step_count += 1
+                budget.start_tool_call()
+                telemetry.web_search_count += 1
             elif augmentation.status in {"failed", "no_sources"}:
-                step_count += 1
+                budget.start_tool_call()
                 web_search_trace_steps.append(search_failed_step())
+            telemetry.tool_calls = budget.tool_calls
+            # 依頼が満たすべき項目はプランナー呼び出しへ相乗りして取得済み。追加の
+            # レイテンシなしで回答契約へ載せ、長い調査ターンのカバレッジ欠落を防ぐ。
+            # The requirements the answer must satisfy ride along with the planner call, so
+            # the contract gets them at no extra latency and long turns keep their coverage.
+            coverage_requirements = augmentation.answer_requirements
+            telemetry.coverage_requirement_count = len(coverage_requirements)
             suppress_next_generation_started = augmentation.status == "failed"
             research_phase_used = bool(self._selected_reference_trace) or bool(
                 augmentation.result is not None
                 or augmentation.status in {"failed", "no_sources"}
             )
+            telemetry.research_phase_used = research_phase_used
 
             if self._should_stop():
                 return
@@ -1249,33 +1409,51 @@ class ChatGenerationJob:
                 else None
             )
 
+            # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
+            # Memo lookup does not depend on the web search settings, so either tool alone
+            # is still offered to the model.
+            configured_tools: list[dict[str, Any]] = []
+            if is_web_search_enabled():
+                configured_tools.append(web_search_tool)
+            if personal_knowledge_tool is not None:
+                configured_tools.append(personal_knowledge_tool)
+            if shared_prompt_tool is not None:
+                configured_tools.append(shared_prompt_tool)
+
             # 生成ループ（エージェントステップ）
             # Generation loop (agent steps)
             final_answer_required = False
             answer_stream_started = False
             research_summary: dict[str, Any] | None = None
+            # 完了ノートが取れなかったときに最終回答へ引き継ぐ、モデル自身の下書き。
+            # The model's own draft, carried to the answer pass when no note could be parsed.
+            research_draft = ""
             # 各ステップが任意で書く「次の一手の根拠」。直近分だけを次のステップへ渡す。
             # The optional rationale each step may write for its next move; only the most
             # recent notes are carried into the following step.
             step_notes: list[str] = []
-            while step_count < max_steps:
+            while configured_tools:
                 if self._should_stop():
                     return
+                if budget.research_exhausted:
+                    # 予算切れでツールを引き上げる。ここで打ち切ると完了ノートが無いまま
+                    # 最終回答へ進むため、この後の締めステップで必ずノートを作る。
+                    # The budget withdraws the tools here. Stopping now would enter the answer
+                    # phase with no completion note, so a wrap-up step always writes one.
+                    telemetry.tools_withdrawn_by_budget = True
+                    final_answer_required = True
+                    break
 
-                remaining_steps = max_steps - step_count
-                # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
-                # Memo lookup does not depend on the web search settings, so either tool alone
-                # is still offered to the model.
-                available_tools: list[dict[str, Any]] = []
-                if remaining_steps >= 3:
-                    if is_web_search_enabled():
-                        available_tools.append(web_search_tool)
-                    if personal_knowledge_tool is not None:
-                        available_tools.append(personal_knowledge_tool)
-                    if shared_prompt_tool is not None:
-                        available_tools.append(shared_prompt_tool)
-                allow_tools = bool(available_tools)
-                tools = available_tools if allow_tools else None
+                # 調査ループ自身もツール結果を積み上げるため、最終回答だけでなく次の
+                # ツール選択リクエストの前にも古い根拠を圧縮する。ここで入力超過すると
+                # 締めステップや最終回答へ到達できず、長い調査ターン全体が失われる。
+                # The research loop also accumulates tool results. Compact old evidence before
+                # each next selection request, or an input overflow here would prevent both the
+                # wrap-up and final-answer recovery from ever running.
+                current_messages, _ = compact_tool_messages(
+                    current_messages,
+                    max_tokens=get_final_answer_input_token_budget(),
+                )
                 research_messages = (
                     build_research_loop_messages(
                         current_messages,
@@ -1284,48 +1462,37 @@ class ChatGenerationJob:
                     if research_phase_used
                     else current_messages
                 )
-                llm_step = step_count + 1
+                research_messages, _ = compact_tool_messages(
+                    research_messages,
+                    max_tokens=get_final_answer_input_token_budget(),
+                )
+                llm_step = budget.start_llm_turn()
+                telemetry.llm_turns = budget.llm_turns
 
                 if not suppress_next_generation_started:
                     self._publish(
                         "response_generation_started",
-                        {"step": llm_step, "max_steps": max_steps},
+                        {"step": llm_step, "max_steps": budget.max_steps},
                     )
                 suppress_next_generation_started = False
-                step_count += 1
-
-                if not allow_tools:
-                    # ツールが使えない最終回答ストリームは、ツール呼び出しの有無を待たず即時表示する。
-                    # A tool-free answer stream can be displayed immediately because no later
-                    # tool call can turn its text into intermediate output.
-                    self._pending_stream_chunks = []
-                    answer_stream_started = True
-                    answer_messages = (
-                        build_final_answer_messages(
-                            current_messages,
-                            research_summary=research_summary,
-                        )
-                        if research_phase_used
-                        else current_messages
-                    )
-                    final_answer_incomplete = stream_final_answer(answer_messages)
-                    break
 
                 tool_calls_buffer: list[dict[str, Any]] = []
                 step_chunks: list[str] = []
                 self._pending_stream_chunks = step_chunks
+                self._pending_stream_is_rewrite = False
                 for chunk in self._iter_llm_stream_with_retry(
                     research_messages,
-                    tools=tools,
+                    tools=configured_tools,
                     generation_phase="research",
                     discard_partial_on_retry=True,
+                    tolerate_output_limit=True,
                 ):
                     if self._should_stop():
                         return
                     if not chunk:
                         continue
 
-                    parsed_tool_calls = _parse_tool_calls_chunk(chunk) if allow_tools else None
+                    parsed_tool_calls = _parse_tool_calls_chunk(chunk)
                     if parsed_tool_calls is not None:
                         tool_calls_buffer.extend(parsed_tool_calls)
                         continue
@@ -1336,12 +1503,18 @@ class ChatGenerationJob:
 
                 if not tool_calls_buffer:
                     self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                     if research_phase_used:
                         # ツールなしは調査完了の合図。本文は破棄し、次のツール無効ストリームを
-                        # ユーザー向けの最終回答として表示する。
+                        # ユーザー向けの最終回答として表示する。ノートを読めなかった場合だけ、
+                        # 統合作業を失わないように下書きとして引き継ぐ。
                         # No tool call means the research loop is complete. Discard this draft and
-                        # use the next tool-free stream for the user-facing final answer.
+                        # use the next tool-free stream for the user-facing final answer. Only when
+                        # the note cannot be read is the draft carried on, so the synthesis the
+                        # model already performed is not thrown away.
                         research_summary = parse_research_summary(step_chunks)
+                        if research_summary is None:
+                            research_draft = extract_research_draft(step_chunks)
                         final_answer_required = True
                     else:
                         # 検索を一度も使わない通常回答は、最初のストリームをそのまま表示する。
@@ -1357,7 +1530,9 @@ class ChatGenerationJob:
                 # system message.
                 append_step_note(step_notes, parse_step_note(step_chunks))
                 self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
                 research_phase_used = True
+                telemetry.research_phase_used = True
 
                 normalized_tool_calls = [
                     _normalize_tool_call(tool_call, step=llm_step, index=index)
@@ -1378,7 +1553,7 @@ class ChatGenerationJob:
                         func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
                         and self._personal_knowledge_search is not None
                     ):
-                        step_count = self._run_lookup_tool_call(
+                        self._run_lookup_tool_call(
                             tc,
                             tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
                             search=self._personal_knowledge_search,
@@ -1387,8 +1562,7 @@ class ChatGenerationJob:
                             failure_log_message="Memo / context search via tool call failed.",
                             failure_tool_message="Memo and My Context search failed.",
                             current_messages=current_messages,
-                            step_count=step_count,
-                            max_steps=max_steps,
+                            budget=budget,
                             trace_steps=web_search_trace_steps,
                         )
                         continue
@@ -1397,7 +1571,7 @@ class ChatGenerationJob:
                         func_name == SHARED_PROMPT_TOOL_NAME
                         and self._shared_prompt_search is not None
                     ):
-                        step_count = self._run_lookup_tool_call(
+                        self._run_lookup_tool_call(
                             tc,
                             tool_name=SHARED_PROMPT_TOOL_NAME,
                             search=self._shared_prompt_search,
@@ -1406,8 +1580,7 @@ class ChatGenerationJob:
                             failure_log_message="Shared prompt search via tool call failed.",
                             failure_tool_message="Shared prompt search failed.",
                             current_messages=current_messages,
-                            step_count=step_count,
-                            max_steps=max_steps,
+                            budget=budget,
                             trace_steps=web_search_trace_steps,
                         )
                         continue
@@ -1447,7 +1620,7 @@ class ChatGenerationJob:
                         )
                         continue
 
-                    if max_steps - step_count <= 1:
+                    if budget.tool_calls_exhausted:
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1462,7 +1635,8 @@ class ChatGenerationJob:
                         )
                         continue
 
-                    step_count += 1
+                    search_step_index = budget.start_tool_call()
+                    telemetry.tool_calls = budget.tool_calls
                     query_text = str(query)
                     freshness_text = str(freshness or "")
                     search_key = _normalized_search_key(
@@ -1477,8 +1651,8 @@ class ChatGenerationJob:
                         {
                             "query": query_text,
                             "reason": "Model-requested search",
-                            "step": step_count,
-                            "max_steps": max_steps,
+                            "step": search_step_index,
+                            "max_steps": budget.max_steps,
                             "cached": cached_result is not None,
                         },
                     )
@@ -1494,12 +1668,13 @@ class ChatGenerationJob:
                             {
                                 "query": cached_result.query,
                                 "source_count": len(cached_result.sources),
-                                "step": step_count,
-                                "max_steps": max_steps,
+                                "step": search_step_index,
+                                "max_steps": budget.max_steps,
                                 "cached": True,
                             },
                         )
                         collect_web_search_image_selections(cached_result)
+                        telemetry.cached_web_search_count += 1
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1507,6 +1682,7 @@ class ChatGenerationJob:
                                     cached_result,
                                     evidence_context_budget,
                                     cached=True,
+                                    telemetry=telemetry,
                                 ),
                             )
                         )
@@ -1530,13 +1706,14 @@ class ChatGenerationJob:
                         )
                         if result.has_sources:
                             web_search_results.append(result)
+                        telemetry.web_search_count += 1
                         self._publish(
                             "web_search_completed",
                             {
                                 "query": result.query,
                                 "source_count": len(result.sources),
-                                "step": step_count,
-                                "max_steps": max_steps,
+                                "step": search_step_index,
+                                "max_steps": budget.max_steps,
                                 "cached": False,
                             },
                         )
@@ -1547,6 +1724,7 @@ class ChatGenerationJob:
                                 _budgeted_web_search_result_tool_payload(
                                     result,
                                     evidence_context_budget,
+                                    telemetry=telemetry,
                                 ),
                             )
                         )
@@ -1569,8 +1747,8 @@ class ChatGenerationJob:
                                 "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
                                 "message": message,
                                 "retry_after_seconds": exc.retry_after_seconds,
-                                "step": step_count,
-                                "max_steps": max_steps,
+                                "step": search_step_index,
+                                "max_steps": budget.max_steps,
                             },
                         )
                         current_messages.append(
@@ -1598,8 +1776,8 @@ class ChatGenerationJob:
                                 "query": query_text,
                                 "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
                                 "message": "Web検索に失敗しました。検索なしで回答を続けます。",
-                                "step": step_count,
-                                "max_steps": max_steps,
+                                "step": search_step_index,
+                                "max_steps": budget.max_steps,
                             },
                         )
                         current_messages.append(
@@ -1618,24 +1796,133 @@ class ChatGenerationJob:
                 # the evidence collected so far.
                 final_answer_required = True
 
+            # ツール予算切れで打ち切ると、モデルは完了ノートを書く機会を得られない。
+            # ノート不在のまま最終回答へ進むと、長い調査の要件が丸ごと落ちるため、
+            # 締めのステップを1回だけ挟んでノートを必ず作る。
+            # Being cut off at the tool budget denies the model the chance to write its
+            # completion note. Entering the answer phase without one drops the requirements a
+            # long research turn gathered, so run exactly one wrap-up step to produce it.
+            if (
+                telemetry.tools_withdrawn_by_budget
+                and research_phase_used
+                and final_answer_required
+                and research_summary is None
+                and not self._should_stop()
+            ):
+                self._publish(
+                    "response_generation_started",
+                    {
+                        "step": budget.step + 1,
+                        "max_steps": budget.max_steps,
+                        "phase": "research_wrapup",
+                    },
+                )
+                wrapup_chunks: list[str] = []
+                # 締めステップの出力は完了ノートだけで、ユーザー向け本文ではない。
+                # 停止時に本文として保存されないよう、内部バッファとして印を付ける。
+                # The wrap-up emits only the completion note, never user-facing prose, so mark
+                # the buffer internal to keep a stop from persisting it as the answer.
+                self._pending_stream_chunks = wrapup_chunks
+                self._pending_stream_is_internal = True
+                self._pending_stream_is_rewrite = False
+                try:
+                    wrapup_messages, _ = compact_tool_messages(
+                        build_research_wrapup_messages(current_messages),
+                        max_tokens=get_final_answer_input_token_budget(),
+                    )
+                    for chunk in self._iter_llm_stream_with_retry(
+                        wrapup_messages,
+                        tools=None,
+                        generation_phase="research_wrapup",
+                        discard_partial_on_retry=True,
+                        tolerate_output_limit=True,
+                    ):
+                        if self._should_stop():
+                            return
+                        if chunk:
+                            wrapup_chunks.append(chunk)
+                finally:
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_internal = False
+                    self._pending_stream_is_rewrite = False
+                telemetry.research_wrapup_used = True
+                research_summary = parse_research_summary(wrapup_chunks)
+                if research_summary is None and not research_draft:
+                    research_draft = extract_research_draft(wrapup_chunks)
+
             if final_answer_required:
                 self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
                 if not suppress_next_generation_started:
                     self._publish(
                         "response_generation_started",
                         {
-                            "step": step_count + 1,
-                            "max_steps": max_steps,
+                            "step": budget.step + 1,
+                            "max_steps": budget.max_steps,
                             "phase": "final_answer",
                         },
                     )
                 suppress_next_generation_started = False
-                final_answer_messages = build_final_answer_messages(
-                    current_messages,
-                    research_summary=research_summary,
+                telemetry.research_summary_present = research_summary is not None
+                telemetry.research_draft_forwarded = bool(research_draft)
+                final_answer_messages = (
+                    build_final_answer_messages(
+                        current_messages,
+                        research_summary=research_summary,
+                        user_request=latest_user_message,
+                        coverage_requirements=coverage_requirements,
+                        research_draft=research_draft,
+                    )
+                    if research_phase_used
+                    else current_messages
+                )
+                # 送る前に入力量を見積もり、超過しそうなら古い根拠から縮める。
+                # 超過してから直すとターンごと「内部エラー」で失われる。
+                # Estimate the request before sending and shrink the oldest evidence if it is
+                # about to overflow: recovering after the fact loses the whole turn.
+                final_answer_messages, compacted = compact_tool_messages(
+                    final_answer_messages,
+                    max_tokens=get_final_answer_input_token_budget(),
+                )
+                telemetry.final_answer_input_tokens = estimate_messages_tokens(
+                    final_answer_messages
+                )
+                telemetry.final_answer_input_chars = estimate_messages_chars(
+                    final_answer_messages
                 )
                 answer_stream_started = True
-                final_answer_incomplete = stream_final_answer(final_answer_messages)
+                try:
+                    final_answer_incomplete = stream_final_answer(
+                        final_answer_messages,
+                        deep_reasoning=research_phase_used,
+                    )
+                except LlmInputLimitError:
+                    # 見積もりが外れて実際に超過した場合の最後の砦。根拠を最小まで削って
+                    # 一度だけやり直す。ここで諦めると回答が丸ごと失われる。
+                    # Last resort when the estimate was wrong and the provider still refused:
+                    # compact the evidence to the minimum and retry exactly once, because
+                    # giving up here loses the answer entirely.
+                    if chunks:
+                        raise
+                    logger.warning(
+                        "Retrying the final answer after an input-limit rejection.",
+                        extra={"model": self._model},
+                    )
+                    telemetry.input_limit_recoveries += 1
+                    final_answer_messages, _ = compact_tool_messages(
+                        final_answer_messages,
+                        max_tokens=1,
+                    )
+                    telemetry.final_answer_input_tokens = estimate_messages_tokens(
+                        final_answer_messages
+                    )
+                    telemetry.final_answer_input_chars = estimate_messages_chars(
+                        final_answer_messages
+                    )
+                    final_answer_incomplete = stream_final_answer(
+                        final_answer_messages,
+                        deep_reasoning=research_phase_used,
+                    )
 
             if streaming_citation_buffer:
                 streaming_evidence = combine_web_search_results(
@@ -1687,6 +1974,23 @@ class ChatGenerationJob:
             self._handle_error(
                 error_message,
                 payload,
+                invoke_error_callback=not chunks,
+            )
+            return
+        except LlmInputLimitError:
+            if self._cancelled:
+                return
+            logger.warning(
+                "Chat generation stopped because the request exceeded the model context window.",
+                extra=self._telemetry.as_log_extra(),
+            )
+            error_message = (
+                "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
+                "質問を分けるか、参照を減らして再試行してください。"
+            )
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": True},
                 invoke_error_callback=not chunks,
             )
             return
@@ -1862,9 +2166,16 @@ class ChatGenerationJob:
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
         if final_answer_incomplete is not None:
-            if isinstance(final_answer_incomplete, LlmOutputLimitError):
+            if isinstance(final_answer_incomplete, FinalAnswerContinuationStalledError):
+                message = "回答の続きを生成できず、途中までの回答を保存しました。"
+            elif isinstance(final_answer_incomplete, LlmOutputLimitError):
                 message = (
                     "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
+                )
+            elif isinstance(final_answer_incomplete, LlmInputLimitError):
+                message = (
+                    "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
+                    "途中までの回答を保存しました。"
                 )
             else:
                 message = (
@@ -1880,30 +2191,28 @@ class ChatGenerationJob:
                 ),
                 "continuations": continuation_count,
             }
+            self._telemetry.final_answer_output_chars = len(bot_reply)
+            self._telemetry.evidence_budget_consumed = evidence_context_budget.consumed
             logger.info(
                 "Chat generation ended with a persisted partial answer.",
                 extra={
                     "terminal_event": "incomplete",
-                    "model": self._model,
-                    "agent_steps": step_count,
-                    "web_search_count": len(web_search_results),
-                    "continuation_count": continuation_count,
                     "output_chars": len(bot_reply),
                     "duration_seconds": round(time.monotonic() - self.started_at, 3),
+                    **self._telemetry.as_log_extra(),
                 },
             )
             self._publish("incomplete", incomplete_payload, done=True)
             return
+        self._telemetry.final_answer_output_chars = len(bot_reply)
+        self._telemetry.evidence_budget_consumed = evidence_context_budget.consumed
         logger.info(
             "Chat generation completed.",
             extra={
                 "terminal_event": "done",
-                "model": self._model,
-                "agent_steps": step_count,
-                "web_search_count": len(web_search_results),
-                "continuation_count": continuation_count,
                 "output_chars": len(bot_reply),
                 "duration_seconds": round(time.monotonic() - self.started_at, 3),
+                **self._telemetry.as_log_extra(),
             },
         )
         self._publish("done", done_payload, done=True)
