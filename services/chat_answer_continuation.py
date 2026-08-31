@@ -32,6 +32,16 @@ FINAL_ANSWER_RESTART_PREFIX_CHARS = 160
 FINAL_ANSWER_RESTART_ANCHOR_CHARS = (320, 200, 120, 64)
 
 
+class FinalAnswerContinuationStalledError(LlmOutputLimitError):
+    """A continuation completed without adding any user-visible answer text."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Final answer continuation produced no new text.",
+            reason="continuation_stalled",
+        )
+
+
 @dataclass(frozen=True)
 class FinalAnswerRecoveryResult:
     error: LlmServiceError | None
@@ -149,13 +159,15 @@ def stream_final_answer_with_recovery(
     publish_event: Callable[[str, dict[str, Any]], None],
     should_stop: Callable[[], bool],
     adopt_buffer: Callable[[list[str]], None] | None = None,
+    adopt_buffer_mode: Callable[[bool], None] | None = None,
     answer_phase: str = "final_answer",
     continuation_phase: str = "continuation",
 ) -> FinalAnswerRecoveryResult:
     """Stream every pass live, buffering only enough of a continuation to de-duplicate it.
 
     `adopt_buffer` receives the live buffer list for each continuation pass so a stop or a
-    disconnect can still persist text that has not been published yet.
+    disconnect can still persist text that has not been published yet. `adopt_buffer_mode`
+    reports when that buffer contains a full answer rewrite rather than a normal continuation.
     """
     raw_answer_chunks: list[str] = []
     continuation_count = 0
@@ -180,6 +192,19 @@ def stream_final_answer_with_recovery(
             stalled,
             restart_trimmed,
         )
+
+    def stalled_result() -> FinalAnswerRecoveryResult:
+        nonlocal stalled
+        stalled = True
+        error = FinalAnswerContinuationStalledError()
+        reasons.append(_continuation_reason(error))
+        logger.warning(
+            "Stopping continuation because the last pass produced no new text "
+            "(model=%s, continuation=%s).",
+            model,
+            continuation_count,
+        )
+        return result(error)
 
     def flush_pass(state: _ContinuationPass) -> None:
         """Publish a buffered opening (or a spliced rewrite) exactly once."""
@@ -215,8 +240,11 @@ def stream_final_answer_with_recovery(
 
     while True:
         state = _ContinuationPass()
-        if continuation_count and adopt_buffer is not None:
-            adopt_buffer(state.buffer)
+        if continuation_count:
+            if adopt_buffer is not None:
+                adopt_buffer(state.buffer)
+            if adopt_buffer_mode is not None:
+                adopt_buffer_mode(False)
         chars_before_pass = len("".join(raw_answer_chunks))
         try:
             for chunk in iter_stream(request_messages, phase):
@@ -240,6 +268,8 @@ def stream_final_answer_with_recovery(
                     # 書き直しは全文が揃うまで配信しない。途中まで流すと本文が二重化する。
                     # A rewrite must not stream: publishing part of it duplicates the answer.
                     state.full_buffer_mode = True
+                    if adopt_buffer_mode is not None:
+                        adopt_buffer_mode(True)
                 if state.full_buffer_mode:
                     continue
                 if state.buffered_chars >= FINAL_ANSWER_CONTINUATION_OVERLAP_CHARS:
@@ -264,14 +294,7 @@ def stream_final_answer_with_recovery(
             if continuation_count and len("".join(raw_answer_chunks)) <= chars_before_pass:
                 # 1文字も進まない継続は、繰り返しても費用とレイテンシだけが増える。
                 # A continuation that adds nothing only costs money and latency if repeated.
-                stalled = True
-                logger.warning(
-                    "Stopping continuation because the last pass produced no new text "
-                    "(model=%s, continuation=%s).",
-                    model,
-                    continuation_count,
-                )
-                return result(exc)
+                return stalled_result()
             if continuation_count >= max_continuations or should_stop():
                 return result(exc)
             continuation_count += 1
@@ -306,4 +329,10 @@ def stream_final_answer_with_recovery(
             raise
 
         flush_pass(state)
+        if continuation_count and len("".join(raw_answer_chunks)) <= chars_before_pass:
+            # 正常終了でも重複部分しか返さないモデルがある。成功扱いにすると、部分回答を
+            # 継続できず、UIにも「ここまでで完了」と誤って伝わる。
+            # A model can finish normally after returning only the repeated boundary. Treating
+            # that as success loses the continuation affordance and falsely signals completion.
+            return stalled_result()
         return result(None)

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from services.chat_agent_budget import AgentStepBudget, get_max_llm_turns, get_max_tool_calls
 from services.chat_answer_continuation import (
     FINAL_ANSWER_CONTINUATION_OVERLAP_CHARS,
+    FinalAnswerContinuationStalledError,
     get_final_answer_max_continuations,
     looks_like_restarted_answer,
     splice_restarted_answer,
@@ -26,7 +27,13 @@ from services.llm import (
 )
 
 
-def _run_recovery(passes, *, adopt_buffer=None, should_stop=None):
+def _run_recovery(
+    passes,
+    *,
+    adopt_buffer=None,
+    adopt_buffer_mode=None,
+    should_stop=None,
+):
     """Drive the recovery helper over scripted passes and capture what it published."""
     published: list[str] = []
     events: list[tuple[str, dict]] = []
@@ -44,6 +51,7 @@ def _run_recovery(passes, *, adopt_buffer=None, should_stop=None):
         publish_event=lambda name, payload: events.append((name, payload)),
         should_stop=should_stop or (lambda: False),
         adopt_buffer=adopt_buffer,
+        adopt_buffer_mode=adopt_buffer_mode,
     )
     return result, "".join(published), published, events
 
@@ -168,6 +176,41 @@ class FinalAnswerRecoveryTestCase(unittest.TestCase):
         self.assertEqual(text, "same text")
         self.assertTrue(result.stalled)
         self.assertEqual(result.continuation_count, 1)
+
+    # 日本語: 出力上限ではなく正常終了した継続が境界重複だけを返しても、成功扱いにせず
+    # 部分回答としてUIへ渡します。これがないと「続き」ボタンを表示できません。
+    # English: A normally finished continuation that returns only the repeated boundary is still
+    # a partial answer, not success, so the UI can offer the continuation action.
+    def test_normally_finished_continuation_without_progress_is_stalled(self):
+        def first_pass():
+            yield "same text"
+            raise LlmOutputLimitError("limit", reason="max_output_tokens")
+
+        result, text, _, _ = _run_recovery([first_pass, lambda: ["same text"]])
+
+        self.assertIsInstance(result.error, FinalAnswerContinuationStalledError)
+        self.assertTrue(result.stalled)
+        self.assertEqual(result.continuation_count, 1)
+        self.assertEqual(text, "same text")
+        self.assertIn("continuation_stalled", result.reasons)
+
+    def test_rewrite_buffer_mode_is_reported_to_the_owner(self):
+        body = "".join(f"段落{index}の本文です。" for index in range(60))
+        modes: list[bool] = []
+
+        def first_pass():
+            yield body
+            raise LlmOutputLimitError("limit", reason="max_output_tokens")
+
+        result, text, _, _ = _run_recovery(
+            [first_pass, lambda: [body, "結論"]],
+            adopt_buffer_mode=modes.append,
+        )
+
+        self.assertIsNone(result.error)
+        self.assertEqual(text, body + "結論")
+        self.assertIn(False, modes)
+        self.assertIn(True, modes)
 
     # 日本語: 入力超過を継続へ回すと入力がさらに増えて必ず再失敗するため、継続しません。
     # English: Continuing an input overflow grows the request and always fails again.

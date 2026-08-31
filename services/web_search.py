@@ -51,10 +51,12 @@ WEB_SEARCH_DEFAULT_MAX_RESULTS = 6
 WEB_SEARCH_DEFAULT_MAX_TOKENS = 4096
 WEB_SEARCH_MAX_QUERY_CHARS = 240
 # 1回答あたりのWeb根拠の絶対上限。実際の予算はツール呼び出し上限から算出するため、
-# ここは「どれだけステップ上限を上げても超えない天井」として機能する。
+# ここは「どれだけステップ上限を上げても超えない天井」として機能する。初回検索8,000文字、
+# 最大10回のツール検索4,000文字、タグやJSONの端数2,000文字を収容できる値にする。
 # Absolute ceiling for one answer's web evidence. The working budget is derived from the
-# tool-call limit, so this value is the cap that no step-limit increase can exceed.
-WEB_SEARCH_MAX_CONTEXT_CHARS = 40000
+# tool-call limit, so this value is the cap that no step-limit increase can exceed. It covers
+# the initial 8,000 characters, ten 4,000-character tool-search shares, and a 2,000-character margin.
+WEB_SEARCH_MAX_CONTEXT_CHARS = 50000
 # 初回検索とツール検索それぞれの取り分。予算は許可されたツール呼び出し回数分を必ず賄う。
 # 取り分の合計が予算を超えると、後半の検索が「中身ゼロで成功した検索結果」になり、
 # モデルは根拠がないまま回答を書くことになる。

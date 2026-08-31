@@ -23,7 +23,13 @@ from .chat_agent_budget import (
     MAX_TOOL_CALLS_LIMIT,
     AgentStepBudget,
 )
-from .chat_answer_continuation import stream_final_answer_with_recovery
+from .chat_answer_continuation import (
+    FinalAnswerContinuationStalledError,
+    looks_like_restarted_answer,
+    splice_restarted_answer,
+    stream_final_answer_with_recovery,
+    strip_continuation_overlap,
+)
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_input_budget import (
     compact_tool_messages,
@@ -390,6 +396,18 @@ def _web_search_result_tool_payload(
             "This answer's evidence budget is exhausted, so the source text was omitted. "
             "Answer from the evidence already gathered and do not request another search."
         )
+        # The status explanation is added after optional metadata has been trimmed. Keep the
+        # explanation within the requested budget whenever the required evidence IDs leave room;
+        # for an impossibly tiny budget, preserving IDs and the explicit status is safer than
+        # silently returning a misleading successful result.
+        while len(json.dumps(payload, ensure_ascii=False)) > max_chars:
+            message = payload.get("message")
+            if not isinstance(message, str) or not message:
+                break
+            overflow = len(json.dumps(payload, ensure_ascii=False)) - max_chars
+            if len(message) <= overflow + 8:
+                break
+            payload["message"] = f"{message[: len(message) - overflow - 8].rstrip()}..."
     return payload
 
 
@@ -504,6 +522,9 @@ class ChatGenerationJob:
         # 調査の締めステップなど、ユーザー向け本文にならない一時バッファであることの印。
         # Marks a pending buffer that is internal-only and must never be saved as the answer.
         self._pending_stream_is_internal = False
+        # 継続中に全文を書き直しているかどうか。停止時は全文をそのまま足さず接合する。
+        # Whether a continuation is rewriting the full answer; cancellation must splice it.
+        self._pending_stream_is_rewrite = False
         # Search-image selections are made as soon as search results arrive so a
         # cancellation can still persist images that were already revealed.
         self._selected_web_search_images: list[dict[str, str]] = []
@@ -590,7 +611,27 @@ class ChatGenerationJob:
             # 調査ステップの途中で停止した場合、内部メモが本文として残らないよう取り除く。
             # A stop during a research step must not leave internal notes in the saved body.
             pending_text = strip_internal_notes("".join(self._pending_stream_chunks))
+            existing_text = "".join(self._chunks)
+            # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
+            # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
+            # Use the existing tail as an anchor even if cancellation races the rewrite-mode
+            # flag. The same splice handles normal boundary overlap; the window covers short text.
+            should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
+                existing_text,
+                pending_text,
+            )
+            if should_splice:
+                spliced_pending = splice_restarted_answer(existing_text, pending_text)
+                if spliced_pending is not None:
+                    pending_text = spliced_pending
+                else:
+                    # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+                    # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+                    pending_text = ""
+            else:
+                pending_text = strip_continuation_overlap(existing_text, pending_text)
             self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
             if pending_text:
                 self._chunks.append(pending_text)
                 self._publish("chunk", {"text": pending_text})
@@ -1252,6 +1293,12 @@ class ChatGenerationJob:
             # Hand the continuation pass's undelivered buffer to the job so a stop or a
             # disconnect still routes it through the persistence path.
             self._pending_stream_chunks = buffer
+            self._pending_stream_is_rewrite = False
+
+        def set_continuation_buffer_mode(is_rewrite: bool) -> None:
+            # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
+            # Tell the cancellation path when a continuation has switched to a full rewrite.
+            self._pending_stream_is_rewrite = is_rewrite
 
         def stream_final_answer(
             answer_messages: list[dict[str, Any]],
@@ -1259,23 +1306,32 @@ class ChatGenerationJob:
             deep_reasoning: bool = False,
         ) -> BaseException | None:
             nonlocal continuation_count
-            result = stream_final_answer_with_recovery(
-                answer_messages,
-                model=self._model,
-                iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
-                    messages,
-                    tools=None,
-                    generation_phase=phase,
-                ),
-                publish_chunk=publish_answer_chunk,
-                publish_event=self._publish,
-                should_stop=self._should_stop,
-                adopt_buffer=adopt_continuation_buffer,
-                answer_phase="final_answer_deep" if deep_reasoning else "final_answer",
-                continuation_phase=(
-                    "continuation_deep" if deep_reasoning else "continuation"
-                ),
-            )
+            try:
+                result = stream_final_answer_with_recovery(
+                    answer_messages,
+                    model=self._model,
+                    iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
+                        messages,
+                        tools=None,
+                        generation_phase=phase,
+                    ),
+                    publish_chunk=publish_answer_chunk,
+                    publish_event=self._publish,
+                    should_stop=self._should_stop,
+                    adopt_buffer=adopt_continuation_buffer,
+                    adopt_buffer_mode=set_continuation_buffer_mode,
+                    answer_phase="final_answer_deep" if deep_reasoning else "final_answer",
+                    continuation_phase=(
+                        "continuation_deep" if deep_reasoning else "continuation"
+                    ),
+                )
+            finally:
+                # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
+                # バッファや書き直しモードを誤って拾わないようにする。
+                # Clear shared state on every exit so later persistence cannot adopt a stale
+                # continuation buffer or rewrite mode.
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             continuation_count = result.continuation_count
             self._telemetry.continuation_count = result.continuation_count
             for reason in result.reasons:
@@ -1388,6 +1444,16 @@ class ChatGenerationJob:
                     final_answer_required = True
                     break
 
+                # 調査ループ自身もツール結果を積み上げるため、最終回答だけでなく次の
+                # ツール選択リクエストの前にも古い根拠を圧縮する。ここで入力超過すると
+                # 締めステップや最終回答へ到達できず、長い調査ターン全体が失われる。
+                # The research loop also accumulates tool results. Compact old evidence before
+                # each next selection request, or an input overflow here would prevent both the
+                # wrap-up and final-answer recovery from ever running.
+                current_messages, _ = compact_tool_messages(
+                    current_messages,
+                    max_tokens=get_final_answer_input_token_budget(),
+                )
                 research_messages = (
                     build_research_loop_messages(
                         current_messages,
@@ -1395,6 +1461,10 @@ class ChatGenerationJob:
                     )
                     if research_phase_used
                     else current_messages
+                )
+                research_messages, _ = compact_tool_messages(
+                    research_messages,
+                    max_tokens=get_final_answer_input_token_budget(),
                 )
                 llm_step = budget.start_llm_turn()
                 telemetry.llm_turns = budget.llm_turns
@@ -1409,6 +1479,7 @@ class ChatGenerationJob:
                 tool_calls_buffer: list[dict[str, Any]] = []
                 step_chunks: list[str] = []
                 self._pending_stream_chunks = step_chunks
+                self._pending_stream_is_rewrite = False
                 for chunk in self._iter_llm_stream_with_retry(
                     research_messages,
                     tools=configured_tools,
@@ -1432,6 +1503,7 @@ class ChatGenerationJob:
 
                 if not tool_calls_buffer:
                     self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                     if research_phase_used:
                         # ツールなしは調査完了の合図。本文は破棄し、次のツール無効ストリームを
                         # ユーザー向けの最終回答として表示する。ノートを読めなかった場合だけ、
@@ -1458,6 +1530,7 @@ class ChatGenerationJob:
                 # system message.
                 append_step_note(step_notes, parse_step_note(step_chunks))
                 self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
                 research_phase_used = True
                 telemetry.research_phase_used = True
 
@@ -1751,9 +1824,14 @@ class ChatGenerationJob:
                 # the buffer internal to keep a stop from persisting it as the answer.
                 self._pending_stream_chunks = wrapup_chunks
                 self._pending_stream_is_internal = True
+                self._pending_stream_is_rewrite = False
                 try:
-                    for chunk in self._iter_llm_stream_with_retry(
+                    wrapup_messages, _ = compact_tool_messages(
                         build_research_wrapup_messages(current_messages),
+                        max_tokens=get_final_answer_input_token_budget(),
+                    )
+                    for chunk in self._iter_llm_stream_with_retry(
+                        wrapup_messages,
                         tools=None,
                         generation_phase="research_wrapup",
                         discard_partial_on_retry=True,
@@ -1766,6 +1844,7 @@ class ChatGenerationJob:
                 finally:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_internal = False
+                    self._pending_stream_is_rewrite = False
                 telemetry.research_wrapup_used = True
                 research_summary = parse_research_summary(wrapup_chunks)
                 if research_summary is None and not research_draft:
@@ -1773,6 +1852,7 @@ class ChatGenerationJob:
 
             if final_answer_required:
                 self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
                 if not suppress_next_generation_started:
                     self._publish(
                         "response_generation_started",
@@ -1834,6 +1914,9 @@ class ChatGenerationJob:
                         max_tokens=1,
                     )
                     telemetry.final_answer_input_tokens = estimate_messages_tokens(
+                        final_answer_messages
+                    )
+                    telemetry.final_answer_input_chars = estimate_messages_chars(
                         final_answer_messages
                     )
                     final_answer_incomplete = stream_final_answer(
@@ -2083,7 +2166,9 @@ class ChatGenerationJob:
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
         if final_answer_incomplete is not None:
-            if isinstance(final_answer_incomplete, LlmOutputLimitError):
+            if isinstance(final_answer_incomplete, FinalAnswerContinuationStalledError):
+                message = "回答の続きを生成できず、途中までの回答を保存しました。"
+            elif isinstance(final_answer_incomplete, LlmOutputLimitError):
                 message = (
                     "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
                 )
