@@ -2,6 +2,7 @@ import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from services.chat_agent_budget import AgentStepBudget
 from services.chat_generation import ChatGenerationJob
 from services.personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
@@ -157,7 +158,10 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
             },
         }
         messages = []
-        next_step = job._run_lookup_tool_call(
+        # 推論ターンとツール実行は別カウンタ。ツール実行だけが1増える。
+        # Reasoning turns and tool calls use separate counters; only tool calls advance here.
+        budget = AgentStepBudget(max_llm_turns=4, max_tool_calls=4, llm_turns=1)
+        job._run_lookup_tool_call(
             tool_call,
             tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
             search=job._personal_knowledge_search,
@@ -166,10 +170,11 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
             failure_log_message="lookup failed",
             failure_tool_message="lookup failed",
             current_messages=messages,
-            step_count=1,
-            max_steps=8,
+            budget=budget,
         )
-        self.assertEqual(next_step, 2)
+        self.assertEqual(budget.tool_calls, 1)
+        self.assertEqual(budget.llm_turns, 1)
+        self.assertEqual(budget.step, 2)
         self.assertEqual(json.loads(messages[0]["content"])["memo_count"], 1)
         self.assertEqual(
             events,
