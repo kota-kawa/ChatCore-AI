@@ -120,6 +120,8 @@ export const jaMessages = {
   "chat.inputPlaceholderTemporary": "未保存モードで入力",
   "chat.stop": "生成を停止",
   "chat.regenerate": "回答を再生成",
+  "chat.continueAnswer": "回答の続きを生成",
+  "chat.continueAnswerPrompt": "前の回答が途中で終わっています。止まったところから続きだけを書いてください。すでに書いた内容は繰り返さず、依頼したすべての項目を最後まで扱ってください。",
   "chat.copy": "回答をコピー",
   "chat.edit": "メッセージを編集",
   "chat.saveMemo": "メモに保存",

@@ -701,6 +701,9 @@ export function useHomePageGenerationActions({
         finalText: string,
         persist = true,
         parts?: ChatMessagePart[],
+        // 途中までの回答として保存されたターンに印を付け、続きを生成する導線を出す。
+        // Mark a turn saved as a partial answer so the "continue" affordance can appear.
+        markPartial = false,
       ) => {
         // 確定テキストを保留中の途中描画で上書きしないようにキャンセルする。
         // Cancel any pending partial render so it cannot overwrite the final text.
@@ -721,6 +724,7 @@ export function useHomePageGenerationActions({
                   sender: "assistant",
                   text: finalDisplayText,
                   ...(hasParts ? { parts: resolvedParts } : {}),
+                  ...(markPartial ? { partial: true } : {}),
                 },
               ];
             });
@@ -752,6 +756,7 @@ export function useHomePageGenerationActions({
               ...(hasParts ? { parts: resolvedParts } : {}),
               streaming: false,
               generativeUiPending: false,
+              partial: markPartial,
             };
           });
         });
@@ -1015,7 +1020,7 @@ export function useHomePageGenerationActions({
           const incompletePayload = normalizeChatResponsePayload(parsed.data);
           const finalText = incompletePayload.response ?? streamedText;
           applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          finalizeStreamingMessage(finalText, false, incompletePayload.parts);
+          finalizeStreamingMessage(finalText, false, incompletePayload.parts, true);
           appendAssistantErrorMessage(
             roomId,
             typeof parsed.data.message === "string"

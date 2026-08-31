@@ -24,6 +24,7 @@ import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
 import { GenerativeUiLoader } from "./generative_ui_loader";
 import { MemoSaveActionButton } from "./memo_save_action_button";
+import { ContinueActionButton } from "./continue_action_button";
 import { RegenerateActionButton } from "./regenerate_action_button";
 import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
@@ -140,6 +141,7 @@ type ChatMessageRowProps = {
   isLoadingOlder: boolean;
   loadOlderChatHistory: () => Promise<void>;
   onRegenerate: () => void;
+  onContinue: () => void;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
@@ -170,6 +172,7 @@ function ChatMessageRow({
   isLoadingOlder,
   loadOlderChatHistory,
   onRegenerate,
+  onContinue,
   editingMessageId,
   onEditStart,
   onEditCancel,
@@ -368,6 +371,11 @@ function ChatMessageRow({
               }}
             />
           )}
+          {/* 途中保存された回答は、作り直すより続きを書かせるほうが失われる情報がない。 */}
+          {/* For a partial answer, continuing loses nothing, unlike regenerating from scratch. */}
+          {!message.error && message.partial && isLastAssistantMessage && (
+            <ContinueActionButton onContinue={onContinue} disabled={isGenerating} />
+          )}
           {!message.error && isLastAssistantMessage && (
             <RegenerateActionButton
               onRegenerate={onRegenerate}
@@ -396,6 +404,7 @@ type ChatMessageListProps = {
   loadOlderChatHistory: () => Promise<void>;
   messages: UiChatMessage[];
   onRegenerate: () => void;
+  onContinue: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   tasks: NormalizedTask[];
@@ -417,6 +426,7 @@ function ChatMessageListComponent({
   loadOlderChatHistory,
   messages,
   onRegenerate,
+  onContinue,
   onEditAndRegenerate,
   onSwitchBranch,
   tasks,
@@ -514,6 +524,7 @@ function ChatMessageListComponent({
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
+      onContinue,
       editingMessageId,
       onEditStart: handleEditStart,
       onEditCancel: handleEditCancel,
@@ -527,6 +538,7 @@ function ChatMessageListComponent({
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
+      onContinue,
       editingMessageId,
       handleEditStart,
       handleEditCancel,

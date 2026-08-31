@@ -230,6 +230,30 @@ describe("failed chat turns", () => {
     expect(assistantMessages[0].streaming).toBe(false);
     expect(assistantMessages[1].error).toBe(true);
     expect(assistantMessages[1].text).toContain("保存");
+    // 途中保存の印が付いていないと「続きを生成」の導線が出せない。
+    // Without the partial marker the "continue the answer" affordance cannot appear.
+    expect(assistantMessages[0].partial).toBe(true);
+  });
+
+  it("does not mark a completed answer as partial", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createStreamResponse([
+        `id: 1\nevent: chunk\ndata: ${JSON.stringify({ text: "完了した回答" })}\n\n`,
+        `id: 2\nevent: done\ndata: ${JSON.stringify({ response: "完了した回答" })}\n\n`,
+      ]),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("普通の質問", "model", "room-1");
+    });
+
+    const assistantMessages = result.current.state.messages.filter(
+      (message) => message.sender === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0].partial).toBeFalsy();
   });
 
   it("recreates a chat room that no longer exists and sends the message again", async () => {

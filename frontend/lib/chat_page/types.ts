@@ -103,6 +103,8 @@ export type UiChatMessage = {
   /** True while a generative UI fence is streaming and no renderable part has arrived yet. */
   generativeUiPending?: boolean;
   error?: boolean;
+  /** True when the server saved this answer as a partial one (SSE `incomplete`). */
+  partial?: boolean;
   attachedFileNames?: string[];
   /** Server-side chat_history id; present for persisted (DB-backed) messages. */
   serverId?: number;
