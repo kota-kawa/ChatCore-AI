@@ -37,6 +37,8 @@ except ImportError:  # pragma: no cover - depends on SDK version
     AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
     RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
+from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
+
 
 # 環境変数から正の整数値を取得します。無効な場合はデフォルト値を返します。
 # Retrieve a positive integer from environment variables, returning the default if invalid.
@@ -300,6 +302,22 @@ class LlmUpstreamServiceError(LlmRetryableProviderError):
     pass
 
 
+# プロバイダがモデルのツール呼び出しを拒否した場合の例外クラス。
+# Exception class raised when the provider rejects the model's tool call.
+class LlmToolSchemaError(LlmProviderError):
+    """The provider refused the model's tool call instead of returning it.
+
+    Groq などはツール引数をサーバー側でスキーマ検証し、違反をストリーム途中のエラーとして
+    返す。同じ要求を再送しても同じ拒否になりやすいため retryable ではない。回復手段は
+    「ツールを外して同じステップをやり直す」ことであり、呼び出し側がそれを担う。
+    Providers such as Groq validate tool arguments server-side and surface a violation as a
+    mid-stream error. Re-sending the same request reproduces it, so this is not retryable;
+    the recovery is to replay the step without tools, which the caller performs.
+    """
+
+    pass
+
+
 # 認証エラーによるLLMプロバイダエラーに関する例外クラス。
 # Exception class for LLM provider authentication errors.
 class LlmAuthenticationError(LlmProviderError):
@@ -355,16 +373,37 @@ _INPUT_LIMIT_ERROR_PATTERN = re.compile(
 )
 
 
-def _looks_like_input_limit_error(exc: BaseException) -> bool:
+# プロバイダがモデルのツール呼び出しを拒否したことを、文面とエラーコードから判別する。
+# 文言はプロバイダごとに異なるため、既知の表現をまとめて照合する。
+# Detect a provider-side rejection of the model's tool call from its message and error code.
+# The wording differs per provider, so match the known phrasings together.
+_TOOL_CALL_REJECTION_PATTERN = re.compile(
+    r"tool[_ ]call validation failed|did not match schema|tool_use_failed|"
+    r"failed to call a function|invalid[_ ]tool[_ ]call|tool[_ ]call arguments",
+    re.IGNORECASE,
+)
+
+
+def _error_text_candidates(exc: BaseException) -> list[str]:
     candidates: list[str] = [str(exc)]
     for attribute in ("message", "code", "body"):
         value = getattr(exc, attribute, None)
         if value is not None:
             candidates.append(str(value))
+    return [candidate for candidate in candidates if candidate]
+
+
+def _looks_like_tool_call_rejection(exc: BaseException) -> bool:
+    return any(
+        _TOOL_CALL_REJECTION_PATTERN.search(candidate)
+        for candidate in _error_text_candidates(exc)
+    )
+
+
+def _looks_like_input_limit_error(exc: BaseException) -> bool:
     return any(
         _INPUT_LIMIT_ERROR_PATTERN.search(candidate)
-        for candidate in candidates
-        if candidate
+        for candidate in _error_text_candidates(exc)
     )
 
 
@@ -392,6 +431,15 @@ def _map_provider_exception(
         return LlmNetworkError(f"{provider_name} API connection failed.")
     if isinstance(exc, (AuthenticationError, AnthropicAuthenticationError)):
         return LlmAuthenticationError(f"{provider_name} API authentication failed.")
+    # ツール呼び出しの拒否は、ストリーム途中の APIError（ステータスなし）でも 400 でも届く。
+    # ステータスコードによる分類より先に判定し、汎用のプロバイダ障害へ埋もれさせない。
+    # A rejected tool call arrives either as a mid-stream APIError without a status code or as
+    # a 400. Classify it before the status-code branches so it is not buried in a generic
+    # provider failure that the caller cannot recover from.
+    if _looks_like_tool_call_rejection(exc):
+        return LlmToolSchemaError(
+            f"{provider_name} API rejected the model's tool call against the tool schema."
+        )
     if isinstance(exc, (APIStatusError, AnthropicAPIStatusError)):
         status_code = getattr(exc, "status_code", None)
         if status_code in (401, 403):
@@ -582,10 +630,16 @@ def _groq_reasoning_kwargs(
 def _chat_completion_tool_kwargs(
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
-    if not tools:
+    # プロバイダ側のスキーマ検証で拒否されない形へ緩めてから渡す。制約はここで落とし、
+    # 引数の検証と正規化はツール実行側（回復できる場所）に一本化する。
+    # Relax the schema before handing it over, so provider-side validation cannot reject a
+    # tool call. Argument validation and normalization belong to the tool handlers, which
+    # can recover without failing the turn.
+    provider_tools = prepare_provider_tools(tools)
+    if not provider_tools:
         return {}
     return {
-        "tools": tools,
+        "tools": provider_tools,
         "tool_choice": "auto",
     }
 
@@ -1022,6 +1076,12 @@ def _prepare_claude_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, 
         input_schema = function.get("parameters")
         if not isinstance(input_schema, dict):
             input_schema = {"type": "object", "properties": {}}
+        else:
+            # プロバイダごとにモデルへ見せる契約を変えない。緩めたスキーマを唯一の契約とし、
+            # 値の正規化はどのプロバイダでも同じハンドラで行う。
+            # Keep one model-facing contract across providers: the relaxed schema is the only
+            # contract, and the same handlers normalize the values for every provider.
+            input_schema = relax_tool_parameters_schema(input_schema)
         claude_tools.append(
             {
                 "name": name,

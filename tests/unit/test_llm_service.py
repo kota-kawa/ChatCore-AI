@@ -238,6 +238,39 @@ class LlmServiceTestCase(unittest.TestCase):
 
         self.assertIsInstance(mapped, llm.LlmInputLimitError)
 
+    # 日本語: ストリーム途中で届くツール呼び出し拒否を、専用の例外へ分類することを検証します。
+    # English: Verify a mid-stream tool-call rejection maps to its own exception type.
+    def test_provider_error_mapping_detects_tool_call_rejection(self):
+        mapped = llm._map_provider_exception(
+            Exception(
+                "Tool call validation failed: parameters for tool web_search did not match "
+                'schema: errors: [`/search_language`: value must be one of "", "ar"]'
+            ),
+            provider_name="Groq",
+            fallback_message="Groq streaming API call failed.",
+        )
+
+        self.assertIsInstance(mapped, llm.LlmToolSchemaError)
+        # 同じ要求を送り直しても同じ拒否になるため、汎用の再試行対象にはしない。
+        # Re-sending the identical request reproduces the rejection, so it is not retryable.
+        self.assertFalse(mapped.retryable)
+
+    # 日本語: エラーコードだけで届く tool_use_failed も同じ分類になることを検証します。
+    # English: Verify a tool_use_failed carried only in the error code maps the same way.
+    def test_provider_error_mapping_detects_tool_use_failed_code(self):
+        class _FakeStatusError(Exception):
+            status_code = 400
+            body = {"error": {"code": "tool_use_failed", "message": "Failed to call a function."}}
+
+        with patch.object(llm, "APIStatusError", _FakeStatusError):
+            mapped = llm._map_provider_exception(
+                _FakeStatusError("bad request"),
+                provider_name="Groq",
+                fallback_message="Groq streaming API call failed.",
+            )
+
+        self.assertIsInstance(mapped, llm.LlmToolSchemaError)
+
     # 日本語: 出力枠がフェーズごとに分かれ、本文を書く回答フェーズが最大になることを検証します。
     # English: Verify the output budget is split per phase and the answer phase gets the largest.
     def test_output_token_budget_is_split_by_generation_phase(self):

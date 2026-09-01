@@ -44,6 +44,11 @@ class SharedPromptResult:
 # LLMへ渡すツール定義スキーマを返す
 # Return the tool definition schema handed to the LLM
 def get_shared_prompt_tool_definition() -> dict[str, Any]:
+    # スキーマの制約（enum・required・additionalProperties）はモデルへの誘導であり、検証ではない。
+    # services/llm_tool_schema.py がプロバイダ境界で落とすため、引数の検証と正規化は呼び出し側で行う。
+    # The schema constraints (enum, required, additionalProperties) guide the model; they do not
+    # validate. services/llm_tool_schema.py drops them at the provider boundary, so argument
+    # validation and normalization belong to the caller.
     return {
         "type": "function",
         "function": {
