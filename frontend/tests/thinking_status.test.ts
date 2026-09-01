@@ -23,3 +23,10 @@ test("keeps the existing preparing status when no selected lookup is enabled", (
     generationPhase: "preparing",
   });
 });
+
+test("shows the concise thinking status in Japanese", () => {
+  assert.deepEqual(getInitialThinkingState(false, false, "ja"), {
+    text: "思考中",
+    generationPhase: "preparing",
+  });
+});
