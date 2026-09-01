@@ -506,6 +506,22 @@ class LlmServiceTestCase(unittest.TestCase):
                     llm.GROQ_MODEL,
                 )
 
+    def test_get_groq_response_logs_configuration_error_without_api_key(self):
+        """
+        Groq APIキー未設定時、例外の送出だけでなくログにも詳細が残ることを検証します。
+        Verify that a missing Groq API key is logged (not just raised) with provider/model detail.
+        """
+        with patch.object(llm, "groq_client", None):
+            with self.assertLogs("services.llm", level="ERROR") as cm:
+                with self.assertRaises(llm.LlmConfigurationError):
+                    llm.get_groq_response(
+                        [{"role": "user", "content": "hello"}],
+                        llm.GROQ_MODEL,
+                    )
+        logged_text = "\n".join(cm.output)
+        self.assertIn("GROQ_API_KEY", logged_text)
+        self.assertIn(llm.GROQ_MODEL, logged_text)
+
     def test_get_claude_response_wraps_provider_error_as_exception(self):
         """
         プロバイダー呼び出し時に例外が発生した場合、一般的なプロバイダーエラーとしてラップされることを検証します。
@@ -595,6 +611,33 @@ class LlmServiceTestCase(unittest.TestCase):
         # 認証エラーはリトライ不可であることを検証
         # Assert that the auth error is not marked retryable
         self.assertFalse(llm.is_retryable_llm_error(cm.exception))
+
+    def test_get_claude_response_logs_provider_error_with_model_and_traceback(self):
+        """
+        プロバイダーエラー発生時、モデル名とトレースバック付きで詳細がログに残ることを検証します。
+        Verify that a provider-call failure is logged with the model name and a traceback
+        attached, so LLM chat errors are always recorded with enough detail to debug.
+        """
+        mock_claude = MagicMock()
+        mock_claude.messages.create.side_effect = RuntimeError("provider down")
+
+        with patch.object(llm, "claude_client", mock_claude):
+            with self.assertLogs("services.llm", level="ERROR") as cm:
+                with self.assertRaises(llm.LlmProviderError):
+                    llm.get_claude_response(
+                        [{"role": "user", "content": "hello"}],
+                        llm.CLAUDE_HAIKU_4_5_MODEL,
+                    )
+
+        self.assertEqual(len(cm.records), 1)
+        record = cm.records[0]
+        logged_text = "\n".join(cm.output)
+        self.assertIn(llm.CLAUDE_HAIKU_4_5_MODEL, logged_text)
+        self.assertIn("provider down", logged_text)
+        # A traceback must be attached so the failure is debuggable from the log alone.
+        self.assertIsNotNone(record.exc_info)
+        self.assertEqual(record.llm_model, llm.CLAUDE_HAIKU_4_5_MODEL)
+        self.assertEqual(record.llm_provider, "Anthropic Claude")
 
     def test_get_openai_response_raises_configuration_error_without_api_key(self):
         """
