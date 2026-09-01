@@ -47,6 +47,7 @@ from services.llm import (
     LlmOutputLimitError,
     LlmRateLimitError,
     LlmTimeoutError,
+    LlmToolSchemaError,
 )
 from services.selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
@@ -1904,6 +1905,123 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("<step_note>", body)
         self.assertIn("鎌倉の紅葉は11月下旬が見頃です。", body)
         self.assertNotIn(step_note, persisted_messages[0])
+
+    # 日本語: モデルがスキーマ外の引数（ISOの"ja"、言い換えた鮮度、未知の追加引数）を返しても、
+    # こちら側で正規化して検索を続けられることを検証します。プロバイダ側の検証には頼りません。
+    # English: Verify off-schema arguments from the model (ISO "ja", a reworded freshness, an
+    # unknown extra field) are normalized here and the search proceeds. Provider-side
+    # validation is never relied upon.
+    def test_background_generation_job_normalizes_model_supplied_search_arguments(self):
+        persisted_messages = []
+        stream_call_count = 0
+        search_result = WebSearchResult(
+            query="東京の天気",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/weather",
+                    title="東京の天気",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("今週の天気",),
+                ),
+            ),
+        )
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count == 1:
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps(
+                                    {
+                                        "query": "東京の天気",
+                                        "search_language": "ja",
+                                        "freshness": "past week",
+                                        "count": 5,
+                                    }
+                                ),
+                            },
+                        }
+                    ]
+                )
+                return
+            if stream_call_count == 2:
+                yield "<research_complete>"
+                return
+            yield "今週の東京の天気です。"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "東京の天気を調べて"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ) as mock_search,
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "東京の天気を調べて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(mock_search.call_args.args, ("東京の天気",))
+        self.assertEqual(mock_search.call_args.kwargs["search_language"], "jp")
+        self.assertEqual(mock_search.call_args.kwargs["freshness"], "pw")
+        self.assertIn("今週の東京の天気です。", body)
+
+    # 日本語: プロバイダがツール呼び出しを拒否しても、ツールなしでやり直して回答まで届くことを検証します。
+    # English: Verify a provider-rejected tool call replays without tools and still reaches an answer.
+    def test_background_generation_job_recovers_from_rejected_tool_call(self):
+        persisted_messages = []
+        stream_tools: list[bool] = []
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            stream_tools.append(bool(tools))
+            if tools:
+                raise LlmToolSchemaError(
+                    "Groq API rejected the model's tool call against the tool schema."
+                )
+            yield "ツールなしで回答しました。"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        # 拒否された調査ステップは、同じ内容をツールなしで1度だけやり直す。
+        # The rejected research step is replayed exactly once without tools.
+        self.assertEqual(stream_tools[:2], [True, False])
+        self.assertIn("ツールなしで回答しました。", body)
+        self.assertNotIn('"error"', body)
+        self.assertTrue(persisted_messages)
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
