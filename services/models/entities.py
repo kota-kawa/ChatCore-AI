@@ -89,6 +89,11 @@ class ChatRoom(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(255), server_default=text("'新規チャット'"))
     created_at: Mapped[datetime | None] = _timestamp()
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
     mode: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'normal'"))
     active_root_id: Mapped[int | None] = mapped_column(Integer)
     project_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))
@@ -97,6 +102,7 @@ class ChatRoom(Base):
         CheckConstraint("mode IN ('normal', 'temporary')", name="chk_chat_rooms_mode"),
         Index("idx_chat_rooms_user_created_at", "user_id", desc("created_at")),
         Index("idx_chat_rooms_user_created_at_id", "user_id", desc("created_at"), desc("id")),
+        Index("idx_chat_rooms_user_last_activity_id", "user_id", desc("last_activity_at"), desc("id")),
         Index("idx_chat_rooms_project_created_at", "project_id", desc("created_at")),
     )
 

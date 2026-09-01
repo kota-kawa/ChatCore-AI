@@ -9,6 +9,7 @@ from sqlalchemy.types import Text
 from services.models import (
     Base,
     ChatHistory,
+    ChatRoom,
     ContextFact,
     MemoEntry,
     Prompt,
@@ -72,6 +73,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(UserSkill.is_enabled.nullable)
         self.assertTrue(UserSkill.source_prompt_id.nullable)
         self.assertFalse(User.generative_ui_skill_enabled.nullable)
+        self.assertFalse(ChatRoom.last_activity_at.nullable)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)
@@ -89,6 +91,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertTrue(any("USING hnsw" in statement for statement in index_sql))
         self.assertTrue(any("WHERE" in statement for statement in index_sql))
         self.assertTrue(any("idx_user_skills_user_source_prompt" in statement for statement in index_sql))
+        self.assertTrue(any("idx_chat_rooms_user_last_activity_id" in statement for statement in index_sql))
 
 
 if __name__ == "__main__":

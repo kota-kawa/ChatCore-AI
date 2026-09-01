@@ -41,7 +41,13 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 7},
         )
         rooms = [
-            {"id": f"room-{index}", "title": f"Room {index}", "mode": "normal", "created_at": "2026-04-20T10:00:00+09:00"}
+            {
+                "id": f"room-{index}",
+                "title": f"Room {index}",
+                "mode": "normal",
+                "created_at": "2026-04-01T10:00:00+09:00",
+                "last_activity_at": "2026-04-20T10:00:00+09:00",
+            }
             for index in range(21)
         ]
         with (
@@ -57,7 +63,9 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         fetch.assert_awaited_once_with(7, limit=21, cursor=None)
 
     def test_get_chat_rooms_passes_decoded_cursor(self):
-        cursor = _encode_room_list_cursor({"id": "room-20", "created_at": "2026-04-20T10:00:00"})
+        cursor = _encode_room_list_cursor(
+            {"id": "room-20", "last_activity_at": "2026-04-20T10:00:00"}
+        )
         request = build_request(
             method="GET",
             path="/api/get_chat_rooms",

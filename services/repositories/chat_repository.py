@@ -161,16 +161,17 @@ class ChatRepository:
         )
         self.session.add(record)
         await self.session.flush()
+        room_updates: dict[str, Any] = {"last_activity_at": func.current_timestamp()}
         if parent_id is None:
-            await self.session.execute(
-                update(ChatRoom).where(ChatRoom.id == chat_room_id).values(active_root_id=record.id)
-            )
+            room_updates["active_root_id"] = record.id
+            await self.session.execute(update(ChatRoom).where(ChatRoom.id == chat_room_id).values(**room_updates))
         else:
             await self.session.execute(
                 update(ChatHistory)
                 .where(ChatHistory.id == parent_id, ChatHistory.chat_room_id == chat_room_id)
                 .values(active_child_id=record.id)
             )
+            await self.session.execute(update(ChatRoom).where(ChatRoom.id == chat_room_id).values(**room_updates))
         return record.id
 
     async def copy_messages_into_room(self, chat_room_id: str, messages: list[dict[str, Any]]) -> int:
@@ -206,13 +207,13 @@ class ChatRepository:
         stmt = (
             select(ChatRoom)
             .where(ChatRoom.user_id == user_id, or_(ChatRoom.mode.is_(None), ChatRoom.mode != "temporary"))
-            .order_by(ChatRoom.created_at.desc(), ChatRoom.id.desc())
+            .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
         )
         if cursor is not None:
             stmt = stmt.where(
                 or_(
-                    ChatRoom.created_at < cursor[0],
-                    and_(ChatRoom.created_at == cursor[0], ChatRoom.id < cursor[1]),
+                    ChatRoom.last_activity_at < cursor[0],
+                    and_(ChatRoom.last_activity_at == cursor[0], ChatRoom.id < cursor[1]),
                 )
             )
         if limit is not None:
@@ -878,7 +879,7 @@ class ChatRepository:
             await self.session.execute(
                 select(ChatRoom)
                 .where(ChatRoom.project_id == project_id)
-                .order_by(ChatRoom.created_at.desc(), ChatRoom.id.desc())
+                .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
             )
         ).scalars().all()
         payload = self._serialize_project(project)
@@ -891,7 +892,7 @@ class ChatRepository:
             await self.session.execute(
                 select(ChatRoom)
                 .where(ChatRoom.project_id == project_id)
-                .order_by(ChatRoom.created_at.desc(), ChatRoom.id.desc())
+                .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
             )
         ).scalars().all()
         return [self._serialize_room(room, project_room=True) for room in rooms]
@@ -1195,9 +1196,11 @@ class ChatRepository:
             "title": room.title or "新規チャット",
             "mode": room.mode or "normal",
             "created_at": serialize_datetime_iso(room.created_at),
+            "last_activity_at": serialize_datetime_iso(room.last_activity_at),
         }
         if project_room:
             payload["createdAt"] = payload.pop("created_at")
+            payload["lastActivityAt"] = payload.pop("last_activity_at")
         return payload
 
     @staticmethod

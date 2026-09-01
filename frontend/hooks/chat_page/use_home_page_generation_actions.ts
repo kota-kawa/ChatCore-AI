@@ -6,7 +6,10 @@ import {
   normalizeChatResponsePayload,
   normalizeGenerationStatusPayload,
 } from "../../lib/chat_page/api_contract";
-import { isLatestChatTurnAnswered } from "../../lib/chat_page/home_page_controller_utils";
+import {
+  isLatestChatTurnAnswered,
+  moveChatRoomToFront,
+} from "../../lib/chat_page/home_page_controller_utils";
 import {
   prependUiChatMessagesWithinLimit,
   rememberStreamEventId,
@@ -421,6 +424,10 @@ export function useHomePageGenerationActions({
           : room,
       ),
     );
+  }, [setChatRooms]);
+
+  const markChatRoomActive = useCallback((roomId: string) => {
+    setChatRooms((previous) => moveChatRoomToFront(previous, roomId));
   }, [setChatRooms]);
 
   const loadLocalChatHistory = useCallback(
@@ -1584,6 +1591,7 @@ export function useHomePageGenerationActions({
     ): Promise<boolean> => {
       const generation = acquireGeneration(roomId);
       if (!generation) return false;
+      markChatRoomActive(roomId);
 
       const userMessage: UiChatMessage = {
         id: nextMessageId("user", messageSeqRef),
@@ -1760,6 +1768,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       currentRoomMode,
       isGenerationActive,
+      markChatRoomActive,
       notifyStoredHistoryWriteIssue,
       personalKnowledgeEnabled,
       sharedPromptsEnabled,
@@ -1820,6 +1829,7 @@ export function useHomePageGenerationActions({
 
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+      markChatRoomActive(roomId);
 
       const userMsg: UiChatMessage = {
         id: nextMessageId("user", messageSeqRef),
@@ -1943,6 +1953,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       currentRoomMode,
       isGenerationActive,
+      markChatRoomActive,
       notifyStoredHistoryWriteIssue,
       personalKnowledgeEnabled,
       sharedPromptsEnabled,
@@ -1982,6 +1993,7 @@ export function useHomePageGenerationActions({
 
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+      markChatRoomActive(roomId);
 
       const thinkingId = nextMessageId("thinking", messageSeqRef);
       const initialThinkingState = getInitialThinkingState(
@@ -2097,6 +2109,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       currentRoomMode,
       isGenerationActive,
+      markChatRoomActive,
       notifyStoredHistoryWriteIssue,
       personalKnowledgeEnabled,
       sharedPromptsEnabled,

@@ -5,6 +5,7 @@ import {
   buildTaskOrderForPersistence,
   isLatestChatTurnAnswered,
   mergeUniqueChatRooms,
+  moveChatRoomToFront,
   removeTaskById,
   removeChatRoomsById,
   updateTaskById,
@@ -155,6 +156,24 @@ test("removeChatRoomsById removes deleted room ids", () => {
     rooms.map((room) => room.id),
     ["room-2"],
   );
+});
+
+test("moveChatRoomToFront promotes an existing room without changing the others", () => {
+  const rooms = [
+    { id: "room-1", title: "Room 1", mode: "normal" as const },
+    { id: "room-2", title: "Room 2", mode: "normal" as const },
+    { id: "room-3", title: "Room 3", mode: "normal" as const },
+  ];
+
+  const promoted = moveChatRoomToFront(rooms, "room-3");
+
+  assert.deepEqual(promoted.map((room) => room.id), ["room-3", "room-1", "room-2"]);
+  assert.deepEqual(rooms.map((room) => room.id), ["room-1", "room-2", "room-3"]);
+});
+
+test("moveChatRoomToFront preserves the list when the room is absent", () => {
+  const rooms = [{ id: "room-1", title: "Room 1", mode: "normal" as const }];
+  assert.equal(moveChatRoomToFront(rooms, "missing"), rooms);
 });
 
 test("updateChatRoomTitle trims and updates only the matching room", () => {
