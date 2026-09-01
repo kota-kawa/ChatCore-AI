@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import Request
 
 from .background_executor import submit_background_task
+from .chat_context import trim_text_to_token_budget
 from .chat_agent_budget import (
     DEFAULT_MAX_LLM_TURNS,
     DEFAULT_MAX_TOOL_CALLS,
@@ -34,8 +35,17 @@ from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_input_budget import (
     compact_tool_messages,
     estimate_messages_chars,
-    estimate_messages_tokens,
     get_final_answer_input_token_budget,
+)
+from .llm_context_budget import (
+    estimate_request_tokens,
+    get_context_budget,
+    request_fits_context,
+)
+from .research_state import (
+    RESEARCH_STATE_MARKER,
+    ResearchState,
+    is_reference_context_message,
 )
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
@@ -876,6 +886,25 @@ class ChatGenerationJob:
             emitted = False
             attempt_chunks: list[str] = []
             try:
+                # Check the complete provider request before opening a stream.  The legacy
+                # compactor only counted Web tool JSON and could miss system context, tool
+                # schemas, or assistant tool-call metadata.
+                if not request_fits_context(
+                    current_messages,
+                    self._model,
+                    generation_phase,
+                    current_tools,
+                ):
+                    budget = get_context_budget(
+                        self._model,
+                        generation_phase,
+                        current_tools,
+                    )
+                    raise LlmInputLimitError(
+                        "The prepared LLM request exceeds the model context budget "
+                        f"(estimated={estimate_request_tokens(current_messages, current_tools)}, "
+                        f"available={budget.available_input_tokens})."
+                    )
                 for chunk in get_llm_response_stream(
                     current_messages,
                     self._model,
@@ -983,8 +1012,14 @@ class ChatGenerationJob:
         current_messages: list[dict[str, Any]],
         budget: AgentStepBudget,
         trace_steps: list[TraceStep] | None = None,
+        research_state: ResearchState | None = None,
     ) -> None:
         if search is None:
+            if research_state is not None:
+                research_state.add_reference_payload(
+                    {"status": "unsupported_tool"},
+                    source_type=event_prefix,
+                )
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -1006,6 +1041,11 @@ class ChatGenerationJob:
 
         query = _tool_argument_text(args.get("query"))
         if not query:
+            if research_state is not None:
+                research_state.add_reference_payload(
+                    {"status": "invalid_arguments"},
+                    source_type=event_prefix,
+                )
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -1018,6 +1058,12 @@ class ChatGenerationJob:
             return
 
         if budget.tool_calls_exhausted:
+            if research_state is not None:
+                research_state.add_reference_payload(
+                    {"status": "step_limit_reached"},
+                    source_type=event_prefix,
+                    query=query,
+                )
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -1063,6 +1109,12 @@ class ChatGenerationJob:
                     },
                 )
             )
+            if research_state is not None:
+                research_state.add_reference_payload(
+                    {"status": "failed"},
+                    source_type=event_prefix,
+                    query=query,
+                )
             if trace_steps is not None:
                 trace_steps.append(
                     selected_reference_step(
@@ -1089,6 +1141,12 @@ class ChatGenerationJob:
                 {"query": query, "step": step, "max_steps": budget.max_steps},
             )
             current_messages.append(_tool_result_message(tool_call, payload))
+            if research_state is not None:
+                research_state.add_reference_payload(
+                    payload,
+                    source_type=event_prefix,
+                    query=query,
+                )
             if trace_steps is not None:
                 trace_steps.append(
                     selected_reference_step(
@@ -1114,6 +1172,12 @@ class ChatGenerationJob:
             },
         )
         current_messages.append(_tool_result_message(tool_call, payload))
+        if research_state is not None:
+            research_state.add_reference_payload(
+                payload,
+                source_type=event_prefix,
+                query=query,
+            )
         # 事前検索と同じクエリは既にトレースへ記録済みなので、重複行を追加しない。
         # A query satisfied by the prefetch is already present in the trace.
         if trace_steps is not None and status != "already_searched":
@@ -1161,6 +1225,29 @@ class ChatGenerationJob:
         telemetry.evidence_budget_max_chars = evidence_context_budget.max_chars
         coverage_requirements: tuple[str, ...] = ()
         latest_user_message = _latest_user_message_text(self._conversation_messages)
+        # Keep a semantic, bounded checkpoint outside the growing tool transcript.  The raw
+        # transcript remains available while it is small for provider compatibility, but later
+        # research/wrap-up/answer requests can be rebuilt from this state alone.
+        research_state = ResearchState(
+            user_request=latest_user_message,
+            max_chars=14_000,
+        )
+        for prior_result in self._prior_web_search_results:
+            research_state.add_web_result(prior_result)
+        for selected_trace in self._selected_reference_trace:
+            research_state.add_reference_payload(
+                selected_trace.payload,
+                source_type=selected_trace.source,
+                query=selected_trace.query,
+            )
+        research_base_messages = [dict(message) for message in self._conversation_messages]
+        # Prior-turn web context is also reference data.  Even when this turn does not start a
+        # new search, answer preparation must be able to replace that large system block with
+        # the bounded ledger instead of replaying it indefinitely.
+        has_prior_reference_context = bool(self._prior_web_search_results) or any(
+            is_reference_context_message(message)
+            for message in research_base_messages
+        )
         selected_web_search_images = self._selected_web_search_images
         revealed_image_indices: list[int] = []
         revealed_image_offsets: list[int] = []
@@ -1338,6 +1425,156 @@ class ChatGenerationJob:
             if chunk:
                 publish_completed_answer_step([chunk])
 
+        def minimal_base_messages() -> list[dict[str, Any]]:
+            """Return the smallest safe base prompt used by context-limit recovery."""
+            base: list[dict[str, Any]] = []
+            first_system = next(
+                (
+                    message
+                    for message in research_base_messages
+                    if message.get("role") == "system"
+                    and not str(message.get("content") or "").lstrip().startswith(
+                        RESEARCH_STATE_MARKER
+                    )
+                    and not is_reference_context_message(message)
+                ),
+                None,
+            )
+            if first_system is not None:
+                base.append(
+                    {
+                        "role": "system",
+                        "content": trim_text_to_token_budget(
+                            str(first_system.get("content") or ""),
+                            3_000,
+                        ),
+                    }
+                )
+            if latest_user_message:
+                base.append({"role": "user", "content": latest_user_message})
+            return base
+
+        def prepare_research_messages(
+            raw_messages: list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None,
+            *,
+            phase: str,
+        ) -> list[dict[str, Any]] | None:
+            """Prefer the raw transcript while small, then rebuild from semantic state."""
+            budget = get_context_budget(self._model, phase, tools)
+            state_tokens = min(6_000, max(1_000, budget.available_input_tokens // 3))
+            candidate = research_state.inject(raw_messages, max_tokens=state_tokens)
+            if request_fits_context(candidate, self._model, phase, tools):
+                return candidate
+
+            projected = build_research_loop_messages(
+                research_state.projected_messages(
+                    research_base_messages,
+                    max_tokens=state_tokens,
+                )
+            )
+            if request_fits_context(projected, self._model, phase, tools):
+                telemetry.context_projection_count += 1
+                return projected
+
+            compacted, compacted_count = compact_tool_messages(
+                projected,
+                max_tokens=budget.available_input_tokens,
+            )
+            if request_fits_context(compacted, self._model, phase, tools):
+                telemetry.context_compaction_count += compacted_count
+                return compacted
+
+            minimal = build_research_loop_messages(
+                research_state.projected_messages(
+                    minimal_base_messages(),
+                    max_tokens=max(1_000, min(state_tokens, 2_000)),
+                )
+            )
+            if request_fits_context(minimal, self._model, phase, tools):
+                telemetry.context_projection_count += 1
+                telemetry.context_recovery_count += 1
+                return minimal
+            return None
+
+        def prepare_answer_messages(
+            *,
+            research_summary: dict[str, Any] | None,
+            research_draft: str,
+        ) -> list[dict[str, Any]] | None:
+            """Build a fresh answer request without the accumulated tool transcript."""
+            phase = "final_answer_deep" if research_phase_used else "final_answer"
+            tools: list[dict[str, Any]] | None = None
+            budget = get_context_budget(self._model, phase, tools)
+            application_input_cap = get_final_answer_input_token_budget()
+            effective_input_cap = min(budget.available_input_tokens, application_input_cap)
+
+            def answer_request_fits(messages: list[dict[str, Any]]) -> bool:
+                return request_fits_context(messages, self._model, phase, tools) and (
+                    estimate_request_tokens(messages, tools) <= effective_input_cap
+                )
+
+            state_tokens = min(6_000, max(1_000, effective_input_cap // 3))
+            projected = research_state.projected_messages(
+                research_base_messages,
+                max_tokens=state_tokens,
+                include_notes=False,
+            )
+            candidate = (
+                build_final_answer_messages(
+                    projected,
+                    research_summary=research_summary,
+                    user_request=latest_user_message,
+                    coverage_requirements=coverage_requirements,
+                    research_draft=research_draft,
+                )
+                if research_phase_used or has_prior_reference_context
+                else current_messages
+            )
+            if answer_request_fits(candidate):
+                if research_phase_used or has_prior_reference_context:
+                    telemetry.context_projection_count += 1
+                return candidate
+
+            compacted, compacted_count = compact_tool_messages(
+                candidate,
+                max_tokens=effective_input_cap,
+            )
+            if answer_request_fits(compacted):
+                telemetry.context_compaction_count += compacted_count
+                return compacted
+
+            minimal_projected = research_state.projected_messages(
+                minimal_base_messages(),
+                max_tokens=max(1_000, min(state_tokens, 2_000)),
+                include_notes=False,
+            )
+            minimal_candidate = build_final_answer_messages(
+                minimal_projected,
+                research_summary=research_summary or research_state.answer_summary(),
+                user_request=latest_user_message,
+                coverage_requirements=coverage_requirements,
+                research_draft=research_draft,
+            )
+            if answer_request_fits(minimal_candidate):
+                telemetry.context_recovery_count += 1
+                return minimal_candidate
+
+            # Last resort: omit the state block while keeping the original request and the
+            # standing system prompt.  If this does not fit, the provider cannot answer even the
+            # user's own request and the outer error contract is the honest fallback.
+            plain_candidate = build_final_answer_messages(
+                minimal_base_messages(),
+                research_summary=None,
+                user_request=latest_user_message,
+                coverage_requirements=coverage_requirements,
+                research_draft="",
+            )
+            if answer_request_fits(plain_candidate):
+                telemetry.context_recovery_count += 1
+                return plain_candidate
+            return None
+
         def adopt_continuation_buffer(buffer: list[str]) -> None:
             # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
             # Hand the continuation pass's undelivered buffer to the job so a stop or a
@@ -1437,6 +1674,15 @@ class ChatGenerationJob:
             # the contract gets them at no extra latency and long turns keep their coverage.
             coverage_requirements = augmentation.answer_requirements
             telemetry.coverage_requirement_count = len(coverage_requirements)
+            research_state.coverage_requirements = tuple(coverage_requirements[:8])
+            if augmentation.result is not None:
+                research_state.add_web_result(augmentation.result)
+            elif augmentation.status in {"failed", "no_sources"}:
+                research_state.add_reference_payload(
+                    {"status": augmentation.status},
+                    source_type="web_search",
+                    query=latest_user_message,
+                )
             suppress_next_generation_started = augmentation.status == "failed"
             research_phase_used = bool(self._selected_reference_trace) or bool(
                 augmentation.result is not None
@@ -1478,6 +1724,10 @@ class ChatGenerationJob:
             # 完了ノートが取れなかったときに最終回答へ引き継ぐ、モデル自身の下書き。
             # The model's own draft, carried to the answer pass when no note could be parsed.
             research_draft = ""
+            # Keep the bounded answer projection for the optional generative-UI repair pass too;
+            # replaying the raw tool transcript there would recreate the context overflow after
+            # the main answer request had already recovered.
+            answer_context_messages: list[dict[str, Any]] | None = None
             # 各ステップが任意で書く「次の一手の根拠」。直近分だけを次のステップへ渡す。
             # The optional rationale each step may write for its next move; only the most
             # recent notes are carried into the following step.
@@ -1494,17 +1744,11 @@ class ChatGenerationJob:
                     final_answer_required = True
                     break
 
-                # 調査ループ自身もツール結果を積み上げるため、最終回答だけでなく次の
-                # ツール選択リクエストの前にも古い根拠を圧縮する。ここで入力超過すると
-                # 締めステップや最終回答へ到達できず、長い調査ターン全体が失われる。
-                # The research loop also accumulates tool results. Compact old evidence before
-                # each next selection request, or an input overflow here would prevent both the
-                # wrap-up and final-answer recovery from ever running.
-                current_messages, _ = compact_tool_messages(
-                    current_messages,
-                    max_tokens=get_final_answer_input_token_budget(),
-                )
-                research_messages = (
+                # Keep a short semantic checkpoint close to the next decision.  While the raw
+                # transcript fits, retain it for provider/tool compatibility; once it grows,
+                # prepare_research_messages rebuilds the request from ResearchState instead of
+                # sending the accumulated assistant/tool history.
+                raw_research_messages = (
                     build_research_loop_messages(
                         current_messages,
                         step_notes=step_notes,
@@ -1512,10 +1756,17 @@ class ChatGenerationJob:
                     if research_phase_used
                     else current_messages
                 )
-                research_messages, _ = compact_tool_messages(
-                    research_messages,
-                    max_tokens=get_final_answer_input_token_budget(),
+                research_messages = prepare_research_messages(
+                    raw_research_messages,
+                    configured_tools,
+                    phase="research",
                 )
+                if research_messages is None:
+                    telemetry.forced_wrapup_due_to_context = True
+                    telemetry.context_recovery_count += 1
+                    research_phase_used = True
+                    final_answer_required = True
+                    break
                 llm_step = budget.start_llm_turn()
                 telemetry.llm_turns = budget.llm_turns
 
@@ -1530,26 +1781,43 @@ class ChatGenerationJob:
                 step_chunks: list[str] = []
                 self._pending_stream_chunks = step_chunks
                 self._pending_stream_is_rewrite = False
-                for chunk in self._iter_llm_stream_with_retry(
-                    research_messages,
-                    tools=configured_tools,
-                    generation_phase="research",
-                    discard_partial_on_retry=True,
-                    tolerate_output_limit=True,
-                ):
-                    if self._should_stop():
-                        return
-                    if not chunk:
-                        continue
+                research_input_limit = False
+                try:
+                    for chunk in self._iter_llm_stream_with_retry(
+                        research_messages,
+                        tools=configured_tools,
+                        generation_phase="research",
+                        discard_partial_on_retry=True,
+                        tolerate_output_limit=True,
+                    ):
+                        if self._should_stop():
+                            return
+                        if not chunk:
+                            continue
 
-                    parsed_tool_calls = _parse_tool_calls_chunk(chunk)
-                    if parsed_tool_calls is not None:
-                        tool_calls_buffer.extend(parsed_tool_calls)
-                        continue
-                    step_chunks.append(chunk)
+                        parsed_tool_calls = _parse_tool_calls_chunk(chunk)
+                        if parsed_tool_calls is not None:
+                            tool_calls_buffer.extend(parsed_tool_calls)
+                            continue
+                        step_chunks.append(chunk)
+                except LlmInputLimitError:
+                    # A provider may use a stricter tokenizer than our estimate.  Do not send the
+                    # same growing transcript again: transition directly to the bounded answer
+                    # projection and let the final phase recover from the evidence already held.
+                    research_input_limit = True
+                    telemetry.input_limit_recoveries += 1
+                    telemetry.forced_wrapup_due_to_context = True
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
 
                 if self._should_stop():
                     return
+
+                if research_input_limit:
+                    research_phase_used = True
+                    final_answer_required = True
+                    configured_tools = []
+                    break
 
                 if not tool_calls_buffer:
                     self._pending_stream_chunks = []
@@ -1563,6 +1831,7 @@ class ChatGenerationJob:
                         # the note cannot be read is the draft carried on, so the synthesis the
                         # model already performed is not thrown away.
                         research_summary = parse_research_summary(step_chunks)
+                        research_state.merge_summary(research_summary)
                         if research_summary is None:
                             research_draft = extract_research_draft(step_chunks)
                         final_answer_required = True
@@ -1578,7 +1847,9 @@ class ChatGenerationJob:
                 # This step is intermediate tool-use output; do not display or persist it as the answer.
                 # Only the optional step note is kept, and it is carried into the next step's
                 # system message.
-                append_step_note(step_notes, parse_step_note(step_chunks))
+                parsed_step_note = parse_step_note(step_chunks)
+                append_step_note(step_notes, parsed_step_note)
+                research_state.add_step_note(parsed_step_note)
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
                 research_phase_used = True
@@ -1614,6 +1885,7 @@ class ChatGenerationJob:
                             current_messages=current_messages,
                             budget=budget,
                             trace_steps=web_search_trace_steps,
+                            research_state=research_state,
                         )
                         continue
 
@@ -1632,10 +1904,15 @@ class ChatGenerationJob:
                             current_messages=current_messages,
                             budget=budget,
                             trace_steps=web_search_trace_steps,
+                            research_state=research_state,
                         )
                         continue
 
                     if func_name != "web_search":
+                        research_state.add_reference_payload(
+                            {"status": "unsupported_tool"},
+                            source_type=str(func_name or "unknown_tool"),
+                        )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1664,6 +1941,10 @@ class ChatGenerationJob:
                     freshness = normalize_web_search_freshness(args.get("freshness"))
                     search_language = normalize_search_language(args.get("search_language"))
                     if not query:
+                        research_state.add_reference_payload(
+                            {"status": "invalid_arguments"},
+                            source_type="web_search",
+                        )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1676,6 +1957,11 @@ class ChatGenerationJob:
                         continue
 
                     if budget.tool_calls_exhausted:
+                        research_state.add_reference_payload(
+                            {"status": "step_limit_reached"},
+                            source_type="web_search",
+                            query=query,
+                        )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1712,6 +1998,7 @@ class ChatGenerationJob:
                         },
                     )
                     if cached_result is not None:
+                        research_state.add_web_result(cached_result, query=query_text)
                         web_search_trace_steps.extend(
                             [
                                 search_step(cached_result, cached=True),
@@ -1730,15 +2017,21 @@ class ChatGenerationJob:
                         )
                         collect_web_search_image_selections(cached_result)
                         telemetry.cached_web_search_count += 1
+                        tool_payload = _budgeted_web_search_result_tool_payload(
+                            cached_result,
+                            evidence_context_budget,
+                            cached=True,
+                            telemetry=telemetry,
+                        )
+                        research_state.add_reference_payload(
+                            tool_payload,
+                            source_type="web_search",
+                            query=query_text,
+                        )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
-                                _budgeted_web_search_result_tool_payload(
-                                    cached_result,
-                                    evidence_context_budget,
-                                    cached=True,
-                                    telemetry=telemetry,
-                                ),
+                                tool_payload,
                             )
                         )
                         continue
@@ -1761,6 +2054,7 @@ class ChatGenerationJob:
                         )
                         if result.has_sources:
                             web_search_results.append(result)
+                        research_state.add_web_result(result, query=query_text)
                         telemetry.web_search_count += 1
                         self._publish(
                             "web_search_completed",
@@ -1773,14 +2067,20 @@ class ChatGenerationJob:
                             },
                         )
                         collect_web_search_image_selections(result)
+                        tool_payload = _budgeted_web_search_result_tool_payload(
+                            result,
+                            evidence_context_budget,
+                            telemetry=telemetry,
+                        )
+                        research_state.add_reference_payload(
+                            tool_payload,
+                            source_type="web_search",
+                            query=query_text,
+                        )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
-                                _budgeted_web_search_result_tool_payload(
-                                    result,
-                                    evidence_context_budget,
-                                    telemetry=telemetry,
-                                ),
+                                tool_payload,
                             )
                         )
                     except WebSearchQuotaExceeded as exc:
@@ -1823,6 +2123,11 @@ class ChatGenerationJob:
                                 },
                             )
                         )
+                        research_state.add_reference_payload(
+                            {"status": "quota_exceeded", "message": message},
+                            source_type="web_search",
+                            query=query_text,
+                        )
                     except Exception:
                         logger.exception("Brave search via tool call failed.")
                         web_search_trace_steps.append(
@@ -1850,6 +2155,11 @@ class ChatGenerationJob:
                                     "message": "Web search failed.",
                                 },
                             )
+                        )
+                        research_state.add_reference_payload(
+                            {"status": "failed"},
+                            source_type="web_search",
+                            query=query_text,
                         )
 
             if not answer_stream_started:
@@ -1888,27 +2198,65 @@ class ChatGenerationJob:
                 self._pending_stream_is_internal = True
                 self._pending_stream_is_rewrite = False
                 try:
-                    wrapup_messages, _ = compact_tool_messages(
-                        build_research_wrapup_messages(current_messages),
-                        max_tokens=get_final_answer_input_token_budget(),
+                    wrapup_base = research_state.projected_messages(
+                        research_base_messages,
+                        max_tokens=2_000,
                     )
-                    for chunk in self._iter_llm_stream_with_retry(
+                    wrapup_messages = build_research_wrapup_messages(wrapup_base)
+                    wrapup_budget = get_context_budget(
+                        self._model,
+                        "research_wrapup",
+                        None,
+                    )
+                    if not request_fits_context(
                         wrapup_messages,
-                        tools=None,
-                        generation_phase="research_wrapup",
-                        discard_partial_on_retry=True,
-                        tolerate_output_limit=True,
+                        self._model,
+                        "research_wrapup",
+                        None,
                     ):
-                        if self._should_stop():
-                            return
-                        if chunk:
-                            wrapup_chunks.append(chunk)
+                        telemetry.forced_wrapup_due_to_context = True
+                        telemetry.context_recovery_count += 1
+                        research_summary = research_state.answer_summary() or None
+                    else:
+                        wrapup_messages, _ = compact_tool_messages(
+                            wrapup_messages,
+                            max_tokens=wrapup_budget.available_input_tokens,
+                        )
+                        if not request_fits_context(
+                            wrapup_messages,
+                            self._model,
+                            "research_wrapup",
+                            None,
+                        ):
+                            telemetry.forced_wrapup_due_to_context = True
+                            telemetry.context_recovery_count += 1
+                            research_summary = research_state.answer_summary() or None
+                        else:
+                            try:
+                                for chunk in self._iter_llm_stream_with_retry(
+                                    wrapup_messages,
+                                    tools=None,
+                                    generation_phase="research_wrapup",
+                                    discard_partial_on_retry=True,
+                                    tolerate_output_limit=True,
+                                ):
+                                    if self._should_stop():
+                                        return
+                                    if chunk:
+                                        wrapup_chunks.append(chunk)
+                            except LlmInputLimitError:
+                                telemetry.input_limit_recoveries += 1
+                                telemetry.forced_wrapup_due_to_context = True
+                                research_summary = research_state.answer_summary() or None
                 finally:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_internal = False
                     self._pending_stream_is_rewrite = False
                 telemetry.research_wrapup_used = True
-                research_summary = parse_research_summary(wrapup_chunks)
+                parsed_wrapup_summary = parse_research_summary(wrapup_chunks)
+                research_state.merge_summary(parsed_wrapup_summary)
+                if parsed_wrapup_summary is not None:
+                    research_summary = parsed_wrapup_summary
                 if research_summary is None and not research_draft:
                     research_draft = extract_research_draft(wrapup_chunks)
 
@@ -1925,33 +2273,28 @@ class ChatGenerationJob:
                         },
                     )
                 suppress_next_generation_started = False
+                if research_summary is None:
+                    state_summary = research_state.answer_summary()
+                    research_summary = state_summary or None
                 telemetry.research_summary_present = research_summary is not None
                 telemetry.research_draft_forwarded = bool(research_draft)
-                final_answer_messages = (
-                    build_final_answer_messages(
-                        current_messages,
-                        research_summary=research_summary,
-                        user_request=latest_user_message,
-                        coverage_requirements=coverage_requirements,
-                        research_draft=research_draft,
+                final_answer_messages = prepare_answer_messages(
+                    research_summary=research_summary,
+                    research_draft=research_draft,
+                )
+                if final_answer_messages is None:
+                    telemetry.context_recovery_count += 1
+                    raise LlmInputLimitError(
+                        "The minimal answer request still exceeds the model context budget."
                     )
-                    if research_phase_used
-                    else current_messages
-                )
-                # 送る前に入力量を見積もり、超過しそうなら古い根拠から縮める。
-                # 超過してから直すとターンごと「内部エラー」で失われる。
-                # Estimate the request before sending and shrink the oldest evidence if it is
-                # about to overflow: recovering after the fact loses the whole turn.
-                final_answer_messages, compacted = compact_tool_messages(
+                telemetry.final_answer_input_tokens = estimate_request_tokens(
                     final_answer_messages,
-                    max_tokens=get_final_answer_input_token_budget(),
-                )
-                telemetry.final_answer_input_tokens = estimate_messages_tokens(
-                    final_answer_messages
+                    None,
                 )
                 telemetry.final_answer_input_chars = estimate_messages_chars(
                     final_answer_messages
                 )
+                answer_context_messages = final_answer_messages
                 answer_stream_started = True
                 try:
                     final_answer_incomplete = stream_final_answer(
@@ -1959,32 +2302,77 @@ class ChatGenerationJob:
                         deep_reasoning=research_phase_used,
                     )
                 except LlmInputLimitError:
-                    # 見積もりが外れて実際に超過した場合の最後の砦。根拠を最小まで削って
-                    # 一度だけやり直す。ここで諦めると回答が丸ごと失われる。
-                    # Last resort when the estimate was wrong and the provider still refused:
-                    # compact the evidence to the minimum and retry exactly once, because
-                    # giving up here loses the answer entirely.
+                    # A provider can still reject a conservative estimate.  Rebuild a fresh
+                    # state-only request, then a request containing only the original prompt;
+                    # never replay the growing transcript.
                     if chunks:
                         raise
                     logger.warning(
-                        "Retrying the final answer after an input-limit rejection.",
+                        "Rebuilding the final answer after an input-limit rejection.",
                         extra={"model": self._model},
                     )
                     telemetry.input_limit_recoveries += 1
-                    final_answer_messages, _ = compact_tool_messages(
-                        final_answer_messages,
-                        max_tokens=1,
-                    )
-                    telemetry.final_answer_input_tokens = estimate_messages_tokens(
-                        final_answer_messages
-                    )
-                    telemetry.final_answer_input_chars = estimate_messages_chars(
-                        final_answer_messages
-                    )
-                    final_answer_incomplete = stream_final_answer(
-                        final_answer_messages,
-                        deep_reasoning=research_phase_used,
-                    )
+                    fallback_candidates = [
+                        # Summary-only first: it is smaller than the state projection and still
+                        # carries the semantic facts already extracted by the research pass.
+                        build_final_answer_messages(
+                            minimal_base_messages(),
+                            research_summary=research_summary or research_state.answer_summary(),
+                            user_request=latest_user_message,
+                            coverage_requirements=coverage_requirements,
+                            research_draft=research_draft,
+                        ),
+                        build_final_answer_messages(
+                            research_state.projected_messages(
+                                minimal_base_messages(),
+                                max_tokens=1_500,
+                                include_notes=False,
+                            ),
+                            research_summary=research_summary or research_state.answer_summary(),
+                            user_request=latest_user_message,
+                            coverage_requirements=coverage_requirements,
+                            research_draft=research_draft,
+                        ),
+                        # If the provider's tokenizer rejects both the summary and state
+                        # projection, keep one final prompt with only the original request and
+                        # standing policy so a context mismatch does not become a blank answer.
+                        build_final_answer_messages(
+                            minimal_base_messages(),
+                            research_summary=None,
+                            user_request=latest_user_message,
+                            coverage_requirements=coverage_requirements,
+                            research_draft="",
+                        ),
+                    ]
+                    final_answer_incomplete = None
+                    recovered = False
+                    for fallback in fallback_candidates:
+                        if not request_fits_context(
+                            fallback,
+                            self._model,
+                            "final_answer_deep" if research_phase_used else "final_answer",
+                            None,
+                        ) or estimate_request_tokens(fallback, None) > get_final_answer_input_token_budget():
+                            continue
+                        final_answer_messages = fallback
+                        answer_context_messages = fallback
+                        telemetry.final_answer_input_tokens = estimate_request_tokens(
+                            fallback,
+                            None,
+                        )
+                        telemetry.final_answer_input_chars = estimate_messages_chars(fallback)
+                        try:
+                            final_answer_incomplete = stream_final_answer(
+                                fallback,
+                                deep_reasoning=research_phase_used,
+                            )
+                        except LlmInputLimitError:
+                            telemetry.input_limit_recoveries += 1
+                            continue
+                        recovered = True
+                        break
+                    if not recovered:
+                        raise
 
             if streaming_citation_buffer:
                 streaming_evidence = combine_web_search_results(
@@ -2145,7 +2533,7 @@ class ChatGenerationJob:
         else:
             normalized_response = normalize_response_with_artifact_retry(
                 bot_reply,
-                conversation_messages=current_messages,
+                conversation_messages=answer_context_messages or current_messages,
                 model=self._model,
                 generate_response=get_llm_response,
                 user_request=latest_user_message,
