@@ -15,4 +15,4 @@ Review all included content and attachments before creating or copying a link. R
 
 ## Revoke access
 
-Disable or delete a sharing link when access is no longer required. A recipient may have copied content before revocation, so do not rely on revocation to recover already disclosed information.
+When access is no longer required, delete the chat room, revoke the memo link from its sharing settings, or delete/unpublish the prompt. Chat links do not have an explicit expiry; memo links have a default expiry and can be refreshed or revoked. A recipient may have copied content before revocation, so do not rely on revocation to recover already disclosed information.

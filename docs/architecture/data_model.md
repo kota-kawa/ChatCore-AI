@@ -48,6 +48,8 @@ erDiagram
 | Context vault | `context_facts`, `context_fact_candidates` | active/deprecated の事実と、承認前の抽出候補を分ける。候補は承認後に事実へ紐づく。`context_facts.embedding_status` で vector の生成待ちを監視する。 |
 | MCP OAuth | `mcp_oauth_clients`, `mcp_oauth_user_clients`, `mcp_oauth_grants`, `mcp_oauth_authorization_codes`, `mcp_oauth_tokens` | client、ユーザー別 client 表示、grant、短命 authorization code、access/refresh token を分離する。token の保存値は digest 化される。 |
 
+共有リンクの公開パス、token生成設定、衝突判定、期限・撤回状態のシリアライズは共有サービスで再利用します。ただし `shared_chat_rooms` と `shared_memo_entries` の保存境界・ライフサイクルは統合せず、公開プロンプトは引き続き `prompts.id` と soft-delete を正本にします。
+
 `prompt_list_entries_legacy` と `prompt_list_entries_v2` は migration の変換過程で現れる名前であり、現行機能の所有境界を判断する際は現在の `prompt_list_entries` と migration head を確認します。
 
 ## 永続化されない状態
