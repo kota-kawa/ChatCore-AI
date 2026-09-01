@@ -60,6 +60,8 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`llm_turns`、`tool_calls`、`web_search_count`、`continuation_count`、`continuation_stalled`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は3です。`continuation_stalled=true` は継続が重複部分だけで終わった状態なので、本文は保存済みですが完了扱いではありません。
 
+ツール（関数呼び出し）を使うターンだけが `error` で終わる場合は、プロバイダ側のツール引数検証を疑います。`Tool call validation failed` や `tool_use_failed` は、モデルが返した引数がツールスキーマに合わないとしてプロバイダが拒否した状態で、`LlmToolSchemaError` として分類されます。ログの `tool_schema_recoveries` が増えていれば、そのステップはツールなしでやり直して回答へ到達しています。これはスキーマの制約に検証を期待した実装の兆候なので、`enum` や `required` を足すのではなく、`services/llm_tool_schema.py` の緩和対象を確認し、値の正規化をハンドラ側（`services/chat_generation.py`、`services/web_search.py`）へ寄せます（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）。
+
 開始経路だけ正常で再生成・再接続だけ切れる場合は、`deploy/chatcore-ai.conf` の4つの SSE 経路が同じ location に入り、`proxy_buffering off` と長い `proxy_read_timeout` が適用されているか確認します。
 
 ## API 契約・フロント同期エラー
