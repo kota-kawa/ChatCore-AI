@@ -905,7 +905,7 @@ export function useHomePageGenerationActions({
           updateThinkingStatus(
             promptCount > 0
               ? localize("見つかった共有プロンプトを読み込んでいます", "Reading the shared prompts that matched")
-              : localize("該当する共有プロンプトはありませんでした。回答を作成しています", "No shared prompt matched. Preparing an answer"),
+              : localize("該当する共有プロンプトはありませんでした。思考中", "No shared prompt matched. Preparing an answer"),
             promptCount > 0 ? "web-search" : "generating",
           );
           return;
@@ -913,7 +913,7 @@ export function useHomePageGenerationActions({
 
         if (parsed.event === "shared_prompt_search_failed") {
           updateThinkingStatus(
-            localize("共有プロンプトの検索に失敗しました。回答を作成しています", "Shared prompt search failed. Preparing an answer"),
+            localize("共有プロンプトの検索に失敗しました。思考中", "Shared prompt search failed. Preparing an answer"),
             "generating",
           );
           return;
@@ -943,7 +943,7 @@ export function useHomePageGenerationActions({
           updateThinkingStatus(
             memoCount + factCount > 0
               ? localize("見つかったメモを読み込んでいます", "Reading the notes that matched")
-              : localize("該当するメモはありませんでした。回答を作成しています", "No notes matched. Preparing an answer"),
+              : localize("該当するメモはありませんでした。思考中", "No notes matched. Preparing an answer"),
             memoCount + factCount > 0 ? "web-search" : "generating",
           );
           return;
@@ -951,7 +951,7 @@ export function useHomePageGenerationActions({
 
         if (parsed.event === "personal_knowledge_search_failed") {
           updateThinkingStatus(
-            localize("メモの検索に失敗しました。回答を作成しています", "Note search failed. Preparing an answer"),
+            localize("メモの検索に失敗しました。思考中", "Note search failed. Preparing an answer"),
             "generating",
           );
           return;
@@ -975,21 +975,21 @@ export function useHomePageGenerationActions({
         if (parsed.event === "web_search_failed") {
           switch (getWebSearchFailureStatus(parsed.data.code)) {
             case "configuration":
-              updateThinkingStatus(localize("検索設定を確認できませんでした。回答を作成しています", "Search settings were unavailable. Preparing an answer"), "generating");
+              updateThinkingStatus(localize("検索設定を確認できませんでした。思考中", "Search settings were unavailable. Preparing an answer"), "generating");
               break;
             case "quota_exceeded":
-              updateThinkingStatus(localize("Web検索の上限に達しました。回答を作成しています", "The web search limit was reached. Preparing an answer"), "generating");
+              updateThinkingStatus(localize("Web検索の上限に達しました。思考中", "The web search limit was reached. Preparing an answer"), "generating");
               break;
             case "request_failed":
             default:
-              updateThinkingStatus(localize("Web検索に失敗しました。回答を作成しています", "Web search failed. Preparing an answer"), "generating");
+              updateThinkingStatus(localize("Web検索に失敗しました。思考中", "Web search failed. Preparing an answer"), "generating");
               break;
           }
           return;
         }
 
         if (parsed.event === "response_generation_started") {
-          updateThinkingStatus(localize("回答を作成しています", "Preparing an answer"), "generating");
+          updateThinkingStatus(localize("思考中", "Preparing an answer"), "generating");
           return;
         }
 
@@ -1243,7 +1243,7 @@ export function useHomePageGenerationActions({
           {
             id: thinkingId,
             sender: "thinking",
-            text: localize("AIが応答を準備しています", "AI is preparing a response"),
+            text: localize("思考中", "AI is preparing a response"),
             generationPhase: "preparing",
           },
         ];

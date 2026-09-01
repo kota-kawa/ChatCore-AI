@@ -34,7 +34,7 @@ export function getInitialThinkingState(
     };
   }
   return {
-    text: english ? "AI is preparing a response" : "AIが応答を準備しています",
+    text: english ? "AI is preparing a response" : "思考中",
     generationPhase: "preparing",
   };
 }
