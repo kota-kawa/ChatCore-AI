@@ -16,6 +16,7 @@ export type ChatRoom = {
   id: string;
   title: string;
   createdAt?: string;
+  lastActivityAt?: string;
   mode: ChatRoomMode;
 };
 

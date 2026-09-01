@@ -16,6 +16,7 @@ test("normalizeChatRoom normalizes incomplete payloads", () => {
     title: "   ",
     mode: "temporary",
     created_at: "2026-01-01T00:00:00Z",
+    last_activity_at: "2026-02-01T00:00:00Z",
   });
 
   assert.deepEqual(normalized, {
@@ -23,6 +24,7 @@ test("normalizeChatRoom normalizes incomplete payloads", () => {
     title: "新規チャット",
     mode: "temporary",
     createdAt: "2026-01-01T00:00:00Z",
+    lastActivityAt: "2026-02-01T00:00:00Z",
   });
 });
 

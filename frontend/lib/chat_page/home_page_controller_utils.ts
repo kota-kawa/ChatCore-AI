@@ -57,6 +57,12 @@ export function removeChatRoomsById(rooms: ChatRoom[], roomIds: Iterable<string>
   return rooms.filter((room) => !removed.has(room.id));
 }
 
+export function moveChatRoomToFront(rooms: ChatRoom[], roomId: string): ChatRoom[] {
+  const roomIndex = rooms.findIndex((room) => room.id === roomId);
+  if (roomIndex <= 0) return rooms;
+  return [rooms[roomIndex], ...rooms.slice(0, roomIndex), ...rooms.slice(roomIndex + 1)];
+}
+
 export function updateChatRoomTitle(rooms: ChatRoom[], roomId: string, title: string): ChatRoom[] {
   const normalizedTitle = title.trim();
   if (!normalizedTitle) return rooms;

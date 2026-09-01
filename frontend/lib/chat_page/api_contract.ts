@@ -150,12 +150,14 @@ export function normalizeChatRoom(raw: unknown): ChatRoom | null {
 
   const rawTitle = optionalString(record.title);
   const rawCreatedAt = optionalString(record.created_at);
+  const rawLastActivityAt = optionalString(record.last_activity_at);
   const rawMode = optionalString(record.mode);
 
   return {
     id: String(rawId),
     title: rawTitle && rawTitle.trim() ? rawTitle : "新規チャット",
     createdAt: rawCreatedAt,
+    ...(rawLastActivityAt !== undefined ? { lastActivityAt: rawLastActivityAt } : {}),
     mode: rawMode === "temporary" ? "temporary" : "normal",
   };
 }

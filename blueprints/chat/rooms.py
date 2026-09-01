@@ -163,12 +163,12 @@ def _resolve_room_list_pagination(request: Request) -> tuple[int, tuple[datetime
 
 
 # ページネーションカーソル文字列（Base64 URL Safe）をデコードし日時とルームIDを取り出す関数
-# Decode a URL-safe Base64 cursor string into a tuple of (datetime, room_id) for pagination.
+# Decode a URL-safe Base64 cursor string into a tuple of (last activity datetime, room_id) for pagination.
 def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
     """
     Base64エンコードされたURLセーフなカーソル文字列をデコードし、
-    そこに含まれる作成日時(datetime)とルームID(str)をタプルで返します。
-    Decodes a Base64 URL-safe cursor string and returns a tuple of (datetime, room_id).
+    そこに含まれる最終アクティビティ日時(datetime)とルームID(str)をタプルで返します。
+    Decodes a Base64 URL-safe cursor string and returns a tuple of (last activity datetime, room_id).
     """
     if not value:
         return None
@@ -181,15 +181,15 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
         decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
         payload = json.loads(decoded)
         
-        created_at = payload.get("created_at")
+        last_activity_at = payload.get("last_activity_at") or payload.get("created_at")
         room_id = payload.get("id")
-        if not isinstance(created_at, str) or not isinstance(room_id, str) or not room_id:
+        if not isinstance(last_activity_at, str) or not isinstance(room_id, str) or not room_id:
             raise ValueError
             
         # Z（UTC）をタイムゾーンオフセット形式に正規化してdatetimeオブジェクトを生成
         # Normalize Z with UTC offset formatting and parse to datetime
-        normalized_created_at = created_at.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized_created_at), room_id
+        normalized_last_activity_at = last_activity_at.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized_last_activity_at), room_id
     except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
         # 不正なカーソルの場合はエラーをスロー
         # Raise ApiServiceError on malformed cursor strings
@@ -197,21 +197,21 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
 
 
 # ルームデータからページネーションカーソル用のBase64 URL Safe文字列を作成する関数
-# Encode room metadata (created_at and id) into a URL-safe Base64 cursor string for pagination.
+# Encode room metadata (last_activity_at and id) into a URL-safe Base64 cursor string for pagination.
 def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
     """
-    ルーム情報（作成日時およびルームID）をJSON化し、URLセーフなBase64文字列にエンコードして次のページ取得用カーソルを生成します。
-    Serializes room metadata (created_at and id) and encodes it to a URL-safe Base64 string cursor.
+    ルーム情報（最終アクティビティ日時およびルームID）をJSON化し、URLセーフなBase64文字列にエンコードして次のページ取得用カーソルを生成します。
+    Serializes room metadata (last_activity_at and id) and encodes it to a URL-safe Base64 string cursor.
     """
-    created_at = room.get("created_at")
+    last_activity_at = room.get("last_activity_at")
     room_id = room.get("id")
-    if not isinstance(created_at, str) or not isinstance(room_id, str) or not room_id:
+    if not isinstance(last_activity_at, str) or not isinstance(room_id, str) or not room_id:
         return None
     
     # 辞書をコンパクトなJSON文字列にする
     # Convert dict to a compact JSON string
     payload = json.dumps(
-        {"created_at": created_at, "id": room_id},
+        {"last_activity_at": last_activity_at, "id": room_id},
         ensure_ascii=False,
         separators=(",", ":"),
     )
