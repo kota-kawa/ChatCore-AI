@@ -11,6 +11,7 @@ from services.memo_share import (
     revoke_shared_memo_token,
 )
 from services.memo_embedding_service import schedule_embedding as _schedule_embedding
+from services.share_common import build_share_path
 from services.repositories.memo_export_repository import (
     fetch_memos_for_export as _fetch_memos_for_export,
 )
@@ -71,7 +72,7 @@ def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
     # 有効なトークンがあり、共有状態がアクティブであれば共有URLを設定
     # Set the share URL if the token is present and the share state is active.
     if share_token and bool(share_state.get("is_active")):
-        share_url = frontend_url(f"/shared/memo/{share_token}")
+        share_url = frontend_url(build_share_path("memo", share_token))
     return {"status": "success", **share_state, "share_url": share_url}
 
 # 外部に公開されるモジュールAPIの定義

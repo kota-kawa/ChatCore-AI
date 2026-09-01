@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { COPY_FEEDBACK_RESET_MS } from "../lib/copy_feedback";
-import { copyTextToClipboard } from "../scripts/chat/message_utils";
+import { copyTextToClipboard } from "../scripts/core/clipboard";
 
 // React 非依存の共有定数を、これまで通りこのフックからも参照できるよう再エクスポートする。
 // Re-export the React-free shared constant so callers can keep importing it from this hook.

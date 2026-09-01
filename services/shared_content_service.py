@@ -20,6 +20,7 @@ from services.repositories.prompt_resource_repository import PromptResourceRepos
 from services.repositories.chat_repository import ChatRepository
 from services.repositories.shared_content_repository import SharedContentRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
+from services.share_common import ShareContentKind, build_share_url
 from services.error_messages import (
     ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_SHARED_SKILL_INVALID_TYPE,
@@ -28,7 +29,6 @@ from services.error_messages import (
     MESSAGE_SHARED_SKILL_ALREADY_ADDED,
 )
 from services.user_skills import normalize_user_skill_instructions
-from services.web_urls import build_frontend_url
 
 
 SHARED_CONTENT_DEFAULT_LIMIT = 20
@@ -1012,7 +1012,8 @@ class SharedContentService:
         return normalized[: SHARED_CONTENT_SNIPPET_LENGTH - 1].rstrip() + "…"
 
     def _public_url(self, prompt_id: int) -> str:
-        return build_frontend_url(
+        return build_share_url(
             self._public_base_url,
-            f"/shared/prompt/{prompt_id}",
+            ShareContentKind.PROMPT,
+            prompt_id,
         )

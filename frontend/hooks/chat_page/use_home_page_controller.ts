@@ -54,13 +54,6 @@ import {
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { copyTextToClipboard } from "../../scripts/chat/message_utils";
-import {
-  COPY_ERROR_ICON,
-  COPY_FEEDBACK_RESET_MS,
-  COPY_IDLE_ICON,
-  COPY_SUCCESS_ICON,
-} from "../../lib/copy_feedback";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
 import {
   invalidateTasksCache,
@@ -1119,39 +1112,6 @@ export function useHomePageController() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [closeNewPromptModal, closeShareModal, isNewPromptModalOpen, isPromptSubmitting, shareModalOpen]);
-
-  useEffect(() => {
-    const onCodeCopyClick = (event: MouseEvent) => {
-      if (!(event.target instanceof Element)) return;
-      const button = event.target.closest<HTMLButtonElement>(".code-block-copy-btn");
-      if (!button) return;
-
-      const codeElement = button.closest(".code-block-container")?.querySelector("code");
-      const code = codeElement?.textContent || "";
-      const icon = button.querySelector("i");
-
-      // コピーボタンはアイコンのみ。成功時は数秒だけチェックマークへ差し替え、その後元へ戻す。
-      // Copy buttons are icon-only: swap to a check mark for a few seconds on success, then restore.
-      const swapIcon = (resultIcon: typeof COPY_SUCCESS_ICON | typeof COPY_ERROR_ICON) => {
-        if (!icon) return;
-        icon.classList.remove(COPY_IDLE_ICON, COPY_SUCCESS_ICON, COPY_ERROR_ICON);
-        icon.classList.add(resultIcon);
-        scheduleTrackedTimeout(() => {
-          icon.classList.remove(COPY_SUCCESS_ICON, COPY_ERROR_ICON);
-          icon.classList.add(COPY_IDLE_ICON);
-        }, COPY_FEEDBACK_RESET_MS);
-      };
-
-      copyTextToClipboard(code)
-        .then(() => swapIcon(COPY_SUCCESS_ICON))
-        .catch(() => swapIcon(COPY_ERROR_ICON));
-    };
-
-    document.addEventListener("click", onCodeCopyClick);
-    return () => {
-      document.removeEventListener("click", onCodeCopyClick);
-    };
-  }, [scheduleTrackedTimeout]);
 
   useEffect(() => {
     if (promptAssistControllerRef.current) return;

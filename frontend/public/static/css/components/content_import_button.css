@@ -1,0 +1,40 @@
+/* Shared visual/state hooks for actions that import shared content. */
+.content-import-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-content: center;
+  transition: opacity var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.content-import-button--labelled {
+  min-height: var(--tap-target-min);
+}
+
+.content-import-button--compact {
+  min-height: var(--tap-target-min);
+  min-width: var(--tap-target-min);
+}
+
+.content-import-button[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.content-import-button[data-action-state="success"] {
+  color: var(--success-color);
+}
+
+.content-import-button[data-action-state="error"] {
+  color: var(--danger-color);
+}
+
+.content-import-button[data-action-state="pending"] .bi-arrow-repeat {
+  animation: cc-content-import-spin 0.9s linear infinite;
+}
+
+@keyframes cc-content-import-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

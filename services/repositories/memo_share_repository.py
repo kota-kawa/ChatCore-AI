@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api_errors import ResourceNotFoundError
 from services.error_messages import ERROR_MEMO_NOT_FOUND_FOR_SHARE, ERROR_SHARED_LINK_NOT_FOUND
 from services.models import MemoEntry, SharedMemoEntry
+from services.share_common import TokenShareLifecycle
 
 
 class MemoShareRepository:
@@ -24,9 +25,8 @@ class MemoShareRepository:
     def _is_active(row: Any) -> bool:
         expires_at = row.get("expires_at") if hasattr(row, "get") else None
         revoked_at = row.get("revoked_at") if hasattr(row, "get") else None
-        return revoked_at is None and (
-            expires_at is None or expires_at > datetime.utcnow()
-        )
+        share_token = row.get("share_token") if hasattr(row, "get") else None
+        return TokenShareLifecycle(share_token, expires_at, revoked_at).is_active
 
     async def create_or_get(
         self,

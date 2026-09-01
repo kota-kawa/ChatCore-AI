@@ -1,4 +1,5 @@
 import { useEffect, useState, type MutableRefObject } from "react";
+import { isNativeShareSupported } from "../../lib/share";
 
 type UsePromptSharePageSetupOptions = {
   hasModalLockRef: MutableRefObject<boolean>;
@@ -15,7 +16,7 @@ export function usePromptSharePageSetup({
 
   useEffect(() => {
     document.body.classList.add("prompt-share-page");
-    setSupportsNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+    setSupportsNativeShare(isNativeShareSupported());
 
     const importCustomElements = async () => {
       await Promise.all([

@@ -12,15 +12,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .datetime_serialization import serialize_datetime_iso
 from .db import session_scope
 from .repositories.memo_share_repository import MemoShareRepository
+from .share_common import (
+    SHARED_TOKEN_MAX_COLLISION_RETRIES,
+    SHARED_TOKEN_RETRY_BACKOFF_SECONDS,
+    TokenShareLifecycle,
+    generate_share_token,
+    is_unique_violation,
+    serialize_token_share_lifecycle,
+)
 
-UNIQUE_VIOLATION_PGCODE = "23505"
-SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 DEFAULT_SHARE_EXPIRES_DAYS = 30
 T = TypeVar("T")
 
 
 def _is_expired(expires_at: Any) -> bool:
-    return isinstance(expires_at, datetime) and expires_at <= datetime.utcnow()
+    return TokenShareLifecycle(None, expires_at, None).is_expired
 
 
 def _serialize_share_state(
@@ -30,16 +36,12 @@ def _serialize_share_state(
     *,
     is_reused: bool = False,
 ) -> dict[str, Any]:
-    expired = _is_expired(expires_at)
-    return {
-        "share_token": share_token or "",
-        "expires_at": serialize_datetime_iso(expires_at),
-        "revoked_at": serialize_datetime_iso(revoked_at),
-        "is_expired": expired,
-        "is_revoked": revoked_at is not None,
-        "is_active": bool(share_token) and revoked_at is None and not expired,
-        "is_reused": is_reused,
-    }
+    return serialize_token_share_lifecycle(
+        share_token,
+        expires_at,
+        revoked_at,
+        is_reused=is_reused,
+    )
 
 
 def _resolve_expires_at(expires_in_days: int | None) -> datetime | None:
@@ -59,18 +61,8 @@ async def _in_transaction(
             return await operation(owned_session)
 
 
-def _sqlstate(exc: BaseException) -> str | None:
-    current: BaseException | None = exc
-    for _ in range(3):
-        if current is None:
-            return None
-        value = getattr(current, "sqlstate", None)
-        if value:
-            return str(value)
-        current = getattr(current, "orig", None)
-        if not isinstance(current, BaseException):
-            return None
-    return None
+def _is_unique_violation(exc: BaseException) -> bool:
+    return is_unique_violation(exc)
 
 
 async def _create_once(
@@ -111,13 +103,13 @@ async def create_or_get_shared_memo_token(
             session,
             memo_id,
             user_id,
-            secrets.token_urlsafe(18),
+            generate_share_token(secrets.token_urlsafe),
             expires_at,
             force_refresh=force_refresh,
         )
 
     for attempt in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
-        token = secrets.token_urlsafe(18)
+        token = generate_share_token(secrets.token_urlsafe)
         try:
             async with session_scope() as owned_session:
                 async with owned_session.begin():
@@ -130,9 +122,9 @@ async def create_or_get_shared_memo_token(
                         force_refresh=force_refresh,
                     )
         except IntegrityError as exc:
-            if _sqlstate(exc) != UNIQUE_VIOLATION_PGCODE or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
+            if not _is_unique_violation(exc) or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
                 raise
-            await asyncio.sleep(0.05 * (attempt + 1))
+            await asyncio.sleep(SHARED_TOKEN_RETRY_BACKOFF_SECONDS * (attempt + 1))
     raise RuntimeError("Failed to create shared memo token after collision retries.")
 
 

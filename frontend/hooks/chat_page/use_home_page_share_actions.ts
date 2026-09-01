@@ -2,7 +2,8 @@ import { useCallback, type MutableRefObject } from "react";
 
 import { normalizeShareChatRoomPayload } from "../../lib/chat_page/api_contract";
 import type { ChatRoomMode } from "../../lib/chat_page/types";
-import { copyTextToClipboard } from "../../scripts/chat/message_utils";
+import { shareWithNativeSheet as openNativeShare } from "../../lib/share";
+import { copyTextToClipboard } from "../../scripts/core/clipboard";
 import {
   extractApiErrorMessage,
   readJsonBodySafe,
@@ -133,27 +134,26 @@ export function useHomePageShareActions({
       setShareStatus({ message: locale === "en" ? "Create a share link first." : "先に共有リンクを生成してください。", error: true });
       return;
     }
-    if (!navigator.share) {
+    const result = await openNativeShare({
+      title: locale === "en" ? "Chat Core shared chat" : "Chat Core 共有チャット",
+      text: locale === "en" ? "Shared from Chat Core." : "このチャットルームを共有しました。",
+      url: shareUrl,
+    });
+    if (result.status === "cancelled") return;
+    if (result.status === "unsupported") {
       setShareStatus({ message: locale === "en" ? "This browser does not support native sharing." : "このブラウザはネイティブ共有に対応していません。", error: true });
       return;
     }
-
-    try {
-      await navigator.share({
-        title: locale === "en" ? "Chat Core shared chat" : "Chat Core 共有チャット",
-        text: locale === "en" ? "Shared from Chat Core." : "このチャットルームを共有しました。",
-        url: shareUrl,
-      });
+    if (result.status === "shared") {
       setShareStatus({ message: locale === "en" ? "Share sheet opened." : "共有シートを開きました。", error: false });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      setShareStatus({
-        message: error instanceof Error ? error.message : (locale === "en" ? "Sharing failed." : "共有に失敗しました。"),
-        error: true,
-      });
+      return;
     }
+
+    const error = result.error;
+    setShareStatus({
+      message: error instanceof Error ? error.message : (locale === "en" ? "Sharing failed." : "共有に失敗しました。"),
+      error: true,
+    });
   }, [locale, shareUrl]);
 
   return {

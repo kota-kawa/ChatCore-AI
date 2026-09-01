@@ -8,6 +8,7 @@ import { decodeStoredMessage } from "../../lib/shared_chat/message_text";
 import type { SharedChatPayload } from "../../lib/shared_chat/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImportActionState } from "../../hooks/use_import_action";
 
 // ページコンポーネントに渡されるProps型
 // Props passed to the SharedChatPage component
@@ -130,6 +131,7 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
 export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: SharedChatPageProps) {
   const { locale } = useTranslation();
   const english = locale === "en";
+  const continueActionState = useImportActionState();
   // 他ページと共通の右下アクションメニューをクライアント側で登録する
   // Register the shared bottom-right action menu on the client.
   useEffect(() => {
@@ -198,7 +200,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: 
                   ) : null}
                 </p>
               </div>
-              <SharedChatContinueButton token={token} />
+              <SharedChatContinueButton token={token} actionState={continueActionState} />
             </header>
 
             <main className="shared-chat-messages">
@@ -212,7 +214,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: 
               {english
                 ? "This page is read-only. “Continue this chat” copies the conversation into your own chat; the original stays unchanged."
                 : "このページは読み取り専用です。「このチャットを続ける」を押すと、会話が自分のチャットに複製され、共有元は変更されません。"}
-              <SharedChatContinueButton token={token} />
+              <SharedChatContinueButton token={token} actionState={continueActionState} />
             </footer>
           </div>
         )}

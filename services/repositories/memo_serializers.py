@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 from typing import Any
 
 from services.datetime_serialization import serialize_datetime_iso
+from services.share_common import TokenShareLifecycle, build_share_path
 from services.web import frontend_url as default_frontend_url
 
 from .memo_constants import DEFAULT_EXCERPT_LENGTH
@@ -47,11 +47,7 @@ def is_expired(expires_at: Any) -> bool:
     """
     # 期限が datetime 型でない場合は未期限とみなす
     # If the expiration date is not a datetime object, consider it not expired.
-    if not isinstance(expires_at, datetime):
-        return False
-    # 現在のUTC時刻と比較して期限切れ判定。現在のUTC時間以前であればTrue
-    # Compare with the current UTC datetime to check expiration. Returns True if current UTC is past or equal to expires_at.
-    return expires_at <= datetime.utcnow()
+    return TokenShareLifecycle(None, expires_at, None).is_expired
 
 
 def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
@@ -71,9 +67,10 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     expires_at = memo.get("expires_at")
     revoked_at = memo.get("revoked_at")
 
+    lifecycle = TokenShareLifecycle(share_token, expires_at, revoked_at)
     # トークンが存在し、無効化されておらず、有効期限内である場合にアクティブと判定
     # Considered active if token exists, is not revoked, and is not expired.
-    is_active = bool(share_token) and revoked_at is None and not is_expired(expires_at)
+    is_active = lifecycle.is_active
 
     # シリアライズされた共有メタデータ情報を返す
     # Return the serialized sharing metadata.
@@ -81,12 +78,12 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
         "share_token": share_token,
         "expires_at": serialize_datetime_iso(expires_at),
         "revoked_at": serialize_datetime_iso(revoked_at),
-        "is_expired": is_expired(expires_at),
-        "is_revoked": revoked_at is not None,
+        "is_expired": lifecycle.is_expired,
+        "is_revoked": lifecycle.is_revoked,
         "is_active": is_active,
         # アクティブな場合のみ共有URLを構築
         # Build the share URL only if the sharing state is active.
-        "share_url": _frontend_url(f"/shared/memo/{share_token}") if is_active else "",
+        "share_url": _frontend_url(build_share_path("memo", share_token)) if is_active else "",
     }
 
 
