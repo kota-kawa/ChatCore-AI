@@ -41,9 +41,11 @@ from services.chat_research_notes import (
     strip_internal_notes,
 )
 from services.llm import (
+    LlmAuthenticationError,
     LlmConfigurationError,
     LlmInputLimitError,
     LlmOutputLimitError,
+    LlmRateLimitError,
     LlmTimeoutError,
 )
 from services.selected_reference_context import (
@@ -56,6 +58,7 @@ from services.web_search import (
     create_web_evidence_context_budget,
     WebEvidenceContextBudget,
     WebSearchAugmentation,
+    WebSearchQuotaExceeded,
     WebSearchResult,
     WebSearchSource,
     WEB_SEARCH_ERROR_REQUEST_FAILED,
@@ -2137,25 +2140,125 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: web_search_failed", body)
         self.assertIn(f'"code": "{WEB_SEARCH_ERROR_REQUEST_FAILED}"', body)
         self.assertIn('"phase": "final_answer"', body)
+
+    # 日本語: 「思考→Web検索」ループの途中で月間検索上限に達した場合も、その場でログへ
+    # 詳細が残ることを検証します（画面には失敗ステータスしか出ないため、原因の追跡はログに依存する）。
+    # English: Verify that hitting the monthly web-search quota mid-loop (during the
+    # research → web-search tool loop, not just at the top-level handler) is logged with
+    # detail on the spot, since the UI only shows a failure status and the cause is only
+    # traceable via the log.
+    def test_background_generation_job_logs_web_search_quota_exceeded_mid_loop(self):
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            if tools:
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "今日のニュース"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            if generation_phase == "research_wrapup":
+                yield json.dumps({"requirements": [], "facts": []}, ensure_ascii=False)
+                return
+            yield "検索なしで回答します"
+
+        with (
+            patch.dict(
+                "services.chat_generation.os.environ",
+                {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
+                clear=False,
+            ),
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "今日のニュース"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                side_effect=WebSearchQuotaExceeded(limit=100, retry_after_seconds=3600),
+            ),
+            self.assertLogs("services.chat_generation", level="WARNING") as log_cm,
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "今日のニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("検索なしで回答します", body)
+        logged_text = "\n".join(log_cm.output)
+        self.assertIn("quota exceeded", logged_text)
+        self.assertIn("limit=100", logged_text)
         self.assertIn("event: chunk", body)
 
     # 日本語: LLMの設定エラー(APIキー不足等)が発生した際、その詳細メッセージがエラーイベントとして出力されることを検証します。
     # English: Verify that LLM configuration errors (like missing API keys) are output as error events.
     def test_background_generation_job_surfaces_configuration_error_message(self):
-        with patch(
-            "services.chat_generation.get_llm_response_stream",
-            side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
-        ):
-            job = start_generation_job(
-                "guest:sid-1:default",
-                conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="gpt-5.6-luna",
-                persist_response=lambda _: None,
-            )
-            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+        # ユーザーへエラーが表示される経路には、必ず詳細なログが対応して残ることを検証する。
+        # Verify that a detailed log line always accompanies an error surfaced to the user.
+        with self.assertLogs("services.chat_generation", level="ERROR") as log_cm:
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
+            ):
+                job = start_generation_job(
+                    "guest:sid-1:default",
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="gpt-5.6-luna",
+                    persist_response=lambda _: None,
+                )
+                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("event: error", body)
         self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        logged_text = "\n".join(log_cm.output)
+        self.assertIn("configuration error", logged_text)
+        self.assertIn("OPENAI_API_KEY が未設定です。", logged_text)
+
+    def test_background_generation_job_logs_authentication_and_rate_limit_errors(self):
+        # 認証エラー・レート制限エラーもユーザー表示だけでなく必ずログに残ることを検証する。
+        # Authentication and rate-limit errors must also be logged, not just shown to the user.
+        with self.assertLogs("services.chat_generation", level="ERROR") as log_cm:
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=LlmAuthenticationError("Anthropic Claude API authentication failed."),
+            ):
+                job = start_generation_job(
+                    "guest:sid-1:default",
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="claude-haiku-4-5-20251001",
+                    persist_response=lambda _: None,
+                )
+                b"".join(_iter_llm_stream_events(job))
+        self.assertIn("authentication error", "\n".join(log_cm.output))
+
+        with self.assertLogs("services.chat_generation", level="WARNING") as log_cm:
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=LlmRateLimitError(
+                    "Groq API rate limit exceeded.", retry_after_seconds=30
+                ),
+            ):
+                job = start_generation_job(
+                    "guest:sid-2:default",
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+                b"".join(_iter_llm_stream_events(job))
+        logged_text = "\n".join(log_cm.output)
+        self.assertIn("rate limit", logged_text)
+        self.assertIn("retry_after_seconds=30", logged_text)
 
     # 日本語: 応答が出力される前に発生した一時的な通信エラーについて、自動リトライが走り最終的に成功することを検証します。
     # English: Verify that transient errors occurring before output are automatically retried and eventually succeed.
@@ -2971,6 +3074,57 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(any("要約方針" in content and "要約テンプレ" in content for content in contents))
         personal_search.assert_awaited_once_with(42, "要約して")
         shared_search.assert_awaited_once_with("要約して")
+
+    # 日本語: 非ストリーミング経路（is_streaming_model=False）でLLM呼び出しが失敗した場合、
+    # ユーザーへのエラー応答だけでなく詳細なログも必ず残ることを検証します。
+    # English: Verify that when the LLM call fails on the non-streaming regenerate path
+    # (is_streaming_model=False), a detailed log entry is always recorded alongside the
+    # error response returned to the user.
+    def test_regenerate_logs_llm_service_error_in_non_streaming_path(self):
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+
+        def get_llm_response(messages, model):
+            raise LlmRateLimitError("Anthropic Claude API rate limit exceeded.")
+
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                new=AsyncMock(return_value=[
+                    {"id": 10, "message": "要約して", "sender": "user"},
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ]),
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
+            self.assertLogs("blueprints.chat.messages", level="ERROR") as log_cm,
+        ):
+            response = asyncio.run(chat_regenerate(request))
+
+        self.assertEqual(response.status_code, 500)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertIn("rate limit", payload["error"])
+        logged_text = "\n".join(log_cm.output)
+        self.assertIn("room-1", logged_text)
+        self.assertIn("claude-haiku-4-5-20251001", logged_text)
 
     # 日本語: メッセージを編集して再生成する際、元の添付ファイル内容が正しく引き継がれることを検証します。
     # English: Verify that editing a message and regenerating it preserves the original attachment contents.

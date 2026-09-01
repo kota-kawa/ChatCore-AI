@@ -1733,6 +1733,13 @@ class ChatGenerationJob:
                             f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
                             "検索なしで回答を続けます。"
                         )
+                        logger.warning(
+                            "Web search quota exceeded mid-turn (limit=%s, retry_after_seconds=%s); "
+                            "continuing the turn without this search.",
+                            exc.limit,
+                            exc.retry_after_seconds,
+                            extra=self._telemetry.as_log_extra(),
+                        )
                         web_search_trace_steps.append(
                             search_failed_step(
                                 query_text,
@@ -1940,10 +1947,24 @@ class ChatGenerationJob:
                     publish_stream_text_with_images(buffered_text)
 
         # エラーハンドリング
-        # Error handling
+        # ユーザーへエラーを表示する経路は必ずログにも詳細を残す方針のため、各分岐で
+        # exc_info 付きのログを出す（呼び出し元の llm.py 側で既にログ済みの例外でも、
+        # ここでは会話ターンのテレメトリ（モデル・ステップ数・調査有無など）を紐付けて
+        # 再度記録し、どのターンで失敗したかを追えるようにする）。
+        # Error handling. Every branch that surfaces an error to the user must also leave a
+        # detailed log entry. Even though llm.py already logs the raw provider exception, log
+        # again here with this turn's telemetry (model, step count, whether research/tool use
+        # was in progress) so failures mid-loop (research → web search → answer) are traceable
+        # to the specific turn, not just the provider call.
         except LlmConfigurationError as exc:
             if self._cancelled:
                 return
+            logger.error(
+                "Chat generation stopped due to an LLM configuration error: %s",
+                exc,
+                exc_info=True,
+                extra=self._telemetry.as_log_extra(),
+            )
             error_message = str(exc) or "LLM設定エラーが発生しました。"
             self._handle_error(
                 error_message,
@@ -1951,9 +1972,15 @@ class ChatGenerationJob:
                 invoke_error_callback=not chunks,
             )
             return
-        except LlmAuthenticationError:
+        except LlmAuthenticationError as exc:
             if self._cancelled:
                 return
+            logger.error(
+                "Chat generation stopped due to an LLM provider authentication error: %s",
+                exc,
+                exc_info=True,
+                extra=self._telemetry.as_log_extra(),
+            )
             error_message = "LLMプロバイダ認証エラーが発生しました。設定を確認してください。"
             self._handle_error(
                 error_message,
@@ -1964,6 +1991,13 @@ class ChatGenerationJob:
         except LlmRateLimitError as exc:
             if self._cancelled:
                 return
+            logger.warning(
+                "Chat generation hit an LLM provider rate limit (retry_after_seconds=%s): %s",
+                exc.retry_after_seconds,
+                exc,
+                exc_info=True,
+                extra=self._telemetry.as_log_extra(),
+            )
             error_message = "AI提供元が混み合っています。時間をおいて再試行してください。"
             payload: dict[str, Any] = {
                 "message": error_message,
@@ -1982,6 +2016,7 @@ class ChatGenerationJob:
                 return
             logger.warning(
                 "Chat generation stopped because the request exceeded the model context window.",
+                exc_info=True,
                 extra=self._telemetry.as_log_extra(),
             )
             error_message = (
@@ -2002,6 +2037,13 @@ class ChatGenerationJob:
                 error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
             else:
                 error_message = "内部エラーが発生しました。"
+            logger.error(
+                "Chat generation stopped due to an LLM service error (retryable=%s): %s",
+                retryable,
+                exc,
+                exc_info=True,
+                extra={**self._telemetry.as_log_extra(), "llm_error_type": exc.__class__.__name__},
+            )
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": retryable},
@@ -2011,7 +2053,10 @@ class ChatGenerationJob:
         except Exception:
             if self._cancelled:
                 return
-            logger.exception("Unexpected error while generating chat response.")
+            logger.exception(
+                "Unexpected error while generating chat response.",
+                extra=self._telemetry.as_log_extra(),
+            )
             error_message = "内部エラーが発生しました。"
             self._handle_error(
                 error_message,

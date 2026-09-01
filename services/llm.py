@@ -423,26 +423,76 @@ def _map_provider_exception(
 
 # マッピングされたLLMプロバイダエラーをログ出力し、例外として発生させる
 # Log and raise the mapped LLM provider error.
-# LLMプロバイダ例外を共通例外に変換してログ出力し、送出します。
-# Map the LLM provider exception, log it, and raise it.
+# LLMプロバイダ例外を共通例外に変換してログ出力し、送出します。呼び出し元・モデル・
+# フェーズ・ステータスコード・再試行可否を構造化フィールドとして残し、原因調査に
+# トレースバックが必ず残るようにする（LLM関連の障害はすべてログへ残す方針）。
+# Map the LLM provider exception, log it, and raise it. Logs the caller's model, phase,
+# status code, and retryability as structured fields, and always attaches a traceback, so
+# every LLM-related failure leaves an investigable trail.
 def _raise_provider_error(
     exc: BaseException,
     *,
     provider_name: str,
     fallback_message: str,
+    model_name: str = "",
+    generation_phase: str = "default",
 ) -> None:
     mapped_error = _map_provider_exception(
         exc,
         provider_name=provider_name,
         fallback_message=fallback_message,
     )
+    status_code = getattr(exc, "status_code", None)
+    retryable = getattr(mapped_error, "retryable", False)
+    retry_after_seconds = getattr(mapped_error, "retry_after_seconds", None)
     logger.error(
-        "%s (%s -> %s).",
+        "%s (%s -> %s, provider=%s, model=%s, phase=%s, status_code=%s, retryable=%s): %s",
         fallback_message,
         exc.__class__.__name__,
         mapped_error.__class__.__name__,
+        provider_name,
+        model_name or "-",
+        generation_phase,
+        status_code if status_code is not None else "-",
+        retryable,
+        _redact_sensitive_text(str(exc)),
+        exc_info=exc,
+        extra={
+            "llm_provider": provider_name,
+            "llm_model": model_name,
+            "llm_generation_phase": generation_phase,
+            "llm_error_type": mapped_error.__class__.__name__,
+            "llm_source_error_type": exc.__class__.__name__,
+            "llm_status_code": status_code,
+            "llm_retryable": retryable,
+            "llm_retry_after_seconds": retry_after_seconds,
+        },
     )
     raise mapped_error from exc
+
+
+# APIキー未設定などの設定不備エラーをログ出力してから例外として発生させる
+# Log a configuration error (e.g. missing API key) before raising it.
+# 設定不備は呼び出し側で無言のまま握りつぶされやすいため、送出前に必ずログへ残す。
+# Configuration errors are easy for callers to swallow silently, so always log before raising.
+def _raise_configuration_error(
+    message: str,
+    *,
+    provider_name: str,
+    model_name: str = "",
+) -> None:
+    logger.error(
+        "%s (provider=%s, model=%s).",
+        message,
+        provider_name,
+        model_name or "-",
+        extra={
+            "llm_provider": provider_name,
+            "llm_model": model_name,
+            "llm_error_type": LlmConfigurationError.__name__,
+        },
+    )
+    raise LlmConfigurationError(message)
 
 
 # 指定されたLLMモデルが無効であることを警告し、例外を発生させる
@@ -656,7 +706,11 @@ def get_groq_response(
     # Run chat completion through the Groq client.
     """Groq API呼び出し (via OpenAI client)"""
     if groq_client is None:
-        raise LlmConfigurationError("GROQ_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "GROQ_API_KEY が未設定です。",
+            provider_name="Groq",
+            model_name=model_name,
+        )
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
@@ -690,6 +744,7 @@ def get_groq_response(
             exc,
             provider_name="Groq",
             fallback_message="Groq API call failed.",
+            model_name=model_name,
         )
 
 
@@ -711,7 +766,12 @@ def _get_openai_compatible_response_stream(
     # OpenAI互換APIのストリーム断片を順次返し、最後に確実に close します。
     # Yield OpenAI-compatible stream deltas and always close the stream.
     if client is None:
-        raise LlmConfigurationError(missing_key_message)
+        provider_name = "Groq" if "Groq" in provider_error_message else "provider"
+        _raise_configuration_error(
+            missing_key_message,
+            provider_name=provider_name,
+            model_name=model_name,
+        )
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     stream = None
@@ -810,6 +870,8 @@ def _get_openai_compatible_response_stream(
             exc,
             provider_name=provider_name,
             fallback_message=provider_error_message,
+            model_name=model_name,
+            generation_phase=generation_phase,
         )
     finally:
         if stream is not None:
@@ -1005,7 +1067,11 @@ def get_claude_response(
     tools: list[dict[str, Any]] | None = None,
 ) -> str:
     if claude_client is None:
-        raise LlmConfigurationError("ANTHROPIC_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "ANTHROPIC_API_KEY が未設定です。",
+            provider_name="Anthropic Claude",
+            model_name=model_name,
+        )
 
     system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
     try:
@@ -1026,6 +1092,7 @@ def get_claude_response(
             exc,
             provider_name="Anthropic Claude",
             fallback_message="Anthropic Claude API call failed.",
+            model_name=model_name,
         )
 
 
@@ -1039,7 +1106,11 @@ def get_claude_response_stream(
     generation_phase: str = "default",
 ) -> Iterator[str]:
     if claude_client is None:
-        raise LlmConfigurationError("ANTHROPIC_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "ANTHROPIC_API_KEY が未設定です。",
+            provider_name="Anthropic Claude",
+            model_name=model_name,
+        )
 
     system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
     stream = None
@@ -1131,6 +1202,8 @@ def get_claude_response_stream(
             exc,
             provider_name="Anthropic Claude",
             fallback_message="Anthropic Claude streaming API call failed.",
+            model_name=model_name,
+            generation_phase=generation_phase,
         )
     finally:
         if stream is not None and hasattr(stream, "close"):
@@ -1150,7 +1223,11 @@ def get_openai_response(
     # OpenAI Responses APIでテキスト応答を取得します。
     # Fetch text output via OpenAI Responses API.
     if openai_client is None:
-        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "OPENAI_API_KEY が未設定です。",
+            provider_name="OpenAI",
+            model_name=model_name,
+        )
 
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
@@ -1197,6 +1274,7 @@ def get_openai_response(
             exc,
             provider_name="OpenAI",
             fallback_message="OpenAI Responses API call failed.",
+            model_name=model_name,
         )
 
 
@@ -1214,7 +1292,11 @@ def get_openai_response_stream(
     # OpenAI Responses APIのストリーム断片を逐次返します。
     # Yield OpenAI Responses API text deltas incrementally.
     if openai_client is None:
-        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "OPENAI_API_KEY が未設定です。",
+            provider_name="OpenAI",
+            model_name=model_name,
+        )
 
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
@@ -1278,6 +1360,8 @@ def get_openai_response_stream(
             exc,
             provider_name="OpenAI",
             fallback_message="OpenAI Responses streaming API call failed.",
+            model_name=model_name,
+            generation_phase=generation_phase,
         )
 
 
@@ -1363,7 +1447,11 @@ def _get_chat_completions_json_response(
     fallback_message: str,
 ) -> str | None:
     if client is None:
-        raise LlmConfigurationError(missing_key_message)
+        _raise_configuration_error(
+            missing_key_message,
+            provider_name=provider_name,
+            model_name=model_name,
+        )
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
@@ -1385,6 +1473,7 @@ def _get_chat_completions_json_response(
             exc,
             provider_name=provider_name,
             fallback_message=fallback_message,
+            model_name=model_name,
         )
 
 
@@ -1397,7 +1486,11 @@ def _get_openai_responses_json_response(
     model_name: str,
 ) -> str | None:
     if openai_client is None:
-        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+        _raise_configuration_error(
+            "OPENAI_API_KEY が未設定です。",
+            provider_name="OpenAI",
+            model_name=model_name,
+        )
 
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
@@ -1416,6 +1509,7 @@ def _get_openai_responses_json_response(
             exc,
             provider_name="OpenAI",
             fallback_message="OpenAI Responses JSON API call failed.",
+            model_name=model_name,
         )
 
 

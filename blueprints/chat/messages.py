@@ -1133,6 +1133,15 @@ async def chat_regenerate(
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
+        # ユーザーへエラーを返す経路は必ず詳細をログへ残す。
+        # Always log details on any path that surfaces an error to the user.
+        logger.error(
+            "Non-streaming chat generation failed for room %s (model=%s): %s",
+            chat_room_id,
+            model,
+            exc,
+            exc_info=True,
+        )
         return jsonify({"error": str(exc)}, status_code=500)
 
     selected_steps = selected_reference_steps(selected_reference_trace)
@@ -1605,6 +1614,15 @@ async def chat_edit_and_regenerate(
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
+        # ユーザーへエラーを返す経路は必ず詳細をログへ残す。
+        # Always log details on any path that surfaces an error to the user.
+        logger.error(
+            "Non-streaming chat generation failed for room %s (model=%s): %s",
+            chat_room_id,
+            model,
+            exc,
+            exc_info=True,
+        )
         return jsonify({"error": str(exc)}, status_code=500)
 
     selected_steps = selected_reference_steps(selected_reference_trace)
