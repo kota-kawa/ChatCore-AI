@@ -171,12 +171,46 @@ _BRAVE_SEARCH_LANG_VALUES = {
     "uk",
     "vi",
 }
+# Braveの言語コードは一部がISO 639-1と一致しない（日本語は "ja" ではなく "jp"）。モデルは
+# 自然にISO形式やBCP-47形式を返すため、既知の言い換えをここで正規のBraveコードへ寄せる。
+# 地域サブタグの脱落（"fr-FR" → "fr"）は _canonical_brave_search_lang が汎用に処理するので、
+# ここには「機械的に短くしても届かない」対応だけを置く。
+# Some Brave language codes differ from ISO 639-1 (Japanese is "jp", not "ja"). Models
+# naturally emit ISO or BCP-47 tags, so map the known spellings onto the canonical Brave
+# codes here. Dropping a region subtag ("fr-FR" -> "fr") is handled generically by
+# _canonical_brave_search_lang, so this table only carries what truncation cannot reach.
 _BRAVE_SEARCH_LANG_ALIASES = {
     "ja": "jp",
-    "ja-jp": "jp",
+    "jpn": "jp",
     "zh": "zh-hans",
+    "zho": "zh-hans",
+    "chi": "zh-hans",
     "zh-cn": "zh-hans",
+    "zh-sg": "zh-hans",
     "zh-tw": "zh-hant",
+    "zh-hk": "zh-hant",
+    "zh-mo": "zh-hant",
+    "cn": "zh-hans",
+    "tw": "zh-hant",
+    "pt": "pt-br",
+    "br": "pt-br",
+    "en-uk": "en-gb",
+    "gb": "en-gb",
+    "us": "en",
+    "eng": "en",
+    "kr": "ko",
+    "kor": "ko",
+    "no": "nb",
+    "nn": "nb",
+    "nor": "nb",
+    "iw": "he",
+    "heb": "he",
+    "ua": "uk",
+    "gr": "el",
+    "cz": "cs",
+    "se": "sv",
+    "dk": "da",
+    "ee": "et",
 }
 _BRAVE_SEARCH_LANGUAGE_CODES = tuple(sorted(_BRAVE_SEARCH_LANG_VALUES))
 _SEARCH_LANGUAGE_POLICY = (
@@ -863,6 +897,76 @@ def _is_iso_date(value: str) -> bool:
     return year.isdigit() and month.isdigit() and day.isdigit()
 
 
+# Braveが受け付ける鮮度指定と、モデルが返しがちな言い換え。未知の値は「指定なし」へ落とす。
+# Freshness values Brave accepts, plus the spellings a model tends to produce instead.
+# Anything unknown degrades to "no freshness filter" rather than reaching the API.
+_BRAVE_FRESHNESS_VALUES = frozenset({"pd", "pw", "pm", "py"})
+_BRAVE_FRESHNESS_ALIASES = {
+    "d": "pd",
+    "1d": "pd",
+    "p1d": "pd",
+    "24h": "pd",
+    "day": "pd",
+    "today": "pd",
+    "past-day": "pd",
+    "pastday": "pd",
+    "past-24-hours": "pd",
+    "w": "pw",
+    "1w": "pw",
+    "7d": "pw",
+    "p1w": "pw",
+    "week": "pw",
+    "past-week": "pw",
+    "pastweek": "pw",
+    "m": "pm",
+    "1m": "pm",
+    "30d": "pm",
+    "p1m": "pm",
+    "month": "pm",
+    "past-month": "pm",
+    "pastmonth": "pm",
+    "y": "py",
+    "1y": "py",
+    "365d": "py",
+    "p1y": "py",
+    "year": "py",
+    "past-year": "py",
+    "pastyear": "py",
+    "all": "",
+    "any": "",
+    "anytime": "",
+    "none": "",
+    "null": "",
+    "false": "",
+    "no": "",
+    "unlimited": "",
+}
+
+
+def normalize_web_search_freshness(value: Any) -> str:
+    """Normalize a model-supplied freshness value to something Brave accepts.
+
+    鮮度指定はそのままBrave APIのクエリへ載る。プランナーもツール呼び出しも同じ正規化を
+    通し、未知の値でリモート400を踏まないようにする。
+    The freshness value goes straight into the Brave API query. Both the planner and the tool
+    call go through this normalization so an unknown value never causes a remote 400.
+    """
+    raw = re.sub(r"\s+", "", str(value or ""))
+    if not raw:
+        return ""
+
+    # 期間指定（YYYY-MM-DDtoYYYY-MM-DD）は "to" が小文字である必要がある。
+    # A date range (YYYY-MM-DDtoYYYY-MM-DD) requires a lowercase "to".
+    date_range = f"{raw[:10]}to{raw[12:]}" if len(raw) == 22 else raw
+    if _is_valid_date_range(date_range):
+        return date_range
+
+    normalized = raw.casefold().replace("_", "-")
+    if normalized in _BRAVE_FRESHNESS_VALUES:
+        return normalized
+    return _BRAVE_FRESHNESS_ALIASES.get(normalized, "")
+
+
 # プランナーが任意で返す「回答が満たすべき項目」を正規化する。欠落・不正でも検索判定は
 # 成立させ、要件だけを空にする。プランナーは既に修復リトライを持つため、必須項目を
 # 増やして失敗経路を増やさない。
@@ -908,9 +1012,7 @@ def _parse_decision_payload(
     if search_language_value is None:
         search_language_value = loaded.get("search_lang")
     search_language = _normalize_requested_search_language(search_language_value)
-    freshness = str(loaded.get("freshness") or "").strip()
-    if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
-        freshness = ""
+    freshness = normalize_web_search_freshness(loaded.get("freshness"))
     reason = _normalize_text(loaded.get("reason", ""), max_chars=240)
     answer_requirements = _normalize_answer_requirements(loaded.get("answer_requirements"))
 
@@ -1183,12 +1285,35 @@ def _infer_search_language(query: str) -> str:
     return _detect_search_language(query)
 
 
+def _canonical_brave_search_lang(value: Any) -> str:
+    """Map any requested language tag onto a Brave code, or "" when it is unsupported.
+
+    モデルが返す言語タグは ISO 639-1、BCP-47（地域付き）、区切り記号違いなど揺れる。
+    完全一致 → 言い換え表 → 地域サブタグを1つずつ落として再試行、の順で解決し、
+    どれにも当たらなければ空文字を返して呼び出し側のフォールバックへ委ねる。
+    Language tags from a model vary: ISO 639-1, BCP-47 with a region, different separators.
+    Resolve exact match, then the alias table, then progressively drop region subtags, and
+    return an empty string when nothing matches so the caller's fallback decides.
+    """
+    normalized = re.sub(r"\s+", "", str(value or "")).casefold().replace("_", "-")
+    if not normalized:
+        return ""
+
+    candidate = normalized
+    while candidate:
+        mapped = _BRAVE_SEARCH_LANG_ALIASES.get(candidate, candidate)
+        if mapped in _BRAVE_SEARCH_LANG_VALUES:
+            return mapped
+        if "-" not in candidate:
+            break
+        candidate = candidate.rsplit("-", 1)[0]
+    return ""
+
+
 def _normalize_brave_search_lang(value: str) -> str:
     # 言語コードをBrave Search APIが受け付ける形式に正規化する
     # Normalize language code to the format accepted by Brave Search API.
-    normalized = str(value or "").strip().lower()
-    normalized = _BRAVE_SEARCH_LANG_ALIASES.get(normalized, normalized)
-    return normalized if normalized in _BRAVE_SEARCH_LANG_VALUES else "en"
+    return _canonical_brave_search_lang(value) or "en"
 
 
 def _normalize_requested_search_language(value: Any) -> str:
@@ -1196,8 +1321,12 @@ def _normalize_requested_search_language(value: Any) -> str:
     normalized = str(value or "").strip().casefold()
     if normalized in {"", "auto", "user", "input", "same", "same-as-user", "same_as_user"}:
         return ""
-    normalized = _BRAVE_SEARCH_LANG_ALIASES.get(normalized, normalized)
-    return normalized if normalized in _BRAVE_SEARCH_LANG_VALUES else ""
+    return _canonical_brave_search_lang(normalized)
+
+
+def normalize_search_language(value: Any) -> str:
+    """Public entry point for normalizing a model-supplied search language."""
+    return _normalize_requested_search_language(value)
 
 
 def _contains_codepoint_in_ranges(
@@ -1919,6 +2048,13 @@ def search_brave_llm_context(
     normalized_query = _normalize_text(_redact_secretish_text(query), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     if not normalized_query:
         raise ValueError("Search query is empty.")
+
+    # 鮮度指定はそのままBraveのクエリに載るため、外部APIへ渡す最後の地点でも正規化する。
+    # 呼び出し側の正規化漏れが、遠くのHTTP 400として現れないようにする。
+    # The freshness value goes straight into the Brave query, so normalize it again at the
+    # last point before the external API: a caller that forgot must not surface as a distant
+    # HTTP 400.
+    freshness = normalize_web_search_freshness(freshness)
 
     # 明示的な運用設定を最優先し、次にプランナーが意味判断した検索言語を使う。
     # Keep the explicit deployment override first, then honor the planner's semantic language choice.
@@ -2703,6 +2839,11 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
 def get_web_search_tool_definition() -> dict[str, Any]:
     # LLMに提供するWeb検索ツールの定義スキーマを取得する
     # Retrieve the tool definition schema for web search provided to the LLM.
+    # スキーマの制約（enum・required・additionalProperties）はモデルへの誘導であり、検証ではない。
+    # services/llm_tool_schema.py がプロバイダ境界で落とすため、引数の検証と正規化は呼び出し側で行う。
+    # The schema constraints (enum, required, additionalProperties) guide the model; they do not
+    # validate. services/llm_tool_schema.py drops them at the provider boundary, so argument
+    # validation and normalization belong to the caller.
     return {
         "type": "function",
         "function": {
@@ -2729,7 +2870,13 @@ def get_web_search_tool_definition() -> dict[str, Any]:
                     },
                     "search_language": {
                         "type": "string",
-                        "description": "Brave Search language code for this query. Use the user's input language by default; use a different valid code only when the target country, local sources, or another language is likely to produce better results, and write query in that language.",
+                        "description": (
+                            "Brave Search language code for this query. Use the user's input "
+                            "language by default; use a different valid code only when the "
+                            "target country, local sources, or another language is likely to "
+                            "produce better results, and write query in that language. "
+                            "Note that Japanese is 'jp', not 'ja'."
+                        ),
                         "enum": ["", *_BRAVE_SEARCH_LANGUAGE_CODES],
                     },
                 },

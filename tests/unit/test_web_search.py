@@ -605,6 +605,70 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("search_language", properties)
         self.assertIn("en", properties["search_language"]["enum"])
         self.assertIn("target country", definition["function"]["description"])
+        # ISOの "ja" とBraveの "jp" の食い違いは、モデルがツール呼び出しを拒否される主因だった。
+        # The ISO "ja" vs Brave "jp" mismatch was the main cause of rejected tool calls.
+        self.assertIn("'jp', not 'ja'", properties["search_language"]["description"])
+
+    # 日本語: モデルが返しがちな言語タグの揺れを、Braveのコードへ寄せられることを検証します。
+    # English: Verify the language tags a model tends to emit resolve to Brave's own codes.
+    def test_normalize_search_language_accepts_common_model_spellings(self):
+        expected = {
+            "ja": "jp",
+            "ja-JP": "jp",
+            "ja_JP": "jp",
+            "JA": "jp",
+            "jpn": "jp",
+            "zh": "zh-hans",
+            "zh-CN": "zh-hans",
+            "zh-TW": "zh-hant",
+            "zh-Hant-TW": "zh-hant",
+            "en-US": "en",
+            "en-GB": "en-gb",
+            "fr-FR": "fr",
+            "pt": "pt-br",
+            "pt-PT": "pt-pt",
+            "no": "nb",
+            "iw": "he",
+        }
+
+        for value, code in expected.items():
+            with self.subTest(value=value):
+                self.assertEqual(web_search.normalize_search_language(value), code)
+
+    # 日本語: 未知・自動指定の言語は空文字へ落とし、入力言語の推定へ委ねることを検証します。
+    # English: Verify unknown or auto values fall back to "" so input-language inference decides.
+    def test_normalize_search_language_falls_back_for_unusable_values(self):
+        for value in ("", "auto", "user", "xx", "klingon", None, 7):
+            with self.subTest(value=value):
+                self.assertEqual(web_search.normalize_search_language(value), "")
+
+    # 日本語: 鮮度指定の言い換えをBraveの受理値へ正規化することを検証します。
+    # English: Verify freshness spellings normalize to the values Brave accepts.
+    def test_normalize_web_search_freshness_maps_model_spellings(self):
+        expected = {
+            "pd": "pd",
+            "PD": "pd",
+            "day": "pd",
+            "past week": "pw",
+            "past_month": "pm",
+            "30d": "pm",
+            "1y": "py",
+            "2026-01-01to2026-01-31": "2026-01-01to2026-01-31",
+            "2026-01-01TO2026-01-31": "2026-01-01to2026-01-31",
+        }
+
+        for value, freshness in expected.items():
+            with self.subTest(value=value):
+                self.assertEqual(
+                    web_search.normalize_web_search_freshness(value), freshness
+                )
+
+    # 日本語: 未知の鮮度指定は外部APIへ渡さず、フィルタなしへ落とすことを検証します。
+    # English: Verify an unknown freshness never reaches the API and degrades to no filter.
+    def test_normalize_web_search_freshness_drops_unusable_values(self):
+        for value in ("", "garbage", "recent", "none", None, 7, "2026-13-99to2026"):
+            with self.subTest(value=value):
+                self.assertEqual(web_search.normalize_web_search_freshness(value), "")
 
     # 日本語: maybeaugmentmessagesreportsmonthlyクォータ超過ことを検証します。
     # English: Verify that maybe augment messages reports monthly quota exceeded.

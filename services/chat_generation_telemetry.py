@@ -48,6 +48,9 @@ class ChatGenerationTelemetry:
     truncated_evidence_payloads: int = 0
     input_limit_recoveries: int = 0
     research_output_limit_recoveries: int = 0
+    # プロバイダがツール呼び出しを拒否し、ツールなしでやり直して回復した回数。
+    # How often a provider rejected a tool call and the step recovered without tools.
+    tool_schema_recoveries: int = 0
 
     @property
     def agent_steps(self) -> int:
@@ -98,4 +101,5 @@ class ChatGenerationTelemetry:
             "truncated_evidence_payloads": self.truncated_evidence_payloads,
             "input_limit_recoveries": self.input_limit_recoveries,
             "research_output_limit_recoveries": self.research_output_limit_recoveries,
+            "tool_schema_recoveries": self.tool_schema_recoveries,
         }

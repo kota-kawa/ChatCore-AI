@@ -71,6 +71,7 @@ from .llm import (
     LlmRateLimitError,
     LlmRetryableProviderError,
     LlmServiceError,
+    LlmToolSchemaError,
     get_llm_response,
     get_llm_response_stream,
     is_retryable_llm_error,
@@ -95,6 +96,8 @@ from .web_search import (
     inject_prior_web_search_context,
     is_web_search_enabled,
     maybe_augment_messages_with_web_search,
+    normalize_search_language,
+    normalize_web_search_freshness,
     resolve_web_search_citations,
     search_brave_llm_context,
     split_web_search_citation_stream_text,
@@ -251,6 +254,25 @@ def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
             continue
         tool_calls.append(item)
     return tool_calls or None
+
+
+# ツール引数として渡されたテキストを、型が揺れていても安全に文字列へ寄せる
+# Coerce a tool argument into text, tolerating whatever type the model produced
+# スキーマ検証をプロバイダに任せない以上、引数の型はこちらで受け止める。文字列以外
+# （数値・文字列の配列など）でも実行を止めず、解釈できない値だけを空文字にする。
+# Since provider-side schema validation is no longer relied upon, the argument types are
+# absorbed here. Non-strings (numbers, a list of strings) still run; only values that
+# cannot be read at all become an empty string.
+def _tool_argument_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return " ".join(_tool_argument_text(entry) for entry in value).strip()
+    return ""
 
 
 # 検索クエリ・日付フィルタ・検索言語を正規化したキーを生成する
@@ -847,6 +869,9 @@ class ChatGenerationJob:
         # been emitted, to avoid duplicated or garbled output.
         max_retries = _get_llm_stream_max_retries()
         attempt = 0
+        # プロバイダがツール呼び出しを拒否したときだけ、ツールなしで同じステップをやり直す。
+        # Only a provider-side tool-call rejection replays the same step without tools.
+        current_tools = tools
         while True:
             emitted = False
             attempt_chunks: list[str] = []
@@ -854,7 +879,7 @@ class ChatGenerationJob:
                 for chunk in get_llm_response_stream(
                     current_messages,
                     self._model,
-                    tools=tools,
+                    tools=current_tools,
                     generation_phase=generation_phase,
                 ):
                     if self._should_stop():
@@ -890,6 +915,31 @@ class ChatGenerationJob:
                     self._pending_stream_chunks.clear()
                     yield from buffered
                 return
+            except LlmToolSchemaError as exc:
+                # プロバイダがモデルのツール呼び出しをスキーマ検証で拒否した場合、同じ要求を
+                # 再送しても同じ拒否になる。ツールを外して1度だけやり直し、ターン全体を
+                # 落とさずに手持ちの情報で回答へ進む。
+                # A provider that rejected the model's tool call rejects the identical request
+                # again. Replay the step once without tools so the turn degrades to an answer
+                # from what is already known instead of failing outright.
+                if (
+                    current_tools is None
+                    or (emitted and not discard_partial_on_retry)
+                    or self._cancelled
+                ):
+                    raise
+                logger.warning(
+                    "Provider rejected a tool call; replaying the step without tools "
+                    "(model=%s, phase=%s): %s",
+                    self._model,
+                    generation_phase,
+                    exc,
+                )
+                self._telemetry.tool_schema_recoveries += 1
+                current_tools = None
+                if discard_partial_on_retry:
+                    self._pending_stream_chunks.clear()
+                continue
             except LlmRetryableProviderError as exc:
                 if (
                     (emitted and not discard_partial_on_retry)
@@ -954,7 +1004,7 @@ class ChatGenerationJob:
         if not isinstance(args, dict):
             args = {}
 
-        query = str(args.get("query") or "").strip()
+        query = _tool_argument_text(args.get("query"))
         if not query:
             current_messages.append(
                 _tool_result_message(
@@ -1605,9 +1655,14 @@ class ChatGenerationJob:
                     if not isinstance(args, dict):
                         args = {}
 
-                    query = args.get("query")
-                    freshness = args.get("freshness", "")
-                    search_language = args.get("search_language", "")
+                    # プロバイダ側のスキーマ検証には頼らない。モデルが返した引数はここで
+                    # 正規化し、想定外の値は既定へ丸めてターンを進める。
+                    # Never rely on provider-side schema validation: normalize the model's
+                    # arguments here and round unexpected values to a default so the turn
+                    # keeps moving.
+                    query = _tool_argument_text(args.get("query"))
+                    freshness = normalize_web_search_freshness(args.get("freshness"))
+                    search_language = normalize_search_language(args.get("search_language"))
                     if not query:
                         current_messages.append(
                             _tool_result_message(
@@ -1637,8 +1692,8 @@ class ChatGenerationJob:
 
                     search_step_index = budget.start_tool_call()
                     telemetry.tool_calls = budget.tool_calls
-                    query_text = str(query)
-                    freshness_text = str(freshness or "")
+                    query_text = query
+                    freshness_text = freshness
                     search_key = _normalized_search_key(
                         query_text,
                         freshness_text,

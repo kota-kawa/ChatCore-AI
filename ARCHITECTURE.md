@@ -124,6 +124,8 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 調査ループ（ツール呼び出しを繰り返すフェーズ）で使う内部メモは `services/chat_research_notes.py` が担当します。ステップメモ（`<step_note>`、任意・1〜2文の「次の一手の根拠」）は直近数件だけを次ステップの system メッセージへ組み直して渡し、会話履歴の assistant メッセージにも最終回答パスにも渡しません。研究ループと締めステップには、長いツール履歴の末尾へ再確認用 user 指示を置きます。最終回答パスへ渡る内部メモは調査完了ノート（`<research_complete>`）だけです。調査完了ノートは元の要件・主要事実・不確実性・回答計画の索引であり、最終回答の範囲上限ではありません。内部メモはいずれもユーザー向け本文には出力せず、途中停止時の部分出力からも取り除きます。
 
+LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
+
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 
 ### 添付ファイル
