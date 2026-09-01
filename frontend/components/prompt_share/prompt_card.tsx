@@ -19,6 +19,8 @@ import {
 } from "../../scripts/prompt_share/formatters";
 import type { PromptData } from "../../scripts/prompt_share/types";
 import { useTranslation } from "../../contexts/locale_context";
+import type { ImportActionState } from "../../hooks/use_import_action";
+import { ContentImportButton } from "../ui/content_import_button";
 
 // サーバーから受け取ったPromptDataに、クライアント専用の状態を追加した拡張型
 // Extends server-side PromptData with client-only state (local ID and action status)
@@ -37,6 +39,7 @@ type PromptCardProps = {
   isLikePending: boolean;
   isLikeEffectActive: boolean;
   isAddAsTaskPending: boolean;
+  addAsTaskState?: ImportActionState;
   isMemoSavePending: boolean;
   isUseInChatEffectActive: boolean;
   isOwnPrompt?: boolean;
@@ -77,6 +80,7 @@ function PromptCardComponent({
   isLikePending,
   isLikeEffectActive,
   isAddAsTaskPending,
+  addAsTaskState,
   isMemoSavePending,
   isUseInChatEffectActive,
   isOwnPrompt = false,
@@ -109,6 +113,7 @@ function PromptCardComponent({
   const isAddedToSkills = Boolean(prompt.added_to_skills);
   const isPrimaryActionActive = isSkillFormat ? isAddedToSkills : isUsedInChat;
   const isPrimaryActionPending = isAddAsTaskPending;
+  const primaryActionState = addAsTaskState ?? (isPrimaryActionPending ? "pending" : "idle");
   const primaryActionLabel = isSkillFormat
     ? isPrimaryActionPending
       ? t("promptShare.addingSkill")
@@ -383,17 +388,18 @@ function PromptCardComponent({
 
           {/* 共有プロンプトの主操作も二重送信を防ぐ */}
           {/* Guard the shared-prompt primary action against duplicate API requests */}
-          <button
+          <ContentImportButton
+            variant="compact"
             className={`prompt-action-btn use-in-chat-btn cc-press${isSkillFormat ? " add-to-skill-btn" : ""}${isSkillFormat && isAddedToSkills ? " added-to-skills" : isUsedInChat ? " used-in-chat" : ""}${isPrimaryActionPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
-            type="button"
-            aria-label={primaryActionLabel}
-            aria-pressed={isSkillFormat ? (isAddedToSkills ? "true" : "false") : isUsedInChat ? "true" : "false"}
-            aria-disabled={isPrimaryActionPending || (isSkillFormat && isAddedToSkills) ? "true" : "false"}
-            disabled={isPrimaryActionPending || (isSkillFormat && isAddedToSkills)}
-            data-tooltip={
-              primaryActionLabel
-            }
-            data-tooltip-placement="top"
+            pending={isPrimaryActionPending}
+            state={primaryActionState}
+            active={isPrimaryActionActive}
+            disableWhenActive={isSkillFormat}
+            label={primaryActionLabel}
+            iconClass={isPrimaryActionActive ? "bi-plus-square-fill" : "bi-plus-square"}
+            ariaPressed={isSkillFormat ? isAddedToSkills : isUsedInChat}
+            dataTooltip={primaryActionLabel}
+            dataTooltipPlacement="top"
             onClick={(event) => {
               event.stopPropagation();
               if (isPrimaryActionPending || (isSkillFormat && isAddedToSkills)) {
@@ -401,9 +407,7 @@ function PromptCardComponent({
               }
               void onAddAsTask(prompt);
             }}
-          >
-            <i className={`bi ${isPrimaryActionActive ? "bi-plus-square-fill" : "bi-plus-square"}`}></i>
-          </button>
+          />
         </div>
       </div>
     </div>

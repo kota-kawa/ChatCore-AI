@@ -10,7 +10,8 @@ import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdow
 import { stripMarkdownForPreview } from "../../../../scripts/core/markdown_preview";
 import { resilientFetch } from "../../../../scripts/core/resilient_fetch";
 import { showToast } from "../../../../scripts/core/toast";
-import { copyTextToClipboard } from "../../../../scripts/chat/message_utils";
+import { copyTextToClipboard } from "../../../../scripts/core/clipboard";
+import { CopyButton } from "../../../../components/ui/copy_button";
 import {
   getPromptFormatLabel,
   getPromptMediaLabel,
@@ -372,12 +373,14 @@ export default function SharedPromptPage({
       ]
     : undefined;
 
-  const copyResource = async (resource: PromptResource) => {
+  const copyResource = async (resource: PromptResource): Promise<boolean> => {
     try {
       await copyTextToClipboard(resource.content);
       showToast(english ? `Copied ${resource.path}.` : `${resource.path} をコピーしました。`, { variant: "success" });
+      return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : (english ? "Copy failed." : "コピーに失敗しました。"), { variant: "error" });
+      return false;
     }
   };
 
@@ -490,15 +493,13 @@ export default function SharedPromptPage({
                             {resource.language ? ` · ${resource.language}` : ""}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void copyResource(resource);
-                          }}
-                        >
-                          <i className="bi bi-clipboard" aria-hidden="true" />
-                          {english ? "Copy" : "コピー"}
-                        </button>
+                        <CopyButton
+                          onCopy={() => copyResource(resource)}
+                          label={english ? "Copy" : "コピー"}
+                          copiedLabel={english ? "Copied" : "コピーしました"}
+                          tooltip="none"
+                          className="shared-prompt-resource__copy"
+                        />
                       </header>
                       <pre><code>{resource.content}</code></pre>
                     </article>

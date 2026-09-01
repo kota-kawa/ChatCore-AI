@@ -9,7 +9,6 @@ import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
 import { stripWebSearchArtifacts } from "./memo_text";
 import { sanitizeMessageHtml } from "./message_utils";
 import { initMessageCopyButtons } from "./message_copy_buttons";
-import { refreshChatShareState } from "./chat_share";
 
 type MarkedParseOptions = {
   async?: boolean;
@@ -623,7 +622,6 @@ function showChatInterface() {
 
   setupContainer.setAttribute("data-visible", "false");
   chatContainer.setAttribute("data-visible", "true");
-  refreshChatShareState();
 
   // Markdown パーサはチャット画面表示時に遅延読み込みする
   if (!markdownEnhancementDisabled) void ensureMarkedParser();

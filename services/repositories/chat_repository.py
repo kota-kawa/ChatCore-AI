@@ -43,6 +43,12 @@ from services.models import (
     User,
     UserSkill,
 )
+from services.share_common import (
+    SHARED_TOKEN_MAX_COLLISION_RETRIES,
+    SHARED_TOKEN_RETRY_BACKOFF_SECONDS,
+    generate_share_token,
+    is_unique_violation,
+)
 from services.user_skills import (
     MAX_USER_SKILL_NAME_LENGTH,
     MAX_USER_SKILLS,
@@ -50,10 +56,10 @@ from services.user_skills import (
     normalize_user_skill_name,
 )
 
-UNIQUE_VIOLATION_PGCODE = "23505"
 DB_WRITE_MAX_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
-SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
+# Keep the old repository-level name for callers that imported it while using
+# the shared share-token retry configuration as the single source of truth.
+DB_RETRY_BACKOFF_SECONDS = SHARED_TOKEN_RETRY_BACKOFF_SECONDS
 TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307
 USER_SKILL_WRITE_LOCK_NAMESPACE = 1_413_567_308
 
@@ -80,21 +86,8 @@ def _jsonb_value(encoded: str | None) -> Any:
         return encoded
 
 
-def _sqlstate(exc: BaseException) -> str | None:
-    current: BaseException | None = exc
-    for _ in range(4):
-        if current is None:
-            return None
-        value = getattr(current, "sqlstate", None) or getattr(current, "pgcode", None)
-        if value:
-            return str(value)
-        original = getattr(current, "orig", None)
-        current = original if isinstance(original, BaseException) else None
-    return None
-
-
 def _is_unique_violation(exc: BaseException) -> bool:
-    return _sqlstate(exc) == UNIQUE_VIOLATION_PGCODE
+    return is_unique_violation(exc)
 
 
 class ChatRepository:
@@ -360,7 +353,7 @@ class ChatRepository:
     async def create_or_get_shared_chat_token(self, room_id: str, user_id: int) -> str:
         await self._owned_room(room_id, user_id, "他ユーザーのチャットルームは共有できません")
         for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
-            token = self._token_generator(18)
+            token = generate_share_token(self._token_generator)
             statement = (
                 pg_insert(SharedChatRoom)
                 .values(chat_room_id=room_id, share_token=token)

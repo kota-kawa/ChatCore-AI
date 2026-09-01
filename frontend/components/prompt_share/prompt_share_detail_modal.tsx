@@ -1,7 +1,7 @@
 import React, { useState, type RefObject } from "react";
 
 import MarkdownContent from "../MarkdownContent";
-import { copyTextToClipboard } from "../../scripts/chat/message_utils";
+import { copyTextToClipboard } from "../../scripts/core/clipboard";
 import { showToast } from "../../scripts/core/toast";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";

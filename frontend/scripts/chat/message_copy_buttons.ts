@@ -14,7 +14,7 @@ import {
   COPY_IDLE_ICON,
   COPY_SUCCESS_ICON,
 } from "../../lib/copy_feedback";
-import { copyTextToClipboard } from "./message_utils";
+import { copyTextToClipboard } from "../core/clipboard";
 
 type CopyButtonSource = {
   // クリック対象のボタン / The clickable button

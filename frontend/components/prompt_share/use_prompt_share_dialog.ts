@@ -1,10 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-import { copyTextToClipboard } from "../../scripts/chat/message_utils";
+import { copyTextToClipboard } from "../../scripts/core/clipboard";
+import { shareWithNativeSheet as openNativeShare } from "../../lib/share";
 import { buildPromptPath } from "../../lib/promptSlug";
 import type { PromptRecord } from "./prompt_card";
 import { getPromptId } from "./prompt_share_page_utils";
 import { useTranslation } from "../../contexts/locale_context";
+import { useShareLinks } from "../../hooks/use_share";
 
 // 共有モーダルのURL生成・SNSリンク・コピー・Web Share操作を管理する
 // Manages share modal URL creation, SNS links, copy action, and Web Share action
@@ -18,24 +20,10 @@ export function usePromptShareDialog() {
   const [shareActionLoading, setShareActionLoading] = useState(false);
   const cachedPromptShareUrlsRef = useRef<Map<string, string>>(new Map());
 
-  // SNS共有リンクを共有URLから動的に生成する。URLが未設定の場合は無効なリンクを返す
-  // Derives SNS share links from the share URL; returns placeholder links if none is set
-  const shareSnsLinks = useMemo(() => {
-    if (!shareUrl) {
-      return {
-        x: "#",
-        line: "#",
-        facebook: "#"
-      };
-    }
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent(t("promptShare.shareHelp"));
-    return {
-      x: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
-      line: `https://social-plugins.line.me/lineit/share?url=${encodedUrl}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`
-    };
-  }, [shareUrl, t]);
+  const { socialLinks: shareSnsLinks } = useShareLinks({
+    shareUrl,
+    text: t("promptShare.shareHelp"),
+  });
 
   // プロンプトIDとタイトルをもとに、SEOに適したスラッグ付きの外部共有パーマリンクを生成する
   // Generates a permanent shareable link from the prompt's ID and title, including an SEO-friendly slug
@@ -115,26 +103,25 @@ export function usePromptShareDialog() {
       return;
     }
 
-    if (typeof navigator.share !== "function") {
-      setPromptShareStatus(t("promptShare.nativeShareUnsupported"), true);
-      return;
-    }
-
-    try {
-      await navigator.share({
+    const result = await openNativeShare({
         title: t("promptShare.sharePrompt"),
         text: t("promptShare.shareHelp"),
         url: currentShareUrl
-      });
-      setPromptShareStatus(t("promptShare.shareSheetOpened"));
-    } catch (error) {
-      // ユーザーが共有シートをキャンセルした場合はエラーとして扱わない
-      // User-initiated cancellation of the share sheet is not treated as an error
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
+    });
+    if (result.status === "cancelled") return;
+    if (result.status === "unsupported") {
+      setPromptShareStatus(t("promptShare.nativeShareUnsupported"), true);
+      return;
     }
+    if (result.status === "shared") {
+      setPromptShareStatus(t("promptShare.shareSheetOpened"));
+      return;
+    }
+
+    setPromptShareStatus(
+      result.error instanceof Error ? result.error.message : "Native sharing failed.",
+      true,
+    );
   }, [setPromptShareStatus, shareUrl, t]);
 
   return {

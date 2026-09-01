@@ -10,6 +10,7 @@ import type {
   PromptFeedback
 } from "./prompt_share_page_types";
 import { useTranslation } from "../../contexts/locale_context";
+import type { ImportActionState } from "../../hooks/use_import_action";
 import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 
@@ -46,6 +47,7 @@ type PromptSharePageLayoutProps = {
   likePendingIds: Set<string>;
   actionEffectIds: Set<string>;
   addAsTaskPendingIds: Set<string>;
+  addAsTaskStates?: ReadonlyMap<string, ImportActionState>;
   memoSavePendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
@@ -128,6 +130,7 @@ export function PromptSharePageLayout({
   likePendingIds,
   actionEffectIds,
   addAsTaskPendingIds,
+  addAsTaskStates = new Map(),
   memoSavePendingIds,
   onOpenDetail,
   onOpenComments,
@@ -389,6 +392,7 @@ export function PromptSharePageLayout({
                   isLikePending={likePendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
+                  addAsTaskState={addAsTaskStates.get(promptId)}
                   isMemoSavePending={memoSavePendingIds.has(promptId)}
                   isUseInChatEffectActive={
                     actionEffectIds.has(`${promptId}:use-in-chat`) ||

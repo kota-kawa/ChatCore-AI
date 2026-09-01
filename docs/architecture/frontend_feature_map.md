@@ -45,6 +45,8 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。
 - `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。
 
+共有モーダルのSNS URL生成、Web Share API、クリップボード操作、共有本文の表示は共通ランタイム／UI部品で処理します。チャット、メモ、プロンプト固有のURL発行とステータス文言は各adapterに残します。共有Chatのforkと公開PromptのTask／Skill取り込みは、共通の操作状態・二重実行防止・ボタン外観を使いながら、APIと遷移は機能ごとの契約を維持します。
+
 ## 変更時の境界
 
 ページの UI だけなら対応する `pages/` と `components/`、画面状態なら `hooks/`／`contexts/`、API の取得・再試行なら `lib/`／`scripts/`を優先します。JSON の形状を変える場合は Backend model と生成スキーマも更新し、SSE の形状を変える場合は `lib/chat_page/` の parser と対象テストを同時に確認します。

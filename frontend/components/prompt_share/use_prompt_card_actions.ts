@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
+import { useKeyedImportActionState } from "../../hooks/use_import_action";
 import { showToast } from "../../scripts/core/toast";
 import {
   addPromptAsTask,
@@ -30,10 +31,15 @@ export function usePromptCardActions({
 }: UsePromptCardActionsOptions) {
   const { t } = useTranslation();
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
-  const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
   const [memoSavePendingIds, setMemoSavePendingIds] = useState<Set<string>>(new Set());
   const likePendingIdsRef = useRef<Set<string>>(new Set());
   const memoSavePendingIdsRef = useRef<Set<string>>(new Set());
+  const {
+    states: addAsTaskStates,
+    pendingIds: addAsTaskPendingIds,
+    isPending: isAddAsTaskPending,
+    run: runAddAsTask,
+  } = useKeyedImportActionState();
 
   // いいね操作のAPIリクエスト中に重複送信を防ぐためのフラグを管理する
   // Manages a pending flag to prevent duplicate like API requests
@@ -44,20 +50,6 @@ export function usePromptCardActions({
       likePendingIdsRef.current.delete(clientId);
     }
     setLikePendingIds(new Set(likePendingIdsRef.current));
-  }, []);
-
-  // タスク追加の非同期処理中に重複リクエストを防ぐためのフラグを管理する
-  // Manages a pending flag to prevent duplicate add-as-task requests
-  const setAddAsTaskPending = useCallback((clientId: string, pending: boolean) => {
-    setAddAsTaskPendingIds((current) => {
-      const next = new Set(current);
-      if (pending) {
-        next.add(clientId);
-      } else {
-        next.delete(clientId);
-      }
-      return next;
-    });
   }, []);
 
   // メモ保存の送信中状態をrefとstateで同期し、連打による重複保存を防ぐ
@@ -119,6 +111,9 @@ export function usePromptCardActions({
       if (isSkill && prompt.added_to_skills) {
         return;
       }
+      if (isAddAsTaskPending(promptId)) {
+        return;
+      }
 
       const wasUsedInChat = Boolean(prompt.used_in_chat);
       const wasAddedToSkills = Boolean(prompt.added_to_skills);
@@ -139,37 +134,36 @@ export function usePromptCardActions({
         }
       }
 
-      setAddAsTaskPending(promptId, true);
       try {
-        const response = isSkill
-          ? await addPromptAsSkill(prompt)
-          : nextUsedInChat
-            ? await addPromptAsTask(prompt)
-            : await removePromptAsTask(prompt);
-        const serverMessage =
-          typeof response.message === "string" && response.message.trim()
-            ? response.message
-            : "";
-        const fallbackMessage = isSkill
-          ? t("promptShare.addedToSkills")
-          : nextUsedInChat
-            ? t("promptShare.addedToChat")
-            : t("promptShare.removedFromChat");
-        updatePromptRecord(promptId, (currentPrompt) => isSkill
-          ? { ...currentPrompt, added_to_skills: true }
-          : { ...currentPrompt, used_in_chat: nextUsedInChat });
-        showToast(serverMessage || fallbackMessage, { variant: "success" });
+        await runAddAsTask(promptId, async () => {
+          const response = isSkill
+            ? await addPromptAsSkill(prompt)
+            : nextUsedInChat
+              ? await addPromptAsTask(prompt)
+              : await removePromptAsTask(prompt);
+          const serverMessage =
+            typeof response.message === "string" && response.message.trim()
+              ? response.message
+              : "";
+          const fallbackMessage = isSkill
+            ? t("promptShare.addedToSkills")
+            : nextUsedInChat
+              ? t("promptShare.addedToChat")
+              : t("promptShare.removedFromChat");
+          updatePromptRecord(promptId, (currentPrompt) => isSkill
+            ? { ...currentPrompt, added_to_skills: true }
+            : { ...currentPrompt, used_in_chat: nextUsedInChat });
+          showToast(serverMessage || fallbackMessage, { variant: "success" });
+        });
       } catch (error) {
         console.error(isSkill ? "Skill追加中にエラーが発生しました:" : "チャット利用状態の更新中にエラーが発生しました:", error);
         updatePromptRecord(promptId, (currentPrompt) => isSkill
           ? { ...currentPrompt, added_to_skills: wasAddedToSkills }
           : { ...currentPrompt, used_in_chat: wasUsedInChat });
         showToast(error instanceof Error && error.message ? error.message : t(isSkill ? "promptShare.addSkillFailed" : "promptShare.updateChatFailed"), { variant: "error" });
-      } finally {
-        setAddAsTaskPending(promptId, false);
       }
     },
-    [closePromptDropdown, isLoggedIn, setAddAsTaskPending, t, triggerActionEffect, updatePromptRecord]
+    [closePromptDropdown, isAddAsTaskPending, isLoggedIn, runAddAsTask, t, triggerActionEffect, updatePromptRecord]
   );
 
   // いいね状態を楽観的UIで即座に反映し、API失敗時はロールバックする
@@ -219,6 +213,7 @@ export function usePromptCardActions({
 
   return {
     addAsTaskPendingIds,
+    addAsTaskStates,
     handleAddPromptAsTask,
     handleSavePromptAsMemo,
     handleTogglePromptLike,

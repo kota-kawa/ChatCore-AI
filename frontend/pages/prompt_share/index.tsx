@@ -810,6 +810,7 @@ export default function PromptSharePage({
 
   const {
     addAsTaskPendingIds,
+    addAsTaskStates,
     handleAddPromptAsTask,
     handleSavePromptAsMemo,
     handleTogglePromptLike,
@@ -1220,6 +1221,7 @@ export default function PromptSharePage({
         likePendingIds={likePendingIds}
         actionEffectIds={actionEffectIds}
         addAsTaskPendingIds={addAsTaskPendingIds}
+        addAsTaskStates={addAsTaskStates}
         memoSavePendingIds={memoSavePendingIds}
         onOpenDetail={openPromptDetailModal}
         onOpenComments={openPromptCommentsModal}

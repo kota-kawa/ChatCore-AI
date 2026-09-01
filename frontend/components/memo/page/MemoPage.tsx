@@ -15,7 +15,9 @@ import React, {
 import useSWR from "swr";
 
 import "../../../scripts/core/csrf";
-import { copyTextToClipboard } from "../../../scripts/chat/message_utils";
+import { copyTextToClipboard } from "../../../scripts/core/clipboard";
+import { shareWithNativeSheet as openNativeShare } from "../../../lib/share";
+import { useShareLinks } from "../../../hooks/use_share";
 import { setLoggedInState } from "../../../scripts/core/app_state";
 import {
   readCachedAuthState,
@@ -150,7 +152,6 @@ export default function MemoPage() {
   const [shareState, setShareState] = useState<SharePayload | null>(null);
   const [shareStatus, setShareStatus] = useState<FlashState | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
-  const [supportsNativeShare, setSupportsNativeShare] = useState(false);
 
   // Bulk selection
   const [isBulkMode, setIsBulkMode] = useState(false);
@@ -232,16 +233,10 @@ export default function MemoPage() {
   }, [displayMemos]);
 
   const shareUrl = (shareState?.share_url || "").trim();
-  const shareSnsLinks = useMemo(() => {
-    if (!shareUrl) return { x: "#", line: "#", facebook: "#" };
-    const eu = encodeURIComponent(shareUrl);
-    const et = encodeURIComponent(t("memo.nativeShareText"));
-    return {
-      x: `https://twitter.com/intent/tweet?url=${eu}&text=${et}`,
-      line: `https://social-plugins.line.me/lineit/share?url=${eu}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${eu}`,
-    };
-  }, [shareUrl, t]);
+  const { socialLinks: shareSnsLinks, supportsNativeShare } = useShareLinks({
+    shareUrl,
+    text: t("memo.nativeShareText"),
+  });
 
   // -----------------------------------------------------------------------
   // Effects
@@ -255,7 +250,6 @@ export default function MemoPage() {
       await Promise.all([import("../../../scripts/components/popup_menu"), import("../../../scripts/components/user_icon")]);
     };
     void importCustomElements();
-    setSupportsNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
     return () => {
       document.body.classList.remove("memo-page");
       document.body.classList.remove("modal-open");
@@ -1276,14 +1270,16 @@ export default function MemoPage() {
 
   const openNativeShareSheet = useCallback(async () => {
     if (!shareUrl) { setShareStatus({ type: "error", text: t("memo.createShareLinkFirst") }); return; }
-    if (!supportsNativeShare || typeof navigator.share !== "function") { setShareStatus({ type: "error", text: t("memo.nativeShareUnsupported") }); return; }
-    try {
-      await navigator.share({ title: t("memo.nativeShareTitle"), text: t("memo.nativeShareText"), url: shareUrl });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : t("memo.nativeShareFailed") });
+    const result = await openNativeShare({ title: t("memo.nativeShareTitle"), text: t("memo.nativeShareText"), url: shareUrl });
+    if (result.status === "cancelled") return;
+    if (result.status === "unsupported") {
+      setShareStatus({ type: "error", text: t("memo.nativeShareUnsupported") });
+      return;
     }
-  }, [shareUrl, supportsNativeShare]);
+    if (result.status === "failed") {
+      setShareStatus({ type: "error", text: result.error instanceof Error ? result.error.message : t("memo.nativeShareFailed") });
+    }
+  }, [shareUrl, t]);
 
   // -----------------------------------------------------------------------
   // Collections management
