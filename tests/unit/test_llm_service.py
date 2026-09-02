@@ -296,6 +296,17 @@ class LlmServiceTestCase(unittest.TestCase):
 
         self.assertIsInstance(mapped, llm.LlmToolSchemaError)
 
+    # 日本語: Groqの tool_choice=none 違反メッセージも回復可能な専用例外へ分類することを検証します。
+    # English: Verify that Groq's tool_choice=none violation maps to the recoverable tool error.
+    def test_provider_error_mapping_detects_tool_choice_none_violation(self):
+        mapped = llm._map_provider_exception(
+            Exception("Tool choice is none, but model called a tool"),
+            provider_name="Groq",
+            fallback_message="Groq streaming API call failed.",
+        )
+
+        self.assertIsInstance(mapped, llm.LlmToolSchemaError)
+
     # 日本語: 出力枠がフェーズごとに分かれ、本文を書く回答フェーズが最大になることを検証します。
     # English: Verify the output budget is split per phase and the answer phase gets the largest.
     def test_output_token_budget_is_split_by_generation_phase(self):

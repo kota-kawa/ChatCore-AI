@@ -407,7 +407,8 @@ _OUTPUT_TOKEN_VALIDATION_PATTERN = re.compile(
 # The wording differs per provider, so match the known phrasings together.
 _TOOL_CALL_REJECTION_PATTERN = re.compile(
     r"tool[_ ]call validation failed|did not match schema|tool_use_failed|"
-    r"failed to call a function|invalid[_ ]tool[_ ]call|tool[_ ]call arguments",
+    r"failed to call a function|invalid[_ ]tool[_ ]call|tool[_ ]call arguments|"
+    r"tool[_ ]choice\s*(?:is|=)\s*none.*model\s+called\s+a\s+tool",
     re.IGNORECASE,
 )
 

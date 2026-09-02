@@ -371,6 +371,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("search limit for this turn has been reached", system_contents)
         self.assertIn("Do not call any tool", system_contents)
         self.assertIn("answer the original request now", system_contents)
+        self.assertNotIn("choose exactly one action", system_contents)
+        self.assertNotIn("call one appropriate tool", system_contents)
 
     def test_strip_turn_state_update_removes_complete_and_unterminated_envelopes(self):
         self.assertEqual(strip_turn_state_update("通常の本文です。"), "通常の本文です。")
@@ -1982,6 +1984,92 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("ツールなしで回答しました。", body)
         self.assertNotIn('"error"', body)
         self.assertTrue(persisted_messages)
+
+    # 日本語: ツール予算切れ後の tool_choice=none 違反を、最小の最終回答要求へ
+    # 1度だけ切り替えて回復することを検証します。
+    # English: Verify that a tool_choice=none violation after budget exhaustion is recovered
+    # once by replaying the smallest final-answer request.
+    def test_background_generation_job_recovers_from_tool_choice_none_violation(self):
+        persisted_messages = []
+        stream_tools: list[bool] = []
+        captured_messages: list[list[dict[str, object]]] = []
+        search_result = WebSearchResult(
+            query="Pythonの最新情報",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/python",
+                    title="Python news",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("Python update",),
+                ),
+            ),
+        )
+
+        def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
+            stream_tools.append(bool(tools))
+            captured_messages.append([dict(message) for message in messages])
+            if len(stream_tools) == 1:
+                yield _turn_state_update(
+                    unresolved_questions=["Pythonの最新情報"],
+                    ready_to_answer=False,
+                )
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-budget-exhausted",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "Pythonの最新情報"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            if len(stream_tools) == 2:
+                raise LlmToolSchemaError("Tool choice is none, but model called a tool")
+
+            self.assertIsNone(tools)
+            yield _turn_state_update(ready_to_answer=True)
+            yield "取得済み情報で回答しました。"
+
+        with (
+            patch.dict(
+                "services.chat_generation.os.environ",
+                {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
+                clear=False,
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-tool-choice-none:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(stream_tools, [True, False, False])
+        self.assertIn("取得済み情報で回答しました。", body)
+        self.assertNotIn('"error"', body)
+        self.assertTrue(persisted_messages)
+        for messages in captured_messages[1:]:
+            self.assertFalse(any(message.get("role") == "tool" for message in messages))
+            self.assertFalse(any(message.get("tool_calls") for message in messages))
+        final_system_contents = "\n".join(
+            message.get("content", "")
+            for message in captured_messages[1][-10:]
+            if message.get("role") == "system"
+        )
+        self.assertNotIn("call one appropriate tool", final_system_contents)
 
     # 日本語: 生成ジョブが同じクエリに対する重複検索要求を検知した際、キャッシュされた検索結果を再利用することを検証します。
     # English: Verify that the generation job reuses cached search results when detecting duplicate queries.
