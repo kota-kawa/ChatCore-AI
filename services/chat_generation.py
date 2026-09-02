@@ -1540,7 +1540,10 @@ class ChatGenerationJob:
                 except TurnStateProjectionError:
                     return None
                 candidate = build_turn_loop_messages(
-                    [*with_web_policy(projected), *latest_tool_exchange],
+                    [
+                        *with_web_policy(projected),
+                        *([] if force_answer else latest_tool_exchange),
+                    ],
                     force_answer=force_answer,
                 )
                 if request_fits_context(candidate, self._model, phase, tools):
@@ -1557,7 +1560,7 @@ class ChatGenerationJob:
             minimal_candidate = build_turn_loop_messages(
                 [
                     *with_web_policy(minimal_projected),
-                    *([] if minimal else latest_tool_exchange),
+                    *([] if minimal or force_answer else latest_tool_exchange),
                 ],
                 force_answer=force_answer,
             )
@@ -1602,6 +1605,10 @@ class ChatGenerationJob:
             # Set when the provider's tokenizer is stricter than the local estimate: the same
             # request is never resent, the retry falls back to a TurnState-only request.
             minimal_context_required = False
+            # 最終回答のツールなし要求が拒否された場合だけ、最小構成で1度だけやり直す。
+            # If the tool-free final-answer request is rejected, replay it once in the
+            # smallest safe shape and never loop indefinitely.
+            tool_schema_recovery_attempted = False
 
             # 単一判断ループ: TurnStateを見る → 必要ならツール → State更新 → 再判断。
             # ツール履歴全体は再送せず、直近の呼び出しと結果だけを次の判断へ渡す。
@@ -1617,7 +1624,7 @@ class ChatGenerationJob:
                     current_messages,
                     active_tools,
                     force_answer=force_answer,
-                    minimal=minimal_context_required,
+                    minimal=minimal_context_required or tool_schema_recovery_attempted,
                 )
                 if turn_messages is None:
                     telemetry.context_recovery_count += 1
@@ -1669,6 +1676,25 @@ class ChatGenerationJob:
                     self._pending_stream_is_rewrite = False
                     suppress_next_generation_started = True
                     continue
+                except LlmToolSchemaError:
+                    # ツール予算切れ後のツールなし要求がモデルの逸脱で拒否された場合は、
+                    # 直前の会話・ツール履歴をさらに削った最終回答要求へ1度だけ切り替える。
+                    # If the model violates the tool-free request after the budget is exhausted,
+                    # retry once with the smallest final-answer request, stripped of recent
+                    # conversation and tool history.
+                    if (
+                        force_answer
+                        and active_tools is None
+                        and not tool_schema_recovery_attempted
+                        and not self._cancelled
+                    ):
+                        tool_schema_recovery_attempted = True
+                        telemetry.tool_schema_recoveries += 1
+                        self._pending_stream_chunks = []
+                        self._pending_stream_is_rewrite = False
+                        suppress_next_generation_started = True
+                        continue
+                    raise
 
                 if self._should_stop():
                     return
