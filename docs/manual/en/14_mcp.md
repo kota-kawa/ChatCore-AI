@@ -19,14 +19,16 @@ Disconnect an integration from Settings when it is no longer needed. If authoriz
 
 ## Publish image prompts
 
-The `publish_prompt` tool accepts `media_type` values `text` and `image`. To include a reference image,
-use `image_file` from a supported client's file picker, or send `image_base64` with a PNG, JPEG, WebP, or GIF
-encoded in Base64 (up to 5 MB decoded). You may also
-provide `image_filename` and `image_mime_type`; a `data:image/...;base64,...` value is supported as well.
-Remote image URLs are not fetched. Images go through the same validation, metadata stripping, and WebP
-normalization as browser uploads before they are saved.
+The `publish_prompt` tool accepts `media_type` values `text` and `image`. For an image prompt, use
+`publish_image_prompt` for a ChatGPT file input or `publish_image_prompt_base64` when the actual image bytes are
+already available as Base64. `publish_prompt` also requires an image input when `media_type=image`. Remote image
+URLs are not fetched. Images go through the same validation, metadata stripping, and WebP normalization as browser
+uploads before they are saved.
 
-When posting an image from ChatGPT, use `publish_image_prompt`. It requires exactly one of `image_file` or
-`image_base64`, so it cannot silently create a post without the requested image. A successful result reports
-`image_attached: true` after the image has actually been saved. File-upload download URLs are accepted only
-from ChatGPT's HTTPS file host, redirects are not followed, and streaming stops at the 5 MB limit.
+The `image_file` input of `publish_image_prompt` is required at the top level. When an image was just generated in
+ChatGPT, pass that image through the ChatGPT file input without model-side Base64 conversion or re-compression. A
+successful result reports `image_attached: true` after the image has actually been saved. File-upload download URLs
+are accepted only from ChatGPT's HTTPS file host, redirects are not followed, and streaming stops at the 5 MB limit.
+
+Use `publish_image_prompt_base64` only when the image bytes are already available as Base64 (including a
+`data:image/...;base64,...` value).

@@ -144,7 +144,7 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(publish.call_args.kwargs["image_filename"], "example.png")
         self.assertEqual(publish.call_args.kwargs["image_mime_type"], "image/png")
 
-    def test_publish_image_prompt_requires_and_forwards_reference_image(self):
+    def test_publish_image_prompt_base64_requires_and_forwards_reference_image(self):
         server = self._server()
         publish_result = mcp_server.McpPublishResult(
             prompt_id=93,
@@ -167,7 +167,7 @@ class McpContentToolTestCase(unittest.TestCase):
         ):
             result = asyncio.run(
                 server.call_tool(
-                    "publish_image_prompt",
+                    "publish_image_prompt_base64",
                     {
                         "title": "Image prompt",
                         "content": "Generate a watercolor landscape.",
@@ -179,13 +179,27 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertTrue(result[1]["image_attached"])
         self.assertEqual(publish.call_args.args[1].media_type, "image")
         self.assertEqual(publish.call_args.kwargs["image_base64"], "cG5nLWJ5dGVz")
-        audit.assert_called_once_with(unittest.mock.ANY, "publish_image_prompt", 93)
+        audit.assert_called_once_with(unittest.mock.ANY, "publish_image_prompt_base64", 93)
 
         with self.assertRaises(ToolError):
             asyncio.run(
                 server.call_tool(
-                    "publish_image_prompt",
+                    "publish_image_prompt_base64",
                     {"title": "Image prompt", "content": "Generate a watercolor landscape."},
+                )
+            )
+
+    def test_publish_prompt_rejects_image_without_reference_image(self):
+        server = self._server()
+        with self.assertRaisesRegex(ToolError, "image_fileまたはimage_base64"):
+            asyncio.run(
+                server.call_tool(
+                    "publish_prompt",
+                    {
+                        "title": "Image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "media_type": "image",
+                    },
                 )
             )
 

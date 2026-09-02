@@ -33,6 +33,7 @@ class McpServerTestCase(unittest.TestCase):
             {
                 "publish_prompt",
                 "publish_image_prompt",
+                "publish_image_prompt_base64",
                 "publish_skill",
                 "list_shared_content",
                 "search_shared_content",
@@ -63,6 +64,7 @@ class McpServerTestCase(unittest.TestCase):
         expected_scopes = {
             "publish_prompt": "prompts:write",
             "publish_image_prompt": "prompts:write",
+            "publish_image_prompt_base64": "prompts:write",
             "publish_skill": "prompts:write",
             "list_shared_content": "prompts:read",
             "search_shared_content": "prompts:read",
@@ -122,8 +124,14 @@ class McpServerTestCase(unittest.TestCase):
         with patch.dict(os.environ, environment, clear=False):
             tools = asyncio.run(mcp_server._create_mcp().list_tools())
 
+        publish_tool_names = {
+            "publish_prompt",
+            "publish_image_prompt",
+            "publish_image_prompt_base64",
+            "publish_skill",
+        }
         for tool in tools:
-            if tool.name not in {"publish_prompt", "publish_image_prompt", "publish_skill"}:
+            if tool.name not in publish_tool_names:
                 continue
             definition = tool.model_dump(by_alias=True)
             category = definition["inputSchema"]["properties"]["category"]
@@ -189,13 +197,25 @@ class McpServerTestCase(unittest.TestCase):
             for tool in tools
             if tool.name == "publish_image_prompt"
         )
-        self.assertNotIn("image_base64", image_prompt_definition["inputSchema"].get("required", []))
+        self.assertEqual(
+            set(image_prompt_definition["inputSchema"]["required"]),
+            {"title", "content", "image_file"},
+        )
+        self.assertNotIn("image_base64", image_prompt_definition["inputSchema"]["properties"])
         self.assertEqual(
             image_prompt_definition["_meta"]["openai/fileParams"],
             ["image_file"],
         )
-        self.assertIn("exactly one", image_prompt_definition["description"])
-        self.assertIn("never reports success", image_prompt_definition["description"])
+        self.assertIn("required image_file", image_prompt_definition["description"])
+
+        base64_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "publish_image_prompt_base64"
+        )
+        self.assertIn("image_base64", base64_definition["inputSchema"]["required"])
+        self.assertNotIn("image_file", base64_definition["inputSchema"]["properties"])
+        self.assertIsNone(base64_definition["_meta"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:
