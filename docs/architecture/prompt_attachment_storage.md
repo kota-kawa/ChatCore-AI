@@ -23,7 +23,8 @@ truth for the periodic orphan reconciler.
 `services.prompt_attachment_upload` owns filename, MIME, signature, and size
 validation before calling the processing and storage boundaries. Both the
 browser multipart endpoint and the MCP prompt-publishing tools use this service.
-MCP accepts Base64 input (including an image data URL) and ChatGPT file inputs
+MCP accepts Base64 input through `publish_image_prompt_base64` (including an
+image data URL) and required ChatGPT file inputs through `publish_image_prompt`,
 declared through `_meta["openai/fileParams"]`. ChatGPT file inputs are fetched
 only from its HTTPS `files.oaiusercontent.com` download host, without redirects,
 and with the same 5 MB streaming limit. Arbitrary remote URLs are not fetched.

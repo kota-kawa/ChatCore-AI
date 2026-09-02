@@ -32,7 +32,7 @@ MCPクライアント（ChatGPTなど）はRFC 8707の `resource` インジケ�
 利用できる主なツールは次のとおりです。
 
 - 公開コンテンツ: `list_shared_content`、`search_shared_content`、`get_shared_content`、
-  `list_prompt_categories`、`publish_prompt`、`publish_image_prompt`、`publish_skill`
+  `list_prompt_categories`、`publish_prompt`、`publish_image_prompt`、`publish_image_prompt_base64`、`publish_skill`
 - メモ読取: `list_memos`、`search_memos`、`get_memo`、`list_memo_collections`
 - メモ書込: `create_memo`、`update_memo`、`append_memo_content`
 - コンテキスト読取: `get_personal_context`、`search_context`
@@ -61,20 +61,21 @@ MCPツールからファイルの書き出しや一括読み込みを開始す�
 メモ一覧はタイトルと安全なメタデータだけを返し、共有トークンや共有URLを外部AIへ渡しません。
 メモ本文は最大12,000文字ずつ分割して取得できます。
 
-`publish_prompt` は `media_type` に `text` または `image` を指定できます。画像プロンプトへ
-作例画像を添付する場合は、ChatGPTなど対応クライアントのファイル選択から `image_file` を渡すか、
-`image_base64` に5MB以下のPNG／JPEG／WebP／GIFをBase64で渡し、
-必要に応じて `image_filename`（例: `reference.png`）と `image_mime_type` を指定してください。
-`data:image/...;base64,...` 形式も利用できます。画像を指定すると `media_type` は `image` として
-保存されます。サーバーはfile upload用のChatGPT一時URL以外の外部URLから画像を取得せず、Web投稿と
-同じ検査・メタデータ除去・WebP変換を行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、
-運用環境で変更する場合もこの
-Base64転送分を含むサイズを確保してください。
-ChatGPTから作例画像も含めて投稿するときは、画像が必須入力になっている
-`publish_image_prompt` を使用します。このツールは画像が渡されない限り投稿を実行せず、成功結果の
-`image_attached` で画像が実際に保存されたことを確認できます。`image_file` と `image_base64` は
-同時に指定できません。file uploadで渡された一時URLはChatGPTのファイル配信ホストだけを許可し、
-リダイレクトを追跡せず、5MBを超えた時点で取得を中止します。
+`publish_prompt` は `media_type` に `text` または `image` を指定できます。画像プロンプトを投稿する場合は、
+ChatGPTなど対応クライアントのファイル入力を使う `publish_image_prompt`、または実際の画像バイトを
+Base64で渡す `publish_image_prompt_base64` を使用してください。`publish_prompt` で
+`media_type=image` を指定する場合も、画像入力が必須です。画像はPNG／JPEG／WebP／GIFに対応し、
+サーバーはfile upload用のChatGPT一時URL以外の外部URLから取得しません。
+
+`publish_image_prompt` の `image_file` はトップレベルの必須入力です。ChatGPTで直前に生成した画像、または
+ChatGPTのファイル選択から選んだ画像を、このファイル入力としてそのまま渡してください。ChatGPT側で
+Base64化・再圧縮せず、成功結果の `image_attached=true` を確認してください。`image_file` の一時URLは
+ChatGPTのファイル配信ホストだけを許可し、リダイレクトを追跡せず、5MBを超えた時点で取得を中止します。
+
+`publish_image_prompt_base64` は、画像バイトをすでにBase64として取得できる場合だけ使用します。
+`data:image/...;base64,...` 形式も利用できます。画像はWeb投稿と同じ検査・メタデータ除去・WebP変換を
+行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、運用環境で変更する場合もBase64転送分を
+含むサイズを確保してください。
 
 メモの更新・追記には、直前の読込結果に含まれる `revision` が必要です。Web画面や別のMCP接続で
 先に変更されていた場合は更新せず、再読込を求めます。共有中のメモは公開内容も変わるため、
