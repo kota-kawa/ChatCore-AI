@@ -2,12 +2,14 @@ import { getRuntimeLocale } from "../../lib/i18n/config";
 import {
   buildButtonMarkup,
   buildDialogMarkup,
+  buildPromptFieldMarkup,
   playCloseTransition,
   playOpenTransition
 } from "./alert_modal_view";
 
 const ALERT_MODAL_ROOT_ID = "cc-alert-modal-root";
 const CONFIRM_MODAL_ROOT_ID = "cc-confirm-modal-root";
+const PROMPT_MODAL_ROOT_ID = "cc-prompt-modal-root";
 const ALERT_MODAL_OPEN_CLASS = "cc-alert-modal-open";
 
 function releaseBodyModalState() {
@@ -351,11 +353,236 @@ class GlobalConfirmModal {
   }
 }
 
+type PromptModalOptions = {
+  defaultValue?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  inputLabel?: string;
+};
+
+type PromptQueueItem = {
+  message: string;
+  options: PromptModalOptions;
+  resolve: (value: string | null) => void;
+};
+
+class GlobalPromptModal {
+  private readonly rootEl: HTMLDivElement;
+  private readonly messageEl: HTMLParagraphElement;
+  private readonly inputEl: HTMLInputElement;
+  private readonly inputLabelEl: HTMLElement;
+  private readonly closeBtn: HTMLButtonElement;
+  private readonly cancelBtn: HTMLButtonElement;
+  private readonly okBtn: HTMLButtonElement;
+  private readonly okLabelEl: HTMLElement;
+  private readonly cancelLabelEl: HTMLElement;
+  private readonly queue: PromptQueueItem[] = [];
+  private currentItem: PromptQueueItem | null = null;
+  private isVisible = false;
+  private previouslyFocusedElement: HTMLElement | null = null;
+  private cancelExitTransition: (() => void) | null = null;
+
+  constructor() {
+    this.rootEl = this.createModalElement();
+
+    const messageEl = this.rootEl.querySelector(".cc-alert-modal__message");
+    const inputEl = this.rootEl.querySelector('input[data-cc-prompt-input="true"]');
+    const inputLabelEl = this.rootEl.querySelector(".cc-alert-modal__field-label");
+    const closeBtn = this.rootEl.querySelector(".cc-alert-modal__close");
+    const cancelBtn = this.rootEl.querySelector('button[data-cc-prompt-cancel="true"]');
+    const okBtn = this.rootEl.querySelector('[data-cc-prompt-ok="true"]');
+
+    if (
+      !(messageEl instanceof HTMLParagraphElement) ||
+      !(inputEl instanceof HTMLInputElement) ||
+      !(inputLabelEl instanceof HTMLElement) ||
+      !(closeBtn instanceof HTMLButtonElement) ||
+      !(cancelBtn instanceof HTMLButtonElement) ||
+      !(okBtn instanceof HTMLButtonElement)
+    ) {
+      throw new Error("Prompt modal elements are missing.");
+    }
+
+    const okLabelEl = okBtn.querySelector(".cc-alert-modal__label");
+    const cancelLabelEl = cancelBtn.querySelector(".cc-alert-modal__label");
+    if (!(okLabelEl instanceof HTMLElement) || !(cancelLabelEl instanceof HTMLElement)) {
+      throw new Error("Prompt modal button labels are missing.");
+    }
+
+    this.messageEl = messageEl;
+    this.inputEl = inputEl;
+    this.inputLabelEl = inputLabelEl;
+    this.closeBtn = closeBtn;
+    this.cancelBtn = cancelBtn;
+    this.okBtn = okBtn;
+    this.okLabelEl = okLabelEl;
+    this.cancelLabelEl = cancelLabelEl;
+    this.bindEvents();
+  }
+
+  public readonly prompt = (message?: unknown, options: PromptModalOptions = {}): Promise<string | null> => {
+    const normalizedMessage = message === undefined ? "" : String(message);
+    return new Promise<string | null>((resolve) => {
+      this.queue.push({ message: normalizedMessage, options, resolve });
+      this.openNext();
+    });
+  };
+
+  private createModalElement() {
+    const existing = document.getElementById(PROMPT_MODAL_ROOT_ID);
+    if (existing instanceof HTMLDivElement) {
+      return existing;
+    }
+
+    const english = getRuntimeLocale() === "en";
+    const root = document.createElement("div");
+    root.id = PROMPT_MODAL_ROOT_ID;
+    root.className = "cc-alert-modal cc-alert-modal--prompt";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
+    root.setAttribute("aria-hidden", "true");
+    root.hidden = true;
+    root.innerHTML = buildDialogMarkup({
+      variant: "prompt",
+      closeLabel: english ? "Close" : "閉じる",
+      title: english ? "Input" : "入力",
+      overlayAttribute: 'data-cc-prompt-cancel="true"',
+      fieldMarkup: buildPromptFieldMarkup(english ? "Value" : "入力内容"),
+      actionsMarkup: [
+        buildButtonMarkup({
+          label: english ? "Cancel" : "キャンセル",
+          secondary: true,
+          attributes: 'data-cc-prompt-cancel="true"'
+        }),
+        buildButtonMarkup({
+          label: "OK",
+          attributes: 'data-cc-prompt-ok="true"'
+        })
+      ].join("")
+    });
+    document.body.appendChild(root);
+    return root;
+  }
+
+  private bindEvents() {
+    this.rootEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest('[data-cc-prompt-cancel="true"]')) {
+        this.finish(null);
+      }
+    });
+    this.closeBtn.addEventListener("click", () => this.finish(null));
+    this.cancelBtn.addEventListener("click", () => this.finish(null));
+    this.okBtn.addEventListener("click", () => this.finish(this.inputEl.value));
+    document.addEventListener("keydown", this.handleKeyDown, true);
+  }
+
+  private readonly handleKeyDown = (event: KeyboardEvent) => {
+    if (!this.isVisible) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.finish(null);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.finish(this.inputEl.value);
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = this.getFocusableElements();
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  private getFocusableElements() {
+    const candidates = this.rootEl.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    return Array.from(candidates).filter((el) => !el.hasAttribute("disabled"));
+  }
+
+  private openNext() {
+    if (this.isVisible) return;
+
+    const nextItem = this.queue.shift();
+    if (!nextItem) return;
+    this.currentItem = nextItem;
+
+    this.cancelExitTransition?.();
+    this.cancelExitTransition = null;
+
+    const english = getRuntimeLocale() === "en";
+    const { options } = nextItem;
+
+    this.previouslyFocusedElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    this.messageEl.textContent = nextItem.message;
+    this.inputLabelEl.textContent =
+      options.inputLabel ?? nextItem.message ?? (english ? "Value" : "入力内容");
+    this.okLabelEl.textContent = options.confirmLabel ?? "OK";
+    this.cancelLabelEl.textContent =
+      options.cancelLabel ?? (english ? "Cancel" : "キャンセル");
+    this.inputEl.value = options.defaultValue ?? "";
+    this.inputEl.placeholder = options.placeholder ?? "";
+
+    playOpenTransition(this.rootEl);
+    document.body.classList.add(ALERT_MODAL_OPEN_CLASS);
+    this.isVisible = true;
+    this.inputEl.focus();
+    this.inputEl.select();
+  }
+
+  private finish(rawValue: string | null) {
+    if (!this.isVisible) return;
+
+    this.isVisible = false;
+    this.cancelExitTransition = playCloseTransition(this.rootEl, () => {
+      this.cancelExitTransition = null;
+      releaseBodyModalState();
+      this.openNext();
+    });
+
+    const activeItem = this.currentItem;
+    this.currentItem = null;
+    if (activeItem) {
+      activeItem.resolve(rawValue === null ? null : rawValue);
+    }
+
+    if (this.previouslyFocusedElement?.isConnected) {
+      this.previouslyFocusedElement.focus();
+    }
+    this.previouslyFocusedElement = null;
+  }
+}
+
 type DialogWindow = typeof window & {
   __chatcoreAlertModalInitialized?: boolean;
   __chatcoreAlertModal?: GlobalAlertModal;
   __chatcoreConfirmModalInitialized?: boolean;
   __chatcoreConfirmModal?: GlobalConfirmModal;
+  __chatcorePromptModalInitialized?: boolean;
+  __chatcorePromptModal?: GlobalPromptModal;
 };
 
 function ensureGlobalAlertModal() {
@@ -402,6 +629,27 @@ function ensureGlobalConfirmModal() {
   install();
 }
 
+function ensureGlobalPromptModal() {
+  if (typeof window === "undefined") return;
+  if (typeof document === "undefined") return;
+
+  const globalWindow = window as DialogWindow;
+  if (globalWindow.__chatcorePromptModalInitialized) return;
+
+  const install = () => {
+    if (globalWindow.__chatcorePromptModalInitialized) return;
+    globalWindow.__chatcorePromptModal = new GlobalPromptModal();
+    globalWindow.__chatcorePromptModalInitialized = true;
+  };
+
+  if (!document.body) {
+    document.addEventListener("DOMContentLoaded", install, { once: true });
+    return;
+  }
+
+  install();
+}
+
 function showAlertModal(message?: unknown) {
   if (typeof window === "undefined") return;
   ensureGlobalAlertModal();
@@ -416,7 +664,19 @@ function showConfirmModal(message?: unknown): Promise<boolean> {
   return (window as DialogWindow).__chatcoreConfirmModal?.confirm(message) ?? Promise.resolve(false);
 }
 
+function showPromptModal(message?: unknown, options: PromptModalOptions = {}): Promise<string | null> {
+  if (typeof window === "undefined") {
+    return Promise.resolve(null);
+  }
+  ensureGlobalPromptModal();
+  return (
+    (window as DialogWindow).__chatcorePromptModal?.prompt(message, options) ?? Promise.resolve(null)
+  );
+}
+
 ensureGlobalAlertModal();
 ensureGlobalConfirmModal();
+ensureGlobalPromptModal();
 
-export { showAlertModal, showConfirmModal };
+export { showAlertModal, showConfirmModal, showPromptModal };
+export type { PromptModalOptions };

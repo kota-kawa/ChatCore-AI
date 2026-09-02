@@ -25,6 +25,17 @@ const ICONS = {
       />
       <circle cx="12" cy="16.6" r="1.1" fill="currentColor" />
     </svg>
+  `,
+  prompt: `
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+      <path
+        d="M4 16.5V20h3.5L18 9.5 14.5 6 4 16.5Z"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linejoin="round"
+      />
+      <path d="M13.3 7.2 16.8 10.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+    </svg>
   `
 } as const;
 
@@ -36,6 +47,7 @@ type DialogMarkupOptions = {
   title: string;
   overlayAttribute: string;
   actionsMarkup: string;
+  fieldMarkup?: string;
 };
 
 function buildDialogMarkup({
@@ -43,7 +55,8 @@ function buildDialogMarkup({
   closeLabel,
   title,
   overlayAttribute,
-  actionsMarkup
+  actionsMarkup,
+  fieldMarkup = ""
 }: DialogMarkupOptions) {
   return `
     <div class="cc-alert-modal__overlay" ${overlayAttribute}></div>
@@ -56,10 +69,20 @@ function buildDialogMarkup({
         <div class="cc-alert-modal__text">
           <h2 class="cc-alert-modal__title">${title}</h2>
           <p class="cc-alert-modal__message"></p>
+          ${fieldMarkup}
         </div>
       </div>
       <div class="cc-alert-modal__actions">${actionsMarkup}</div>
     </div>
+  `;
+}
+
+function buildPromptFieldMarkup(inputLabel: string) {
+  return `
+    <label class="cc-alert-modal__field">
+      <span class="cc-alert-modal__field-label">${inputLabel}</span>
+      <input type="text" class="cc-alert-modal__input" data-cc-prompt-input="true" autocomplete="off" />
+    </label>
   `;
 }
 
@@ -100,4 +123,10 @@ function playCloseTransition(root: HTMLElement, onFinished: () => void) {
   return () => window.clearTimeout(timerId);
 }
 
-export { buildButtonMarkup, buildDialogMarkup, playCloseTransition, playOpenTransition };
+export {
+  buildButtonMarkup,
+  buildDialogMarkup,
+  buildPromptFieldMarkup,
+  playCloseTransition,
+  playOpenTransition
+};
