@@ -12,6 +12,7 @@
 - [0006: 長時間チャットの最終回答を限定継続で回復する](0006-long-running-chat-completion-recovery.md)
 - [0007: 調査ターンの回答契約を会話の末尾で渡す](0007-research-turn-answer-contract.md)
 - [0008: ツールスキーマの検証をプロバイダに委ねない](0008-provider-safe-tool-schemas.md)
+- [0009: 通常チャットを単一 TurnState と単一判断ループで実行する](0009-single-turn-state-chat-loop.md)
 
 ## 追加・更新の基準
 

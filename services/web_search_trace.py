@@ -128,16 +128,6 @@ def _source_count(result: WebSearchResult | None) -> int:
     return len(result.sources) if result is not None else 0
 
 
-def decision_step(result: WebSearchResult | None = None) -> TraceStep:
-    # 検索の要否を判断したステップ
-    # The step where the assistant decided a search was needed.
-    freshness = _freshness_label(result)
-    detail = "質問の内容から、手元の知識だけでは足りず最新情報が必要だと判断しました。"
-    if freshness:
-        detail = f"{detail[:-1]}（{freshness}の情報を優先）。"
-    return TraceStep(title="検索が必要か判断", detail=detail, kind="decide")
-
-
 def search_step(
     result: WebSearchResult,
     *,
@@ -264,21 +254,6 @@ def review_step(result: WebSearchResult | None, *, reused: bool = False) -> Trac
     else:
         detail = "取得した情報が回答の根拠として使えるかを確認しました。"
     return TraceStep(title="検索結果を確認", detail=detail, kind="review")
-
-
-def context_added_step(result: WebSearchResult | None) -> TraceStep:
-    # 検索結果を回答用の文脈へ取り込んだステップ
-    # The step that folded the search results into the answering context.
-    count = _source_count(result)
-    return TraceStep(
-        title="検索結果を回答の文脈へ追加",
-        detail=(
-            f"{count}件の抜粋を回答用の参照データとして読み込みました。"
-            if count
-            else "取得した抜粋を回答用の参照データとして読み込みました。"
-        ),
-        kind="review",
-    )
 
 
 def search_failed_step(query: str = "", *, reason: str = "") -> TraceStep:

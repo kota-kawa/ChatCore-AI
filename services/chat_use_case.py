@@ -44,23 +44,15 @@ from services.web_search import (
     deserialize_web_search_results,
     extract_prior_web_search_results,
     inject_prior_web_search_context,
-    maybe_augment_messages_with_web_search,
     resolve_web_search_citations,
     strip_web_search_citation_html,
-    serialize_web_search_result,
-    with_web_search_citations,
 )
 from services.web_search_trace import (
     TraceStep,
     answer_step,
     build_web_search_trace_markdown,
-    context_added_step,
-    decision_step,
-    page_reading_steps,
-    search_step,
     selected_reference_steps,
 )
-from services.web_search_images import append_web_search_image_parts, choose_web_search_images
 from services.chat_title import build_initial_title_candidates, generate_chat_room_title
 
 
@@ -806,13 +798,14 @@ class ChatPostUseCase:
 
             return deps.build_llm_stream_response(deps.iter_llm_stream_events(job))
 
-        # 非ストリーミングモデルの場合は同期的にWeb検索/LLM応答を取得し、結果を永続化する
-        # For non-streaming models, synchronously perform web search/LLM call and persist the response
+        # 対応モデルは通常ストリーミング経路へ入る。互換用の同期経路では事前検索Plannerを
+        # 起動せず、取得済みの参照だけでモデル自身に回答させる。
+        # Supported models normally use the streaming agent loop. This compatibility fallback
+        # never runs a separate search planner; it answers from already available references.
         conversation_messages = inject_prior_web_search_context(
             conversation_messages, prior_web_search_results
         )
-        augmentation = maybe_augment_messages_with_web_search(conversation_messages, model)
-        response_messages = augmentation.messages
+        response_messages = conversation_messages
 
         try:
             bot_reply = await run_blocking(deps.get_llm_response, response_messages, model)
@@ -880,21 +873,10 @@ class ChatPostUseCase:
         web_search_trace_steps: list[TraceStep] = selected_reference_steps(
             selected_reference_trace
         )
-        if augmentation.result is not None:
-            web_search_trace_steps.extend(
-                [
-                    decision_step(augmentation.result),
-                    search_step(augmentation.result),
-                    *page_reading_steps(augmentation.result),
-                    context_added_step(augmentation.result),
-                ]
-            )
-        if web_search_trace_steps or augmentation.result is not None:
-            web_search_trace_steps.append(
-                answer_step([augmentation.result] if augmentation.result is not None else [])
-            )
+        if web_search_trace_steps:
+            web_search_trace_steps.append(answer_step([]))
         trace_block = build_web_search_trace_markdown(
-            augmentation.result,
+            None,
             steps=web_search_trace_steps,
         )
         if trace_block:
@@ -924,12 +906,8 @@ class ChatPostUseCase:
         # Remove chip markup echoed by the model before resolving citation markers.
         bot_reply = strip_web_search_citation_html(bot_reply)
         citation_evidence = combine_web_search_results(
-            [
-                *([augmentation.result] if augmentation.result is not None else []),
-                *prior_web_search_results,
-            ]
+            prior_web_search_results
         )
-        resolved_citations = ()
         if citation_evidence is not None:
             citation_resolution = resolve_web_search_citations(
                 bot_reply,
@@ -943,7 +921,6 @@ class ChatPostUseCase:
                     },
                 )
             bot_reply = citation_resolution.text
-            resolved_citations = citation_resolution.citations
             if message_parts:
                 message_parts = [
                     (
@@ -954,43 +931,14 @@ class ChatPostUseCase:
                     for part in message_parts
                 ]
 
-        # 引用解決後の本文に画像を挿入する。先に画像を挿入してから本文全体を
-        # 引用解決すると、画像前後のテキストパーツが重複するため、この順序を保つ。
-        # Place images after citation resolution. Replacing every text part with the
-        # resolved full response before this point would duplicate text around images.
-        if augmentation.result is not None:
-            image_selections = await run_blocking(
-                choose_web_search_images,
-                user_message,
-                augmentation.result,
-                model=model,
-                answer_text=bot_reply,
-            )
-            message_parts = append_web_search_image_parts(
-                message_parts,
-                image_selections,
-                fallback_text=bot_reply,
-            )
-
         # 保存直前にトレース分割と本文内の画像位置を確定する。
         # Finalize trace splitting and inline image placement before persisting.
         if message_parts:
             message_parts = normalize_message_parts_for_display(message_parts) or None
 
-        # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう保存する
-        # Serialize this turn's search results so later turns can reference them.
-        this_turn_web_search = (
-            [
-                serialize_web_search_result(
-                    with_web_search_citations(
-                        augmentation.result,
-                        resolved_citations,
-                    )
-                )
-            ]
-            if augmentation.result is not None and augmentation.result.has_sources
-            else None
-        )
+        # この互換経路は検索を行わないため、このターンの検索結果は保存しない。
+        # This compatibility path never searches, so it stores no results for later turns.
+        this_turn_web_search = None
 
         # 本文もUIパーツも空なら回答が無いのと同じ。空の応答を保存すると空の吹き出しが
         # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。

@@ -162,12 +162,20 @@ def stream_final_answer_with_recovery(
     adopt_buffer_mode: Callable[[bool], None] | None = None,
     answer_phase: str = "final_answer",
     continuation_phase: str = "continuation",
+    published_answer_text: str = "",
+    published_answer_error: LlmServiceError | None = None,
 ) -> FinalAnswerRecoveryResult:
     """Stream every pass live, buffering only enough of a continuation to de-duplicate it.
 
     `adopt_buffer` receives the live buffer list for each continuation pass so a stop or a
     disconnect can still persist text that has not been published yet. `adopt_buffer_mode`
     reports when that buffer contains a full answer rewrite rather than a normal continuation.
+
+    単一判断ループでは、回答の1本目は呼び出し側のループがすでに配信している。その本文と
+    打ち切り理由を渡すと、この関数は最初のパスを送らず継続だけを実行する。
+    In the single decision loop the caller already streamed the first answer pass, so passing
+    that text with the interruption that ended it starts this function directly at a
+    continuation instead of re-requesting the answer.
     """
     raw_answer_chunks: list[str] = []
     continuation_count = 0
@@ -238,6 +246,47 @@ def stream_final_answer_with_recovery(
 
         publish_text(strip_continuation_overlap(existing, segment))
 
+    def begin_continuation(reason_source: BaseException) -> None:
+        """Enter the next continuation pass for an interrupted answer."""
+        nonlocal continuation_count, request_messages, phase
+        continuation_count += 1
+        logger.warning(
+            "Continuing interrupted final answer "
+            "(model=%s, continuation=%s/%s, reason=%s, output_chars=%s).",
+            model,
+            continuation_count,
+            max_continuations,
+            _continuation_reason(reason_source),
+            len("".join(raw_answer_chunks)),
+        )
+        publish_event(
+            "response_generation_started",
+            {
+                "phase": "continuation",
+                "continuation": continuation_count,
+                "max_continuations": max_continuations,
+            },
+        )
+        request_messages = build_final_answer_continuation_messages(
+            answer_messages,
+            "".join(raw_answer_chunks),
+        )
+        phase = continuation_phase
+
+    if published_answer_error is not None:
+        # 本文はすでに配信済みなので、ここでは配信せず継続の土台としてだけ引き継ぐ。
+        # The text is already on the wire; adopt it only as the base for the continuation.
+        if published_answer_text:
+            raw_answer_chunks.append(published_answer_text)
+        reasons.append(_continuation_reason(published_answer_error))
+        if (
+            not raw_answer_chunks
+            or continuation_count >= max_continuations
+            or should_stop()
+        ):
+            return result(published_answer_error)
+        begin_continuation(published_answer_error)
+
     while True:
         state = _ContinuationPass()
         if continuation_count:
@@ -297,29 +346,7 @@ def stream_final_answer_with_recovery(
                 return stalled_result()
             if continuation_count >= max_continuations or should_stop():
                 return result(exc)
-            continuation_count += 1
-            logger.warning(
-                "Continuing interrupted final answer "
-                "(model=%s, continuation=%s/%s, reason=%s, output_chars=%s).",
-                model,
-                continuation_count,
-                max_continuations,
-                _continuation_reason(exc),
-                len("".join(raw_answer_chunks)),
-            )
-            publish_event(
-                "response_generation_started",
-                {
-                    "phase": "continuation",
-                    "continuation": continuation_count,
-                    "max_continuations": max_continuations,
-                },
-            )
-            request_messages = build_final_answer_continuation_messages(
-                answer_messages,
-                "".join(raw_answer_chunks),
-            )
-            phase = continuation_phase
+            begin_continuation(exc)
             continue
         except LlmServiceError as exc:
             flush_pass(state)

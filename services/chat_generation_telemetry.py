@@ -30,10 +30,6 @@ class ChatGenerationTelemetry:
     lookup_call_count: int = 0
     tools_withdrawn_by_budget: bool = False
     research_phase_used: bool = False
-    research_summary_present: bool = False
-    research_wrapup_used: bool = False
-    research_draft_forwarded: bool = False
-    coverage_requirement_count: int = 0
     final_answer_input_tokens: int = 0
     final_answer_input_chars: int = 0
     final_answer_output_chars: int = 0
@@ -52,7 +48,6 @@ class ChatGenerationTelemetry:
     context_projection_count: int = 0
     context_compaction_count: int = 0
     context_recovery_count: int = 0
-    forced_wrapup_due_to_context: bool = False
     # プロバイダがツール呼び出しを拒否し、ツールなしでやり直して回復した回数。
     # How often a provider rejected a tool call and the step recovered without tools.
     tool_schema_recoveries: int = 0
@@ -88,10 +83,6 @@ class ChatGenerationTelemetry:
             "lookup_call_count": self.lookup_call_count,
             "tools_withdrawn_by_budget": self.tools_withdrawn_by_budget,
             "research_phase_used": self.research_phase_used,
-            "research_summary_present": self.research_summary_present,
-            "research_wrapup_used": self.research_wrapup_used,
-            "research_draft_forwarded": self.research_draft_forwarded,
-            "coverage_requirement_count": self.coverage_requirement_count,
             "final_answer_input_tokens": self.final_answer_input_tokens,
             "final_answer_input_chars": self.final_answer_input_chars,
             "final_answer_output_chars": self.final_answer_output_chars,
@@ -109,6 +100,5 @@ class ChatGenerationTelemetry:
             "context_projection_count": self.context_projection_count,
             "context_compaction_count": self.context_compaction_count,
             "context_recovery_count": self.context_recovery_count,
-            "forced_wrapup_due_to_context": self.forced_wrapup_due_to_context,
             "tool_schema_recoveries": self.tool_schema_recoveries,
         }

@@ -49,7 +49,6 @@ UNKNOWN_MODEL_CONTEXT_WINDOW_TOKENS = DEFAULT_CONTEXT_WINDOW_TOKENS
 # long-running deployment can change its configuration without reloading this
 # module.
 DEFAULT_OUTPUT_TOKENS = 16_384
-DEFAULT_RESEARCH_OUTPUT_TOKENS = 8_192
 DEFAULT_ANSWER_OUTPUT_TOKENS = 32_768
 
 # Reserve room for provider-side tokenization differences and request framing.
@@ -62,9 +61,10 @@ DEFAULT_SAFETY_MARGIN_TOKENS = 2_048
 DEFAULT_TOOL_DEFINITION_OVERHEAD_TOKENS = 64
 MESSAGE_FRAME_OVERHEAD_TOKENS = 4
 
-RESEARCH_GENERATION_PHASES = frozenset({"research", "research_wrapup"})
+# 通常チャットの検索判断と回答は単一の agent フェーズで実行する。調査専用フェーズは無い。
+# Search decisions and answers share one agent phase in normal chat; no research-only phase.
 ANSWER_GENERATION_PHASES = frozenset(
-    {"final_answer", "continuation", "final_answer_deep", "continuation_deep"}
+    {"agent", "final_answer", "continuation", "final_answer_deep", "continuation_deep"}
 )
 
 
@@ -142,8 +142,6 @@ def get_output_reserved_tokens(generation_phase: str = "default") -> int:
     phase = str(generation_phase or "default").strip().lower()
     if phase in ANSWER_GENERATION_PHASES:
         return _positive_int_env("LLM_MAX_TOKENS_ANSWER", DEFAULT_ANSWER_OUTPUT_TOKENS)
-    if phase in RESEARCH_GENERATION_PHASES:
-        return _positive_int_env("LLM_MAX_TOKENS_RESEARCH", DEFAULT_RESEARCH_OUTPUT_TOKENS)
     return _positive_int_env("LLM_MAX_TOKENS", DEFAULT_OUTPUT_TOKENS)
 
 
@@ -385,7 +383,6 @@ __all__ = [
     "LlmContextBudget",
     "MODEL_CONTEXT_WINDOWS",
     "QWEN_3_6_27B_MODEL",
-    "RESEARCH_GENERATION_PHASES",
     "calculate_available_input_tokens",
     "estimate_messages_and_tools_tokens",
     "estimate_messages_tokens",

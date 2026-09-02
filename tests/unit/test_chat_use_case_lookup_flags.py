@@ -105,10 +105,6 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             session=session,
         )
         with (
-            patch(
-                "services.chat_use_case.maybe_augment_messages_with_web_search",
-                side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
-            ),
             patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             asyncio.run(
@@ -298,10 +294,6 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         )
 
         with (
-            patch(
-                "services.chat_use_case.maybe_augment_messages_with_web_search",
-                side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
-            ),
             patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             asyncio.run(

@@ -65,27 +65,29 @@ class LlmContextBudgetTestCase(unittest.TestCase):
             os.environ,
             {
                 "LLM_MAX_TOKENS": "1000",
-                "LLM_MAX_TOKENS_RESEARCH": "2000",
                 "LLM_MAX_TOKENS_ANSWER": "3000",
             },
         ):
             self.assertEqual(get_output_reserved_tokens("default"), 1000)
-            self.assertEqual(get_output_reserved_tokens("research"), 2000)
-            self.assertEqual(get_output_reserved_tokens("research_wrapup"), 2000)
+            # 判断ループも回答を書くため、回答フェーズと同じ出力枠を使う。
+            # The decision loop writes the answer too, so it reserves the answer budget.
+            self.assertEqual(get_output_reserved_tokens("agent"), 3000)
             self.assertEqual(get_output_reserved_tokens("final_answer"), 3000)
             self.assertEqual(get_output_reserved_tokens("continuation_deep"), 3000)
+            # 廃止した調査専用フェーズは既定の出力枠へ落ちる。
+            # The retired research-only phase falls back to the general output budget.
+            self.assertEqual(get_output_reserved_tokens("research"), 1000)
 
     def test_invalid_output_environment_values_use_phase_defaults(self):
         with patch.dict(
             os.environ,
             {
                 "LLM_MAX_TOKENS": "0",
-                "LLM_MAX_TOKENS_RESEARCH": "-1",
                 "LLM_MAX_TOKENS_ANSWER": "invalid",
             },
         ):
             self.assertGreater(get_output_reserved_tokens("default"), 0)
-            self.assertGreater(get_output_reserved_tokens("research"), 0)
+            self.assertGreater(get_output_reserved_tokens("agent"), 0)
             self.assertGreater(get_output_reserved_tokens("final_answer"), 0)
 
     def test_message_estimate_includes_metadata_and_tool_calls(self):

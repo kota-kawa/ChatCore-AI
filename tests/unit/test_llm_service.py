@@ -274,23 +274,23 @@ class LlmServiceTestCase(unittest.TestCase):
     # 日本語: 出力枠がフェーズごとに分かれ、本文を書く回答フェーズが最大になることを検証します。
     # English: Verify the output budget is split per phase and the answer phase gets the largest.
     def test_output_token_budget_is_split_by_generation_phase(self):
-        self.assertEqual(
-            llm.max_output_tokens_for_phase("research"),
-            llm.LLM_RESEARCH_MAX_TOKENS,
-        )
-        self.assertEqual(
-            llm.max_output_tokens_for_phase("research_wrapup"),
-            llm.LLM_RESEARCH_MAX_TOKENS,
-        )
-        for phase in ("final_answer", "final_answer_deep", "continuation", "continuation_deep"):
+        # 検索判断も回答も同じ agent フェーズで走るため、回答用の出力枠を使う。
+        # Searching and answering share the agent phase, so both use the answer budget.
+        for phase in (
+            "agent",
+            "final_answer",
+            "final_answer_deep",
+            "continuation",
+            "continuation_deep",
+        ):
             self.assertEqual(
                 llm.max_output_tokens_for_phase(phase),
                 llm.LLM_ANSWER_MAX_TOKENS,
             )
         self.assertEqual(llm.max_output_tokens_for_phase("default"), llm.LLM_MAX_TOKENS)
-        # 本文を書くフェーズは調査ステップより大きくなければならない。
-        # The answer phase must be larger than a research step.
-        self.assertGreater(llm.LLM_ANSWER_MAX_TOKENS, llm.LLM_RESEARCH_MAX_TOKENS)
+        # 本文を書くフェーズは、補助的な既定フェーズより大きくなければならない。
+        # The answer-writing phase must be larger than the auxiliary default phase.
+        self.assertGreater(llm.LLM_ANSWER_MAX_TOKENS, llm.LLM_MAX_TOKENS)
 
     # 日本語: Claudeにも生成フェーズが伝わり、回答フェーズの出力枠が適用されることを検証します。
     # English: Verify the generation phase reaches Claude so the answer budget applies there too.
