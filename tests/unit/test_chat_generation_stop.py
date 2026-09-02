@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 import unittest
@@ -7,7 +8,8 @@ from services.chat_generation import (
     REMOTE_CANCEL_CHECK_INTERVAL_SECONDS,
     ChatGenerationService,
 )
-from services.web_search import WebSearchAugmentation
+from services.chat_turn_state import strip_turn_state_update
+from services.web_search import WebSearchResult, WebSearchSource
 
 
 # 日本語: 複数ワーカーが共有するRedisを模した、Pub/Sub付きの疑似Redisクライアント。
@@ -187,26 +189,34 @@ class _FakePipeline:
         return True
 
 
-# 日本語: 生成を模擬し、キャンセルされるまでチャンクを送り続けるストリームを返します。
-# English: Return a stream that keeps emitting chunks until the job is cancelled.
-def _endless_stream(messages, model, tools=None, generation_phase="default"):
+# 日本語: 回答可能と判断した後、キャンセルまで本文を送り続けるモデルを模擬します。
+# English: Emulate a model that decides it can answer, then emits body chunks until cancelled.
+def _endless_answer_stream(messages, model, tools=None, generation_phase="default"):
     del messages, model, tools, generation_phase
+    yield (
+        '<turn_state_update>{"objective":"こんにちは",'
+        '"unresolved_questions":[],"facts":[],"evidence_ids":[],'
+        '"ready_to_answer":true}</turn_state_update>'
+    )
     for index in range(2000):
         time.sleep(0.01)
         yield f"chunk-{index} "
 
 
-# 日本語: Web検索による文脈拡張を行わないダミーの拡張結果を返します。
-# English: Return a no-op augmentation so web search does not run in tests.
-def _skip_web_search(
-    messages,
-    model,
-    publish_event=None,
-    page_fetch_budget=None,
-    evidence_context_budget=None,
-):
-    del model, publish_event, page_fetch_budget, evidence_context_budget
-    return WebSearchAugmentation(messages=messages, result=None)
+def _web_search_tool_call(query):
+    return json.dumps(
+        [
+            {
+                "id": "call-web-search",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": json.dumps({"query": query}, ensure_ascii=False),
+                },
+            }
+        ],
+        ensure_ascii=False,
+    )
 
 
 # 日本語: 生成中に条件が満たされるまで待機するヘルパー。
@@ -258,22 +268,25 @@ class ChatGenerationStopTestCase(unittest.TestCase):
                 else (lambda response, **kwargs: None)
             ),
         )
-        self.assertTrue(_wait_until(lambda: bool(job._chunks or job._pending_stream_chunks)))
+        # 内部状態の封筒だけが届いた時点では本文がまだ無い。停止のテストは、表示される
+        # 本文が生成され始めてから停止させる必要がある。
+        # Only the internal envelope has arrived at first, and there is no body yet. A stop
+        # test must wait until user-facing text has actually started.
+        self.assertTrue(
+            _wait_until(
+                lambda: bool(job._chunks)
+                or bool(strip_turn_state_update("".join(job._pending_stream_chunks)))
+            )
+        )
         return job
 
-    # 日本語: ジョブを所有しないワーカーへ停止要求が届いても、生成が停止しロックが解放されることを検証します。
-    # English: Verify a stop request landing on a non-owning worker still cancels the job and frees the lock.
-    def test_stop_on_non_owning_worker_cancels_generation(self):
+    # 日本語: 回答出力中のジョブへ別ワーカーから停止要求しても、部分回答を保存しロックを解放することを検証します。
+    # English: Verify a remote stop during answer output persists the partial answer and frees the lock.
+    def test_stop_during_answer_output_persists_partial_response(self):
         persisted = []
-        with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                side_effect=_skip_web_search,
-            ),
-            patch(
-                "services.chat_generation.get_llm_response_stream",
-                side_effect=_endless_stream,
-            ),
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner, persisted)
 
@@ -288,19 +301,111 @@ class ChatGenerationStopTestCase(unittest.TestCase):
         # 停止までに生成できた本文は失われず保存されること。
         # Text produced before the stop is persisted rather than dropped.
         self.assertTrue(persisted)
+        self.assertNotIn("turn_state_update", persisted[0])
+
+    # 日本語: モデルがTurnStateを更新している途中に停止した場合、内部状態を回答として保存しないことを検証します。
+    # English: Verify stopping while the model updates TurnState never persists internal state as an answer.
+    def test_stop_during_model_decision_does_not_persist_turn_state(self):
+        persisted = []
+        decision_started = threading.Event()
+
+        def deciding_stream(messages, model, tools=None, generation_phase="default"):
+            del messages, model, tools, generation_phase
+            decision_started.set()
+            yield '<turn_state_update>{"objective":"こんにちは",'
+            for _ in range(2000):
+                time.sleep(0.01)
+                yield '"unresolved_questions":['
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=deciding_stream,
+        ):
+            job = self.owner.start_generation_job(
+                self.job_key,
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **kwargs: persisted.append(response),
+            )
+            self.assertTrue(decision_started.wait(timeout=5.0))
+            self.assertTrue(self.other_worker.cancel_generation_job(self.job_key))
+
+        self.assertTrue(job.is_done)
+        self.assertEqual(persisted, [])
+        self.assertFalse(self.owner.has_active_generation(self.job_key))
+
+    # 日本語: ツール実行後の停止で次のモデル判断が中断され、検索結果を回答として保存しないことを検証します。
+    # English: Verify a stop after tool execution interrupts the next decision without persisting evidence as an answer.
+    def test_stop_after_tool_execution_does_not_persist_tool_result(self):
+        persisted = []
+        search_completed = threading.Event()
+        stream_call_count = 0
+        search_result = WebSearchResult(
+            query="東京の天気",
+            searched_at="2026-09-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/weather",
+                    title="東京の天気",
+                    hostname="example.com",
+                    age="",
+                    snippets=("晴れです。",),
+                ),
+            ),
+        )
+
+        def stream_side_effect(messages, model, tools=None, generation_phase="default"):
+            nonlocal stream_call_count
+            del messages, model, generation_phase
+            stream_call_count += 1
+            if stream_call_count == 1:
+                self.assertIsNotNone(tools)
+                yield (
+                    '<turn_state_update>{"objective":"東京の天気",'
+                    '"unresolved_questions":["最新の天気"],"facts":[],'
+                    '"evidence_ids":[],"ready_to_answer":false}</turn_state_update>'
+                )
+                yield _web_search_tool_call("東京の天気")
+                return
+
+            search_completed.set()
+            for _ in range(2000):
+                time.sleep(0.01)
+                yield '<turn_state_update>{"objective":"東京の天気"'
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ) as mock_search,
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = self.owner.start_generation_job(
+                self.job_key,
+                conversation_messages=[
+                    {"role": "user", "content": "東京の天気を教えて"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **kwargs: persisted.append(response),
+            )
+            self.assertTrue(search_completed.wait(timeout=5.0))
+            self.assertTrue(self.other_worker.cancel_generation_job(self.job_key))
+
+        self.assertTrue(job.is_done)
+        self.assertEqual(mock_search.call_count, 1)
+        self.assertEqual(persisted, [])
+        self.assertFalse(self.owner.has_active_generation(self.job_key))
 
     # 日本語: 停止直後に同じルームで再生成を開始できることを検証します。
     # English: Verify regeneration can start for the same room right after a stop.
     def test_regeneration_is_allowed_immediately_after_remote_stop(self):
-        with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                side_effect=_skip_web_search,
-            ),
-            patch(
-                "services.chat_generation.get_llm_response_stream",
-                side_effect=_endless_stream,
-            ),
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=_endless_answer_stream,
         ):
             self._start_job(self.owner)
             self.other_worker.cancel_generation_job(self.job_key)
@@ -326,15 +431,9 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     # 日本語: Pub/Sub通知を取りこぼしても、停止要求マーカーの定期確認でジョブが停止することを検証します。
     # English: Verify the periodic marker check stops the job even when the pub/sub notice is missed.
     def test_running_job_stops_itself_from_the_cancel_request_marker(self):
-        with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                side_effect=_skip_web_search,
-            ),
-            patch(
-                "services.chat_generation.get_llm_response_stream",
-                side_effect=_endless_stream,
-            ),
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner)
             self.redis.set(self.owner._cancel_request_key(self.job_key), "1")
@@ -354,15 +453,9 @@ class ChatGenerationStopTestCase(unittest.TestCase):
         cancel_key = self.owner._cancel_request_key(self.job_key)
         self.redis.set(cancel_key, "1")
 
-        with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                side_effect=_skip_web_search,
-            ),
-            patch(
-                "services.chat_generation.get_llm_response_stream",
-                side_effect=_endless_stream,
-            ),
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner)
             self.assertFalse(self.redis.exists(cancel_key))

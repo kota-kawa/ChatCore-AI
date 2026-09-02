@@ -118,13 +118,17 @@ Redis 障害時の扱いは用途ごとに異なります。一般キャッシ�
 4. フロントエンドは `/api/chat_generation_stream` などの SSE エンドポイントを購読し、切断時はステータス確認と再接続を行う。
 5. 応答の永続化はジョブの終了・停止経路で一度だけ行います。途中停止でも生成済みの本文を扱うため、完了と停止の二重保存を追加しないでください。
 
-LLM のストリーム終了理由が出力上限の場合は成功完了として扱いません。`services/chat_answer_continuation.py` の最終回答パスは、表示済みの生本文を assistant 履歴として渡す限定回数の継続生成を行い、境界重複を除去します。継続が最初から書き直した場合は既存本文の末尾を錨に接合し、接合できないパスは破棄します。正常終了しても新しい本文が増えない継続は `incomplete` として扱います。検索トレースなどの表示装飾は継続入力へ含めません。継続上限後も本文がある場合は一度だけ保存し、終端イベント `incomplete` で部分回答であることを明示します。本文のない失敗は従来どおり `error` です。非表示の調査ステップは試行全体をバッファするため、一時障害時に途中出力を破棄して先頭から安全に再試行できます。
+LLM のストリーム終了理由が出力上限の場合は成功完了として扱いません。回答を書いた判断ステップが出力上限で切れたときは、`services/chat_answer_continuation.py` が表示済みの生本文を assistant 履歴として渡す限定回数の継続生成を行い、境界重複を除去します。継続は別フェーズではなく同じ回答の続きであり、モデルへ渡すのは判断ループが使ったのと同じ要求です。継続が最初から書き直した場合は既存本文の末尾を錨に接合し、接合できないパスは破棄します。正常終了しても新しい本文が増えない継続は `incomplete` として扱います。検索トレースなどの表示装飾と内部の状態更新封筒は継続入力にも表示本文にも含めません。継続上限後も本文がある場合は一度だけ保存し、終端イベント `incomplete` で部分回答であることを明示します。本文のない失敗は従来どおり `error` です。ツール呼び出しの有無が確定するまで判断ステップは試行全体をバッファするため、一時障害時に途中出力を破棄して先頭から安全に再試行できます。プロバイダが自前の見積もりより厳しく入力超過を返した場合は、同じ要求を送り直さず、生のツール結果を落とした `TurnState` だけの最小要求で同じ判断を1度だけやり直します。
 
 SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ、待機中だけイベント ID のないコメント keepalive を送ります。`done`、`aborted`、`error`、`incomplete` が終端イベントです。Nginx は開始・再生成・編集再生成・再接続の4経路すべてで buffering を無効化します。
 
-調査ループ（ツール呼び出しを繰り返すフェーズ）で使う内部メモは `services/chat_research_notes.py` が担当します。ステップメモ（`<step_note>`、任意・1〜2文の「次の一手の根拠」）は直近数件だけを次ステップの system メッセージへ組み直して渡し、会話履歴の assistant メッセージにも最終回答パスにも渡しません。研究ループと締めステップには、長いツール履歴の末尾へ再確認用 user 指示を置きます。最終回答パスへ渡る内部メモは調査完了ノート（`<research_complete>`）だけです。調査完了ノートは元の要件・主要事実・不確実性・回答計画の索引であり、最終回答の範囲上限ではありません。内部メモはいずれもユーザー向け本文には出力せず、途中停止時の部分出力からも取り除きます。
+通常チャットの検索を伴うターンは、`services/research_state.py` の単一の `TurnState` を意味状態の正本として扱います。`TurnState` には目的、未解決事項、得られた事実、出典、実行済み検索をまとめ、`step_notes` や `research_summary` のような並行する内部状態を持ちません。状態更新は文字数で先頭・末尾を切る処理ではありません。検索結果を受け取ったモデルが、質問への回答に必要な新しい事実、既存事実の修正、なお不明な点を判断し、根拠との対応を保って `TurnState` へ統合します。
 
-複数回検索するターンでは、`services/research_state.py` の `ResearchState` を意味状態のチェックポイントとして併用します。各検索結果は evidence_id に紐づく短い抜粋へ、参照検索はメモ／事実の要約へ圧縮し、ステップメモと完了ノートはモデルの判断に応じて保持します。履歴が小さい間は従来のツール履歴を使いますが、送信前の `services/llm_context_budget.py` のモデル別予算（出力枠・ツール定義・安全余白を含む）を超えそうになった時点で、ツール履歴を再送せず、意味状態からフェーズ別の新しい投影を作ります。完全な検索結果はプロンプト外に保持して引用解決へ使い、投影は段階的に縮退しても元の依頼・要件・evidence_id を残します。プロバイダが厳しいトークナイザで拒否した場合も、同じ履歴を再送せず締め／最終回答へ移行します。
+`services/chat_generation.py` が「`TurnState` をモデルへ渡す → モデルが回答または検索を選ぶ → 検索結果をプロンプト外の Evidence として保持する → モデルが `TurnState` を更新する → 再判断する」という1本のループを所有します。事前の検索 Planner、調査後だけを扱う Wrapup、別 Summary 生成は置きません。検索要否とクエリは回答を生成するメインモデル自身が判断します。ループの終了条件は、モデルが現在の状態で回答可能と判断した場合、または検索実行回数が設定上限へ達した場合だけです。上限到達時は、モデルがその時点の `TurnState` と参照可能な Evidence から、不確実性を明示して回答します。
+
+検索結果の全文と元のツール結果は、`services/chat_evidence_store.py` の `EvidenceStore` がターン内に保持し、`TurnState` の外かつプロンプト外へ置きます。次の判断には原則として更新済みの `TurnState` と直近のツール結果だけを渡し、生の検索履歴を毎回再送しません。詳細が再び必要になった場合は、モデルが `get_evidence` ツールへ evidence ID を渡して再取得できます。再取得もプロンプトへ載るため、検索結果と同じ根拠予算で抑え、超える場合は ID を残したまま本文から落として `evidence_truncated` を返します。検索根拠を持つターンには、引用 marker と回答方針を定める system 指示（`build_web_search_evidence_policy_message`）を1つだけ添えます。指示は根拠本文を含まず、根拠はツール結果と Evidence ストアだけが運びます。`TurnState` の出典は引用解決に必要な evidence ID と出典情報を保持し、コンテキスト予算が厳しい場合も文字列の機械的切り捨てではなく、モデルによる状態更新と必要な Evidence の再取得で対処します。
+
+モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 
 LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
 
@@ -175,7 +179,7 @@ npm --prefix frontend run generate:api-schemas
 | 変更したいもの | 最初に見る場所 | 併せて確認するもの |
 | --- | --- | --- |
 | API の入出力 | 対応する `blueprints/` と `services/*_models.py` | 生成 Zod、フロントの API 正規化、ルートテスト |
-| チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_research_notes.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
+| チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_turn_state.py`、`services/research_state.py`、`services/chat_evidence_store.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
 | 認証・セッション・CSRF | `blueprints/auth*`、`services/repositories/auth_identity_repository.py`、`services/session_middleware.py`、`services/csrf.py` | `user_auth_providers`契約、Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |
 | プロンプト画像 | `services/prompt_attachment_processing.py` と storage | `docs/architecture/prompt_attachment_storage.md`、添付テスト |

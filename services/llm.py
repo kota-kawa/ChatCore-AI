@@ -96,26 +96,22 @@ LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
 # Split the output budget by phase. One shared cap over-provisions research steps while
 # starving the phase that actually writes the answer. The per-phase values deliberately do
 # not derive from LLM_MAX_TOKENS so that a stale deployment value cannot starve the answer.
-# 調査ステップが書くのはツール呼び出しと1〜2文の内部ノートだけなので、枠は小さくてよい。
-# A research step only emits tool calls and a one-or-two sentence internal note.
-LLM_RESEARCH_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_RESEARCH", 8192)
-# 最終回答と継続は本文そのものを書く。長い調査の後でも1パスで書き切れる枠を確保する。
-# The final answer and its continuations write the body itself, so they need room to finish
+# 判断ループと継続は本文そのものを書く。長い調査の後でも1パスで書き切れる枠を確保する。
+# The decision loop and its continuations write the body itself, so they need room to finish
 # a long research answer in a single pass.
 LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
 
-# 調査（ツール選択）フェーズと、本文を書く回答フェーズを名前で区別する。
-# Distinguish the tool-selecting research phases from the answer-writing phases by name.
-RESEARCH_GENERATION_PHASES = frozenset({"research", "research_wrapup"})
+# 通常チャットは調査専用フェーズを持たず、検索判断も回答も `agent` の1フェーズで行う。
+# Normal chat has no research-only generation phase: searching and answering share `agent`.
 ANSWER_GENERATION_PHASES = frozenset(
-    {"final_answer", "continuation", "final_answer_deep", "continuation_deep"}
+    {"agent", "final_answer", "continuation", "final_answer_deep", "continuation_deep"}
 )
 # 調査を伴うターンの回答フェーズ。長い調査の後の統合は、そのターンで最も難しい作業なので、
 # 思考量を最小に落としたままにしない。調査のない雑談は従来どおり低遅延を優先する。
 # The answer phase of a turn that did research. Synthesising after a long research phase is
 # the hardest work in the turn, so it must not run on the smallest reasoning budget; a turn
 # with no research keeps the low-latency baseline.
-DEEP_REASONING_PHASES = frozenset({"final_answer_deep", "continuation_deep"})
+DEEP_REASONING_PHASES = frozenset({"agent", "final_answer_deep", "continuation_deep"})
 
 
 # 生成フェーズに応じた出力トークン上限を返す
@@ -123,8 +119,6 @@ DEEP_REASONING_PHASES = frozenset({"final_answer_deep", "continuation_deep"})
 def max_output_tokens_for_phase(generation_phase: str = "default") -> int:
     if generation_phase in ANSWER_GENERATION_PHASES:
         return LLM_ANSWER_MAX_TOKENS
-    if generation_phase in RESEARCH_GENERATION_PHASES:
-        return LLM_RESEARCH_MAX_TOKENS
     return LLM_MAX_TOKENS
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
@@ -607,11 +601,6 @@ def _groq_reasoning_kwargs(
         if is_answer_phase:
             reasoning_options = {
                 "reasoning_effort": "medium" if is_deep_phase else "low",
-                "reasoning_format": "hidden",
-            }
-        elif generation_phase in RESEARCH_GENERATION_PHASES:
-            reasoning_options = {
-                "reasoning_effort": "medium",
                 "reasoning_format": "hidden",
             }
         else:

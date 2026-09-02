@@ -3,7 +3,9 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from services.chat_agent_budget import AgentStepBudget
+from services.chat_evidence_store import EvidenceStore
 from services.chat_generation import ChatGenerationJob
+from services.research_state import TurnState
 from services.personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     PersonalKnowledgeResult,
@@ -161,6 +163,7 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
         # 推論ターンとツール実行は別カウンタ。ツール実行だけが1増える。
         # Reasoning turns and tool calls use separate counters; only tool calls advance here.
         budget = AgentStepBudget(max_llm_turns=4, max_tool_calls=4, llm_turns=1)
+        turn_state = TurnState(objective="沖縄旅行")
         job._run_lookup_tool_call(
             tool_call,
             tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
@@ -171,6 +174,8 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
             failure_tool_message="lookup failed",
             current_messages=messages,
             budget=budget,
+            turn_state=turn_state,
+            evidence_store=EvidenceStore(),
         )
         self.assertEqual(budget.tool_calls, 1)
         self.assertEqual(budget.llm_turns, 1)
@@ -180,6 +185,13 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
             events,
             ["personal_knowledge_search_started", "personal_knowledge_search_completed"],
         )
+        # 参照結果は TurnState の検索台帳と Evidence 参照として残る。
+        # The lookup result is recorded in the TurnState ledger and as evidence references.
+        self.assertEqual(
+            [search.tool_name for search in turn_state.executed_searches],
+            [PERSONAL_KNOWLEDGE_TOOL_NAME],
+        )
+        self.assertEqual(turn_state.executed_searches[0].query, "沖縄")
 
 
 if __name__ == "__main__":

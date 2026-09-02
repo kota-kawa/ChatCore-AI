@@ -8,7 +8,8 @@ from blueprints.auth import api_send_login_code
 from blueprints.chat.messages import chat
 from blueprints.chat.tasks import update_tasks_order
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
-from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearchSource
+import services.chat_use_case as chat_use_case
+from services.research_state import is_reference_context_message
 from tests.helpers.request_helpers import build_request
 
 
@@ -120,9 +121,12 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_quota.assert_not_called()
         mock_llm.assert_not_called()
 
-    # 日本語: チャットの正常応答において、Web検索によって補強された場合に、検索ソースと詳細情報（参照URL等）がレスポンスに含まれていることを検証します。
-    # English: Verify that successful chat responses augmented with web search results include the search sources metadata in the payload.
-    def test_chat_json_response_path_includes_web_search_sources(self):
+    # 日本語: 非ストリーミング互換経路でも事前検索Plannerを起動せず、モデル自身の回答を
+    # そのまま返すことを検証します。検索判断は単一の判断ループだけが行います。
+    # English: Verify the non-streaming compatibility path runs no separate search planner and
+    # returns the model's own answer; only the single decision loop decides to search.
+    def test_chat_json_response_path_runs_without_a_search_planner(self):
+        conversation = [{"role": "user", "content": "今日のOpenAI of the day を教えて"}]
         request = make_request(
             method="POST",
             path="/api/chat",
@@ -134,22 +138,12 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             session={},
         )
 
-        search_result = WebSearchResult(
-            query="OpenAI 最新ニュース 今日",
-            searched_at="2026-05-06T00:00:00+00:00",
-            sources=(
-                WebSearchSource(
-                    url="https://example.com/openai-news",
-                    title="OpenAI News",
-                    hostname="example.com",
-                    age="2026-05-06",
-                    snippets=(),
-                ),
-            ),
+        # 事前検索Plannerは実装ごと存在しない。パッチ対象として復活していないことも確認する。
+        # The search planner no longer exists; assert it has not come back as a patch target.
+        self.assertFalse(
+            hasattr(chat_use_case, "maybe_augment_messages_with_web_search")
         )
 
-        # 日本語: Web検索結果の拡張及びLLM呼び出し結果をモック
-        # English: Mock search augmentation result and the subsequent LLM response
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -158,7 +152,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                 with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
                     with patch(
                         "blueprints.chat.messages.ephemeral_store.get_messages",
-                        return_value=[{"role": "user", "content": "今日のOpenAI of the day を教えて"}],
+                        return_value=list(conversation),
                     ):
                         with patch("blueprints.chat.messages.ephemeral_store.append_message"):
                             with patch(
@@ -170,64 +164,27 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                     return_value=False,
                                 ):
                                     with patch(
-                                        "services.chat_use_case.maybe_augment_messages_with_web_search",
-                                        return_value=WebSearchAugmentation(
-                                            messages=[{"role": "user", "content": "今日のOpenAI of the day を教えて"}],
-                                            result=search_result,
-                                        ),
-                                    ) as mock_augment:
-                                        with patch(
-                                            "blueprints.chat.messages.get_llm_response",
-                                            return_value="最新ニュースです。",
-                                        ) as mock_llm:
-                                            with patch(
-                                                "services.chat_use_case.choose_web_search_images",
-                                                return_value=[
-                                                    {
-                                                        "url": "https://cdn.example.com/news.jpg",
-                                                        "alt": "OpenAIの関連画像",
-                                                        "source_url": "https://example.com/openai-news",
-                                                        "source_title": "OpenAI News",
-                                                        "placement": "start",
-                                                    }
-                                                ],
-                                            ) as mock_image:
-                                                response = asyncio.run(chat(request))
+                                        "blueprints.chat.messages.get_llm_response",
+                                        return_value="最新ニュースです。",
+                                    ) as mock_llm:
+                                        response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertIn("最新ニュースです。", payload["response"])
-        self.assertTrue(payload["response"].startswith('<details class="web-search-sources web-search-sources--trace">'))
-        self.assertIn('<summary class="web-search-sources__summary">', payload["response"])
-        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', payload["response"])
-        self.assertIn('<span class="web-search-sources__count">4ステップ</span>', payload["response"])
-        self.assertIn(
-            '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
-            payload["response"],
+        self.assertEqual(payload["response"], "最新ニュースです。")
+        # 検索していないので、回答トレースも検索由来のパーツも作らない。
+        # Nothing was searched, so neither a trace block nor search-derived parts are built.
+        self.assertNotIn("web-search-sources", payload["response"])
+        self.assertIsNone(payload.get("parts"))
+        # 会話は標準のsystem指示だけを伴い、検索由来の参照ブロックは足されない。
+        # The conversation carries only the standing system instructions: no injected
+        # search-context block is added ahead of the answer.
+        sent_messages = mock_llm.call_args.args[0]
+        self.assertEqual(sent_messages[-1], conversation[0])
+        self.assertFalse(
+            any(is_reference_context_message(message) for message in sent_messages)
         )
-        self.assertIn(
-            '<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>',
-            payload["response"],
-        )
-        self.assertIn("https://example.com/openai-news", payload["response"])
-        # LLM が冒頭配置を指定した画像は、回答トレースの直後へ置かれる。
-        # An image whose LLM plan says start is placed immediately after the trace.
-        self.assertEqual(
-            [part["type"] for part in payload["parts"]],
-            ["text", "web_search_image", "text"],
-        )
-        self.assertTrue(
-            payload["parts"][0]["text"].startswith(
-                '<details class="web-search-sources web-search-sources--trace">'
-            )
-        )
-        self.assertNotIn("回答までのステップ", payload["parts"][2]["text"])
-        self.assertIn("最新ニュースです。", payload["parts"][2]["text"])
-        self.assertEqual(payload["parts"][1]["image"]["url"], "https://cdn.example.com/news.jpg")
-        mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
-        mock_image.assert_called_once()
-        self.assertEqual(mock_image.call_args.kwargs["model"], "openai/gpt-oss-120b")
 
     # 日本語: プロンプト管理APIにおける日付オブジェクトが、ISO-8601形式（YYYY-MM-DDTHH:MM:SS）で一貫してシリアライズされることを検証します。
     # English: Verify that datetime objects in prompt management API payloads are consistently serialized to ISO-8601 format.

@@ -72,7 +72,7 @@ class WebSearchTraceTestCase(unittest.TestCase):
         result = self._result("Python news", ["example.com"])
 
         block = trace.build_web_search_trace_markdown(
-            steps=[trace.decision_step(result), trace.search_step(result)]
+            steps=[trace.search_step(result), trace.review_step(result)]
         )
 
         self.assertIn('<details class="web-search-sources web-search-sources--trace">', block)
@@ -83,7 +83,7 @@ class WebSearchTraceTestCase(unittest.TestCase):
             block,
         )
         self.assertIn('<ol class="web-search-sources__steps">', block)
-        self.assertIn('<span class="web-search-sources__step-title">検索が必要か判断</span>', block)
+        self.assertIn('<span class="web-search-sources__step-title">検索結果を確認</span>', block)
         self.assertIn('<i class="bi bi-search"></i>', block)
         self.assertNotIn('<details class="web-search-sources__step-details" open', block)
 

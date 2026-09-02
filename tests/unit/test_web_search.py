@@ -1,11 +1,9 @@
 import json
 import os
 import unittest
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from services import url_fetcher, web_search
-from services.llm import LIGHTWEIGHT_TASK_MODEL
 from services.url_fetcher import FetchedImage, FetchedLink
 
 
@@ -46,320 +44,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         env_patcher.start()
         self.addCleanup(env_patcher.stop)
-
-    # 日本語: decideWeb検索usesllmjsondecisionことを検証します。
-    # English: Verify that decide web search uses llm json decision.
-    def test_decide_web_search_uses_llm_json_decision(self):
-        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": true, "query": "OpenAI latest news", "freshness": "pd", "reason": "current news"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "OpenAI latest news")
-        self.assertEqual(decision.freshness, "pd")
-
-    # 日本語: 対象国の一次情報が優先される場合に、プランナーが別言語を選べることを検証します。
-    # English: Verify the planner can choose another language when target-country primary sources are better.
-    def test_decide_web_search_accepts_planner_selected_source_language(self):
-        messages = [{"role": "user", "content": "アメリカの連邦税制を公式情報で調べて"}]
-
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value=(
-                '{"should_search": true, "query": "United States federal tax official guidance", '
-                '"search_language": "en", "freshness": "", "reason": "US primary sources"}'
-            ),
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.search_language, "en")
-        planner_prompt = mock_llm.call_args.args[0][0]["content"]
-        self.assertIn("For the first web search, default to the language used in the latest user message", planner_prompt)
-        self.assertIn("another country or region", planner_prompt)
-        self.assertIn("rewrite the query in that language", planner_prompt)
-
-    # 日本語: decideWeb検索stripsMarkdownコードfencesことを検証します。
-    # English: Verify that decide web search strips markdown code fences.
-    def test_decide_web_search_strips_markdown_code_fences(self):
-        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='```json\n{"should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}\n```',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "OpenAI news")
-
-    # 日本語: should_searchの文字列値は構造化判断として受け入れないことを検証します。
-    # English: Verify that a string should_search value is not accepted as a structured decision.
-    def test_decide_web_search_rejects_string_should_search(self):
-        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": "true", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.query, "")
-
-    # 日本語: should_search欠落時にqueryの有無から検索要否を推定せず、修復LLMの判断を使うことを検証します。
-    # English: Verify that a missing should_search never infers intent from query presence and uses planner repair.
-    def test_decide_web_search_repairs_missing_should_search_instead_of_inferring_from_query(self):
-        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
-
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            side_effect=[
-                '{"decision": "search", "query": "React 19 latest information", "reason": "current software information"}',
-                '{"should_search": false, "query": "", "freshness": "", "reason": "repair says no search"}',
-            ],
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.query, "")
-        self.assertEqual(mock_llm.call_count, 2)
-
-    # 日本語: 初回出力と修復出力の両方でshould_searchが欠落した場合は検索しないことを検証します。
-    # English: Verify that search is skipped when both the initial and repaired outputs omit should_search.
-    def test_decide_web_search_skips_when_repair_still_omits_should_search(self):
-        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
-
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"query": "React 19 latest information", "reason": "current software information"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.query, "")
-
-    # 日本語: decideWeb検索acceptsdecisionenumことを検証します。
-    # English: Verify that decide web search accepts decision enum.
-    def test_decide_web_search_accepts_decision_enum(self):
-        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"decision": "search", "should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "OpenAI news")
-
-    # 日本語: should_searchの日本語文字列値は構造化判断として受け入れないことを検証します。
-    # English: Verify that a Japanese string should_search value is not accepted as a structured decision.
-    def test_decide_web_search_rejects_japanese_string_should_search(self):
-        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": "必要", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.query, "")
-
-    # 日本語: decideWeb検索repairsnonjsonplanneroutputことを検証します。
-    # English: Verify that decide web search repairs non json planner output.
-    def test_decide_web_search_repairs_non_json_planner_output(self):
-        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            side_effect=[
-                "検索が必要です。query は React 19 latest information です。",
-                '{"decision": "search", "should_search": true, "query": "React 19 latest information", "freshness": "py", "reason": "latest software information"}',
-            ],
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "React 19 latest information")
-        self.assertEqual(mock_llm.call_count, 2)
-
-    # 日本語: プランナー障害時に文字列一致のフォールバックで検索要否を決めないことを検証します。
-    # English: Verify planner failure never falls back to keyword matching.
-    def test_decide_web_search_does_not_use_keyword_fallback_when_planner_fails(self):
-        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.query, "")
-        self.assertIn("planner unavailable", decision.reason)
-
-    # 日本語: 画像の有用性は文字列一致ではなくLLMの意味判断で検索へ反映することを検証します。
-    # English: Verify the LLM's semantic visual judgment requires a search in any language.
-    def test_decide_web_search_uses_llm_visual_judgment_across_languages(self):
-        messages = [{"role": "user", "content": "Enséñame cómo es la Sagrada Família"}]
-
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value=(
-                '{"decision":"skip","should_search":false,'
-                '"needs_web_images":true,"query":"Sagrada Família Barcelona",'
-                '"freshness":"","reason":"visual evidence materially helps"}'
-            ),
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "Sagrada Família Barcelona")
-        planner_prompt = mock_llm.call_args.args[0][0]["content"]
-        self.assertIn("semantic meaning and conversational context, in any language", planner_prompt)
-        self.assertIn("needs_web_images", planner_prompt)
-
-    # 日本語: newsリクエストに対して、decideWeb検索usesllmことを検証します。
-    # English: Verify that decide web search uses llm for news request.
-    def test_decide_web_search_uses_llm_for_news_request(self):
-        messages = [{"role": "user", "content": "今日のニュースを教えてほしい"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": true, "query": "今日のニュース 2026-05-06", "freshness": "pd", "reason": "news requires current information"}',
-        ):
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(decision.query, "今日のニュース 2026-05-06")
-        self.assertEqual(decision.freshness, "pd")
-        self.assertEqual(decision.reason, "news requires current information")
-
-    # 日本語: plaingreetingに対して、decideWeb検索usesplannerことを検証します。
-    # English: Verify that decide web search uses planner for plain greeting.
-    def test_decide_web_search_uses_planner_for_plain_greeting(self):
-        messages = [{"role": "user", "content": "こんにちは"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": false, "query": "", "freshness": "", "reason": "greeting"}',
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        mock_llm.assert_called_once()
-
-    # 日本語: substantivenormalmessageに対して、decideWeb検索consultsplannerことを検証します。
-    # English: Verify that decide web search consults planner for substantive normal message.
-    def test_decide_web_search_consults_planner_for_substantive_normal_message(self):
-        messages = [{"role": "user", "content": "日本で法人を設立する時の注意点を教えてください"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": true, "query": "日本 法人設立 注意点 最新", "freshness": "py", "reason": "legal and procedural details"}',
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertTrue(decision.should_search)
-        self.assertIn("法人設立", decision.query)
-        mock_llm.assert_called_once()
-
-    # 日本語: タスクcard起動に対して、decideWeb検索含むタスクシステムコンテキストことを検証します。
-    # English: Verify that decide web search includes task system context for task card launch.
-    def test_decide_web_search_includes_task_system_context_for_task_card_launch(self):
-        messages = [
-            {
-                "role": "system",
-                "content": "<task_contract><task_name>市場調査</task_name><task_instruction>最新情報を調べて競合比較してください。</task_instruction></task_contract>",
-            },
-            {"role": "user", "content": "【タスク】市場調査\n【状況・作業環境】新しいCRMを検討しています"},
-        ]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": true, "query": "CRM 最新 比較", "freshness": "pm", "reason": "active task requires research"}',
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        planner_context = mock_llm.call_args.args[0][1]["content"]
-        self.assertTrue(decision.should_search)
-        self.assertIn("Running-task system", planner_context)
-        self.assertIn("最新情報を調べて競合比較", planner_context)
-
-    # 日本語: purewritingタスクに対して、decideWeb検索usesplannerことを検証します。
-    # English: Verify that decide web search uses planner for pure writing task.
-    def test_decide_web_search_uses_planner_for_pure_writing_task(self):
-        messages = [{"role": "user", "content": "短い自己紹介文を書いて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": false, "query": "", "freshness": "", "reason": "pure writing"}',
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
-
-        self.assertFalse(decision.should_search)
-        mock_llm.assert_called_once()
-
-    # 日本語: 選択中の会話モデルにかかわらず、検索プランナーが軽量モデルを使うことを検証します。
-    # English: Verify that the search planner uses the lightweight model regardless of chat selection.
-    def test_decide_web_search_always_uses_lightweight_model(self):
-        messages = [{"role": "user", "content": "今日の天気を教えて"}]
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.object(
-            web_search,
-            "get_llm_json_response",
-            return_value='{"should_search": true, "query": "today weather", "freshness": "pd", "reason": "current"}',
-        ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "openai/gpt-oss-120b")
-
-        self.assertTrue(decision.should_search)
-        self.assertEqual(mock_llm.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
-
-    # 日本語: 検索bravellmコンテキストparsessourcesことを検証します。
     # English: Verify that search brave llm context parses sources.
     def test_search_brave_llm_context_parses_sources(self):
         response = MagicMock()
@@ -518,86 +202,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
     # 日本語: およびaddsコンテキスト、maybeaugmentmessagespublishes検索eventsことを検証します。
     # English: Verify that maybe augment messages publishes search events and adds context.
-    def test_maybe_augment_messages_publishes_search_events_and_adds_context(self):
-        messages = [{"role": "user", "content": "今日のPythonニュースを調べて"}]
-        events = []
-        result = web_search.WebSearchResult(
-            query="Python news",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url="https://example.com/python",
-                    title="Python News",
-                    hostname="example.com",
-                    age="2026-04-30",
-                    snippets=("Python released news.",),
-                ),
-            ),
-        )
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
-            with patch.object(
-                web_search,
-                "decide_web_search",
-                return_value=web_search.WebSearchDecision(
-                    True,
-                    "Python news",
-                    "pd",
-                    "current",
-                    search_language="en",
-                ),
-            ):
-                with patch.object(
-                    web_search,
-                    "search_brave_llm_context",
-                    return_value=result,
-                ) as mock_search:
-                    augmented = web_search.maybe_augment_messages_with_web_search(
-                        messages,
-                        "claude-haiku-4-5-20251001",
-                        publish_event=lambda event, payload: events.append(
-                            SimpleNamespace(event=event, payload=payload)
-                        ),
-                    )
-
-        self.assertEqual(
-            [event.event for event in events],
-            ["web_search_planning_started", "web_search_started", "web_search_completed"],
-        )
-        self.assertEqual(events[2].payload["source_count"], 1)
-        self.assertEqual(events[2].payload["sources"][0]["url"], "https://example.com/python")
-        self.assertEqual(events[2].payload["sources"][0]["title"], "Python News")
-        self.assertEqual(events[2].payload["sources"][0]["hostname"], "example.com")
-        self.assertEqual(
-            events[2].payload["sources"][0]["evidence_id"],
-            result.sources[0].evidence_id,
-        )
-        self.assertIs(augmented.result, result)
-        self.assertEqual(augmented.status, "completed")
-        self.assertEqual(len(augmented.messages), 2)
-        self.assertEqual(mock_search.call_args.kwargs["language_hint"], messages[0]["content"])
-        self.assertEqual(mock_search.call_args.kwargs["search_language"], "en")
-        self.assertIn("<web_search_context", augmented.messages[0]["content"])
-        self.assertIn(
-            "A real-time web search with Brave has already been run for this turn",
-            augmented.messages[0]["content"],
-        )
-        self.assertIn(
-            "never say that you cannot browse or cannot search in real time",
-            augmented.messages[0]["content"],
-        )
-        self.assertIn(
-            "do not stop to ask follow-up questions",
-            augmented.messages[0]["content"],
-        )
-        self.assertIn("https://example.com/python", augmented.messages[0]["content"])
-        self.assertIn(result.sources[0].evidence_id, augmented.messages[0]["content"])
-        self.assertIn("[[source:<evidence_id>]]", augmented.messages[0]["content"])
-
-    # 日本語: Web検索ツールに、対象国・一次情報に応じた検索言語指定が含まれることを検証します。
-    # English: Verify the web-search tool exposes an explicit language choice for target-country sources.
     def test_web_search_tool_definition_describes_search_language_policy(self):
         definition = web_search.get_web_search_tool_definition()
         properties = definition["function"]["parameters"]["properties"]
@@ -672,76 +276,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
     # 日本語: maybeaugmentmessagesreportsmonthlyクォータ超過ことを検証します。
     # English: Verify that maybe augment messages reports monthly quota exceeded.
-    def test_maybe_augment_messages_reports_monthly_quota_exceeded(self):
-        messages = [{"role": "user", "content": "今日のPythonニュースを調べて"}]
-        events = []
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
-            with patch.object(
-                web_search,
-                "decide_web_search",
-                return_value=web_search.WebSearchDecision(True, "Python news", "pd", "current"),
-            ):
-                with patch.object(
-                    web_search,
-                    "search_brave_llm_context",
-                    side_effect=web_search.WebSearchQuotaExceeded(500, 60),
-                ):
-                    augmented = web_search.maybe_augment_messages_with_web_search(
-                        messages,
-                        "claude-haiku-4-5-20251001",
-                        publish_event=lambda event, payload: events.append(
-                            SimpleNamespace(event=event, payload=payload)
-                        ),
-                    )
-
-        self.assertEqual(
-            [event.event for event in events],
-            ["web_search_planning_started", "web_search_started", "web_search_failed"],
-        )
-        self.assertEqual(events[2].payload["code"], web_search.WEB_SEARCH_ERROR_QUOTA_EXCEEDED)
-        self.assertIn("月間上限", events[2].payload["message"])
-        self.assertIsNone(augmented.result)
-        self.assertEqual(augmented.status, "failed")
-        self.assertIn("The monthly limit for Brave web search", augmented.messages[0]["content"])
-        self.assertIn("real-time verification is unavailable", augmented.messages[0]["content"])
-
-    # 日本語: required検索に対して、maybeaugmentmessagesreportsmissingbraveAPIkeyことを検証します。
-    # English: Verify that maybe augment messages reports missing brave api key for required search.
-    def test_maybe_augment_messages_reports_missing_brave_api_key_for_required_search(self):
-        messages = [{"role": "user", "content": "今日のニュースを教えて"}]
-        events = []
-
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, {"BRAVE_API_KEY": ""}, clear=False):
-            with patch.object(
-                web_search,
-                "decide_web_search",
-                return_value=web_search.WebSearchDecision(True, "今日のニュース", "pd", "current"),
-            ):
-                augmented = web_search.maybe_augment_messages_with_web_search(
-                    messages,
-                    "claude-haiku-4-5-20251001",
-                    publish_event=lambda event, payload: events.append(
-                        SimpleNamespace(event=event, payload=payload)
-                    ),
-                )
-
-        self.assertEqual([event.event for event in events], ["web_search_planning_started", "web_search_failed"])
-        self.assertEqual(events[1].payload["code"], web_search.WEB_SEARCH_ERROR_CONFIGURATION)
-        self.assertIn("APIキーが未設定", events[1].payload["message"])
-        self.assertIsNone(augmented.result)
-        self.assertEqual(augmented.status, "failed")
-        self.assertIn(
-            "the Brave Search API key is not configured",
-            augmented.messages[0]["content"],
-        )
-
-    # 日本語: ビルドWeb検索sourcesMarkdown返却するcollapsibleblockことを検証します。
-    # English: Verify that build web search sources markdown returns collapsible block.
     def test_build_web_search_sources_markdown_returns_collapsible_block(self):
         result = web_search.WebSearchResult(
             query="Python news",
@@ -1670,7 +1204,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ),
         )
 
-        content = web_search.build_web_search_system_message(result)["content"]
+        del result
+        content = web_search.build_web_search_evidence_policy_message()["content"]
 
         self.assertIn("A list of links is never an answer", content)
         self.assertIn("never build a per-item list of URLs", content)
@@ -1698,13 +1233,11 @@ class WebSearchServiceTestCase(unittest.TestCase):
             sources=sources,
         )
 
-        content = web_search.build_web_search_system_message(result)["content"]
+        content = web_search.build_prior_web_search_system_message([result])["content"]
 
-        self.assertLessEqual(len(content), web_search.WEB_SEARCH_MAX_CONTEXT_CHARS)
+        self.assertLessEqual(len(content), web_search.WEB_SEARCH_PRIOR_CONTEXT_MAX_CHARS)
         self.assertTrue(content.endswith("</web_search_context>"))
         self.assertEqual(content.count("\n<source id="), content.count("\n</source>"))
-        for source in sources:
-            self.assertIn(source.evidence_id, content)
 
     def test_system_message_counts_escaped_metadata_against_context_budget(self):
         sources = tuple(
@@ -1724,12 +1257,10 @@ class WebSearchServiceTestCase(unittest.TestCase):
             sources=sources,
         )
 
-        content = web_search.build_web_search_system_message(result)["content"]
+        content = web_search.build_prior_web_search_system_message([result])["content"]
 
-        self.assertLessEqual(len(content), web_search.WEB_SEARCH_MAX_CONTEXT_CHARS)
-        self.assertEqual(content.count("\n<source id="), 14)
-        for source in sources:
-            self.assertIn(source.evidence_id, content)
+        self.assertLessEqual(len(content), web_search.WEB_SEARCH_PRIOR_CONTEXT_MAX_CHARS)
+        self.assertEqual(content.count("\n<source id="), content.count("\n</source>"))
 
     # 日本語: ビルドシステムmessage含むpagetextことを検証します。
     # English: Verify that build system message includes page text.
@@ -1749,7 +1280,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ),
         )
 
-        message = web_search.build_web_search_system_message(result)
+        message = web_search.build_prior_web_search_system_message([result])
 
         self.assertIsNotNone(message)
         self.assertIn("Page extract: The full article body text.", message["content"])
@@ -1772,7 +1303,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ),
         )
 
-        content = web_search.build_web_search_system_message(result)["content"]
+        del result
+        content = web_search.build_web_search_evidence_policy_message()["content"]
 
         self.assertIn("do not disprove it", content)
         self.assertIn("the sources do not cover it", content)
@@ -1796,7 +1328,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ),
         )
 
-        content = web_search.build_web_search_system_message(result)["content"]
+        del result
+        content = web_search.build_web_search_evidence_policy_message()["content"]
 
         self.assertIn("evidence to analyze, not as text to repeat", content)
         self.assertIn("compare agreement and conflict", content)
@@ -1828,7 +1361,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ),
         )
 
-        message = web_search.build_web_search_system_message(result)
+        message = web_search.build_prior_web_search_system_message([result])
         content = message["content"]
 
         # The only real context wrapper is ours; the injected closing wrapper is gone.
@@ -1913,17 +1446,14 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
             web_search.build_web_search_evidence_id(source.url),
         )
 
-    def test_build_system_message_includes_evidence_id_and_marker_contract(self):
-        result = self._result()
+    def test_evidence_policy_states_the_marker_contract(self):
+        content = web_search.build_web_search_evidence_policy_message()["content"]
 
-        content = web_search.build_web_search_system_message(result)["content"]
-
+        self.assertIn("[[source:<evidence_id>]]", content)
         self.assertIn(
-            f'evidence_id="{result.sources[0].evidence_id}"',
+            "Use only evidence_id values that actually appear in TurnState or in a tool result",
             content,
         )
-        self.assertIn("[[source:<evidence_id>]]", content)
-        self.assertIn("Use only evidence_id values that actually appear below", content)
         self.assertIn("Never shorten it to [[src_...]]", content)
         self.assertIn("full-width citation brackets such as 【src_...】", content)
         self.assertIn("ordinary Markdown citations or links", content)

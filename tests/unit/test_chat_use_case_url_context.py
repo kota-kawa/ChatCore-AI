@@ -126,10 +126,6 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
                 return_value=fetched,
             ) as mock_fetch,
             patch(
-                "services.chat_use_case.maybe_augment_messages_with_web_search",
-                side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
-            ),
-            patch(
                 "services.chat_use_case.normalize_response_with_artifact_retry",
                 side_effect=lambda response, **_kwargs: SimpleNamespace(
                     text=response, parts=None, validation_errors=[]

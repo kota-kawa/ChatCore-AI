@@ -30,15 +30,14 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
-from services.chat_research_notes import (
-    STEP_NOTE_HISTORY_LIMIT,
-    STEP_NOTE_MAX_CHARS,
-    build_final_answer_messages,
-    build_research_loop_messages,
-    build_research_wrapup_messages,
-    parse_research_summary,
-    parse_step_note,
-    strip_internal_notes,
+from services.chat_turn_state import (
+    TURN_STATE_UPDATE_CLOSE_TAG,
+    TURN_STATE_UPDATE_MAX_CHARS,
+    TURN_STATE_UPDATE_OPEN_TAG,
+    build_turn_loop_messages,
+    parse_turn_state_update,
+    strip_turn_state_update,
+    strip_turn_state_update_chunks,
 )
 from services.llm import (
     LlmAuthenticationError,
@@ -55,15 +54,12 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
 )
 from services.web_search import (
-    build_web_search_system_message,
     create_web_evidence_context_budget,
     WebEvidenceContextBudget,
-    WebSearchAugmentation,
     WebSearchQuotaExceeded,
     WebSearchResult,
     WebSearchSource,
     WEB_SEARCH_ERROR_REQUEST_FAILED,
-    WEB_SEARCH_INITIAL_CONTEXT_MAX_CHARS,
     WEB_SEARCH_MAX_CONTEXT_CHARS,
     WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
 )
@@ -222,17 +218,42 @@ def make_request(json_body, session=None):
     )
 
 
-def _research_then_answer_stream(*answer_chunks, research_summary=None):
-    """Return mock streams for a short research-complete pass followed by final prose."""
-    summary_payload = (
-        json.dumps(research_summary, ensure_ascii=False)
-        if research_summary is not None
-        else ""
+def _turn_state_update(**overrides):
+    payload = {
+        "objective": "テスト質問に回答する",
+        "unresolved_questions": [],
+        "facts": [],
+        "evidence_ids": [],
+        "ready_to_answer": True,
+    }
+    payload.update(overrides)
+    return (
+        f"{TURN_STATE_UPDATE_OPEN_TAG}"
+        f"{json.dumps(payload, ensure_ascii=False)}"
+        f"{TURN_STATE_UPDATE_CLOSE_TAG}"
     )
-    return [
-        iter([f"<research_complete>{summary_payload}</research_complete>"]),
-        iter(answer_chunks),
-    ]
+
+
+def _direct_answer_stream(*answer_chunks, state=None):
+    """Return one agent stream containing a state replacement and the final answer."""
+    return iter([_turn_state_update(**(state or {})), *answer_chunks])
+
+
+def _search_then_answer_stream(query, *answer_chunks, state=None):
+    """Return one tool decision followed by a state-updating answer decision."""
+    tool_call = json.dumps(
+        [
+            {
+                "id": "call-web-search",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": json.dumps({"query": query}),
+                },
+            }
+        ]
+    )
+    return [iter([_turn_state_update(ready_to_answer=False), tool_call]), _direct_answer_stream(*answer_chunks, state=state)]
 
 
 # 日本語: チャットのストリーミング応答、検索拡張、履歴制限、再生成などの処理を検証するテストクラス。
@@ -278,155 +299,112 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(payload.startswith(": keepalive\n\n"))
         self.assertIn("id: 1\nevent: done", payload)
 
-    # 日本語: 研究完了メモが構造化・短文化され、許可された項目だけが残ることを検証します。
-    # English: Verify that a research-complete note is structured, bounded, and limited to allowed fields.
-    def test_parse_research_summary_accepts_bounded_structured_note(self):
+    def test_parse_turn_state_update_accepts_replacement_fields_only(self):
         payload = {
-            "requirements": [f"要件{i}" for i in range(10)],
-            "facts": [f"事実{i}" for i in range(15)],
-            "uncertainties": [f"不確実性{i}" for i in range(7)],
-            "answer_plan": "  要点を整理して回答する。  ",
-            "unexpected": "破棄する",
+            "objective": "鎌倉の紅葉を説明する",
+            "unresolved_questions": ["今年の見頃はいつか"],
+            "facts": [
+                {
+                    "statement": "例年は11月下旬が見頃です。",
+                    "evidence_ids": ["src_example"],
+                }
+            ],
+            "evidence_ids": ["src_example"],
+            "ready_to_answer": False,
+            "separate_summary": "保存しない",
         }
 
-        summary = parse_research_summary(
+        update = parse_turn_state_update(
             [
-                "<research_complete>",
+                TURN_STATE_UPDATE_OPEN_TAG,
                 json.dumps(payload, ensure_ascii=False),
-                "</research_complete>",
+                TURN_STATE_UPDATE_CLOSE_TAG,
             ]
         )
 
-        self.assertEqual(summary["requirements"], [f"要件{i}" for i in range(8)])
-        self.assertEqual(summary["facts"], [f"事実{i}" for i in range(12)])
-        self.assertEqual(summary["uncertainties"], [f"不確実性{i}" for i in range(5)])
-        self.assertEqual(summary["answer_plan"], "要点を整理して回答する。")
-        self.assertNotIn("unexpected", summary)
+        self.assertEqual(update["objective"], payload["objective"])
+        self.assertEqual(update["unresolved_questions"], payload["unresolved_questions"])
+        self.assertEqual(update["facts"], payload["facts"])
+        self.assertEqual(update["evidence_ids"], ["src_example"])
+        self.assertFalse(update["ready_to_answer"])
+        self.assertNotIn("separate_summary", update)
 
-    # 日本語: 不正な形式や上限超過の研究メモを最終回答へ渡さないことを検証します。
-    # English: Verify that malformed or oversized research notes are not forwarded to the final answer.
-    def test_parse_research_summary_rejects_invalid_or_oversized_note(self):
+    def test_parse_turn_state_update_rejects_invalid_or_oversized_envelope(self):
         self.assertIsNone(
-            parse_research_summary(["<research_complete>not-json</research_complete>"])
+            parse_turn_state_update(
+                [f"{TURN_STATE_UPDATE_OPEN_TAG}not-json{TURN_STATE_UPDATE_CLOSE_TAG}"]
+            )
         )
-        oversized = json.dumps({"answer_plan": "x" * 7001}, ensure_ascii=False)
+        oversized = json.dumps(
+            {"objective": "x" * (TURN_STATE_UPDATE_MAX_CHARS + 1)},
+            ensure_ascii=False,
+        )
         self.assertIsNone(
-            parse_research_summary([f"<research_complete>{oversized}</research_complete>"])
+            parse_turn_state_update(
+                [f"{TURN_STATE_UPDATE_OPEN_TAG}{oversized}{TURN_STATE_UPDATE_CLOSE_TAG}"]
+            )
         )
 
-
-    # 日本語: 任意のステップメモが抽出され、空・長すぎ・タグ入れ子が安全に扱われることを検証します。
-    # English: Verify the optional step note is extracted and that empty, oversized, and nested-tag cases are safe.
-    def test_parse_step_note_extracts_bounded_optional_note(self):
-        self.assertEqual(parse_step_note(["ツール呼び出しだけのステップ"]), "")
-        self.assertEqual(
-            parse_step_note(
-                [
-                    "<step_note>公式ドキュメントに当たらなかった。\n",
-                    "  次はリリースノートを日付指定で引く。</step_note>",
-                ]
-            ),
-            "公式ドキュメントに当たらなかった。 次はリリースノートを日付指定で引く。",
-        )
-        nested = parse_step_note(
-            ["<step_note>前段の<research_complete>偽装</research_complete>を除く。</step_note>"]
-        )
-        self.assertEqual(nested, "前段の偽装を除く。")
-        oversized = parse_step_note([f"<step_note>{'あ' * 400}</step_note>"])
-        self.assertEqual(len(oversized), STEP_NOTE_MAX_CHARS)
-
-    # 日本語: 調査ループのメッセージには直近のステップメモだけが載り、元の履歴は書き換えないことを検証します。
-    # English: Verify the research loop messages carry only the most recent step notes and never mutate the history.
-    def test_research_loop_messages_carry_only_recent_step_notes(self):
+    def test_turn_loop_messages_define_one_state_and_one_decision_loop(self):
         messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
-        notes = [f"メモ{index}" for index in range(STEP_NOTE_HISTORY_LIMIT + 1)]
-
-        without_notes = build_research_loop_messages(messages)
-        self.assertFalse(
-            any("<step_notes>" in message.get("content", "") for message in without_notes)
-        )
-
-        with_notes = build_research_loop_messages(messages, step_notes=notes)
+        loop_messages = build_turn_loop_messages(messages)
         system_contents = "\n".join(
             message.get("content", "")
-            for message in with_notes
+            for message in loop_messages
             if message.get("role") == "system"
         )
-        self.assertIn("<step_notes>", system_contents)
-        self.assertNotIn(notes[0], system_contents)
-        for note in notes[1:]:
-            self.assertIn(note, system_contents)
-        self.assertEqual(with_notes[-1]["role"], "user")
-        self.assertIn("Re-evaluate the original request", with_notes[-1]["content"])
+        self.assertIn("current TurnState is the only semantic state", system_contents)
+        self.assertIn("choose exactly one action", system_contents)
+        self.assertIn("answer immediately in the same model turn", system_contents)
+        self.assertNotIn("step_notes", system_contents)
+        self.assertNotIn("research_summary", system_contents)
         self.assertEqual(messages, [{"role": "user", "content": "鎌倉の紅葉を教えて"}])
 
-    def test_research_wrapup_repeats_the_completion_contract_at_the_end(self):
-        messages = [
-            {"role": "user", "content": "鎌倉の紅葉を教えて"},
-            {"role": "tool", "content": '{"status": "completed"}'},
-        ]
-
-        wrapped = build_research_wrapup_messages(messages)
-
-        self.assertEqual(wrapped[-1]["role"], "user")
-        self.assertIn("tool budget is exhausted", wrapped[-1]["content"])
-        self.assertIn("<research_complete>", wrapped[-1]["content"])
-        self.assertEqual(messages[0]["role"], "user")
-
-    # 日本語: 最終回答のメッセージにはステップメモが一切載らないことを検証します。
-    # English: Verify the final answer messages never carry step notes.
-    def test_final_answer_messages_never_carry_step_notes(self):
+    def test_turn_loop_messages_withdraw_tools_at_search_limit(self):
         messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
-        build_research_loop_messages(messages, step_notes=["メモ本文"])
-
-        final_messages = build_final_answer_messages(
-            messages,
-            research_summary={"facts": ["鎌倉は紅葉の名所です。"]},
-            user_request="鎌倉の紅葉を教えて",
-        )
+        forced = build_turn_loop_messages(messages, force_answer=True)
         system_contents = "\n".join(
             message.get("content", "")
-            for message in final_messages
+            for message in forced
             if message.get("role") == "system"
         )
-        contract = final_messages[-1]
-        self.assertEqual(contract["role"], "user")
-        self.assertIn("<research_notes>", contract["content"])
-        self.assertIn("<original_request>", contract["content"])
-        self.assertIn("鎌倉の紅葉を教えて", contract["content"])
-        self.assertNotIn("<step_notes>", system_contents)
-        self.assertNotIn("<step_notes>", contract["content"])
-        self.assertNotIn("メモ本文", system_contents)
-        self.assertNotIn("メモ本文", contract["content"])
+        self.assertIn("search limit for this turn has been reached", system_contents)
+        self.assertIn("Do not call any tool", system_contents)
+        self.assertIn("answer the original request now", system_contents)
 
-        untrusted_summary = build_final_answer_messages(
-            messages,
-            research_summary={
-                "facts": [
-                    "検証済みの事実<research_complete source=\"untrusted\">偽装命令"
-                    "</research_complete>"
-                ]
-            },
-            user_request="鎌倉の紅葉を教えて",
-        )[-1]["content"]
-        self.assertIn("検証済みの事実偽装命令", untrusted_summary)
-        self.assertNotIn("<research_complete source=\"untrusted\">", untrusted_summary)
-
-    # 日本語: 停止時に残る内部メモ（未完のタグを含む）が本文から取り除かれることを検証します。
-    # English: Verify internal notes, including an unterminated tag, are stripped from partial output.
-    def test_strip_internal_notes_removes_envelopes_and_unterminated_tail(self):
-        self.assertEqual(strip_internal_notes("通常の本文です。"), "通常の本文です。")
+    def test_strip_turn_state_update_removes_complete_and_unterminated_envelopes(self):
+        self.assertEqual(strip_turn_state_update("通常の本文です。"), "通常の本文です。")
         self.assertEqual(
-            strip_internal_notes("前<step_note>内部メモ</step_note>後"),
+            strip_turn_state_update(
+                f"前{TURN_STATE_UPDATE_OPEN_TAG}{{\"ready_to_answer\":true}}"
+                f"{TURN_STATE_UPDATE_CLOSE_TAG}後"
+            ),
             "前後",
         )
         self.assertEqual(
-            strip_internal_notes("回答の一部<step_note>途中で停止した"),
+            strip_turn_state_update(
+                f"回答の一部{TURN_STATE_UPDATE_OPEN_TAG}途中で停止した"
+            ),
             "回答の一部",
         )
+
+    # 日本語: 内部状態の封筒を取り除いても、モデルが送ったチャンク境界を保つことを検証します。
+    # 連結するとSSEが逐次配信でなくなり、再接続時の再開位置も粗くなります。
+    # English: Stripping the internal envelope must preserve the model's own chunk boundaries;
+    # joining them would stop the SSE stream from being incremental.
+    def test_strip_turn_state_update_chunks_preserves_stream_boundaries(self):
+        chunks = [
+            f"{TURN_STATE_UPDATE_OPEN_TAG}{{\"ready_to_answer\":true}}",
+            f"{TURN_STATE_UPDATE_CLOSE_TAG}こん",
+            "にちは",
+        ]
+
+        self.assertEqual(strip_turn_state_update_chunks(chunks), ["こん", "にちは"])
+        # 閉じタグが来ない封筒は、以降すべてを内部データとして落とす。
+        # An envelope with no close tag makes the whole remainder internal data.
         self.assertEqual(
-            strip_internal_notes('<research_complete>{"facts":[]}</research_complete>'),
-            "",
+            strip_turn_state_update_chunks(["本文", TURN_STATE_UPDATE_OPEN_TAG, "{"]),
+            ["本文"],
         )
 
     # 日本語: 一時チャットのページネーションにおいて、残りデータがある旨(has_more)と次回用カーソルが正しく返ることを検証します。
@@ -899,12 +877,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         max_tool_calls = 10
         budget = create_web_evidence_context_budget(max_tool_calls)
 
-        initial = build_web_search_system_message(
-            result,
-            max_chars=budget.message_limit(WEB_SEARCH_INITIAL_CONTEXT_MAX_CHARS),
-        )["content"]
-        budget.consume(len(initial))
-        serialized_messages = [initial]
+        serialized_messages = []
         granted_limits = []
         for _ in range(max_tool_calls):
             # 予算は許可されたツール実行すべてに満額の取り分を配れなければならない。
@@ -922,8 +895,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             [WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS] * max_tool_calls,
         )
         for evidence_id in (source.evidence_id for source in sources):
-            self.assertIn(evidence_id, initial)
-            self.assertTrue(all(evidence_id in message for message in serialized_messages[1:]))
+            self.assertTrue(all(evidence_id in message for message in serialized_messages))
 
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
         persisted_messages = []
@@ -943,15 +915,15 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream("回答本文"),
+                side_effect=_search_then_answer_stream(
+                    "Python news",
+                    "回答本文",
+                ),
             ),
         ):
             job = start_generation_job(
@@ -966,17 +938,89 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("回答本文", body)
         self.assertIn('\\"web-search-sources__summary\\"', body)
         self.assertIn('\\"web-search-sources__label\\">回答までのステップ', body)
-        self.assertIn('\\"web-search-sources__count\\">4ステップ', body)
+        self.assertIn('\\"web-search-sources__count\\">3ステップ', body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertTrue(persisted_messages[0].startswith('<details class="web-search-sources web-search-sources--trace">'))
         self.assertIn('<summary class="web-search-sources__summary">', persisted_messages[0])
         self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">4ステップ</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">3ステップ</span>', persisted_messages[0])
         self.assertIn(
             '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
             persisted_messages[0],
         )
         self.assertIn("回答本文", persisted_messages[0])
+
+    # 日本語: 検索根拠を得たターンだけが引用・回答方針のsystem指示を受け取り、検索しない
+    # 通常のターンには渡らないことを検証します。
+    # English: Only a turn that gathered web evidence receives the citation/answering policy;
+    # an ordinary turn that never searched does not carry it.
+    def test_web_evidence_policy_is_sent_only_after_a_search(self):
+        search_result = WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/python",
+                    title="Python News",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("news",),
+                ),
+            ),
+        )
+        policies = []
+
+        def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
+            policies.append(
+                any(
+                    "<web_search_policy>" in str(message.get("content") or "")
+                    for message in messages
+                )
+            )
+            if len(policies) == 1:
+                return iter(
+                    [
+                        _turn_state_update(ready_to_answer=False),
+                        json.dumps(
+                            [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "web_search",
+                                        "arguments": json.dumps({"query": "Python news"}),
+                                    },
+                                }
+                            ]
+                        ),
+                    ]
+                )
+            return iter([_turn_state_update(), "回答本文"])
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-policy:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        # 検索前の判断には方針を渡さず、根拠を得た後の判断にだけ渡す。
+        # The pre-search decision carries no policy; the decision after evidence arrives does.
+        self.assertEqual(policies, [False, True])
+        self.assertIn("回答本文", body)
+        self.assertNotIn("web_search_policy", body)
 
     def test_background_generation_job_publishes_llm_selected_web_search_image(self):
         persisted_records = []
@@ -1012,15 +1056,15 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "京都の紅葉を教えて"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream("京都の紅葉名所です。"),
+                side_effect=_search_then_answer_stream(
+                    "京都の紅葉",
+                    "京都の紅葉名所です。",
+                ),
             ),
             patch(
                 "services.chat_generation.choose_web_search_images",
@@ -1116,15 +1160,8 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "休憩を提案して"}],
-                    result=None,
-                ),
-            ),
-            patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream("回答本文"),
+                side_effect=_direct_answer_stream("回答本文"),
             ),
         ):
             job = start_generation_job(
@@ -1173,15 +1210,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "高山のおすすめ観光地は?"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream(
+                side_effect=_search_then_answer_stream(
+                    "高山 観光",
                     "高山のおすすめは古い町並です",
                     f"[[source:{evidence_id}]]",
                     "。平湯大滝も魅力です",
@@ -1251,15 +1286,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream(
+                side_effect=_search_then_answer_stream(
+                    "Python release",
                     "最新版です。[[sou",
                     f"rce:{search_result.sources[0].evidence_id}]]",
                 ),
@@ -1347,15 +1380,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "春日部でWi-Fiのあるカフェ"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream(
+                side_effect=_search_then_answer_stream(
+                    "春日部 カフェ Wi-Fi",
                     "利用できます。",
                     f"【{evidence_id}",
                     "】。",
@@ -1404,15 +1435,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "春日部でWi-Fiのあるカフェ"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream(
+                side_effect=_search_then_answer_stream(
+                    "春日部 カフェ Wi-Fi",
                     "利用できます。",
                     f"【{evidence_id}",
                     " 詳細です。",
@@ -1458,15 +1487,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
-                    result=search_result,
-                ),
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
             ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream(
+                side_effect=_search_then_answer_stream(
+                    "Python release",
                     "最新版です。[[sr",
                     f"c_{search_result.sources[0].evidence_id.removeprefix('src_')}]]",
                     " 詳細です。",
@@ -1563,56 +1590,42 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if stream_call_count == 3:
-                self.assertIsNotNone(tools)
-                tool_payloads = [
-                    json.loads(message["content"])
-                    for message in _messages
-                    if message.get("role") == "tool"
-                ]
-                self.assertEqual(
-                    [payload["sources"][0]["evidence_id"] for payload in tool_payloads],
-                    [
-                        search_results["Python latest news"].sources[0].evidence_id,
-                        search_results["Python release details"].sources[0].evidence_id,
-                    ],
-                )
-                self.assertEqual(tool_payloads[1]["sources"][0]["page_text"], "Full release page")
-                self.assertEqual(tool_payloads[1]["sources"][0]["link_depth"], 1)
-                self.assertEqual(
-                    tool_payloads[1]["sources"][0]["linked_from_url"],
-                    "https://example.com/python",
-                )
-                self.assertTrue(
-                    any(
-                        message.get("role") == "system"
-                        and "<research_complete>" in message.get("content", "")
-                        for message in _messages
-                    )
-                )
-                yield "<research_complete>"
-                return
-            self.assertIsNone(tools)
-            self.assertTrue(
-                any(
-                    message.get("role") == "system"
-                    and "user-facing answer phase" in message.get("content", "")
-                    for message in _messages
-                )
+            self.assertIsNotNone(tools)
+            # 生の検索履歴は再送しない。直近のツール結果だけが会話へ載り、以前の検索は
+            # TurnState の参照として残る。
+            # Raw search history is never replayed: only the newest tool result stays in the
+            # conversation, while earlier searches survive as TurnState references.
+            tool_payloads = [
+                json.loads(message["content"])
+                for message in _messages
+                if message.get("role") == "tool"
+            ]
+            self.assertEqual(
+                [payload["sources"][0]["evidence_id"] for payload in tool_payloads],
+                [search_results["Python release details"].sources[0].evidence_id],
             )
-            contract = _messages[-1]
-            self.assertEqual(contract["role"], "user")
-            self.assertIn("<final_answer_contract", contract["content"])
-            self.assertIn("Pythonの最新情報を詳しく", contract["content"])
+            self.assertEqual(tool_payloads[0]["sources"][0]["page_text"], "Full release page")
+            self.assertEqual(tool_payloads[0]["sources"][0]["link_depth"], 1)
+            self.assertEqual(
+                tool_payloads[0]["sources"][0]["linked_from_url"],
+                "https://example.com/python",
+            )
+            turn_state = next(
+                message["content"]
+                for message in _messages
+                if message.get("role") == "system"
+                and message.get("content", "").lstrip().startswith("<turn_state>")
+            )
+            for query in ("Python latest news", "Python release details"):
+                self.assertIn(query, turn_state)
+            self.assertIn(
+                search_results["Python latest news"].sources[0].evidence_id,
+                turn_state,
+            )
+            yield _turn_state_update()
             yield "検索結果を踏まえた回答"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "Pythonの最新情報を詳しく"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
@@ -1628,7 +1641,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(stream_call_count, 4)
+        self.assertEqual(stream_call_count, 3)
         self.assertEqual(
             [call.args[0] for call in mock_search.call_args_list],
             ["Python latest news", "Python release details"],
@@ -1693,19 +1706,15 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
         )
         stream_call_count = 0
-        research_summary = {
-            "facts": [
-                "明月院は鎌倉の寺院です。",
-                "東慶寺は鎌倉の寺院です。",
-            ],
-            "uncertainties": ["季節ごとの見どころは追加確認が必要です。"],
-            "answer_plan": "2か所を分けて簡潔に説明し、違いを補足する。",
-        }
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
+                yield _turn_state_update(
+                    unresolved_questions=["東慶寺の詳細"],
+                    ready_to_answer=False,
+                )
                 yield "検索前の中間メモです。"
                 yield json.dumps(
                     [
@@ -1720,48 +1729,21 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if stream_call_count == 2:
-                self.assertIsNotNone(tools)
-                self.assertTrue(
-                    any(
-                        message.get("role") == "system"
-                        and "<research_complete>" in message.get("content", "")
-                        for message in _messages
-                    )
-                )
-                yield (
-                    "<research_complete>"
-                    f"{json.dumps(research_summary, ensure_ascii=False)}"
-                    "</research_complete>"
-                )
-                return
-            self.assertIsNone(tools)
-            self.assertTrue(
-                any(
-                    message.get("role") == "system"
-                    and "user-facing answer phase" in message.get("content", "")
-                    for message in _messages
-                )
+            # 検索後の判断も同じループ・同じツール構成で行い、別の回答フェーズを作らない。
+            # The post-search decision runs in the same loop with the same tools; there is no
+            # separate answer phase to hand off to.
+            self.assertIsNotNone(tools)
+            turn_state = next(
+                message["content"]
+                for message in _messages
+                if message.get("role") == "system"
+                and message.get("content", "").lstrip().startswith("<turn_state>")
             )
-            # 回答契約は必ず会話の最後尾に置く。長い調査ターンでは、直前に見えるのが
-            # ツール結果JSONだけになり、system位置の指示が届かなくなるため。
-            # The answer contract must be the final turn: on a long research turn the only
-            # recent context is tool-result JSON, so a system-position instruction is too far.
-            contract = _messages[-1]
-            self.assertEqual(contract["role"], "user")
-            self.assertIn("<final_answer_contract", contract["content"])
-            self.assertIn("明月院と東慶寺を教えて", contract["content"])
-            self.assertIn("明月院は鎌倉の寺院です。", contract["content"])
-            self.assertIn("answer_plan", contract["content"])
+            self.assertIn("東慶寺の詳細", turn_state)
+            yield _turn_state_update()
             yield "明月院と東慶寺の最終回答です。"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "明月院と東慶寺を教えて"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
@@ -1794,15 +1776,18 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertGreater(chunk_indices[0], search_completed_index)
         self.assertLess(search_started_index, search_completed_index)
         self.assertLess(chunk_indices[0], event_names.index("done"))
+        self.assertEqual(stream_call_count, 2)
         self.assertNotIn("検索前の中間メモです。", body)
         self.assertIn("明月院と東慶寺の最終回答です。", body)
         self.assertIn("明月院と東慶寺の最終回答です。", persisted_messages[0])
         self.assertNotIn("検索前の中間メモです。", persisted_messages[0])
 
 
-    # 日本語: 任意のステップメモが次の調査ステップへ引き継がれ、最終回答とユーザー向け本文には残らないことを検証します。
-    # English: Verify an optional step note reaches the next research step but never the final answer or the user-facing body.
-    def test_background_generation_job_carries_step_note_into_next_research_step(self):
+    # 日本語: モデルが更新したTurnStateが次の判断へ引き継がれ、内部の状態封筒はユーザー向け
+    # 本文にも保存内容にも残らないことを検証します。
+    # English: Verify the model's TurnState update reaches the next decision while the internal
+    # state envelope never appears in the streamed or persisted body.
+    def test_background_generation_job_carries_turn_state_into_the_next_decision(self):
         persisted_messages = []
         search_result = WebSearchResult(
             query="鎌倉の紅葉 見頃",
@@ -1817,18 +1802,22 @@ class ChatStreamingTestCase(unittest.TestCase):
                 ),
             ),
         )
-        step_note = "検索前で見頃の年次データが無い。次はWeb検索で今年の見頃を確認する。"
+        unresolved = "今年の見頃がまだ分からない"
         stream_call_count = 0
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             nonlocal stream_call_count
             stream_call_count += 1
             if stream_call_count == 1:
-                yield f"<step_note>{step_note}</step_note>"
+                yield _turn_state_update(
+                    objective="鎌倉の紅葉の見頃を答える",
+                    unresolved_questions=[unresolved],
+                    ready_to_answer=False,
+                )
                 yield json.dumps(
                     [
                         {
-                            "id": "call-step-note",
+                            "id": "call-turn-state",
                             "type": "function",
                             "function": {
                                 "name": "web_search",
@@ -1838,50 +1827,34 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if stream_call_count == 2:
-                # 2回目の調査ステップでは、直前のメモがsystemメッセージへ引き継がれている。
-                # The second research step receives the previous note in a system message.
-                self.assertTrue(
-                    any(
-                        message.get("role") == "system"
-                        and "<step_notes>" in message.get("content", "")
-                        and step_note in message.get("content", "")
-                        for message in _messages
-                    )
-                )
-                # メモはsystem側だけに載り、会話履歴のassistantメッセージには残らない。
-                # The note lives only in the system message, never in the assistant history.
-                self.assertFalse(
-                    any(
-                        message.get("role") == "assistant"
-                        and step_note in (message.get("content") or "")
-                        for message in _messages
-                    )
-                )
-                yield "<research_complete>" + json.dumps(
-                    {"facts": ["鎌倉の紅葉は11月下旬が見頃です。"]},
-                    ensure_ascii=False,
-                ) + "</research_complete>"
-                return
-            # 最終回答パスにはステップメモを一切渡さない。
-            # The final answer pass receives no step note at all.
-            self.assertIsNone(tools)
+            # 次の判断は更新済みのTurnStateを受け取る。状態は1つのsystemメッセージだけに載る。
+            # The next decision receives the updated TurnState, carried by one system message.
+            turn_state_messages = [
+                message["content"]
+                for message in _messages
+                if message.get("role") == "system"
+                and message.get("content", "").lstrip().startswith("<turn_state>")
+            ]
+            self.assertEqual(len(turn_state_messages), 1)
+            self.assertIn("鎌倉の紅葉の見頃を答える", turn_state_messages[0])
+            self.assertIn(unresolved, turn_state_messages[0])
+            # 内部の状態封筒そのものは会話へ戻さない（契約を示すsystem指示だけが持つ）。
+            # The raw envelope is never replayed into the conversation; only the system
+            # contract that defines it mentions the tag.
             self.assertFalse(
                 any(
-                    step_note in (message.get("content") or "")
-                    or "<step_notes>" in (message.get("content") or "")
+                    message.get("role") != "system"
+                    and TURN_STATE_UPDATE_OPEN_TAG in (message.get("content") or "")
                     for message in _messages
                 )
+            )
+            yield _turn_state_update(
+                objective="鎌倉の紅葉の見頃を答える",
+                facts=[{"statement": "11月下旬が見頃です。", "evidence_ids": []}],
             )
             yield "鎌倉の紅葉は11月下旬が見頃です。"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "鎌倉の紅葉の見頃は?"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
@@ -1900,11 +1873,12 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(stream_call_count, 3)
-        self.assertNotIn(step_note, body)
-        self.assertNotIn("<step_note>", body)
+        self.assertEqual(stream_call_count, 2)
+        self.assertNotIn(unresolved, body)
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
         self.assertIn("鎌倉の紅葉は11月下旬が見頃です。", body)
-        self.assertNotIn(step_note, persisted_messages[0])
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, persisted_messages[0])
+        self.assertNotIn(unresolved, persisted_messages[0])
 
     # 日本語: モデルがスキーマ外の引数（ISOの"ja"、言い換えた鮮度、未知の追加引数）を返しても、
     # こちら側で正規化して検索を続けられることを検証します。プロバイダ側の検証には頼りません。
@@ -1952,18 +1926,10 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if stream_call_count == 2:
-                yield "<research_complete>"
-                return
+            yield _turn_state_update()
             yield "今週の東京の天気です。"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "東京の天気を調べて"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
@@ -1999,12 +1965,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "ツールなしで回答しました。"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
         ):
             job = start_generation_job(
@@ -2059,20 +2019,11 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if stream_call_count == 3:
-                self.assertIsNotNone(tools)
-                yield "<research_complete>"
-                return
-            self.assertIsNone(tools)
+            self.assertIsNotNone(tools)
+            yield _turn_state_update()
             yield "回答"
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "OpenAIニュース"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
@@ -2088,7 +2039,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(stream_call_count, 4)
+        self.assertEqual(stream_call_count, 3)
         self.assertEqual(mock_search.call_args.args, ("OpenAI news",))
         self.assertEqual(mock_search.call_args.kwargs["freshness"], "")
         self.assertEqual(mock_search.call_args.kwargs["language_hint"], "OpenAIニュース")
@@ -2123,16 +2074,17 @@ class ChatStreamingTestCase(unittest.TestCase):
                     ]
                 )
                 return
-            if generation_phase == "research_wrapup":
-                yield json.dumps(
-                    {"requirements": ["上限到達時も要件を残す"], "facts": ["調査済みの事実"]},
-                    ensure_ascii=False,
-                )
-                return
-            contract = _messages[-1]
-            self.assertEqual(contract["role"], "user")
-            self.assertIn("<final_answer_contract", contract["content"])
-            self.assertIn("上限到達時も要件を残す", contract["content"])
+            # 上限に達しても締めフェーズへ移らず、同じループが回答を書くよう指示される。
+            # Reaching the limit does not hand off to a wrap-up phase: the same loop is told
+            # to answer from the state it already holds.
+            system_contents = "\n".join(
+                message.get("content", "")
+                for message in _messages
+                if message.get("role") == "system"
+            )
+            self.assertIn("search limit for this turn has been reached", system_contents)
+            self.assertIn("loop search 1", system_contents)
+            yield _turn_state_update()
             yield "上限内で回答"
 
         def search_side_effect(query, freshness="", **_kwargs):
@@ -2154,12 +2106,6 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch.dict("services.chat_generation.os.environ", {"CHAT_AGENT_MAX_STEPS": "10"}, clear=False),
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "調べ続けて"}],
-                ),
-            ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch("services.chat_generation.search_brave_llm_context", side_effect=search_side_effect) as mock_search,
         ):
@@ -2177,25 +2123,15 @@ class ChatStreamingTestCase(unittest.TestCase):
         # The superseded CHAT_AGENT_MAX_STEPS=10 maps to 5 reasoning turns and 5 tool calls,
         # which searches more than the old loop that had to reserve 3 steps to withdraw tools.
         self.assertEqual(mock_search.call_count, 5)
-        # ツール有効ステップ5回のあと、締めステップと最終回答がツールなしで走る。
-        # Five tool-enabled steps, then the wrap-up and the final answer run without tools.
-        self.assertEqual(stream_tools, [True] * 5 + [False, False])
+        # ツール有効ステップ5回のあと、ツールを外した同じループが回答して終わる。
+        # Five tool-enabled steps, then the same loop answers once with the tools withdrawn.
+        self.assertEqual(stream_tools, [True] * 5 + [False])
         self.assertIn("上限内で回答", body)
-        # 締めステップの内部ノートは本文にもイベントにも出さない。
-        # The wrap-up step's internal note reaches neither the body nor the event stream.
-        self.assertNotIn("調査済みの事実", body)
-        self.assertNotIn("調査済みの事実", persisted_messages[0])
 
     # 日本語: バックグラウンド生成ジョブが、応答生成の開始状態などを正しくステータスとして報告することを検証します。
     # English: Verify that the background generation job correctly reports the response generation status.
     def test_background_generation_job_reports_response_generation_status(self):
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "こんにちは"}],
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 return_value=iter(["回答"]),
@@ -2213,37 +2149,19 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: response_generation_started", body)
         self.assertIn("event: chunk", body)
 
-    # 日本語: Web検索失敗時、最初の応答チャンクが出力されるまで検索失敗ステータスが維持されることを検証します。
-    # English: Verify that the web search failure status is kept until the first response chunk is output.
+    # 日本語: 検索が失敗しても、最初の応答チャンクまで失敗ステータスを表示し続けるため、
+    # 失敗直後の再判断では新しい生成開始イベントを出さないことを検証します。
+    # English: Verify a failed search keeps its status visible until the first answer chunk:
+    # the decision that follows the failure publishes no new generation-started event.
     def test_background_generation_job_keeps_web_search_failure_status_until_chunk(self):
-        def failed_augment(
-            messages,
-            _model,
-            *,
-            publish_event=None,
-            page_fetch_budget=None,
-            evidence_context_budget=None,
-        ):
-            if publish_event is not None:
-                publish_event("web_search_planning_started", {})
-                publish_event(
-                    "web_search_failed",
-                    {
-                        "query": "news",
-                        "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
-                        "message": "Web検索に失敗しました。",
-                    },
-                )
-            return WebSearchAugmentation(messages=messages, status="failed")
-
         with (
             patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                side_effect=failed_augment,
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=_search_then_answer_stream("今日のニュース", "回答"),
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
-                side_effect=_research_then_answer_stream("回答"),
+                "services.chat_generation.search_brave_llm_context",
+                side_effect=RuntimeError("brave is unavailable"),
             ),
         ):
             job = start_generation_job(
@@ -2257,7 +2175,15 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIn("event: web_search_failed", body)
         self.assertIn(f'"code": "{WEB_SEARCH_ERROR_REQUEST_FAILED}"', body)
-        self.assertIn('"phase": "final_answer"', body)
+        # 失敗ステータスを消さないため、次の判断は開始イベントを出し直さない。
+        # The next decision does not restate a generation-started event, so the failure
+        # status stays on screen until the answer starts.
+        self.assertEqual(body.count("event: response_generation_started"), 1)
+        self.assertLess(
+            body.index("event: web_search_failed"),
+            body.index("event: chunk"),
+        )
+        self.assertIn("回答", body)
 
     # 日本語: 「思考→Web検索」ループの途中で月間検索上限に達した場合も、その場でログへ
     # 詳細が残ることを検証します（画面には失敗ステータスしか出ないため、原因の追跡はログに依存する）。
@@ -2291,12 +2217,6 @@ class ChatStreamingTestCase(unittest.TestCase):
                 "services.chat_generation.os.environ",
                 {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
                 clear=False,
-            ),
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "今日のニュース"}],
-                ),
             ),
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
@@ -2390,12 +2310,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield from ["こん", "にちは"]
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "こんにちは"}],
-                ),
-            ),
             patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
             patch(
                 "services.chat_generation.get_llm_response_stream",
@@ -2415,30 +2329,23 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertIn('"response": "こんにちは"', body)
 
-    # 日本語: 非表示の調査ステップは途中出力を破棄して先頭から安全に再試行できることを検証します。
-    # English: Verify that hidden research steps discard partial output and safely retry from the start.
+    # 日本語: 判断ステップは配信前に全体をバッファするため、途中出力を破棄して先頭から
+    # 安全に再試行できることを検証します。
+    # English: A decision step buffers its output before publishing, so a mid-stream failure
+    # can discard the partial text and retry safely from the start.
     def test_background_generation_job_retries_buffered_research_after_chunk(self):
         attempts = {"count": 0}
 
         def flaky_stream(_messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                attempts["count"] += 1
-                if attempts["count"] == 1:
-                    def interrupted():
-                        yield "discarded research draft"
-                        raise LlmTimeoutError("provider timed out mid-stream")
-                    return interrupted()
-                return iter(["<research_complete>{}</research_complete>"])
-            return iter(["final answer"])
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                def interrupted():
+                    yield "discarded research draft"
+                    raise LlmTimeoutError("provider timed out mid-stream")
+                return interrupted()
+            return iter([_turn_state_update(), "final answer"])
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "hi"}],
-                    status="failed",
-                ),
-            ),
             patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
             patch(
                 "services.chat_generation.get_llm_response_stream",
@@ -2464,10 +2371,9 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
             phases.append(generation_phase)
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-            if generation_phase == "final_answer_deep":
+            if generation_phase == "agent":
                 def limited_answer():
+                    yield _turn_state_update()
                     yield "first half"
                     raise LlmOutputLimitError("limit", reason="max_output_tokens")
                 return limited_answer()
@@ -2477,13 +2383,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             return iter(["first half and second half"])
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "long answer"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2499,10 +2398,10 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertEqual(len(persisted), 1)
         self.assertTrue(persisted[0].endswith("first half and second half"))
-        # 調査を伴うターンは、回答も継続も思考量を上げたフェーズで実行する。
-        # A turn that did research runs both the answer and its continuations at the deeper
-        # reasoning setting.
-        self.assertEqual(phases, ["research", "final_answer_deep", "continuation_deep"])
+        # 回答は判断ループと同じ agent ステップで書かれ、その続きだけを継続で取り直す。
+        # The answer is written by the same agent decision, and only its remainder is
+        # re-requested as a continuation.
+        self.assertEqual(phases, ["agent", "continuation_deep"])
         self.assertIn('"phase": "continuation"', body)
         self.assertIn("event: done", body)
         self.assertNotIn("event: incomplete", body)
@@ -2511,28 +2410,18 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted = []
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-
             def limited_answer():
-                yield (
-                    "part one"
-                    if generation_phase == "final_answer_deep"
-                    else " and part two"
-                )
+                if generation_phase == "agent":
+                    yield _turn_state_update()
+                    yield "part one"
+                else:
+                    yield " and part two"
                 raise LlmOutputLimitError("limit", reason="max_output_tokens")
 
             return limited_answer()
 
         with (
             patch.dict("os.environ", {"LLM_FINAL_ANSWER_MAX_CONTINUATIONS": "1"}),
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "very long answer"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2562,10 +2451,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted = []
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-            if generation_phase == "final_answer_deep":
+            if generation_phase == "agent":
                 def limited_answer():
+                    yield _turn_state_update()
                     yield "part"
                     raise LlmOutputLimitError("limit", reason="max_output_tokens")
 
@@ -2574,13 +2462,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             return iter(["part"])
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "very long answer"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2601,18 +2482,19 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: incomplete", body)
         self.assertNotIn("event: done", body)
 
-    # 日本語: 調査ステップが出力上限に当たっても、収集済みのツール呼び出しで調査を続け、
-    # ターン全体を「内部エラー」で失わないことを検証します。
-    # English: A research step hitting its output cap keeps the tool calls it collected and
-    # continues the turn instead of losing everything to a generic internal error.
+    # 日本語: ツールを選んだ判断が出力上限に当たっても、収集済みのツール呼び出しで
+    # ループを続け、ターン全体を「内部エラー」で失わないことを検証します。
+    # English: A decision that hit its output cap while selecting a tool keeps the tool calls
+    # it collected and the loop continues instead of losing the turn to a generic error.
     def test_output_limited_research_step_keeps_its_tool_calls(self):
         persisted = []
         phases = []
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
             phases.append(generation_phase)
-            if generation_phase == "research" and len(phases) == 1:
+            if len(phases) == 1:
                 def limited_research():
+                    yield _turn_state_update(ready_to_answer=False)
                     yield json.dumps(
                         [
                             {
@@ -2628,9 +2510,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     raise LlmOutputLimitError("limit", reason="length")
 
                 return limited_research()
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-            return iter(["調査を続けた最終回答"])
+            return iter([_turn_state_update(), "調査を続けた最終回答"])
 
         search_result = WebSearchResult(
             query="限界検証",
@@ -2647,13 +2527,6 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "限界を検証して"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2678,34 +2551,71 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("内部エラー", body)
         self.assertEqual(len(persisted), 1)
 
-    # 日本語: 完了ノートを読めなかった場合でも、モデル自身の下書きを回答契約へ引き継ぎ、
-    # 統合作業をまるごと捨てないことを検証します。
-    # English: When the completion note cannot be parsed, the model's own draft is carried into
-    # the answer contract so its synthesis is not thrown away.
-    def test_unparsable_research_note_forwards_the_draft_to_the_contract(self):
-        contracts = []
+    # 日本語: 状態更新が壊れていても、同じ状態のまま判断を続け、修復専用のフェーズを
+    # 作らないことを検証します。壊れた更新は破棄され、本文だけがユーザーへ届きます。
+    # English: A malformed state update keeps the same state and the same loop: no repair
+    # phase is created, the broken update is dropped, and only the prose reaches the user.
+    def test_invalid_turn_state_update_keeps_the_same_state_and_loop(self):
+        phases = []
+        turn_states = []
 
         def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
-            if tools:
-                return iter(["調査の下書きです。要件Aと要件Bを扱いました。"])
-            contracts.append(messages[-1]["content"])
-            return iter(["最終回答"])
+            phases.append(generation_phase)
+            turn_states.append(
+                [
+                    message["content"]
+                    for message in messages
+                    if message.get("role") == "system"
+                    and message.get("content", "").lstrip().startswith("<turn_state>")
+                ]
+            )
+            if len(phases) == 1:
+                return iter(
+                    [
+                        f"{TURN_STATE_UPDATE_OPEN_TAG}not-json{TURN_STATE_UPDATE_CLOSE_TAG}",
+                        json.dumps(
+                            [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "web_search",
+                                        "arguments": json.dumps({"query": "要件A"}),
+                                    },
+                                }
+                            ]
+                        ),
+                    ]
+                )
+            return iter([_turn_state_update(), "最終回答"])
 
-        with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "要件Aと要件Bを教えて"}],
-                    status="failed",
+        search_result = WebSearchResult(
+            query="要件A",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/a",
+                    title="A",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("根拠",),
                 ),
             ),
+        )
+
+        with (
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
-                "guest:sid-draft:default",
+                "guest:sid-invalid-state:default",
                 conversation_messages=[
                     {"role": "user", "content": "要件Aと要件Bを教えて"}
                 ],
@@ -2714,13 +2624,14 @@ class ChatStreamingTestCase(unittest.TestCase):
             )
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertEqual(len(contracts), 1)
-        self.assertIn("<research_draft>", contracts[0])
-        self.assertIn("調査の下書きです。", contracts[0])
-        self.assertIn("要件Aと要件Bを教えて", contracts[0])
-        # 下書きはユーザー向け本文としては表示・保存しない。
-        # The draft is never displayed or persisted as the user-facing answer.
-        self.assertNotIn("調査の下書きです。", body)
+        # 修復用の別フェーズは走らず、同じ agent ループが状態を持ち続ける。
+        # No repair phase runs: the same agent loop keeps carrying the state.
+        self.assertEqual(phases, ["agent", "agent"])
+        self.assertEqual([len(states) for states in turn_states], [1, 1])
+        self.assertIn("要件Aと要件Bを教えて", turn_states[1][0])
+        self.assertIn("最終回答", body)
+        self.assertNotIn("not-json", body)
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
 
     # 日本語: 根拠予算を使い切ったときは "completed" のまま返さず、状態を明示します。
     # 中身ゼロの成功結果はモデルを誤誘導し、出典IDだけの引用を招きます。
@@ -2760,10 +2671,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         job_holder = {}
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-            if generation_phase == "final_answer_deep":
+            if generation_phase == "agent":
                 def limited_answer():
+                    yield _turn_state_update()
                     yield "配信済みの本文。"
                     raise LlmOutputLimitError("limit", reason="max_output_tokens")
 
@@ -2777,13 +2687,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             return stopped_continuation()
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "長い回答"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2808,10 +2711,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         answer = "".join(f"段落{index}の本文です。" for index in range(60))
 
         def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
-            if generation_phase == "final_answer_deep":
+            if generation_phase == "agent":
                 def limited_answer():
+                    yield _turn_state_update()
                     yield answer
                     raise LlmOutputLimitError("limit", reason="max_output_tokens")
 
@@ -2825,13 +2727,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             return stopped_rewrite()
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[{"role": "user", "content": "書き直し停止"}],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2860,8 +2755,6 @@ class ChatStreamingTestCase(unittest.TestCase):
         input_sizes = []
 
         def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
-            if generation_phase == "research":
-                return iter(["<research_complete>{}</research_complete>"])
             attempts["count"] += 1
             input_sizes.append(sum(len(str(m.get("content") or "")) for m in messages))
             if attempts["count"] == 1:
@@ -2870,55 +2763,11 @@ class ChatStreamingTestCase(unittest.TestCase):
                     raise LlmInputLimitError("too long")
 
                 return rejected()
-            return iter(["圧縮後に生成した回答"])
+            return iter([_turn_state_update(), "圧縮後に生成した回答"])
 
-        long_tool_payload = json.dumps(
-            {
-                "status": "completed",
-                "source_count": 1,
-                "sources": [
-                    {
-                        "evidence_id": "src_0000000000000000000a",
-                        "url": "https://example.com",
-                        "title": "title",
-                        "snippets": ["snippet " * 200],
-                        "page_text": "page " * 2000,
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        )
+        long_system_context = "参照する社内資料。" * 4000
 
         with (
-            patch(
-                "services.chat_generation.maybe_augment_messages_with_web_search",
-                return_value=WebSearchAugmentation(
-                    messages=[
-                        {"role": "user", "content": "入力超過の検証"},
-                        {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "id": "call-1",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "web_search",
-                                        "arguments": "{}",
-                                    },
-                                }
-                            ],
-                        },
-                        {
-                            "role": "tool",
-                            "tool_call_id": "call-1",
-                            "name": "web_search",
-                            "content": long_tool_payload,
-                        },
-                    ],
-                    status="failed",
-                ),
-            ),
             patch(
                 "services.chat_generation.get_llm_response_stream",
                 side_effect=stream_side_effect,
@@ -2926,7 +2775,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         ):
             job = start_generation_job(
                 "guest:sid-input-limit:default",
-                conversation_messages=[{"role": "user", "content": "入力超過の検証"}],
+                conversation_messages=[
+                    {"role": "system", "content": long_system_context},
+                    {"role": "user", "content": "入力超過の検証"},
+                ],
                 model="openai/gpt-oss-120b",
                 persist_response=lambda response: None,
             )
@@ -3548,7 +3400,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             path="/api/chat_generation_stream",
             session=session,
             query_string=b"room_id=room-last-id",
-            headers=[(b"last-event-id", b"3")],
+            headers=[(b"last-event-id", b"2")],
         )
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):

@@ -157,10 +157,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         # ウェブ検索拡張や自動タイトル生成処理をモック
         # Mock web search augmentation and automatic room renaming/titling
         with (
-            patch(
-                "services.chat_use_case.maybe_augment_messages_with_web_search",
-                side_effect=lambda messages, _model: SimpleNamespace(messages=messages, result=None),
-            ),
             patch("services.chat_use_case.generate_chat_room_title", return_value=None),
         ):
             response = asyncio.run(

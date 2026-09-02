@@ -957,11 +957,6 @@ export function useHomePageGenerationActions({
           return;
         }
 
-        if (parsed.event === "web_search_planning_started") {
-          updateThinkingStatus(localize("検索が必要か判断しています", "Checking whether web search is needed"), "web-search");
-          return;
-        }
-
         if (parsed.event === "web_search_started") {
           updateThinkingStatus(localize("Web検索中", "Finding relevant information"), "web-search");
           return;

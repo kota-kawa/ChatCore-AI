@@ -33,9 +33,7 @@ from .chat_answer_continuation import (
 )
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_input_budget import (
-    compact_tool_messages,
     estimate_messages_chars,
-    get_final_answer_input_token_budget,
 )
 from .llm_context_budget import (
     estimate_request_tokens,
@@ -43,9 +41,15 @@ from .llm_context_budget import (
     request_fits_context,
 )
 from .research_state import (
-    RESEARCH_STATE_MARKER,
-    ResearchState,
+    TURN_STATE_MARKER,
+    TurnState,
+    TurnStateProjectionError,
     is_reference_context_message,
+)
+from .chat_evidence_store import (
+    EvidenceStore,
+    GET_EVIDENCE_TOOL_NAME,
+    get_evidence_tool_definition,
 )
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
@@ -86,26 +90,23 @@ from .llm import (
     get_llm_response_stream,
     is_retryable_llm_error,
 )
-from .chat_research_notes import (
-    append_step_note,
-    build_final_answer_messages,
-    build_research_loop_messages,
-    build_research_wrapup_messages,
-    extract_research_draft,
-    parse_research_summary,
-    parse_step_note,
-    strip_internal_notes,
+from .chat_turn_state import (
+    TurnStateUpdateFilter,
+    build_turn_loop_messages,
+    parse_turn_state_update,
+    strip_turn_state_update,
+    strip_turn_state_update_chunks,
 )
+from .chat_prompt import insert_after_leading_system_messages
 from .web_search import (
     WEB_SEARCH_MAX_CONTEXT_CHARS,
     WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
+    build_web_search_evidence_policy_message,
     combine_web_search_results,
     create_web_evidence_context_budget,
     create_web_page_fetch_budget,
     get_web_search_tool_definition,
-    inject_prior_web_search_context,
     is_web_search_enabled,
-    maybe_augment_messages_with_web_search,
     normalize_search_language,
     normalize_web_search_freshness,
     resolve_web_search_citations,
@@ -131,8 +132,6 @@ from .web_search_trace import (
     TraceStep,
     answer_step,
     build_web_search_trace_markdown,
-    context_added_step,
-    decision_step,
     page_reading_steps,
     review_step,
     search_failed_step,
@@ -557,6 +556,10 @@ class ChatGenerationJob:
         # 継続中に全文を書き直しているかどうか。停止時は全文をそのまま足さず接合する。
         # Whether a continuation is rewriting the full answer; cancellation must splice it.
         self._pending_stream_is_rewrite = False
+        # 直前のモデルストリームが出力上限で打ち切られたか。回答なら継続生成へ回す。
+        # Whether the last model stream was cut off by the output cap; an answer then
+        # continues instead of being persisted as if the model had finished.
+        self._last_stream_output_limited = False
         # Search-image selections are made as soon as search results arrive so a
         # cancellation can still persist images that were already revealed.
         self._selected_web_search_images: list[dict[str, str]] = []
@@ -642,7 +645,7 @@ class ChatGenerationJob:
         if self._pending_stream_chunks and not self._pending_stream_is_internal:
             # 調査ステップの途中で停止した場合、内部メモが本文として残らないよう取り除く。
             # A stop during a research step must not leave internal notes in the saved body.
-            pending_text = strip_internal_notes("".join(self._pending_stream_chunks))
+            pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
             existing_text = "".join(self._chunks)
             # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
             # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
@@ -879,6 +882,7 @@ class ChatGenerationJob:
         # been emitted, to avoid duplicated or garbled output.
         max_retries = _get_llm_stream_max_retries()
         attempt = 0
+        self._last_stream_output_limited = False
         # プロバイダがツール呼び出しを拒否したときだけ、ツールなしで同じステップをやり直す。
         # Only a provider-side tool-call rejection replays the same step without tools.
         current_tools = tools
@@ -939,6 +943,7 @@ class ChatGenerationJob:
                     getattr(exc, "reason", exc.__class__.__name__),
                 )
                 self._telemetry.research_output_limit_recoveries += 1
+                self._last_stream_output_limited = True
                 if discard_partial_on_retry:
                     buffered = list(attempt_chunks)
                     self._pending_stream_chunks.clear()
@@ -1011,15 +1016,28 @@ class ChatGenerationJob:
         failure_tool_message: str,
         current_messages: list[dict[str, Any]],
         budget: AgentStepBudget,
+        turn_state: TurnState,
+        evidence_store: EvidenceStore,
         trace_steps: list[TraceStep] | None = None,
-        research_state: ResearchState | None = None,
     ) -> None:
-        if search is None:
-            if research_state is not None:
-                research_state.add_reference_payload(
-                    {"status": "unsupported_tool"},
-                    source_type=event_prefix,
+        if budget.tool_calls_exhausted:
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "step_limit_reached",
+                        "message": "The search limit has been reached.",
+                    },
                 )
+            )
+            return
+
+        step = budget.start_tool_call()
+        self._telemetry.tool_calls = budget.tool_calls
+        self._telemetry.lookup_call_count += 1
+
+        if search is None:
+            turn_state.record_search(tool_name=tool_name, status="unsupported_tool")
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -1041,11 +1059,7 @@ class ChatGenerationJob:
 
         query = _tool_argument_text(args.get("query"))
         if not query:
-            if research_state is not None:
-                research_state.add_reference_payload(
-                    {"status": "invalid_arguments"},
-                    source_type=event_prefix,
-                )
+            turn_state.record_search(tool_name=tool_name, status="invalid_arguments")
             current_messages.append(
                 _tool_result_message(
                     tool_call,
@@ -1056,31 +1070,6 @@ class ChatGenerationJob:
                 )
             )
             return
-
-        if budget.tool_calls_exhausted:
-            if research_state is not None:
-                research_state.add_reference_payload(
-                    {"status": "step_limit_reached"},
-                    source_type=event_prefix,
-                    query=query,
-                )
-            current_messages.append(
-                _tool_result_message(
-                    tool_call,
-                    {
-                        "status": "step_limit_reached",
-                        "message": (
-                            "The lookup step limit has been reached. "
-                            "Answer using the information already available."
-                        ),
-                    },
-                )
-            )
-            return
-
-        step = budget.start_tool_call()
-        self._telemetry.tool_calls = budget.tool_calls
-        self._telemetry.lookup_call_count += 1
         self._publish(
             f"{event_prefix}_started",
             {"query": query, "step": step, "max_steps": budget.max_steps},
@@ -1109,12 +1098,11 @@ class ChatGenerationJob:
                     },
                 )
             )
-            if research_state is not None:
-                research_state.add_reference_payload(
-                    {"status": "failed"},
-                    source_type=event_prefix,
-                    query=query,
-                )
+            turn_state.record_search(
+                tool_name=tool_name,
+                query=query,
+                status="failed",
+            )
             if trace_steps is not None:
                 trace_steps.append(
                     selected_reference_step(
@@ -1134,6 +1122,17 @@ class ChatGenerationJob:
         # A source reporting that it could not search is a failure too. Passing it through as a
         # zero-hit result would make both the UI and the model claim that nothing matched.
         status = str(payload.get("status") or "")
+        evidence_refs = evidence_store.add_reference_payload(
+            payload,
+            source_type=event_prefix,
+            query=query,
+        )
+        turn_state.record_search(
+            tool_name=tool_name,
+            query=query,
+            evidence_refs=evidence_refs,
+            status=status or "ok",
+        )
         if status == "failed":
             logger.warning("%s (status=failed)", failure_log_message)
             self._publish(
@@ -1141,12 +1140,6 @@ class ChatGenerationJob:
                 {"query": query, "step": step, "max_steps": budget.max_steps},
             )
             current_messages.append(_tool_result_message(tool_call, payload))
-            if research_state is not None:
-                research_state.add_reference_payload(
-                    payload,
-                    source_type=event_prefix,
-                    query=query,
-                )
             if trace_steps is not None:
                 trace_steps.append(
                     selected_reference_step(
@@ -1172,14 +1165,6 @@ class ChatGenerationJob:
             },
         )
         current_messages.append(_tool_result_message(tool_call, payload))
-        if research_state is not None:
-            research_state.add_reference_payload(
-                payload,
-                source_type=event_prefix,
-                query=query,
-            )
-        # 事前検索と同じクエリは既にトレースへ記録済みなので、重複行を追加しない。
-        # A query satisfied by the prefetch is already present in the trace.
         if trace_steps is not None and status != "already_searched":
             trace_steps.append(
                 selected_reference_step(
@@ -1207,12 +1192,7 @@ class ChatGenerationJob:
             self._selected_reference_trace
         )
         streaming_citation_buffer = ""
-        current_messages = [dict(m) for m in self._conversation_messages]
-        # 過去ターンの検索結果を参照用コンテキストとして再注入する
-        # Re-inject prior-turn search results as a reference context.
-        current_messages = inject_prior_web_search_context(
-            current_messages, self._prior_web_search_results
-        )
+        current_messages: list[dict[str, Any]] = []
         suppress_next_generation_started = False
         budget = AgentStepBudget.from_environment()
         telemetry = self._telemetry
@@ -1223,31 +1203,24 @@ class ChatGenerationJob:
         # them turns later searches into "successful" results with no content at all.
         evidence_context_budget = create_web_evidence_context_budget(budget.max_tool_calls)
         telemetry.evidence_budget_max_chars = evidence_context_budget.max_chars
-        coverage_requirements: tuple[str, ...] = ()
         latest_user_message = _latest_user_message_text(self._conversation_messages)
-        # Keep a semantic, bounded checkpoint outside the growing tool transcript.  The raw
-        # transcript remains available while it is small for provider compatibility, but later
-        # research/wrap-up/answer requests can be rebuilt from this state alone.
-        research_state = ResearchState(
-            user_request=latest_user_message,
-            max_chars=14_000,
-        )
+        evidence_store = EvidenceStore()
+        turn_state = TurnState(objective=latest_user_message)
         for prior_result in self._prior_web_search_results:
-            research_state.add_web_result(prior_result)
+            turn_state.record_evidence_refs(evidence_store.add_web_result(prior_result))
         for selected_trace in self._selected_reference_trace:
-            research_state.add_reference_payload(
+            selected_refs = evidence_store.add_reference_payload(
                 selected_trace.payload,
                 source_type=selected_trace.source,
                 query=selected_trace.query,
             )
-        research_base_messages = [dict(message) for message in self._conversation_messages]
-        # Prior-turn web context is also reference data.  Even when this turn does not start a
-        # new search, answer preparation must be able to replace that large system block with
-        # the bounded ledger instead of replaying it indefinitely.
-        has_prior_reference_context = bool(self._prior_web_search_results) or any(
-            is_reference_context_message(message)
-            for message in research_base_messages
-        )
+            turn_state.record_search(
+                tool_name=selected_trace.source,
+                query=selected_trace.query,
+                evidence_refs=selected_refs,
+                status=str(selected_trace.payload.get("status") or "ok"),
+            )
+        turn_base_messages = [dict(message) for message in self._conversation_messages]
         selected_web_search_images = self._selected_web_search_images
         revealed_image_indices: list[int] = []
         revealed_image_offsets: list[int] = []
@@ -1420,10 +1393,80 @@ class ChatGenerationJob:
                         last_streaming_parts_signature = streaming_parts_signature
                         self._publish("response_parts_updated", streaming_parts_update)
 
+        continuation_state_filter = TurnStateUpdateFilter()
+
         def publish_answer_chunk(chunk: str) -> None:
-            """Publish one chunk from a tool-free answer stream immediately."""
-            if chunk:
-                publish_completed_answer_step([chunk])
+            """Publish one continuation chunk, minus any repeated state envelope."""
+            visible = continuation_state_filter.feed(chunk)
+            if visible:
+                publish_completed_answer_step([visible])
+
+        def adopt_continuation_buffer(buffer: list[str]) -> None:
+            # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
+            # Hand the continuation pass's undelivered buffer to the job so a stop or a
+            # disconnect still routes it through the persistence path.
+            self._pending_stream_chunks = buffer
+            self._pending_stream_is_rewrite = False
+
+        def set_continuation_buffer_mode(is_rewrite: bool) -> None:
+            # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
+            # Tell the cancellation path when a continuation has switched to a full rewrite.
+            self._pending_stream_is_rewrite = is_rewrite
+
+        def continue_interrupted_answer(
+            answer_messages: list[dict[str, Any]],
+            published_text: str,
+        ) -> BaseException | None:
+            """Continue an answer the provider cut off at its output cap.
+
+            回答を書いたモデル判断だけが継続の対象で、別フェーズは作らない。すでに配信した
+            本文を assistant 履歴として渡し、続きだけを同じループの延長として受け取る。
+            Only the decision that wrote the answer is continued; no separate phase is created.
+            The published text is replayed as assistant history so the provider returns just
+            the remainder of the same answer.
+            """
+            nonlocal continuation_count
+            interruption = LlmOutputLimitError(
+                "The answer stream stopped at the model output limit.",
+                reason="max_output_tokens",
+            )
+            try:
+                result = stream_final_answer_with_recovery(
+                    answer_messages,
+                    model=self._model,
+                    iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
+                        messages,
+                        tools=None,
+                        generation_phase=phase,
+                    ),
+                    publish_chunk=publish_answer_chunk,
+                    publish_event=self._publish,
+                    should_stop=self._should_stop,
+                    adopt_buffer=adopt_continuation_buffer,
+                    adopt_buffer_mode=set_continuation_buffer_mode,
+                    answer_phase="agent",
+                    continuation_phase="continuation_deep",
+                    published_answer_text=published_text,
+                    published_answer_error=interruption,
+                )
+            finally:
+                # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
+                # バッファや書き直しモードを誤って拾わないようにする。
+                # Clear shared state on every exit so later persistence cannot adopt a stale
+                # continuation buffer or rewrite mode.
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
+            trailing = continuation_state_filter.flush()
+            if trailing:
+                publish_completed_answer_step([trailing])
+            continuation_count = result.continuation_count
+            telemetry.continuation_count = result.continuation_count
+            for reason in result.reasons:
+                telemetry.record_continuation_reason(reason)
+            telemetry.continuation_stalled = result.stalled
+            telemetry.continuation_restart_trimmed = result.restart_trimmed
+            telemetry.first_pass_finish_reason = interruption.reason
+            return result.error
 
         def minimal_base_messages() -> list[dict[str, Any]]:
             """Return the smallest safe base prompt used by context-limit recovery."""
@@ -1431,10 +1474,10 @@ class ChatGenerationJob:
             first_system = next(
                 (
                     message
-                    for message in research_base_messages
+                    for message in turn_base_messages
                     if message.get("role") == "system"
                     and not str(message.get("content") or "").lstrip().startswith(
-                        RESEARCH_STATE_MARKER
+                        TURN_STATE_MARKER
                     )
                     and not is_reference_context_message(message)
                 ),
@@ -1454,242 +1497,77 @@ class ChatGenerationJob:
                 base.append({"role": "user", "content": latest_user_message})
             return base
 
-        def prepare_research_messages(
-            raw_messages: list[dict[str, Any]],
+        def prepare_turn_messages(
+            latest_tool_exchange: list[dict[str, Any]],
             tools: list[dict[str, Any]] | None,
             *,
-            phase: str,
+            force_answer: bool,
+            minimal: bool = False,
         ) -> list[dict[str, Any]] | None:
-            """Prefer the raw transcript while small, then rebuild from semantic state."""
-            budget = get_context_budget(self._model, phase, tools)
-            state_tokens = min(6_000, max(1_000, budget.available_input_tokens // 3))
-            candidate = research_state.inject(raw_messages, max_tokens=state_tokens)
-            if request_fits_context(candidate, self._model, phase, tools):
-                return candidate
+            """Build one decision request from TurnState plus only the newest tool result.
 
-            projected = build_research_loop_messages(
-                research_state.projected_messages(
-                    research_base_messages,
+            ``minimal`` はプロバイダ側の拒否からの再構築用。生のツール結果を落とし、
+            TurnState と元の依頼だけで同じ判断をやり直す。
+            ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
+            dropped and the same decision is retried from TurnState and the original request.
+            """
+            phase = "agent"
+            context_budget = get_context_budget(self._model, phase, tools)
+            state_tokens = min(
+                6_000,
+                max(1_000, context_budget.available_input_tokens // 3),
+            )
+
+            def with_web_policy(
+                projection: list[dict[str, Any]],
+            ) -> list[dict[str, Any]]:
+                # 検索根拠を持つターンだけ、引用と回答の方針を1つのsystem指示として渡す。
+                # A turn holding web evidence gets the citation and answering policy as one
+                # system instruction; an ordinary chat turn never carries it.
+                if not (web_search_results or self._prior_web_search_results):
+                    return projection
+                return insert_after_leading_system_messages(
+                    projection,
+                    build_web_search_evidence_policy_message(),
+                )
+
+            if not minimal:
+                try:
+                    projected = turn_state.projected_messages(
+                        turn_base_messages,
+                        max_tokens=state_tokens,
+                    )
+                except TurnStateProjectionError:
+                    return None
+                candidate = build_turn_loop_messages(
+                    [*with_web_policy(projected), *latest_tool_exchange],
+                    force_answer=force_answer,
+                )
+                if request_fits_context(candidate, self._model, phase, tools):
+                    telemetry.context_projection_count += 1
+                    return candidate
+
+            try:
+                minimal_projected = turn_state.projected_messages(
+                    minimal_base_messages(),
                     max_tokens=state_tokens,
                 )
+            except TurnStateProjectionError:
+                return None
+            minimal_candidate = build_turn_loop_messages(
+                [
+                    *with_web_policy(minimal_projected),
+                    *([] if minimal else latest_tool_exchange),
+                ],
+                force_answer=force_answer,
             )
-            if request_fits_context(projected, self._model, phase, tools):
+            if request_fits_context(minimal_candidate, self._model, phase, tools):
                 telemetry.context_projection_count += 1
-                return projected
-
-            compacted, compacted_count = compact_tool_messages(
-                projected,
-                max_tokens=budget.available_input_tokens,
-            )
-            if request_fits_context(compacted, self._model, phase, tools):
-                telemetry.context_compaction_count += compacted_count
-                return compacted
-
-            minimal = build_research_loop_messages(
-                research_state.projected_messages(
-                    minimal_base_messages(),
-                    max_tokens=max(1_000, min(state_tokens, 2_000)),
-                )
-            )
-            if request_fits_context(minimal, self._model, phase, tools):
-                telemetry.context_projection_count += 1
-                telemetry.context_recovery_count += 1
-                return minimal
-            return None
-
-        def prepare_answer_messages(
-            *,
-            research_summary: dict[str, Any] | None,
-            research_draft: str,
-        ) -> list[dict[str, Any]] | None:
-            """Build a fresh answer request without the accumulated tool transcript."""
-            phase = "final_answer_deep" if research_phase_used else "final_answer"
-            tools: list[dict[str, Any]] | None = None
-            budget = get_context_budget(self._model, phase, tools)
-            application_input_cap = get_final_answer_input_token_budget()
-            effective_input_cap = min(budget.available_input_tokens, application_input_cap)
-
-            def answer_request_fits(messages: list[dict[str, Any]]) -> bool:
-                return request_fits_context(messages, self._model, phase, tools) and (
-                    estimate_request_tokens(messages, tools) <= effective_input_cap
-                )
-
-            state_tokens = min(6_000, max(1_000, effective_input_cap // 3))
-            projected = research_state.projected_messages(
-                research_base_messages,
-                max_tokens=state_tokens,
-                include_notes=False,
-            )
-            candidate = (
-                build_final_answer_messages(
-                    projected,
-                    research_summary=research_summary,
-                    user_request=latest_user_message,
-                    coverage_requirements=coverage_requirements,
-                    research_draft=research_draft,
-                )
-                if research_phase_used or has_prior_reference_context
-                else current_messages
-            )
-            if answer_request_fits(candidate):
-                if research_phase_used or has_prior_reference_context:
-                    telemetry.context_projection_count += 1
-                return candidate
-
-            compacted, compacted_count = compact_tool_messages(
-                candidate,
-                max_tokens=effective_input_cap,
-            )
-            if answer_request_fits(compacted):
-                telemetry.context_compaction_count += compacted_count
-                return compacted
-
-            minimal_projected = research_state.projected_messages(
-                minimal_base_messages(),
-                max_tokens=max(1_000, min(state_tokens, 2_000)),
-                include_notes=False,
-            )
-            minimal_candidate = build_final_answer_messages(
-                minimal_projected,
-                research_summary=research_summary or research_state.answer_summary(),
-                user_request=latest_user_message,
-                coverage_requirements=coverage_requirements,
-                research_draft=research_draft,
-            )
-            if answer_request_fits(minimal_candidate):
                 telemetry.context_recovery_count += 1
                 return minimal_candidate
-
-            # Last resort: omit the state block while keeping the original request and the
-            # standing system prompt.  If this does not fit, the provider cannot answer even the
-            # user's own request and the outer error contract is the honest fallback.
-            plain_candidate = build_final_answer_messages(
-                minimal_base_messages(),
-                research_summary=None,
-                user_request=latest_user_message,
-                coverage_requirements=coverage_requirements,
-                research_draft="",
-            )
-            if answer_request_fits(plain_candidate):
-                telemetry.context_recovery_count += 1
-                return plain_candidate
             return None
 
-        def adopt_continuation_buffer(buffer: list[str]) -> None:
-            # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
-            # Hand the continuation pass's undelivered buffer to the job so a stop or a
-            # disconnect still routes it through the persistence path.
-            self._pending_stream_chunks = buffer
-            self._pending_stream_is_rewrite = False
-
-        def set_continuation_buffer_mode(is_rewrite: bool) -> None:
-            # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
-            # Tell the cancellation path when a continuation has switched to a full rewrite.
-            self._pending_stream_is_rewrite = is_rewrite
-
-        def stream_final_answer(
-            answer_messages: list[dict[str, Any]],
-            *,
-            deep_reasoning: bool = False,
-        ) -> BaseException | None:
-            nonlocal continuation_count
-            try:
-                result = stream_final_answer_with_recovery(
-                    answer_messages,
-                    model=self._model,
-                    iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
-                        messages,
-                        tools=None,
-                        generation_phase=phase,
-                    ),
-                    publish_chunk=publish_answer_chunk,
-                    publish_event=self._publish,
-                    should_stop=self._should_stop,
-                    adopt_buffer=adopt_continuation_buffer,
-                    adopt_buffer_mode=set_continuation_buffer_mode,
-                    answer_phase="final_answer_deep" if deep_reasoning else "final_answer",
-                    continuation_phase=(
-                        "continuation_deep" if deep_reasoning else "continuation"
-                    ),
-                )
-            finally:
-                # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
-                # バッファや書き直しモードを誤って拾わないようにする。
-                # Clear shared state on every exit so later persistence cannot adopt a stale
-                # continuation buffer or rewrite mode.
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
-            continuation_count = result.continuation_count
-            self._telemetry.continuation_count = result.continuation_count
-            for reason in result.reasons:
-                self._telemetry.record_continuation_reason(reason)
-            self._telemetry.continuation_stalled = result.stalled
-            self._telemetry.continuation_restart_trimmed = result.restart_trimmed
-            if result.error is not None:
-                self._telemetry.first_pass_finish_reason = getattr(
-                    result.error, "reason", result.error.__class__.__name__
-                )
-            else:
-                self._telemetry.first_pass_finish_reason = "stop"
-            return result.error
-
         try:
-            # ウェブ検索によるコンテキスト拡張の判定
-            # Determine context augmentation using web search
-            augmentation = maybe_augment_messages_with_web_search(
-                current_messages,
-                self._model,
-                publish_event=self._publish,
-                page_fetch_budget=page_fetch_budget,
-                evidence_context_budget=evidence_context_budget,
-            )
-            current_messages = augmentation.messages
-            if augmentation.result is not None:
-                web_search_trace_steps.extend(
-                    [
-                        decision_step(augmentation.result),
-                        search_step(augmentation.result),
-                        *page_reading_steps(augmentation.result),
-                        context_added_step(augmentation.result),
-                    ]
-                )
-                web_search_results.append(augmentation.result)
-                web_search_results_by_key[
-                    _normalized_search_key(
-                        augmentation.result.query,
-                        augmentation.result.freshness,
-                        augmentation.search_language,
-                    )
-                ] = augmentation.result
-                collect_web_search_image_selections(augmentation.result)
-                budget.start_tool_call()
-                telemetry.web_search_count += 1
-            elif augmentation.status in {"failed", "no_sources"}:
-                budget.start_tool_call()
-                web_search_trace_steps.append(search_failed_step())
-            telemetry.tool_calls = budget.tool_calls
-            # 依頼が満たすべき項目はプランナー呼び出しへ相乗りして取得済み。追加の
-            # レイテンシなしで回答契約へ載せ、長い調査ターンのカバレッジ欠落を防ぐ。
-            # The requirements the answer must satisfy ride along with the planner call, so
-            # the contract gets them at no extra latency and long turns keep their coverage.
-            coverage_requirements = augmentation.answer_requirements
-            telemetry.coverage_requirement_count = len(coverage_requirements)
-            research_state.coverage_requirements = tuple(coverage_requirements[:8])
-            if augmentation.result is not None:
-                research_state.add_web_result(augmentation.result)
-            elif augmentation.status in {"failed", "no_sources"}:
-                research_state.add_reference_payload(
-                    {"status": augmentation.status},
-                    source_type="web_search",
-                    query=latest_user_message,
-                )
-            suppress_next_generation_started = augmentation.status == "failed"
-            research_phase_used = bool(self._selected_reference_trace) or bool(
-                augmentation.result is not None
-                or augmentation.status in {"failed", "no_sources"}
-            )
-            telemetry.research_phase_used = research_phase_used
-
             if self._should_stop():
                 return
 
@@ -1715,58 +1593,37 @@ class ChatGenerationJob:
                 configured_tools.append(personal_knowledge_tool)
             if shared_prompt_tool is not None:
                 configured_tools.append(shared_prompt_tool)
+            configured_tools.append(get_evidence_tool_definition())
 
-            # 生成ループ（エージェントステップ）
-            # Generation loop (agent steps)
-            final_answer_required = False
-            answer_stream_started = False
-            research_summary: dict[str, Any] | None = None
-            # 完了ノートが取れなかったときに最終回答へ引き継ぐ、モデル自身の下書き。
-            # The model's own draft, carried to the answer pass when no note could be parsed.
-            research_draft = ""
-            # Keep the bounded answer projection for the optional generative-UI repair pass too;
-            # replaying the raw tool transcript there would recreate the context overflow after
-            # the main answer request had already recovered.
             answer_context_messages: list[dict[str, Any]] | None = None
-            # 各ステップが任意で書く「次の一手の根拠」。直近分だけを次のステップへ渡す。
-            # The optional rationale each step may write for its next move; only the most
-            # recent notes are carried into the following step.
-            step_notes: list[str] = []
-            while configured_tools:
+            telemetry.research_phase_used = bool(self._selected_reference_trace)
+            # プロバイダのトークナイザが自前の見積もりより厳しい場合の再構築フラグ。
+            # 同じ要求を送り直さず、TurnState だけの最小要求へ切り替える。
+            # Set when the provider's tokenizer is stricter than the local estimate: the same
+            # request is never resent, the retry falls back to a TurnState-only request.
+            minimal_context_required = False
+
+            # 単一判断ループ: TurnStateを見る → 必要ならツール → State更新 → 再判断。
+            # ツール履歴全体は再送せず、直近の呼び出しと結果だけを次の判断へ渡す。
+            while True:
                 if self._should_stop():
                     return
-                if budget.research_exhausted:
-                    # 予算切れでツールを引き上げる。ここで打ち切ると完了ノートが無いまま
-                    # 最終回答へ進むため、この後の締めステップで必ずノートを作る。
-                    # The budget withdraws the tools here. Stopping now would enter the answer
-                    # phase with no completion note, so a wrap-up step always writes one.
-                    telemetry.tools_withdrawn_by_budget = True
-                    final_answer_required = True
-                    break
 
-                # Keep a short semantic checkpoint close to the next decision.  While the raw
-                # transcript fits, retain it for provider/tool compatibility; once it grows,
-                # prepare_research_messages rebuilds the request from ResearchState instead of
-                # sending the accumulated assistant/tool history.
-                raw_research_messages = (
-                    build_research_loop_messages(
-                        current_messages,
-                        step_notes=step_notes,
-                    )
-                    if research_phase_used
-                    else current_messages
+                force_answer = budget.tool_calls_exhausted
+                active_tools = None if force_answer else configured_tools
+                if force_answer:
+                    telemetry.tools_withdrawn_by_budget = True
+                turn_messages = prepare_turn_messages(
+                    current_messages,
+                    active_tools,
+                    force_answer=force_answer,
+                    minimal=minimal_context_required,
                 )
-                research_messages = prepare_research_messages(
-                    raw_research_messages,
-                    configured_tools,
-                    phase="research",
-                )
-                if research_messages is None:
-                    telemetry.forced_wrapup_due_to_context = True
+                if turn_messages is None:
                     telemetry.context_recovery_count += 1
-                    research_phase_used = True
-                    final_answer_required = True
-                    break
+                    raise LlmInputLimitError(
+                        "The complete TurnState does not fit the model context budget."
+                    )
                 llm_step = budget.start_llm_turn()
                 telemetry.llm_turns = budget.llm_turns
 
@@ -1781,12 +1638,11 @@ class ChatGenerationJob:
                 step_chunks: list[str] = []
                 self._pending_stream_chunks = step_chunks
                 self._pending_stream_is_rewrite = False
-                research_input_limit = False
                 try:
                     for chunk in self._iter_llm_stream_with_retry(
-                        research_messages,
-                        tools=configured_tools,
-                        generation_phase="research",
+                        turn_messages,
+                        tools=active_tools,
+                        generation_phase="agent",
                         discard_partial_on_retry=True,
                         tolerate_output_limit=True,
                     ):
@@ -1794,65 +1650,62 @@ class ChatGenerationJob:
                             return
                         if not chunk:
                             continue
-
                         parsed_tool_calls = _parse_tool_calls_chunk(chunk)
                         if parsed_tool_calls is not None:
                             tool_calls_buffer.extend(parsed_tool_calls)
-                            continue
-                        step_chunks.append(chunk)
+                        else:
+                            step_chunks.append(chunk)
                 except LlmInputLimitError:
-                    # A provider may use a stricter tokenizer than our estimate.  Do not send the
-                    # same growing transcript again: transition directly to the bounded answer
-                    # projection and let the final phase recover from the evidence already held.
-                    research_input_limit = True
+                    # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
+                    # TurnState だけの最小要求で同じ判断を1度だけやり直す。
+                    # Resending the identical request only repeats the rejection: drop the raw
+                    # tool result and retry the same decision once from TurnState alone.
+                    if minimal_context_required or chunks:
+                        raise
+                    minimal_context_required = True
                     telemetry.input_limit_recoveries += 1
-                    telemetry.forced_wrapup_due_to_context = True
+                    telemetry.context_recovery_count += 1
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
+                    suppress_next_generation_started = True
+                    continue
 
                 if self._should_stop():
                     return
 
-                if research_input_limit:
-                    research_phase_used = True
-                    final_answer_required = True
-                    configured_tools = []
-                    break
+                turn_state.apply_model_update(parse_turn_state_update(step_chunks))
 
                 if not tool_calls_buffer:
+                    output_limited = self._last_stream_output_limited
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
-                    if research_phase_used:
-                        # ツールなしは調査完了の合図。本文は破棄し、次のツール無効ストリームを
-                        # ユーザー向けの最終回答として表示する。ノートを読めなかった場合だけ、
-                        # 統合作業を失わないように下書きとして引き継ぐ。
-                        # No tool call means the research loop is complete. Discard this draft and
-                        # use the next tool-free stream for the user-facing final answer. Only when
-                        # the note cannot be read is the draft carried on, so the synthesis the
-                        # model already performed is not thrown away.
-                        research_summary = parse_research_summary(step_chunks)
-                        research_state.merge_summary(research_summary)
-                        if research_summary is None:
-                            research_draft = extract_research_draft(step_chunks)
-                        final_answer_required = True
-                    else:
-                        # 検索を一度も使わない通常回答は、最初のストリームをそのまま表示する。
-                        # For ordinary answers with no research phase, publish the first stream.
-                        answer_stream_started = True
-                        publish_completed_answer_step(step_chunks)
+                    # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
+                    # Keep the model's own boundaries and drop only the internal envelope.
+                    visible_chunks = strip_turn_state_update_chunks(step_chunks)
+                    answer_context_messages = turn_messages
+                    telemetry.final_answer_input_tokens = estimate_request_tokens(
+                        turn_messages,
+                        active_tools,
+                    )
+                    telemetry.final_answer_input_chars = estimate_messages_chars(turn_messages)
+                    telemetry.first_pass_finish_reason = (
+                        "max_output_tokens" if output_limited else "stop"
+                    )
+                    if visible_chunks:
+                        publish_completed_answer_step(visible_chunks)
+                        if output_limited:
+                            # 出力上限で切れた回答は成功完了にしない。同じ回答の続きだけを
+                            # 限定回数で取り直す。
+                            # An answer cut off at the output cap is not a success: fetch
+                            # only the remainder, a bounded number of times.
+                            final_answer_incomplete = continue_interrupted_answer(
+                                turn_messages,
+                                "".join(visible_chunks),
+                            )
                     break
 
-                # このステップは検索・参照のための中間生成なので、本文として表示・保存しない。
-                # 任意のステップメモだけを取り出し、次のステップのsystemメッセージへ引き継ぐ。
-                # This step is intermediate tool-use output; do not display or persist it as the answer.
-                # Only the optional step note is kept, and it is carried into the next step's
-                # system message.
-                parsed_step_note = parse_step_note(step_chunks)
-                append_step_note(step_notes, parsed_step_note)
-                research_state.add_step_note(parsed_step_note)
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
-                research_phase_used = True
                 telemetry.research_phase_used = True
 
                 normalized_tool_calls = [
@@ -1864,7 +1717,7 @@ class ChatGenerationJob:
                     "content": None,
                     "tool_calls": normalized_tool_calls,
                 }
-                current_messages.append(assistant_tool_call_msg)
+                current_messages = [assistant_tool_call_msg]
 
                 for tc in normalized_tool_calls:
                     # ツールごとの実行と結果の追加
@@ -1884,8 +1737,9 @@ class ChatGenerationJob:
                             failure_tool_message="Memo and My Context search failed.",
                             current_messages=current_messages,
                             budget=budget,
+                            turn_state=turn_state,
+                            evidence_store=evidence_store,
                             trace_steps=web_search_trace_steps,
-                            research_state=research_state,
                         )
                         continue
 
@@ -1903,16 +1757,47 @@ class ChatGenerationJob:
                             failure_tool_message="Shared prompt search failed.",
                             current_messages=current_messages,
                             budget=budget,
+                            turn_state=turn_state,
+                            evidence_store=evidence_store,
                             trace_steps=web_search_trace_steps,
-                            research_state=research_state,
                         )
                         continue
 
+                    if func_name == GET_EVIDENCE_TOOL_NAME:
+                        if budget.tool_calls_exhausted:
+                            payload = {
+                                "status": "step_limit_reached",
+                                "message": "The search limit has been reached.",
+                            }
+                        else:
+                            budget.start_tool_call()
+                            telemetry.tool_calls = budget.tool_calls
+                            # 再取得もプロンプトへ載るため、検索結果と同じ根拠予算で抑える。
+                            # A re-read also enters the prompt, so it shares the evidence budget.
+                            payload = evidence_store.execute_get_evidence(
+                                tc.get("function", {}).get("arguments", "{}"),
+                                max_chars=evidence_context_budget.message_limit(
+                                    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
+                                ),
+                            )
+                            evidence_context_budget.consume(
+                                len(json.dumps(payload, ensure_ascii=False))
+                            )
+                            turn_state.record_search(
+                                tool_name=GET_EVIDENCE_TOOL_NAME,
+                                status=str(payload.get("status") or "unknown"),
+                            )
+                        current_messages.append(_tool_result_message(tc, payload))
+                        continue
+
                     if func_name != "web_search":
-                        research_state.add_reference_payload(
-                            {"status": "unsupported_tool"},
-                            source_type=str(func_name or "unknown_tool"),
-                        )
+                        if not budget.tool_calls_exhausted:
+                            budget.start_tool_call()
+                            telemetry.tool_calls = budget.tool_calls
+                            turn_state.record_search(
+                                tool_name=str(func_name or "unknown_tool"),
+                                status="unsupported_tool",
+                            )
                         current_messages.append(
                             _tool_result_message(
                                 tc,
@@ -1932,6 +1817,21 @@ class ChatGenerationJob:
                     if not isinstance(args, dict):
                         args = {}
 
+                    if budget.tool_calls_exhausted:
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                {
+                                    "status": "step_limit_reached",
+                                    "message": "The web search limit has been reached.",
+                                },
+                            )
+                        )
+                        continue
+
+                    search_step_index = budget.start_tool_call()
+                    telemetry.tool_calls = budget.tool_calls
+
                     # プロバイダ側のスキーマ検証には頼らない。モデルが返した引数はここで
                     # 正規化し、想定外の値は既定へ丸めてターンを進める。
                     # Never rely on provider-side schema validation: normalize the model's
@@ -1941,9 +1841,9 @@ class ChatGenerationJob:
                     freshness = normalize_web_search_freshness(args.get("freshness"))
                     search_language = normalize_search_language(args.get("search_language"))
                     if not query:
-                        research_state.add_reference_payload(
-                            {"status": "invalid_arguments"},
-                            source_type="web_search",
+                        turn_state.record_search(
+                            tool_name="web_search",
+                            status="invalid_arguments",
                         )
                         current_messages.append(
                             _tool_result_message(
@@ -1955,29 +1855,6 @@ class ChatGenerationJob:
                             )
                         )
                         continue
-
-                    if budget.tool_calls_exhausted:
-                        research_state.add_reference_payload(
-                            {"status": "step_limit_reached"},
-                            source_type="web_search",
-                            query=query,
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "step_limit_reached",
-                                    "message": (
-                                        "The web search step limit has been reached. "
-                                        "Answer using the information already available."
-                                    ),
-                                },
-                            )
-                        )
-                        continue
-
-                    search_step_index = budget.start_tool_call()
-                    telemetry.tool_calls = budget.tool_calls
                     query_text = query
                     freshness_text = freshness
                     search_key = _normalized_search_key(
@@ -1998,7 +1875,15 @@ class ChatGenerationJob:
                         },
                     )
                     if cached_result is not None:
-                        research_state.add_web_result(cached_result, query=query_text)
+                        cached_refs = evidence_store.add_web_result(cached_result)
+                        turn_state.record_search(
+                            tool_name="web_search",
+                            query=query_text,
+                            evidence_refs=cached_refs,
+                            searched_at=cached_result.searched_at,
+                            freshness=cached_result.freshness,
+                            status="cached",
+                        )
                         web_search_trace_steps.extend(
                             [
                                 search_step(cached_result, cached=True),
@@ -2022,11 +1907,6 @@ class ChatGenerationJob:
                             evidence_context_budget,
                             cached=True,
                             telemetry=telemetry,
-                        )
-                        research_state.add_reference_payload(
-                            tool_payload,
-                            source_type="web_search",
-                            query=query_text,
                         )
                         current_messages.append(
                             _tool_result_message(
@@ -2054,7 +1934,15 @@ class ChatGenerationJob:
                         )
                         if result.has_sources:
                             web_search_results.append(result)
-                        research_state.add_web_result(result, query=query_text)
+                        result_refs = evidence_store.add_web_result(result)
+                        turn_state.record_search(
+                            tool_name="web_search",
+                            query=query_text,
+                            evidence_refs=result_refs,
+                            searched_at=result.searched_at,
+                            freshness=result.freshness,
+                            status="ok" if result.has_sources else "no_sources",
+                        )
                         telemetry.web_search_count += 1
                         self._publish(
                             "web_search_completed",
@@ -2071,11 +1959,6 @@ class ChatGenerationJob:
                             result,
                             evidence_context_budget,
                             telemetry=telemetry,
-                        )
-                        research_state.add_reference_payload(
-                            tool_payload,
-                            source_type="web_search",
-                            query=query_text,
                         )
                         current_messages.append(
                             _tool_result_message(
@@ -2123,10 +2006,10 @@ class ChatGenerationJob:
                                 },
                             )
                         )
-                        research_state.add_reference_payload(
-                            {"status": "quota_exceeded", "message": message},
-                            source_type="web_search",
+                        turn_state.record_search(
+                            tool_name="web_search",
                             query=query_text,
+                            status="quota_exceeded",
                         )
                     except Exception:
                         logger.exception("Brave search via tool call failed.")
@@ -2156,223 +2039,11 @@ class ChatGenerationJob:
                                 },
                             )
                         )
-                        research_state.add_reference_payload(
-                            {"status": "failed"},
-                            source_type="web_search",
+                        turn_state.record_search(
+                            tool_name="web_search",
                             query=query_text,
+                            status="failed",
                         )
-
-            if not answer_stream_started:
-                # ツールループがステップ上限に達した場合も、取得済み情報で最終回答を生成する。
-                # If the tool loop reaches its step limit, still generate a final answer from
-                # the evidence collected so far.
-                final_answer_required = True
-
-            # ツール予算切れで打ち切ると、モデルは完了ノートを書く機会を得られない。
-            # ノート不在のまま最終回答へ進むと、長い調査の要件が丸ごと落ちるため、
-            # 締めのステップを1回だけ挟んでノートを必ず作る。
-            # Being cut off at the tool budget denies the model the chance to write its
-            # completion note. Entering the answer phase without one drops the requirements a
-            # long research turn gathered, so run exactly one wrap-up step to produce it.
-            if (
-                telemetry.tools_withdrawn_by_budget
-                and research_phase_used
-                and final_answer_required
-                and research_summary is None
-                and not self._should_stop()
-            ):
-                self._publish(
-                    "response_generation_started",
-                    {
-                        "step": budget.step + 1,
-                        "max_steps": budget.max_steps,
-                        "phase": "research_wrapup",
-                    },
-                )
-                wrapup_chunks: list[str] = []
-                # 締めステップの出力は完了ノートだけで、ユーザー向け本文ではない。
-                # 停止時に本文として保存されないよう、内部バッファとして印を付ける。
-                # The wrap-up emits only the completion note, never user-facing prose, so mark
-                # the buffer internal to keep a stop from persisting it as the answer.
-                self._pending_stream_chunks = wrapup_chunks
-                self._pending_stream_is_internal = True
-                self._pending_stream_is_rewrite = False
-                try:
-                    wrapup_base = research_state.projected_messages(
-                        research_base_messages,
-                        max_tokens=2_000,
-                    )
-                    wrapup_messages = build_research_wrapup_messages(wrapup_base)
-                    wrapup_budget = get_context_budget(
-                        self._model,
-                        "research_wrapup",
-                        None,
-                    )
-                    if not request_fits_context(
-                        wrapup_messages,
-                        self._model,
-                        "research_wrapup",
-                        None,
-                    ):
-                        telemetry.forced_wrapup_due_to_context = True
-                        telemetry.context_recovery_count += 1
-                        research_summary = research_state.answer_summary() or None
-                    else:
-                        wrapup_messages, _ = compact_tool_messages(
-                            wrapup_messages,
-                            max_tokens=wrapup_budget.available_input_tokens,
-                        )
-                        if not request_fits_context(
-                            wrapup_messages,
-                            self._model,
-                            "research_wrapup",
-                            None,
-                        ):
-                            telemetry.forced_wrapup_due_to_context = True
-                            telemetry.context_recovery_count += 1
-                            research_summary = research_state.answer_summary() or None
-                        else:
-                            try:
-                                for chunk in self._iter_llm_stream_with_retry(
-                                    wrapup_messages,
-                                    tools=None,
-                                    generation_phase="research_wrapup",
-                                    discard_partial_on_retry=True,
-                                    tolerate_output_limit=True,
-                                ):
-                                    if self._should_stop():
-                                        return
-                                    if chunk:
-                                        wrapup_chunks.append(chunk)
-                            except LlmInputLimitError:
-                                telemetry.input_limit_recoveries += 1
-                                telemetry.forced_wrapup_due_to_context = True
-                                research_summary = research_state.answer_summary() or None
-                finally:
-                    self._pending_stream_chunks = []
-                    self._pending_stream_is_internal = False
-                    self._pending_stream_is_rewrite = False
-                telemetry.research_wrapup_used = True
-                parsed_wrapup_summary = parse_research_summary(wrapup_chunks)
-                research_state.merge_summary(parsed_wrapup_summary)
-                if parsed_wrapup_summary is not None:
-                    research_summary = parsed_wrapup_summary
-                if research_summary is None and not research_draft:
-                    research_draft = extract_research_draft(wrapup_chunks)
-
-            if final_answer_required:
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
-                if not suppress_next_generation_started:
-                    self._publish(
-                        "response_generation_started",
-                        {
-                            "step": budget.step + 1,
-                            "max_steps": budget.max_steps,
-                            "phase": "final_answer",
-                        },
-                    )
-                suppress_next_generation_started = False
-                if research_summary is None:
-                    state_summary = research_state.answer_summary()
-                    research_summary = state_summary or None
-                telemetry.research_summary_present = research_summary is not None
-                telemetry.research_draft_forwarded = bool(research_draft)
-                final_answer_messages = prepare_answer_messages(
-                    research_summary=research_summary,
-                    research_draft=research_draft,
-                )
-                if final_answer_messages is None:
-                    telemetry.context_recovery_count += 1
-                    raise LlmInputLimitError(
-                        "The minimal answer request still exceeds the model context budget."
-                    )
-                telemetry.final_answer_input_tokens = estimate_request_tokens(
-                    final_answer_messages,
-                    None,
-                )
-                telemetry.final_answer_input_chars = estimate_messages_chars(
-                    final_answer_messages
-                )
-                answer_context_messages = final_answer_messages
-                answer_stream_started = True
-                try:
-                    final_answer_incomplete = stream_final_answer(
-                        final_answer_messages,
-                        deep_reasoning=research_phase_used,
-                    )
-                except LlmInputLimitError:
-                    # A provider can still reject a conservative estimate.  Rebuild a fresh
-                    # state-only request, then a request containing only the original prompt;
-                    # never replay the growing transcript.
-                    if chunks:
-                        raise
-                    logger.warning(
-                        "Rebuilding the final answer after an input-limit rejection.",
-                        extra={"model": self._model},
-                    )
-                    telemetry.input_limit_recoveries += 1
-                    fallback_candidates = [
-                        # Summary-only first: it is smaller than the state projection and still
-                        # carries the semantic facts already extracted by the research pass.
-                        build_final_answer_messages(
-                            minimal_base_messages(),
-                            research_summary=research_summary or research_state.answer_summary(),
-                            user_request=latest_user_message,
-                            coverage_requirements=coverage_requirements,
-                            research_draft=research_draft,
-                        ),
-                        build_final_answer_messages(
-                            research_state.projected_messages(
-                                minimal_base_messages(),
-                                max_tokens=1_500,
-                                include_notes=False,
-                            ),
-                            research_summary=research_summary or research_state.answer_summary(),
-                            user_request=latest_user_message,
-                            coverage_requirements=coverage_requirements,
-                            research_draft=research_draft,
-                        ),
-                        # If the provider's tokenizer rejects both the summary and state
-                        # projection, keep one final prompt with only the original request and
-                        # standing policy so a context mismatch does not become a blank answer.
-                        build_final_answer_messages(
-                            minimal_base_messages(),
-                            research_summary=None,
-                            user_request=latest_user_message,
-                            coverage_requirements=coverage_requirements,
-                            research_draft="",
-                        ),
-                    ]
-                    final_answer_incomplete = None
-                    recovered = False
-                    for fallback in fallback_candidates:
-                        if not request_fits_context(
-                            fallback,
-                            self._model,
-                            "final_answer_deep" if research_phase_used else "final_answer",
-                            None,
-                        ) or estimate_request_tokens(fallback, None) > get_final_answer_input_token_budget():
-                            continue
-                        final_answer_messages = fallback
-                        answer_context_messages = fallback
-                        telemetry.final_answer_input_tokens = estimate_request_tokens(
-                            fallback,
-                            None,
-                        )
-                        telemetry.final_answer_input_chars = estimate_messages_chars(fallback)
-                        try:
-                            final_answer_incomplete = stream_final_answer(
-                                fallback,
-                                deep_reasoning=research_phase_used,
-                            )
-                        except LlmInputLimitError:
-                            telemetry.input_limit_recoveries += 1
-                            continue
-                        recovered = True
-                        break
-                    if not recovered:
-                        raise
 
             if streaming_citation_buffer:
                 streaming_evidence = combine_web_search_results(
