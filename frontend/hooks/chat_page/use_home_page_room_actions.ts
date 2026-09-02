@@ -982,9 +982,10 @@ export function useHomePageRoomActions({
 
   const handleRenameRoom = useCallback(
     async (roomId: string, currentTitle: string) => {
-      const nextTitle = await showPromptModal(localize("新しいチャットルーム名", "New chat name"), {
+      const nextTitle = await showPromptModal(localize("チャットルーム名", "Chat name"), {
+        title: localize("チャット名を変更", "Rename chat"),
         defaultValue: currentTitle,
-        inputLabel: localize("チャットルーム名", "Chat name"),
+        confirmLabel: localize("変更", "Rename"),
       });
       const normalizedTitle = nextTitle?.trim();
       if (!normalizedTitle) return;
