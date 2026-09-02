@@ -11,6 +11,13 @@ const ALERT_MODAL_ROOT_ID = "cc-alert-modal-root";
 const CONFIRM_MODAL_ROOT_ID = "cc-confirm-modal-root";
 const PROMPT_MODAL_ROOT_ID = "cc-prompt-modal-root";
 const ALERT_MODAL_OPEN_CLASS = "cc-alert-modal-open";
+const PROMPT_INPUT_ID = "cc-prompt-modal-input";
+
+/** Wires `aria-labelledby` / `aria-describedby` so screen readers announce the dialog. */
+function applyDialogAria(root: HTMLElement, titleId: string, messageId: string) {
+  root.setAttribute("aria-labelledby", titleId);
+  root.setAttribute("aria-describedby", messageId);
+}
 
 function releaseBodyModalState() {
   if (document.querySelector(".cc-alert-modal.is-visible")) return;
@@ -77,8 +84,11 @@ class GlobalAlertModal {
       closeLabel: english ? "Close" : "閉じる",
       title: english ? "Notice" : "お知らせ",
       overlayAttribute: "data-cc-alert-close",
+      titleId: "cc-alert-modal-title",
+      messageId: "cc-alert-modal-message",
       actionsMarkup: buildButtonMarkup({ label: "OK" })
     });
+    applyDialogAria(root, "cc-alert-modal-title", "cc-alert-modal-message");
     document.body.appendChild(root);
     return root;
   }
@@ -238,6 +248,8 @@ class GlobalConfirmModal {
       closeLabel: english ? "Close" : "閉じる",
       title: english ? "Confirm" : "確認",
       overlayAttribute: 'data-cc-confirm-cancel="true"',
+      titleId: "cc-confirm-modal-title",
+      messageId: "cc-confirm-modal-message",
       actionsMarkup: [
         buildButtonMarkup({
           label: english ? "Cancel" : "キャンセル",
@@ -250,6 +262,7 @@ class GlobalConfirmModal {
         })
       ].join("")
     });
+    applyDialogAria(root, "cc-confirm-modal-title", "cc-confirm-modal-message");
     document.body.appendChild(root);
     return root;
   }
@@ -353,12 +366,17 @@ class GlobalConfirmModal {
   }
 }
 
+/**
+ * `message` is the field label (it maps 1:1 onto `window.prompt(message)`), so
+ * anything longer belongs in `description` to keep the label scannable.
+ */
 type PromptModalOptions = {
+  title?: string;
+  description?: string;
   defaultValue?: string;
   placeholder?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  inputLabel?: string;
 };
 
 type PromptQueueItem = {
@@ -369,6 +387,7 @@ type PromptQueueItem = {
 
 class GlobalPromptModal {
   private readonly rootEl: HTMLDivElement;
+  private readonly titleEl: HTMLElement;
   private readonly messageEl: HTMLParagraphElement;
   private readonly inputEl: HTMLInputElement;
   private readonly inputLabelEl: HTMLElement;
@@ -386,6 +405,7 @@ class GlobalPromptModal {
   constructor() {
     this.rootEl = this.createModalElement();
 
+    const titleEl = this.rootEl.querySelector(".cc-alert-modal__title");
     const messageEl = this.rootEl.querySelector(".cc-alert-modal__message");
     const inputEl = this.rootEl.querySelector('input[data-cc-prompt-input="true"]');
     const inputLabelEl = this.rootEl.querySelector(".cc-alert-modal__field-label");
@@ -394,6 +414,7 @@ class GlobalPromptModal {
     const okBtn = this.rootEl.querySelector('[data-cc-prompt-ok="true"]');
 
     if (
+      !(titleEl instanceof HTMLElement) ||
       !(messageEl instanceof HTMLParagraphElement) ||
       !(inputEl instanceof HTMLInputElement) ||
       !(inputLabelEl instanceof HTMLElement) ||
@@ -410,6 +431,7 @@ class GlobalPromptModal {
       throw new Error("Prompt modal button labels are missing.");
     }
 
+    this.titleEl = titleEl;
     this.messageEl = messageEl;
     this.inputEl = inputEl;
     this.inputLabelEl = inputLabelEl;
@@ -448,7 +470,9 @@ class GlobalPromptModal {
       closeLabel: english ? "Close" : "閉じる",
       title: english ? "Input" : "入力",
       overlayAttribute: 'data-cc-prompt-cancel="true"',
-      fieldMarkup: buildPromptFieldMarkup(english ? "Value" : "入力内容"),
+      titleId: "cc-prompt-modal-title",
+      messageId: "cc-prompt-modal-message",
+      bodyMarkup: buildPromptFieldMarkup(PROMPT_INPUT_ID),
       actionsMarkup: [
         buildButtonMarkup({
           label: english ? "Cancel" : "キャンセル",
@@ -461,6 +485,7 @@ class GlobalPromptModal {
         })
       ].join("")
     });
+    applyDialogAria(root, "cc-prompt-modal-title", "cc-prompt-modal-message");
     document.body.appendChild(root);
     return root;
   }
@@ -537,9 +562,11 @@ class GlobalPromptModal {
 
     this.previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    this.messageEl.textContent = nextItem.message;
-    this.inputLabelEl.textContent =
-      options.inputLabel ?? nextItem.message ?? (english ? "Value" : "入力内容");
+    // The message is the field label, so the header keeps a short title and the
+    // paragraph is reserved for optional extra context (hidden while empty).
+    this.titleEl.textContent = options.title || (english ? "Input" : "入力");
+    this.messageEl.textContent = options.description ?? "";
+    this.inputLabelEl.textContent = nextItem.message || (english ? "Value" : "入力内容");
     this.okLabelEl.textContent = options.confirmLabel ?? "OK";
     this.cancelLabelEl.textContent =
       options.cancelLabel ?? (english ? "Cancel" : "キャンセル");
@@ -565,9 +592,7 @@ class GlobalPromptModal {
 
     const activeItem = this.currentItem;
     this.currentItem = null;
-    if (activeItem) {
-      activeItem.resolve(rawValue === null ? null : rawValue);
-    }
+    activeItem?.resolve(rawValue);
 
     if (this.previouslyFocusedElement?.isConnected) {
       this.previouslyFocusedElement.focus();

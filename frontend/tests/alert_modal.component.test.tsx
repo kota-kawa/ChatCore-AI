@@ -82,30 +82,66 @@ describe("global alert & confirm modal", () => {
     vi.runOnlyPendingTimers();
   });
 
-  it("prefills the prompt input and resolves the entered value from OK", async () => {
-    const pending = showPromptModal("新しいチャットルーム名", { defaultValue: "旧タイトル" });
+  it("uses the message as the field label and resolves the entered value from OK", async () => {
+    const pending = showPromptModal("チャットルーム名", {
+      title: "チャット名を変更",
+      confirmLabel: "変更",
+      defaultValue: "旧タイトル"
+    });
 
     const dialog = root(PROMPT_ROOT);
     expect(dialog.classList.contains("is-visible")).toBe(true);
-    expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("新しいチャットルーム名");
+    expect(dialog.querySelector(".cc-alert-modal__title")?.textContent).toBe("チャット名を変更");
+    expect(dialog.querySelector(".cc-alert-modal__field-label")?.textContent).toBe("チャットルーム名");
+    // The label carries the prompt, so the description paragraph stays empty.
+    expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("");
 
     const input = dialog.querySelector<HTMLInputElement>('input[data-cc-prompt-input="true"]');
     if (!input) throw new Error("prompt input is missing");
     expect(input.value).toBe("旧タイトル");
+    // The field must be labelled for assistive tech, not just visually.
+    expect(dialog.querySelector(".cc-alert-modal__field-label")?.getAttribute("for")).toBe(input.id);
 
     input.value = "新タイトル";
-    button(PROMPT_ROOT, 'data-cc-prompt-ok="true"').click();
+    const ok = button(PROMPT_ROOT, 'data-cc-prompt-ok="true"');
+    expect(ok.querySelector(".cc-alert-modal__label")?.textContent).toBe("変更");
+    ok.click();
 
     await expect(pending).resolves.toBe("新タイトル");
     vi.runOnlyPendingTimers();
   });
 
   it("resolves null when the prompt dialog is cancelled", async () => {
-    const pending = showPromptModal("新しいチャットルーム名", { defaultValue: "旧タイトル" });
+    const pending = showPromptModal("チャットルーム名", { defaultValue: "旧タイトル" });
     button(PROMPT_ROOT, 'data-cc-prompt-cancel="true"').click();
 
     await expect(pending).resolves.toBeNull();
     vi.runOnlyPendingTimers();
+  });
+
+  it("restores the default title and clears the description between prompts", async () => {
+    const first = showPromptModal("チャットルーム名", { title: "チャット名を変更", description: "50文字まで" });
+    const dialog = root(PROMPT_ROOT);
+    expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("50文字まで");
+    button(PROMPT_ROOT, 'data-cc-prompt-cancel="true"').click();
+    await expect(first).resolves.toBeNull();
+    vi.runOnlyPendingTimers();
+
+    const second = showPromptModal("プロジェクト名");
+    expect(dialog.querySelector(".cc-alert-modal__title")?.textContent).toBe("入力");
+    expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("");
+    button(PROMPT_ROOT, 'data-cc-prompt-cancel="true"').click();
+    await expect(second).resolves.toBeNull();
+    vi.runOnlyPendingTimers();
+  });
+
+  it("labels each dialog for assistive tech", () => {
+    void showConfirmModal("削除しますか？");
+    const dialog = root(CONFIRM_ROOT);
+    const titleId = dialog.getAttribute("aria-labelledby");
+    const messageId = dialog.getAttribute("aria-describedby");
+    expect(dialog.querySelector(`#${titleId}`)).toHaveClass("cc-alert-modal__title");
+    expect(dialog.querySelector(`#${messageId}`)).toHaveClass("cc-alert-modal__message");
   });
 
   it("shows the next queued alert once the previous one finished closing", () => {

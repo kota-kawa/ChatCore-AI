@@ -47,7 +47,13 @@ type DialogMarkupOptions = {
   title: string;
   overlayAttribute: string;
   actionsMarkup: string;
-  fieldMarkup?: string;
+  /**
+   * Rendered full-width under the header rather than inside the icon-indented
+   * text column, so inputs line up with the dialog padding and the action row.
+   */
+  bodyMarkup?: string;
+  titleId: string;
+  messageId: string;
 };
 
 function buildDialogMarkup({
@@ -56,33 +62,45 @@ function buildDialogMarkup({
   title,
   overlayAttribute,
   actionsMarkup,
-  fieldMarkup = ""
+  bodyMarkup = "",
+  titleId,
+  messageId
 }: DialogMarkupOptions) {
+  const body = bodyMarkup ? `<div class="cc-alert-modal__body">${bodyMarkup}</div>` : "";
   return `
     <div class="cc-alert-modal__overlay" ${overlayAttribute}></div>
     <div class="cc-alert-modal__dialog" role="document" tabindex="-1">
       <button type="button" class="cc-alert-modal__close" aria-label="${closeLabel}">
-        <span aria-hidden="true">×</span>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+          <path d="m7.5 7.5 9 9m0-9-9 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
       </button>
       <div class="cc-alert-modal__head">
         <span class="cc-alert-modal__icon" aria-hidden="true">${ICONS[variant]}</span>
         <div class="cc-alert-modal__text">
-          <h2 class="cc-alert-modal__title">${title}</h2>
-          <p class="cc-alert-modal__message"></p>
-          ${fieldMarkup}
+          <h2 class="cc-alert-modal__title" id="${titleId}">${title}</h2>
+          <p class="cc-alert-modal__message" id="${messageId}"></p>
         </div>
       </div>
+      ${body}
       <div class="cc-alert-modal__actions">${actionsMarkup}</div>
     </div>
   `;
 }
 
-function buildPromptFieldMarkup(inputLabel: string) {
+function buildPromptFieldMarkup(inputId: string) {
   return `
-    <label class="cc-alert-modal__field">
-      <span class="cc-alert-modal__field-label">${inputLabel}</span>
-      <input type="text" class="cc-alert-modal__input" data-cc-prompt-input="true" autocomplete="off" />
-    </label>
+    <div class="cc-alert-modal__field">
+      <label class="cc-alert-modal__field-label" for="${inputId}"></label>
+      <input
+        type="text"
+        id="${inputId}"
+        class="cc-alert-modal__input"
+        data-cc-prompt-input="true"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
   `;
 }
 
