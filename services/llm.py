@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover - depends on SDK version
     AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
     RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
+from services.llm_model_limits import get_model_max_output_tokens
 from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
 
 
@@ -84,10 +85,11 @@ OPENAI_DEFAULT_MODEL = GPT_5_6_LUNA_MODEL
 CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
 # 対応モデル（Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna）はいずれも思考トークンがこの上限に
 # 含まれる。4096では生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
-# ため、既定値を引き上げる（全プロバイダの出力上限 65536 以内）。
+# ため、既定値を引き上げる。モデル固有の出力上限は送信前に適用する。
 # All supported models (Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna) count reasoning tokens
 # against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
-# code) mid-stream, so raise the default (well within every provider's 65536 output cap).
+# code) mid-stream, so raise the default. Provider-specific hard caps are applied below before
+# a request is sent.
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
 # 出力枠はフェーズごとに分ける。単一の上限を全フェーズで共有すると、調査ステップに
 # 過剰な枠を与えたまま、本文を書く最終回答フェーズが足りなくなる。
@@ -100,6 +102,8 @@ LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
 # The decision loop and its continuations write the body itself, so they need room to finish
 # a long research answer in a single pass.
 LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
+# Provider-specific maximums, such as Qwen's smaller Groq output cap, are applied by
+# max_output_tokens_for_model without reducing the shared answer budget for other models.
 
 # 通常チャットは調査専用フェーズを持たず、検索判断も回答も `agent` の1フェーズで行う。
 # Normal chat has no research-only generation phase: searching and answering share `agent`.
@@ -120,6 +124,17 @@ def max_output_tokens_for_phase(generation_phase: str = "default") -> int:
     if generation_phase in ANSWER_GENERATION_PHASES:
         return LLM_ANSWER_MAX_TOKENS
     return LLM_MAX_TOKENS
+
+
+def max_output_tokens_for_model(
+    model_name: str | None,
+    generation_phase: str = "default",
+) -> int:
+    """Return the configured phase budget bounded by the provider's model cap."""
+
+    configured = max_output_tokens_for_phase(generation_phase)
+    provider_limit = get_model_max_output_tokens(model_name)
+    return min(configured, provider_limit) if provider_limit is not None else configured
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
 # Retry transient connection failures by default; configurable via env var.
@@ -312,6 +327,12 @@ class LlmToolSchemaError(LlmProviderError):
     pass
 
 
+class LlmRequestValidationError(LlmProviderError):
+    """The provider rejected request parameters before generation started."""
+
+    pass
+
+
 # 認証エラーによるLLMプロバイダエラーに関する例外クラス。
 # Exception class for LLM provider authentication errors.
 class LlmAuthenticationError(LlmProviderError):
@@ -366,6 +387,19 @@ _INPUT_LIMIT_ERROR_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# A provider can mention its context window while explaining that a request
+# parameter such as max_completion_tokens is invalid. That is not an input
+# overflow and must not be shown as an evidence-size error to the user.
+_OUTPUT_TOKEN_PARAMETER_PATTERN = re.compile(
+    r"max[_ ]?(?:completion[_ ]?)?tokens",
+    re.IGNORECASE,
+)
+_OUTPUT_TOKEN_VALIDATION_PATTERN = re.compile(
+    r"less than or equal|must be|maximum (?:value|number)|"
+    r"exceed(?:s|ed)?|too many|invalid",
+    re.IGNORECASE,
+)
+
 
 # プロバイダがモデルのツール呼び出しを拒否したことを、文面とエラーコードから判別する。
 # 文言はプロバイダごとに異なるため、既知の表現をまとめて照合する。
@@ -385,6 +419,14 @@ def _error_text_candidates(exc: BaseException) -> list[str]:
         if value is not None:
             candidates.append(str(value))
     return [candidate for candidate in candidates if candidate]
+
+
+def _looks_like_output_token_parameter_error(exc: BaseException) -> bool:
+    return any(
+        _OUTPUT_TOKEN_PARAMETER_PATTERN.search(candidate)
+        and _OUTPUT_TOKEN_VALIDATION_PATTERN.search(candidate)
+        for candidate in _error_text_candidates(exc)
+    )
 
 
 def _looks_like_tool_call_rejection(exc: BaseException) -> bool:
@@ -433,6 +475,14 @@ def _map_provider_exception(
     if _looks_like_tool_call_rejection(exc):
         return LlmToolSchemaError(
             f"{provider_name} API rejected the model's tool call against the tool schema."
+        )
+    status_code = getattr(exc, "status_code", None)
+    if (
+        _looks_like_output_token_parameter_error(exc)
+        and status_code in (None, 400, 413)
+    ):
+        return LlmRequestValidationError(
+            f"{provider_name} API rejected the request parameters."
         )
     if isinstance(exc, (APIStatusError, AnthropicAPIStatusError)):
         status_code = getattr(exc, "status_code", None)
@@ -563,8 +613,8 @@ def _chat_completion_token_limit_kwargs(
     *,
     generation_phase: str = "default",
 ) -> dict[str, int]:
-    max_tokens = max_output_tokens_for_phase(generation_phase)
-    if is_openai_model(model_name):
+    max_tokens = max_output_tokens_for_model(model_name, generation_phase)
+    if is_openai_model(model_name) or is_groq_model(model_name):
         return {"max_completion_tokens": max_tokens}
     return {"max_tokens": max_tokens}
 
@@ -845,10 +895,10 @@ def _get_openai_compatible_response_stream(
                 # Record that output was cut off at the token cap (a main cause of broken
                 # generative UI JSON).
                 logger.warning(
-                    "LLM stream truncated by token limit (model=%s, phase=%s, max_tokens=%s).",
+                    "LLM stream truncated by token limit (model=%s, phase=%s, max_output_tokens=%s).",
                     model_name,
                     generation_phase,
-                    max_output_tokens_for_phase(generation_phase),
+                    max_output_tokens_for_model(model_name, generation_phase),
                 )
                 output_limit_reason = "length"
             delta = choice.delta
@@ -1170,7 +1220,7 @@ def get_claude_response_stream(
         request_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": claude_messages,
-            "max_tokens": max_output_tokens_for_phase(generation_phase),
+            "max_tokens": max_output_tokens_for_model(model_name, generation_phase),
             "stream": True,
         }
         if system_prompt is not None:
@@ -1209,10 +1259,10 @@ def get_claude_response_stream(
                 if stop_reason == "max_tokens":
                     logger.warning(
                         "Claude stream truncated by token limit "
-                        "(model=%s, phase=%s, max_tokens=%s).",
+                        "(model=%s, phase=%s, max_output_tokens=%s).",
                         model_name,
                         generation_phase,
-                        max_output_tokens_for_phase(generation_phase),
+                        max_output_tokens_for_model(model_name, generation_phase),
                     )
                     output_limit_reason = str(stop_reason)
                 elif stop_reason == "model_context_window_exceeded":
@@ -1369,7 +1419,7 @@ def get_openai_response_stream(
         with openai_client.responses.stream(
             model=model_name,
             input=sanitized_messages,
-            max_output_tokens=max_output_tokens_for_phase(generation_phase),
+            max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
             **_openai_responses_reasoning_kwargs(model_name),
         ) as stream:
             for event in stream:
@@ -1386,7 +1436,7 @@ def get_openai_response_stream(
                         "(model=%s, phase=%s, max_output_tokens=%s).",
                         model_name,
                         generation_phase,
-                        max_output_tokens_for_phase(generation_phase),
+                        max_output_tokens_for_model(model_name, generation_phase),
                     )
                     response = getattr(event, "response", None)
                     incomplete_details = getattr(response, "incomplete_details", None)

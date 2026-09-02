@@ -21,13 +21,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from services.chat_context import estimate_token_count
+from services.llm_model_limits import (
+    MODEL_MAX_OUTPUT_TOKENS,
+    QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
+    QWEN_3_6_27B_MODEL,
+    get_model_max_output_tokens,
+)
 
 # The supported model names are repeated here intentionally.  Importing these
 # constants from services.llm would create an import cycle once the LLM layer
 # uses this module for its preflight check.
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
-QWEN_3_6_27B_MODEL = "qwen/qwen3.6-27b"
 GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
 
@@ -131,18 +136,26 @@ def get_model_context_window(model_name: str | None) -> int:
     return MODEL_CONTEXT_WINDOWS.get(normalized_name, UNKNOWN_MODEL_CONTEXT_WINDOW_TOKENS)
 
 
-def get_output_reserved_tokens(generation_phase: str = "default") -> int:
+def get_output_reserved_tokens(
+    generation_phase: str = "default",
+    model_name: str | None = None,
+) -> int:
     """Return the output tokens reserved for a generation phase.
 
     This follows the same environment variables as ``services.llm``.  Unknown
     phases intentionally use the general output cap rather than the larger
-    answer cap.
+    answer cap. A known provider cap is applied so the preflight reflects the
+    maximum the provider will accept.
     """
 
     phase = str(generation_phase or "default").strip().lower()
-    if phase in ANSWER_GENERATION_PHASES:
-        return _positive_int_env("LLM_MAX_TOKENS_ANSWER", DEFAULT_ANSWER_OUTPUT_TOKENS)
-    return _positive_int_env("LLM_MAX_TOKENS", DEFAULT_OUTPUT_TOKENS)
+    configured = (
+        _positive_int_env("LLM_MAX_TOKENS_ANSWER", DEFAULT_ANSWER_OUTPUT_TOKENS)
+        if phase in ANSWER_GENERATION_PHASES
+        else _positive_int_env("LLM_MAX_TOKENS", DEFAULT_OUTPUT_TOKENS)
+    )
+    provider_limit = get_model_max_output_tokens(model_name)
+    return min(configured, provider_limit) if provider_limit is not None else configured
 
 
 def get_safety_margin_tokens() -> int:
@@ -293,11 +306,15 @@ def get_context_budget(
 
     normalized_name = str(model_name or "").strip()
     phase = str(generation_phase or "default").strip().lower() or "default"
+    default_output = get_output_reserved_tokens(phase, normalized_name)
     resolved_output = (
-        get_output_reserved_tokens(phase)
+        default_output
         if output_reserved_tokens is None
-        else _positive_int(output_reserved_tokens, get_output_reserved_tokens(phase))
+        else _positive_int(output_reserved_tokens, default_output)
     )
+    provider_limit = get_model_max_output_tokens(normalized_name)
+    if provider_limit is not None:
+        resolved_output = min(resolved_output, provider_limit)
     resolved_safety = (
         get_safety_margin_tokens()
         if safety_margin_tokens is None
@@ -382,6 +399,8 @@ __all__ = [
     "GPT_OSS_20B_MODEL",
     "LlmContextBudget",
     "MODEL_CONTEXT_WINDOWS",
+    "MODEL_MAX_OUTPUT_TOKENS",
+    "QWEN_3_6_27B_MAX_OUTPUT_TOKENS",
     "QWEN_3_6_27B_MODEL",
     "calculate_available_input_tokens",
     "estimate_messages_and_tools_tokens",
@@ -392,6 +411,7 @@ __all__ = [
     "get_context_budget",
     "get_llm_context_budget",
     "get_model_context_window",
+    "get_model_max_output_tokens",
     "get_output_reserved_tokens",
     "get_safety_margin_tokens",
     "get_tool_definition_overhead_tokens",
