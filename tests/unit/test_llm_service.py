@@ -238,6 +238,31 @@ class LlmServiceTestCase(unittest.TestCase):
 
         self.assertIsInstance(mapped, llm.LlmInputLimitError)
 
+    def test_provider_error_mapping_does_not_misclassify_output_token_limit(self):
+        class _FakeStatusError(Exception):
+            status_code = 400
+            body = {
+                "error": {
+                    "message": (
+                        "`max_completion_tokens` must be less than or equal to `16384`, "
+                        "the maximum value for `max_completion_tokens` is less than the "
+                        "`context_window` for this model"
+                    ),
+                    "type": "invalid_request_error",
+                    "param": "max_completion_tokens",
+                }
+            }
+
+        with patch.object(llm, "APIStatusError", _FakeStatusError):
+            mapped = llm._map_provider_exception(
+                _FakeStatusError("bad request"),
+                provider_name="Groq",
+                fallback_message="Groq streaming API call failed.",
+            )
+
+        self.assertIsInstance(mapped, llm.LlmRequestValidationError)
+        self.assertNotIsInstance(mapped, llm.LlmInputLimitError)
+
     # 日本語: ストリーム途中で届くツール呼び出し拒否を、専用の例外へ分類することを検証します。
     # English: Verify a mid-stream tool-call rejection maps to its own exception type.
     def test_provider_error_mapping_detects_tool_call_rejection(self):
@@ -430,6 +455,11 @@ class LlmServiceTestCase(unittest.TestCase):
             llm.QWEN_3_6_27B_MODEL,
         )
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
+        self.assertEqual(
+            request_kwargs["max_completion_tokens"],
+            llm.max_output_tokens_for_model(llm.QWEN_3_6_27B_MODEL),
+        )
+        self.assertNotIn("max_tokens", request_kwargs)
         self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
         self.assertEqual(request_kwargs["extra_body"]["reasoning_format"], "hidden")
         self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
@@ -839,11 +869,17 @@ class LlmServiceTestCase(unittest.TestCase):
                 llm.get_groq_response_stream(
                     [{"role": "user", "content": "hello"}],
                     llm.QWEN_3_6_27B_MODEL,
+                    generation_phase="agent",
                 )
             )
 
         self.assertEqual(response, ["qwen-stream"])
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
+        self.assertEqual(
+            request_kwargs["max_completion_tokens"],
+            llm.max_output_tokens_for_model(llm.QWEN_3_6_27B_MODEL),
+        )
+        self.assertNotIn("max_tokens", request_kwargs)
         self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
         self.assertEqual(request_kwargs["extra_body"]["reasoning_format"], "hidden")
         self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
