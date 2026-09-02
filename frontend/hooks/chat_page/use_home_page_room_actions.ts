@@ -15,7 +15,7 @@ import {
 } from "../../lib/chat_page/home_page_controller_utils";
 import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
 import type { AttachedFile, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
-import { showConfirmModal } from "../../scripts/core/alert_modal";
+import { showConfirmModal, showPromptModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import {
   extractApiErrorMessage,
@@ -982,7 +982,10 @@ export function useHomePageRoomActions({
 
   const handleRenameRoom = useCallback(
     async (roomId: string, currentTitle: string) => {
-      const nextTitle = window.prompt(localize("新しいチャットルーム名", "New chat name"), currentTitle);
+      const nextTitle = await showPromptModal(localize("新しいチャットルーム名", "New chat name"), {
+        defaultValue: currentTitle,
+        inputLabel: localize("チャットルーム名", "Chat name"),
+      });
       const normalizedTitle = nextTitle?.trim();
       if (!normalizedTitle) return;
 

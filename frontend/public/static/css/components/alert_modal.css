@@ -1,5 +1,6 @@
 /* alert_modal.css
-   Global alert / confirm dialog (window.alert replacement and showConfirmModal).
+   Global alert / confirm / prompt dialog (window.alert replacement,
+   showConfirmModal and showPromptModal).
    Themable through the --cc-modal-* tokens declared on .cc-alert-modal so that
    page themes only need to redefine variables instead of restyling elements.
 */
@@ -187,6 +188,51 @@
 
 .cc-alert-modal__message:empty {
   display: none;
+}
+
+/* ---------- prompt field ---------- */
+
+.cc-alert-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.cc-alert-modal__field-label {
+  color: var(--cc-modal-muted-color);
+  font-size: var(--text-sm, 0.8125rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.cc-alert-modal__input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--cc-modal-ghost-border);
+  border-radius: var(--radius-m, 12px);
+  background: var(--cc-modal-ghost-bg);
+  color: var(--cc-modal-title-color);
+  font-family: inherit;
+  font-size: var(--text-base, 0.9375rem);
+  line-height: 1.5;
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease);
+}
+
+.cc-alert-modal__input::placeholder {
+  color: var(--cc-modal-muted-color);
+  opacity: 0.7;
+}
+
+.cc-alert-modal__input:focus-visible {
+  outline: none;
+  border-color: var(--cc-modal-accent);
+  background: var(--cc-modal-ghost-bg-hover);
+  box-shadow: var(--shadow-focus-strong, 0 0 0 4px rgba(25, 195, 125, 0.18));
 }
 
 /* ---------- actions ---------- */

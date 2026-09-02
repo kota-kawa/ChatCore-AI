@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { showAlertModal, showConfirmModal } from "../scripts/core/alert_modal";
+import { showAlertModal, showConfirmModal, showPromptModal } from "../scripts/core/alert_modal";
 
 const CONFIRM_ROOT = "#cc-confirm-modal-root";
 const ALERT_ROOT = "#cc-alert-modal-root";
+const PROMPT_ROOT = "#cc-prompt-modal-root";
 
 function root(selector: string) {
   const el = document.querySelector<HTMLDivElement>(selector);
@@ -27,6 +28,9 @@ describe("global alert & confirm modal", () => {
     for (let i = 0; i < 5; i += 1) {
       document
         .querySelector<HTMLButtonElement>(`${CONFIRM_ROOT} button[data-cc-confirm-cancel="true"]`)
+        ?.click();
+      document
+        .querySelector<HTMLButtonElement>(`${PROMPT_ROOT} button[data-cc-prompt-cancel="true"]`)
         ?.click();
       document.querySelector<HTMLButtonElement>(`${ALERT_ROOT} .cc-alert-modal__button`)?.click();
       vi.runOnlyPendingTimers();
@@ -75,6 +79,32 @@ describe("global alert & confirm modal", () => {
     label?.click();
 
     await expect(pending).resolves.toBe(false);
+    vi.runOnlyPendingTimers();
+  });
+
+  it("prefills the prompt input and resolves the entered value from OK", async () => {
+    const pending = showPromptModal("新しいチャットルーム名", { defaultValue: "旧タイトル" });
+
+    const dialog = root(PROMPT_ROOT);
+    expect(dialog.classList.contains("is-visible")).toBe(true);
+    expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("新しいチャットルーム名");
+
+    const input = dialog.querySelector<HTMLInputElement>('input[data-cc-prompt-input="true"]');
+    if (!input) throw new Error("prompt input is missing");
+    expect(input.value).toBe("旧タイトル");
+
+    input.value = "新タイトル";
+    button(PROMPT_ROOT, 'data-cc-prompt-ok="true"').click();
+
+    await expect(pending).resolves.toBe("新タイトル");
+    vi.runOnlyPendingTimers();
+  });
+
+  it("resolves null when the prompt dialog is cancelled", async () => {
+    const pending = showPromptModal("新しいチャットルーム名", { defaultValue: "旧タイトル" });
+    button(PROMPT_ROOT, 'data-cc-prompt-cancel="true"').click();
+
+    await expect(pending).resolves.toBeNull();
     vi.runOnlyPendingTimers();
   });
 
