@@ -189,6 +189,138 @@ class McpContentToolTestCase(unittest.TestCase):
                 )
             )
 
+    def test_chunked_image_upload_tools_stage_and_publish_the_image(self):
+        server = self._server()
+        upload_id = "a" * 32
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=95,
+            title="Chunked image prompt",
+            content_format="prompt",
+            media_type="image",
+            image_attached=True,
+            public_url="https://example.test/shared/prompt/95",
+        )
+        actor = SimpleNamespace(user_id=7, client_id="client-a")
+        with (
+            patch("services.mcp_server.require_actor", return_value=actor),
+            patch("services.mcp_server._consume_image_upload_operation_limit", new=AsyncMock()),
+            patch("services.mcp_server.create_mcp_image_upload", return_value=upload_id) as create_upload,
+            patch(
+                "services.mcp_server.append_mcp_image_upload_chunk",
+                return_value=(1, 8),
+            ) as append_chunk,
+            patch("services.mcp_server.consume_mcp_image_upload", return_value="aGVsbG8=") as consume_upload,
+            patch("services.mcp_server.delete_consumed_mcp_image_upload") as delete_upload,
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(return_value=publish_result),
+            ) as publish,
+            patch("services.mcp_server.audit_tool_success"),
+        ):
+            started = asyncio.run(
+                server.call_tool(
+                    "start_image_prompt_upload",
+                    {"total_base64_characters": 8},
+                )
+            )
+            appended = asyncio.run(
+                server.call_tool(
+                    "append_image_prompt_upload",
+                    {
+                        "upload_id": upload_id,
+                        "chunk_index": 0,
+                        "chunk_base64": "aGVsbG8=",
+                    },
+                )
+            )
+            published = asyncio.run(
+                server.call_tool(
+                    "publish_chunked_image_prompt",
+                    {
+                        "title": "Chunked image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "upload_id": upload_id,
+                        "image_filename": "reference.png",
+                        "image_mime_type": "image/png",
+                    },
+                )
+            )
+
+        self.assertEqual(started[1]["upload_id"], upload_id)
+        self.assertEqual(appended[1]["next_chunk_index"], 1)
+        self.assertTrue(published[1]["image_attached"])
+        create_upload.assert_called_once_with(7, "client-a", 8)
+        append_chunk.assert_called_once_with(upload_id, 7, "client-a", 0, "aGVsbG8=")
+        consume_upload.assert_called_once_with(7, "client-a", upload_id)
+        delete_upload.assert_called_once_with(upload_id, 7, "client-a")
+        self.assertEqual(publish.call_args.kwargs["image_base64"], "aGVsbG8=")
+        self.assertEqual(publish.call_args.kwargs["image_filename"], "reference.png")
+
+    def test_chunked_image_upload_is_deleted_when_publication_fails(self):
+        server = self._server()
+        upload_id = "b" * 32
+        actor = SimpleNamespace(user_id=7, client_id="client-a")
+        with (
+            patch("services.mcp_server.require_actor", return_value=actor),
+            patch("services.mcp_server.consume_mcp_image_upload", return_value="aGVsbG8="),
+            patch("services.mcp_server.delete_consumed_mcp_image_upload") as delete_upload,
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(side_effect=ValueError("invalid image")),
+            ),
+            patch("services.mcp_server.audit_tool_success"),
+        ):
+            with self.assertRaisesRegex(ToolError, "invalid image"):
+                asyncio.run(
+                    server.call_tool(
+                        "publish_chunked_image_prompt",
+                        {
+                            "title": "Chunked image prompt",
+                            "content": "Generate a watercolor landscape.",
+                            "upload_id": upload_id,
+                        },
+                    )
+                )
+
+        delete_upload.assert_called_once_with(upload_id, 7, "client-a")
+
+    def test_chunked_image_cleanup_failure_does_not_hide_publication_success(self):
+        server = self._server()
+        upload_id = "c" * 32
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=96,
+            title="Chunked image prompt",
+            content_format="prompt",
+            media_type="image",
+            image_attached=True,
+            public_url="https://example.test/shared/prompt/96",
+        )
+        actor = SimpleNamespace(user_id=7, client_id="client-a")
+        with (
+            patch("services.mcp_server.require_actor", return_value=actor),
+            patch("services.mcp_server.consume_mcp_image_upload", return_value="aGVsbG8="),
+            patch(
+                "services.mcp_server.delete_consumed_mcp_image_upload",
+                side_effect=OSError("disk unavailable"),
+            ),
+            patch("services.mcp_server._publish", new=AsyncMock(return_value=publish_result)),
+            patch("services.mcp_server.audit_tool_success"),
+            patch("services.mcp_server.logger.warning") as warning,
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "publish_chunked_image_prompt",
+                    {
+                        "title": "Chunked image prompt",
+                        "content": "Generate a watercolor landscape.",
+                        "upload_id": upload_id,
+                    },
+                )
+            )
+
+        self.assertTrue(result[1]["image_attached"])
+        warning.assert_called_once()
+
     def test_publish_prompt_rejects_image_without_reference_image(self):
         server = self._server()
         with self.assertRaisesRegex(ToolError, "image_fileまたはimage_base64"):

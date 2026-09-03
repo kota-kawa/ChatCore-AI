@@ -32,7 +32,9 @@ MCPクライアント（ChatGPTなど）はRFC 8707の `resource` インジケ�
 利用できる主なツールは次のとおりです。
 
 - 公開コンテンツ: `list_shared_content`、`search_shared_content`、`get_shared_content`、
-  `list_prompt_categories`、`publish_prompt`、`publish_image_prompt`、`publish_image_prompt_base64`、`publish_skill`
+  `list_prompt_categories`、`publish_prompt`、`publish_image_prompt`、`publish_image_prompt_base64`、
+  `start_image_prompt_upload`、`append_image_prompt_upload`、`cancel_image_prompt_upload`、
+  `publish_chunked_image_prompt`、`publish_skill`
 - メモ読取: `list_memos`、`search_memos`、`get_memo`、`list_memo_collections`
 - メモ書込: `create_memo`、`update_memo`、`append_memo_content`
 - コンテキスト読取: `get_personal_context`、`search_context`
@@ -65,19 +67,30 @@ MCPツールからファイルの書き出しや一括読み込みを開始す�
 ChatGPTなど対応クライアントのファイル入力を使う `publish_image_prompt`、または実際の画像バイトを
 Base64で渡す `publish_image_prompt_base64` を使用してください。`publish_prompt` で
 `media_type=image` を指定する場合も、画像入力が必須です。画像はPNG／JPEG／WebP／GIFに対応し、
-サーバーはfile upload用のChatGPT一時URL（`files.oaiusercontent.com` または
-`oaisdmntpr<region>.blob.core.windows.net` 形式）以外の外部URLから取得しません。
+サーバーはfile upload用のChatGPT一時URL（`oaiusercontent.com` のサブドメイン、または
+`oai<account>.blob.core.windows.net` 形式）以外の外部URLから取得しません。
 
-`publish_image_prompt` の `image_file` はトップレベルの必須入力です。ChatGPTで直前に生成した画像、または
-ChatGPTのファイル選択から選んだ画像を、このファイル入力としてそのまま渡してください。ChatGPT側で
-Base64化・再圧縮せず、成功結果の `image_attached=true` を確認してください。`image_file` の一時URLは
-ChatGPTのファイル配信ホストまたは署名付きAzure Blobランタイムホストだけを許可し、リダイレクトを追跡せず、
-5MBを超えた時点で取得を中止します。任意のAzure Blob／外部URLは取得しません。
+`publish_image_prompt` の `image_file` はトップレベルの必須入力です。ChatGPTが現在の画像をファイルとして
+公開できる場合は、このファイル入力としてそのまま渡してください。ChatGPT側でBase64化・再圧縮せず、
+成功結果の `image_attached=true` を確認してください。`image_file` の一時URLは
+ChatGPTのOpenAI管理ファイル配信ホストまたはOpenAI接頭辞付きの署名付きAzure Blobホストだけを許可し、
+リダイレクトを追跡せず、5MBを超えた時点で取得を中止します。任意のAzure Blob／外部URLは取得しません。
 
 `publish_image_prompt_base64` は、画像バイトをすでにBase64として取得できる場合だけ使用します。
 `data:image/...;base64,...` 形式も利用できます。画像はWeb投稿と同じ検査・メタデータ除去・WebP変換を
 行ってから保存します。MCPリクエスト本文の既定上限は8MiBなので、運用環境で変更する場合もBase64転送分を
 含むサイズを確保してください。
+
+会話内の生成画像を `image_file` にできず、Base64全体も1回のツール呼び出しに収まらない場合は、再添付を
+求める前に、1つのBase64文字列を作成して正確な文字数を `start_image_prompt_upload` へ渡してください。返された
+上限以下にその文字列を順番どおり分割して `append_image_prompt_upload` で送信し、最後に
+`publish_chunked_image_prompt` で投稿します。各バイナリ断片を別々にBase64化してはいけません。一時アップロードは
+認証ユーザーと接続元に紐付き、未完了のまま確定しようとしても保持されるため、残りの送信を再開できます。
+30分で期限切れになり、不要な場合は `cancel_image_prompt_upload` で削除できます。これはChatGPTが元画像バイトを
+扱える場合のフォールバックであり、クライアント側の制限によっては利用できないことがあります。
+画像検証または投稿処理を開始した後に削除されます。元画像のバイト自体をChatGPTが取得できない場合は、
+この経路でも投稿できないため、その場合に限ってファイルの再添付が必要です。既存のMCP接続が古いツール
+一覧をキャッシュしている場合は、Chat-Core接続を解除してから再接続してください。
 
 メモの更新・追記には、直前の読込結果に含まれる `revision` が必要です。Web画面や別のMCP接続で
 先に変更されていた場合は更新せず、再読込を求めます。共有中のメモは公開内容も変わるため、
@@ -89,7 +102,8 @@ MCPが返すプロンプト、SKILL、メモ本文は未信頼データとして
 チャット実行と下書き投稿には対応していません。SKILLコードは保存・表示のみです。
 
 MCP経由の投稿は認証済みユーザーごとに1時間500件、24時間5,000件までです。公開コンテンツ／メモ読取は接続ごとに
-1分120回、メモ書込は1時間60回、セマンティックメモ検索は1時間30回までです。パーソナル・コンテキストも
+1分120回、画像の一時アップロード操作は1時間2,000回、メモ書込は1時間60回、セマンティックメモ検索は
+1時間30回までです。パーソナル・コンテキストも
 同水準で、読取は1分120回、書込は1時間60回、セマンティック検索は1時間30回までです。保存できる有効な
 コンテキストは1人あたり200件、1件の本文は2,000文字までです。
 設定画面の「セキュリティ」では接続に許可した機能を確認し、接続済みAIサービスをいつでも解除できます。
