@@ -65,12 +65,14 @@ MCPツールからファイルの書き出しや一括読み込みを開始す�
 ChatGPTなど対応クライアントのファイル入力を使う `publish_image_prompt`、または実際の画像バイトを
 Base64で渡す `publish_image_prompt_base64` を使用してください。`publish_prompt` で
 `media_type=image` を指定する場合も、画像入力が必須です。画像はPNG／JPEG／WebP／GIFに対応し、
-サーバーはfile upload用のChatGPT一時URL以外の外部URLから取得しません。
+サーバーはfile upload用のChatGPT一時URL（`files.oaiusercontent.com` または
+`oaisdmntpr<region>.blob.core.windows.net` 形式）以外の外部URLから取得しません。
 
 `publish_image_prompt` の `image_file` はトップレベルの必須入力です。ChatGPTで直前に生成した画像、または
 ChatGPTのファイル選択から選んだ画像を、このファイル入力としてそのまま渡してください。ChatGPT側で
 Base64化・再圧縮せず、成功結果の `image_attached=true` を確認してください。`image_file` の一時URLは
-ChatGPTのファイル配信ホストだけを許可し、リダイレクトを追跡せず、5MBを超えた時点で取得を中止します。
+ChatGPTのファイル配信ホストまたは署名付きAzure Blobランタイムホストだけを許可し、リダイレクトを追跡せず、
+5MBを超えた時点で取得を中止します。任意のAzure Blob／外部URLは取得しません。
 
 `publish_image_prompt_base64` は、画像バイトをすでにBase64として取得できる場合だけ使用します。
 `data:image/...;base64,...` 形式も利用できます。画像はWeb投稿と同じ検査・メタデータ除去・WebP変換を

@@ -392,6 +392,7 @@ def _create_mcp() -> FastMCP:
             "Publish an image-generation prompt and attach the image generated or selected in the current "
             "ChatGPT conversation. Use this tool for ChatGPT image posts. The required image_file must be "
             "provided as the client's file parameter; do not convert it to Base64 or replace it with a remote URL. "
+            "ChatGPT's files.oaiusercontent.com and signed Azure Blob runtime file URLs are supported. "
             "The result reports image_attached=true only after the file has been saved."
         ),
         annotations=annotations,

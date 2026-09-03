@@ -26,8 +26,10 @@ browser multipart endpoint and the MCP prompt-publishing tools use this service.
 MCP accepts Base64 input through `publish_image_prompt_base64` (including an
 image data URL) and required ChatGPT file inputs through `publish_image_prompt`,
 declared through `_meta["openai/fileParams"]`. ChatGPT file inputs are fetched
-only from its HTTPS `files.oaiusercontent.com` download host, without redirects,
-and with the same 5 MB streaming limit. Arbitrary remote URLs are not fetched.
+only from its HTTPS `files.oaiusercontent.com` host or its signed Azure Blob
+runtime host (`oaisdmntpr<region>.blob.core.windows.net`), without redirects,
+and with the same 5 MB streaming limit. Arbitrary remote URLs and arbitrary
+Azure Blob hosts are not fetched.
 
 ## Future object-storage migration
 
