@@ -52,10 +52,25 @@ ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT = (
 )
 ERROR_MCP_PROMPT_IMAGE_REQUIRED = "image_fileまたはimage_base64で画像を指定してください。"
 ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_URL_INVALID = (
-    "画像ファイルのダウンロードURLが許可されていません。ChatGPTから画像を選び直してください。"
+    "画像ファイルのダウンロードURLが許可されていません。元画像のバイトを取得できる場合は、"
+    "チャンク式アップロードで再試行してください。"
 )
 ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED = (
-    "画像ファイルを取得できませんでした。ChatGPTから画像を選び直して再試行してください。"
+    "画像ファイルを取得できませんでした。元画像のバイトを取得できる場合は、"
+    "チャンク式アップロードで再試行してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED = (
+    "画像の一時アップロードが見つからないか、有効期限が切れています。最初から再試行してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_UPLOAD_CHUNK_INVALID = "画像のBase64チャンクが不正です。"
+ERROR_MCP_PROMPT_IMAGE_UPLOAD_CHUNK_ORDER = (
+    "画像チャンクの順序が不正です。返されたnext_chunk_indexから再開してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_UPLOAD_INCOMPLETE = (
+    "画像の一時アップロードが未完了です。残りのチャンクを送信してから再試行してください。"
+)
+ERROR_MCP_PROMPT_IMAGE_UPLOAD_LIMIT = (
+    "同時に保持できる画像の一時アップロード数を超えています。不要なアップロードをキャンセルしてから再試行してください。"
 )
 ERROR_GUEST_PROMPT_TEXT_ONLY = (
     "ゲスト投稿ではテキストプロンプトのみ投稿できます。"

@@ -7,6 +7,7 @@ import httpx
 from pydantic import ValidationError
 
 from services import mcp_server
+from services.mcp_image_upload_session import MCP_IMAGE_UPLOAD_CHUNK_MAX_LENGTH
 from services.request_models import (
     MAX_SHARED_PROMPT_CONTENT_LENGTH,
     MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
@@ -34,6 +35,10 @@ class McpServerTestCase(unittest.TestCase):
                 "publish_prompt",
                 "publish_image_prompt",
                 "publish_image_prompt_base64",
+                "start_image_prompt_upload",
+                "append_image_prompt_upload",
+                "cancel_image_prompt_upload",
+                "publish_chunked_image_prompt",
                 "publish_skill",
                 "list_shared_content",
                 "search_shared_content",
@@ -57,6 +62,9 @@ class McpServerTestCase(unittest.TestCase):
         )
         self.assertFalse(by_name["publish_prompt"].annotations.readOnlyHint)
         self.assertFalse(by_name["publish_prompt"].annotations.idempotentHint)
+        self.assertFalse(by_name["start_image_prompt_upload"].annotations.openWorldHint)
+        self.assertTrue(by_name["append_image_prompt_upload"].annotations.idempotentHint)
+        self.assertTrue(by_name["cancel_image_prompt_upload"].annotations.destructiveHint)
         self.assertTrue(by_name["search_shared_content"].annotations.readOnlyHint)
         self.assertTrue(by_name["get_memo"].annotations.readOnlyHint)
         self.assertTrue(by_name["update_memo"].annotations.destructiveHint)
@@ -65,6 +73,10 @@ class McpServerTestCase(unittest.TestCase):
             "publish_prompt": "prompts:write",
             "publish_image_prompt": "prompts:write",
             "publish_image_prompt_base64": "prompts:write",
+            "start_image_prompt_upload": "prompts:write",
+            "append_image_prompt_upload": "prompts:write",
+            "cancel_image_prompt_upload": "prompts:write",
+            "publish_chunked_image_prompt": "prompts:write",
             "publish_skill": "prompts:write",
             "list_shared_content": "prompts:read",
             "search_shared_content": "prompts:read",
@@ -102,6 +114,7 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(save_input["properties"]["importance"]["default"], 50)
 
         self.assertIn("Write in Markdown", server.instructions)
+        self.assertIn("start_image_prompt_upload", server.instructions)
         markdown_inputs = {
             "create_memo": "content",
             "update_memo": "content",
@@ -128,6 +141,7 @@ class McpServerTestCase(unittest.TestCase):
             "publish_prompt",
             "publish_image_prompt",
             "publish_image_prompt_base64",
+            "publish_chunked_image_prompt",
             "publish_skill",
         }
         for tool in tools:
@@ -216,6 +230,45 @@ class McpServerTestCase(unittest.TestCase):
         self.assertIn("image_base64", base64_definition["inputSchema"]["required"])
         self.assertNotIn("image_file", base64_definition["inputSchema"]["properties"])
         self.assertIsNone(base64_definition["_meta"])
+
+        start_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "start_image_prompt_upload"
+        )
+        start_input = start_definition["inputSchema"]
+        self.assertEqual(start_input["required"], ["total_base64_characters"])
+        self.assertEqual(
+            start_input["properties"]["total_base64_characters"]["maximum"],
+            MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
+        )
+        self.assertIn("chunk_max_characters", start_definition["outputSchema"]["properties"])
+
+        append_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "append_image_prompt_upload"
+        )
+        append_properties = append_definition["inputSchema"]["properties"]
+        self.assertEqual(
+            append_properties["chunk_base64"]["maxLength"],
+            MCP_IMAGE_UPLOAD_CHUNK_MAX_LENGTH,
+        )
+        self.assertEqual(
+            set(append_definition["inputSchema"]["required"]),
+            {"upload_id", "chunk_index", "chunk_base64"},
+        )
+
+        chunked_publish_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "publish_chunked_image_prompt"
+        )
+        self.assertEqual(
+            set(chunked_publish_definition["inputSchema"]["required"]),
+            {"title", "content", "upload_id"},
+        )
+        self.assertNotIn("image_base64", chunked_publish_definition["inputSchema"]["properties"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:

@@ -142,6 +142,57 @@ class McpPromptPublishingTestCase(unittest.TestCase):
         self.assertEqual(attachment["height"], "16")
         self.assertEqual(get.call_args.args[0], str(image_file.download_url))
 
+    def test_downloads_and_saves_a_chatgpt_generated_image_file_parameter(self):
+        source = self._image_bytes()
+        response = self._DownloadResponse(
+            source,
+            headers={"Content-Length": str(len(source)), "Content-Type": "image/png"},
+        )
+        image_file = OpenAIFileInput(
+            download_url=(
+                "https://oaidalleapiprodscus.blob.core.windows.net/"
+                "private/generated-image.png?st=signed"
+            ),
+            file_id="file-generated-123",
+            mime_type="image/png",
+            file_name="generated-image.png",
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.dict(os.environ, {PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV: temp_dir}),
+            patch("services.mcp_prompt_publishing.requests.get", return_value=response) as get,
+        ):
+            attachment = save_mcp_prompt_file(image_file, 42)
+
+        self.assertTrue(attachment["url"].startswith("/prompt_share/api/media/"))
+        self.assertEqual(attachment["width"], "24")
+        self.assertEqual(attachment["height"], "16")
+        self.assertEqual(get.call_args.args[0], str(image_file.download_url))
+
+    def test_downloads_from_an_openai_file_host_sibling(self):
+        source = self._image_bytes()
+        response = self._DownloadResponse(
+            source,
+            headers={"Content-Length": str(len(source)), "Content-Type": "image/png"},
+        )
+        image_file = OpenAIFileInput(
+            download_url="https://images.oaiusercontent.com/file-123?token=signed",
+            file_id="file-123",
+            mime_type="image/png",
+            file_name="reference.png",
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.dict(os.environ, {PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV: temp_dir}),
+            patch("services.mcp_prompt_publishing.requests.get", return_value=response) as get,
+        ):
+            attachment = save_mcp_prompt_file(image_file, 42)
+
+        self.assertTrue(attachment["url"].startswith("/prompt_share/api/media/"))
+        self.assertEqual(get.call_args.args[0], str(image_file.download_url))
+
     def test_rejects_a_non_openai_file_download_url_without_fetching_it(self):
         image_file = OpenAIFileInput(
             download_url="https://example.com/reference.png",
@@ -159,6 +210,20 @@ class McpPromptPublishingTestCase(unittest.TestCase):
     def test_rejects_an_arbitrary_azure_blob_download_url_without_fetching_it(self):
         image_file = OpenAIFileInput(
             download_url="https://example.blob.core.windows.net/reference.png?sig=signed",
+            file_id="file-123",
+            mime_type="image/png",
+            file_name="reference.png",
+        )
+
+        with patch("services.mcp_prompt_publishing.requests.get") as get:
+            with self.assertRaisesRegex(ValueError, "ダウンロードURL"):
+                save_mcp_prompt_file(image_file, 42)
+
+        get.assert_not_called()
+
+    def test_rejects_a_lookalike_openai_file_host_without_fetching_it(self):
+        image_file = OpenAIFileInput(
+            download_url="https://images.oaiusercontent.com.example.test/reference.png",
             file_id="file-123",
             mime_type="image/png",
             file_name="reference.png",

@@ -26,10 +26,25 @@ browser multipart endpoint and the MCP prompt-publishing tools use this service.
 MCP accepts Base64 input through `publish_image_prompt_base64` (including an
 image data URL) and required ChatGPT file inputs through `publish_image_prompt`,
 declared through `_meta["openai/fileParams"]`. ChatGPT file inputs are fetched
-only from its HTTPS `files.oaiusercontent.com` host or its signed Azure Blob
-runtime host (`oaisdmntpr<region>.blob.core.windows.net`), without redirects,
-and with the same 5 MB streaming limit. Arbitrary remote URLs and arbitrary
-Azure Blob hosts are not fetched.
+only from its HTTPS `oaiusercontent.com` hosts or OpenAI-prefixed signed Azure
+Blob storage accounts (`oai<account>.blob.core.windows.net`), without redirects,
+and with the same 5 MB streaming limit. The Azure account pattern supports both
+uploaded files and generated-image storage across regions. Arbitrary remote URLs
+and Azure Blob accounts without the OpenAI prefix are not fetched.
+
+When ChatGPT has the original image bytes but cannot expose a conversation image
+as a file parameter or fit its Base64 value in one tool call, the MCP server also
+supports a bounded chunk-staging flow. `start_image_prompt_upload` creates an
+actor-bound session below the shared attachment volume,
+`append_image_prompt_upload` stores ordered fragments of one Base64 string, and
+`publish_chunked_image_prompt` validates and publishes the assembled value through
+the same upload service. The expected Base64 character count declared at session
+creation prevents an incomplete upload from being consumed; consumption is
+atomic so concurrent append or duplicate publication cannot reuse the session.
+Sessions expire after 30 minutes, accept at most 5 MB of decoded image data, can
+be explicitly cancelled, and are deleted after the publication attempt. The staging
+implementation must move behind the object-storage boundary during a multi-host
+storage migration.
 
 ## Future object-storage migration
 

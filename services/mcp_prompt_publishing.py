@@ -40,12 +40,14 @@ _MIME_TO_EXTENSION = {
     "image/webp": ".webp",
     "image/gif": ".gif",
 }
-_OPENAI_FILE_DOWNLOAD_HOST = "files.oaiusercontent.com"
-# ChatGPT may issue file parameters backed by its Azure Blob runtime instead of
-# files.oaiusercontent.com. Keep this host pattern narrow: arbitrary Azure
-# Blob URLs must not become a general-purpose remote fetch primitive.
-_OPENAI_RUNTIME_AZURE_BLOB_HOST_PATTERN = re.compile(
-    r"^oaisdmntpr[a-z0-9-]+\.blob\.core\.windows\.net$"
+_OPENAI_FILE_DOWNLOAD_DOMAIN = "oaiusercontent.com"
+# ChatGPT file parameters may use different OpenAI-managed Azure storage
+# accounts for uploaded files and generated images. Azure storage account names
+# contain 3-24 lowercase alphanumeric characters; require the OpenAI ``oai``
+# prefix so arbitrary Azure Blob URLs do not become a general-purpose fetch
+# primitive while allowing ChatGPT to rotate its storage account or region.
+_OPENAI_AZURE_BLOB_HOST_PATTERN = re.compile(
+    r"^oai[a-z0-9]{0,21}\.blob\.core\.windows\.net$"
 )
 _OPENAI_FILE_DOWNLOAD_TIMEOUT_SECONDS = (5, 20)
 _DOWNLOAD_CHUNK_BYTES = 64 * 1024
@@ -156,9 +158,9 @@ def _validate_openai_file_download_url(download_url: str) -> str:
         or parsed.password is not None
         or port not in {None, 443}
         or not (
-            hostname == _OPENAI_FILE_DOWNLOAD_HOST
-            or hostname.endswith(f".{_OPENAI_FILE_DOWNLOAD_HOST}")
-            or _OPENAI_RUNTIME_AZURE_BLOB_HOST_PATTERN.fullmatch(hostname)
+            hostname == _OPENAI_FILE_DOWNLOAD_DOMAIN
+            or hostname.endswith(f".{_OPENAI_FILE_DOWNLOAD_DOMAIN}")
+            or _OPENAI_AZURE_BLOB_HOST_PATTERN.fullmatch(hostname)
         )
     ):
         raise ValueError(ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_URL_INVALID)
