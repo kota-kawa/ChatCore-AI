@@ -28,7 +28,9 @@ uploads before they are saved.
 The `image_file` input of `publish_image_prompt` is required at the top level. When an image was just generated in
 ChatGPT, pass that image through the ChatGPT file input without model-side Base64 conversion or re-compression. A
 successful result reports `image_attached: true` after the image has actually been saved. File-upload download URLs
-are accepted only from ChatGPT's HTTPS file host, redirects are not followed, and streaming stops at the 5 MB limit.
+are accepted from ChatGPT's HTTPS file host or its signed Azure Blob runtime host
+(`oaisdmntpr<region>.blob.core.windows.net`). Arbitrary Azure Blob and remote URLs are not fetched;
+redirects are not followed, and streaming stops at the 5 MB limit.
 
 Use `publish_image_prompt_base64` only when the image bytes are already available as Base64 (including a
 `data:image/...;base64,...` value).
