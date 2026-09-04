@@ -150,8 +150,6 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         {!payload.error && memo && (
           <article
             className="shared-memo-shell cc-fade-in"
-            // CSS変数でメモのテーマカラーを適用する / Apply memo theme color via CSS custom property
-            style={memo.background_color ? { "--shared-memo-color": memo.background_color } as React.CSSProperties : undefined}
           >
             <header className="shared-memo-header">
               <h1>{title}</h1>
