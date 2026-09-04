@@ -1,5 +1,6 @@
 import type { UserSkill } from "../../../lib/chat_page/skill_api";
 import { useTranslation } from "../../../contexts/locale_context";
+import MarkdownContent from "../../MarkdownContent";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
 
@@ -60,7 +61,10 @@ export function SkillDetailModal({ skill, onClose }: SkillDetailModalProps) {
                   <h3 className="task-detail-section-title" id="skill-detail-instructions-title">{t("home.skillInstructions")}</h3>
                   <span>{t("home.skillCharacterCount", { count: skill.instructions.length.toLocaleString() })}</span>
                 </div>
-                <pre className="task-detail-section-body skill-detail-modal__instructions">{skill.instructions}</pre>
+                <MarkdownContent
+                  text={skill.instructions}
+                  className="task-detail-section-body skill-detail-modal__instructions skill-detail-modal__markdown"
+                />
               </section>
             </div>
           </div>
