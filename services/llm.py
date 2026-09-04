@@ -620,17 +620,31 @@ def _chat_completion_token_limit_kwargs(
     return {"max_tokens": max_tokens}
 
 
-def _openai_reasoning_kwargs(model_name: str) -> dict[str, Any]:
-    """Preserve GPT-5 mini's low-latency baseline for GPT-5.6 Luna requests."""
+def _openai_reasoning_kwargs(
+    model_name: str,
+    *,
+    generation_phase: str = "default",
+) -> dict[str, Any]:
+    """Return phase-aware reasoning options for GPT-5.6 Luna Chat Completions."""
     if model_name == GPT_5_6_LUNA_MODEL:
-        return {"reasoning_effort": "none"}
+        return {
+            "reasoning_effort": "high" if generation_phase == "final_answer" else "medium"
+        }
     return {}
 
 
-def _openai_responses_reasoning_kwargs(model_name: str) -> dict[str, Any]:
-    """Use the Responses API equivalent of the GPT-5.6 Luna reasoning baseline."""
+def _openai_responses_reasoning_kwargs(
+    model_name: str,
+    *,
+    generation_phase: str = "default",
+) -> dict[str, Any]:
+    """Return phase-aware reasoning options for GPT-5.6 Luna Responses API."""
     if model_name == GPT_5_6_LUNA_MODEL:
-        return {"reasoning": {"effort": "none"}}
+        return {
+            "reasoning": {
+                "effort": "high" if generation_phase == "final_answer" else "medium"
+            }
+        }
     return {}
 
 
@@ -650,8 +664,11 @@ def _groq_reasoning_kwargs(
         }
     elif model_name in GPT_OSS_MODELS:
         if is_answer_phase:
+            # Keep every GPT-OSS answer phase at medium or higher; only the final answer uses high.
+            # GPT-OSS の回答フェーズはすべて medium 以上にし、最終回答だけ high にします。
+            reasoning_effort = "high" if generation_phase == "final_answer" else "medium"
             reasoning_options = {
-                "reasoning_effort": "medium" if is_deep_phase else "low",
+                "reasoning_effort": reasoning_effort,
                 "reasoning_format": "hidden",
             }
         else:
@@ -879,7 +896,10 @@ def _get_openai_compatible_response_stream(
                 model_name,
                 generation_phase=generation_phase,
             ),
-            **_openai_reasoning_kwargs(model_name),
+            **_openai_reasoning_kwargs(
+                model_name,
+                generation_phase=generation_phase,
+            ),
             **(reasoning_kwargs or {}),
             "stream": True,
             **_chat_completion_tool_kwargs(tools),
@@ -1319,6 +1339,7 @@ def get_openai_response(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> str:
     # OpenAI Responses APIでテキスト応答を取得します。
     # Fetch text output via OpenAI Responses API.
@@ -1339,8 +1360,14 @@ def get_openai_response(
             request_kwargs: dict[str, Any] = {
                 "model": model_name,
                 "messages": sanitized_messages,
-                **_chat_completion_token_limit_kwargs(model_name),
-                **_openai_reasoning_kwargs(model_name),
+                **_chat_completion_token_limit_kwargs(
+                    model_name,
+                    generation_phase=generation_phase,
+                ),
+                **_openai_reasoning_kwargs(
+                    model_name,
+                    generation_phase=generation_phase,
+                ),
                 **_chat_completion_tool_kwargs(tools),
             }
             response = openai_client.chat.completions.create(
@@ -1365,8 +1392,11 @@ def get_openai_response(
         response = openai_client.responses.create(
             model=model_name,
             input=sanitized_messages,
-            max_output_tokens=LLM_MAX_TOKENS,
-            **_openai_responses_reasoning_kwargs(model_name),
+            max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
+            **_openai_responses_reasoning_kwargs(
+                model_name,
+                generation_phase=generation_phase,
+            ),
         )
         return response.output_text
     except Exception as exc:
@@ -1375,6 +1405,7 @@ def get_openai_response(
             provider_name="OpenAI",
             fallback_message="OpenAI Responses API call failed.",
             model_name=model_name,
+            generation_phase=generation_phase,
         )
 
 
@@ -1421,7 +1452,10 @@ def get_openai_response_stream(
             model=model_name,
             input=sanitized_messages,
             max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
-            **_openai_responses_reasoning_kwargs(model_name),
+            **_openai_responses_reasoning_kwargs(
+                model_name,
+                generation_phase=generation_phase,
+            ),
         ) as stream:
             for event in stream:
                 if event.type == "response.output_text.delta":
@@ -1520,6 +1554,7 @@ def get_llm_response(
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
+    generation_phase: str = "default",
 ) -> str | None:
     # 指定モデル名でプロバイダを振り分け、不正モデルは例外として扱います。
     # Route provider by model name and raise on invalid models.
@@ -1529,7 +1564,12 @@ def get_llm_response(
     if is_groq_model(model_name):
         return get_groq_response(conversation_messages, model_name, tools=tools)
     if is_openai_model(model_name):
-        return get_openai_response(conversation_messages, model_name, tools=tools)
+        return get_openai_response(
+            conversation_messages,
+            model_name,
+            tools=tools,
+            generation_phase=generation_phase,
+        )
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
