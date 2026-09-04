@@ -6,7 +6,7 @@ import os
 from urllib.parse import urlparse
 
 from services.runtime_config import is_production_env
-from services.web_constants import FRONTEND_URL
+from services.web_urls import frontend_base_url
 
 DEFAULT_MCP_DCR_RATE_LIMIT_PER_HOUR = 20
 DEFAULT_MCP_AUTHORIZE_RATE_LIMIT_PER_10_MINUTES = 30
@@ -24,7 +24,7 @@ def is_mcp_enabled() -> bool:
 
 
 def get_mcp_public_base_url() -> str:
-    value = (os.getenv("MCP_PUBLIC_BASE_URL") or FRONTEND_URL).strip().rstrip("/")
+    value = (os.getenv("MCP_PUBLIC_BASE_URL") or frontend_base_url()).strip().rstrip("/")
     parsed = urlparse(value)
     if (
         parsed.scheme not in {"http", "https"}

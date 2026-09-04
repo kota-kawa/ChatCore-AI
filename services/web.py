@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Tuple, TypeVar
-from urllib.parse import urlencode
 
 from fastapi import Request
 from pydantic import BaseModel
@@ -13,7 +12,6 @@ from .error_messages import ERROR_INVALID_JSON
 from .web_constants import (
     BASE_DIR as _BASE_DIR,
     DEFAULT_INTERNAL_ERROR_MESSAGE,
-    FRONTEND_URL,
 )
 from .web_json import (
     get_json as _get_json,
@@ -30,7 +28,9 @@ from .web_session import (
     set_session_permanent as _set_session_permanent,
 )
 from .web_urls import (
-    build_frontend_url as _build_frontend_url,
+    frontend_login_url as _frontend_login_url,
+    frontend_url as _frontend_url,
+    redirect_to_frontend as _redirect_to_frontend,
     sanitize_next_path as _sanitize_next_path,
     url_for as _url_for,
 )
@@ -170,24 +170,20 @@ def sanitize_next_path(next_path: Any, default: str = "/") -> str:
 
 
 def frontend_url(path: str = "", *, query: str | None = None) -> str:
-    # 既存互換のため、モジュールの FRONTEND_URL を毎回参照してURLを組み立てる
-    # Preserve legacy behavior by reading services.web.FRONTEND_URL dynamically.
-    return _build_frontend_url(FRONTEND_URL, path, query=query)
+    # フロントエンドの絶対URLを構築する
+    # Build an absolute frontend URL
+    return _frontend_url(path, query=query)
 
 
 def redirect_to_frontend(
     request: Request, path: str | None = None, *, status_code: int = 302
 ) -> RedirectResponse:
-    # 現在パス（または指定パス）をFRONTEND_URLへリダイレクトする
-    # Redirect current (or provided) path to FRONTEND_URL.
-    target_path = path if path is not None else request.url.path
-    query = request.url.query or None
-    return RedirectResponse(frontend_url(target_path, query=query), status_code=status_code)
+    # 現在パス（または指定パス）をフロントエンドへリダイレクトする
+    # Redirect current (or provided) path to the frontend
+    return _redirect_to_frontend(request, path, status_code=status_code)
 
 
 def frontend_login_url(next_path: str | None = None) -> str:
     # ログイン後遷移先を next クエリに埋め込んだログインURLを組み立てる
-    # Build login URL with optional post-login `next` query parameter.
-    safe_next_path = sanitize_next_path(next_path, default="/") if next_path else None
-    query = urlencode({"next": safe_next_path}) if safe_next_path else None
-    return frontend_url("/login", query=query)
+    # Build login URL with optional post-login `next` query parameter
+    return _frontend_login_url(next_path)
