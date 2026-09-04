@@ -528,6 +528,28 @@ class LlmServiceTestCase(unittest.TestCase):
             passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
         )
 
+    def test_get_openai_response_uses_none_reasoning_with_tools_for_luna(self):
+        """
+        Lunaのツール呼び出し時にChat Completionsへnoneのreasoningを渡すことを検証します。
+        Verify that Luna receives none reasoning when function tools use Chat Completions.
+        """
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.return_value = _mock_openai_response("openai-ok")
+
+        with patch.object(llm, "openai_client", mock_openai):
+            response = llm.get_openai_response(
+                [{"role": "user", "content": "search this"}],
+                llm.GPT_5_6_LUNA_MODEL,
+                tools=[{"type": "function", "function": {"name": "web_search"}}],
+                generation_phase="final_answer",
+            )
+
+        self.assertEqual(response, "openai-ok")
+        request_kwargs = mock_openai.chat.completions.create.call_args.kwargs
+        self.assertEqual(request_kwargs["reasoning_effort"], "none")
+        self.assertEqual(request_kwargs["tool_choice"], "auto")
+        mock_openai.responses.create.assert_not_called()
+
     def test_get_llm_response_rejects_invalid_model(self):
         """
         定義されていない無効なモデル名が指定された場合に、LlmInvalidModelErrorエラーが発生することを検証します。
@@ -1099,7 +1121,9 @@ class LlmServiceTestCase(unittest.TestCase):
             ),
         )
         self.assertNotIn("max_tokens", chat_kwargs)
-        self.assertEqual(chat_kwargs["reasoning_effort"], "high")
+        # Luna rejects non-none reasoning when Chat Completions also receives function tools.
+        # Luna は Chat Completions で function tool と none 以外の reasoning を併用できない。
+        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
         self.assertEqual(chat_kwargs["tool_choice"], "auto")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
@@ -1148,7 +1172,9 @@ class LlmServiceTestCase(unittest.TestCase):
         chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
         self.assertNotIn("tools", chat_kwargs)
         self.assertNotIn("tool_choice", chat_kwargs)
-        self.assertEqual(chat_kwargs["reasoning_effort"], "medium")
+        # Tool history also forces Chat Completions, so the same Luna restriction applies.
+        # ツール履歴も Chat Completions 経路を使うため、同じ Luna の制約が適用される。
+        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
