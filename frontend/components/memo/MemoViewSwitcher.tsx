@@ -1,7 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "../../contexts/locale_context";
+import type { MemoView } from "../../lib/memo/types";
 
-export type MemoView = "memos" | "context";
+// 型の正本は lib/memo/types.ts。既存の import 元との互換のため再エクスポートする。
+// The type now lives in lib/memo/types.ts; re-export it so existing imports keep working.
+export type { MemoView };
 
 type MemoViewSwitcherProps = {
   activeView: MemoView;

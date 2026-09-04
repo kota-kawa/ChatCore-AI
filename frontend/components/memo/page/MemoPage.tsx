@@ -40,10 +40,23 @@ import { MemoToolbar } from "../MemoToolbar";
 import { MyContextPanel } from "../MyContextPanel";
 import { MemoViewSwitcher, type MemoView } from "../MemoViewSwitcher";
 import {
+  buildMemoExportUrl,
+  createCollection,
+  createMemo,
+  createMemoShare,
+  deleteCollection,
+  deleteMemo,
+  fetchMemoShare,
   loadCollections,
   loadMemoDetail,
   loadMemoList,
-  memoFetchJsonOrThrow,
+  reorderMemos,
+  runBulkMemoAction,
+  setMemoArchived,
+  setMemoPinned,
+  suggestMemoTitle,
+  updateCollection,
+  updateMemo,
 } from "../../../lib/memo/api";
 import {
   DETAIL_AUTOSAVE_DELAY_MS,
@@ -63,6 +76,7 @@ import {
 } from "../../../lib/memo/utils";
 import type {
   BulkAction,
+  BulkMemoActionInput,
   Collection,
   DetailSaveStatus,
   FlashState,
@@ -71,6 +85,7 @@ import type {
   MemoDetail,
   MemoListState,
   MemoSummary,
+  MemoUpdateInput,
   SharePayload,
 } from "../../../lib/memo/types";
 
@@ -511,16 +526,7 @@ export default function MemoPage() {
     if (!formState.ai_response.trim()) { showFlash("error", t("memo.bodyRequired")); return; }
     setSubmitting(true);
     try {
-      await memoFetchJsonOrThrow(
-        "/memo/api",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify(formState),
-        },
-        { defaultMessage: t("memo.memoSaveFailed") },
-      );
+      await createMemo(formState, t("memo.memoSaveFailed"));
       setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
       setPreviewMode(false);
       setIsComposeExpanded(false);
@@ -540,16 +546,7 @@ export default function MemoPage() {
     if (!formState.ai_response.trim()) { showFlash("error", t("memo.aiResponseRequired")); return; }
     setAiSuggesting(true);
     try {
-      const { payload } = await memoFetchJsonOrThrow<{ title?: string }>(
-        "/memo/api/suggest",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ ai_response: formState.ai_response }),
-        },
-        { defaultMessage: t("memo.aiSuggestionFailed") },
-      );
+      const payload = await suggestMemoTitle(formState.ai_response, t("memo.aiSuggestionFailed"));
       setFormState((prev) => ({
         ...prev,
         title: payload.title || prev.title,
@@ -690,7 +687,7 @@ export default function MemoPage() {
     setDetailSaveStatus("saving");
     setDetailSaveError("");
     try {
-      const body: Record<string, unknown> = {
+      const body: MemoUpdateInput = {
         title: snapshot.title,
         ai_response: snapshot.aiResponse,
       };
@@ -709,25 +706,16 @@ export default function MemoPage() {
         }
       }
 
-      const { payload } = await memoFetchJsonOrThrow<{ memo?: MemoDetail }>(
-        `/memo/api/${selectedMemo.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify(body),
-        },
-        { defaultMessage: t("memo.memoUpdateFailed"), hasApplicationError: (data) => !data.memo },
-      );
+      const updatedMemo = await updateMemo(selectedMemo.id, body, t("memo.memoUpdateFailed"));
       if (requestId === detailSaveSequenceRef.current) {
-        if (payload.memo) {
+        if (updatedMemo) {
           // Keep the exact text the user submitted as the saved baseline
           // instead of the server's normalized response. This prevents the
           // autosave from rewriting what the user is actively editing (for
           // example, a leading blank line they just added), so the editor
           // only ever changes in response to the user's own input.
           setSelectedMemo({
-            ...payload.memo,
+            ...updatedMemo,
             title: snapshot.title,
             ai_response: snapshot.aiResponse,
             collection_id: snapshot.collectionId,
@@ -836,11 +824,7 @@ export default function MemoPage() {
       );
       patchSelectedMemoOptimistically(memo.id, { is_pinned: enabled, pinned_at: pinnedAt });
       try {
-        await memoFetchJsonOrThrow(
-          `/memo/api/${memo.id}/pin`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
-          { defaultMessage: t("memo.pinUpdateFailed") },
-        );
+        await setMemoPinned(memo.id, enabled, t("memo.pinUpdateFailed"));
         showFlash("success", memo.is_pinned ? t("memo.unpinnedSuccess") : t("memo.pinnedSuccess"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
@@ -868,11 +852,7 @@ export default function MemoPage() {
       );
       patchSelectedMemoOptimistically(memo.id, { is_archived: enabled, archived_at: archivedAt });
       try {
-        await memoFetchJsonOrThrow(
-          `/memo/api/${memo.id}/archive`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
-          { defaultMessage: t("memo.archiveUpdateFailed") },
-        );
+        await setMemoArchived(memo.id, enabled, t("memo.archiveUpdateFailed"));
         showFlash("success", memo.is_archived ? t("memo.unarchivedSuccess") : t("memo.archivedSuccess"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
@@ -892,11 +872,7 @@ export default function MemoPage() {
     await withActionLoading(memo.id, async () => {
       await updateMemoListOptimistically(() => null, [memo.id]);
       try {
-        await memoFetchJsonOrThrow(
-          `/memo/api/${memo.id}`,
-          { method: "DELETE", credentials: "same-origin" },
-          { defaultMessage: t("memo.memoDeleteFailed") },
-        );
+        await deleteMemo(memo.id, t("memo.memoDeleteFailed"));
         showFlash("success", t("memo.memoDeleted"));
         if (selectedMemo?.id && String(selectedMemo.id) === String(memo.id)) startMemoDetailCloseAnimation();
         await mutate();
@@ -1040,16 +1016,7 @@ export default function MemoPage() {
     clearMemoDragState();
 
     try {
-      await memoFetchJsonOrThrow(
-        "/memo/api/reorder",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ memo_id: memoId, before_id: beforeId, after_id: afterId }),
-        },
-        { defaultMessage: t("memo.reorderFailed") },
-      );
+      await reorderMemos({ memo_id: memoId, before_id: beforeId, after_id: afterId }, t("memo.reorderFailed"));
       await mutate();
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : t("memo.reorderFailed"));
@@ -1168,17 +1135,13 @@ export default function MemoPage() {
     }, selectedIdList);
 
     try {
-      const body: Record<string, unknown> = {
+      const body: BulkMemoActionInput = {
         action,
         memo_ids: selectedIdList.map(Number),
       };
       if (extra?.collectionId !== undefined) body.collection_id = extra.collectionId;
 
-      await memoFetchJsonOrThrow(
-        "/memo/api/bulk",
-        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) },
-        { defaultMessage: t("memo.bulkActionFailed") },
-      );
+      await runBulkMemoAction(body, t("memo.bulkActionFailed"));
       const labels: Record<BulkAction, string> = {
         delete: t("common.delete"), archive: t("memo.archive"), unarchive: t("memo.unarchive"),
         pin: t("memo.pin"), unpin: t("memo.unpin"),
@@ -1206,11 +1169,7 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const loadShareState = useCallback(async (memoId: string | number) => {
-    const { payload } = await memoFetchJsonOrThrow<SharePayload>(
-      `/memo/api/${memoId}/share`,
-      { credentials: "same-origin" },
-      { defaultMessage: t("memo.shareInfoFailed") },
-    );
+    const payload = await fetchMemoShare(memoId, t("memo.shareInfoFailed"));
     setShareState(payload);
     return payload;
   }, []);
@@ -1230,16 +1189,7 @@ export default function MemoPage() {
       }
 
       setShareStatus({ type: "success", text: t("memo.creatingShareLink") });
-      const { payload: createdPayload } = await memoFetchJsonOrThrow<SharePayload>(
-        `/memo/api/${memoId}/share`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ force_refresh: false, expires_in_days: 30 }),
-        },
-        { defaultMessage: t("memo.createShareLinkFailed") },
-      );
+      const createdPayload = await createMemoShare(memoId, t("memo.createShareLinkFailed"));
       setShareState(createdPayload);
       setShareStatus({ type: "success", text: t("memo.shareLinkCreated") });
       await mutate();
@@ -1292,11 +1242,7 @@ export default function MemoPage() {
     if (!name) { showFlash("error", t("memo.collectionNameRequired")); return; }
     setCollectionActionLoading(true);
     try {
-      await memoFetchJsonOrThrow(
-        "/memo/api/collections",
-        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name, color: newCollectionColor }) },
-        { defaultMessage: t("memo.collectionCreateFailed") },
-      );
+      await createCollection({ name, color: newCollectionColor }, t("memo.collectionCreateFailed"));
       setNewCollectionName("");
       setNewCollectionColor("#6b7280");
       showFlash("success", t("memo.collectionCreated"));
@@ -1310,11 +1256,7 @@ export default function MemoPage() {
   const handleUpdateCollection = useCallback(async (collectionId: number) => {
     setCollectionActionLoading(true);
     try {
-      await memoFetchJsonOrThrow(
-        `/memo/api/collections/${collectionId}`,
-        { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name: editingCollectionName, color: editingCollectionColor }) },
-        { defaultMessage: t("memo.collectionUpdateFailed") },
-      );
+      await updateCollection(collectionId, { name: editingCollectionName, color: editingCollectionColor }, t("memo.collectionUpdateFailed"));
       setEditingCollectionId(null);
       showFlash("success", t("memo.collectionUpdated"));
       await mutateCollections();
@@ -1330,11 +1272,7 @@ export default function MemoPage() {
     if (!confirmed) return;
     setCollectionActionLoading(true);
     try {
-      await memoFetchJsonOrThrow(
-        `/memo/api/collections/${collectionId}`,
-        { method: "DELETE", credentials: "same-origin" },
-        { defaultMessage: t("memo.collectionDeleteFailed") },
-      );
+      await deleteCollection(collectionId, t("memo.collectionDeleteFailed"));
       if (activeCollectionId === collectionId) setActiveCollectionId(null);
       showFlash("success", t("memo.collectionDeleted"));
       await mutateCollections();
@@ -1354,12 +1292,8 @@ export default function MemoPage() {
       showFlash("error", t("memo.exportSelectionRequired"));
       return;
     }
-    const ids = exportScope === "selected"
-      ? Array.from(exportSelectedIds).join(",")
-      : "";
-    const params = new URLSearchParams({ format: exportFormat });
-    if (ids) params.set("ids", ids);
-    const url = `/memo/api/export?${params.toString()}`;
+    const ids = exportScope === "selected" ? Array.from(exportSelectedIds) : [];
+    const url = buildMemoExportUrl(exportFormat, ids);
     const a = document.createElement("a");
     a.href = url;
     a.download = `memos.${exportFormat === "json" ? "json" : exportFormat === "csv" ? "csv" : "md"}`;
