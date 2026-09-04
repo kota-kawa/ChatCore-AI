@@ -68,3 +68,39 @@ export type MemoComposeFormState = {
   collection_id: number | null;
   background_color: string | null;
 };
+
+// Notebook 画面内の表示切替。"memos" は従来のメモ、"context" はマイコンテキスト金庫。
+// View switch inside the notebook: "memos" is the classic memo list, "context" is the vault.
+export type MemoView = "memos" | "context";
+
+export type MemoExportFormat = "markdown" | "json" | "csv";
+export type MemoExportScope = "all" | "selected";
+
+// ---------------------------------------------------------------------------
+// Request payloads for /memo/api/* mutations (see lib/memo/api.ts)
+// ---------------------------------------------------------------------------
+
+export type MemoUpdateInput = {
+  title: string;
+  ai_response: string;
+  background_color?: string;
+  clear_background_color?: true;
+  collection_id?: number;
+  clear_collection?: true;
+};
+
+export type MemoReorderInput = {
+  memo_id: number;
+  before_id: number | null;
+  after_id: number | null;
+};
+
+export type BulkMemoActionInput = {
+  action: BulkAction;
+  memo_ids: number[];
+  collection_id?: number | null;
+};
+
+export type CollectionInput = { name: string; color: string };
+
+export type MemoSuggestPayload = { title?: string };

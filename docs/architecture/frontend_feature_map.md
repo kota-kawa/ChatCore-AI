@@ -23,7 +23,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE |
 | `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `register.tsx`, `oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
 | `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like` |
-| `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`lib/memo/`、`contexts/locale_context.tsx` | `/memo/api/*`、`/api/context-facts/*` |
+| `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
 | `/prompt_share` | `pages/prompt_share/index.tsx` | `components/prompt_share/`、プロンプト共有 hook 群 | `/prompt_share/api/*`、`/search/prompts`、`/api/*` |
 | `/prompt_share/manage_prompts` | `pages/prompt_share/manage_prompts.tsx` | 設定用 prompt component、`resilientFetch` | `/prompt_manage/api/*` |
 | `/shared/[token]` | `pages/shared/[token].tsx` | `components/shared_chat/` | 共有チャット取得・fork API |

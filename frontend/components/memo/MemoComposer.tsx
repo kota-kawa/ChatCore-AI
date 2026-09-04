@@ -1,62 +1,38 @@
-import React, {
-  type ChangeEvent,
-  type Dispatch,
-  type FormEvent,
-  type RefObject,
-  type SetStateAction,
-} from "react";
+import React from "react";
 
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
-import type { Collection, MemoComposeFormState } from "../../lib/memo/types";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoComposerProps = {
-  composeIsExpanded: boolean;
-  openTextComposer: () => void;
-  openChecklistComposer: () => void;
-  openComposePalette: () => void;
-  handleSubmitMemo: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  formState: MemoComposeFormState;
-  handleFormChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
-  previewMode: boolean;
-  setPreviewMode: Dispatch<SetStateAction<boolean>>;
-  composeTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  collections: Collection[];
-  setFormState: Dispatch<SetStateAction<MemoComposeFormState>>;
-  aiSuggesting: boolean;
-  handleAiSuggest: () => Promise<void>;
-  isComposePaletteOpen: boolean;
-  submitting: boolean;
-  setIsComposeExpanded: Dispatch<SetStateAction<boolean>>;
-  setIsComposePaletteOpen: Dispatch<SetStateAction<boolean>>;
-  hasComposeDraft: boolean;
-};
+import {
+  useMemoPageComposerContext,
+  useMemoPageListContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Quick capture ──
-export function MemoComposer({
-  composeIsExpanded,
-  openTextComposer,
-  openChecklistComposer,
-  openComposePalette,
-  handleSubmitMemo,
-  formState,
-  handleFormChange,
-  previewMode,
-  setPreviewMode,
-  composeTextareaRef,
-  collections,
-  setFormState,
-  aiSuggesting,
-  handleAiSuggest,
-  isComposePaletteOpen,
-  submitting,
-  setIsComposeExpanded,
-  setIsComposePaletteOpen,
-  hasComposeDraft,
-}: MemoComposerProps) {
+export function MemoComposer() {
+  const { collections } = useMemoPageListContext();
+  const {
+    composeIsExpanded,
+    openTextComposer,
+    openChecklistComposer,
+    openComposePalette,
+    handleSubmitMemo,
+    formState,
+    handleFormChange,
+    previewMode,
+    setPreviewMode,
+    composeTextareaRef,
+    setFormState,
+    aiSuggesting,
+    handleAiSuggest,
+    isComposePaletteOpen,
+    submitting,
+    setIsComposeExpanded,
+    setIsComposePaletteOpen,
+    hasComposeDraft,
+  } = useMemoPageComposerContext();
   const { locale, t } = useTranslation();
   const english = locale === "en";
   return (

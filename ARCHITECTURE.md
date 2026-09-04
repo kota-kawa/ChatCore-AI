@@ -68,7 +68,7 @@ flowchart LR
 
 - `blueprints/`: HTTP のルート、認証・CSRF の境界、入力の受け取り、レスポンスへの変換を担当します。チャット、プロンプト共有、メモ、コンテキスト金庫、管理、認証を機能単位に分割しています。
 - `services/`: 複数のルートから使う業務処理、外部連携、共通エラー、セキュリティ、キャッシュ、バックグラウンド処理を担当します。ルートから直接呼ぶ必要がある場合も、処理をサービスへ寄せてハンドラを薄く保ちます。
-- `services/repositories/`: 複数機能で共有する DB アクセスの配置先です。既存コードには機能配下のデータアクセス（例: `blueprints/memo/repository.py`）もあるため、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
+- `services/repositories/`: 複数機能で共有する DB アクセスの配置先です（メモの DB アクセスも `services/repositories/memo_repository.py` にあります）。機能配下にデータアクセスが残っている場合も、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
 - `services/repositories/auth_identity_repository.py`: メール・Google・Passkey認証が参照するユーザーと認証プロバイダーの専用永続化境界です。一般ユーザー機能のRepositoryへ認証情報の読み書きを追加しません。
 - `services/request_models.py` / `services/response_models.py`: API 契約を定義します。フロントエンドの型を手書きで先行変更しないでください。
 - `services/api_errors.py` / `services/error_messages.py`: API エラーの型と利用者向け文言を集約します。
@@ -142,7 +142,7 @@ LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ
 
 - `frontend/pages/`: Next.js Pages Router のページエントリーポイント。ページ単位のデータ取得と画面構成を担当します。
 - `frontend/components/`: 機能単位・共通 UI の React コンポーネント。チャット、メモ、プロンプト共有、設定、認証などに分かれています。
-- `frontend/hooks/` と `frontend/contexts/`: 複数コンポーネントで共有する状態・副作用・画面フローを担当します。チャットページの巨大なフローは用途別 hook に分割されています。
+- `frontend/hooks/` と `frontend/contexts/`: 複数コンポーネントで共有する状態・副作用・画面フローを担当します。チャットページとメモページの巨大なフローは、用途別 hook（`hooks/chat_page/`、`hooks/memo_page/`）と、その戻り値をスライスして子へ配る Context Provider（`contexts/chat_page/`、`contexts/memo_page/`）に分割されています。
 - `frontend/lib/`: API 呼び出し、SWR、レスポンス正規化、i18n、ストリーム処理などの再利用ロジックです。読み取りは `swrFetcher`、一般リクエストは `resilientFetch` の既存パターンを優先します。
 - `frontend/scripts/`: ブラウザ側の共通ランタイム（CSRF、テーマ、再試行付き fetch など）です。
 - `frontend/public/` と `frontend/styles/`: 静的 CSS、ページ・コンポーネント用 CSS、互換スタイルを配置します。トークンと CSS の責務分割は `frontend/STYLING_STRATEGY.md` が正本です。

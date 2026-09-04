@@ -1,88 +1,56 @@
-import React, {
-  type Dispatch,
-  type DragEvent,
-  type MutableRefObject,
-  type SetStateAction,
-} from "react";
+import React from "react";
 import { createPortal } from "react-dom";
 
 import { parseMemoText } from "../../lib/memo/utils";
-import type { Collection, MemoActionMenuPosition, MemoSummary } from "../../lib/memo/types";
+import type { MemoSummary } from "../../lib/memo/types";
 import { formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoHistoryPanelProps = {
-  activeCollection: Collection | null | undefined;
-  totalMemoCount: number;
-  memoLoadError: Error | undefined;
-  memoListLoading: boolean;
-  memos: MemoSummary[];
-  pinnedMemos: MemoSummary[];
-  otherMemos: MemoSummary[];
-  openMenuMemoId: string;
-  actionLoadingId: string;
-  selectedIds: Set<string>;
-  copyingMemoId: string;
-  canDragMemos: boolean;
-  draggedMemoId: string;
-  cardRefs: MutableRefObject<Map<string, HTMLElement>>;
-  isBulkMode: boolean;
-  menuPosition: MemoActionMenuPosition | null;
-  canReorderCurrentView: boolean;
-  handleMemoDragStart: (event: DragEvent<HTMLElement>, memo: MemoSummary) => void;
-  clearMemoDragState: () => void;
-  toggleSelectMemo: (memoId: string) => void;
-  handleTogglePin: (memo: MemoSummary) => Promise<void>;
-  openMemoDetail: (memoId: string | number) => Promise<void>;
-  copyMemoFullText: (memo: MemoSummary) => Promise<boolean>;
-  handleToggleArchive: (memo: MemoSummary) => Promise<void>;
-  toggleMemoActionMenu: (memoId: string, trigger: HTMLElement) => void;
-  openShareModal: (memo: MemoSummary) => Promise<void>;
-  setOpenMenuMemoId: Dispatch<SetStateAction<string>>;
-  setMenuPosition: Dispatch<SetStateAction<MemoActionMenuPosition | null>>;
-  handleDeleteMemo: (memo: MemoSummary) => Promise<void>;
-  handleMemoSectionDragOver: (event: DragEvent<HTMLUListElement>, sectionMemos: MemoSummary[]) => void;
-  handleMemoDrop: (event: DragEvent<HTMLElement>) => Promise<void>;
-};
+import {
+  useMemoPageBoardContext,
+  useMemoPageListContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Memo list ──
-export function MemoHistoryPanel({
-  activeCollection,
-  totalMemoCount,
-  memoLoadError,
-  memoListLoading,
-  memos,
-  pinnedMemos,
-  otherMemos,
-  openMenuMemoId,
-  actionLoadingId,
-  selectedIds,
-  copyingMemoId,
-  canDragMemos,
-  draggedMemoId,
-  cardRefs,
-  isBulkMode,
-  menuPosition,
-  canReorderCurrentView,
-  handleMemoDragStart,
-  clearMemoDragState,
-  toggleSelectMemo,
-  handleTogglePin,
-  openMemoDetail,
-  copyMemoFullText,
-  handleToggleArchive,
-  toggleMemoActionMenu,
-  openShareModal,
-  setOpenMenuMemoId,
-  setMenuPosition,
-  handleDeleteMemo,
-  handleMemoSectionDragOver,
-  handleMemoDrop,
-}: MemoHistoryPanelProps) {
+export function MemoHistoryPanel() {
+  const {
+    activeCollection,
+    totalMemoCount,
+    memoLoadError,
+    memoListLoading,
+    memos,
+  } = useMemoPageListContext();
+  const {
+    pinnedMemos,
+    otherMemos,
+    openMenuMemoId,
+    actionLoadingId,
+    selectedIds,
+    copyingMemoId,
+    canDragMemos,
+    draggedMemoId,
+    cardRefs,
+    isBulkMode,
+    menuPosition,
+    canReorderCurrentView,
+    handleMemoDragStart,
+    clearMemoDragState,
+    toggleSelectMemo,
+    handleTogglePin,
+    openMemoDetail,
+    copyMemoFullText,
+    handleToggleArchive,
+    toggleMemoActionMenu,
+    openShareModal,
+    setOpenMenuMemoId,
+    setMenuPosition,
+    handleDeleteMemo,
+    handleMemoSectionDragOver,
+    handleMemoDrop,
+  } = useMemoPageBoardContext();
   const { t } = useTranslation();
   return (
             <section className="memo-history-panel">

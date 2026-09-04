@@ -1,47 +1,30 @@
 import { EXPORT_FORMATS } from "../../lib/memo/constants";
-import type { MemoSummary } from "../../lib/memo/types";
 import { formatDateTime } from "../../lib/datetime";
 import { useTranslation } from "../../contexts/locale_context";
-
-type ExportFormat = "markdown" | "json" | "csv";
-type ExportScope = "all" | "selected";
-
-type MemoExportModalProps = {
-  isExportModalOpen: boolean;
-  setIsExportModalOpen: (value: boolean) => void;
-  exportFormat: ExportFormat;
-  setExportFormat: (value: ExportFormat) => void;
-  exportScope: ExportScope;
-  setExportScope: (value: ExportScope) => void;
-  exportSelectedIds: Set<string>;
-  exportSelectedCount: number;
-  allVisibleExportSelected: boolean;
-  clearExportSelection: () => void;
-  selectAllExportMemos: () => void;
-  toggleExportMemo: (memoId: string) => void;
-  canDownloadExport: boolean;
-  handleExport: () => void;
-  memos: MemoSummary[];
-};
+import {
+  useMemoPageListContext,
+  useMemoPageModalsContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Export modal ──
-export function MemoExportModal({
-  isExportModalOpen,
-  setIsExportModalOpen,
-  exportFormat,
-  setExportFormat,
-  exportScope,
-  setExportScope,
-  exportSelectedIds,
-  exportSelectedCount,
-  allVisibleExportSelected,
-  clearExportSelection,
-  selectAllExportMemos,
-  toggleExportMemo,
-  canDownloadExport,
-  handleExport,
-  memos,
-}: MemoExportModalProps) {
+export function MemoExportModal() {
+  const { memos } = useMemoPageListContext();
+  const {
+    isExportModalOpen,
+    setIsExportModalOpen,
+    exportFormat,
+    setExportFormat,
+    exportScope,
+    setExportScope,
+    exportSelectedIds,
+    exportSelectedCount,
+    allVisibleExportSelected,
+    clearExportSelection,
+    selectAllExportMemos,
+    toggleExportMemo,
+    canDownloadExport,
+    handleExport,
+  } = useMemoPageModalsContext();
   const { t } = useTranslation();
   return (
         <div className={`memo-export-modal${isExportModalOpen ? " is-visible" : ""}`} aria-hidden={isExportModalOpen ? "false" : "true"}>
