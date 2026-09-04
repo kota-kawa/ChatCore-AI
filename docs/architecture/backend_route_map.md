@@ -23,7 +23,7 @@
 | `prompt_share_api_bp` | `/prompt_share/api/*` | `blueprints/prompt_share/prompt_share_api.py` | 公開プロンプト、詳細、投稿、コメント、いいね、メディア、チャット用タスク／Skillへの取り込み |
 | `search_bp` | `/search/prompts` | `blueprints/prompt_share/prompt_search.py` | 公開プロンプト検索 |
 | `prompt_manage_api_bp` | `/prompt_manage/api/*` | `blueprints/prompt_share/prompt_manage_api.py` | 自分の投稿、保存・いいね一覧、編集・削除 |
-| `memo_bp` | `/memo/api/*`、`/memo` | `blueprints/memo/routes.py`, `repository.py`, `exports.py` | メモ、コレクション、共有、並び替え、エクスポート |
+| `memo_bp` | `/memo/api/*`、`/memo` | `blueprints/memo/{memos,suggest,bulk,reorder,export,collections,share,pages}.py`, `export_formats.py` | メモ、コレクション、共有、並び替え、エクスポート |
 | `context_vault_bp` | `/api/context-facts/*` | `blueprints/context_vault/routes.py`, `services/context_vault_*` | コンテキスト事実、候補、import/export、抽出設定 |
 | `admin_bp` | `/admin/*` | `blueprints/admin/views.py` | 管理ログイン、ダッシュボード、管理用 DB 操作 |
 | `mcp_oauth_bp` | `/api/mcp/oauth/*` | `blueprints/mcp_oauth.py`, `services/mcp_oauth.py` | MCP 同意、クライアント、接続の管理 |
@@ -50,7 +50,7 @@
 - 状態変更ルートは `require_csrf` を router dependency または既存共通境界から適用します。
 - 認証・所有者確認・クォータはルートの入力検証だけで完結させず、サービス／repository 側でも信頼境界を確認します。
 - JSON の入出力は `services/request_models.py`、`services/response_models.py`、`services/web.py` の既存パターンを優先します。
-- DB 操作は `services/db.py` の接続プールを使います。既存の `blueprints/memo/repository.py` のように機能内 repository がある場合は、移動ではなく境界を確認して変更します。
+- DB 操作は `services/db.py` の接続プールを使います。メモの DB アクセスは `services/repositories/memo_repository.py` にあります。機能配下に repository が残っている場合は、移動ではなく境界を確認して変更します。
 
 ### ルートを探すコマンド
 
