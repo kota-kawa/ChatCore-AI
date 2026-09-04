@@ -1,15 +1,20 @@
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from services.share_common import (
     DEFAULT_SHARE_TOKEN_BYTES,
     ShareContentKind,
     TokenShareLifecycle,
+    build_public_share_url,
     build_share_path,
     build_share_url,
     generate_share_token,
     is_unique_violation,
+    resolve_share_base_url,
 )
+from services.web_constants import DEFAULT_FRONTEND_URL
 
 
 class ShareCommonTestCase(unittest.TestCase):
@@ -23,6 +28,34 @@ class ShareCommonTestCase(unittest.TestCase):
             build_share_url("https://example.test/", "prompt", 42),
             "https://example.test/shared/prompt/42",
         )
+
+    def test_frontend_url_is_the_canonical_share_base(self):
+        # MCP 用の公開URLが設定されていても、共有リンクは FRONTEND_URL を使う
+        with patch("services.web_constants.FRONTEND_URL", "https://chatcore-ai.com"), patch.dict(
+            os.environ, {"MCP_PUBLIC_BASE_URL": "https://mcp.example.test"}
+        ):
+            self.assertEqual(resolve_share_base_url(), "https://chatcore-ai.com")
+            self.assertEqual(
+                build_public_share_url("memo", "memo-token"),
+                "https://chatcore-ai.com/shared/memo/memo-token",
+            )
+
+    def test_falls_back_to_the_mcp_public_base_url_when_frontend_url_is_the_default(self):
+        # FRONTEND_URL が未設定のままなら公開リンクが localhost に退化しないようにする
+        with patch("services.web_constants.FRONTEND_URL", DEFAULT_FRONTEND_URL), patch.dict(
+            os.environ, {"MCP_PUBLIC_BASE_URL": "https://mcp.example.test"}
+        ):
+            self.assertEqual(resolve_share_base_url(), "https://mcp.example.test")
+            self.assertEqual(
+                build_public_share_url("prompt", 42),
+                "https://mcp.example.test/shared/prompt/42",
+            )
+
+    def test_uses_the_default_frontend_url_when_nothing_is_configured(self):
+        with patch("services.web_constants.FRONTEND_URL", DEFAULT_FRONTEND_URL), patch.dict(
+            os.environ, {}, clear=True
+        ):
+            self.assertEqual(resolve_share_base_url(), DEFAULT_FRONTEND_URL)
 
     def test_rejects_an_empty_or_nested_identifier(self):
         for identifier in (None, "", "  ", "token/other", "token?next=other"):

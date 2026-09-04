@@ -441,8 +441,8 @@ class MemoApiTestCase(unittest.TestCase):
                 "is_reused": False,
             },
         ), patch(
-            "blueprints.memo.frontend_url",
-            return_value="https://chatcore-ai.com/shared/memo/memo-share-token",
+            "services.web_constants.FRONTEND_URL",
+            "https://chatcore-ai.com",
         ):
             response = asyncio.run(api_share_memo(request))
 
@@ -470,8 +470,8 @@ class MemoApiTestCase(unittest.TestCase):
                 "is_reused": True,
             },
         ), patch(
-            "blueprints.memo.frontend_url",
-            return_value="https://chatcore-ai.com/shared/memo/memo-share-token",
+            "services.web_constants.FRONTEND_URL",
+            "https://chatcore-ai.com",
         ):
             response = asyncio.run(api_memo_share_detail(request, memo_id=5))
         self.assertEqual(response.status_code, 200)
@@ -502,8 +502,8 @@ class MemoApiTestCase(unittest.TestCase):
                 "is_reused": False,
             },
         ), patch(
-            "blueprints.memo.frontend_url",
-            return_value="https://chatcore-ai.com/shared/memo/memo-share-token",
+            "services.web_constants.FRONTEND_URL",
+            "https://chatcore-ai.com",
         ):
             response = asyncio.run(api_memo_share_refresh(request, memo_id=5))
         self.assertEqual(response.status_code, 200)

@@ -20,7 +20,7 @@ from services.repositories.prompt_resource_repository import PromptResourceRepos
 from services.repositories.chat_repository import ChatRepository
 from services.repositories.shared_content_repository import SharedContentRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
-from services.share_common import ShareContentKind, build_share_url
+from services.share_common import ShareContentKind, build_public_share_url, build_share_url
 from services.error_messages import (
     ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_SHARED_SKILL_INVALID_TYPE,
@@ -103,7 +103,7 @@ class SharedContentService:
     def __init__(
         self,
         *,
-        public_base_url: str,
+        public_base_url: str | None = None,
         repository: SharedContentRepository | None = None,
         resource_repository: PromptResourceRepository | None = None,
     ) -> None:
@@ -1012,6 +1012,10 @@ class SharedContentService:
         return normalized[: SHARED_CONTENT_SNIPPET_LENGTH - 1].rstrip() + "…"
 
     def _public_url(self, prompt_id: int) -> str:
+        # 明示指定が無ければ共通の解決結果を使い、経路ごとのホスト差を防ぐ
+        # Fall back to the shared resolution so every transport agrees on the host.
+        if not self._public_base_url:
+            return build_public_share_url(ShareContentKind.PROMPT, prompt_id)
         return build_share_url(
             self._public_base_url,
             ShareContentKind.PROMPT,

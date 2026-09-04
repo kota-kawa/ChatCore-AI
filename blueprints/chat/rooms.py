@@ -27,7 +27,7 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.project_service import assign_room_to_project
-from services.share_common import build_share_path
+from services.share_common import build_public_share_url
 
 from services.request_models import (
     ChatRoomIdRequest,
@@ -38,7 +38,6 @@ from services.request_models import (
     ShareChatRoomRequest,
 )
 from services.web import (
-    frontend_url,
     jsonify,
     jsonify_rate_limited,
     jsonify_service_error,
@@ -750,7 +749,7 @@ async def share_chat_room(request: Request):
 
         # フルURLを生成
         # Generate the full frontend URL for sharing
-        share_url = frontend_url(build_share_path("chat", share_token))
+        share_url = build_public_share_url("chat", share_token)
         return jsonify(
             {
                 "share_token": share_token,
