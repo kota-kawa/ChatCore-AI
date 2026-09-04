@@ -420,8 +420,136 @@
 
 :where(body.chat-page, .chat-page-shell) .skill-detail-modal__instructions {
   max-height: min(56vh, 480px);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* MarkdownContent の共通レンダラーで生成された本文を、閲覧用モーダルでも読みやすく整える。 */
+/* Keep MarkdownContent output readable in the review modal as well. */
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown > * {
+  margin: 0.65rem 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown > :first-child {
+  margin-top: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown p {
+  margin: 0.5rem 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h1,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h2,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h3,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h4,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h5,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h6 {
+  margin: 1.1rem 0 0.4rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #064e3b;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h1 {
+  font-size: 1.35rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h2 {
+  font-size: 1.15rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h3,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h4,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h5,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h6 {
+  font-size: 1rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown ul,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown ol {
+  margin: 0.5rem 0 0.5rem 1rem;
+  padding-left: 0.8rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown li + li {
+  margin-top: 0.25rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown blockquote {
+  margin: 0.65rem 0;
+  padding: 0.5rem 0.9rem;
+  border-left: 2px solid rgba(15, 23, 42, 0.16);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.035);
+  color: #5c5750;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown code {
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f7a51;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.87em;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown pre {
+  margin: 0.65rem 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 8px;
+  background: #1e1e2e;
+  line-height: 1.55;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown pre code {
+  padding: 0;
+  background: transparent;
+  color: #cdd6f4;
+  font-size: 0.84rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown strong {
+  font-weight: 700;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown em {
+  font-style: italic;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown hr {
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid rgba(15, 118, 110, 0.18);
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown table {
+  width: 100%;
+  margin: 0.65rem 0;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown th,
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown td {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  text-align: left;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown th {
+  background: rgba(15, 118, 110, 0.08);
+  font-weight: 700;
+}
+
+:where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown a {
+  color: #0f7a51;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
 }
 
 @keyframes skill-modal-spin {
@@ -535,6 +663,53 @@
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__instructions {
   color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h1,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h2,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h3,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h4,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h5,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown h6 {
+  color: #99f6e4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown blockquote {
+  border-left-color: rgba(148, 163, 184, 0.42);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown code {
+  background: rgba(45, 212, 191, 0.1);
+  color: #99f6e4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown pre {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: #0b1220;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown pre code {
+  background: transparent;
+  color: #cdd6f4;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown hr {
+  border-top-color: rgba(94, 234, 212, 0.28);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown th,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown td {
+  border-color: rgba(94, 234, 212, 0.22);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown th {
+  background: rgba(17, 72, 60, 0.68);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-detail-modal__markdown a {
+  color: #99f6e4;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../contexts/locale_context";
@@ -81,8 +81,12 @@ describe("SkillSection", () => {
     expect(handleToggle).toHaveBeenCalledWith(skill);
   });
 
-  it("opens the full Skill instructions from the chip body", () => {
-    mockedUseHomePageSkills.mockReturnValue(state());
+  it("renders Markdown in the full Skill instructions modal", async () => {
+    const markdownSkill = {
+      ...skill,
+      instructions: "# 方針\n\n**結論から書く**\n\n- 簡潔に\n- 明確に",
+    };
+    mockedUseHomePageSkills.mockReturnValue(state({ skills: [markdownSkill] }));
     renderSection();
 
     fireEvent.click(screen.getByRole("button", { name: "短く答えるの内容を表示" }));
@@ -94,7 +98,12 @@ describe("SkillSection", () => {
     // 内側に留めるとオーバーレイが画面全体を覆えない。
     expect(dialog.parentElement).toBe(document.body);
     expect(screen.getByRole("heading", { name: "短く答える" })).toBeInTheDocument();
-    expect(screen.getByText("結論から書く")).toBeInTheDocument();
+    await waitFor(() => {
+      const markdown = document.querySelector(".skill-detail-modal__markdown");
+      expect(markdown?.querySelector("h1")?.textContent).toBe("方針");
+      expect(markdown?.querySelector("strong")?.textContent).toBe("結論から書く");
+      expect(markdown?.querySelector("ul")?.textContent).toContain("簡潔に");
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "モーダルを閉じる" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
