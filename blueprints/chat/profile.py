@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
+from services.avatar_storage import AVATAR_UPLOAD_DIR, build_avatar_public_url
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
@@ -29,7 +30,6 @@ from services.llm_daily_limit import (
 from services.request_models import EmailChangeConfirmRequest, EmailChangeRequest
 from services.security import constant_time_compare, generate_verification_code
 from services.web import (
-    BASE_DIR,
     jsonify,
     jsonify_rate_limited,
     log_and_internal_server_error,
@@ -68,10 +68,6 @@ AVATAR_MAX_BYTES = 5 * 1024 * 1024
 # アバター画像を読み書きする際のバッファチャンクサイズ（1MB）
 # Chunk size (1MB) used when reading and writing the avatar file in bytes.
 _AVATAR_CHUNK_SIZE = 1024 * 1024
-
-# アバター画像のアップロード先ディレクトリ
-# Upload destination directory for avatar images.
-_AVATAR_UPLOAD_DIR = os.path.join(BASE_DIR, "frontend", "public", "static", "uploads")
 
 # アバター画像として許可される拡張子のセット
 # Set of allowed file extensions for avatar images.
@@ -256,7 +252,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
 
     # 保存されたアバター画像のURLパスを返す
     # Return the URL path to the saved avatar image
-    return f"/static/uploads/{stored_filename}"
+    return build_avatar_public_url(stored_filename)
 
 
 # ユーザーのプロフィール情報（メールアドレスを除く）をデータベースに保存する関数
@@ -362,7 +358,7 @@ async def user_profile(request: Request):
         try:
             avatar_url = await run_blocking(
                 _save_avatar_file,
-                _AVATAR_UPLOAD_DIR,
+                AVATAR_UPLOAD_DIR,
                 avatar_f.file,
                 avatar_f.filename,
                 getattr(avatar_f, "content_type", ""),
