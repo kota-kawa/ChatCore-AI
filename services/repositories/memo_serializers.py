@@ -1,37 +1,12 @@
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from services.datetime_serialization import serialize_datetime_iso
-from services.share_common import TokenShareLifecycle, build_share_path
-from services.web import frontend_url as default_frontend_url
+from services.share_common import TokenShareLifecycle, build_public_share_url
 
 from .memo_constants import DEFAULT_EXCERPT_LENGTH
 from .memo_helpers import parse_memo_text
-
-
-def _frontend_url(path: str) -> str:
-    """
-    パスからフロントエンドのURLを解決するヘルパー関数
-    Helper function to resolve the frontend URL from a given path.
-
-    Args:
-        path (str): リダイレクト先のパス / The target path for redirection.
-
-    Returns:
-        str: 完全修飾ドメイン名を含むURL / The fully qualified URL.
-    """
-    # メモモジュールのカスタムURL解決関数があれば使用し、無ければデフォルトを使用
-    # Use the memo module's custom URL resolver if defined; otherwise, fallback to the default.
-    memo_module = sys.modules.get("blueprints.memo")
-    if memo_module is not None:
-        # カスタムURL解決関数が存在する場合はそれを取得して呼び出す。存在しない場合はデフォルトの解決関数を使用
-        # Get and call the custom URL resolver if it exists. Otherwise, use the default resolver.
-        return getattr(memo_module, "frontend_url", default_frontend_url)(path)
-    # モジュールが見つからない場合はデフォルトの解決関数を使用
-    # Use the default resolver if the module is not found.
-    return default_frontend_url(path)
 
 
 def is_expired(expires_at: Any) -> bool:
@@ -83,7 +58,7 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
         "is_active": is_active,
         # アクティブな場合のみ共有URLを構築
         # Build the share URL only if the sharing state is active.
-        "share_url": _frontend_url(build_share_path("memo", share_token)) if is_active else "",
+        "share_url": build_public_share_url("memo", share_token) if is_active else "",
     }
 
 

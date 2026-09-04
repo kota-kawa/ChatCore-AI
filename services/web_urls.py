@@ -6,7 +6,13 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import Request
 from starlette.responses import RedirectResponse
 
-from .web_constants import FRONTEND_URL
+from . import web_constants
+
+
+def frontend_base_url() -> str:
+    # FRONTEND_URL は呼び出し時に読み直す（テストや実行時の差し替えを1箇所で吸収する）
+    # Read FRONTEND_URL at call time so runtime/test overrides apply in one place.
+    return web_constants.FRONTEND_URL
 
 
 def build_frontend_url(base_url: str, path: str = "", *, query: str | None = None) -> str:
@@ -54,9 +60,9 @@ def url_for(request: Request, endpoint: str, **values: Any) -> str:
 
 
 def frontend_url(path: str = "", *, query: str | None = None) -> str:
-    # フロントエンドURLを安全に連結して返す（定数 FRONTEND_URL を使用）
+    # フロントエンドURLを安全に連結して返す（FRONTEND_URL を毎回参照する）
     # Build an absolute frontend URL with normalized path/query using FRONTEND_URL.
-    return build_frontend_url(FRONTEND_URL, path, query=query)
+    return build_frontend_url(frontend_base_url(), path, query=query)
 
 
 def sanitize_next_path(next_path: Any, default: str = "/") -> str:

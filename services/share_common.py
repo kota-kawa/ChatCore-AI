@@ -9,6 +9,7 @@ revocable token.
 
 from __future__ import annotations
 
+import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,7 +17,8 @@ from enum import Enum
 from typing import Any, Callable
 
 from services.datetime_serialization import serialize_datetime_iso
-from services.web_urls import build_frontend_url
+from services.web_constants import DEFAULT_FRONTEND_URL
+from services.web_urls import build_frontend_url, frontend_base_url
 
 
 class ShareContentKind(str, Enum):
@@ -73,6 +75,23 @@ def build_share_path(kind: ShareContentKind | str, identifier: object) -> str:
     return f"{_SHARE_PATH_PREFIXES[content_kind]}/{_validate_share_identifier(identifier)}"
 
 
+def resolve_share_base_url() -> str:
+    """Resolve the one public base URL that every share link is built from.
+
+    共有リンクはフロントエンドのページを指すため ``FRONTEND_URL`` を正本と
+    する。MCP 用の公開URLだけを設定した構成でリンクが localhost に退化しない
+    よう、``FRONTEND_URL`` が既定値のままのときだけ ``MCP_PUBLIC_BASE_URL``
+    を使う（この値の厳格な検証は MCP エンドポイント側の
+    ``services/mcp_config.py`` が担う）。
+    """
+
+    frontend = frontend_base_url().strip()
+    if frontend and frontend.rstrip("/") != DEFAULT_FRONTEND_URL:
+        return frontend
+    mcp_public = (os.getenv("MCP_PUBLIC_BASE_URL") or "").strip()
+    return mcp_public or frontend or DEFAULT_FRONTEND_URL
+
+
 def build_share_url(
     base_url: str,
     kind: ShareContentKind | str,
@@ -81,6 +100,12 @@ def build_share_url(
     """Build an absolute frontend URL for a shared resource."""
 
     return build_frontend_url(base_url, build_share_path(kind, identifier))
+
+
+def build_public_share_url(kind: ShareContentKind | str, identifier: object) -> str:
+    """Build the canonical share URL, resolving the public base URL once."""
+
+    return build_share_url(resolve_share_base_url(), kind, identifier)
 
 
 # Descriptive aliases make the contract easy to discover at call sites while
@@ -205,6 +230,8 @@ __all__ = [
     "UNIQUE_VIOLATION_PGCODE",
     "build_share_path",
     "build_share_url",
+    "build_public_share_url",
+    "resolve_share_base_url",
     "build_shared_content_path",
     "build_shared_content_url",
     "generate_share_token",

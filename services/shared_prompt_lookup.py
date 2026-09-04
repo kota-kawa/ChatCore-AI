@@ -10,7 +10,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from services.mcp_config import get_mcp_public_base_url
 from services.shared_content_service import SharedContentService
 
 logger = logging.getLogger(__name__)
@@ -87,7 +86,7 @@ def _trim(text: str, limit: int) -> str:
 
 
 def _service() -> SharedContentService:
-    return SharedContentService(public_base_url=get_mcp_public_base_url())
+    return SharedContentService()
 
 
 # 公開プロンプトを検索し、上位ヒットは本文まで読み込む

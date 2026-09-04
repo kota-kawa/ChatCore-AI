@@ -1,6 +1,8 @@
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
+from services.share_common import build_public_share_url
 from services.shared_content_service import (
     InvalidSharedContentCursor,
     SHARED_CONTENT_MAX_LIMIT,
@@ -148,6 +150,31 @@ class SharedContentServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail.skill_python_script, "print(1)")
         self.assertEqual(detail.resources[0].path, "scripts/main.py")
         self.assertEqual({call[1] for call in resources.calls}, {session})
+
+    async def test_public_url_falls_back_to_the_shared_base_url_resolution(self):
+        # ベースURL未指定なら REST 経路と同じ絶対URLになることを保証する
+        # Without an explicit base URL the service must agree with the REST transport.
+        repository = _Repository(
+            rows=[
+                {
+                    "id": 21,
+                    "title": "one",
+                    "category": "coding",
+                    "content_format": "skill",
+                    "media_type": "text",
+                    "snippet_source": "body",
+                    "created_at": datetime(2026, 7, 16, 12, 0, 0),
+                }
+            ]
+        )
+        service = SharedContentService(repository=repository)
+
+        with patch("services.web_constants.FRONTEND_URL", "https://chatcore-ai.com"):
+            page = await service.list_public_content(session=object())
+            self.assertEqual(
+                str(page.items[0].public_url),
+                build_public_share_url("prompt", 21),
+            )
 
     async def test_blank_query_is_rejected_before_database_access(self):
         repository = _Repository()

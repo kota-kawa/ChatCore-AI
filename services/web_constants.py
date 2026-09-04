@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import os
 
+# 環境変数が未設定のときに使うフロントエンドのベースURL
+# The frontend base URL used when the environment variable is unset.
+DEFAULT_FRONTEND_URL = "http://localhost:3000"
+
 # フロントエンドのベースURL。環境変数から取得し、未設定の場合はローカルホストをデフォルトとする
 # The base URL of the frontend. Loaded from environment variables, defaulting to localhost if unset.
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
 
 # プロジェクトのベースディレクトリへの絶対パス
 # The absolute path to the project's base directory.

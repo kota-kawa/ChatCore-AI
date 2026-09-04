@@ -79,8 +79,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         # English: Create a share request as the owner (user ID 3)
         request = make_share_request({"room_id": "room-42"}, session={"user_id": 3})
 
-        # 日本語: 所有者検証、トークン生成、およびURL生成処理をモック化
-        # English: Mock the owner validation, token generation, and front-end URL generation
+        # 日本語: 所有者検証、トークン生成、およびフロントエンドのベースURLをモック化
+        # English: Mock the owner validation, token generation, and the frontend base URL
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
                 with patch(
@@ -88,8 +88,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
                     return_value=("abc123token", None),
                 ):
                     with patch(
-                        "blueprints.chat.rooms.frontend_url",
-                        return_value="https://chatcore-ai.com/shared/abc123token",
+                        "services.web_constants.FRONTEND_URL",
+                        "https://chatcore-ai.com",
                     ):
                         response = asyncio.run(share_chat_room(request))
 

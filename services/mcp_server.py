@@ -74,7 +74,7 @@ from services.request_models import (
     SkillResourceInput,
 )
 from services.shared_prompt_service import create_shared_prompt
-from services.share_common import ShareContentKind, build_share_url
+from services.share_common import ShareContentKind, build_public_share_url
 
 _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
@@ -253,11 +253,7 @@ async def _publish(
             content_format=payload.content_format,
             media_type=payload.media_type,
             image_attached=bool(attachments),
-            public_url=build_share_url(
-                get_mcp_public_base_url(),
-                ShareContentKind.PROMPT,
-                prompt_id,
-            ),
+            public_url=build_public_share_url(ShareContentKind.PROMPT, prompt_id),
         )
     except Exception:
         for attachment in attachments:

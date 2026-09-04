@@ -11,7 +11,6 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, BaseModel, Field
 
-from services.mcp_config import get_mcp_public_base_url
 from services.mcp_oauth import MCP_PROMPTS_READ_SCOPE
 from services.mcp_tools.common import consume_tool_limit, require_actor
 from services.prompt_categories import PROMPT_CATEGORIES
@@ -82,7 +81,7 @@ READ_ANNOTATIONS = ToolAnnotations(
 
 def register_shared_content_tools(mcp: FastMCP) -> None:
     """Register bounded public-content discovery tools on the MCP server."""
-    service = SharedContentService(public_base_url=get_mcp_public_base_url())
+    service = SharedContentService()
 
     async def load_page(**kwargs) -> PublicSharedContentPage:
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)

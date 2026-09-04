@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import is_retryable_db_error, session_scope
 from .repositories.passkey_repository import PasskeyRepository
-from .web import FRONTEND_URL
+from .web_constants import DEFAULT_FRONTEND_URL
+from .web_urls import frontend_base_url
 
 DEFAULT_PASSKEY_RP_NAME = "Chat Core"
 PASSKEY_CHALLENGE_TTL_SECONDS = 300
@@ -33,7 +34,7 @@ def get_passkey_rp_id(request: Request) -> str:
     if configured_rp_id:
         return configured_rp_id
 
-    candidates = (FRONTEND_URL, str(request.base_url), str(request.url))
+    candidates = (frontend_base_url(), str(request.base_url), str(request.url))
     for candidate in candidates:
         hostname = urlsplit(candidate).hostname
         if isinstance(hostname, str) and hostname:
@@ -49,7 +50,7 @@ def get_passkey_origins(request: Request) -> list[str]:
             return explicit
 
     origins: list[str] = []
-    candidates = (FRONTEND_URL, str(request.base_url), str(request.url))
+    candidates = (frontend_base_url(), str(request.base_url), str(request.url))
     for candidate in candidates:
         parts = urlsplit(candidate)
         if not parts.scheme or not parts.netloc:
@@ -57,7 +58,7 @@ def get_passkey_origins(request: Request) -> list[str]:
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in origins:
             origins.append(origin)
-    return origins or ["http://localhost:3000"]
+    return origins or [DEFAULT_FRONTEND_URL]
 
 
 def clear_passkey_session(session: dict[str, Any]) -> None:

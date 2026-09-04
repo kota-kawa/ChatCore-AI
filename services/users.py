@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .avatar_storage import DEFAULT_AVATAR_URL, normalize_avatar_url
 from .db import session_scope
 from .i18n import Locale, normalize_locale
 from .repositories.auth_identity_repository import AuthIdentityRepository
@@ -15,8 +16,6 @@ from .repositories.user_repository import UserRepository
 
 
 DEFAULT_USERNAME = "ユーザー"
-DEFAULT_AVATAR_URL = "/static/user-icon.png"
-LEGACY_AVATAR_URL_MAX_LENGTH = 255
 EMAIL_AUTH_PROVIDER = "email"
 GOOGLE_AUTH_PROVIDER = "google"
 ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT"
@@ -34,13 +33,6 @@ def _normalize_provider_metadata(
         normalized_provider_user_id = normalized_provider_user_id or email
         normalized_provider_email = normalized_provider_email or email
     return normalized_provider_user_id, normalized_provider_email
-
-
-def _normalize_avatar_url(avatar_url: str | None) -> str:
-    normalized = (avatar_url or "").strip()
-    if not normalized or len(normalized) > LEGACY_AVATAR_URL_MAX_LENGTH:
-        return DEFAULT_AVATAR_URL
-    return normalized
 
 
 @asynccontextmanager
@@ -146,7 +138,7 @@ async def create_user(
     session: AsyncSession | None = None,
 ) -> int | None:
     normalized_username = (username or "").strip()[:255] or DEFAULT_USERNAME
-    normalized_avatar_url = _normalize_avatar_url(avatar_url)
+    normalized_avatar_url = normalize_avatar_url(avatar_url)
     normalized_preferred_locale = normalize_locale(preferred_locale)
     if preferred_locale is not None and normalized_preferred_locale is None:
         raise ValueError("Unsupported preferred locale")
@@ -204,7 +196,7 @@ async def update_user_profile_from_google_if_unset(
     normalized_name = (name or "").strip() or None
     normalized_picture = (picture or "").strip() or None
     if normalized_picture:
-        normalized_picture = _normalize_avatar_url(normalized_picture)
+        normalized_picture = normalize_avatar_url(normalized_picture)
     await _run_auth(
         lambda repository: repository.update_profile_from_google_if_unset(
             user_id=int(user_id),
