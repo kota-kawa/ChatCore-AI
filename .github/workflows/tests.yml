@@ -73,7 +73,34 @@ jobs:
 
       - name: Audit production frontend dependencies
         working-directory: frontend
-        run: npm audit --omit=dev
+        run: |
+          set -euo pipefail
+          audit_log="$(mktemp)"
+          trap 'rm -f "$audit_log"' EXIT
+
+          for attempt in 1 2 3; do
+            echo "Running npm audit (attempt ${attempt}/3)"
+            if npm audit \
+              --omit=dev \
+              --fetch-retries=0 \
+              --fetch-timeout=60000 \
+              2>&1 | tee "$audit_log"; then
+              exit 0
+            fi
+
+            if ! grep -Eq \
+              'audit endpoint returned an error|audit network timeout|Service Unavailable|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EHOSTUNREACH|socket hang up' \
+              "$audit_log"; then
+              exit 1
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep "$((attempt * 15))"
+            fi
+          done
+
+          echo "npm audit failed after 3 transient-error retries."
+          exit 1
 
   lint:
     name: Ruff Lint (Light)

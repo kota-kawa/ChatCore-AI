@@ -110,12 +110,6 @@ LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
 ANSWER_GENERATION_PHASES = frozenset(
     {"agent", "final_answer", "continuation", "final_answer_deep", "continuation_deep"}
 )
-# 調査を伴うターンの回答フェーズ。長い調査の後の統合は、そのターンで最も難しい作業なので、
-# 思考量を最小に落としたままにしない。調査のない雑談は従来どおり低遅延を優先する。
-# The answer phase of a turn that did research. Synthesising after a long research phase is
-# the hardest work in the turn, so it must not run on the smallest reasoning budget; a turn
-# with no research keeps the low-latency baseline.
-DEEP_REASONING_PHASES = frozenset({"agent", "final_answer_deep", "continuation_deep"})
 
 
 # 生成フェーズに応じた出力トークン上限を返す
@@ -624,9 +618,19 @@ def _openai_reasoning_kwargs(
     model_name: str,
     *,
     generation_phase: str = "default",
+    has_tool_context: bool = False,
 ) -> dict[str, Any]:
-    """Return phase-aware reasoning options for GPT-5.6 Luna Chat Completions."""
+    """Return phase-aware reasoning options for GPT-5.6 Luna Chat Completions.
+
+    GPT-5.6 Luna rejects function tools combined with non-``none`` reasoning on
+    the Chat Completions endpoint.  Tool-bearing turns stay on that endpoint
+    because their existing message history uses the Chat Completions shape, so
+    those requests must explicitly use ``none``.  Tool-free turns continue to
+    use the phase-specific reasoning budget.
+    """
     if model_name == GPT_5_6_LUNA_MODEL:
+        if has_tool_context:
+            return {"reasoning_effort": "none"}
         return {
             "reasoning_effort": "high" if generation_phase == "final_answer" else "medium"
         }
@@ -656,10 +660,9 @@ def _groq_reasoning_kwargs(
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
-    is_deep_phase = generation_phase in DEEP_REASONING_PHASES
     if model_name == QWEN_3_6_27B_MODEL:
         reasoning_options = {
-            "reasoning_effort": "none" if (is_answer_phase and not is_deep_phase) else "default",
+            "reasoning_effort": "default",
             "reasoning_format": "hidden",
         }
     elif model_name in GPT_OSS_MODELS:
@@ -885,6 +888,7 @@ def _get_openai_compatible_response_stream(
         )
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
@@ -899,6 +903,7 @@ def _get_openai_compatible_response_stream(
             **_openai_reasoning_kwargs(
                 model_name,
                 generation_phase=generation_phase,
+                has_tool_context=has_tool_context,
             ),
             **(reasoning_kwargs or {}),
             "stream": True,
@@ -1353,8 +1358,9 @@ def get_openai_response(
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
     )
+    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     try:
-        if tools or _conversation_has_tool_history(sanitized_messages):
+        if has_tool_context:
             # Responses API は既存の tool/result 会話履歴と形が合わないため、tool を使うターンだけ Chat Completions 側に寄せます。
             # Since Responses API does not fit existing tool/result conversation formats, route only the tool usage turns to the Chat Completions API.
             request_kwargs: dict[str, Any] = {
@@ -1367,6 +1373,7 @@ def get_openai_response(
                 **_openai_reasoning_kwargs(
                     model_name,
                     generation_phase=generation_phase,
+                    has_tool_context=has_tool_context,
                 ),
                 **_chat_completion_tool_kwargs(tools),
             }
@@ -1432,8 +1439,9 @@ def get_openai_response_stream(
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
     )
+    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     try:
-        if tools or _conversation_has_tool_history(sanitized_messages):
+        if has_tool_context:
             # Tool 呼び出しを含む履歴は Chat Completions の message shape に合わせてストリーミングします。
             # Stream message history containing tool calls in accordance with the Chat Completions message shape.
             yield from _get_openai_compatible_response_stream(
