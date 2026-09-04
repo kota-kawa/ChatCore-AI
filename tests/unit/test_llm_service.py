@@ -915,6 +915,20 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(extra_body["reasoning_effort"], "high")
         self.assertEqual(extra_body["reasoning_format"], "hidden")
 
+    def test_groq_non_final_answer_phases_use_at_least_medium_reasoning(self):
+        for generation_phase in (
+            "agent",
+            "continuation",
+            "final_answer_deep",
+            "continuation_deep",
+        ):
+            with self.subTest(generation_phase=generation_phase):
+                extra_body = llm._groq_reasoning_kwargs(
+                    llm.GROQ_MODEL,
+                    generation_phase=generation_phase,
+                )["extra_body"]
+                self.assertEqual(extra_body["reasoning_effort"], "medium")
+
     def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
         """
         Groqストリーミング内で複数のツール呼び出しのチャンク（引数分割など）が適切に集約され、JSON文字列として出力されることを検証します。

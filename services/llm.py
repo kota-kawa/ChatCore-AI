@@ -650,14 +650,11 @@ def _groq_reasoning_kwargs(
         }
     elif model_name in GPT_OSS_MODELS:
         if is_answer_phase:
+            # Keep every GPT-OSS answer phase at medium or higher; only the final answer uses high.
+            # GPT-OSS の回答フェーズはすべて medium 以上にし、最終回答だけ high にします。
+            reasoning_effort = "high" if generation_phase == "final_answer" else "medium"
             reasoning_options = {
-                "reasoning_effort": (
-                    "high"
-                    if generation_phase == "final_answer"
-                    else "medium"
-                    if is_deep_phase
-                    else "low"
-                ),
+                "reasoning_effort": reasoning_effort,
                 "reasoning_format": "hidden",
             }
         else:
