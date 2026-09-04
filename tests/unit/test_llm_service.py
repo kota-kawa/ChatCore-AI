@@ -918,6 +918,26 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
         self.assertTrue(mock_stream.closed)
 
+    def test_qwen_answer_phases_use_default_reasoning(self):
+        """
+        Qwenの最終回答を含むすべての回答フェーズでdefaultを使うことを検証します。
+        Verify that Qwen uses default reasoning for every answer phase, including final answers.
+        """
+        for generation_phase in (
+            "agent",
+            "final_answer",
+            "continuation",
+            "final_answer_deep",
+            "continuation_deep",
+        ):
+            with self.subTest(generation_phase=generation_phase):
+                extra_body = llm._groq_reasoning_kwargs(
+                    llm.QWEN_3_6_27B_MODEL,
+                    generation_phase=generation_phase,
+                )["extra_body"]
+                self.assertEqual(extra_body["reasoning_effort"], "default")
+                self.assertEqual(extra_body["reasoning_format"], "hidden")
+
     def test_final_answer_phase_uses_high_groq_reasoning_budget(self):
         mock_groq = MagicMock()
         mock_groq.chat.completions.create.return_value = _MockStream(

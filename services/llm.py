@@ -110,12 +110,6 @@ LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
 ANSWER_GENERATION_PHASES = frozenset(
     {"agent", "final_answer", "continuation", "final_answer_deep", "continuation_deep"}
 )
-# 調査を伴うターンの回答フェーズ。長い調査の後の統合は、そのターンで最も難しい作業なので、
-# 思考量を最小に落としたままにしない。調査のない雑談は従来どおり低遅延を優先する。
-# The answer phase of a turn that did research. Synthesising after a long research phase is
-# the hardest work in the turn, so it must not run on the smallest reasoning budget; a turn
-# with no research keeps the low-latency baseline.
-DEEP_REASONING_PHASES = frozenset({"agent", "final_answer_deep", "continuation_deep"})
 
 
 # 生成フェーズに応じた出力トークン上限を返す
@@ -666,10 +660,9 @@ def _groq_reasoning_kwargs(
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
-    is_deep_phase = generation_phase in DEEP_REASONING_PHASES
     if model_name == QWEN_3_6_27B_MODEL:
         reasoning_options = {
-            "reasoning_effort": "none" if (is_answer_phase and not is_deep_phase) else "default",
+            "reasoning_effort": "default",
             "reasoning_format": "hidden",
         }
     elif model_name in GPT_OSS_MODELS:
