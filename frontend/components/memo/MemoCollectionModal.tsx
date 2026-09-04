@@ -1,48 +1,31 @@
-import { type Dispatch, type SetStateAction } from "react";
-
 import type { Collection } from "../../lib/memo/types";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoCollectionModalProps = {
-  isCollectionPanelOpen: boolean;
-  setIsCollectionPanelOpen: (value: boolean) => void;
-  collections: Collection[];
-  newCollectionName: string;
-  setNewCollectionName: Dispatch<SetStateAction<string>>;
-  newCollectionColor: string;
-  setNewCollectionColor: Dispatch<SetStateAction<string>>;
-  collectionActionLoading: boolean;
-  handleCreateCollection: () => Promise<void>;
-  editingCollectionId: number | null;
-  setEditingCollectionId: Dispatch<SetStateAction<number | null>>;
-  editingCollectionName: string;
-  setEditingCollectionName: Dispatch<SetStateAction<string>>;
-  editingCollectionColor: string;
-  setEditingCollectionColor: Dispatch<SetStateAction<string>>;
-  handleUpdateCollection: (collectionId: number) => Promise<void>;
-  handleDeleteCollection: (collectionId: number, name: string) => Promise<void>;
-};
+import {
+  useMemoPageListContext,
+  useMemoPageModalsContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Collection management panel ──
-export function MemoCollectionModal({
-  isCollectionPanelOpen,
-  setIsCollectionPanelOpen,
-  collections,
-  newCollectionName,
-  setNewCollectionName,
-  newCollectionColor,
-  setNewCollectionColor,
-  collectionActionLoading,
-  handleCreateCollection,
-  editingCollectionId,
-  setEditingCollectionId,
-  editingCollectionName,
-  setEditingCollectionName,
-  editingCollectionColor,
-  setEditingCollectionColor,
-  handleUpdateCollection,
-  handleDeleteCollection,
-}: MemoCollectionModalProps) {
+export function MemoCollectionModal() {
+  const { collections } = useMemoPageListContext();
+  const {
+    isCollectionPanelOpen,
+    setIsCollectionPanelOpen,
+    newCollectionName,
+    setNewCollectionName,
+    newCollectionColor,
+    setNewCollectionColor,
+    collectionActionLoading,
+    handleCreateCollection,
+    editingCollectionId,
+    setEditingCollectionId,
+    editingCollectionName,
+    setEditingCollectionName,
+    editingCollectionColor,
+    setEditingCollectionColor,
+    handleUpdateCollection,
+    handleDeleteCollection,
+  } = useMemoPageModalsContext();
   const { t } = useTranslation();
   return (
         <div className={`memo-collection-modal${isCollectionPanelOpen ? " is-visible" : ""}`} aria-hidden={isCollectionPanelOpen ? "false" : "true"}>

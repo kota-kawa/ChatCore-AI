@@ -3,6 +3,8 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import { MemoToolbar } from "../components/memo/MemoToolbar";
+import { MemoPageContextProvider } from "../contexts/memo_page/memo_page_context";
+import { createMemoPageControllerStub } from "./memo_page_context_harness";
 
 function ToolbarHarness() {
   const [archiveScope, setArchiveScope] = useState("active");
@@ -11,35 +13,28 @@ function ToolbarHarness() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isCollectionPanelOpen, setIsCollectionPanelOpen] = useState(false);
 
+  const controller = createMemoPageControllerStub({
+    archiveScope,
+    setArchiveScope,
+    sortMode,
+    setSortMode,
+    activeCollectionId,
+    setActiveCollectionId,
+    isFiltersOpen,
+    setIsFiltersOpen,
+    setIsCollectionPanelOpen,
+    collections: [{ id: 1, name: "仕事", color: "#3b82f6", memo_count: 2 }],
+    totalMemoCount: 2,
+    hasActiveFilters: archiveScope !== "active" || sortMode !== "manual" || activeCollectionId !== null,
+  });
+
   return (
-    <>
-      <MemoToolbar
-        activeCollection={null}
-        activeCollectionId={activeCollectionId}
-        archiveScope={archiveScope}
-        sortMode={sortMode}
-        collections={[{ id: 1, name: "仕事", color: "#3b82f6", memo_count: 2 }]}
-        totalMemoCount={2}
-        query=""
-        setQuery={() => undefined}
-        hasActiveFilters={archiveScope !== "active" || sortMode !== "manual" || activeCollectionId !== null}
-        setArchiveScope={setArchiveScope}
-        setSortMode={setSortMode}
-        setActiveCollectionId={setActiveCollectionId}
-        viewMode="grid"
-        setViewMode={() => undefined}
-        isBulkMode={false}
-        exitBulkMode={() => undefined}
-        setIsBulkMode={() => undefined}
-        setIsExportModalOpen={() => undefined}
-        isFiltersOpen={isFiltersOpen}
-        setIsFiltersOpen={setIsFiltersOpen}
-        setIsCollectionPanelOpen={setIsCollectionPanelOpen}
-      />
+    <MemoPageContextProvider controller={controller}>
+      <MemoToolbar />
       <output data-testid="toolbar-state">
         {`${archiveScope}/${sortMode}/${activeCollectionId ?? "all"}/${isCollectionPanelOpen}`}
       </output>
-    </>
+    </MemoPageContextProvider>
   );
 }
 

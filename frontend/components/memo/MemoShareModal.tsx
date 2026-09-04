@@ -1,31 +1,20 @@
-import type { FlashState } from "../../lib/memo/types";
 import { ShareDialogContent } from "../ui/share_dialog_content";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoShareModalProps = {
-  isShareModalOpen: boolean;
-  closeShareModal: () => void;
-  shareUrl: string;
-  shareStatus: FlashState | null;
-  copyShareLink: () => Promise<boolean>;
-  openNativeShareSheet: () => Promise<void>;
-  shareLoading: boolean;
-  supportsNativeShare: boolean;
-  shareSnsLinks: { x: string; line: string; facebook: string };
-};
+import { useMemoPageModalsContext } from "../../contexts/memo_page/memo_page_context";
 
 // ── Share modal ──
-export function MemoShareModal({
-  isShareModalOpen,
-  closeShareModal,
-  shareUrl,
-  shareStatus,
-  copyShareLink,
-  openNativeShareSheet,
-  shareLoading,
-  supportsNativeShare,
-  shareSnsLinks,
-}: MemoShareModalProps) {
+export function MemoShareModal() {
+  const {
+    isShareModalOpen,
+    closeShareModal,
+    shareUrl,
+    shareStatus,
+    copyShareLink,
+    openNativeShareSheet,
+    shareLoading,
+    supportsNativeShare,
+    shareSnsLinks,
+  } = useMemoPageModalsContext();
   const { t } = useTranslation();
   return (
         <div

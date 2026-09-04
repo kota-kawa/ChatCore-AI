@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
 import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
@@ -6,65 +6,43 @@ import type { MemoEditPayload } from "../../lib/chat_page/mini_chat_runtime";
 import { InlineLoading } from "../ui/inline_loading";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
-import type { Collection, DetailSaveStatus, MemoDetail } from "../../lib/memo/types";
 import { formatDateTime } from "../../lib/datetime";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoDetailModalProps = {
-  selectedMemo: MemoDetail | null;
-  isMemoDetailClosing: boolean;
-  closeMemoDetail: () => Promise<void>;
-  detailEditBackgroundColor: string | null;
-  setDetailEditBackgroundColor: Dispatch<SetStateAction<string | null>>;
-  detailPreviewMode: boolean;
-  setDetailPreviewMode: Dispatch<SetStateAction<boolean>>;
-  detailEditTitle: string;
-  setDetailEditTitle: Dispatch<SetStateAction<string>>;
-  collections: Collection[];
-  detailEditCollectionId: number | null;
-  setDetailEditCollectionId: Dispatch<SetStateAction<number | null>>;
-  copyDetailFullText: () => Promise<boolean>;
-  isMemoAgentOpen: boolean;
-  setIsMemoAgentOpen: Dispatch<SetStateAction<boolean>>;
-  openMemoAgent: () => Promise<void>;
-  detailSaveStatus: DetailSaveStatus;
-  detailHasUnsavedChanges: boolean;
-  detailSaveError: string;
-  detailLoading: boolean;
-  detailError: string;
-  detailEditAiResponse: string;
-  setDetailEditAiResponse: Dispatch<SetStateAction<string>>;
-};
+import {
+  useMemoPageDetailContext,
+  useMemoPageListContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Memo detail modal ──
-export function MemoDetailModal({
-  selectedMemo,
-  isMemoDetailClosing,
-  closeMemoDetail,
-  detailEditBackgroundColor,
-  setDetailEditBackgroundColor,
-  detailPreviewMode,
-  setDetailPreviewMode,
-  detailEditTitle,
-  setDetailEditTitle,
-  collections,
-  detailEditCollectionId,
-  setDetailEditCollectionId,
-  copyDetailFullText,
-  isMemoAgentOpen,
-  setIsMemoAgentOpen,
-  openMemoAgent,
-  detailSaveStatus,
-  detailHasUnsavedChanges,
-  detailSaveError,
-  detailLoading,
-  detailError,
-  detailEditAiResponse,
-  setDetailEditAiResponse,
-}: MemoDetailModalProps) {
+export function MemoDetailModal() {
+  const { collections } = useMemoPageListContext();
+  const {
+    selectedMemo,
+    isMemoDetailClosing,
+    closeMemoDetail,
+    detailEditBackgroundColor,
+    setDetailEditBackgroundColor,
+    detailPreviewMode,
+    setDetailPreviewMode,
+    detailEditTitle,
+    setDetailEditTitle,
+    detailEditCollectionId,
+    setDetailEditCollectionId,
+    copyDetailFullText,
+    isMemoAgentOpen,
+    setIsMemoAgentOpen,
+    openMemoAgent,
+    detailSaveStatus,
+    detailHasUnsavedChanges,
+    detailSaveError,
+    detailLoading,
+    detailError,
+    detailEditAiResponse,
+    setDetailEditAiResponse,
+  } = useMemoPageDetailContext();
   const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement>(null);
 

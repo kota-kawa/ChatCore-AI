@@ -1,35 +1,23 @@
-import { type Dispatch, type SetStateAction } from "react";
-
-import type { BulkAction, Collection, MemoSummary } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoBulkBarProps = {
-  hasSelection: boolean;
-  selectedIds: Set<string>;
-  memos: MemoSummary[];
-  selectAll: () => void;
-  deselectAll: () => void;
-  executeBulkAction: (action: BulkAction, extra?: { collectionId?: number | null }) => Promise<void>;
-  bulkLoading: boolean;
-  collections: Collection[];
-  bulkCollectionId: number | null;
-  setBulkCollectionId: Dispatch<SetStateAction<number | null>>;
-};
+import {
+  useMemoPageBoardContext,
+  useMemoPageListContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // Bulk action bar
-export function MemoBulkBar({
-  hasSelection,
-  selectedIds,
-  memos,
-  selectAll,
-  deselectAll,
-  executeBulkAction,
-  bulkLoading,
-  collections,
-  bulkCollectionId,
-  setBulkCollectionId,
-}: MemoBulkBarProps) {
+export function MemoBulkBar() {
+  const { memos, collections } = useMemoPageListContext();
+  const {
+    hasSelection,
+    selectedIds,
+    selectAll,
+    deselectAll,
+    executeBulkAction,
+    bulkLoading,
+    bulkCollectionId,
+    setBulkCollectionId,
+  } = useMemoPageBoardContext();
   const { t } = useTranslation();
   return (
             <div className="memo-bulk-bar memo-card" role="toolbar" aria-label={t("memo.bulkToolbar")}>

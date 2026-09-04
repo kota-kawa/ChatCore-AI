@@ -1,57 +1,32 @@
-import { type Dispatch, type SetStateAction } from "react";
-
 import type { Collection } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
-
-type MemoToolbarProps = {
-  activeCollection: Collection | null | undefined;
-  activeCollectionId: number | null;
-  archiveScope: string;
-  sortMode: string;
-  collections: Collection[];
-  totalMemoCount: number;
-  query: string;
-  setQuery: Dispatch<SetStateAction<string>>;
-  hasActiveFilters: boolean;
-  setArchiveScope: Dispatch<SetStateAction<string>>;
-  setSortMode: Dispatch<SetStateAction<string>>;
-  setActiveCollectionId: Dispatch<SetStateAction<number | null>>;
-  viewMode: "grid" | "list";
-  setViewMode: Dispatch<SetStateAction<"grid" | "list">>;
-  isBulkMode: boolean;
-  exitBulkMode: () => void;
-  setIsBulkMode: Dispatch<SetStateAction<boolean>>;
-  setIsExportModalOpen: (value: boolean) => void;
-  isFiltersOpen: boolean;
-  setIsFiltersOpen: Dispatch<SetStateAction<boolean>>;
-  setIsCollectionPanelOpen: (value: boolean) => void;
-};
+import {
+  useMemoPageBoardContext,
+  useMemoPageListContext,
+  useMemoPageModalsContext,
+  useMemoPageUiContext,
+} from "../../contexts/memo_page/memo_page_context";
 
 // ── Toolbar ──
-export function MemoToolbar({
-  activeCollection,
-  activeCollectionId,
-  archiveScope,
-  sortMode,
-  collections,
-  totalMemoCount,
-  query,
-  setQuery,
-  hasActiveFilters,
-  setArchiveScope,
-  setSortMode,
-  setActiveCollectionId,
-  viewMode,
-  setViewMode,
-  isBulkMode,
-  exitBulkMode,
-  setIsBulkMode,
-  setIsExportModalOpen,
-  isFiltersOpen,
-  setIsFiltersOpen,
-  setIsCollectionPanelOpen,
-}: MemoToolbarProps) {
+export function MemoToolbar() {
+  const { viewMode, setViewMode, isFiltersOpen, setIsFiltersOpen } = useMemoPageUiContext();
+  const {
+    activeCollection,
+    activeCollectionId,
+    archiveScope,
+    sortMode,
+    collections,
+    totalMemoCount,
+    query,
+    setQuery,
+    hasActiveFilters,
+    setArchiveScope,
+    setSortMode,
+    setActiveCollectionId,
+  } = useMemoPageListContext();
+  const { isBulkMode, exitBulkMode, setIsBulkMode } = useMemoPageBoardContext();
+  const { setIsExportModalOpen, setIsCollectionPanelOpen } = useMemoPageModalsContext();
   const { locale, t } = useTranslation();
   const english = locale === "en";
   const sortOptions = english

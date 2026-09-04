@@ -1,39 +1,23 @@
-import { type Dispatch, type SetStateAction } from "react";
-
-import type { Collection } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
-import type { MemoView } from "./MemoViewSwitcher";
 import { useTranslation } from "../../contexts/locale_context";
+import {
+  useMemoPageListContext,
+  useMemoPageModalsContext,
+  useMemoPageUiContext,
+} from "../../contexts/memo_page/memo_page_context";
 
-type MemoSidebarProps = {
-  isSidebarCollapsed: boolean;
-  setIsSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
-  activeCollectionId: number | null;
-  setActiveCollectionId: Dispatch<SetStateAction<number | null>>;
-  archiveScope: string;
-  setArchiveScope: Dispatch<SetStateAction<string>>;
-  sortMode: string;
-  setSortMode: Dispatch<SetStateAction<string>>;
-  collections: Collection[];
-  setIsCollectionPanelOpen: (value: boolean) => void;
-  activeView: MemoView;
-  setActiveView: Dispatch<SetStateAction<MemoView>>;
-};
-
-export function MemoSidebar({
-  isSidebarCollapsed,
-  setIsSidebarCollapsed,
-  activeCollectionId,
-  setActiveCollectionId,
-  archiveScope,
-  setArchiveScope,
-  sortMode,
-  setSortMode,
-  collections,
-  setIsCollectionPanelOpen,
-  activeView,
-  setActiveView,
-}: MemoSidebarProps) {
+export function MemoSidebar() {
+  const { isSidebarCollapsed, setIsSidebarCollapsed, activeView, setActiveView } = useMemoPageUiContext();
+  const {
+    activeCollectionId,
+    setActiveCollectionId,
+    archiveScope,
+    setArchiveScope,
+    sortMode,
+    setSortMode,
+    collections,
+  } = useMemoPageListContext();
+  const { setIsCollectionPanelOpen } = useMemoPageModalsContext();
   const { t } = useTranslation();
   const isMemosView = activeView === "memos";
   return (
