@@ -651,7 +651,13 @@ def _groq_reasoning_kwargs(
     elif model_name in GPT_OSS_MODELS:
         if is_answer_phase:
             reasoning_options = {
-                "reasoning_effort": "medium" if is_deep_phase else "low",
+                "reasoning_effort": (
+                    "high"
+                    if generation_phase == "final_answer"
+                    else "medium"
+                    if is_deep_phase
+                    else "low"
+                ),
                 "reasoning_format": "hidden",
             }
         else:

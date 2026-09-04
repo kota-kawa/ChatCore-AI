@@ -896,7 +896,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertNotIn("include_reasoning", request_kwargs["extra_body"])
         self.assertTrue(mock_stream.closed)
 
-    def test_final_answer_phase_reduces_groq_reasoning_budget(self):
+    def test_final_answer_phase_uses_high_groq_reasoning_budget(self):
         mock_groq = MagicMock()
         mock_groq.chat.completions.create.return_value = _MockStream(
             _mock_stream_chunk("answer")
@@ -912,7 +912,7 @@ class LlmServiceTestCase(unittest.TestCase):
             )
 
         extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
-        self.assertEqual(extra_body["reasoning_effort"], "low")
+        self.assertEqual(extra_body["reasoning_effort"], "high")
         self.assertEqual(extra_body["reasoning_format"], "hidden")
 
     def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
