@@ -521,7 +521,7 @@ class LlmServiceTestCase(unittest.TestCase):
         mock_openai.responses.create.assert_called_once()
         response_kwargs = mock_openai.responses.create.call_args.kwargs
         self.assertEqual(response_kwargs["model"], llm.GPT_5_6_LUNA_MODEL)
-        self.assertEqual(response_kwargs["reasoning"], {"effort": "none"})
+        self.assertEqual(response_kwargs["reasoning"], {"effort": "medium"})
         passed_messages = response_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         self.assertTrue(
@@ -992,7 +992,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["groq", "-stream"])
         mock_stream.assert_called_once_with(messages, llm.GROQ_MODEL, tools=tools)
 
-    def test_get_openai_response_stream_yields_text_deltas(self):
+    def test_get_openai_response_stream_uses_high_reasoning_for_final_answer(self):
         """
         OpenAIのレスポンスAPIを用いたストリーミング時に、差分テキストが正しく抽出・出力されることを検証します。
         Verify that OpenAI responses.stream correctly yields text deltas.
@@ -1021,6 +1021,7 @@ class LlmServiceTestCase(unittest.TestCase):
                         {"role": "user", "content": "hello"},
                     ],
                     llm.GPT_5_6_LUNA_MODEL,
+                    generation_phase="final_answer",
                 )
             )
 
@@ -1029,7 +1030,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["openai", "-stream"])
         mock_openai.responses.stream.assert_called_once()
         stream_kwargs = mock_openai.responses.stream.call_args.kwargs
-        self.assertEqual(stream_kwargs["reasoning"], {"effort": "none"})
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "high"})
         passed_messages = stream_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         self.assertTrue(
@@ -1081,6 +1082,7 @@ class LlmServiceTestCase(unittest.TestCase):
                     [{"role": "user", "content": "hello"}],
                     llm.GPT_5_6_LUNA_MODEL,
                     tools=[{"type": "function", "function": {"name": "web_search"}}],
+                    generation_phase="final_answer",
                 )
             )
 
@@ -1089,9 +1091,15 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["tool", "-stream"])
         mock_openai.chat.completions.create.assert_called_once()
         chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
-        self.assertEqual(chat_kwargs["max_completion_tokens"], llm.LLM_MAX_TOKENS)
+        self.assertEqual(
+            chat_kwargs["max_completion_tokens"],
+            llm.max_output_tokens_for_model(
+                llm.GPT_5_6_LUNA_MODEL,
+                "final_answer",
+            ),
+        )
         self.assertNotIn("max_tokens", chat_kwargs)
-        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
+        self.assertEqual(chat_kwargs["reasoning_effort"], "high")
         self.assertEqual(chat_kwargs["tool_choice"], "auto")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
@@ -1140,7 +1148,7 @@ class LlmServiceTestCase(unittest.TestCase):
         chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
         self.assertNotIn("tools", chat_kwargs)
         self.assertNotIn("tool_choice", chat_kwargs)
-        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
+        self.assertEqual(chat_kwargs["reasoning_effort"], "medium")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
