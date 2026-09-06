@@ -31,6 +31,7 @@ from services.chat_generation import (
     start_generation_job,
 )
 from services.chat_turn_state import (
+    TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT,
     TURN_STATE_UPDATE_CLOSE_TAG,
     TURN_STATE_UPDATE_MAX_CHARS,
     TURN_STATE_UPDATE_OPEN_TAG,
@@ -371,8 +372,34 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("search limit for this turn has been reached", system_contents)
         self.assertIn("Do not call any tool", system_contents)
         self.assertIn("answer the original request now", system_contents)
+        self.assertIn("must follow the envelope in this same response", system_contents)
         self.assertNotIn("choose exactly one action", system_contents)
         self.assertNotIn("call one appropriate tool", system_contents)
+
+    # 日本語: 空回答の回復メモは回答のみ契約の直後にだけ入り、通常の判断要求には入りません。
+    # English: The empty-answer recovery note sits right behind the answer-only contract and
+    # never appears in an ordinary decision request.
+    def test_turn_loop_messages_add_recovery_note_only_when_requested(self):
+        messages = [
+            {"role": "system", "content": "base"},
+            {"role": "user", "content": "鎌倉の紅葉を教えて"},
+        ]
+        recovery = build_turn_loop_messages(
+            messages, force_answer=True, empty_answer_recovery=True
+        )
+        system_contents = [
+            message["content"] for message in recovery if message.get("role") == "system"
+        ]
+        self.assertEqual(len(system_contents), 3)
+        self.assertIn("search limit for this turn has been reached", system_contents[1])
+        self.assertEqual(system_contents[2], TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT)
+        self.assertEqual(recovery[-1], {"role": "user", "content": "鎌倉の紅葉を教えて"})
+
+        plain = build_turn_loop_messages(messages, force_answer=True)
+        self.assertNotIn(
+            TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT,
+            [message["content"] for message in plain],
+        )
 
     def test_strip_turn_state_update_removes_complete_and_unterminated_envelopes(self):
         self.assertEqual(strip_turn_state_update("通常の本文です。"), "通常の本文です。")
@@ -618,8 +645,8 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with patch(
             "services.chat_generation.get_llm_response_stream",
-            return_value=iter([]),
-        ):
+            side_effect=lambda *args, **kwargs: iter([]),
+        ) as mock_stream:
             job = start_generation_job(
                 "guest:sid-empty:default",
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
@@ -636,6 +663,185 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 空の吹き出しを残さないよう、空応答は保存しない。
         # An empty reply is never persisted, so no blank bubble is left behind.
         self.assertEqual(persisted_messages, [])
+        self.assertEqual(len(cleanup_calls), 1)
+        # 無出力の判断は回答のみ要求で1度だけやり直し、それ以上は繰り返さない。
+        # An empty decision is retried once as an answer-only request, never more.
+        self.assertEqual(mock_stream.call_count, 2)
+
+    # 日本語: 最後の判断が内部封筒だけで本文を返さなかった場合、回答のみ要求で1度やり直し、
+    # その本文を保存して done で終えることを検証します。
+    # English: When the final decision returns only the internal envelope, the job retries once
+    # as an answer-only request, persists that answer, and finishes with done.
+    def test_background_generation_job_recovers_envelope_only_final_answer(self):
+        persisted = []
+        requests = []
+
+        def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
+            requests.append({"messages": messages, "tools": tools, "phase": generation_phase})
+            if len(requests) == 1:
+                return iter([_turn_state_update()])
+            return iter([_turn_state_update(), "回復した最終回答"])
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=stream_side_effect,
+        ):
+            job = start_generation_job(
+                "guest:sid-envelope-only:default",
+                conversation_messages=[{"role": "user", "content": "鎌倉の紅葉を教えて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted.append(response),
+            )
+            events = list(_iter_llm_stream_events(job))
+            body = b"".join(events).decode("utf-8")
+
+        self.assertEqual(len(requests), 2)
+        self.assertIsNone(requests[1]["tools"])
+        self.assertEqual(requests[1]["phase"], "agent")
+        recovery_system_contents = [
+            message["content"]
+            for message in requests[1]["messages"]
+            if message.get("role") == "system"
+        ]
+        self.assertIn(TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT, recovery_system_contents)
+        self.assertIn("event: done", body)
+        self.assertNotIn("event: error", body)
+        self.assertIn("回復した最終回答", body)
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
+        self.assertEqual(persisted, ["回復した最終回答"])
+        # 同じ判断のやり直しなので、進捗イベントは1回だけ。
+        # The retry is the same decision, so the progress event is published once.
+        self.assertEqual(body.count("event: response_generation_started"), 1)
+
+    # 日本語: 本文ゼロのまま出力上限に当たった判断も、継続ではなく回答のみ要求で1度やり直します。
+    # English: A decision cut off at the output cap before any body text is also retried once
+    # as an answer-only request instead of a continuation.
+    def test_background_generation_job_recovers_output_limited_empty_answer(self):
+        persisted = []
+        calls = []
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            calls.append(generation_phase)
+            if len(calls) == 1:
+                def limited():
+                    raise LlmOutputLimitError("limit", reason="max_output_tokens")
+                    yield  # pragma: no cover - makes this a generator
+
+                return limited()
+            return iter([_turn_state_update(), "上限後の最終回答"])
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=stream_side_effect,
+        ):
+            job = start_generation_job(
+                "guest:sid-limit-empty:default",
+                conversation_messages=[{"role": "user", "content": "長い調査をして"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(calls, ["agent", "agent"])
+        self.assertIn("event: done", body)
+        self.assertIn("上限後の最終回答", body)
+        self.assertEqual(persisted, ["上限後の最終回答"])
+
+    # 日本語: 検索後に本文が2度とも返らなければ、選定済みの検索画像だけを保存せず、
+    # トレースだけの本文も作らず、error で終えることを検証します。
+    # English: If no body arrives even after the retry, the job must not persist the selected
+    # web-search images alone or a trace-only body; it ends with error.
+    def test_background_generation_job_rejects_image_only_answer_after_recovery(self):
+        persisted = []
+        cleanup_calls = []
+        phases = []
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            phases.append(generation_phase)
+            if len(phases) == 1:
+                return iter(
+                    [
+                        _turn_state_update(ready_to_answer=False),
+                        json.dumps(
+                            [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "web_search",
+                                        "arguments": json.dumps({"query": "京都の紅葉"}),
+                                    },
+                                }
+                            ]
+                        ),
+                    ]
+                )
+            return iter([_turn_state_update()])
+
+        search_result = WebSearchResult(
+            query="京都の紅葉",
+            searched_at="2026-08-19T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/kyoto",
+                    title="京都の紅葉ガイド",
+                    hostname="example.com",
+                    age="",
+                    snippets=("見頃は11月下旬",),
+                    image_candidates=(
+                        WebSearchImageCandidate(
+                            url="https://cdn.example.com/maple.jpg",
+                            alt="紅葉の写真",
+                            kind="og:image",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted.append({"response": response, "message_parts": message_parts})
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ),
+            patch(
+                "services.chat_generation.choose_web_search_images",
+                return_value=[
+                    {
+                        "url": "https://cdn.example.com/maple.jpg",
+                        "alt": "京都の紅葉の写真",
+                        "source_url": "https://example.com/kyoto",
+                        "source_title": "京都の紅葉ガイド",
+                        "placement": "after_subject",
+                        "placement_anchor": "京都の紅葉",
+                    }
+                ],
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-image-only:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉を教えて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+                on_error=lambda: cleanup_calls.append(True),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        # 検索 → 封筒のみ → 回復要求も封筒のみ。
+        # search → envelope only → the recovery request is envelope only as well.
+        self.assertEqual(phases, ["agent", "agent", "agent"])
+        self.assertIn("event: error", body)
+        self.assertIn(ERROR_CHAT_EMPTY_RESPONSE, body)
+        self.assertNotIn("event: done", body)
+        self.assertNotIn("回答までのステップ", body)
+        self.assertEqual(persisted, [])
         self.assertEqual(len(cleanup_calls), 1)
 
     # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。

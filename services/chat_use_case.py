@@ -879,9 +879,12 @@ class ChatPostUseCase:
             None,
             steps=web_search_trace_steps,
         )
-        if trace_block:
-            separator = "" if not bot_reply else "\n\n"
-            bot_reply = f"{trace_block}{separator}{bot_reply}"
+        # 本文の無いターンにトレースだけを前置すると空判定をすり抜け、「回答までの
+        # ステップ」だけの応答が保存される。本文があるときだけ前置する。
+        # Prepending the trace to an empty body would slip past the empty-answer guard and
+        # persist a steps-only reply, so only a non-empty body receives the trace.
+        if trace_block and bot_reply.strip():
+            bot_reply = f"{trace_block}\n\n{bot_reply}"
 
         normalized_response = await run_blocking(
             partial(

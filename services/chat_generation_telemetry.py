@@ -51,6 +51,9 @@ class ChatGenerationTelemetry:
     # プロバイダがツール呼び出しを拒否し、ツールなしでやり直して回復した回数。
     # How often a provider rejected a tool call and the step recovered without tools.
     tool_schema_recoveries: int = 0
+    # 最後の判断が本文を返さず、回答のみ要求で1度やり直した回数。
+    # How often the final decision produced no user-facing answer and was retried answer-only.
+    empty_answer_recoveries: int = 0
 
     @property
     def agent_steps(self) -> int:
@@ -101,4 +104,5 @@ class ChatGenerationTelemetry:
             "context_compaction_count": self.context_compaction_count,
             "context_recovery_count": self.context_recovery_count,
             "tool_schema_recoveries": self.tool_schema_recoveries,
+            "empty_answer_recoveries": self.empty_answer_recoveries,
         }
