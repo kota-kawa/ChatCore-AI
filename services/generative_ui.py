@@ -411,32 +411,6 @@ def _coerce_height(value: Any) -> int | None:
     return None
 
 
-# 各コード（HTML、CSS、JS）が制限文字数を超えている場合に、優先順位に従って切り詰めます。
-# Trim HTML, CSS, and JS contents sequentially to enforce the maximum aggregate limit.
-def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]:
-    html = html[:MAX_ARTIFACT_HTML_CHARS]
-    css = css[:MAX_ARTIFACT_CSS_CHARS]
-    js = js[:MAX_ARTIFACT_JS_CHARS]
-    overflow = len(html) + len(css) + len(js) - MAX_ARTIFACT_TOTAL_CHARS
-    if overflow <= 0:
-        return html, css, js
-
-    js_trim = min(len(js), overflow)
-    js = js[: len(js) - js_trim]
-    overflow -= js_trim
-    if overflow <= 0:
-        return html, css, js
-
-    css_trim = min(len(css), overflow)
-    css = css[: len(css) - css_trim]
-    overflow -= css_trim
-    if overflow <= 0:
-        return html, css, js
-
-    html = html[: max(0, len(html) - overflow)]
-    return html, css, js
-
-
 # HTML本文が空の場合に、JavaScriptからDOM操作ができるようデフォルトのコンテナ要素を挿入します。
 # Inject a default fallback container element if the HTML body is empty but JS refers to #app.
 def _ensure_artifact_has_body(html: str, js: str) -> str:
@@ -1219,7 +1193,6 @@ def _prepare_artifact_payload(payload: Any) -> Any:
         js = "\n".join(part for part in [js, *embedded_js] if part)
     js = _normalize_three_module_imports(js)
     html = _ensure_artifact_has_body(html, js)
-    html, css, js = _trim_artifact_sources(html, css, js)
 
     title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
     description = _coerce_string(_first_present(payload, "description", "summary", "caption")).strip()

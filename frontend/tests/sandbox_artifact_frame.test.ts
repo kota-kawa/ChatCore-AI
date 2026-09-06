@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { JSDOM } from "jsdom";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -69,6 +70,28 @@ test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
 
   assert.match(srcDoc, /chatcore-empty-artifact/);
   assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
+  assert.doesNotMatch(srcDoc, /rect\.width > 2 && rect\.height > 2\) return true/);
+  assert.match(srcDoc, /hasBackground \|\| hasBorder \|\| style\.boxShadow/);
+  assert.match(srcDoc, /runtimeFailed = true/);
+  assert.match(srcDoc, /node\.closest\("#chatcore-empty-artifact"\)/);
+});
+
+test("sandbox keeps the safe fallback visible after a runtime error", async () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    js: `
+      const app = document.getElementById("app");
+      app.style.backgroundColor = "red";
+      app.getBoundingClientRect = () => ({ width: 500, height: 300 });
+      throw new Error("render failed");
+    `,
+  });
+  const dom = new JSDOM(srcDoc, { pretendToBeVisual: true, runScripts: "dangerously" });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.ok(dom.window.document.getElementById("chatcore-empty-artifact"));
+  dom.window.close();
 });
 
 test("buildSandboxArtifactSrcDoc injects local three.js when the artifact requests it", () => {

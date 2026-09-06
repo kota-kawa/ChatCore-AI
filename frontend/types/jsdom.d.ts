@@ -7,10 +7,15 @@ declare module "jsdom" {
 
   // DOMPurify初期化とdocument取得に必要なwindowの最小型
   // Minimal window type needed for DOMPurify initialization and document access
-  type JsdomWindow = WindowLike & { document: Document };
+  type JsdomWindow = WindowLike & { document: Document; close(): void };
+
+  type JsdomOptions = {
+    pretendToBeVisual?: boolean;
+    runScripts?: "dangerously" | "outside-only";
+  };
 
   class JSDOM {
-    constructor(html?: string);
+    constructor(html?: string, options?: JsdomOptions);
     readonly window: JsdomWindow;
   }
 

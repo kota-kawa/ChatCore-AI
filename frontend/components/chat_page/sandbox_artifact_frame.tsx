@@ -131,6 +131,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   var MIN_HEIGHT = ${MIN_FRAME_HEIGHT};
   var MAX_HEIGHT = ${MAX_FRAME_HEIGHT};
   var resizePending = false;
+  var runtimeFailed = false;
   function root(){
     return document.getElementById("chatcore-artifact-root") || document.body;
   }
@@ -165,22 +166,37 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   function hasRenderableContent(){
     var container = root();
     if (!container) return false;
-    var nodes = container.children || [];
+    var nodes = container.querySelectorAll ? container.querySelectorAll("*") : (container.children || []);
     for (var i = 0; i < nodes.length; i += 1) {
       var node = nodes[i];
-      if (node.id === "chatcore-empty-artifact") continue;
+      if (node.id === "chatcore-empty-artifact" || (node.closest && node.closest("#chatcore-empty-artifact"))) continue;
       var tag = String(node.tagName || "").toLowerCase();
       if (tag === "script" || tag === "style") continue;
       if (/^(canvas|svg|img|video|button|input|select|textarea)$/.test(tag)) return true;
       if (node.querySelector && node.querySelector("canvas,svg,img,video,button,input,select,textarea")) return true;
       if (String(node.textContent || "").trim()) return true;
+      // 空の #app もCSSによって寸法を持つことがあるため、寸法だけでは描画成功と判定しない。
+      // An empty #app can have dimensions from CSS, so geometry alone is not
+      // evidence of a successful render.
       var rect = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-      if (rect && rect.width > 2 && rect.height > 2) return true;
+      var style = typeof getComputedStyle === "function" ? getComputedStyle(node) : null;
+      if (rect && rect.width > 2 && rect.height > 2 && style) {
+        var backgroundColor = String(style.backgroundColor || "").toLowerCase().split(" ").join("");
+        var hasBackground = style.backgroundImage !== "none" || (
+          backgroundColor !== "" &&
+          backgroundColor !== "transparent" &&
+          backgroundColor !== "rgba(0,0,0,0)" &&
+          backgroundColor !== "rgb(0,0,0,0)"
+        );
+        var hasBorder = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth]
+          .some(function(width){ return parseFloat(width || "0") > 0; });
+        if (hasBackground || hasBorder || style.boxShadow !== "none") return true;
+      }
     }
     return false;
   }
   function ensureVisibleContent(){
-    if (hasRenderableContent()) {
+    if (!runtimeFailed && hasRenderableContent()) {
       var existing = document.getElementById("chatcore-empty-artifact");
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
       requestHeight();
@@ -201,6 +217,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
     requestHeight();
   }
   function reportError(message){
+    runtimeFailed = true;
     send("chatcore-artifact-error", { message: String(message || "Artifact script error") });
     setTimeout(ensureVisibleContent, 0);
   }
@@ -321,7 +338,9 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
 
       if ((data as { type?: unknown }).type === "chatcore-artifact-error") {
         const message = (data as { message?: unknown }).message;
-        setErrorMessage(typeof message === "string" ? message.slice(0, 180) : "Artifact error");
+        const normalizedMessage = typeof message === "string" ? message.slice(0, 180) : "Artifact error";
+        console.warn(`Generated UI runtime error (${artifact.title}): ${normalizedMessage}`);
+        setErrorMessage(normalizedMessage);
       }
     };
 
@@ -329,7 +348,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, []);
+  }, [artifact.title]);
 
   const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
 
