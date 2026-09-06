@@ -203,6 +203,42 @@ describe("failed chat turns", () => {
     expect(readStoredHistory("room-1")).toEqual([]);
   });
 
+  // 検索画像だけの完了は回答ではない。画像だけの吹き出しを残さず失敗として扱う。
+  // A completion carrying only web-search images is not an answer: treat it as a
+  // failure instead of leaving an image-only bubble behind.
+  it("treats a done event carrying only web-search images as an empty answer", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createStreamResponse([
+        `id: 1\nevent: done\ndata: ${JSON.stringify({
+          response: "",
+          parts: [
+            {
+              type: "web_search_image",
+              image: {
+                url: "https://cdn.example.com/maple.jpg",
+                alt: "紅葉の写真",
+                source_url: "https://example.com/kyoto",
+                source_title: "京都の紅葉ガイド",
+              },
+            },
+          ],
+        })}\n\n`,
+      ]),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("京都の紅葉を教えて", "model", "room-1");
+    });
+
+    const messages = result.current.state.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].error).toBe(true);
+    expect(messages[0].text).toContain("空");
+    expect(readStoredHistory("room-1")).toEqual([]);
+  });
+
   it("keeps a server-persisted partial answer when the stream ends incomplete", async () => {
     resilientFetchMock.mockResolvedValue(
       createStreamResponse([
