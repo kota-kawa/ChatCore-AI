@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import Request
 
 from .background_executor import submit_background_task
-from .chat_context import trim_text_to_token_budget
+from .chat_context_recovery import build_recovery_base_messages
 from .chat_agent_budget import (
     DEFAULT_MAX_LLM_TURNS,
     DEFAULT_MAX_TOOL_CALLS,
@@ -41,10 +41,8 @@ from .llm_context_budget import (
     request_fits_context,
 )
 from .research_state import (
-    TURN_STATE_MARKER,
     TurnState,
     TurnStateProjectionError,
-    is_reference_context_message,
 )
 from .chat_evidence_store import (
     EvidenceStore,
@@ -1234,6 +1232,8 @@ class ChatGenerationJob:
         telemetry.evidence_budget_max_chars = evidence_context_budget.max_chars
         latest_user_message = _latest_user_message_text(self._conversation_messages)
         evidence_store = EvidenceStore()
+        # 原文は初期値。最初のモデル判断で履歴を踏まえた目的へ更新する。
+        # The raw request is a seed; the first model decision resolves it in context.
         turn_state = TurnState(objective=latest_user_message)
         for prior_result in self._prior_web_search_results:
             turn_state.record_evidence_refs(evidence_store.add_web_result(prior_result))
@@ -1497,35 +1497,6 @@ class ChatGenerationJob:
             telemetry.first_pass_finish_reason = interruption.reason
             return result.error
 
-        def minimal_base_messages() -> list[dict[str, Any]]:
-            """Return the smallest safe base prompt used by context-limit recovery."""
-            base: list[dict[str, Any]] = []
-            first_system = next(
-                (
-                    message
-                    for message in turn_base_messages
-                    if message.get("role") == "system"
-                    and not str(message.get("content") or "").lstrip().startswith(
-                        TURN_STATE_MARKER
-                    )
-                    and not is_reference_context_message(message)
-                ),
-                None,
-            )
-            if first_system is not None:
-                base.append(
-                    {
-                        "role": "system",
-                        "content": trim_text_to_token_budget(
-                            str(first_system.get("content") or ""),
-                            3_000,
-                        ),
-                    }
-                )
-            if latest_user_message:
-                base.append({"role": "user", "content": latest_user_message})
-            return base
-
         def prepare_turn_messages(
             latest_tool_exchange: list[dict[str, Any]],
             tools: list[dict[str, Any]] | None,
@@ -1537,9 +1508,9 @@ class ChatGenerationJob:
             """Build one decision request from TurnState plus only the newest tool result.
 
             ``minimal`` はプロバイダ側の拒否からの再構築用。生のツール結果を落とし、
-            TurnState と元の依頼だけで同じ判断をやり直す。
+            TurnState と直前の会話・最新の依頼で同じ判断をやり直す。
             ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
-            dropped and the same decision is retried from TurnState and the original request.
+            dropped and the same decision is retried with TurnState and the recent exchange.
             ``empty_answer_recovery`` は直前の判断が本文を返さなかった回復用で、
             回答のみ契約に短いメモを添える。
             ``empty_answer_recovery`` marks the retry after a decision that produced no
@@ -1587,7 +1558,7 @@ class ChatGenerationJob:
 
             try:
                 minimal_projected = turn_state.projected_messages(
-                    minimal_base_messages(),
+                    build_recovery_base_messages(turn_base_messages),
                     max_tokens=state_tokens,
                 )
             except TurnStateProjectionError:
@@ -1637,9 +1608,9 @@ class ChatGenerationJob:
             answer_context_messages: list[dict[str, Any]] | None = None
             telemetry.research_phase_used = bool(self._selected_reference_trace)
             # プロバイダのトークナイザが自前の見積もりより厳しい場合の再構築フラグ。
-            # 同じ要求を送り直さず、TurnState だけの最小要求へ切り替える。
+            # 同じ要求を送り直さず、TurnState と直前の会話を残した要求へ切り替える。
             # Set when the provider's tokenizer is stricter than the local estimate: the same
-            # request is never resent, the retry falls back to a TurnState-only request.
+            # request is never resent; recovery retains TurnState and the recent exchange.
             minimal_context_required = False
             # 最終回答のツールなし要求が拒否された場合だけ、最小構成で1度だけやり直す。
             # If the tool-free final-answer request is rejected, replay it once in the
@@ -1708,9 +1679,9 @@ class ChatGenerationJob:
                             step_chunks.append(chunk)
                 except LlmInputLimitError:
                     # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
-                    # TurnState だけの最小要求で同じ判断を1度だけやり直す。
+                    # TurnState と直前の会話を残して同じ判断を1度だけやり直す。
                     # Resending the identical request only repeats the rejection: drop the raw
-                    # tool result and retry the same decision once from TurnState alone.
+                    # tool result and retry once with TurnState and the recent exchange.
                     if minimal_context_required or chunks:
                         raise
                     minimal_context_required = True
@@ -1722,10 +1693,10 @@ class ChatGenerationJob:
                     continue
                 except LlmToolSchemaError:
                     # ツール予算切れ後のツールなし要求がモデルの逸脱で拒否された場合は、
-                    # 直前の会話・ツール履歴をさらに削った最終回答要求へ1度だけ切り替える。
+                    # 直前の会話を残し、ツール履歴を除いた最終回答要求へ1度だけ切り替える。
                     # If the model violates the tool-free request after the budget is exhausted,
-                    # retry once with the smallest final-answer request, stripped of recent
-                    # conversation and tool history.
+                    # retry once with a compact final-answer request retaining the recent
+                    # conversation but excluding tool history.
                     if (
                         force_answer
                         and active_tools is None
