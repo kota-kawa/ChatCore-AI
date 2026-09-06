@@ -355,6 +355,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             if message.get("role") == "system"
         )
         self.assertIn("current TurnState is the only semantic state", system_contents)
+        self.assertIn("not a resolved intent", system_contents)
+        self.assertIn("self-contained objective", system_contents)
+        self.assertIn("explicit topic", system_contents)
         self.assertIn("choose exactly one action", system_contents)
         self.assertIn("answer immediately in the same model turn", system_contents)
         self.assertNotIn("step_notes", system_contents)
@@ -372,6 +375,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("search limit for this turn has been reached", system_contents)
         self.assertIn("Do not call any tool", system_contents)
         self.assertIn("answer the original request now", system_contents)
+        self.assertIn("Resolve the objective from the recent", system_contents)
         self.assertIn("must follow the envelope in this same response", system_contents)
         self.assertNotIn("choose exactly one action", system_contents)
         self.assertNotIn("call one appropriate tool", system_contents)
@@ -3084,6 +3088,109 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertLess(input_sizes[1], input_sizes[0])
         self.assertIn("圧縮後に生成した回答", body)
         self.assertIn("event: done", body)
+
+    def test_context_recovery_keeps_the_previous_exchange_before_intent_resolution(self):
+        recent = [
+            {"role": "user", "content": "Compare plans A and B for a small team."},
+            {"role": "assistant", "content": "A is cheaper; B includes audit logs."},
+            {"role": "user", "content": "And if we grow?"},
+        ]
+        optional = "Optional background " * 2000
+        for recovery in ("provider_rejection", "local_budget"):
+            with self.subTest(recovery=recovery):
+                calls = []
+
+                def stream(messages, _model, **_kwargs):
+                    calls.append(messages)
+                    if recovery == "provider_rejection" and len(calls) == 1:
+                        raise LlmInputLimitError("too long")
+                    self.assertEqual(
+                        [m for m in messages if m["role"] != "system"], recent,
+                    )
+                    self.assertFalse(any(m.get("content") == optional for m in messages))
+                    return _direct_answer_stream(
+                        "B supports a growing team.",
+                        state={"objective": "Compare plans A and B as the team grows."},
+                    )
+
+                def fits(messages, *_args):
+                    return recovery != "local_budget" or not any(
+                        m.get("content") == optional for m in messages
+                    )
+
+                with (
+                    patch("services.chat_generation.request_fits_context", side_effect=fits),
+                    patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+                ):
+                    job = start_generation_job(
+                        f"guest:sid-followup-{recovery}:default",
+                        conversation_messages=[
+                            {"role": "system", "content": "Base guidance"},
+                            {"role": "system", "content": optional},
+                            *recent,
+                        ],
+                        model="openai/gpt-oss-120b",
+                        persist_response=lambda _: None,
+                    )
+                    body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+                self.assertEqual(len(calls), 2 if recovery == "provider_rejection" else 1)
+                self.assertIn("event: done", body)
+                self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
+
+    def test_resolved_followup_objective_survives_input_recovery_after_search(self):
+        objective = "Compare plans A and B for a team growing to 50 people."
+        recent = [
+            {"role": "user", "content": "Compare plans A and B."},
+            {"role": "assistant", "content": "Pricing depends on the number of seats."},
+            {"role": "user", "content": "What about 50 people?"},
+        ]
+        calls = []
+
+        def stream(messages, _model, **_kwargs):
+            calls.append(messages)
+            if len(calls) == 1:
+                self.assertEqual([m for m in messages if m["role"] != "system"], recent)
+                return iter([
+                    _turn_state_update(objective=objective, ready_to_answer=False),
+                    json.dumps([{
+                        "id": "call-plan-pricing",
+                        "type": "function",
+                        "function": {
+                            "name": "web_search",
+                            "arguments": json.dumps({"query": "plans A B 50 seats pricing"}),
+                        },
+                    }]),
+                ])
+            if len(calls) == 2:
+                raise LlmInputLimitError("provider rejected tool context")
+            state_messages = [
+                m["content"] for m in messages
+                if m["role"] == "system" and m["content"].startswith("<turn_state>")
+            ]
+            self.assertEqual(len(state_messages), 1)
+            self.assertIn(objective, state_messages[0])
+            self.assertEqual([m for m in messages if m["role"] != "system"], recent)
+            return _direct_answer_stream("The plans differ at 50 seats.", state={"objective": objective})
+
+        with (
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation.search_brave_llm_context", return_value=WebSearchResult(
+                query="plans A B 50 seats pricing", searched_at="2026-09-06T00:00:00+00:00", sources=(),
+            )),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-resolved-followup:default",
+                conversation_messages=recent,
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(calls), 3)
+        self.assertIn("event: done", body)
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
 
     # 日本語: ジョブが完了した後、そのジョブキーに対するアクティブ生成フラグがFalseになることを検証します。
     # English: Verify that the active generation flag for a job key becomes False after job completion.
