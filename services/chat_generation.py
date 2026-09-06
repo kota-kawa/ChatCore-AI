@@ -59,7 +59,9 @@ from services.generative_ui import (
     normalize_response_with_artifacts,
 )
 from services.message_parts_display import (
+    GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
+    WEB_SEARCH_IMAGE_PART_TYPE,
     normalize_message_parts_for_display,
 )
 
@@ -188,6 +190,33 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
             content = message.get("content")
             return content if isinstance(content, str) else str(content or "")
     return ""
+
+
+# 完了したターンにユーザーが読める回答があるかを判定する。検索画像だけ・トレースだけは回答ではない。
+# Decide whether a finished turn carries an answer the user can read; images or a trace alone are not one.
+def _has_user_facing_answer(
+    *,
+    model_text: str,
+    response_text: str,
+    message_parts: list[dict[str, Any]] | None,
+) -> bool:
+    """Return whether a finished turn carries an answer the user can read.
+
+    モデルが本文を書いたか（正規化前の生テキスト）、または生成UIがあるかで判定する。
+    正規化で本文が消えた場合は、テキストと検索画像以外のパーツがあるときだけ回答扱いにする。
+    Answered means the model wrote body text (raw, before normalization) or produced a
+    generated UI. If normalization emptied the body, only parts other than text and
+    web-search images keep the turn answered.
+    """
+    parts = [part for part in (message_parts or []) if isinstance(part, dict)]
+    has_generative_ui = any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in parts)
+    if not model_text.strip() and not has_generative_ui:
+        return False
+    if response_text.strip():
+        return True
+    return any(
+        part.get("type") not in (WEB_SEARCH_IMAGE_PART_TYPE, "text") for part in parts
+    )
 
 
 # ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
@@ -1503,6 +1532,7 @@ class ChatGenerationJob:
             *,
             force_answer: bool,
             minimal: bool = False,
+            empty_answer_recovery: bool = False,
         ) -> list[dict[str, Any]] | None:
             """Build one decision request from TurnState plus only the newest tool result.
 
@@ -1510,6 +1540,10 @@ class ChatGenerationJob:
             TurnState と元の依頼だけで同じ判断をやり直す。
             ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
             dropped and the same decision is retried from TurnState and the original request.
+            ``empty_answer_recovery`` は直前の判断が本文を返さなかった回復用で、
+            回答のみ契約に短いメモを添える。
+            ``empty_answer_recovery`` marks the retry after a decision that produced no
+            user-facing answer; it adds a short note to the answer-only contract.
             """
             phase = "agent"
             context_budget = get_context_budget(self._model, phase, tools)
@@ -1545,6 +1579,7 @@ class ChatGenerationJob:
                         *([] if force_answer else latest_tool_exchange),
                     ],
                     force_answer=force_answer,
+                    empty_answer_recovery=empty_answer_recovery,
                 )
                 if request_fits_context(candidate, self._model, phase, tools):
                     telemetry.context_projection_count += 1
@@ -1563,6 +1598,7 @@ class ChatGenerationJob:
                     *([] if minimal or force_answer else latest_tool_exchange),
                 ],
                 force_answer=force_answer,
+                empty_answer_recovery=empty_answer_recovery,
             )
             if request_fits_context(minimal_candidate, self._model, phase, tools):
                 telemetry.context_projection_count += 1
@@ -1609,6 +1645,9 @@ class ChatGenerationJob:
             # If the tool-free final-answer request is rejected, replay it once in the
             # smallest safe shape and never loop indefinitely.
             tool_schema_recovery_attempted = False
+            # 最後の判断が本文を返さなかった場合だけ、回答のみ要求で1度やり直す。
+            # If the final decision produced no user-facing answer, retry it once answer-only.
+            empty_answer_recovery_attempted = False
 
             # 単一判断ループ: TurnStateを見る → 必要ならツール → State更新 → 再判断。
             # ツール履歴全体は再送せず、直近の呼び出しと結果だけを次の判断へ渡す。
@@ -1616,15 +1655,20 @@ class ChatGenerationJob:
                 if self._should_stop():
                     return
 
-                force_answer = budget.tool_calls_exhausted
+                tools_withdrawn = budget.tool_calls_exhausted
+                # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
+                # Empty-answer recovery is also a tool-free answer request, but it is
+                # accounted separately from budget exhaustion.
+                force_answer = tools_withdrawn or empty_answer_recovery_attempted
                 active_tools = None if force_answer else configured_tools
-                if force_answer:
+                if tools_withdrawn:
                     telemetry.tools_withdrawn_by_budget = True
                 turn_messages = prepare_turn_messages(
                     current_messages,
                     active_tools,
                     force_answer=force_answer,
                     minimal=minimal_context_required or tool_schema_recovery_attempted,
+                    empty_answer_recovery=empty_answer_recovery_attempted,
                 )
                 if turn_messages is None:
                     telemetry.context_recovery_count += 1
@@ -1708,6 +1752,31 @@ class ChatGenerationJob:
                     # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
                     # Keep the model's own boundaries and drop only the internal envelope.
                     visible_chunks = strip_turn_state_update_chunks(step_chunks)
+                    if (
+                        not visible_chunks
+                        and not chunks
+                        and not empty_answer_recovery_attempted
+                        and not self._cancelled
+                    ):
+                        # 封筒のみ・無出力・出力上限で本文ゼロは「回答なし」。ここで抜けると
+                        # 画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
+                        # 回答のみ要求で1度だけやり直す。
+                        # Envelope-only, empty, or cut off before any body text means no
+                        # answer. Breaking here would finish the turn as an image-only or
+                        # trace-only reply, so retry the same decision once, answer-only.
+                        empty_answer_recovery_attempted = True
+                        telemetry.empty_answer_recoveries += 1
+                        logger.warning(
+                            "Final decision produced no user-facing answer; retrying once "
+                            "as an answer-only request.",
+                            extra={
+                                **telemetry.as_log_extra(),
+                                "output_limited": output_limited,
+                                "step_chars": len("".join(step_chunks)),
+                            },
+                        )
+                        suppress_next_generation_started = True
+                        continue
                     answer_context_messages = turn_messages
                     telemetry.final_answer_input_tokens = estimate_request_tokens(
                         turn_messages,
@@ -2208,18 +2277,12 @@ class ChatGenerationJob:
         if self._should_stop():
             return
 
-        bot_reply = "".join(chunks)
-        if not chunks:
-            combined_web_search_result = combine_web_search_results(web_search_results)
-            if web_search_trace_steps or combined_web_search_result is not None:
-                web_search_trace_steps.append(answer_step(web_search_results))
-            trace_block = build_web_search_trace_markdown(
-                combined_web_search_result,
-                steps=web_search_trace_steps,
-            )
-            if trace_block:
-                separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
-                bot_reply = f"{trace_block}{separator}{bot_reply}"
+        # モデルが本文を書いたかは、正規化や画像配置の前に生の chunks で確定する。
+        # 本文ゼロのターンにトレースだけを前置して完了扱いにはしない。
+        # Whether the model wrote any body text is settled from the raw chunks before
+        # normalization and image placement. A turn with no body never gets a trace-only body.
+        model_text = "".join(chunks)
+        bot_reply = model_text
         latest_user_message = _latest_user_message_text(self._conversation_messages)
         if final_answer_incomplete is not None:
             normalized_response = normalize_response_with_artifacts(
@@ -2301,15 +2364,25 @@ class ChatGenerationJob:
 
         self.response = bot_reply
 
-        # 本文もUIパーツも空なら「回答なし」であり、成功として保存してはいけない。
-        # 空の応答を保存すると空の吹き出しが残り、ユーザー発話だけが積み上がる。
-        # An empty body with no UI parts means there is no answer at all, so it must
-        # not be persisted as a success: an empty reply leaves a blank bubble behind
-        # and the conversation ends up as a pile of unanswered user messages.
-        if not bot_reply.strip() and not message_parts:
+        # 本文も生成UIも無ければ「回答なし」であり、成功として保存してはいけない。
+        # 検索画像やトレースだけでは回答にならない。空の応答を保存すると空の吹き出し
+        # （画像だけ・ステップだけの吹き出し）が残り、ユーザー発話だけが積み上がる。
+        # No body and no generated UI means there is no answer at all, so it must not be
+        # persisted as a success: search images or a trace alone are not an answer, and an
+        # empty reply leaves a blank (image-only / steps-only) bubble behind while
+        # unanswered user messages pile up.
+        if not _has_user_facing_answer(
+            model_text=model_text,
+            response_text=bot_reply,
+            message_parts=message_parts,
+        ):
             logger.warning(
                 "Chat generation produced an empty response.",
-                extra={"model": self._model},
+                extra={
+                    **self._telemetry.as_log_extra(),
+                    "has_model_text": bool(model_text.strip()),
+                    "selected_image_count": len(selected_web_search_images),
+                },
             )
             error_message = ERROR_CHAT_EMPTY_RESPONSE
             self._handle_error(

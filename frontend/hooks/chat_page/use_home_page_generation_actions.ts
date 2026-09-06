@@ -993,7 +993,11 @@ export function useHomePageGenerationActions({
           const donePayload = normalizeChatResponsePayload(parsed.data);
           const responseText = donePayload.response ?? streamedText;
           applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          if (!responseText.trim() && !donePayload.parts?.length) {
+          // 検索画像だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
+          // Web-search image parts alone are not an answer; mirror the server-side rule.
+          const hasAnswerParts =
+            donePayload.parts?.some((part) => part.type !== "web_search_image") ?? false;
+          if (!responseText.trim() && !hasAnswerParts) {
             // 空の完了は「回答なし」。空の吹き出しを残さずエラーとして扱う。
             // An empty completion means no answer: treat it as an error instead
             // of leaving a blank bubble behind.
