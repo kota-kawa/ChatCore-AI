@@ -724,8 +724,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             calls.append(generation_phase)
             if len(calls) == 1:
                 def limited():
+                    # 本文を1つも出さずに出力上限へ当たったストリーム。
+                    # A stream that hits the output cap before yielding any body text.
+                    yield from ()
                     raise LlmOutputLimitError("limit", reason="max_output_tokens")
-                    yield  # pragma: no cover - makes this a generator
 
                 return limited()
             return iter([_turn_state_update(), "上限後の最終回答"])
