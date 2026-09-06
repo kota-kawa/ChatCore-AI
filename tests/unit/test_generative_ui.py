@@ -550,6 +550,14 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Assert that the app root element is added
         self.assertIn('id="app"', normalized["html"])
 
+    def test_oversized_javascript_is_rejected_instead_of_truncated(self):
+        """上限超過したJSを、実行不能な位置で切断せず検証エラーにする。"""
+        artifact = dict(VALID_ARTIFACT)
+        artifact["js"] = "const values = [" + ",".join(["1"] * 9100) + "];"
+
+        with self.assertRaises(GenerativeUiValidationError):
+            validate_artifact_payload(artifact)
+
     def test_recovers_truncated_artifact_cut_off_inside_string(self):
         """
         文字列の途中で途切れた不完全なアーティファクトブロックが、正しく修復・抽出されることを検証します。
@@ -1119,6 +1127,34 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             ui_mode="2D",
         )
 
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], "優先度マップ")
+
+    def test_requested_ui_retries_an_oversized_artifact(self):
+        oversized = dict(POLISHED_2D_ARTIFACT)
+        oversized["js"] = "const values = [" + ",".join(["1"] * 9100) + "];"
+        oversized_raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(oversized, ensure_ascii=False)}\n"
+            "```"
+        )
+        repaired_raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(POLISHED_2D_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+        calls = []
+
+        normalized = normalize_response_with_artifact_retry(
+            oversized_raw,
+            conversation_messages=[{"role": "user", "content": "生成UIで見せて"}],
+            model="test-model",
+            generate_response=lambda messages, model: calls.append((messages, model)) or repaired_raw,
+            user_request="生成UIで見せて",
+            ui_mode="2D",
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(normalized.validation_errors, [])
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "優先度マップ")
 
     def test_complete_requested_ui_does_not_retry(self):
