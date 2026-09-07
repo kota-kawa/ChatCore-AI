@@ -23,10 +23,10 @@ from services.error_messages import (
 )
 from services.prompt_categories import category_keys_matching, normalize_category
 from services.prompt_types import CONTENT_FORMAT_SKILL, CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
-from services.repositories.chat_repository import ChatRepository
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
 from services.repositories.shared_content_repository import SharedContentRepository
+from services.repositories.user_skill_repository import UserSkillRepository
 from services.share_common import ShareContentKind, build_public_share_url, build_share_url
 from services.user_skills import normalize_user_skill_instructions
 
@@ -628,7 +628,7 @@ class SharedContentService:
                 return {"error": ERROR_SHARED_SKILL_CONTENT_MISSING}, 400
 
             try:
-                skill, created = await ChatRepository(active).import_user_skill(
+                skill, created = await UserSkillRepository(active).import_user_skill(
                     user_id=int(user_id),
                     source_prompt_id=int(prompt_id),
                     name=str(prompt.get("title") or "共有Skill"),

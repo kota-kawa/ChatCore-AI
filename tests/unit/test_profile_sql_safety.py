@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from blueprints.chat.profile import _update_user_profile, user_profile
 from services.models import User
 from services.repositories.auth_identity_repository import _serialize_auth_user
-from services.repositories.chat_repository import ChatRepository
+from services.repositories.user_repository import UserRepository
 from tests.helpers.request_helpers import build_request
 
 
@@ -86,8 +86,8 @@ class UserSerializerSchemaBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
             preferred_locale="ja",
         )
 
-    def test_chat_serializer_only_reads_columns_present_on_user_model(self):
-        payload = ChatRepository._serialize_user(self._user())
+    def test_user_serializer_only_reads_columns_present_on_user_model(self):
+        payload = UserRepository._serialize_user(self._user())
 
         self.assertEqual(payload["username"], "alice")
         self.assertEqual(payload["preferred_locale"], "ja")
@@ -95,11 +95,11 @@ class UserSerializerSchemaBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("provider_user_id", payload)
         self.assertNotIn("provider_email", payload)
 
-    async def test_chat_repository_get_user_by_id_uses_current_user_schema(self):
+    async def test_user_repository_get_user_by_id_uses_current_user_schema(self):
         session = Mock()
         session.get = AsyncMock(return_value=self._user())
 
-        payload = await ChatRepository(session).get_user_by_id(7)
+        payload = await UserRepository(session).get_user_by_id(7)
 
         session.get.assert_awaited_once_with(User, 7)
         self.assertEqual(payload["email"], "alice@example.com")

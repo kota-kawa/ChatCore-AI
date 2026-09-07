@@ -71,6 +71,8 @@ flowchart LR
 - `services/`: 複数のルートから使う業務処理、外部連携、共通エラー、セキュリティ、キャッシュ、バックグラウンド処理を担当します。ルートから直接呼ぶ必要がある場合も、処理をサービスへ寄せてハンドラを薄く保ちます。
 - `services/repositories/`: 複数機能で共有する DB アクセスの配置先です（メモの DB アクセスも `services/repositories/memo_repository.py` にあります）。機能配下にデータアクセスが残っている場合も、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
 - `services/repositories/auth_identity_repository.py`: メール・Google・Passkey認証が参照するユーザーと認証プロバイダーの専用永続化境界です。一般ユーザー機能のRepositoryへ認証情報の読み書きを追加しません。
+- チャット周辺の永続化は機能ごとにRepositoryを分けています。`chat_repository.py` はルーム・履歴・分岐・共有・ルーム内メモリ、`project_repository.py` はプロジェクトと部屋の所属、`task_repository.py` はタスクテンプレート、`user_skill_repository.py` は `user_skills` と `users.generative_ui_skill_enabled`、`user_repository.py` は `users` のプロフィール・メール・言語設定とアカウント削除を所有します。別機能の行をこれらへ追加しないでください。
+- `services/repositories/chat_room_access.py`: `chat_rooms` の所有者確認とルームのシリアライズを、チャットとプロジェクトの双方から使う共通境界です。ロックとエラー契約を重複実装しないでください。
 - `services/request_models.py` / `services/response_models.py`: API 契約を定義します。フロントエンドの型を手書きで先行変更しないでください。
 - `services/api_errors.py` / `services/error_messages.py`: API エラーの型と利用者向け文言を集約します。
 - `services/csrf.py`: 状態変更リクエストに対する CSRF 検証の共通境界です。ルートごとに独自実装を増やしません。

@@ -12,7 +12,7 @@ from blueprints.chat.skills import (
 from services.chat_context import build_context_messages
 from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.chat_service import list_user_skills, set_user_skill_enabled
-from services.repositories.chat_repository import ChatRepository
+from services.repositories.user_skill_repository import UserSkillRepository
 from services.request_models import CreateUserSkillRequest, UpdateUserSkillStateRequest
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
@@ -119,7 +119,7 @@ class UserSkillServiceTests(unittest.TestCase):
         repository.get_generative_ui_skill_enabled = AsyncMock(return_value=True)
         repository.list_user_skills = AsyncMock(return_value=[{"id": 7, "name": "個人Skill"}])
 
-        async def run_operation(operation, _session):
+        async def run_operation(operation, _session, **_kwargs):
             return await operation(repository)
 
         with patch("services.chat_service._read", side_effect=run_operation):
@@ -155,7 +155,7 @@ class UserSkillServiceTests(unittest.TestCase):
         ])
         session.scalar = AsyncMock(side_effect=[0, None])
         session.flush = AsyncMock()
-        repository = ChatRepository(session)
+        repository = UserSkillRepository(session)
 
         skill, created = asyncio.run(
             repository.import_user_skill(

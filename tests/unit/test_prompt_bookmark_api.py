@@ -133,7 +133,7 @@ class PromptUseInChatApiTestCase(unittest.TestCase):
         )
         service = SharedContentService(public_base_url="", repository=repository)
 
-        with patch("services.shared_content_service.ChatRepository", return_value=skill_repository):
+        with patch("services.shared_content_service.UserSkillRepository", return_value=skill_repository):
             payload, status_code = asyncio.run(
                 service.import_prompt_as_skill(user_id=5, prompt_id=10, session=object())
             )
