@@ -12,6 +12,11 @@ ERROR_TOKEN_REQUIRED = "token is required"
 # チャットや共有機能関連のエラーメッセージ定義です。
 # Error message definitions related to chat and sharing functionality.
 ERROR_CHAT_ROOM_NOT_FOUND = "該当ルームが見つかりません"
+ERROR_CHAT_ROOM_FORBIDDEN = "他ユーザーのチャットルームは操作できません"
+ERROR_CHAT_ROOM_DELETE_FORBIDDEN = "他ユーザーのチャットルームは削除できません"
+ERROR_CHAT_ROOM_SHARE_FORBIDDEN = "他ユーザーのチャットルームは共有できません"
+ERROR_PROJECT_NOT_FOUND = "プロジェクトが見つかりません"
+ERROR_PROJECT_FORBIDDEN = "他ユーザーのプロジェクトは操作できません"
 ERROR_CHAT_EMPTY_RESPONSE = "AIからの回答が空でした。もう一度お試しください。"
 ERROR_SHARED_LINK_NOT_FOUND = "共有リンクが見つかりません"
 ERROR_TASK_NOT_FOUND = "対象のタスクが見つかりません。"

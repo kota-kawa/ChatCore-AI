@@ -1,4 +1,12 @@
-"""Async Chat use-case services backed by :class:`ChatRepository`."""
+"""Async Chat use-case services.
+
+Each use case runs against the repository that owns its rows: chat rooms and
+history in :class:`ChatRepository`, projects in :class:`ProjectRepository`,
+tasks in :class:`TaskRepository`, Skills in :class:`UserSkillRepository` and
+account-owned profile rows in :class:`UserRepository`.  This module owns the
+transaction boundary and keeps the public function names stable for the Chat
+blueprints.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +26,7 @@ from .repositories.chat_repository import (
     DB_WRITE_MAX_ATTEMPTS,
     ChatRepository,
 )
+from .repositories.project_repository import ProjectRepository
 from .user_skills import (
     build_generative_ui_system_skill,
     is_generative_ui_skill_id,
@@ -45,29 +54,40 @@ async def _transaction(session: AsyncSession | None, *, write: bool):
     yield session
 
 
-def _repository(session: AsyncSession, *, token_generator: Callable[[int], str] = secrets.token_urlsafe) -> ChatRepository:
-    return ChatRepository(session, token_generator=token_generator)
+def _chat(session: AsyncSession) -> ChatRepository:
+    return ChatRepository(session)
 
 
-async def _read(operation: Callable[[ChatRepository], Awaitable[T]], session: AsyncSession | None) -> T:
+def _chat_with_token_generator(token_generator: Callable[[int], str]) -> Callable[[AsyncSession], ChatRepository]:
+    """Build a chat repository factory that uses an injected share-token source."""
+
+    return lambda session: ChatRepository(session, token_generator=token_generator)
+
+
+async def _read(
+    operation: Callable[[Any], Awaitable[T]],
+    session: AsyncSession | None,
+    *,
+    repository: Callable[[AsyncSession], Any] = _chat,
+) -> T:
     async with _transaction(session, write=False) as scoped:
-        return await operation(_repository(scoped))
+        return await operation(repository(scoped))
 
 
 async def _write(
-    operation: Callable[[ChatRepository], Awaitable[T]],
+    operation: Callable[[Any], Awaitable[T]],
     session: AsyncSession | None,
     *,
-    token_generator: Callable[[int], str] = secrets.token_urlsafe,
+    repository: Callable[[AsyncSession], Any] = _chat,
 ) -> T:
     if session is not None:
         async with _transaction(session, write=True) as scoped:
-            return await operation(_repository(scoped, token_generator=token_generator))
+            return await operation(repository(scoped))
 
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:
             async with _transaction(None, write=True) as scoped:
-                return await operation(_repository(scoped, token_generator=token_generator))
+                return await operation(repository(scoped))
         except Exception as exc:
             if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                 await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
@@ -218,7 +238,7 @@ async def create_or_get_shared_chat_token(
     return await _write(
         lambda repo: repo.create_or_get_shared_chat_token(room_id, user_id),
         session,
-        token_generator=token_generator,
+        repository=_chat_with_token_generator(token_generator),
     )
 
 
@@ -306,19 +326,27 @@ async def fetch_chat_history_page(
 # Project operations are exposed here so Chat blueprints do not reach into the
 # legacy synchronous project service.
 async def create_project(user_id: int, name: str, instructions: str | None = None, *, session: AsyncSession | None = None):
-    return await _write(lambda repo: repo.create_project(user_id, name, instructions), session)
+    return await _write(
+        lambda repo: repo.create_project(user_id, name, instructions),
+        session,
+        repository=ProjectRepository,
+    )
 
 
 async def list_projects(user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.list_projects(user_id), session)
+    return await _read(lambda repo: repo.list_projects(user_id), session, repository=ProjectRepository)
 
 
 async def get_project(project_id: int, user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_project(project_id, user_id), session)
+    return await _read(lambda repo: repo.get_project(project_id, user_id), session, repository=ProjectRepository)
 
 
 async def list_project_rooms(project_id: int, user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.list_project_rooms(project_id, user_id), session)
+    return await _read(
+        lambda repo: repo.list_project_rooms(project_id, user_id),
+        session,
+        repository=ProjectRepository,
+    )
 
 
 async def update_project(
@@ -332,11 +360,12 @@ async def update_project(
     return await _write(
         lambda repo: repo.update_project(project_id, user_id, name=name, instructions=instructions),
         session,
+        repository=ProjectRepository,
     )
 
 
 async def delete_project(project_id: int, user_id: int, *, session: AsyncSession | None = None) -> None:
-    await _write(lambda repo: repo.delete_project(project_id, user_id), session)
+    await _write(lambda repo: repo.delete_project(project_id, user_id), session, repository=ProjectRepository)
 
 
 async def assign_room_to_project(
@@ -346,11 +375,15 @@ async def assign_room_to_project(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    await _write(lambda repo: repo.assign_room_to_project(room_id, user_id, project_id), session)
+    await _write(
+        lambda repo: repo.assign_room_to_project(room_id, user_id, project_id),
+        session,
+        repository=ProjectRepository,
+    )
 
 
 async def get_project_context(room_id: str, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_project_context(room_id), session)
+    return await _read(lambda repo: repo.get_project_context(room_id), session, repository=ProjectRepository)
 
 
 async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession | None = None):

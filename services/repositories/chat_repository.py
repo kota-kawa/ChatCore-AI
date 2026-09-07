@@ -20,7 +20,9 @@ from services.attached_files import decode_attached_files_from_storage, encode_a
 from services.datetime_serialization import serialize_datetime_iso
 from services.default_tasks import localize_system_task, resolve_system_task_key
 from services.error_messages import (
+    ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
     ERROR_CHAT_ROOM_NOT_FOUND,
+    ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
     ERROR_SHARED_LINK_NOT_FOUND,
     ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_SKILL_LIMIT_REACHED,
@@ -37,12 +39,12 @@ from services.models import (
     ChatRoom,
     ChatRoomSummary,
     MemoryFact,
-    Project,
     SharedChatRoom,
     Task,
     User,
     UserSkill,
 )
+from services.repositories.chat_room_access import load_owned_room, serialize_room
 from services.share_common import (
     SHARED_TOKEN_MAX_COLLISION_RETRIES,
     SHARED_TOKEN_RETRY_BACKOFF_SECONDS,
@@ -211,10 +213,10 @@ class ChatRepository:
             )
         if limit is not None:
             stmt = stmt.limit(limit)
-        return [self._serialize_room(room) for room in (await self.session.execute(stmt)).scalars().all()]
+        return [serialize_room(room) for room in (await self.session.execute(stmt)).scalars().all()]
 
     async def delete_room_for_user(self, room_id: str, user_id: int) -> dict[str, str]:
-        room = await self._owned_room(room_id, user_id, "他ユーザーのチャットルームは削除できません", lock=True)
+        room = await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_DELETE_FORBIDDEN, lock=True)
         await self.session.execute(delete(ChatRoom).where(ChatRoom.id == room.id))
         return {"message": "削除しました"}
 
@@ -238,7 +240,7 @@ class ChatRepository:
         return {"message": "削除しました", "deleted_count": len(unique_room_ids), "deleted_room_ids": unique_room_ids}
 
     async def delete_unanswered_user_messages(self, room_id: str, user_id: int) -> bool:
-        room = await self._owned_room(room_id, user_id, "", lock=True, forbidden_returns_false=True)
+        room = await load_owned_room(self.session, room_id, user_id, "", lock=True, forbidden_returns_false=True)
         if room is None:
             return False
         nodes, active_root_id = await self._load_room_tree(room_id)
@@ -351,7 +353,7 @@ class ChatRepository:
         return str(row[1] or "normal")
 
     async def create_or_get_shared_chat_token(self, room_id: str, user_id: int) -> str:
-        await self._owned_room(room_id, user_id, "他ユーザーのチャットルームは共有できません")
+        await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)
         for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
             token = generate_share_token(self._token_generator)
             statement = (
@@ -375,7 +377,7 @@ class ChatRepository:
                 if not _is_unique_violation(exc):
                     raise
                 await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS)
-                await self._owned_room(room_id, user_id, "他ユーザーのチャットルームは共有できません")
+                await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)
         raise RuntimeError("Failed to create shared chat token after collision retries.")
 
     async def get_shared_chat_room_payload(self, token: str) -> dict[str, Any]:
@@ -837,97 +839,6 @@ class ChatRepository:
                 raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict") from exc
             raise
 
-    # Projects ---------------------------------------------------------------
-
-    async def create_project(self, user_id: int, name: str, instructions: str | None = None) -> dict[str, Any]:
-        project = Project(
-            user_id=user_id,
-            name=self._normalize_project_name(name),
-            instructions=self._normalize_project_instructions(instructions),
-        )
-        self.session.add(project)
-        await self.session.flush()
-        return self._serialize_project(project)
-
-    async def list_projects(self, user_id: int) -> list[dict[str, Any]]:
-        rows = (
-            await self.session.execute(
-                select(Project, func.count(ChatRoom.id).label("chat_count"))
-                .outerjoin(ChatRoom, ChatRoom.project_id == Project.id)
-                .where(Project.user_id == user_id)
-                .group_by(Project.id)
-                .order_by(Project.created_at.desc(), Project.id.desc())
-            )
-        ).all()
-        projects: list[dict[str, Any]] = []
-        for project, count in rows:
-            payload = self._serialize_project(project)
-            payload["chatCount"] = int(count or 0)
-            projects.append(payload)
-        return projects
-
-    async def get_project(self, project_id: int, user_id: int) -> dict[str, Any]:
-        project = await self._owned_project(project_id, user_id)
-        rooms = (
-            await self.session.execute(
-                select(ChatRoom)
-                .where(ChatRoom.project_id == project_id)
-                .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
-            )
-        ).scalars().all()
-        payload = self._serialize_project(project)
-        payload["rooms"] = [self._serialize_room(room, project_room=True) for room in rooms]
-        return payload
-
-    async def list_project_rooms(self, project_id: int, user_id: int) -> list[dict[str, Any]]:
-        await self._owned_project(project_id, user_id)
-        rooms = (
-            await self.session.execute(
-                select(ChatRoom)
-                .where(ChatRoom.project_id == project_id)
-                .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
-            )
-        ).scalars().all()
-        return [self._serialize_room(room, project_room=True) for room in rooms]
-
-    async def update_project(
-        self,
-        project_id: int,
-        user_id: int,
-        *,
-        name: str | None = None,
-        instructions: str | None = None,
-    ) -> dict[str, Any]:
-        project = await self._owned_project(project_id, user_id, lock=True)
-        if name is not None:
-            project.name = self._normalize_project_name(name)
-        if instructions is not None:
-            project.instructions = self._normalize_project_instructions(instructions)
-        project.updated_at = datetime.utcnow()
-        await self.session.flush()
-        return self._serialize_project(project)
-
-    async def delete_project(self, project_id: int, user_id: int) -> None:
-        await self.session.delete(await self._owned_project(project_id, user_id, lock=True))
-
-    async def assign_room_to_project(self, room_id: str, user_id: int, project_id: int | None) -> None:
-        await self._owned_room(room_id, user_id, "他ユーザーのチャットルームは操作できません", lock=True)
-        if project_id is not None:
-            await self._owned_project(project_id, user_id)
-        await self.session.execute(update(ChatRoom).where(ChatRoom.id == room_id).values(project_id=project_id))
-
-    async def get_project_context(self, room_id: str) -> dict[str, Any] | None:
-        row = (
-            await self.session.execute(
-                select(Project.id, Project.name, Project.instructions)
-                .join(ChatRoom, ChatRoom.project_id == Project.id)
-                .where(ChatRoom.id == room_id)
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        return {"project_id": row[0], "name": str(row[1] or ""), "instructions": str(row[2] or "").strip()}
-
     # Users and preferences --------------------------------------------------
 
     async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
@@ -1019,40 +930,6 @@ class ChatRepository:
             }
         active_root_id = await self.session.scalar(select(ChatRoom.active_root_id).where(ChatRoom.id == chat_room_id))
         return nodes, active_root_id
-
-    async def _owned_room(
-        self,
-        room_id: str,
-        user_id: int,
-        forbidden_message: str,
-        *,
-        lock: bool = False,
-        forbidden_returns_false: bool = False,
-    ) -> ChatRoom | None:
-        stmt = select(ChatRoom).where(ChatRoom.id == room_id)
-        if lock:
-            stmt = stmt.with_for_update()
-        room = (await self.session.execute(stmt)).scalar_one_or_none()
-        if room is None:
-            if forbidden_returns_false:
-                return None
-            raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
-        if room.user_id != user_id:
-            if forbidden_returns_false:
-                return None
-            raise ForbiddenOperationError(forbidden_message)
-        return room
-
-    async def _owned_project(self, project_id: int, user_id: int, *, lock: bool = False) -> Project:
-        stmt = select(Project).where(Project.id == project_id)
-        if lock:
-            stmt = stmt.with_for_update()
-        project = (await self.session.execute(stmt)).scalar_one_or_none()
-        if project is None:
-            raise ResourceNotFoundError("プロジェクトが見つかりません")
-        if project.user_id != user_id:
-            raise ForbiddenOperationError("他ユーザーのプロジェクトは操作できません")
-        return project
 
     async def _owned_user_skill(self, skill_id: int, user_id: int, *, lock: bool = False) -> UserSkill:
         stmt = select(UserSkill).where(UserSkill.id == skill_id, UserSkill.user_id == user_id)
@@ -1181,38 +1058,6 @@ class ChatRepository:
             if attached:
                 entry["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
         return entry
-
-    @staticmethod
-    def _serialize_room(room: ChatRoom, *, project_room: bool = False) -> dict[str, Any]:
-        payload = {
-            "id": room.id,
-            "title": room.title or "新規チャット",
-            "mode": room.mode or "normal",
-            "created_at": serialize_datetime_iso(room.created_at),
-            "last_activity_at": serialize_datetime_iso(room.last_activity_at),
-        }
-        if project_room:
-            payload["createdAt"] = payload.pop("created_at")
-            payload["lastActivityAt"] = payload.pop("last_activity_at")
-        return payload
-
-    @staticmethod
-    def _normalize_project_name(name: Any) -> str:
-        return (str(name or "").strip() or "新規プロジェクト")[:255]
-
-    @staticmethod
-    def _normalize_project_instructions(instructions: Any) -> str | None:
-        return None if instructions is None else str(instructions)[:20_000]
-
-    @staticmethod
-    def _serialize_project(project: Project) -> dict[str, Any]:
-        return {
-            "id": project.id,
-            "name": str(project.name or "新規プロジェクト"),
-            "instructions": str(project.instructions or ""),
-            "createdAt": serialize_datetime_iso(project.created_at),
-            "updatedAt": serialize_datetime_iso(project.updated_at),
-        }
 
     @staticmethod
     def _serialize_user_skill(skill: UserSkill) -> dict[str, Any]:
