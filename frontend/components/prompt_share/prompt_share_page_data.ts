@@ -8,12 +8,24 @@ import type {
   PromptPagination
 } from "../../scripts/prompt_share/types";
 import { localizedAbsoluteUrl } from "../../lib/seo";
-import type { Locale } from "../../lib/i18n/config";
+import { resolvePageLocale, type Locale } from "../../lib/i18n/config";
 import { promptShareText } from "../../scripts/prompt_share/i18n";
+import {
+  normalizeCategory,
+  PROMPT_CATEGORY_KEYS
+} from "../../scripts/prompt_share/prompt_category_registry";
 
 export type PromptSharePageProps = {
   initialPrompts?: PromptData[];
   initialPagination?: PromptPagination | null;
+  initialCategory?: string;
+};
+
+export type PromptCategoryPageProps = {
+  category: string;
+  initialPrompts: PromptData[];
+  initialPagination: PromptPagination | null;
+  initialLoadFailed: boolean;
 };
 
 // SEO向けのページ説明文。検索エンジンのスニペットとして表示される
@@ -51,32 +63,96 @@ function getBackendOrigin() {
   return (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
 }
 
-// SSR時にプロンプト一覧を事前取得する。失敗した場合でも空配列でページを返し、CSRで再取得させる
-// Pre-fetches the prompt list at SSR time; returns an empty array on failure so the client can retry
-export const getPromptShareServerSideProps: GetServerSideProps<PromptSharePageProps> = async () => {
+type InitialPromptData = {
+  initialPrompts: PromptData[];
+  initialPagination: PromptPagination | null;
+  initialLoadFailed: boolean;
+};
+
+// 公開フィードの先頭ページをSSRで取得する。カテゴリページと共有トップで同じ取得境界を使う。
+// Fetch the first public-feed page during SSR so category pages and the main feed share one boundary.
+export async function fetchInitialPromptData(category?: string, locale?: Locale): Promise<InitialPromptData> {
+  const params = new URLSearchParams({ limit: String(INITIAL_PROMPT_LIMIT) });
+  if (category) {
+    params.set("category", category);
+  }
+
   try {
     const response = await resilientFetch(
-      `${getBackendOrigin()}/prompt_share/api/prompts?limit=${INITIAL_PROMPT_LIMIT}`,
+      `${getBackendOrigin()}/prompt_share/api/prompts?${params.toString()}`,
       {
         headers: {
-          "Accept": "application/json"
+          "Accept": "application/json",
+          ...(locale ? { "Accept-Language": locale } : {})
         }
       }
     );
     if (!response.ok) {
-      return { props: { initialPrompts: [], initialPagination: null } };
+      return { initialPrompts: [], initialPagination: null, initialLoadFailed: true };
     }
 
     const data = await response.json() as PromptFeedResponse;
-    // APIが制限した初期ページをクライアント側で使いやすい形式に正規化する。
-    // Normalize the API-limited initial page into the client-friendly format.
-    const initialPrompts = Array.isArray(data.prompts)
-      ? data.prompts.map(normalizePromptData)
-      : [];
-
-    return { props: { initialPrompts, initialPagination: data.pagination || null } };
+    return {
+      initialPrompts: Array.isArray(data.prompts)
+        ? data.prompts.map(normalizePromptData)
+        : [],
+      initialPagination: data.pagination || null,
+      initialLoadFailed: false
+    };
   } catch (error) {
     console.error("Failed to load prompt share SSR prompts:", error);
-    return { props: { initialPrompts: [], initialPagination: null } };
+    return { initialPrompts: [], initialPagination: null, initialLoadFailed: true };
   }
+}
+
+// SSR時にプロンプト一覧を事前取得する。失敗した場合でも空配列でページを返し、CSRで再取得させる
+// Pre-fetches the prompt list at SSR time; returns an empty array on failure so the client can retry
+export const getPromptShareServerSideProps: GetServerSideProps<PromptSharePageProps> = async (context) => {
+  const rawCategory = context.query?.category;
+  const requestedCategory = Array.isArray(rawCategory) ? "" : String(rawCategory || "").trim().toLowerCase();
+  const normalizedCategory = normalizeCategory(requestedCategory);
+  const category = normalizedCategory && PROMPT_CATEGORY_KEYS.includes(normalizedCategory)
+    ? normalizedCategory
+    : undefined;
+  const requestHeaders = context.req?.headers;
+  const locale = resolvePageLocale(
+    context.locale,
+    requestHeaders?.cookie,
+    requestHeaders?.["accept-language"]
+  );
+  const data = await fetchInitialPromptData(category, locale);
+  return {
+    props: {
+      initialPrompts: data.initialPrompts,
+      initialPagination: data.initialPagination,
+      initialCategory: category || "all"
+    }
+  };
+};
+
+// 正規カテゴリキーだけを受け付け、旧ラベルや大文字の重複URLを作らない。
+// Accept only exact canonical keys so legacy labels and case variants cannot become duplicate URLs.
+export const getPromptCategoryServerSideProps: GetServerSideProps<PromptCategoryPageProps> = async (context) => {
+  const rawCategory = context.params?.category;
+  const category = Array.isArray(rawCategory) ? "" : String(rawCategory || "").trim();
+
+  if (!category || !PROMPT_CATEGORY_KEYS.includes(category)) {
+    return { notFound: true };
+  }
+
+  const requestHeaders = context.req?.headers;
+  const locale = resolvePageLocale(
+    context.locale,
+    requestHeaders?.cookie,
+    requestHeaders?.["accept-language"]
+  );
+  const data = await fetchInitialPromptData(category, locale);
+  return {
+    props: {
+      category,
+      initialPrompts: data.initialPrompts,
+      initialPagination: data.initialPagination,
+      initialLoadFailed: data.initialLoadFailed
+    }
+  };
 };

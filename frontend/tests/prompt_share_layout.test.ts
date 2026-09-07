@@ -76,6 +76,8 @@ test("prompt share layout renders crawlable page content before client API data 
   assert.match(html, /文章作成/);
   assert.match(html, /調査/);
   assert.match(html, /title="文章作成"/);
+  assert.match(html, /href="\/prompt_share\/category\/writing"/);
+  assert.match(html, /href="\/prompt_share\/category\/research"/);
 });
 
 test("prompt share layout places load more after the final prompt card", () => {

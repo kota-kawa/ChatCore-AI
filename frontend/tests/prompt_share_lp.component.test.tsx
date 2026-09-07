@@ -28,12 +28,14 @@ describe("Prompt share LP scope section", () => {
     const chips = container.querySelectorAll(".pslp-chips li");
     expect(chips.length).toBe(PROMPT_CATEGORY_KEYS.length);
     expect(Array.from(chips).map((chip) => chip.textContent)).toContain("文章作成");
+    expect(container.querySelector('a[href="/prompt_share/category/writing"]')).not.toBeNull();
   });
 
   it("localizes the category labels for English", () => {
     const { container } = renderWithLocale("en", <PromptShareLpScope />);
     const chips = Array.from(container.querySelectorAll(".pslp-chips li")).map((chip) => chip.textContent);
     expect(chips).toContain("Writing");
+    expect(container.querySelector('a[href="/en/prompt_share/category/writing"]')).not.toBeNull();
   });
 
   it("explains that reusable SKILLs and generated images can be shared", () => {

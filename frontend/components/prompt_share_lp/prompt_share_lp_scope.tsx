@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
+import { getPromptCategoryPath } from "../prompt_share/prompt_category_seo";
 import {
   getCategoryLabel,
   PROMPT_CATEGORY_KEYS
@@ -92,7 +94,11 @@ export function PromptShareLpScope() {
         </h3>
         <ul className="pslp-chips">
           {PROMPT_CATEGORY_KEYS.map((key) => (
-            <li key={key}>{getCategoryLabel(key, locale)}</li>
+            <li key={key}>
+              <Link href={getPromptCategoryPath(key, locale)} locale={locale}>
+                {getCategoryLabel(key, locale)}
+              </Link>
+            </li>
           ))}
         </ul>
 

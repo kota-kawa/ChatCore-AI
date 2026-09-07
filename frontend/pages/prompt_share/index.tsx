@@ -54,7 +54,12 @@ import {
   PROMPT_MEDIA_TYPE_FILTERS,
   SEARCH_RESULTS_PER_PAGE
 } from "../../components/prompt_share/prompt_share_page_constants";
-import { CATEGORY_UNSET } from "../../scripts/prompt_share/prompt_category_registry";
+import {
+  CATEGORY_UNSET,
+  getCategoryLabel,
+  normalizeCategory,
+  PROMPT_CATEGORY_KEYS
+} from "../../scripts/prompt_share/prompt_category_registry";
 import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
 import type {
   ContentFormatFilter,
@@ -89,13 +94,41 @@ import {
 
 export const getServerSideProps = getPromptShareServerSideProps;
 
+function resolveCategoryFromSearch(search: string) {
+  const requestedCategory = new URLSearchParams(search).get("category") || "";
+  const normalizedCategory = normalizeCategory(requestedCategory.toLowerCase());
+  return normalizedCategory && PROMPT_CATEGORY_KEYS.includes(normalizedCategory)
+    ? normalizedCategory
+    : "all";
+}
+
+function syncCategoryUrl(category: string) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  const currentCategory = resolveCategoryFromSearch(url.search);
+  const rawCategory = url.searchParams.get("category");
+  if ((category === "all" && !rawCategory) || (currentCategory === category && rawCategory === category)) {
+    return;
+  }
+  if (category === "all") {
+    url.searchParams.delete("category");
+  } else {
+    url.searchParams.set("category", category);
+  }
+  window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 // プロンプト共有ページのメインコンポーネント。検索・フィルタ・モーダル・いいね・チャット追加など全機能を管理する
 // Main component for the prompt share page; manages search, filters, modals, likes, use-in-chat, and all other features
 export default function PromptSharePage({
   initialPrompts = [],
-  initialPagination = null
+  initialPagination = null,
+  initialCategory = "all"
 }: PromptSharePageProps) {
   const { locale, t } = useTranslation();
+  const initialCategoryValue = initialCategory && (
+    initialCategory === "all" || Boolean(getCategoryLabel(initialCategory, locale))
+  ) ? initialCategory : "all";
   // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
   // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
   const initialPromptRecords = useMemo<PromptRecord[]>(() => {
@@ -108,9 +141,11 @@ export default function PromptSharePage({
   // 検索・フィルタ関連の状態
   // Search and filter state
   const [searchInput, setSearchInput] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedCategoryTitle, setSelectedCategoryTitle] = useState(t("promptShare.allPrompts"));
-  const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
+  const [selectedCategory, setSelectedCategory] = useState(initialCategoryValue);
+  const [selectedCategoryTitle, setSelectedCategoryTitle] = useState(
+    initialCategoryValue === "all" ? t("promptShare.allPrompts") : getCategoryLabel(initialCategoryValue, locale)
+  );
+  const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>(initialCategoryValue);
   const [selectedContentFormatFilter, setSelectedContentFormatFilter] = useState<ContentFormatFilter>("all");
   const [selectedMediaTypeFilter, setSelectedMediaTypeFilter] = useState<MediaTypeFilter>("all");
 
@@ -177,7 +212,7 @@ export default function PromptSharePage({
   // Refs allow async callbacks to always read the latest state without stale closures
   const nextPromptClientIdRef = useRef(initialPromptRecords.length);
   const promptsRef = useRef<PromptRecord[]>(initialPromptRecords);
-  const selectedCategoryRef = useRef("all");
+  const selectedCategoryRef = useRef(initialCategoryValue);
   const selectedContentFormatFilterRef = useRef<ContentFormatFilter>("all");
   const selectedMediaTypeFilterRef = useRef<MediaTypeFilter>("all");
   const promptListRequestSequenceRef = useRef(0);
@@ -511,7 +546,7 @@ export default function PromptSharePage({
         setSelectedContentFormatFilter(contentFormatToApply);
         setSelectedMediaTypeFilter(mediaTypeToApply);
         setAppliedCategoryFilter(categoryToApply);
-        setSelectedCategoryTitle(getCategoryTitle(categoryToApply));
+        setSelectedCategoryTitle(getCategoryTitle(categoryToApply, locale));
 
         if (promptRecords.length > 0) {
           setPromptFeedback(null);
@@ -544,7 +579,7 @@ export default function PromptSharePage({
         }
       }
     },
-    [buildPromptCountMeta, toPromptRecords]
+    [buildPromptCountMeta, locale, toPromptRecords]
   );
 
   // 入力文字列でプロンプトを検索し、クエリが空の場合は通常の一覧表示に戻る
@@ -839,6 +874,7 @@ export default function PromptSharePage({
     (category: string) => {
       setOpenDropdownPromptId(null);
       setSelectedCategory(category);
+      syncCategoryUrl(category);
       const contentFormatToApply = selectedContentFormatFilterRef.current;
       const mediaTypeToApply = selectedMediaTypeFilterRef.current;
 
@@ -849,6 +885,21 @@ export default function PromptSharePage({
     },
     [loadPrompts, searchInput]
   );
+
+  // ブラウザの戻る・進むでカテゴリクエリが変わった場合も一覧と選択状態を同期する。
+  // Keep the feed and selected state in sync when browser back/forward changes the category query.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handlePopState = () => {
+      const category = resolveCategoryFromSearch(window.location.search);
+      if (category === selectedCategoryRef.current) return;
+      setSearchInput("");
+      void loadPrompts({ categoryToApply: category });
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [loadPrompts]);
 
   // フォーマットフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
   // When a content format filter is clicked, re-searches if a query is active to apply the new filter

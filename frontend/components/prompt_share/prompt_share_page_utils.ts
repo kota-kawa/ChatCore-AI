@@ -1,19 +1,22 @@
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import type { PromptData } from "../../scripts/prompt_share/types";
 import { promptShareText } from "../../scripts/prompt_share/i18n";
+import type { Locale } from "../../lib/i18n/config";
 
 // カテゴリーに応じたカウントラベルを返す（allの場合は汎用ラベル）
 // Return a count label based on the category (generic label for "all")
-export function getCategoryCountLabel(category: string) {
-  return category === "all" ? promptShareText("promptShare.publicPrompts") : getCategoryLabelOrFallback(category);
+export function getCategoryCountLabel(category: string, locale?: Locale) {
+  return category === "all"
+    ? promptShareText("promptShare.publicPrompts", undefined, locale)
+    : getCategoryLabelOrFallback(category, undefined, locale);
 }
 
 // カテゴリーに応じたページタイトルを返す（allの場合は全件タイトル）
 // Return the page title based on the category (all-items title for "all")
-export function getCategoryTitle(category: string) {
+export function getCategoryTitle(category: string, locale?: Locale) {
   return category === "all"
-    ? promptShareText("promptShare.allPrompts")
-    : getCategoryLabelOrFallback(category);
+    ? promptShareText("promptShare.allPrompts", undefined, locale)
+    : getCategoryLabelOrFallback(category, undefined, locale);
 }
 
 // プロンプトのIDを文字列として返す（nullや未定義の場合は空文字）

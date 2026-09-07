@@ -9,6 +9,7 @@ import type {
   PromptCategory,
   PromptFeedback
 } from "./prompt_share_page_types";
+import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 import type { ImportActionState } from "../../hooks/use_import_action";
 import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
@@ -269,6 +270,30 @@ export function PromptSharePageLayout({
           <ul>
             {categories.slice(0, 6).map((category) => (
               <li key={category.value}>{getCategoryLabel(category)}</li>
+            ))}
+          </ul>
+        </section>
+
+        {/* カテゴリ別の公開ガイドへの通常リンク。検索エンジンが各ページを辿れるようにする */}
+        {/* Crawlable links to public category guides so search engines can discover every page */}
+        <section className="category-guides" aria-labelledby="category-guides-title">
+          <div className="section-header section-header--compact">
+            <h2 id="category-guides-title">{t("promptShare.categoryGuides")}</h2>
+            <p className="section-description">{t("promptShare.categoryGuidesDescription")}</p>
+          </div>
+          <ul className="category-guide-list">
+            {categories.filter((category) => category.value !== "all").map((category) => (
+              <li key={category.value}>
+                <Link
+                  href={`/prompt_share/category/${encodeURIComponent(category.value)}`}
+                  locale={locale}
+                  className="category-guide-link"
+                >
+                  <i className={category.iconClass} aria-hidden="true"></i>
+                  <span>{getCategoryLabel(category)}</span>
+                  <span className="category-guide-link__action">{t("promptShare.browseCategory")}</span>
+                </Link>
+              </li>
             ))}
           </ul>
         </section>

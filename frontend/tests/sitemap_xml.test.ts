@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildSitemapXml, PUBLIC_SITEMAP_ROUTES } from "../pages/sitemap.xml";
+import { buildSitemapXml, PROMPT_CATEGORY_SITEMAP_ROUTES, PUBLIC_SITEMAP_ROUTES } from "../pages/sitemap.xml";
 
 test("sitemap includes public crawlable application pages", () => {
   const sitemap = buildSitemapXml("https://example.com/", "2026-05-20T00:00:00.000Z");
@@ -47,4 +47,22 @@ test("sitemap appends dynamic prompt routes with per-route lastmod", () => {
   assert.match(sitemap, /<loc>https:\/\/example\.com\/en\/shared\/prompt\/42<\/loc>(?:(?!<\/url>)[\s\S])*<lastmod>2026-06-01T00:00:00\.000Z<\/lastmod>/);
   // lastmod未指定のルートはグローバルlastmodにフォールバックする / Routes without lastmod fall back to the global lastmod
   assert.match(sitemap, /<loc>https:\/\/example\.com\/shared\/prompt\/abc<\/loc>(?:(?!<\/url>)[\s\S])*<lastmod>2026-05-20T00:00:00\.000Z<\/lastmod>/);
+});
+
+test("sitemap includes every localized prompt category guide", () => {
+  const sitemap = buildSitemapXml("https://example.com", "2026-05-20T00:00:00.000Z");
+  assert.equal(PROMPT_CATEGORY_SITEMAP_ROUTES.length, 11);
+
+  for (const route of PROMPT_CATEGORY_SITEMAP_ROUTES) {
+    assert.match(sitemap, new RegExp(`<loc>https://example\\.com${route.path}</loc>`));
+    assert.match(sitemap, new RegExp(`<loc>https://example\\.com/en${route.path}</loc>`));
+  }
+
+  const categoryLocations = [...sitemap.matchAll(/<loc>(https:\/\/example\.com(?:\/en)?\/prompt_share\/category\/[^<]+)<\/loc>/g)]
+    .map((match) => match[1]);
+  assert.equal(new Set(categoryLocations).size, PROMPT_CATEGORY_SITEMAP_ROUTES.length * 2);
+  assert.doesNotMatch(
+    sitemap.slice(sitemap.indexOf("/prompt_share/category/")),
+    /<lastmod>/
+  );
 });
