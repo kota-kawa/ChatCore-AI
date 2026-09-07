@@ -8,6 +8,7 @@
 - DB・Redis・SSE の切り分けやテストの考え方は `debugging.md` を参照します。
 - API 契約の生成、DB migration、同期漏れの確認は `contracts-and-migrations.md` を参照します。
 - 特定サブシステムの設計は `../architecture/`、重要な判断理由は `../decisions/` を参照します。
+- システムデザイン面接向けの説明・見積もり・発展案の練習メモは [`system_design_interview_notes.md`](system_design_interview_notes.md) を参照します。実装契約ではないため、実装判断の根拠には使いません。
 
 ## 追記の基準
 

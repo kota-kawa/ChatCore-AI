@@ -49,6 +49,7 @@ flowchart LR
 - [Deployment and operations](docs/architecture/deployment_and_operations.md): Docker Compose、Blue/Green、起動順、ポート、ボリューム、healthcheck。
 - [Testing map](docs/architecture/testing_map.md): Backend／Frontend のテスト配置と機能別の選び方。
 - [Prompt attachment storage](docs/architecture/prompt_attachment_storage.md): 添付画像処理と保存契約の詳細。
+- [System design deep dive](docs/architecture/system_design_deep_dive.md): 機能単位の設計意図（AIエージェント、生成UI、クォータ、代表的な上限、シナリオ、用語）の長文詳細。この文書と重複する記述は持たせず、リンクで参照します。
 
 ## 2. バックエンドの起動と構成
 
@@ -94,7 +95,7 @@ flowchart LR
 
 `services/db.py` はワーカーごとにSQLAlchemy 2.0の`AsyncEngine`と`async_sessionmaker`を遅延生成します。Repositoryは`AsyncSession`を受け取り、Serviceがtransaction境界を管理します。通常のCRUDはORM、検索・CTE・JSONB・pgvector・PostgreSQL固有処理はSQLAlchemy Coreまたは`text()`を使います。`AsyncSession`は並列Task間で共有しません。認証プロバイダー情報の正本は`user_auth_providers`であり、`users`へプロバイダー列を重複保存しません。この契約は認証専用RepositoryとそのSQL契約テストで固定します。
 
-スキーマ変更は Alembic の新しい revision として追加します。適用済み revision の書き換えや、アプリ起動時だけの暗黙の ALTER は行いません。インデックスだけの直接 SQL フォールバックとして `db/performance_indexes.sql` が存在しますが、通常のスキーマ履歴の代替ではありません。
+スキーマ変更は Alembic の新しい revision として追加します。適用済み revision の書き換えや、アプリ起動時だけの暗黙の ALTER は行いません。インデックスも例外ではなく、性能インデックスは `alembic/versions/` の revision で作成します。スキーマを Alembic と別の SQL ファイルで二重管理しません。
 
 ### Redis の役割
 

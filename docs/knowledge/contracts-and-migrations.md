@@ -36,7 +36,7 @@ DB の変更は、適用済み履歴を保つ新しい Alembic revision とし�
 2. 新しい migration を追加し、upgrade と downgrade の責務を明確にする。
 3. 既存 migration を書き換えず、アプリ起動時の暗黙 SQL にスキーマ変更を隠さない。
 4. モデル／API の変更があれば、契約生成と対象ルートテストも同じ変更に含める。
-5. 直接 SQL の `db/performance_indexes.sql` が必要なケースでも、通常のスキーマ履歴を Alembic と二重管理しない。
+5. インデックスだけの変更も revision として追加し、スキーマを Alembic と別の SQL ファイルで二重管理しない。
 
 ### 検証時の注意
 
