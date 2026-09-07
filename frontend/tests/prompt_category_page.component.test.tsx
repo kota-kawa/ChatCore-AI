@@ -55,4 +55,11 @@ describe("Prompt category guide page", () => {
     expect(container.querySelector(".prompt-category-message--error")?.textContent).toContain("読み込めませんでした");
     expect(container.querySelector(".prompt-category-hero__description")?.textContent).toContain("実装したい機能");
   });
+
+  it("uses the SKILL definition as a readable card preview when the description is empty", () => {
+    const { container } = renderPage("ja", {
+      initialPrompts: [{ id: 43, title: "Review skill", content: "", content_format: "skill", skill_markdown: "# Review workflow\nCheck **security** and tests." }]
+    });
+    expect(container.querySelector(".prompt-category-prompt-card p")?.textContent).toBe("Review workflow Check security and tests.");
+  });
 });

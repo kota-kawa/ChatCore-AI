@@ -622,7 +622,7 @@ export const jaMessages = {
   "promptShare.categoryPagePrompts": "{category}の公開プロンプト",
   "promptShare.categoryPageEmpty": "このカテゴリには公開プロンプトがまだありません。紹介文と例を参考に、共有画面で新しい投稿を探せます。",
   "promptShare.categoryPageLoadFailed": "公開プロンプトを読み込めませんでした。紹介文は引き続きご覧いただけます。",
-  "promptShare.categoryPageBrowseAll": "共有画面でこのカテゴリのプロンプトを探す",
+  "promptShare.categoryPageBrowseAll": "このカテゴリのプロンプトを探す",
   "promptShare.categoryPageAllCategories": "他のカテゴリを見る",
   "promptShare.categoryPageMorePrompts": "共有画面でさらに見る",
   "promptShare.categoryPageViewPrompt": "プロンプトの詳細を見る",

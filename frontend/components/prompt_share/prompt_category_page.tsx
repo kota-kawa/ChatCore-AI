@@ -14,9 +14,10 @@ import { buildPromptPath } from "../../lib/promptSlug";
 import { stripMarkdownForPreview } from "../../scripts/core/markdown_preview";
 import {
   getCategoryLabel,
-  PROMPT_CATEGORY_KEYS
+  PROMPT_CATEGORY_KEYS,
+  PROMPT_CATEGORY_REGISTRY
 } from "../../scripts/prompt_share/prompt_category_registry";
-import { normalizePromptData } from "../../scripts/prompt_share/formatters";
+import { getPromptPreviewSource, normalizePromptData } from "../../scripts/prompt_share/formatters";
 import type { PromptData } from "../../scripts/prompt_share/types";
 import {
   getPromptCategoryPath,
@@ -40,7 +41,9 @@ function getPromptDetailPath(prompt: PromptData, locale: Locale) {
 }
 
 function getPromptPreview(prompt: PromptData) {
-  const source = prompt.description?.trim() || stripMarkdownForPreview(prompt.content || "");
+  const source = stripMarkdownForPreview(getPromptPreviewSource(
+    prompt.description, prompt.content_format, prompt.content, prompt.skill_markdown
+  ));
   return truncateSeoText(source, 180);
 }
 
@@ -145,6 +148,7 @@ export function PromptCategoryPage({
   const feedUrl = getPromptCategoryFeedPath(category, locale);
   const structuredData = buildPromptCategoryStructuredData(category, locale, copy, initialPrompts);
   const otherCategories = PROMPT_CATEGORY_KEYS.filter((key) => key !== category);
+  const categoryIcon = PROMPT_CATEGORY_REGISTRY.find((entry) => entry.key === category)?.icon || "bi-grid";
 
   return (
     <>
@@ -158,7 +162,7 @@ export function PromptCategoryPage({
         <link rel="stylesheet" href="/static/css/pages/prompt_share_category/prompt_share_category.css" />
       </SeoHead>
 
-      <div className="lp-page prompt-category-page">
+      <div className="lp-page pslp-page prompt-category-page">
         <PromptShareLpHeader />
         <main className="prompt-category-page__main">
           <nav className="prompt-category-breadcrumbs" aria-label={locale === "en" ? "Breadcrumb" : "パンくずリスト"}>
@@ -169,21 +173,34 @@ export function PromptCategoryPage({
             <span aria-current="page">{categoryLabel}</span>
           </nav>
 
-          <header className="prompt-category-hero">
-            <p className="prompt-category-hero__eyebrow">{t("promptShare.categoryGuides")}</p>
-            <h1>{copy.heading}</h1>
-            <p className="prompt-category-hero__description">{copy.intro}</p>
-            <a href={feedUrl} className="lp-btn lp-btn--primary prompt-category-hero__cta">{t("promptShare.categoryPageBrowseAll")}</a>
-          </header>
+          <div className="prompt-category-introduction">
+            <header className="prompt-category-hero">
+              <p className="prompt-category-hero__eyebrow">
+                <i className={`bi ${categoryIcon}`} aria-hidden="true" />
+                {t("promptShare.categoryGuides")}
+              </p>
+              <h1>{locale === "ja" && copy.heading.includes("に使える") ? (
+                <><span>{copy.heading.split("に使える")[0]}</span><span>に使える{copy.heading.split("に使える")[1]}</span></>
+              ) : copy.heading}</h1>
+              <p className="prompt-category-hero__description">{copy.intro}</p>
+              <a href={feedUrl} className="lp-btn lp-btn--primary prompt-category-hero__cta">
+                {t("promptShare.categoryPageBrowseAll")}<span aria-hidden="true">→</span>
+              </a>
+            </header>
+            <Section title={copy.tipHeading} className="prompt-category-tip">
+              <p>{copy.tip}</p>
+            </Section>
+          </div>
 
           <Section title={copy.examplesHeading} className="prompt-category-examples">
             <ul>
-              {copy.examples.map((example) => <li key={example}>{example}</li>)}
+              {copy.examples.map((example, index) => (
+                <li key={example}>
+                  <span className="prompt-category-examples__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                  <span>{example}</span>
+                </li>
+              ))}
             </ul>
-          </Section>
-
-          <Section title={copy.tipHeading} className="prompt-category-tip">
-            <p>{copy.tip}</p>
           </Section>
 
           <Section title={t("promptShare.categoryPagePrompts", { category: categoryLabel })} className="prompt-category-prompts">
