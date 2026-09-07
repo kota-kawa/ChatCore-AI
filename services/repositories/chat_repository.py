@@ -10,39 +10,28 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, func, literal, or_, select, text, update
+from sqlalchemy import and_, delete, func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api_errors import ApiServiceError, ForbiddenOperationError, ResourceNotFoundError
+from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.attached_files import decode_attached_files_from_storage, encode_attached_files_for_storage
 from services.datetime_serialization import serialize_datetime_iso
-from services.default_tasks import localize_system_task, resolve_system_task_key
 from services.error_messages import (
     ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
     ERROR_CHAT_ROOM_NOT_FOUND,
     ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
     ERROR_SHARED_LINK_NOT_FOUND,
-    ERROR_SHARED_SKILL_CONTENT_MISSING,
-    ERROR_SKILL_LIMIT_REACHED,
-    ERROR_SKILL_NAME_CONFLICT,
-    ERROR_SKILL_NOT_FOUND,
-    ERROR_TASK_NAME_CONFLICT,
-    ERROR_TASK_NOT_FOUND,
-    ERROR_TASK_ORDER_INVALID,
 )
 from services.generative_ui import decode_message_parts, encode_message_parts
-from services.i18n import get_current_locale
 from services.models import (
     ChatHistory,
     ChatRoom,
     ChatRoomSummary,
     MemoryFact,
     SharedChatRoom,
-    Task,
     User,
-    UserSkill,
 )
 from services.repositories.chat_room_access import load_owned_room, serialize_room
 from services.share_common import (
@@ -51,19 +40,11 @@ from services.share_common import (
     generate_share_token,
     is_unique_violation,
 )
-from services.user_skills import (
-    MAX_USER_SKILL_NAME_LENGTH,
-    MAX_USER_SKILLS,
-    normalize_user_skill_instructions,
-    normalize_user_skill_name,
-)
 
 DB_WRITE_MAX_ATTEMPTS = 3
 # Keep the old repository-level name for callers that imported it while using
 # the shared share-token retry configuration as the single source of truth.
 DB_RETRY_BACKOFF_SECONDS = SHARED_TOKEN_RETRY_BACKOFF_SECONDS
-TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307
-USER_SKILL_WRITE_LOCK_NAMESPACE = 1_413_567_308
 
 
 def _decode_web_search_context(raw: Any) -> list[dict[str, Any]] | None:
@@ -93,7 +74,7 @@ def _is_unique_violation(exc: BaseException) -> bool:
 
 
 class ChatRepository:
-    """Repository for chat rooms, history, chat state, projects, tasks and profile rows.
+    """Repository for chat rooms, message history, branches, sharing and room memory.
 
     The repository never commits.  Services own the transaction and pass an
     isolated ``AsyncSession`` for one unit of work.
@@ -519,353 +500,11 @@ class ChatRepository:
         await self.session.execute(statement)
         return summary
 
-    # User skills ------------------------------------------------------------
-
-    async def list_user_skills(self, user_id: int) -> list[dict[str, Any]]:
-        skills = (
-            await self.session.execute(
-                select(UserSkill)
-                .where(UserSkill.user_id == user_id)
-                .order_by(UserSkill.created_at, UserSkill.id)
-            )
-        ).scalars().all()
-        return [self._serialize_user_skill(skill) for skill in skills]
-
-    async def list_enabled_user_skills(self, user_id: int) -> list[dict[str, Any]]:
-        skills = (
-            await self.session.execute(
-                select(UserSkill)
-                .where(UserSkill.user_id == user_id, UserSkill.is_enabled.is_(True))
-                .order_by(UserSkill.created_at, UserSkill.id)
-            )
-        ).scalars().all()
-        return [self._serialize_user_skill(skill) for skill in skills]
-
-    async def create_user_skill(
-        self,
-        user_id: int,
-        name: str,
-        instructions: str,
-    ) -> dict[str, Any]:
-        normalized_name = normalize_user_skill_name(name)
-        normalized_instructions = normalize_user_skill_instructions(instructions)
-        await self._lock_user_skills(user_id)
-        skill_count = await self.session.scalar(
-            select(func.count(UserSkill.id)).where(UserSkill.user_id == user_id)
-        )
-        if int(skill_count or 0) >= MAX_USER_SKILLS:
-            raise ApiServiceError(ERROR_SKILL_LIMIT_REACHED, 409, code="skill_limit_reached")
-
-        duplicate = await self.session.scalar(
-            select(UserSkill.id)
-            .where(
-                UserSkill.user_id == user_id,
-                func.lower(func.btrim(UserSkill.name)) == func.lower(func.btrim(normalized_name)),
-            )
-            .limit(1)
-        )
-        if duplicate is not None:
-            raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict")
-
-        skill = UserSkill(
-            user_id=user_id,
-            name=normalized_name,
-            instructions=normalized_instructions,
-            is_enabled=True,
-        )
-        self.session.add(skill)
-        try:
-            await self.session.flush()
-        except IntegrityError as exc:
-            if _is_unique_violation(exc):
-                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
-            raise
-        return self._serialize_user_skill(skill)
-
-    async def import_user_skill(
-        self,
-        user_id: int,
-        source_prompt_id: int,
-        name: str,
-        instructions: str,
-    ) -> tuple[dict[str, Any], bool]:
-        """Create or return a Skill imported from a shared prompt.
-
-        The same per-user advisory lock as the regular Skill editor is used so
-        the limit and normalized-name allocation remain atomic across both
-        entry points.  ``source_prompt_id`` is deliberately nullable at the
-        schema level so manually-created Skills and deleted shared prompts are
-        still supported, but imported rows are identified by this value while
-        their source remains public.
-        """
-        normalized_name = normalize_user_skill_name(name) or "共有Skill"
-        normalized_instructions = normalize_user_skill_instructions(instructions)
-        if not normalized_instructions:
-            raise ApiServiceError(ERROR_SHARED_SKILL_CONTENT_MISSING, 400, code="skill_content_missing")
-
-        await self._lock_user_skills(user_id)
-        existing = (
-            await self.session.execute(
-                select(UserSkill)
-                .where(
-                    UserSkill.user_id == int(user_id),
-                    UserSkill.source_prompt_id == int(source_prompt_id),
-                )
-                .order_by(UserSkill.id)
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            return self._serialize_user_skill(existing), False
-
-        skill_count = await self.session.scalar(
-            select(func.count(UserSkill.id)).where(UserSkill.user_id == int(user_id))
-        )
-        if int(skill_count or 0) >= MAX_USER_SKILLS:
-            raise ApiServiceError(ERROR_SKILL_LIMIT_REACHED, 409, code="skill_limit_reached")
-
-        skill_name = await self._available_imported_skill_name(
-            user_id=int(user_id),
-            name=normalized_name,
-        )
-        skill = UserSkill(
-            user_id=int(user_id),
-            source_prompt_id=int(source_prompt_id),
-            name=skill_name,
-            instructions=normalized_instructions,
-            is_enabled=True,
-        )
-        self.session.add(skill)
-        try:
-            await self.session.flush()
-        except IntegrityError as exc:
-            if _is_unique_violation(exc):
-                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
-            raise
-        return self._serialize_user_skill(skill), True
-
-    async def delete_user_skill_by_source_prompt(self, user_id: int, source_prompt_id: int) -> bool:
-        """Delete the Skill imported from a shared prompt, if it exists."""
-        await self._lock_user_skills(user_id)
-        result = await self.session.execute(
-            delete(UserSkill).where(
-                UserSkill.user_id == int(user_id),
-                UserSkill.source_prompt_id == int(source_prompt_id),
-            )
-        )
-        await self.session.flush()
-        return bool(result.rowcount or 0)
-
-    async def set_user_skill_enabled(
-        self,
-        user_id: int,
-        skill_id: int,
-        is_enabled: bool,
-    ) -> dict[str, Any]:
-        skill = await self._owned_user_skill(skill_id, user_id, lock=True)
-        skill.is_enabled = is_enabled
-        skill.updated_at = datetime.utcnow()
-        await self.session.flush()
-        return self._serialize_user_skill(skill)
-
-    async def delete_user_skill(self, user_id: int, skill_id: int) -> None:
-        skill = await self._owned_user_skill(skill_id, user_id, lock=True)
-        await self.session.delete(skill)
-        await self.session.flush()
-
-    # Tasks ------------------------------------------------------------------
-
-    async def fetch_tasks(self, user_id: int | None, locale: str) -> list[dict[str, Any]]:
-        rows = (
-            await self.session.execute(
-                select(Task)
-                .where(Task.user_id == user_id, Task.deleted_at.is_(None))
-                .order_by(func.coalesce(Task.display_order, 99999), Task.id)
-            )
-        ).scalars().all()
-        return [self._localize_task(task, locale, is_default=False) for task in rows]
-
-    async def get_task_prompt_data(
-        self, task: str, user_id: int | None, task_id: int | None = None
-    ) -> dict[str, Any] | None:
-        columns = (
-            Task.id.label("task_id"),
-            Task.system_task_key,
-            Task.system_task_revision,
-            Task.is_system_task_customized,
-            Task.name,
-            Task.prompt_template,
-            Task.response_rules,
-            Task.output_skeleton,
-            Task.input_examples,
-            Task.output_examples,
-        )
-        if task_id is not None:
-            stmt = select(*columns).where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
-        else:
-            key = resolve_system_task_key(task)
-            lookup_column = Task.system_task_key if key is not None else Task.name
-            stmt = select(*columns).where(lookup_column == (key or task), Task.deleted_at.is_(None))
-            if user_id:
-                stmt = stmt.where(or_(Task.user_id == user_id, Task.user_id.is_(None))).order_by(
-                    case((Task.user_id == user_id, 0), else_=1), Task.id
-                )
-            else:
-                stmt = stmt.where(Task.user_id.is_(None)).order_by(Task.id)
-            stmt = stmt.limit(1)
-        row = (await self.session.execute(stmt)).mappings().first()
-        return localize_system_task(dict(row), get_current_locale()) if row is not None else None
-
-    async def update_tasks_order(self, user_id: int, new_order: list[int]) -> None:
-        await self._lock_user_tasks(user_id)
-        rows = (
-            await self.session.execute(
-                select(Task.id).where(Task.user_id == user_id, Task.deleted_at.is_(None)).with_for_update()
-            )
-        ).all()
-        active_ids = {int(task_id) for (task_id,) in rows}
-        if len(new_order) != len(active_ids) or set(new_order) != active_ids:
-            raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
-        for index, task_id in enumerate(new_order):
-            result = await self.session.execute(
-                update(Task)
-                .where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
-                .values(display_order=index, updated_at=func.current_timestamp())
-            )
-            if result.rowcount != 1:
-                raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
-
-    async def delete_task(self, user_id: int, task_id: int) -> None:
-        await self._lock_user_tasks(user_id)
-        result = await self.session.execute(
-            update(Task)
-            .where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
-            .values(deleted_at=func.current_timestamp(), updated_at=func.current_timestamp())
-        )
-        if result.rowcount != 1:
-            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
-
-    async def edit_task(
-        self,
-        user_id: int,
-        task_id: int,
-        new_task: str,
-        prompt_template: str | None,
-        response_rules: str | None,
-        output_skeleton: str | None,
-        input_examples: str | None,
-        output_examples: str | None,
-    ) -> bool:
-        await self._lock_user_tasks(user_id)
-        task = (
-            await self.session.execute(
-                select(Task)
-                .where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
-        if task is None:
-            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
-        duplicate = await self.session.scalar(
-            select(Task.id)
-            .where(
-                Task.user_id == user_id,
-                Task.id != task_id,
-                Task.deleted_at.is_(None),
-                func.lower(func.btrim(Task.name)) == func.lower(func.btrim(new_task)),
-            )
-            .limit(1)
-        )
-        if duplicate is not None:
-            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
-        task.name = new_task
-        for field, value in (
-            ("prompt_template", prompt_template),
-            ("response_rules", response_rules),
-            ("output_skeleton", output_skeleton),
-            ("input_examples", input_examples),
-            ("output_examples", output_examples),
-        ):
-            if value is not None:
-                setattr(task, field, value)
-        if task.system_task_key is not None:
-            task.is_system_task_customized = True
-        await self.session.flush()
-        return True
-
-    async def add_task(
-        self,
-        user_id: int,
-        title: str,
-        prompt_content: str,
-        response_rules: str,
-        output_skeleton: str,
-        input_examples: str,
-        output_examples: str,
-    ) -> None:
-        await self._lock_user_tasks(user_id)
-        duplicate = await self.session.scalar(
-            select(Task.id)
-            .where(
-                Task.user_id == user_id,
-                Task.deleted_at.is_(None),
-                func.lower(func.btrim(Task.name)) == func.lower(func.btrim(title)),
-            )
-            .limit(1)
-        )
-        if duplicate is not None:
-            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
-        next_order = await self.session.scalar(
-            select(func.coalesce(func.max(Task.display_order), -1) + 1).where(
-                Task.user_id == user_id, Task.deleted_at.is_(None)
-            )
-        )
-        self.session.add(
-            Task(
-                user_id=user_id,
-                name=title,
-                prompt_template=prompt_content,
-                response_rules=response_rules,
-                output_skeleton=output_skeleton,
-                input_examples=input_examples,
-                output_examples=output_examples,
-                display_order=int(next_order or 0),
-            )
-        )
-        try:
-            await self.session.flush()
-        except IntegrityError as exc:
-            if _is_unique_violation(exc):
-                raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict") from exc
-            raise
-
     # Users and preferences --------------------------------------------------
 
     async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
         user = await self.session.get(User, user_id)
         return self._serialize_user(user) if user is not None else None
-
-    async def get_generative_ui_skill_enabled(self, user_id: int) -> bool:
-        enabled = await self.session.scalar(
-            select(User.generative_ui_skill_enabled).where(User.id == int(user_id))
-        )
-        if enabled is None:
-            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)
-        return bool(enabled)
-
-    async def set_generative_ui_skill_enabled(
-        self,
-        user_id: int,
-        is_enabled: bool,
-    ) -> bool:
-        result = await self.session.execute(
-            update(User)
-            .where(User.id == int(user_id))
-            .values(generative_ui_skill_enabled=bool(is_enabled))
-        )
-        if not result.rowcount:
-            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)
-        return bool(is_enabled)
 
     async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         user = await self.session.scalar(select(User).where(User.email == email).limit(1))
@@ -930,49 +569,6 @@ class ChatRepository:
             }
         active_root_id = await self.session.scalar(select(ChatRoom.active_root_id).where(ChatRoom.id == chat_room_id))
         return nodes, active_root_id
-
-    async def _owned_user_skill(self, skill_id: int, user_id: int, *, lock: bool = False) -> UserSkill:
-        stmt = select(UserSkill).where(UserSkill.id == skill_id, UserSkill.user_id == user_id)
-        if lock:
-            stmt = stmt.with_for_update()
-        skill = (await self.session.execute(stmt)).scalar_one_or_none()
-        if skill is None:
-            raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND, code="skill_not_found")
-        return skill
-
-    async def _lock_user_tasks(self, user_id: int) -> None:
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:namespace, :user_id)").bindparams(
-                namespace=TASK_WRITE_LOCK_NAMESPACE, user_id=user_id
-            )
-        )
-
-    async def _lock_user_skills(self, user_id: int) -> None:
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:namespace, :user_id)").bindparams(
-                namespace=USER_SKILL_WRITE_LOCK_NAMESPACE, user_id=user_id
-            )
-        )
-
-    async def _available_imported_skill_name(self, *, user_id: int, name: str) -> str:
-        """Allocate a deterministic Skill name without colliding with manual Skills."""
-        base_name = normalize_user_skill_name(name) or "共有Skill"
-        candidate = base_name
-        suffix_number = 1
-        while True:
-            existing = await self.session.scalar(
-                select(UserSkill.id)
-                .where(
-                    UserSkill.user_id == int(user_id),
-                    func.lower(func.btrim(UserSkill.name)) == func.lower(func.btrim(candidate)),
-                )
-                .limit(1)
-            )
-            if existing is None:
-                return candidate
-            suffix_number += 1
-            suffix = f" ({suffix_number})"
-            candidate = f"{base_name[: MAX_USER_SKILL_NAME_LENGTH - len(suffix)]}{suffix}"
 
     @staticmethod
     def _trailing_unanswered_user_ids(path: list[dict[str, Any]], children: dict[int | None, list[int]]) -> list[int]:
@@ -1058,40 +654,6 @@ class ChatRepository:
             if attached:
                 entry["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
         return entry
-
-    @staticmethod
-    def _serialize_user_skill(skill: UserSkill) -> dict[str, Any]:
-        return {
-            "id": skill.id,
-            "system_skill_key": None,
-            "name": str(skill.name or ""),
-            "instructions": str(skill.instructions or ""),
-            "is_enabled": bool(skill.is_enabled),
-            "is_default": False,
-            "can_edit": True,
-            "can_delete": True,
-            "created_at": serialize_datetime_iso(skill.created_at),
-            "updated_at": serialize_datetime_iso(skill.updated_at),
-        }
-
-    @staticmethod
-    def _localize_task(task: Task, locale: str, *, is_default: bool) -> dict[str, Any]:
-        return localize_system_task(
-            {
-                "task_id": task.id,
-                "system_task_key": task.system_task_key,
-                "system_task_revision": task.system_task_revision,
-                "is_system_task_customized": task.is_system_task_customized,
-                "name": task.name,
-                "prompt_template": task.prompt_template,
-                "response_rules": task.response_rules,
-                "output_skeleton": task.output_skeleton,
-                "input_examples": task.input_examples,
-                "output_examples": task.output_examples,
-                "is_default": is_default,
-            },
-            locale,
-        )
 
     @staticmethod
     def _serialize_user(user: User) -> dict[str, Any]:

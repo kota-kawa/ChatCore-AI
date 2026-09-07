@@ -27,6 +27,8 @@ from .repositories.chat_repository import (
     ChatRepository,
 )
 from .repositories.project_repository import ProjectRepository
+from .repositories.task_repository import TaskRepository
+from .repositories.user_skill_repository import UserSkillRepository
 from .user_skills import (
     build_generative_ui_system_skill,
     is_generative_ui_skill_id,
@@ -282,7 +284,11 @@ async def get_task_prompt_data(
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any] | None:
-    return await _read(lambda repo: repo.get_task_prompt_data(task, user_id, task_id), session)
+    return await _read(
+        lambda repo: repo.get_task_prompt_data(task, user_id, task_id),
+        session,
+        repository=TaskRepository,
+    )
 
 
 async def list_chat_rooms(
@@ -387,11 +393,11 @@ async def get_project_context(room_id: str, *, session: AsyncSession | None = No
 
 
 async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.fetch_tasks(user_id, locale), session)
+    return await _read(lambda repo: repo.fetch_tasks(user_id, locale), session, repository=TaskRepository)
 
 
 async def list_user_skills(user_id: int, *, session: AsyncSession | None = None):
-    async def operation(repo: ChatRepository):
+    async def operation(repo: UserSkillRepository):
         is_enabled = await repo.get_generative_ui_skill_enabled(user_id)
         personal_skills = await repo.list_user_skills(user_id)
         return [
@@ -399,11 +405,15 @@ async def list_user_skills(user_id: int, *, session: AsyncSession | None = None)
             *personal_skills,
         ]
 
-    return await _read(operation, session)
+    return await _read(operation, session, repository=UserSkillRepository)
 
 
 async def list_enabled_user_skills(user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.list_enabled_user_skills(user_id), session)
+    return await _read(
+        lambda repo: repo.list_enabled_user_skills(user_id),
+        session,
+        repository=UserSkillRepository,
+    )
 
 
 async def create_user_skill(
@@ -416,6 +426,7 @@ async def create_user_skill(
     return await _write(
         lambda repo: repo.create_user_skill(user_id, name, instructions),
         session,
+        repository=UserSkillRepository,
     )
 
 
@@ -431,11 +442,13 @@ async def set_user_skill_enabled(
         stored_enabled = await _write(
             lambda repo: repo.set_generative_ui_skill_enabled(user_id, next_enabled),
             session,
+            repository=UserSkillRepository,
         )
         return build_generative_ui_system_skill(is_enabled=stored_enabled)
     return await _write(
         lambda repo: repo.set_user_skill_enabled(user_id, skill_id, is_enabled),
         session,
+        repository=UserSkillRepository,
     )
 
 
@@ -450,15 +463,19 @@ async def delete_user_skill(
             ERROR_DEFAULT_SKILL_IMMUTABLE,
             code="default_skill_immutable",
         )
-    await _write(lambda repo: repo.delete_user_skill(user_id, skill_id), session)
+    await _write(
+        lambda repo: repo.delete_user_skill(user_id, skill_id),
+        session,
+        repository=UserSkillRepository,
+    )
 
 
 async def update_tasks_order(user_id: int, new_order: list[int], *, session: AsyncSession | None = None) -> None:
-    await _write(lambda repo: repo.update_tasks_order(user_id, new_order), session)
+    await _write(lambda repo: repo.update_tasks_order(user_id, new_order), session, repository=TaskRepository)
 
 
 async def delete_task(user_id: int, task_id: int, *, session: AsyncSession | None = None) -> None:
-    await _write(lambda repo: repo.delete_task(user_id, task_id), session)
+    await _write(lambda repo: repo.delete_task(user_id, task_id), session, repository=TaskRepository)
 
 
 async def edit_task(
@@ -485,6 +502,7 @@ async def edit_task(
             output_examples,
         ),
         session,
+        repository=TaskRepository,
     )
 
 
@@ -510,6 +528,7 @@ async def add_task(
             output_examples,
         ),
         session,
+        repository=TaskRepository,
     )
 
 
