@@ -7,6 +7,8 @@ import time
 import uuid
 from typing import Any
 
+from services.env_settings import env_float
+
 try:
     import redis
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
@@ -28,21 +30,6 @@ def is_redis_configured() -> bool:
     return bool(os.environ.get("REDIS_URL") or os.environ.get("REDIS_HOST"))
 
 
-# 環境変数から正の浮動小数点数値を取得するヘルパー関数
-# Helper function to get a positive float from environment variables
-def _get_positive_float_env(name: str, default: float) -> float:
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return default
-    try:
-        value = float(raw_value)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-# Redisへの接続が失敗した際に、一時的にRedis利用を無効化する
-# Temporarily disable Redis usage when connection fails
 def mark_redis_unavailable(exc: Exception | None = None) -> None:
     global _redis_client, _redis_retry_after
     _redis_client = None
@@ -68,6 +55,8 @@ def _ping_redis_with_timeout(candidate: Any, timeout_seconds: float) -> None:
         try:
             candidate.ping()
         except Exception as exc:
+            # 例外はキュー経由で呼び出し元へ再送出されるため、ここでのログは二重出力になる
+            # The exception is re-raised by the caller via the queue, so logging here would duplicate it
             result_queue.put(exc)
             return
         result_queue.put(None)
@@ -105,7 +94,7 @@ def get_redis_client() -> Any | None:
     # URL 指定を最優先し、未指定時は host/port/db 設定で接続する
     # Prefer REDIS_URL, otherwise build client from host/port/db settings.
     url = os.environ.get("REDIS_URL")
-    connect_timeout = _get_positive_float_env(
+    connect_timeout = env_float(
         "REDIS_CONNECT_TIMEOUT_SECONDS",
         DEFAULT_REDIS_CONNECT_TIMEOUT_SECONDS,
     )

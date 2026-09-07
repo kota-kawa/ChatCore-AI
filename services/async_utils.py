@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import os
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any, TypeVar
+
+from services.env_settings import env_int
 
 T = TypeVar("T")
 
@@ -23,23 +24,8 @@ _executor_lock = threading.Lock()
 _executor: ThreadPoolExecutor | None = None
 
 
-# 環境変数から正の整数を取得する（不正値・非正値は既定値へフォールバック）
-# Read a positive int env var, falling back to the default on invalid/non-positive input.
-def _get_positive_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        parsed = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
-
-# ブロッキング処理用スレッドプールの最大同時実行数を解決する
-# Resolve the max concurrency for the blocking work thread pool.
 def _resolve_max_workers() -> int:
-    return _get_positive_int_env("RUN_BLOCKING_MAX_WORKERS", _DEFAULT_MAX_WORKERS)
+    return env_int("RUN_BLOCKING_MAX_WORKERS", _DEFAULT_MAX_WORKERS)
 
 
 # シングルトンのブロッキング用エグゼキュータを取得する（スレッドセーフな遅延初期化）

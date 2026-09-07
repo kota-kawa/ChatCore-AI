@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import atexit
-import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, TypeVar
+
+from services.env_settings import env_int
 
 T = TypeVar("T")
 
@@ -12,23 +13,8 @@ _executor_lock = threading.Lock()
 _executor: ThreadPoolExecutor | None = None
 
 
-# 環境変数から正の整数値を取得するヘルパー関数
-# Helper function to get a positive integer from environment variables
-def _get_positive_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        parsed = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
-
-# バックグラウンドタスク実行用のスレッドプールエグゼキュータを生成する
-# Create a thread pool executor for running background tasks
 def _create_executor() -> ThreadPoolExecutor:
-    max_workers = _get_positive_int_env("BACKGROUND_WORKER_THREADS", 8)
+    max_workers = env_int("BACKGROUND_WORKER_THREADS", 8)
     return ThreadPoolExecutor(
         max_workers=max_workers,
         thread_name_prefix="chat-core-bg",

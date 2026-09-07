@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
+from services.env_settings import env_bool, env_int
 from services.runtime_config import is_production_env
 from services.web_urls import frontend_base_url
 
@@ -20,7 +21,7 @@ DEFAULT_MCP_CIMD_MAX_CONCURRENT_FETCHES = 4
 
 
 def is_mcp_enabled() -> bool:
-    return (os.getenv("MCP_ENABLED") or "").strip().lower() in {"1", "true", "yes", "on"}
+    return env_bool("MCP_ENABLED")
 
 
 def get_mcp_public_base_url() -> str:
@@ -79,52 +80,41 @@ def get_mcp_allowed_hosts() -> list[str]:
     return [host, sibling]
 
 
-def _get_positive_int_env(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
 def get_mcp_dcr_rate_limit_per_hour() -> int:
-    return _get_positive_int_env("MCP_DCR_RATE_LIMIT_PER_HOUR", DEFAULT_MCP_DCR_RATE_LIMIT_PER_HOUR)
+    return env_int("MCP_DCR_RATE_LIMIT_PER_HOUR", DEFAULT_MCP_DCR_RATE_LIMIT_PER_HOUR)
 
 
 def get_mcp_authorize_rate_limit_per_10_minutes() -> int:
-    return _get_positive_int_env(
+    return env_int(
         "MCP_AUTHORIZE_RATE_LIMIT_PER_10_MINUTES",
         DEFAULT_MCP_AUTHORIZE_RATE_LIMIT_PER_10_MINUTES,
     )
 
 
 def get_mcp_machine_max_body_bytes() -> int:
-    return _get_positive_int_env("MCP_MACHINE_MAX_BODY_BYTES", DEFAULT_MCP_MACHINE_MAX_BODY_BYTES)
+    return env_int("MCP_MACHINE_MAX_BODY_BYTES", DEFAULT_MCP_MACHINE_MAX_BODY_BYTES)
 
 
 def get_mcp_publish_rate_limit_per_hour() -> int:
-    return _get_positive_int_env(
+    return env_int(
         "MCP_PUBLISH_RATE_LIMIT_PER_HOUR",
         DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_HOUR,
     )
 
 
 def get_mcp_publish_rate_limit_per_day() -> int:
-    return _get_positive_int_env(
+    return env_int(
         "MCP_PUBLISH_RATE_LIMIT_PER_DAY",
         DEFAULT_MCP_PUBLISH_RATE_LIMIT_PER_DAY,
     )
 
 
 def get_mcp_cimd_cache_entries() -> int:
-    return _get_positive_int_env("MCP_CIMD_CACHE_ENTRIES", DEFAULT_MCP_CIMD_CACHE_ENTRIES)
+    return env_int("MCP_CIMD_CACHE_ENTRIES", DEFAULT_MCP_CIMD_CACHE_ENTRIES)
 
 
 def get_mcp_cimd_max_concurrent_fetches() -> int:
-    return _get_positive_int_env(
+    return env_int(
         "MCP_CIMD_MAX_CONCURRENT_FETCHES",
         DEFAULT_MCP_CIMD_MAX_CONCURRENT_FETCHES,
     )

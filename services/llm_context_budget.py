@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from services.chat_context import estimate_token_count
+from services.env_settings import env_int
 from services.llm_model_limits import (
     MODEL_MAX_OUTPUT_TOKENS,
     QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
@@ -93,10 +94,6 @@ def _non_negative_int(value: Any, default: int) -> int:
     return parsed if parsed >= 0 else default
 
 
-def _positive_int_env(name: str, default: int) -> int:
-    return _positive_int(os.environ.get(name), default)
-
-
 def _non_negative_int_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None:
@@ -150,9 +147,9 @@ def get_output_reserved_tokens(
 
     phase = str(generation_phase or "default").strip().lower()
     configured = (
-        _positive_int_env("LLM_MAX_TOKENS_ANSWER", DEFAULT_ANSWER_OUTPUT_TOKENS)
+        env_int("LLM_MAX_TOKENS_ANSWER", DEFAULT_ANSWER_OUTPUT_TOKENS)
         if phase in ANSWER_GENERATION_PHASES
-        else _positive_int_env("LLM_MAX_TOKENS", DEFAULT_OUTPUT_TOKENS)
+        else env_int("LLM_MAX_TOKENS", DEFAULT_OUTPUT_TOKENS)
     )
     provider_limit = get_model_max_output_tokens(model_name)
     return min(configured, provider_limit) if provider_limit is not None else configured
