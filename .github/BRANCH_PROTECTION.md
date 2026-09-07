@@ -16,6 +16,7 @@ following status checks to pass before merging:
 
 - `Ruff Lint (Light)`
 - `Ruff Lint (Full)`
+- `Backend Type Check (mypy)`
 - `Dead Code Check (Vulture)`
 - `Version Lock Check`
 - `Unit Tests (Python 3.14)`
@@ -29,7 +30,7 @@ Additional settings:
 
 | Setting | Value | Effect |
 | --- | --- | --- |
-| Required status checks | the 10 jobs above | A merge is blocked until all of them are green. |
+| Required status checks | the 11 jobs above | A merge is blocked until all of them are green. |
 | `enforce_admins` | `true` | The rule applies to admins too — nobody can bypass failing CI. |
 | `strict` (require up to date) | `false` | Branches do not have to be rebased onto the latest `main` before merging. |
 | Required pull request reviews | none | Reviews are not enforced by this rule. |
@@ -37,6 +38,8 @@ Additional settings:
 > **Excluded on purpose:** `Coverage Report (Python 3.14)` and `Deploy (main push)`
 > are conditional jobs that do not run on pull requests. Marking them as required
 > would block every PR indefinitely, so they are not part of the required checks.
+> `Coverage Report` still gates the nightly and `main` runs through
+> `coverage report --fail-under=70`, so a large coverage regression fails there.
 >
 > Unit test shard jobs are also not listed directly. They are gated through
 > `Unit Tests (Python 3.14)`, which depends on every shard and fails if any shard
@@ -47,7 +50,7 @@ Additional settings:
 The `deploy` job in [`tests.yml`](workflows/tests.yml) declares:
 
 ```yaml
-needs: [version_lock_check, dependency_audit, lint, lint_full, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
 if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 ```
 
@@ -66,6 +69,7 @@ cat > branch-protection.json <<'JSON'
     "contexts": [
       "Ruff Lint (Light)",
       "Ruff Lint (Full)",
+      "Backend Type Check (mypy)",
       "Dead Code Check (Vulture)",
       "Version Lock Check",
       "Unit Tests (Python 3.14)",

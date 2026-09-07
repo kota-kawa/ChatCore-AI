@@ -25,6 +25,10 @@ select = [
     "PIE",   # flake8-pie
     "RET",   # flake8-return
     "RUF",   # Ruff-specific rules
+    # 日本語: 例外を黙って捨てる `except: pass` / `except: continue` を禁止します（S ルールはこの2件だけ採用）。
+    # English: Forbid silently discarded exceptions via `except: pass` / `except: continue` (only these two S rules are adopted).
+    "S110",
+    "S112",
     "SIM",   # flake8-simplify
     "TRY",   # tryceratops
     "UP",    # pyupgrade
@@ -55,12 +59,38 @@ ignore = [
 # 日本語: テストでは patch のネストが読みやすいため with 文の統合を強制しません。
 # English: Nested patch blocks read better in tests, so combined with-statements are not enforced there.
 "tests/**" = ["SIM117"]
+# 日本語: 以下は LLM プロンプト本文やメール HTML テンプレートを保持するモジュールです。
+#         行を折り返すと送信される文面そのものが変わるため、行長チェックのみ除外します。
+# English: The modules below hold LLM prompt text or e-mail HTML templates.
+#          Rewrapping their lines would change the text that is actually sent, so only the line-length rule is waived.
+"blueprints/chat/tasks.py" = ["E501"]
+"services/agent_capabilities.py" = ["E501"]
+"services/chat_prompt.py" = ["E501"]
+"services/chat_summary.py" = ["E501"]
+"services/context_vault_extraction.py" = ["E501"]
+"services/email_service.py" = ["E501"]
+"services/memo_agent_actions.py" = ["E501"]
+"services/memory_extraction.py" = ["E501"]
+"services/page_actions.py" = ["E501"]
+"services/prompt_assist.py" = ["E501"]
+"services/user_skills.py" = ["E501"]
+"services/web_search.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.14"
-# 日本語: 段落的に型付けを広げるため、既定はゆるく保ち files で対象を限定します。
-# English: Defaults stay lenient so typing can expand gradually; `files` limits the enforced surface.
-files = ["services/api_errors.py", "services/env_settings.py", "services/error_messages.py", "services/runtime_config.py", "scripts"]
+# 日本語: 型付けは段階的に広げます。files に挙げたモジュールだけを検査対象とし、追加時はここに 1 行足します。
+# English: Typing expands gradually. Only the modules listed in `files` are enforced; add a line here to widen the surface.
+files = [
+    "scripts",
+    "services/api_errors.py",
+    "services/env_settings.py",
+    "services/error_messages.py",
+    "services/runtime_config.py",
+]
+# 日本語: 未検査モジュールからのエラーは報告せず、対象モジュールの型だけを厳格に見ます。
+# English: Errors from modules outside the enforced surface stay silent so only the targets are held strict.
+follow_imports = "silent"
+ignore_missing_imports = true
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true

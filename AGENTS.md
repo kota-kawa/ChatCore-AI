@@ -19,7 +19,9 @@
 - `docs/architecture/data_model.md` は主要 PostgreSQL エンティティと Redis／ファイル保存の境界を説明します。
 - `docs/architecture/deployment_and_operations.md` は Docker Compose、Blue/Green、起動順、ポート、永続ボリュームを説明します。
 - `docs/architecture/testing_map.md` は機能ごとの Backend／Frontend テストの選び方を説明します。
+- `docs/architecture/system_design_deep_dive.md` は機能単位の設計意図（AIエージェント、生成UI、クォータ、代表的な上限、シナリオ、用語）の長文詳細です。`ARCHITECTURE.md` と重複する内容は持たず、該当章へのリンクになっています。
 - `docs/knowledge/README.md` は再利用可能な知見の索引です。デバッグ手順は `docs/knowledge/debugging.md`、API契約とマイグレーションの注意点は `docs/knowledge/contracts-and-migrations.md` を参照してください。作業ログや一時的な状態は追加しません。
+- `docs/knowledge/system_design_interview_notes.md` はシステムデザイン面接向けの準備メモです。容量見積もりや将来の発展案は現在の実装ではないため、実装判断の根拠として引用しないでください。
 - `docs/decisions/README.md` は重要な技術判断（ADR）の索引です。判断を変更・追加するときは、既存 ADR を確認して理由と影響を更新・記録してください。
 - `docs/manual/` は利用者向けマニュアルであり、実装の責務や内部挙動を確認する資料ではありません。
 - `frontend/STYLING_STRATEGY.md` は Next.js 側の CSS 配置・トークン・レガシー互換方針です。UI の変更時は `ARCHITECTURE.md` のフロントエンド章と併せて参照してください。
@@ -30,8 +32,10 @@
 - `python3 -m pip install -r requirements.txt` は、ローカル開発用の Python 依存関係をインストールします。
 - `python3 app.py` は、FastAPI アプリをローカルで起動します（必要な環境変数が設定されていることを確認してください）。
 - `python3 -m unittest` はテストスイートを実行します。特定のファイルをターゲットにする場合は、`python3 -m unittest tests.unit.test_edit_default_task` のように実行します。
-- フロントエンド（`frontend/`）は Node のコマンドを使用します。`npm run dev`（開発サーバー）、`npm run build`（ビルド）、`npm run typecheck`（型検査）、`npm run test`（ロジック + コンポーネントテスト）を実行してください。フロントエンドを変更したら、変更箇所と直接影響を受ける範囲に必要な `typecheck` とテストを実行してください。
+- フロントエンド（`frontend/`）は Node のコマンドを使用します。`npm run dev`（開発サーバー）、`npm run build`（ビルド）、`npm run lint`（ESLint）、`npm run typecheck`（型検査）、`npm run test`（ロジック + コンポーネントテスト）を実行してください。フロントエンドを変更したら、変更箇所と直接影響を受ける範囲に必要な `lint`／`typecheck`／テストを実行してください。
 - 依存バージョンは完全固定（`==` および固定タグ）が必須です。`python3 scripts/check_version_locks.py` で requirements とロック、Docker イメージ、npm スペックの固定を検証できます。浮動バージョン（`^`、`~`、`latest` など）は追加しないでください。
+- バックエンドの静的解析設定は `pyproject.toml` に集約されています。`python3 -m ruff check app.py blueprints services scripts tests` で lint、`python3 -m mypy` で型検査を実行します。mypy は `[tool.mypy]` の `files` に挙げたモジュールだけを検査対象とする段階導入方式で、型付けを広げるときはこのリストへ 1 行追加してください。
+- 環境変数を新しく読むコードを追加したら `.env.example` にも追記してください。`python3 scripts/check_env_documentation.py` がコードと `.env.example` の差分を検出し、CI でも検証されます。
 
 ## バックエンド ↔ フロントエンドのスキーマ同期
 - API のリクエスト/レスポンスモデル（`services/request_models.py` などの Pydantic モデル）を変更したら、`frontend/` で `npm run generate:api-schemas`（内部で `python3 scripts/generate_frontend_zod_schemas.py` を実行）を走らせて Zod スキーマを再生成してください。
@@ -47,7 +51,8 @@
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
 - JavaScript: `static/js/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
 - CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します（リポジトリ直下に `static/css/` は存在しません）。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。BEM スタイルの `kebab-case` クラス名を推奨します。
-- フォーマッターは強制されません。変更は周囲のコードと整合性を保つようにしてください。
+- フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
+- 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
 
 ## 責務分割とファイル肥大化の防止
 - 1つのファイル・関数・クラスに責務を詰め込みすぎないでください。単一責任の原則（SRP）を守り、役割が増えてきたら早めにモジュールへ分割します。
@@ -85,6 +90,7 @@
 - ユーザーへの説明や、作業・編集途中の経過報告はすべて日本語で表示してください。
 
 ## セキュリティと設定のヒント
-- 必要な環境変数には、`GROQ_API_KEY`、`GEMINI_API_KEY`、`FASTAPI_SECRET_KEY`、Resend メールの設定（`RESEND_API_KEY` および `RESEND_FROM_ADDRESS`）、PostgreSQL の設定、および Redis の設定（Redis 認証を使用する場合）が含まれます。シークレット情報は環境変数または `.env` に保持し、git には含めないでください。
+- 必要な環境変数には、LLM プロバイダーの API キー（`GROQ_API_KEY`、`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`）、`FASTAPI_SECRET_KEY`、Resend メールの設定（`RESEND_API_KEY` および `RESEND_FROM_ADDRESS`）、PostgreSQL の設定、および Redis の設定（Redis 認証を使用する場合）が含まれます。シークレット情報は環境変数または `.env` に保持し、git には含めないでください。
+- 実行時に読まれる環境変数の一覧は `.env.example` が正本です。`python3 scripts/check_env_documentation.py` が、コードの読み取りと `.env.example` の記載の同期を検証します（環境変数を追加・削除したら同じ変更で `.env.example` も更新してください）。
 - 本番環境では `FASTAPI_DEBUG` を無効にし、デプロイ前に Docker のデフォルト設定を確認してください。
 - .envファイルの内容は絶対に読んではいけない

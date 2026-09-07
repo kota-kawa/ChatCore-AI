@@ -1,39 +1,28 @@
-# バイナリファイルを無視
-*.env
-*.ini
-!alembic.ini
+# バイナリ・生成物・ローカル成果物を無視
+# Ignore binaries, build output and local-only artifacts
 *.service
 *.sock
 *.exe
 *.dll
 *.Identifier
-# ログファイルを無視
-
 *.cgi
 *.htaccess
-
 *.zip
 *.pptx
-*.txt
-!requirements-build.txt
-!requirements-dev.txt
-!requirements.txt
-
-
 
 # OSやIDEの一時ファイルを無視
+# Ignore OS and IDE scratch files
 .DS_Store
 Thumbs.db
 .vscode/
 
-
-
-
-logs/*.log
+# ログ出力（ディレクトリ全体を無視して .log 以外のファイルも取り込まない）
+# Log output (ignore the whole directory so non-.log files are not picked up either)
+/logs/
 *.log
 
-
 # ビルドディレクトリを無視
+# Ignore build directories
 /build/
 __pycache__/
 
@@ -54,10 +43,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-!frontend/lib/
-!frontend/lib/**
-lib64/
+# distutils/setuptools のビルド出力のみを対象にするためルート限定にする
+# Root-anchored so frontend/lib and other source directories stay tracked
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -85,14 +74,18 @@ yarn-error.log*
 .cache/
 *.tsbuildinfo
 
-# Environment
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# 環境変数・シークレット（拡張子ごと丸ごと無視せず、実ファイル名を指定する）
+# Environment variables and secrets (name the real files instead of ignoring a whole extension)
+.env
+.env.*
+!.env.example
 *.env.bak
 .deploy-active-color
 docker-compose.local.yml
+
+# ローカル専用の ini 設定のみを無視する（alembic.ini などは追跡対象）
+# Ignore only local-only ini config; tracked files such as alembic.ini stay tracked
+*.local.ini
 
 # Database & Uploads
 *.sqlite3
