@@ -34,3 +34,16 @@ test("robots.txt still blocks internal API endpoints and advertises the sitemap"
   assert.match(robots, /Disallow: \/search\//);
   assert.match(robots, /Sitemap: https:\/\/example\.com\/sitemap\.xml/);
 });
+
+test("robots.txt exempts prompt reference images from the API-wide block", () => {
+  const robots = buildRobotsTxt("https://example.com");
+
+  // og:imageと構造化データのimageが指す作例画像は /prompt_share/api/media/ 配下なので、
+  // Allowで例外にしないと画像検索とリッチリザルトから外れる。
+  // The reference images behind og:image and the structured-data image live under
+  // /prompt_share/api/media/, so without this Allow they drop out of image search and rich results.
+  assert.match(robots, /Allow: \/prompt_share\/api\/media\//);
+  assert.ok(
+    robots.indexOf("Allow: /prompt_share/api/media/") < robots.indexOf("Disallow: /prompt_share/api/")
+  );
+});

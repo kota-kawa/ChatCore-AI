@@ -50,6 +50,12 @@ export function buildRobotsTxt(origin: string) {
   return [
     "User-agent: *",
     "Allow: /",
+    // 作例画像はAPI配下で配信されるが、og:imageと構造化データのimageが指す実体なので
+    // API全体のブロックから除外する（画像検索とリッチリザルトで参照させる）。
+    // Reference images are served under the API prefix, yet they are what og:image and the
+    // structured-data image point at, so exempt them from the API-wide block (needed for
+    // image search and rich results).
+    "Allow: /prompt_share/api/media/",
     // APIエンドポイントはクローラーから除外する
     // Exclude API endpoints from crawlers
     "Disallow: /api/",
