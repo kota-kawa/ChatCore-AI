@@ -7,18 +7,16 @@ import logging
 import os
 import threading
 import time
-import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future, TimeoutError
-from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Request
 
-from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     GenerativeUiMode,
+    NormalizedGenerativeResponse,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
 )
@@ -50,7 +48,16 @@ from .chat_evidence_store import (
     EvidenceStore,
     get_evidence_tool_definition,
 )
+from .chat_generation_coordinator import (
+    REMOTE_CANCEL_CHECK_INTERVAL_SECONDS,
+    ChatGenerationCoordinator,
+    ChatGenerationEvent,
+    # blueprints が `services.chat_generation` から直接 import しているため再エクスポートする。
+    # Re-exported because the blueprints import it straight from `services.chat_generation`.
+    ChatGenerationStreamTimeoutError,  # noqa: F401
+)
 from .chat_generation_telemetry import ChatGenerationTelemetry
+from .chat_generation_turn import ChatTurnRunState, ModelDecision
 from .chat_input_budget import (
     estimate_messages_chars,
 )
@@ -103,7 +110,8 @@ from .web_search import (
     WEB_SEARCH_MAX_CONTEXT_CHARS,
     WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
     WebEvidenceContextBudget,
-    WebSearchQuotaExceeded,
+    WebSearchCitation,
+    WebSearchQuotaExceededError,
     WebSearchResult,
     build_web_search_evidence_policy_message,
     combine_web_search_results,
@@ -152,32 +160,9 @@ CHAT_AGENT_MAX_STEPS_LIMIT = MAX_LLM_TURNS_LIMIT + MAX_TOOL_CALLS_LIMIT
 DEFAULT_LLM_STREAM_MAX_RETRIES = 2
 LLM_STREAM_RETRY_BASE_DELAY_SECONDS = 0.5
 LLM_STREAM_RETRY_MAX_DELAY_SECONDS = 8.0
-# 停止要求が別ワーカーへ届いた場合に、所有ワーカーの応答を待つ上限と再確認間隔。
-# Bounds for waiting on the owning worker after a stop request lands on another worker.
+# 停止要求が別ワーカーへ届いた場合に、所有ワーカーの応答を待つ上限。
+# Upper bound for waiting on the owning worker after a stop request lands on another worker.
 DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS = 5.0
-REMOTE_CANCEL_POLL_INTERVAL_SECONDS = 0.05
-# 停止要求マーカーの保持時間と、生成ジョブ側がそれを再確認する間隔。
-# Lifetime of the stop-request marker and how often a running job re-checks it.
-REMOTE_CANCEL_REQUEST_TTL_SECONDS = 60
-REMOTE_CANCEL_CHECK_INTERVAL_SECONDS = 1.0
-_ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
-_CANCEL_REQUEST_KEY_PREFIX = "chat_generation:cancel"
-_CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
-_EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
-_EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
-_TERMINAL_EVENTS = {"done", "error", "aborted", "incomplete"}
-
-
-def _decode_redis_text(raw: Any) -> str | None:
-    """Return Redis payloads as text regardless of the client's decode settings."""
-    if isinstance(raw, str):
-        return raw
-    if isinstance(raw, bytes):
-        try:
-            return raw.decode("utf-8")
-        except Exception:
-            return None
-    return None
 
 
 def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
@@ -275,6 +260,9 @@ def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     try:
         loaded = json.loads(stripped)
     except Exception:
+        # 日本語: モデルがツール呼び出し風のテキストを壊れた JSON で返した場合。通常の本文として扱います。
+        # English: The model returned tool-call-looking text as broken JSON; treat it as ordinary content.
+        logger.debug("Discarded malformed tool-call JSON from the model response.", exc_info=True)
         return None
     if not isinstance(loaded, list):
         return None
@@ -390,7 +378,7 @@ def _web_search_result_tool_payload(
         0,
         (max_chars - base_length) // max(1, detailed_count) - 32,
     )
-    for item, source in zip(sources, result.sources):
+    for item, source in zip(sources, result.sources, strict=True):
         remaining = per_source_budget
         if source.snippets and remaining > 0:
             snippet = source.snippets[0][: min(400, remaining)]
@@ -495,28 +483,6 @@ def _budgeted_web_search_result_tool_payload(
 # Exception class raised when a generation job is already running for the same room/user
 class ChatGenerationAlreadyRunningError(RuntimeError):
     pass
-
-
-# チャット生成イベントの待機中にタイムアウトが発生したことを表す例外クラス
-# Exception class representing a timeout during waiting for chat generation events
-class ChatGenerationStreamTimeoutError(RuntimeError):
-    # 例外を初期化する
-    # Initialize the exception
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.payload = {
-            "message": message,
-            "retryable": True,
-        }
-
-
-# チャット応答生成中に発生する各種イベントを表すデータクラス
-# Dataclass representing various events occurring during chat response generation
-@dataclass(frozen=True)
-class ChatGenerationEvent:
-    sequence_id: int
-    event: str
-    payload: dict[str, Any]
 
 
 # 個別のチャット応答生成のバックグラウンドタスクおよびイベントを管理するクラス
@@ -683,12 +649,9 @@ class ChatGenerationJob:
             )
             if should_splice:
                 spliced_pending = splice_restarted_answer(existing_text, pending_text)
-                if spliced_pending is not None:
-                    pending_text = spliced_pending
-                else:
-                    # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
-                    # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
-                    pending_text = ""
+                # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+                # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+                pending_text = spliced_pending if spliced_pending is not None else ""
             else:
                 pending_text = strip_continuation_overlap(existing_text, pending_text)
             self._pending_stream_chunks = []
@@ -768,6 +731,9 @@ class ChatGenerationJob:
         except TimeoutError:
             return self.is_done
         except Exception:
+            # 日本語: 待機対象のタスクが失敗しても完了状態の返却は続けます。原因追跡のため記録します。
+            # English: Keep returning the completion state even when the awaited task failed; record why.
+            logger.debug("Waiting for the generation task failed.", exc_info=True)
             return self.is_done
         return self.is_done
 
@@ -949,10 +915,6 @@ class ChatGenerationJob:
                         self._pending_stream_chunks[:] = attempt_chunks
                     else:
                         yield chunk
-                if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
-                    yield from attempt_chunks
-                return
             except LlmOutputLimitError as exc:
                 # 調査ステップが出力上限に当たっただけでターン全体を落とさない。プロバイダは
                 # 例外の前に収集済みのツール呼び出しを流すので、それを使って調査を続ける。
@@ -1023,9 +985,103 @@ class ChatGenerationJob:
                 )
                 if self._sleep_with_cancel(delay):
                     raise
+            else:
+                if discard_partial_on_retry:
+                    self._pending_stream_chunks.clear()
+                    yield from attempt_chunks
+                return
 
-    # バックグラウンドスレッドで実行されるチャット応答生成のメインループ
-    # The main loop for chat response generation executed in the background thread
+    # 検索系ツールの結果を回答トレースの1ステップへ変換する。参照元はイベント種別から決まる。
+    # Turn a lookup tool result into one answer-trace step; the source follows the event prefix.
+    @staticmethod
+    def _lookup_trace_step(
+        event_prefix: str,
+        payload: dict[str, Any],
+        query: str,
+    ) -> TraceStep:
+        return selected_reference_step(
+            (
+                PERSONAL_KNOWLEDGE_SOURCE
+                if event_prefix == "personal_knowledge_search"
+                else SHARED_PROMPT_SOURCE
+            ),
+            payload,
+            query=query,
+        )
+
+    # 検索系ツール呼び出しの受け付け判定フェーズ。実行できない場合は結果を積んで None を返す。
+    # The admission phase for a lookup tool call; on refusal it appends the tool result
+    # and returns None instead of a step and query.
+    def _begin_lookup_tool_call(
+        self,
+        tool_call: dict[str, Any],
+        *,
+        tool_name: str,
+        search: Callable[[str], dict[str, Any]] | None,
+        event_prefix: str,
+        current_messages: list[dict[str, Any]],
+        budget: AgentStepBudget,
+        turn_state: TurnState,
+    ) -> tuple[int, str] | None:
+        if budget.tool_calls_exhausted:
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "step_limit_reached",
+                        "message": "The search limit has been reached.",
+                    },
+                )
+            )
+            return None
+
+        step = budget.start_tool_call()
+        self._telemetry.tool_calls = budget.tool_calls
+        self._telemetry.lookup_call_count += 1
+
+        if search is None:
+            turn_state.record_search(tool_name=tool_name, status="unsupported_tool")
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "unsupported_tool",
+                        "message": f"Unsupported tool: {tool_name}",
+                    },
+                )
+            )
+            return None
+
+        args_raw = tool_call.get("function", {}).get("arguments", "{}")
+        try:
+            args = json.loads(args_raw)
+        except Exception:
+            # 日本語: モデルが渡したツール引数が JSON として壊れていた場合は空引数として扱います。
+            # English: Treat tool arguments the model produced as empty when they are not valid JSON.
+            logger.debug("Discarded malformed tool-call arguments from the model.", exc_info=True)
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+
+        query = _tool_argument_text(args.get("query"))
+        if not query:
+            turn_state.record_search(tool_name=tool_name, status="invalid_arguments")
+            current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "invalid_arguments",
+                        "message": "Search query is empty.",
+                    },
+                )
+            )
+            return None
+        self._publish(
+            f"{event_prefix}_started",
+            {"query": query, "step": step, "max_steps": budget.max_steps},
+        )
+        return step, query
+
     # 検索系ツールの呼び出しを1件実行する。ステップ会計は共有の予算オブジェクトが持つ。
     # メモ検索と共有プロンプト検索は進行管理が同じなので、1つの実行部を共有する。
     # Execute one lookup tool call. Step accounting lives in the shared budget object. The
@@ -1046,62 +1102,22 @@ class ChatGenerationJob:
         evidence_store: EvidenceStore,
         trace_steps: list[TraceStep] | None = None,
     ) -> None:
-        if budget.tool_calls_exhausted:
-            current_messages.append(
-                _tool_result_message(
-                    tool_call,
-                    {
-                        "status": "step_limit_reached",
-                        "message": "The search limit has been reached.",
-                    },
-                )
-            )
-            return
-
-        step = budget.start_tool_call()
-        self._telemetry.tool_calls = budget.tool_calls
-        self._telemetry.lookup_call_count += 1
-
-        if search is None:
-            turn_state.record_search(tool_name=tool_name, status="unsupported_tool")
-            current_messages.append(
-                _tool_result_message(
-                    tool_call,
-                    {
-                        "status": "unsupported_tool",
-                        "message": f"Unsupported tool: {tool_name}",
-                    },
-                )
-            )
-            return
-
-        args_raw = tool_call.get("function", {}).get("arguments", "{}")
-        try:
-            args = json.loads(args_raw)
-        except Exception:
-            args = {}
-        if not isinstance(args, dict):
-            args = {}
-
-        query = _tool_argument_text(args.get("query"))
-        if not query:
-            turn_state.record_search(tool_name=tool_name, status="invalid_arguments")
-            current_messages.append(
-                _tool_result_message(
-                    tool_call,
-                    {
-                        "status": "invalid_arguments",
-                        "message": "Search query is empty.",
-                    },
-                )
-            )
-            return
-        self._publish(
-            f"{event_prefix}_started",
-            {"query": query, "step": step, "max_steps": budget.max_steps},
+        admitted = self._begin_lookup_tool_call(
+            tool_call,
+            tool_name=tool_name,
+            search=search,
+            event_prefix=event_prefix,
+            current_messages=current_messages,
+            budget=budget,
+            turn_state=turn_state,
         )
+        if admitted is None:
+            return
+        step, query = admitted
+        # 受け付け判定を通った時点で search は None ではない。
+        # Admission guarantees a callable search here.
         try:
-            payload = search(query)
+            payload = search(query)  # type: ignore[misc]
             if inspect.isawaitable(payload):
                 # The generation loop is intentionally a synchronous worker because the LLM
                 # stream is blocking. Native-async repository callbacks are bridged only at
@@ -1131,15 +1147,7 @@ class ChatGenerationJob:
             )
             if trace_steps is not None:
                 trace_steps.append(
-                    selected_reference_step(
-                        (
-                            PERSONAL_KNOWLEDGE_SOURCE
-                            if event_prefix == "personal_knowledge_search"
-                            else SHARED_PROMPT_SOURCE
-                        ),
-                        {"status": "failed"},
-                        query=query,
-                    )
+                    self._lookup_trace_step(event_prefix, {"status": "failed"}, query)
                 )
             return
 
@@ -1167,17 +1175,7 @@ class ChatGenerationJob:
             )
             current_messages.append(_tool_result_message(tool_call, payload))
             if trace_steps is not None:
-                trace_steps.append(
-                    selected_reference_step(
-                        (
-                            PERSONAL_KNOWLEDGE_SOURCE
-                            if event_prefix == "personal_knowledge_search"
-                            else SHARED_PROMPT_SOURCE
-                        ),
-                        payload,
-                        query=query,
-                    )
-                )
+                trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
             return
 
         self._publish(
@@ -1192,37 +1190,13 @@ class ChatGenerationJob:
         )
         current_messages.append(_tool_result_message(tool_call, payload))
         if trace_steps is not None and status != "already_searched":
-            trace_steps.append(
-                selected_reference_step(
-                    (
-                        PERSONAL_KNOWLEDGE_SOURCE
-                        if event_prefix == "personal_knowledge_search"
-                        else SHARED_PROMPT_SOURCE
-                    ),
-                    payload,
-                    query=query,
-                )
-            )
-        return
+            trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
 
-    def _run(self) -> None:
-        # キャンセル時に保存できるよう、インスタンス側のチャンクリストへ蓄積する。
-        # Accumulate into the instance chunk list so a cancel can persist the partial text.
-        chunks = self._chunks
-        final_answer_incomplete: BaseException | None = None
-        continuation_count = 0
-        last_streaming_parts_signature: str | None = None
-        web_search_results: list[WebSearchResult] = []
-        web_search_results_by_key: dict[tuple[str, str, str], WebSearchResult] = {}
-        web_search_trace_steps: list[TraceStep] = selected_reference_steps(
-            self._selected_reference_trace
-        )
-        streaming_citation_buffer = ""
-        current_messages: list[dict[str, Any]] = []
-        suppress_next_generation_started = False
+    # ターン開始時の状態を組み立てる。既存の参照根拠と選択済み参照をここで取り込む。
+    # Build the turn's starting state, seeding it with prior evidence and selected references.
+    def _build_turn_run_state(self) -> ChatTurnRunState:
         budget = AgentStepBudget.from_environment()
         telemetry = self._telemetry
-        page_fetch_budget = create_web_page_fetch_budget()
         # 根拠の予算は許可されたツール実行回数から算出する。予算が回数に足りないと、
         # 後半の検索が「中身ゼロで成功した検索結果」に化けてモデルを誤誘導する。
         # Size the evidence budget from the permitted tool calls: a budget that cannot cover
@@ -1234,6 +1208,22 @@ class ChatGenerationJob:
         # 原文は初期値。最初のモデル判断で履歴を踏まえた目的へ更新する。
         # The raw request is a seed; the first model decision resolves it in context.
         turn_state = TurnState(objective=latest_user_message)
+        state = ChatTurnRunState(
+            # キャンセル時に保存できるよう、インスタンス側のチャンクリストを共有する。
+            # Share the instance chunk list so a cancel can persist the partial text.
+            chunks=self._chunks,
+            telemetry=telemetry,
+            budget=budget,
+            page_fetch_budget=create_web_page_fetch_budget(),
+            evidence_context_budget=evidence_context_budget,
+            evidence_store=evidence_store,
+            turn_state=turn_state,
+            turn_base_messages=[dict(message) for message in self._conversation_messages],
+            latest_user_message=latest_user_message,
+            selected_web_search_images=self._selected_web_search_images,
+            continuation_state_filter=TurnStateUpdateFilter(),
+            web_search_trace_steps=selected_reference_steps(self._selected_reference_trace),
+        )
         for prior_result in self._prior_web_search_results:
             turn_state.record_evidence_refs(evidence_store.add_web_result(prior_result))
         for selected_trace in self._selected_reference_trace:
@@ -1248,933 +1238,1105 @@ class ChatGenerationJob:
                 evidence_refs=selected_refs,
                 status=str(selected_trace.payload.get("status") or "ok"),
             )
-        turn_base_messages = [dict(message) for message in self._conversation_messages]
-        selected_web_search_images = self._selected_web_search_images
-        revealed_image_indices: list[int] = []
-        revealed_image_offsets: list[int] = []
-        streamed_display_text = ""
+        return state
 
-        def collect_web_search_image_selections(result: WebSearchResult | None) -> None:
-            """Select images as soon as a search result becomes available."""
-            if result is None or len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
+    # 検索結果が届いた時点で表示候補の画像を選ぶ。停止しても露出済み画像を保存できる。
+    # Select images as soon as a search result arrives so a stop still keeps revealed ones.
+    def _collect_web_search_image_selections(
+        self,
+        state: ChatTurnRunState,
+        result: WebSearchResult | None,
+    ) -> None:
+        selected_web_search_images = state.selected_web_search_images
+        if result is None or len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
+            return
+        try:
+            selections = choose_web_search_images(
+                state.latest_user_message,
+                result,
+                model=self._model,
+                answer_text=state.streamed_display_text,
+            )
+        except Exception:
+            logger.warning(
+                "Web search image selection failed during streaming; continuing without an image.",
+                exc_info=True,
+            )
+            return
+        existing_urls = {
+            str(selection.get("url") or "")
+            for selection in selected_web_search_images
+            if isinstance(selection, dict)
+        }
+        for selection in selections:
+            if not isinstance(selection, dict):
+                continue
+            image_url = str(selection.get("url") or "")
+            if not image_url or image_url in existing_urls:
+                continue
+            selected_web_search_images.append(selection)
+            existing_urls.add(image_url)
+            if len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
+                break
+        # A model-requested search can finish after prose has already streamed.
+        # Reconcile selected images against that existing text immediately.
+        self._publish_stream_text_with_images(state, "")
+
+    # 表示本文を1チャンク配信し、画像挿入位置の基準となる累積テキストを進める。
+    # Publish one display chunk and advance the accumulated text that anchors image offsets.
+    def _publish_stream_chunk(self, state: ChatTurnRunState, text: str) -> None:
+        if not text:
+            return
+        self._publish("chunk", {"text": text})
+        state.streamed_display_text += text
+
+    # 本文を配信しつつ、確定したオフセットで検索画像を露出する（過去本文も対象）。
+    # Emit text and reveal images at stable offsets, including past text.
+    def _publish_stream_text_with_images(self, state: ChatTurnRunState, text: str) -> None:
+        pending_text = text
+        while True:
+            raw_parts_update = _build_streaming_parts_update("".join(state.chunks))
+            if raw_parts_update is not None:
+                if pending_text:
+                    self._publish_stream_chunk(state, pending_text)
                 return
-            try:
-                selections = choose_web_search_images(
-                    latest_user_message,
-                    result,
-                    model=self._model,
-                    answer_text=streamed_display_text,
-                )
-            except Exception:
-                logger.warning(
-                    "Web search image selection failed during streaming; continuing without an image.",
-                    exc_info=True,
-                )
+
+            image_parts = build_web_search_image_parts(state.selected_web_search_images)
+            next_image = find_next_streaming_image_insertion(
+                f"{state.streamed_display_text}{pending_text}",
+                image_parts,
+                revealed_indices=set(state.revealed_image_indices),
+                after_offset=state.revealed_image_offsets[-1] if state.revealed_image_offsets else 0,
+            )
+            if next_image is None:
+                if pending_text:
+                    self._publish_stream_chunk(state, pending_text)
                 return
-            existing_urls = {
-                str(selection.get("url") or "")
-                for selection in selected_web_search_images
-                if isinstance(selection, dict)
-            }
-            for selection in selections:
-                if not isinstance(selection, dict):
-                    continue
-                image_url = str(selection.get("url") or "")
-                if not image_url or image_url in existing_urls:
-                    continue
-                selected_web_search_images.append(selection)
-                existing_urls.add(image_url)
-                if len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
-                    break
-            # A model-requested search can finish after prose has already streamed.
-            # Reconcile selected images against that existing text immediately.
-            publish_stream_text_with_images("")
 
-        def publish_stream_chunk(text: str) -> None:
-            nonlocal streamed_display_text
-            if not text:
+            insertion_offset, image_index = next_image
+            current_text_length = len(state.streamed_display_text)
+            relative_offset = insertion_offset - current_text_length
+            if relative_offset < 0:
+                relative_offset = 0
+            if relative_offset > len(pending_text):
+                if pending_text:
+                    self._publish_stream_chunk(state, pending_text)
                 return
-            self._publish("chunk", {"text": text})
-            streamed_display_text += text
 
-        def publish_stream_text_with_images(text: str) -> None:
-            """Emit text and reveal images at stable offsets, including past text."""
-            pending_text = text
-            while True:
-                raw_parts_update = _build_streaming_parts_update("".join(chunks))
-                if raw_parts_update is not None:
-                    if pending_text:
-                        publish_stream_chunk(pending_text)
-                    return
+            if relative_offset:
+                self._publish_stream_chunk(state, pending_text[:relative_offset])
+            state.revealed_image_indices.append(image_index)
+            state.revealed_image_offsets.append(insertion_offset)
+            visible_image_parts = [
+                image_parts[index] for index in state.revealed_image_indices
+            ]
+            visible_parts = build_web_search_image_parts_at_offsets(
+                state.streamed_display_text,
+                visible_image_parts,
+                state.revealed_image_offsets,
+                keep_empty_tail=True,
+            )
+            self._publish(
+                "response_parts_updated",
+                {
+                    "response": state.streamed_display_text,
+                    "parts": visible_parts,
+                },
+            )
+            pending_text = pending_text[relative_offset:]
 
-                image_parts = build_web_search_image_parts(selected_web_search_images)
-                next_image = find_next_streaming_image_insertion(
-                    f"{streamed_display_text}{pending_text}",
-                    image_parts,
-                    revealed_indices=set(revealed_image_indices),
-                    after_offset=revealed_image_offsets[-1] if revealed_image_offsets else 0,
+    # ツール要求が無いと確定したモデルステップだけを、引用解決とUIパーツ更新込みで配信する。
+    # Publish a model step only after confirming it requested no tools.
+    def _publish_completed_answer_step(
+        self,
+        state: ChatTurnRunState,
+        step_chunks: list[str],
+    ) -> None:
+        chunks = state.chunks
+        for raw_chunk in step_chunks:
+            chunk = raw_chunk
+            if not chunks:
+                combined_web_search_result = combine_web_search_results(state.web_search_results)
+                if state.web_search_trace_steps or combined_web_search_result is not None:
+                    state.web_search_trace_steps.append(answer_step(state.web_search_results))
+                trace_block = build_web_search_trace_markdown(
+                    combined_web_search_result,
+                    steps=state.web_search_trace_steps,
                 )
-                if next_image is None:
-                    if pending_text:
-                        publish_stream_chunk(pending_text)
-                    return
+                if trace_block:
+                    chunk = f"{trace_block}\n\n{chunk}"
 
-                insertion_offset, image_index = next_image
-                current_text_length = len(streamed_display_text)
-                relative_offset = insertion_offset - current_text_length
-                if relative_offset < 0:
-                    relative_offset = 0
-                if relative_offset > len(pending_text):
-                    if pending_text:
-                        publish_stream_chunk(pending_text)
-                    return
-
-                if relative_offset:
-                    publish_stream_chunk(pending_text[:relative_offset])
-                revealed_image_indices.append(image_index)
-                revealed_image_offsets.append(insertion_offset)
-                visible_image_parts = [
-                    image_parts[index] for index in revealed_image_indices
-                ]
-                visible_parts = build_web_search_image_parts_at_offsets(
-                    streamed_display_text,
-                    visible_image_parts,
-                    revealed_image_offsets,
-                    keep_empty_tail=True,
+            chunks.append(chunk)
+            streaming_evidence = combine_web_search_results(
+                [*state.web_search_results, *self._prior_web_search_results]
+            )
+            # モデルが真似て書いたチップHTMLは、検索根拠の有無にかかわらず
+            # 表示前に取り除く。正規のチップはこの後の解決処理だけが描画する。
+            # Chip markup echoed by the model is removed before display whether or
+            # not this turn has evidence; only the resolution below renders chips.
+            complete_stream_text, state.streaming_citation_buffer = (
+                split_web_search_citation_stream_text(
+                    f"{state.streaming_citation_buffer}{chunk}"
                 )
-                self._publish(
-                    "response_parts_updated",
-                    {
-                        "response": streamed_display_text,
-                        "parts": visible_parts,
-                    },
-                )
-                pending_text = pending_text[relative_offset:]
-
-        def publish_completed_answer_step(step_chunks: list[str]) -> None:
-            """Publish a model step only after confirming it requested no tools."""
-            nonlocal last_streaming_parts_signature, streaming_citation_buffer
-            for raw_chunk in step_chunks:
-                chunk = raw_chunk
-                if not chunks:
-                    combined_web_search_result = combine_web_search_results(web_search_results)
-                    if web_search_trace_steps or combined_web_search_result is not None:
-                        web_search_trace_steps.append(answer_step(web_search_results))
-                    trace_block = build_web_search_trace_markdown(
-                        combined_web_search_result,
-                        steps=web_search_trace_steps,
-                    )
-                    if trace_block:
-                        chunk = f"{trace_block}\n\n{chunk}"
-
-                chunks.append(chunk)
-                streaming_evidence = combine_web_search_results(
-                    [*web_search_results, *self._prior_web_search_results]
-                )
-                # モデルが真似て書いたチップHTMLは、検索根拠の有無にかかわらず
-                # 表示前に取り除く。正規のチップはこの後の解決処理だけが描画する。
-                # Chip markup echoed by the model is removed before display whether or
-                # not this turn has evidence; only the resolution below renders chips.
-                complete_stream_text, streaming_citation_buffer = (
-                    split_web_search_citation_stream_text(
-                        f"{streaming_citation_buffer}{chunk}"
-                    )
-                )
-                complete_stream_text = strip_web_search_citation_html(
-                    complete_stream_text
-                )
-                if streaming_evidence is None:
-                    stream_text = complete_stream_text
-                else:
-                    stream_text = resolve_web_search_citations(
-                        complete_stream_text,
+            )
+            complete_stream_text = strip_web_search_citation_html(
+                complete_stream_text
+            )
+            if streaming_evidence is None:
+                stream_text = complete_stream_text
+            else:
+                stream_text = resolve_web_search_citations(
+                    complete_stream_text,
+                    streaming_evidence,
+                ).text
+            if stream_text:
+                self._publish_stream_text_with_images(state, stream_text)
+            streaming_parts_update = _build_streaming_parts_update("".join(chunks))
+            if streaming_parts_update is not None:
+                if streaming_evidence is not None:
+                    parts_resolution = resolve_web_search_citations(
+                        streaming_parts_update["response"],
                         streaming_evidence,
-                    ).text
-                if stream_text:
-                    publish_stream_text_with_images(stream_text)
-                streaming_parts_update = _build_streaming_parts_update("".join(chunks))
-                if streaming_parts_update is not None:
-                    if streaming_evidence is not None:
-                        parts_resolution = resolve_web_search_citations(
-                            streaming_parts_update["response"],
-                            streaming_evidence,
-                        )
-                        resolved_parts_text = parts_resolution.text
-                        streaming_parts_update = {
-                            **streaming_parts_update,
-                            "response": resolved_parts_text,
-                            "parts": [
-                                (
-                                    {**part, "text": resolved_parts_text}
-                                    if part.get("type") == "text"
-                                    else part
-                                )
-                                for part in streaming_parts_update["parts"]
-                            ],
-                        }
-                    streaming_parts_signature = json.dumps(
-                        streaming_parts_update,
-                        ensure_ascii=False,
-                        sort_keys=True,
                     )
-                    if streaming_parts_signature != last_streaming_parts_signature:
-                        last_streaming_parts_signature = streaming_parts_signature
-                        self._publish("response_parts_updated", streaming_parts_update)
+                    resolved_parts_text = parts_resolution.text
+                    streaming_parts_update = {
+                        **streaming_parts_update,
+                        "response": resolved_parts_text,
+                        "parts": [
+                            (
+                                {**part, "text": resolved_parts_text}
+                                if part.get("type") == "text"
+                                else part
+                            )
+                            for part in streaming_parts_update["parts"]
+                        ],
+                    }
+                streaming_parts_signature = json.dumps(
+                    streaming_parts_update,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                if streaming_parts_signature != state.last_streaming_parts_signature:
+                    state.last_streaming_parts_signature = streaming_parts_signature
+                    self._publish("response_parts_updated", streaming_parts_update)
 
-        continuation_state_filter = TurnStateUpdateFilter()
+    # 継続生成の1チャンクを、繰り返し届く内部状態の封筒を除いて配信する。
+    # Publish one continuation chunk, minus any repeated state envelope.
+    def _publish_answer_chunk(self, state: ChatTurnRunState, chunk: str) -> None:
+        visible = state.continuation_state_filter.feed(chunk)
+        if visible:
+            self._publish_completed_answer_step(state, [visible])
 
-        def publish_answer_chunk(chunk: str) -> None:
-            """Publish one continuation chunk, minus any repeated state envelope."""
-            visible = continuation_state_filter.feed(chunk)
-            if visible:
-                publish_completed_answer_step([visible])
+    # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
+    # Hand the continuation pass's undelivered buffer to the job so a stop or a
+    # disconnect still routes it through the persistence path.
+    def _adopt_continuation_buffer(self, buffer: list[str]) -> None:
+        self._pending_stream_chunks = buffer
+        self._pending_stream_is_rewrite = False
 
-        def adopt_continuation_buffer(buffer: list[str]) -> None:
-            # 継続パスの未配信バッファをジョブ側へ預ける。停止・切断でも保存経路に載る。
-            # Hand the continuation pass's undelivered buffer to the job so a stop or a
-            # disconnect still routes it through the persistence path.
-            self._pending_stream_chunks = buffer
+    # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
+    # Tell the cancellation path when a continuation has switched to a full rewrite.
+    def _set_continuation_buffer_mode(self, is_rewrite: bool) -> None:
+        self._pending_stream_is_rewrite = is_rewrite
+
+    # 出力上限で切れた回答の続きだけを取り直すフェーズ。
+    # The phase that fetches only the remainder of an answer cut off at the output cap.
+    def _continue_interrupted_answer(
+        self,
+        state: ChatTurnRunState,
+        answer_messages: list[dict[str, Any]],
+        published_text: str,
+    ) -> BaseException | None:
+        """Continue an answer the provider cut off at its output cap.
+
+        回答を書いたモデル判断だけが継続の対象で、別フェーズは作らない。すでに配信した
+        本文を assistant 履歴として渡し、続きだけを同じループの延長として受け取る。
+        Only the decision that wrote the answer is continued; no separate phase is created.
+        The published text is replayed as assistant history so the provider returns just
+        the remainder of the same answer.
+        """
+        telemetry = state.telemetry
+        interruption = LlmOutputLimitError(
+            "The answer stream stopped at the model output limit.",
+            reason="max_output_tokens",
+        )
+        try:
+            result = stream_final_answer_with_recovery(
+                answer_messages,
+                model=self._model,
+                iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
+                    messages,
+                    tools=None,
+                    generation_phase=phase,
+                ),
+                publish_chunk=lambda chunk: self._publish_answer_chunk(state, chunk),
+                publish_event=self._publish,
+                should_stop=self._should_stop,
+                adopt_buffer=self._adopt_continuation_buffer,
+                adopt_buffer_mode=self._set_continuation_buffer_mode,
+                answer_phase="agent",
+                continuation_phase="continuation_deep",
+                published_answer_text=published_text,
+                published_answer_error=interruption,
+            )
+        finally:
+            # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
+            # バッファや書き直しモードを誤って拾わないようにする。
+            # Clear shared state on every exit so later persistence cannot adopt a stale
+            # continuation buffer or rewrite mode.
+            self._pending_stream_chunks = []
             self._pending_stream_is_rewrite = False
+        trailing = state.continuation_state_filter.flush()
+        if trailing:
+            self._publish_completed_answer_step(state, [trailing])
+        state.continuation_count = result.continuation_count
+        telemetry.continuation_count = result.continuation_count
+        for reason in result.reasons:
+            telemetry.record_continuation_reason(reason)
+        telemetry.continuation_stalled = result.stalled
+        telemetry.continuation_restart_trimmed = result.restart_trimmed
+        telemetry.first_pass_finish_reason = interruption.reason
+        return result.error
 
-        def set_continuation_buffer_mode(is_rewrite: bool) -> None:
-            # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
-            # Tell the cancellation path when a continuation has switched to a full rewrite.
-            self._pending_stream_is_rewrite = is_rewrite
+    # 1回のモデル判断へ渡す要求を TurnState と直近のツール結果だけから組み立てるフェーズ。
+    # The phase that builds one decision request from TurnState plus only the newest tool result.
+    def _prepare_turn_messages(
+        self,
+        state: ChatTurnRunState,
+        latest_tool_exchange: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        *,
+        force_answer: bool,
+        minimal: bool = False,
+        empty_answer_recovery: bool = False,
+    ) -> list[dict[str, Any]] | None:
+        """Build one decision request from TurnState plus only the newest tool result.
 
-        def continue_interrupted_answer(
-            answer_messages: list[dict[str, Any]],
-            published_text: str,
-        ) -> BaseException | None:
-            """Continue an answer the provider cut off at its output cap.
+        ``minimal`` はプロバイダ側の拒否からの再構築用。生のツール結果を落とし、
+        TurnState と直前の会話・最新の依頼で同じ判断をやり直す。
+        ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
+        dropped and the same decision is retried with TurnState and the recent exchange.
+        ``empty_answer_recovery`` は直前の判断が本文を返さなかった回復用で、
+        回答のみ契約に短いメモを添える。
+        ``empty_answer_recovery`` marks the retry after a decision that produced no
+        user-facing answer; it adds a short note to the answer-only contract.
+        """
+        telemetry = state.telemetry
+        phase = "agent"
+        context_budget = get_context_budget(self._model, phase, tools)
+        state_tokens = min(
+            6_000,
+            max(1_000, context_budget.available_input_tokens // 3),
+        )
 
-            回答を書いたモデル判断だけが継続の対象で、別フェーズは作らない。すでに配信した
-            本文を assistant 履歴として渡し、続きだけを同じループの延長として受け取る。
-            Only the decision that wrote the answer is continued; no separate phase is created.
-            The published text is replayed as assistant history so the provider returns just
-            the remainder of the same answer.
-            """
-            nonlocal continuation_count
-            interruption = LlmOutputLimitError(
-                "The answer stream stopped at the model output limit.",
-                reason="max_output_tokens",
-            )
-            try:
-                result = stream_final_answer_with_recovery(
-                    answer_messages,
-                    model=self._model,
-                    iter_stream=lambda messages, phase: self._iter_llm_stream_with_retry(
-                        messages,
-                        tools=None,
-                        generation_phase=phase,
-                    ),
-                    publish_chunk=publish_answer_chunk,
-                    publish_event=self._publish,
-                    should_stop=self._should_stop,
-                    adopt_buffer=adopt_continuation_buffer,
-                    adopt_buffer_mode=set_continuation_buffer_mode,
-                    answer_phase="agent",
-                    continuation_phase="continuation_deep",
-                    published_answer_text=published_text,
-                    published_answer_error=interruption,
-                )
-            finally:
-                # 通常完了・入力超過・キャンセルのどの経路でも、次の保存処理が古い共有
-                # バッファや書き直しモードを誤って拾わないようにする。
-                # Clear shared state on every exit so later persistence cannot adopt a stale
-                # continuation buffer or rewrite mode.
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
-            trailing = continuation_state_filter.flush()
-            if trailing:
-                publish_completed_answer_step([trailing])
-            continuation_count = result.continuation_count
-            telemetry.continuation_count = result.continuation_count
-            for reason in result.reasons:
-                telemetry.record_continuation_reason(reason)
-            telemetry.continuation_stalled = result.stalled
-            telemetry.continuation_restart_trimmed = result.restart_trimmed
-            telemetry.first_pass_finish_reason = interruption.reason
-            return result.error
-
-        def prepare_turn_messages(
-            latest_tool_exchange: list[dict[str, Any]],
-            tools: list[dict[str, Any]] | None,
-            *,
-            force_answer: bool,
-            minimal: bool = False,
-            empty_answer_recovery: bool = False,
-        ) -> list[dict[str, Any]] | None:
-            """Build one decision request from TurnState plus only the newest tool result.
-
-            ``minimal`` はプロバイダ側の拒否からの再構築用。生のツール結果を落とし、
-            TurnState と直前の会話・最新の依頼で同じ判断をやり直す。
-            ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
-            dropped and the same decision is retried with TurnState and the recent exchange.
-            ``empty_answer_recovery`` は直前の判断が本文を返さなかった回復用で、
-            回答のみ契約に短いメモを添える。
-            ``empty_answer_recovery`` marks the retry after a decision that produced no
-            user-facing answer; it adds a short note to the answer-only contract.
-            """
-            phase = "agent"
-            context_budget = get_context_budget(self._model, phase, tools)
-            state_tokens = min(
-                6_000,
-                max(1_000, context_budget.available_input_tokens // 3),
+        def with_web_policy(
+            projection: list[dict[str, Any]],
+        ) -> list[dict[str, Any]]:
+            # 検索根拠を持つターンだけ、引用と回答の方針を1つのsystem指示として渡す。
+            # A turn holding web evidence gets the citation and answering policy as one
+            # system instruction; an ordinary chat turn never carries it.
+            if not (state.web_search_results or self._prior_web_search_results):
+                return projection
+            return insert_after_leading_system_messages(
+                projection,
+                build_web_search_evidence_policy_message(),
             )
 
-            def with_web_policy(
-                projection: list[dict[str, Any]],
-            ) -> list[dict[str, Any]]:
-                # 検索根拠を持つターンだけ、引用と回答の方針を1つのsystem指示として渡す。
-                # A turn holding web evidence gets the citation and answering policy as one
-                # system instruction; an ordinary chat turn never carries it.
-                if not (web_search_results or self._prior_web_search_results):
-                    return projection
-                return insert_after_leading_system_messages(
-                    projection,
-                    build_web_search_evidence_policy_message(),
-                )
-
-            if not minimal:
-                try:
-                    projected = turn_state.projected_messages(
-                        turn_base_messages,
-                        max_tokens=state_tokens,
-                    )
-                except TurnStateProjectionError:
-                    return None
-                candidate = build_turn_loop_messages(
-                    [
-                        *with_web_policy(projected),
-                        *([] if force_answer else latest_tool_exchange),
-                    ],
-                    force_answer=force_answer,
-                    empty_answer_recovery=empty_answer_recovery,
-                )
-                if request_fits_context(candidate, self._model, phase, tools):
-                    telemetry.context_projection_count += 1
-                    return candidate
-
+        if not minimal:
             try:
-                minimal_projected = turn_state.projected_messages(
-                    build_recovery_base_messages(turn_base_messages),
+                projected = state.turn_state.projected_messages(
+                    state.turn_base_messages,
                     max_tokens=state_tokens,
                 )
             except TurnStateProjectionError:
                 return None
-            minimal_candidate = build_turn_loop_messages(
+            candidate = build_turn_loop_messages(
                 [
-                    *with_web_policy(minimal_projected),
-                    *([] if minimal or force_answer else latest_tool_exchange),
+                    *with_web_policy(projected),
+                    *([] if force_answer else latest_tool_exchange),
                 ],
                 force_answer=force_answer,
                 empty_answer_recovery=empty_answer_recovery,
             )
-            if request_fits_context(minimal_candidate, self._model, phase, tools):
+            if request_fits_context(candidate, self._model, phase, tools):
                 telemetry.context_projection_count += 1
-                telemetry.context_recovery_count += 1
-                return minimal_candidate
-            return None
+                return candidate
 
         try:
+            minimal_projected = state.turn_state.projected_messages(
+                build_recovery_base_messages(state.turn_base_messages),
+                max_tokens=state_tokens,
+            )
+        except TurnStateProjectionError:
+            return None
+        minimal_candidate = build_turn_loop_messages(
+            [
+                *with_web_policy(minimal_projected),
+                *([] if minimal or force_answer else latest_tool_exchange),
+            ],
+            force_answer=force_answer,
+            empty_answer_recovery=empty_answer_recovery,
+        )
+        if request_fits_context(minimal_candidate, self._model, phase, tools):
+            telemetry.context_projection_count += 1
+            telemetry.context_recovery_count += 1
+            return minimal_candidate
+        return None
+
+    # モデルへ提示するツール定義を決めるフェーズ。
+    # The phase that decides which tool definitions the model is offered.
+    def _configure_agent_tools(self, state: ChatTurnRunState) -> None:
+        web_search_tool = get_web_search_tool_definition()
+        personal_knowledge_tool = (
+            get_personal_knowledge_tool_definition()
+            if self._personal_knowledge_search is not None
+            else None
+        )
+        shared_prompt_tool = (
+            get_shared_prompt_tool_definition()
+            if self._shared_prompt_search is not None
+            else None
+        )
+
+        # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
+        # Memo lookup does not depend on the web search settings, so either tool alone
+        # is still offered to the model.
+        configured_tools: list[dict[str, Any]] = []
+        if is_web_search_enabled():
+            configured_tools.append(web_search_tool)
+        if personal_knowledge_tool is not None:
+            configured_tools.append(personal_knowledge_tool)
+        if shared_prompt_tool is not None:
+            configured_tools.append(shared_prompt_tool)
+        configured_tools.append(get_evidence_tool_definition())
+        state.configured_tools = configured_tools
+        state.telemetry.research_phase_used = bool(self._selected_reference_trace)
+
+    # 単一判断ループ: TurnStateを見る → 必要ならツール → State更新 → 再判断。
+    # ツール履歴全体は再送せず、直近の呼び出しと結果だけを次の判断へ渡す。
+    # The single-decision loop: read TurnState, optionally run tools, update state, decide again.
+    # Only the newest call and its result are replayed, never the whole tool history.
+    def _run_agent_loop(self, state: ChatTurnRunState) -> bool:
+        """Drive the decision loop; return True when a stop request ended the turn."""
+        budget = state.budget
+        telemetry = state.telemetry
+        while True:
             if self._should_stop():
-                return
+                return True
 
-            web_search_tool = get_web_search_tool_definition()
-            personal_knowledge_tool = (
-                get_personal_knowledge_tool_definition()
-                if self._personal_knowledge_search is not None
-                else None
+            tools_withdrawn = budget.tool_calls_exhausted
+            # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
+            # Empty-answer recovery is also a tool-free answer request, but it is
+            # accounted separately from budget exhaustion.
+            force_answer = tools_withdrawn or state.empty_answer_recovery_attempted
+            active_tools = None if force_answer else state.configured_tools
+            if tools_withdrawn:
+                telemetry.tools_withdrawn_by_budget = True
+            turn_messages = self._prepare_turn_messages(
+                state,
+                state.current_messages,
+                active_tools,
+                force_answer=force_answer,
+                minimal=state.minimal_context_required or state.tool_schema_recovery_attempted,
+                empty_answer_recovery=state.empty_answer_recovery_attempted,
             )
-            shared_prompt_tool = (
-                get_shared_prompt_tool_definition()
-                if self._shared_prompt_search is not None
-                else None
-            )
-
-            # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
-            # Memo lookup does not depend on the web search settings, so either tool alone
-            # is still offered to the model.
-            configured_tools: list[dict[str, Any]] = []
-            if is_web_search_enabled():
-                configured_tools.append(web_search_tool)
-            if personal_knowledge_tool is not None:
-                configured_tools.append(personal_knowledge_tool)
-            if shared_prompt_tool is not None:
-                configured_tools.append(shared_prompt_tool)
-            configured_tools.append(get_evidence_tool_definition())
-
-            answer_context_messages: list[dict[str, Any]] | None = None
-            telemetry.research_phase_used = bool(self._selected_reference_trace)
-            # プロバイダのトークナイザが自前の見積もりより厳しい場合の再構築フラグ。
-            # 同じ要求を送り直さず、TurnState と直前の会話を残した要求へ切り替える。
-            # Set when the provider's tokenizer is stricter than the local estimate: the same
-            # request is never resent; recovery retains TurnState and the recent exchange.
-            minimal_context_required = False
-            # 最終回答のツールなし要求が拒否された場合だけ、最小構成で1度だけやり直す。
-            # If the tool-free final-answer request is rejected, replay it once in the
-            # smallest safe shape and never loop indefinitely.
-            tool_schema_recovery_attempted = False
-            # 最後の判断が本文を返さなかった場合だけ、回答のみ要求で1度やり直す。
-            # If the final decision produced no user-facing answer, retry it once answer-only.
-            empty_answer_recovery_attempted = False
-
-            # 単一判断ループ: TurnStateを見る → 必要ならツール → State更新 → 再判断。
-            # ツール履歴全体は再送せず、直近の呼び出しと結果だけを次の判断へ渡す。
-            while True:
-                if self._should_stop():
-                    return
-
-                tools_withdrawn = budget.tool_calls_exhausted
-                # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
-                # Empty-answer recovery is also a tool-free answer request, but it is
-                # accounted separately from budget exhaustion.
-                force_answer = tools_withdrawn or empty_answer_recovery_attempted
-                active_tools = None if force_answer else configured_tools
-                if tools_withdrawn:
-                    telemetry.tools_withdrawn_by_budget = True
-                turn_messages = prepare_turn_messages(
-                    current_messages,
-                    active_tools,
-                    force_answer=force_answer,
-                    minimal=minimal_context_required or tool_schema_recovery_attempted,
-                    empty_answer_recovery=empty_answer_recovery_attempted,
+            if turn_messages is None:
+                telemetry.context_recovery_count += 1
+                raise LlmInputLimitError(
+                    "The complete TurnState does not fit the model context budget."
                 )
-                if turn_messages is None:
-                    telemetry.context_recovery_count += 1
-                    raise LlmInputLimitError(
-                        "The complete TurnState does not fit the model context budget."
-                    )
-                llm_step = budget.start_llm_turn()
-                telemetry.llm_turns = budget.llm_turns
+            llm_step = budget.start_llm_turn()
+            telemetry.llm_turns = budget.llm_turns
 
-                if not suppress_next_generation_started:
-                    self._publish(
-                        "response_generation_started",
-                        {"step": llm_step, "max_steps": budget.max_steps},
-                    )
-                suppress_next_generation_started = False
+            if not state.suppress_next_generation_started:
+                self._publish(
+                    "response_generation_started",
+                    {"step": llm_step, "max_steps": budget.max_steps},
+                )
+            state.suppress_next_generation_started = False
 
-                tool_calls_buffer: list[dict[str, Any]] = []
-                step_chunks: list[str] = []
-                self._pending_stream_chunks = step_chunks
-                self._pending_stream_is_rewrite = False
-                try:
-                    for chunk in self._iter_llm_stream_with_retry(
-                        turn_messages,
-                        tools=active_tools,
-                        generation_phase="agent",
-                        discard_partial_on_retry=True,
-                        tolerate_output_limit=True,
-                    ):
-                        if self._should_stop():
-                            return
-                        if not chunk:
-                            continue
-                        parsed_tool_calls = _parse_tool_calls_chunk(chunk)
-                        if parsed_tool_calls is not None:
-                            tool_calls_buffer.extend(parsed_tool_calls)
-                        else:
-                            step_chunks.append(chunk)
-                except LlmInputLimitError:
-                    # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
-                    # TurnState と直前の会話を残して同じ判断を1度だけやり直す。
-                    # Resending the identical request only repeats the rejection: drop the raw
-                    # tool result and retry once with TurnState and the recent exchange.
-                    if minimal_context_required or chunks:
-                        raise
-                    minimal_context_required = True
-                    telemetry.input_limit_recoveries += 1
-                    telemetry.context_recovery_count += 1
-                    self._pending_stream_chunks = []
-                    self._pending_stream_is_rewrite = False
-                    suppress_next_generation_started = True
+            decision = self._stream_model_decision(
+                state,
+                turn_messages,
+                active_tools,
+                force_answer=force_answer,
+            )
+            if decision.outcome == "stopped":
+                return True
+            if decision.outcome == "replay":
+                continue
+
+            if not decision.tool_calls:
+                if self._finish_answer_step(
+                    state,
+                    turn_messages,
+                    active_tools,
+                    decision.step_chunks,
+                ):
                     continue
-                except LlmToolSchemaError:
-                    # ツール予算切れ後のツールなし要求がモデルの逸脱で拒否された場合は、
-                    # 直前の会話を残し、ツール履歴を除いた最終回答要求へ1度だけ切り替える。
-                    # If the model violates the tool-free request after the budget is exhausted,
-                    # retry once with a compact final-answer request retaining the recent
-                    # conversation but excluding tool history.
-                    if (
-                        force_answer
-                        and active_tools is None
-                        and not tool_schema_recovery_attempted
-                        and not self._cancelled
-                    ):
-                        tool_schema_recovery_attempted = True
-                        telemetry.tool_schema_recoveries += 1
-                        self._pending_stream_chunks = []
-                        self._pending_stream_is_rewrite = False
-                        suppress_next_generation_started = True
-                        continue
-                    raise
+                return False
 
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
+            telemetry.research_phase_used = True
+            self._dispatch_tool_calls(state, decision.tool_calls, llm_step)
+
+    # モデル判断1回をストリームし、本文チャンクとツール呼び出しへ振り分けるフェーズ。
+    # The phase that streams one model decision and splits it into body chunks and tool calls.
+    def _stream_model_decision(
+        self,
+        state: ChatTurnRunState,
+        turn_messages: list[dict[str, Any]],
+        active_tools: list[dict[str, Any]] | None,
+        *,
+        force_answer: bool,
+    ) -> ModelDecision:
+        tool_calls_buffer: list[dict[str, Any]] = []
+        step_chunks: list[str] = []
+        self._pending_stream_chunks = step_chunks
+        self._pending_stream_is_rewrite = False
+        try:
+            for chunk in self._iter_llm_stream_with_retry(
+                turn_messages,
+                tools=active_tools,
+                generation_phase="agent",
+                discard_partial_on_retry=True,
+                tolerate_output_limit=True,
+            ):
                 if self._should_stop():
-                    return
-
-                turn_state.apply_model_update(parse_turn_state_update(step_chunks))
-
-                if not tool_calls_buffer:
-                    output_limited = self._last_stream_output_limited
-                    self._pending_stream_chunks = []
-                    self._pending_stream_is_rewrite = False
-                    # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
-                    # Keep the model's own boundaries and drop only the internal envelope.
-                    visible_chunks = strip_turn_state_update_chunks(step_chunks)
-                    if (
-                        not visible_chunks
-                        and not chunks
-                        and not empty_answer_recovery_attempted
-                        and not self._cancelled
-                    ):
-                        # 封筒のみ・無出力・出力上限で本文ゼロは「回答なし」。ここで抜けると
-                        # 画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
-                        # 回答のみ要求で1度だけやり直す。
-                        # Envelope-only, empty, or cut off before any body text means no
-                        # answer. Breaking here would finish the turn as an image-only or
-                        # trace-only reply, so retry the same decision once, answer-only.
-                        empty_answer_recovery_attempted = True
-                        telemetry.empty_answer_recoveries += 1
-                        logger.warning(
-                            "Final decision produced no user-facing answer; retrying once "
-                            "as an answer-only request.",
-                            extra={
-                                **telemetry.as_log_extra(),
-                                "output_limited": output_limited,
-                                "step_chars": len("".join(step_chunks)),
-                            },
-                        )
-                        suppress_next_generation_started = True
-                        continue
-                    answer_context_messages = turn_messages
-                    telemetry.final_answer_input_tokens = estimate_request_tokens(
-                        turn_messages,
-                        active_tools,
-                    )
-                    telemetry.final_answer_input_chars = estimate_messages_chars(turn_messages)
-                    telemetry.first_pass_finish_reason = (
-                        "max_output_tokens" if output_limited else "stop"
-                    )
-                    if visible_chunks:
-                        publish_completed_answer_step(visible_chunks)
-                        if output_limited:
-                            # 出力上限で切れた回答は成功完了にしない。同じ回答の続きだけを
-                            # 限定回数で取り直す。
-                            # An answer cut off at the output cap is not a success: fetch
-                            # only the remainder, a bounded number of times.
-                            final_answer_incomplete = continue_interrupted_answer(
-                                turn_messages,
-                                "".join(visible_chunks),
-                            )
-                    break
-
+                    return ModelDecision(outcome="stopped")
+                if not chunk:
+                    continue
+                parsed_tool_calls = _parse_tool_calls_chunk(chunk)
+                if parsed_tool_calls is not None:
+                    tool_calls_buffer.extend(parsed_tool_calls)
+                else:
+                    step_chunks.append(chunk)
+        except LlmInputLimitError:
+            # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
+            # TurnState と直前の会話を残して同じ判断を1度だけやり直す。
+            # Resending the identical request only repeats the rejection: drop the raw
+            # tool result and retry once with TurnState and the recent exchange.
+            if state.minimal_context_required or state.chunks:
+                raise
+            state.minimal_context_required = True
+            state.telemetry.input_limit_recoveries += 1
+            state.telemetry.context_recovery_count += 1
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
+            state.suppress_next_generation_started = True
+            return ModelDecision(outcome="replay")
+        except LlmToolSchemaError:
+            # ツール予算切れ後のツールなし要求がモデルの逸脱で拒否された場合は、
+            # 直前の会話を残し、ツール履歴を除いた最終回答要求へ1度だけ切り替える。
+            # If the model violates the tool-free request after the budget is exhausted,
+            # retry once with a compact final-answer request retaining the recent
+            # conversation but excluding tool history.
+            if (
+                force_answer
+                and active_tools is None
+                and not state.tool_schema_recovery_attempted
+                and not self._cancelled
+            ):
+                state.tool_schema_recovery_attempted = True
+                state.telemetry.tool_schema_recoveries += 1
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
-                telemetry.research_phase_used = True
+                state.suppress_next_generation_started = True
+                return ModelDecision(outcome="replay")
+            raise
 
-                normalized_tool_calls = [
-                    _normalize_tool_call(tool_call, step=llm_step, index=index)
-                    for index, tool_call in enumerate(tool_calls_buffer, start=1)
-                ]
-                assistant_tool_call_msg = {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": normalized_tool_calls,
-                }
-                current_messages = [assistant_tool_call_msg]
+        if self._should_stop():
+            return ModelDecision(outcome="stopped")
 
-                for tc in normalized_tool_calls:
-                    # ツールごとの実行と結果の追加
-                    # Execute each tool and append results
-                    func_name = tc.get("function", {}).get("name")
-                    if (
-                        func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
-                        and self._personal_knowledge_search is not None
-                    ):
-                        self._run_lookup_tool_call(
-                            tc,
-                            tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
-                            search=self._personal_knowledge_search,
-                            event_prefix="personal_knowledge_search",
-                            result_counts=("memo_count", "context_fact_count"),
-                            failure_log_message="Memo / context search via tool call failed.",
-                            failure_tool_message="Memo and My Context search failed.",
-                            current_messages=current_messages,
-                            budget=budget,
-                            turn_state=turn_state,
-                            evidence_store=evidence_store,
-                            trace_steps=web_search_trace_steps,
-                        )
-                        continue
+        state.turn_state.apply_model_update(parse_turn_state_update(step_chunks))
+        return ModelDecision(
+            outcome="decided",
+            tool_calls=tool_calls_buffer,
+            step_chunks=step_chunks,
+        )
 
-                    if (
-                        func_name == SHARED_PROMPT_TOOL_NAME
-                        and self._shared_prompt_search is not None
-                    ):
-                        self._run_lookup_tool_call(
-                            tc,
-                            tool_name=SHARED_PROMPT_TOOL_NAME,
-                            search=self._shared_prompt_search,
-                            event_prefix="shared_prompt_search",
-                            result_counts=("prompt_count",),
-                            failure_log_message="Shared prompt search via tool call failed.",
-                            failure_tool_message="Shared prompt search failed.",
-                            current_messages=current_messages,
-                            budget=budget,
-                            turn_state=turn_state,
-                            evidence_store=evidence_store,
-                            trace_steps=web_search_trace_steps,
-                        )
-                        continue
-
-                    if func_name == GET_EVIDENCE_TOOL_NAME:
-                        if budget.tool_calls_exhausted:
-                            payload = {
-                                "status": "step_limit_reached",
-                                "message": "The search limit has been reached.",
-                            }
-                        else:
-                            budget.start_tool_call()
-                            telemetry.tool_calls = budget.tool_calls
-                            # 再取得もプロンプトへ載るため、検索結果と同じ根拠予算で抑える。
-                            # A re-read also enters the prompt, so it shares the evidence budget.
-                            payload = evidence_store.execute_get_evidence(
-                                tc.get("function", {}).get("arguments", "{}"),
-                                max_chars=evidence_context_budget.message_limit(
-                                    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
-                                ),
-                            )
-                            evidence_context_budget.consume(
-                                len(json.dumps(payload, ensure_ascii=False))
-                            )
-                            turn_state.record_search(
-                                tool_name=GET_EVIDENCE_TOOL_NAME,
-                                status=str(payload.get("status") or "unknown"),
-                            )
-                        current_messages.append(_tool_result_message(tc, payload))
-                        continue
-
-                    if func_name != "web_search":
-                        if not budget.tool_calls_exhausted:
-                            budget.start_tool_call()
-                            telemetry.tool_calls = budget.tool_calls
-                            turn_state.record_search(
-                                tool_name=str(func_name or "unknown_tool"),
-                                status="unsupported_tool",
-                            )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "unsupported_tool",
-                                    "message": f"Unsupported tool: {func_name}",
-                                },
-                            )
-                        )
-                        continue
-
-                    args_raw = tc.get("function", {}).get("arguments", "{}")
-                    try:
-                        args = json.loads(args_raw)
-                    except Exception:
-                        args = {}
-                    if not isinstance(args, dict):
-                        args = {}
-
-                    if budget.tool_calls_exhausted:
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "step_limit_reached",
-                                    "message": "The web search limit has been reached.",
-                                },
-                            )
-                        )
-                        continue
-
-                    search_step_index = budget.start_tool_call()
-                    telemetry.tool_calls = budget.tool_calls
-
-                    # プロバイダ側のスキーマ検証には頼らない。モデルが返した引数はここで
-                    # 正規化し、想定外の値は既定へ丸めてターンを進める。
-                    # Never rely on provider-side schema validation: normalize the model's
-                    # arguments here and round unexpected values to a default so the turn
-                    # keeps moving.
-                    query = _tool_argument_text(args.get("query"))
-                    freshness = normalize_web_search_freshness(args.get("freshness"))
-                    search_language = normalize_search_language(args.get("search_language"))
-                    if not query:
-                        turn_state.record_search(
-                            tool_name="web_search",
-                            status="invalid_arguments",
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "invalid_arguments",
-                                    "message": "Search query is empty.",
-                                },
-                            )
-                        )
-                        continue
-                    query_text = query
-                    freshness_text = freshness
-                    search_key = _normalized_search_key(
-                        query_text,
-                        freshness_text,
-                        search_language,
-                    )
-                    cached_result = web_search_results_by_key.get(search_key)
-
-                    self._publish(
-                        "web_search_started",
-                        {
-                            "query": query_text,
-                            "reason": "Model-requested search",
-                            "step": search_step_index,
-                            "max_steps": budget.max_steps,
-                            "cached": cached_result is not None,
-                        },
-                    )
-                    if cached_result is not None:
-                        cached_refs = evidence_store.add_web_result(cached_result)
-                        turn_state.record_search(
-                            tool_name="web_search",
-                            query=query_text,
-                            evidence_refs=cached_refs,
-                            searched_at=cached_result.searched_at,
-                            freshness=cached_result.freshness,
-                            status="cached",
-                        )
-                        web_search_trace_steps.extend(
-                            [
-                                search_step(cached_result, cached=True),
-                                review_step(cached_result, reused=True),
-                            ]
-                        )
-                        self._publish(
-                            "web_search_completed",
-                            {
-                                "query": cached_result.query,
-                                "source_count": len(cached_result.sources),
-                                "step": search_step_index,
-                                "max_steps": budget.max_steps,
-                                "cached": True,
-                            },
-                        )
-                        collect_web_search_image_selections(cached_result)
-                        telemetry.cached_web_search_count += 1
-                        tool_payload = _budgeted_web_search_result_tool_payload(
-                            cached_result,
-                            evidence_context_budget,
-                            cached=True,
-                            telemetry=telemetry,
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                tool_payload,
-                            )
-                        )
-                        continue
-
-                    try:
-                        result = search_brave_llm_context(
-                            query_text,
-                            freshness=freshness_text,
-                            page_fetch_budget=page_fetch_budget,
-                            language_hint=latest_user_message,
-                            search_language=search_language,
-                        )
-                        web_search_results_by_key[search_key] = result
-                        web_search_trace_steps.extend(
-                            [
-                                search_step(result, additional=bool(web_search_results)),
-                                *page_reading_steps(result),
-                                review_step(result),
-                            ]
-                        )
-                        if result.has_sources:
-                            web_search_results.append(result)
-                        result_refs = evidence_store.add_web_result(result)
-                        turn_state.record_search(
-                            tool_name="web_search",
-                            query=query_text,
-                            evidence_refs=result_refs,
-                            searched_at=result.searched_at,
-                            freshness=result.freshness,
-                            status="ok" if result.has_sources else "no_sources",
-                        )
-                        telemetry.web_search_count += 1
-                        self._publish(
-                            "web_search_completed",
-                            {
-                                "query": result.query,
-                                "source_count": len(result.sources),
-                                "step": search_step_index,
-                                "max_steps": budget.max_steps,
-                                "cached": False,
-                            },
-                        )
-                        collect_web_search_image_selections(result)
-                        tool_payload = _budgeted_web_search_result_tool_payload(
-                            result,
-                            evidence_context_budget,
-                            telemetry=telemetry,
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                tool_payload,
-                            )
-                        )
-                    except WebSearchQuotaExceeded as exc:
-                        message = (
-                            f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
-                            "検索なしで回答を続けます。"
-                        )
-                        logger.warning(
-                            "Web search quota exceeded mid-turn (limit=%s, retry_after_seconds=%s); "
-                            "continuing the turn without this search.",
-                            exc.limit,
-                            exc.retry_after_seconds,
-                            extra=self._telemetry.as_log_extra(),
-                        )
-                        web_search_trace_steps.append(
-                            search_failed_step(
-                                query_text,
-                                reason="月間上限に達したため検索結果を取得できませんでした。",
-                            )
-                        )
-                        suppress_next_generation_started = True
-                        self._publish(
-                            "web_search_failed",
-                            {
-                                "query": query_text,
-                                "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
-                                "message": message,
-                                "retry_after_seconds": exc.retry_after_seconds,
-                                "step": search_step_index,
-                                "max_steps": budget.max_steps,
-                            },
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "quota_exceeded",
-                                    "message": message,
-                                    "retry_after_seconds": exc.retry_after_seconds,
-                                },
-                            )
-                        )
-                        turn_state.record_search(
-                            tool_name="web_search",
-                            query=query_text,
-                            status="quota_exceeded",
-                        )
-                    except Exception:
-                        logger.exception("Brave search via tool call failed.")
-                        web_search_trace_steps.append(
-                            search_failed_step(
-                                query_text,
-                                reason="検索リクエストに失敗したため、取得済みの情報で回答を続けました。",
-                            )
-                        )
-                        suppress_next_generation_started = True
-                        self._publish(
-                            "web_search_failed",
-                            {
-                                "query": query_text,
-                                "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
-                                "message": "Web検索に失敗しました。検索なしで回答を続けます。",
-                                "step": search_step_index,
-                                "max_steps": budget.max_steps,
-                            },
-                        )
-                        current_messages.append(
-                            _tool_result_message(
-                                tc,
-                                {
-                                    "status": "failed",
-                                    "message": "Web search failed.",
-                                },
-                            )
-                        )
-                        turn_state.record_search(
-                            tool_name="web_search",
-                            query=query_text,
-                            status="failed",
-                        )
-
-            if streaming_citation_buffer:
-                streaming_evidence = combine_web_search_results(
-                    [*web_search_results, *self._prior_web_search_results]
+    # ツール要求の無い判断を回答として締めるフェーズ。回答のみ再試行が必要なら True を返す。
+    # The phase that closes a tool-free decision as the answer; True asks for one answer-only retry.
+    def _finish_answer_step(
+        self,
+        state: ChatTurnRunState,
+        turn_messages: list[dict[str, Any]],
+        active_tools: list[dict[str, Any]] | None,
+        step_chunks: list[str],
+    ) -> bool:
+        telemetry = state.telemetry
+        output_limited = self._last_stream_output_limited
+        self._pending_stream_chunks = []
+        self._pending_stream_is_rewrite = False
+        # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
+        # Keep the model's own boundaries and drop only the internal envelope.
+        visible_chunks = strip_turn_state_update_chunks(step_chunks)
+        if (
+            not visible_chunks
+            and not state.chunks
+            and not state.empty_answer_recovery_attempted
+            and not self._cancelled
+        ):
+            # 封筒のみ・無出力・出力上限で本文ゼロは「回答なし」。ここで抜けると
+            # 画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
+            # 回答のみ要求で1度だけやり直す。
+            # Envelope-only, empty, or cut off before any body text means no
+            # answer. Breaking here would finish the turn as an image-only or
+            # trace-only reply, so retry the same decision once, answer-only.
+            state.empty_answer_recovery_attempted = True
+            telemetry.empty_answer_recoveries += 1
+            logger.warning(
+                "Final decision produced no user-facing answer; retrying once "
+                "as an answer-only request.",
+                extra={
+                    **telemetry.as_log_extra(),
+                    "output_limited": output_limited,
+                    "step_chars": len("".join(step_chunks)),
+                },
+            )
+            state.suppress_next_generation_started = True
+            return True
+        state.answer_context_messages = turn_messages
+        telemetry.final_answer_input_tokens = estimate_request_tokens(
+            turn_messages,
+            active_tools,
+        )
+        telemetry.final_answer_input_chars = estimate_messages_chars(turn_messages)
+        telemetry.first_pass_finish_reason = (
+            "max_output_tokens" if output_limited else "stop"
+        )
+        if visible_chunks:
+            self._publish_completed_answer_step(state, visible_chunks)
+            if output_limited:
+                # 出力上限で切れた回答は成功完了にしない。同じ回答の続きだけを
+                # 限定回数で取り直す。
+                # An answer cut off at the output cap is not a success: fetch
+                # only the remainder, a bounded number of times.
+                state.final_answer_incomplete = self._continue_interrupted_answer(
+                    state,
+                    turn_messages,
+                    "".join(visible_chunks),
                 )
-                buffered_text = strip_web_search_citation_html(
-                    streaming_citation_buffer
-                )
-                if streaming_evidence is not None:
-                    buffered_text = resolve_web_search_citations(
-                        buffered_text,
-                        streaming_evidence,
-                    ).text
-                if buffered_text:
-                    publish_stream_text_with_images(buffered_text)
+        return False
 
-        # エラーハンドリング
-        # ユーザーへエラーを表示する経路は必ずログにも詳細を残す方針のため、各分岐で
-        # exc_info 付きのログを出す（呼び出し元の llm.py 側で既にログ済みの例外でも、
-        # ここでは会話ターンのテレメトリ（モデル・ステップ数・調査有無など）を紐付けて
-        # 再度記録し、どのターンで失敗したかを追えるようにする）。
-        # Error handling. Every branch that surfaces an error to the user must also leave a
-        # detailed log entry. Even though llm.py already logs the raw provider exception, log
-        # again here with this turn's telemetry (model, step count, whether research/tool use
-        # was in progress) so failures mid-loop (research → web search → answer) are traceable
-        # to the specific turn, not just the provider call.
-        except LlmConfigurationError as exc:
-            if self._cancelled:
-                return
-            logger.error(
-                "Chat generation stopped due to an LLM configuration error: %s",
+    # モデルが要求したツール呼び出しを種類別の実行部へ振り分けるフェーズ。
+    # The phase that routes the model's requested tool calls to their per-tool runners.
+    def _dispatch_tool_calls(
+        self,
+        state: ChatTurnRunState,
+        tool_calls_buffer: list[dict[str, Any]],
+        llm_step: int,
+    ) -> None:
+        normalized_tool_calls = [
+            _normalize_tool_call(tool_call, step=llm_step, index=index)
+            for index, tool_call in enumerate(tool_calls_buffer, start=1)
+        ]
+        assistant_tool_call_msg = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": normalized_tool_calls,
+        }
+        state.current_messages = [assistant_tool_call_msg]
+
+        for tc in normalized_tool_calls:
+            # ツールごとの実行と結果の追加
+            # Execute each tool and append results
+            func_name = tc.get("function", {}).get("name")
+            if (
+                func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
+                and self._personal_knowledge_search is not None
+            ):
+                self._run_lookup_tool_call(
+                    tc,
+                    tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
+                    search=self._personal_knowledge_search,
+                    event_prefix="personal_knowledge_search",
+                    result_counts=("memo_count", "context_fact_count"),
+                    failure_log_message="Memo / context search via tool call failed.",
+                    failure_tool_message="Memo and My Context search failed.",
+                    current_messages=state.current_messages,
+                    budget=state.budget,
+                    turn_state=state.turn_state,
+                    evidence_store=state.evidence_store,
+                    trace_steps=state.web_search_trace_steps,
+                )
+                continue
+
+            if (
+                func_name == SHARED_PROMPT_TOOL_NAME
+                and self._shared_prompt_search is not None
+            ):
+                self._run_lookup_tool_call(
+                    tc,
+                    tool_name=SHARED_PROMPT_TOOL_NAME,
+                    search=self._shared_prompt_search,
+                    event_prefix="shared_prompt_search",
+                    result_counts=("prompt_count",),
+                    failure_log_message="Shared prompt search via tool call failed.",
+                    failure_tool_message="Shared prompt search failed.",
+                    current_messages=state.current_messages,
+                    budget=state.budget,
+                    turn_state=state.turn_state,
+                    evidence_store=state.evidence_store,
+                    trace_steps=state.web_search_trace_steps,
+                )
+                continue
+
+            if func_name == GET_EVIDENCE_TOOL_NAME:
+                self._run_get_evidence_tool_call(state, tc)
+                continue
+
+            if func_name != "web_search":
+                self._record_unsupported_tool_call(state, tc, func_name)
+                continue
+
+            self._run_web_search_tool_call(state, tc)
+
+    # 収集済み根拠の再取得ツールを1件実行するフェーズ。
+    # The phase that runs one evidence re-read tool call.
+    def _run_get_evidence_tool_call(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+    ) -> None:
+        if state.budget.tool_calls_exhausted:
+            payload = {
+                "status": "step_limit_reached",
+                "message": "The search limit has been reached.",
+            }
+        else:
+            state.budget.start_tool_call()
+            state.telemetry.tool_calls = state.budget.tool_calls
+            # 再取得もプロンプトへ載るため、検索結果と同じ根拠予算で抑える。
+            # A re-read also enters the prompt, so it shares the evidence budget.
+            payload = state.evidence_store.execute_get_evidence(
+                tool_call.get("function", {}).get("arguments", "{}"),
+                max_chars=state.evidence_context_budget.message_limit(
+                    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
+                ),
+            )
+            state.evidence_context_budget.consume(
+                len(json.dumps(payload, ensure_ascii=False))
+            )
+            state.turn_state.record_search(
+                tool_name=GET_EVIDENCE_TOOL_NAME,
+                status=str(payload.get("status") or "unknown"),
+            )
+        state.current_messages.append(_tool_result_message(tool_call, payload))
+
+    # 未対応ツールの要求を記録し、モデルへ理由を返すフェーズ。
+    # The phase that records an unsupported tool request and tells the model why.
+    def _record_unsupported_tool_call(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+        func_name: Any,
+    ) -> None:
+        if not state.budget.tool_calls_exhausted:
+            state.budget.start_tool_call()
+            state.telemetry.tool_calls = state.budget.tool_calls
+            state.turn_state.record_search(
+                tool_name=str(func_name or "unknown_tool"),
+                status="unsupported_tool",
+            )
+        state.current_messages.append(
+            _tool_result_message(
+                tool_call,
+                {
+                    "status": "unsupported_tool",
+                    "message": f"Unsupported tool: {func_name}",
+                },
+            )
+        )
+
+    # Web検索ツールの要求1件を、引数正規化からキャッシュ判定・実行まで進めるフェーズ。
+    # The phase that carries one web-search tool call from argument normalization
+    # through the cache check to execution.
+    def _run_web_search_tool_call(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+    ) -> None:
+        budget = state.budget
+        args_raw = tool_call.get("function", {}).get("arguments", "{}")
+        try:
+            args = json.loads(args_raw)
+        except Exception:
+            # 日本語: モデルが渡したツール引数が JSON として壊れていた場合は空引数として扱います。
+            # English: Treat tool arguments the model produced as empty when they are not valid JSON.
+            logger.debug("Discarded malformed tool-call arguments from the model.", exc_info=True)
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+
+        if budget.tool_calls_exhausted:
+            state.current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "step_limit_reached",
+                        "message": "The web search limit has been reached.",
+                    },
+                )
+            )
+            return
+
+        search_step_index = budget.start_tool_call()
+        state.telemetry.tool_calls = budget.tool_calls
+
+        # プロバイダ側のスキーマ検証には頼らない。モデルが返した引数はここで
+        # 正規化し、想定外の値は既定へ丸めてターンを進める。
+        # Never rely on provider-side schema validation: normalize the model's
+        # arguments here and round unexpected values to a default so the turn
+        # keeps moving.
+        query = _tool_argument_text(args.get("query"))
+        freshness = normalize_web_search_freshness(args.get("freshness"))
+        search_language = normalize_search_language(args.get("search_language"))
+        if not query:
+            state.turn_state.record_search(
+                tool_name="web_search",
+                status="invalid_arguments",
+            )
+            state.current_messages.append(
+                _tool_result_message(
+                    tool_call,
+                    {
+                        "status": "invalid_arguments",
+                        "message": "Search query is empty.",
+                    },
+                )
+            )
+            return
+        query_text = query
+        freshness_text = freshness
+        search_key = _normalized_search_key(
+            query_text,
+            freshness_text,
+            search_language,
+        )
+        cached_result = state.web_search_results_by_key.get(search_key)
+
+        self._publish(
+            "web_search_started",
+            {
+                "query": query_text,
+                "reason": "Model-requested search",
+                "step": search_step_index,
+                "max_steps": budget.max_steps,
+                "cached": cached_result is not None,
+            },
+        )
+        if cached_result is not None:
+            self._reuse_cached_web_search(
+                state,
+                tool_call,
+                cached_result,
+                query_text=query_text,
+                step=search_step_index,
+            )
+            return
+
+        try:
+            self._execute_web_search(
+                state,
+                tool_call,
+                query_text=query_text,
+                freshness_text=freshness_text,
+                search_language=search_language,
+                search_key=search_key,
+                step=search_step_index,
+            )
+        except WebSearchQuotaExceededError as exc:
+            self._report_web_search_quota_exceeded(
+                state,
+                tool_call,
                 exc,
-                exc_info=True,
+                query_text=query_text,
+                step=search_step_index,
+            )
+        except Exception:
+            self._report_web_search_failure(
+                state,
+                tool_call,
+                query_text=query_text,
+                step=search_step_index,
+            )
+
+    # 同一条件の検索結果を再利用するフェーズ。プロバイダへは問い合わせない。
+    # The phase that reuses an identical earlier search instead of calling the provider.
+    def _reuse_cached_web_search(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+        cached_result: WebSearchResult,
+        *,
+        query_text: str,
+        step: int,
+    ) -> None:
+        cached_refs = state.evidence_store.add_web_result(cached_result)
+        state.turn_state.record_search(
+            tool_name="web_search",
+            query=query_text,
+            evidence_refs=cached_refs,
+            searched_at=cached_result.searched_at,
+            freshness=cached_result.freshness,
+            status="cached",
+        )
+        state.web_search_trace_steps.extend(
+            [
+                search_step(cached_result, cached=True),
+                review_step(cached_result, reused=True),
+            ]
+        )
+        self._publish(
+            "web_search_completed",
+            {
+                "query": cached_result.query,
+                "source_count": len(cached_result.sources),
+                "step": step,
+                "max_steps": state.budget.max_steps,
+                "cached": True,
+            },
+        )
+        self._collect_web_search_image_selections(state, cached_result)
+        state.telemetry.cached_web_search_count += 1
+        tool_payload = _budgeted_web_search_result_tool_payload(
+            cached_result,
+            state.evidence_context_budget,
+            cached=True,
+            telemetry=state.telemetry,
+        )
+        state.current_messages.append(
+            _tool_result_message(
+                tool_call,
+                tool_payload,
+            )
+        )
+
+    # 新規のWeb検索を実行し、根拠・トレース・ツール結果へ反映するフェーズ。
+    # The phase that runs a fresh web search and folds it into evidence, trace and tool result.
+    def _execute_web_search(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+        *,
+        query_text: str,
+        freshness_text: str,
+        search_language: str,
+        search_key: tuple[str, str, str],
+        step: int,
+    ) -> None:
+        result = search_brave_llm_context(
+            query_text,
+            freshness=freshness_text,
+            page_fetch_budget=state.page_fetch_budget,
+            language_hint=state.latest_user_message,
+            search_language=search_language,
+        )
+        state.web_search_results_by_key[search_key] = result
+        state.web_search_trace_steps.extend(
+            [
+                search_step(result, additional=bool(state.web_search_results)),
+                *page_reading_steps(result),
+                review_step(result),
+            ]
+        )
+        if result.has_sources:
+            state.web_search_results.append(result)
+        result_refs = state.evidence_store.add_web_result(result)
+        state.turn_state.record_search(
+            tool_name="web_search",
+            query=query_text,
+            evidence_refs=result_refs,
+            searched_at=result.searched_at,
+            freshness=result.freshness,
+            status="ok" if result.has_sources else "no_sources",
+        )
+        state.telemetry.web_search_count += 1
+        self._publish(
+            "web_search_completed",
+            {
+                "query": result.query,
+                "source_count": len(result.sources),
+                "step": step,
+                "max_steps": state.budget.max_steps,
+                "cached": False,
+            },
+        )
+        self._collect_web_search_image_selections(state, result)
+        tool_payload = _budgeted_web_search_result_tool_payload(
+            result,
+            state.evidence_context_budget,
+            telemetry=state.telemetry,
+        )
+        state.current_messages.append(
+            _tool_result_message(
+                tool_call,
+                tool_payload,
+            )
+        )
+
+    # 月間上限に達した検索を、ターンを落とさずに記録・通知するフェーズ。
+    # The phase that records and announces a quota-exhausted search without failing the turn.
+    def _report_web_search_quota_exceeded(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+        exc: WebSearchQuotaExceededError,
+        *,
+        query_text: str,
+        step: int,
+    ) -> None:
+        message = (
+            f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
+            "検索なしで回答を続けます。"
+        )
+        logger.warning(
+            "Web search quota exceeded mid-turn (limit=%s, retry_after_seconds=%s); "
+            "continuing the turn without this search.",
+            exc.limit,
+            exc.retry_after_seconds,
+            extra=self._telemetry.as_log_extra(),
+        )
+        state.web_search_trace_steps.append(
+            search_failed_step(
+                query_text,
+                reason="月間上限に達したため検索結果を取得できませんでした。",
+            )
+        )
+        state.suppress_next_generation_started = True
+        self._publish(
+            "web_search_failed",
+            {
+                "query": query_text,
+                "code": WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
+                "message": message,
+                "retry_after_seconds": exc.retry_after_seconds,
+                "step": step,
+                "max_steps": state.budget.max_steps,
+            },
+        )
+        state.current_messages.append(
+            _tool_result_message(
+                tool_call,
+                {
+                    "status": "quota_exceeded",
+                    "message": message,
+                    "retry_after_seconds": exc.retry_after_seconds,
+                },
+            )
+        )
+        state.turn_state.record_search(
+            tool_name="web_search",
+            query=query_text,
+            status="quota_exceeded",
+        )
+
+    # 検索リクエスト自体が失敗した場合に、取得済みの情報で続行させるフェーズ。
+    # The phase that keeps the turn going on already gathered evidence when a search request fails.
+    def _report_web_search_failure(
+        self,
+        state: ChatTurnRunState,
+        tool_call: dict[str, Any],
+        *,
+        query_text: str,
+        step: int,
+    ) -> None:
+        logger.exception("Brave search via tool call failed.")
+        state.web_search_trace_steps.append(
+            search_failed_step(
+                query_text,
+                reason="検索リクエストに失敗したため、取得済みの情報で回答を続けました。",
+            )
+        )
+        state.suppress_next_generation_started = True
+        self._publish(
+            "web_search_failed",
+            {
+                "query": query_text,
+                "code": WEB_SEARCH_ERROR_REQUEST_FAILED,
+                "message": "Web検索に失敗しました。検索なしで回答を続けます。",
+                "step": step,
+                "max_steps": state.budget.max_steps,
+            },
+        )
+        state.current_messages.append(
+            _tool_result_message(
+                tool_call,
+                {
+                    "status": "failed",
+                    "message": "Web search failed.",
+                },
+            )
+        )
+        state.turn_state.record_search(
+            tool_name="web_search",
+            query=query_text,
+            status="failed",
+        )
+
+    # 引用チップ判定のために保留していた末尾を、ループ終了後に配信するフェーズ。
+    # The phase that flushes the tail held back for citation-chip detection once the loop ends.
+    def _flush_streaming_citation_buffer(self, state: ChatTurnRunState) -> None:
+        if not state.streaming_citation_buffer:
+            return
+        streaming_evidence = combine_web_search_results(
+            [*state.web_search_results, *self._prior_web_search_results]
+        )
+        buffered_text = strip_web_search_citation_html(
+            state.streaming_citation_buffer
+        )
+        if streaming_evidence is not None:
+            buffered_text = resolve_web_search_citations(
+                buffered_text,
+                streaming_evidence,
+            ).text
+        if buffered_text:
+            self._publish_stream_text_with_images(state, buffered_text)
+
+    # 生成失敗をユーザー向けイベントと運用ログの両方へ落とすフェーズ。
+    # The phase that turns a generation failure into both a user event and an operations log.
+    def _report_generation_failure(
+        self,
+        exc: Exception,
+        state: ChatTurnRunState,
+    ) -> None:
+        if self._cancelled:
+            return
+        # 本文を1文字も出していない場合だけ、呼び出し元のエラーコールバックを起動する。
+        # Only a turn that emitted no body text at all invokes the caller's error callback.
+        invoke_error_callback = not state.chunks
+        if isinstance(exc, LlmConfigurationError):
+            logger.exception(
+                "Chat generation stopped due to an LLM configuration error.",
                 extra=self._telemetry.as_log_extra(),
             )
             error_message = str(exc) or "LLM設定エラーが発生しました。"
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": False},
-                invoke_error_callback=not chunks,
+                invoke_error_callback=invoke_error_callback,
             )
             return
-        except LlmAuthenticationError as exc:
-            if self._cancelled:
-                return
-            logger.error(
-                "Chat generation stopped due to an LLM provider authentication error: %s",
-                exc,
-                exc_info=True,
+        if isinstance(exc, LlmAuthenticationError):
+            logger.exception(
+                "Chat generation stopped due to an LLM provider authentication error.",
                 extra=self._telemetry.as_log_extra(),
             )
             error_message = "LLMプロバイダ認証エラーが発生しました。設定を確認してください。"
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": False},
-                invoke_error_callback=not chunks,
+                invoke_error_callback=invoke_error_callback,
             )
             return
-        except LlmRateLimitError as exc:
-            if self._cancelled:
-                return
+        if isinstance(exc, LlmRateLimitError):
             logger.warning(
                 "Chat generation hit an LLM provider rate limit (retry_after_seconds=%s): %s",
                 exc.retry_after_seconds,
                 exc,
-                exc_info=True,
+                exc_info=exc,
                 extra=self._telemetry.as_log_extra(),
             )
             error_message = "AI提供元が混み合っています。時間をおいて再試行してください。"
@@ -2187,15 +2349,13 @@ class ChatGenerationJob:
             self._handle_error(
                 error_message,
                 payload,
-                invoke_error_callback=not chunks,
+                invoke_error_callback=invoke_error_callback,
             )
             return
-        except LlmInputLimitError:
-            if self._cancelled:
-                return
+        if isinstance(exc, LlmInputLimitError):
             logger.warning(
                 "Chat generation stopped because the request exceeded the model context window.",
-                exc_info=True,
+                exc_info=exc,
                 extra=self._telemetry.as_log_extra(),
             )
             error_message = (
@@ -2205,78 +2365,68 @@ class ChatGenerationJob:
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": True},
-                invoke_error_callback=not chunks,
+                invoke_error_callback=invoke_error_callback,
             )
             return
-        except LlmServiceError as exc:
-            if self._cancelled:
-                return
+        if isinstance(exc, LlmServiceError):
             retryable = is_retryable_llm_error(exc)
             if retryable:
                 error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
             else:
                 error_message = "内部エラーが発生しました。"
-            logger.error(
-                "Chat generation stopped due to an LLM service error (retryable=%s): %s",
+            logger.exception(
+                "Chat generation stopped due to an LLM service error (retryable=%s).",
                 retryable,
-                exc,
-                exc_info=True,
                 extra={**self._telemetry.as_log_extra(), "llm_error_type": exc.__class__.__name__},
             )
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": retryable},
-                invoke_error_callback=not chunks,
+                invoke_error_callback=invoke_error_callback,
             )
             return
-        except Exception:
-            if self._cancelled:
-                return
-            logger.exception(
-                "Unexpected error while generating chat response.",
-                extra=self._telemetry.as_log_extra(),
-            )
-            error_message = "内部エラーが発生しました。"
-            self._handle_error(
-                error_message,
-                {"message": error_message, "retryable": False},
-                invoke_error_callback=not chunks,
-            )
-            return
+        logger.exception(
+            "Unexpected error while generating chat response.",
+            extra=self._telemetry.as_log_extra(),
+        )
+        error_message = "内部エラーが発生しました。"
+        self._handle_error(
+            error_message,
+            {"message": error_message, "retryable": False},
+            invoke_error_callback=invoke_error_callback,
+        )
 
-        if self._should_stop():
-            return
-
-        # モデルが本文を書いたかは、正規化や画像配置の前に生の chunks で確定する。
-        # 本文ゼロのターンにトレースだけを前置して完了扱いにはしない。
-        # Whether the model wrote any body text is settled from the raw chunks before
-        # normalization and image placement. A turn with no body never gets a trace-only body.
-        model_text = "".join(chunks)
-        bot_reply = model_text
-        latest_user_message = _latest_user_message_text(self._conversation_messages)
-        if final_answer_incomplete is not None:
-            normalized_response = normalize_response_with_artifacts(
+    # 生成本文を正規化するフェーズ。途中終了したターンは生成UIの再試行を行わない。
+    # The phase that normalizes the generated body; a truncated turn skips the generated-UI retry.
+    def _normalize_final_answer(
+        self,
+        state: ChatTurnRunState,
+        bot_reply: str,
+        latest_user_message: str,
+    ) -> NormalizedGenerativeResponse:
+        if state.final_answer_incomplete is not None:
+            return normalize_response_with_artifacts(
                 bot_reply,
                 recover_truncated=True,
                 ui_mode=self._ui_mode,
             )
-        else:
-            normalized_response = normalize_response_with_artifact_retry(
-                bot_reply,
-                conversation_messages=answer_context_messages or current_messages,
-                model=self._model,
-                generate_response=get_llm_response,
-                user_request=latest_user_message,
-                ui_mode=self._ui_mode,
-            )
-        if normalized_response.validation_errors:
-            logger.warning(
-                "One or more generated UI artifacts failed validation and were omitted.",
-                extra={"validation_errors": normalized_response.validation_errors},
-            )
-        bot_reply = normalized_response.text
-        message_parts = normalized_response.parts
+        return normalize_response_with_artifact_retry(
+            bot_reply,
+            conversation_messages=state.answer_context_messages or state.current_messages,
+            model=self._model,
+            generate_response=get_llm_response,
+            user_request=latest_user_message,
+            ui_mode=self._ui_mode,
+        )
 
+    # 引用markerを検証済みソースへのリンクへ解決するフェーズ。
+    # The phase that resolves citation markers into links to verified sources.
+    def _resolve_final_citations(
+        self,
+        state: ChatTurnRunState,
+        bot_reply: str,
+        message_parts: list[dict[str, Any]] | None,
+    ) -> tuple[str, list[dict[str, Any]] | None, tuple[WebSearchCitation, ...]]:
         # 現在ターンと過去ターンの検索根拠を照合し、モデルの引用markerを
         # 検証済みソースへのMarkdownリンクへ変換する。UIパーツがある場合も
         # 表示本文と保存本文が一致するよう、text partを同時に更新する。
@@ -2288,87 +2438,85 @@ class ChatGenerationJob:
         # The reverse order would delete the chips this step just rendered.
         bot_reply = strip_web_search_citation_html(bot_reply)
         citation_evidence = combine_web_search_results(
-            [*web_search_results, *self._prior_web_search_results]
+            [*state.web_search_results, *self._prior_web_search_results]
         )
-        resolved_citations = ()
-        if citation_evidence is not None:
-            citation_resolution = resolve_web_search_citations(
-                bot_reply,
-                citation_evidence,
-            )
-            if citation_resolution.invalid_markers:
-                logger.warning(
-                    "Removed invalid web search citation markers from generated response.",
-                    extra={
-                        "invalid_marker_count": len(citation_resolution.invalid_markers)
-                    },
-                )
-            bot_reply = citation_resolution.text
-            resolved_citations = citation_resolution.citations
-            if message_parts:
-                message_parts = [
-                    (
-                        {**part, "text": bot_reply}
-                        if part.get("type") == "text"
-                        else part
-                    )
-                    for part in message_parts
-                ]
+        resolved_citations: tuple[WebSearchCitation, ...] = ()
+        if citation_evidence is None:
+            return bot_reply, message_parts, resolved_citations
 
-        # 画像は検索結果を取得した時点で選定済み。引用解決後は、選定LLMが返した
-        # 配置計画を本文へ反映し、ストリーム中に表示した順序と保存内容を一致させる。
-        # Image selection already happened when each search result arrived. After
-        # citation resolution, realize the placement plan returned by the selector
-        # so persisted history matches what the stream revealed.
-        if selected_web_search_images:
-            message_parts = append_web_search_image_parts(
-                message_parts,
-                selected_web_search_images,
-                fallback_text=bot_reply,
-            )
-
-        # トレースを独立パーツへ分け、本文内の画像位置を維持したまま保存・配信する。
-        # Finalize the trace split while preserving inline image positions.
-        if message_parts:
-            message_parts = normalize_message_parts_for_display(message_parts) or None
-
-        self.response = bot_reply
-
-        # 本文も生成UIも無ければ「回答なし」であり、成功として保存してはいけない。
-        # 検索画像やトレースだけでは回答にならない。空の応答を保存すると空の吹き出し
-        # （画像だけ・ステップだけの吹き出し）が残り、ユーザー発話だけが積み上がる。
-        # No body and no generated UI means there is no answer at all, so it must not be
-        # persisted as a success: search images or a trace alone are not an answer, and an
-        # empty reply leaves a blank (image-only / steps-only) bubble behind while
-        # unanswered user messages pile up.
-        if not _has_user_facing_answer(
-            model_text=model_text,
-            response_text=bot_reply,
-            message_parts=message_parts,
-        ):
+        citation_resolution = resolve_web_search_citations(
+            bot_reply,
+            citation_evidence,
+        )
+        if citation_resolution.invalid_markers:
             logger.warning(
-                "Chat generation produced an empty response.",
+                "Removed invalid web search citation markers from generated response.",
                 extra={
-                    **self._telemetry.as_log_extra(),
-                    "has_model_text": bool(model_text.strip()),
-                    "selected_image_count": len(selected_web_search_images),
+                    "invalid_marker_count": len(citation_resolution.invalid_markers)
                 },
             )
-            error_message = ERROR_CHAT_EMPTY_RESPONSE
-            self._handle_error(
-                error_message,
-                {"message": error_message, "retryable": True},
-                invoke_error_callback=True,
-            )
-            return
+        bot_reply = citation_resolution.text
+        resolved_citations = citation_resolution.citations
+        if message_parts:
+            message_parts = [
+                (
+                    {**part, "text": bot_reply}
+                    if part.get("type") == "text"
+                    else part
+                )
+                for part in message_parts
+            ]
+        return bot_reply, message_parts, resolved_citations
 
+    # 回答が無いターンを成功として保存せず、エラーとして通知するフェーズ。
+    # The phase that reports an answerless turn as an error instead of persisting it.
+    def _report_empty_response(self, state: ChatTurnRunState, model_text: str) -> None:
+        logger.warning(
+            "Chat generation produced an empty response.",
+            extra={
+                **self._telemetry.as_log_extra(),
+                "has_model_text": bool(model_text.strip()),
+                "selected_image_count": len(state.selected_web_search_images),
+            },
+        )
+        error_message = ERROR_CHAT_EMPTY_RESPONSE
+        self._handle_error(
+            error_message,
+            {"message": error_message, "retryable": True},
+            invoke_error_callback=True,
+        )
+
+    # 途中終了の理由をユーザー向け文言へ変換する。
+    # Translate why the answer ended early into a user-facing sentence.
+    @staticmethod
+    def _partial_answer_message(error: BaseException) -> str:
+        if isinstance(error, FinalAnswerContinuationStalledError):
+            return "回答の続きを生成できず、途中までの回答を保存しました。"
+        if isinstance(error, LlmOutputLimitError):
+            return "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
+        if isinstance(error, LlmInputLimitError):
+            return (
+                "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
+                "途中までの回答を保存しました。"
+            )
+        return "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+
+    # 応答を履歴へ保存し、done / incomplete の終端イベントを発行するフェーズ。
+    # The phase that persists the reply and publishes the terminal done / incomplete event.
+    def _persist_and_publish_result(
+        self,
+        state: ChatTurnRunState,
+        bot_reply: str,
+        message_parts: list[dict[str, Any]] | None,
+        resolved_citations: tuple[WebSearchCitation, ...],
+    ) -> None:
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう永続化する
         # Serialize this turn's search results so later turns can reference them.
         serialized_web_search = [
             serialize_web_search_result(
                 with_web_search_citations(result, resolved_citations)
             )
-            for result in web_search_results
+            for result in state.web_search_results
             if result.has_sources
         ]
 
@@ -2393,34 +2541,19 @@ class ChatGenerationJob:
             done_payload["parts"] = message_parts
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
-        if final_answer_incomplete is not None:
-            if isinstance(final_answer_incomplete, FinalAnswerContinuationStalledError):
-                message = "回答の続きを生成できず、途中までの回答を保存しました。"
-            elif isinstance(final_answer_incomplete, LlmOutputLimitError):
-                message = (
-                    "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
-                )
-            elif isinstance(final_answer_incomplete, LlmInputLimitError):
-                message = (
-                    "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
-                    "途中までの回答を保存しました。"
-                )
-            else:
-                message = (
-                    "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
-                )
+        self._telemetry.final_answer_output_chars = len(bot_reply)
+        self._telemetry.evidence_budget_consumed = state.evidence_context_budget.consumed
+        if state.final_answer_incomplete is not None:
             incomplete_payload = {
                 **done_payload,
-                "message": message,
+                "message": self._partial_answer_message(state.final_answer_incomplete),
                 "partial": True,
                 "retryable": (
-                    isinstance(final_answer_incomplete, LlmOutputLimitError)
-                    or is_retryable_llm_error(final_answer_incomplete)
+                    isinstance(state.final_answer_incomplete, LlmOutputLimitError)
+                    or is_retryable_llm_error(state.final_answer_incomplete)
                 ),
-                "continuations": continuation_count,
+                "continuations": state.continuation_count,
             }
-            self._telemetry.final_answer_output_chars = len(bot_reply)
-            self._telemetry.evidence_budget_consumed = evidence_context_budget.consumed
             logger.info(
                 "Chat generation ended with a persisted partial answer.",
                 extra={
@@ -2432,8 +2565,6 @@ class ChatGenerationJob:
             )
             self._publish("incomplete", incomplete_payload, done=True)
             return
-        self._telemetry.final_answer_output_chars = len(bot_reply)
-        self._telemetry.evidence_budget_consumed = evidence_context_budget.consumed
         logger.info(
             "Chat generation completed.",
             extra={
@@ -2444,6 +2575,107 @@ class ChatGenerationJob:
             },
         )
         self._publish("done", done_payload, done=True)
+
+    # 生成結果を正規化・引用解決・画像配置してから保存と終端通知へ渡すフェーズ。
+    # The phase that normalizes, resolves citations and places images before persisting.
+    def _finalize_generation(self, state: ChatTurnRunState) -> None:
+        # モデルが本文を書いたかは、正規化や画像配置の前に生の chunks で確定する。
+        # 本文ゼロのターンにトレースだけを前置して完了扱いにはしない。
+        # Whether the model wrote any body text is settled from the raw chunks before
+        # normalization and image placement. A turn with no body never gets a trace-only body.
+        model_text = "".join(state.chunks)
+        latest_user_message = _latest_user_message_text(self._conversation_messages)
+        normalized_response = self._normalize_final_answer(
+            state,
+            model_text,
+            latest_user_message,
+        )
+        if normalized_response.validation_errors:
+            logger.warning(
+                "One or more generated UI artifacts failed validation and were omitted.",
+                extra={"validation_errors": normalized_response.validation_errors},
+            )
+        bot_reply = normalized_response.text
+        message_parts = normalized_response.parts
+
+        bot_reply, message_parts, resolved_citations = self._resolve_final_citations(
+            state,
+            bot_reply,
+            message_parts,
+        )
+
+        # 画像は検索結果を取得した時点で選定済み。引用解決後は、選定LLMが返した
+        # 配置計画を本文へ反映し、ストリーム中に表示した順序と保存内容を一致させる。
+        # Image selection already happened when each search result arrived. After
+        # citation resolution, realize the placement plan returned by the selector
+        # so persisted history matches what the stream revealed.
+        if state.selected_web_search_images:
+            message_parts = append_web_search_image_parts(
+                message_parts,
+                state.selected_web_search_images,
+                fallback_text=bot_reply,
+            )
+
+        # トレースを独立パーツへ分け、本文内の画像位置を維持したまま保存・配信する。
+        # Finalize the trace split while preserving inline image positions.
+        if message_parts:
+            message_parts = normalize_message_parts_for_display(message_parts) or None
+
+        self.response = bot_reply
+
+        # 本文も生成UIも無ければ「回答なし」であり、成功として保存してはいけない。
+        # 検索画像やトレースだけでは回答にならない。空の応答を保存すると空の吹き出し
+        # （画像だけ・ステップだけの吹き出し）が残り、ユーザー発話だけが積み上がる。
+        # No body and no generated UI means there is no answer at all, so it must not be
+        # persisted as a success: search images or a trace alone are not an answer, and an
+        # empty reply leaves a blank (image-only / steps-only) bubble behind while
+        # unanswered user messages pile up.
+        if not _has_user_facing_answer(
+            model_text=model_text,
+            response_text=bot_reply,
+            message_parts=message_parts,
+        ):
+            self._report_empty_response(state, model_text)
+            return
+
+        self._persist_and_publish_result(
+            state,
+            bot_reply,
+            message_parts,
+            resolved_citations,
+        )
+
+    # バックグラウンドスレッドで実行されるチャット応答生成の入口。各フェーズを順に呼ぶだけ。
+    # Entry point of chat response generation on the background thread; it only sequences phases.
+    def _run(self) -> None:
+        state = self._build_turn_run_state()
+        try:
+            if self._should_stop():
+                return
+
+            self._configure_agent_tools(state)
+            if self._run_agent_loop(state):
+                return
+            self._flush_streaming_citation_buffer(state)
+
+        # エラーハンドリング
+        # ユーザーへエラーを表示する経路は必ずログにも詳細を残す方針のため、各分岐で
+        # exc_info 付きのログを出す（呼び出し元の llm.py 側で既にログ済みの例外でも、
+        # ここでは会話ターンのテレメトリ（モデル・ステップ数・調査有無など）を紐付けて
+        # 再度記録し、どのターンで失敗したかを追えるようにする）。
+        # Error handling. Every branch that surfaces an error to the user must also leave a
+        # detailed log entry. Even though llm.py already logs the raw provider exception, log
+        # again here with this turn's telemetry (model, step count, whether research/tool use
+        # was in progress) so failures mid-loop (research → web search → answer) are traceable
+        # to the specific turn, not just the provider call.
+        except Exception as exc:
+            self._report_generation_failure(exc, state)
+            return
+
+        if self._should_stop():
+            return
+
+        self._finalize_generation(state)
 
 
 # ジェネレーションキーをビルドする関数
@@ -2498,98 +2730,61 @@ class ChatGenerationService:
         self._redis_client_getter = redis_client_getter
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
-        self._cancel_listener_thread: threading.Thread | None = None
-        self._cancel_listener_lock = threading.Lock()
+        # プロセス間協調（Redis Pub/Sub・分散ロック・停止要求）は専用のコラボレータへ委譲する。
+        # ローカルジョブの操作だけをコールバックとして渡し、ライフサイクルはこのクラスが持つ。
+        # Cross-process coordination (pub/sub, the distributed lock, stop requests) is delegated
+        # to a dedicated collaborator; only local job operations are handed to it as callbacks
+        # so the job lifecycle stays here.
+        self._coordinator = ChatGenerationCoordinator(
+            job_retention_seconds=self._job_retention_seconds,
+            active_job_lock_ttl_seconds=self._active_job_lock_ttl_seconds,
+            distributed_stream_idle_timeout_seconds=self._distributed_stream_idle_timeout_seconds,
+            sse_heartbeat_seconds=self._sse_heartbeat_seconds,
+            remote_cancel_timeout_seconds=self._remote_cancel_timeout_seconds,
+            cancel_local_job=self._cancel_local_job,
+            has_running_local_jobs=self._has_running_local_jobs,
+            redis_client_getter=redis_client_getter,
+        )
 
     # Redis クライアントを取得する
     # Retrieve the Redis client
     def _get_redis_client(self) -> Any | None:
-        if self._redis_client_getter is not None:
-            return self._redis_client_getter()
-        return get_redis_client()
+        return self._coordinator.get_redis_client()
 
     # アクティブジョブの Redis ロックキーを生成する
     # Generate the Redis lock key for the active job
     def _active_lock_key(self, job_key: str) -> str:
-        return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
+        return self._coordinator.active_lock_key(job_key)
 
     # 停止要求マーカーの Redis キーを生成する
     # Generate the Redis key for the stop-request marker
     def _cancel_request_key(self, job_key: str) -> str:
-        return f"{_CANCEL_REQUEST_KEY_PREFIX}:{job_key}"
+        return self._coordinator.cancel_request_key(job_key)
 
     # Redis に保存するイベントストリームのキーを生成する
     # Generate the Redis event stream key
     def _event_stream_key(self, job_key: str) -> str:
-        return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
+        return self._coordinator.event_stream_key(job_key)
 
     # Redis Pub/Sub のイベントチャネル名を生成する
     # Generate the Redis Pub/Sub event channel name
     def _event_channel_name(self, job_key: str) -> str:
-        return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
+        return self._coordinator.event_channel_name(job_key)
 
     # イベントオブジェクトを JSON 文字列にシリアライズする
     # Serialize the event object to a JSON string
     def _serialize_event(self, event: ChatGenerationEvent) -> str:
-        # Redis には SSE と同じ最小構造だけを保存する。payload の中身はイベント種別ごとに変わる。
-        return json.dumps(
-            {
-                "id": event.sequence_id,
-                "event": event.event,
-                "payload": event.payload,
-            },
-            ensure_ascii=False,
-        )
+        return self._coordinator.serialize_event(event)
 
     # JSON 文字列をイベントオブジェクトにデシリアライズする
     # Deserialize a JSON string to an event object
     def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
-        # Redis 上の古い/壊れた値はストリーム全体を落とさず読み飛ばす。
-        try:
-            loaded = json.loads(raw)
-        except Exception:
-            return None
-        if not isinstance(loaded, dict):
-            return None
-        sequence_id = loaded.get("id")
-        event_name = loaded.get("event")
-        payload = loaded.get("payload")
-        if not isinstance(sequence_id, int) or sequence_id <= 0:
-            return None
-        if not isinstance(event_name, str) or not event_name:
-            return None
-        if not isinstance(payload, dict):
-            payload = {}
-        return ChatGenerationEvent(
-            sequence_id=sequence_id,
-            event=event_name,
-            payload=payload,
-        )
+        return self._coordinator.deserialize_event(raw)
 
     # Redis 経由で分散イベントを配信する（リストへの追記および Pub/Sub 発行）
     # Publish a distributed event via Redis (append to list and publish via Pub/Sub)
     def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return
-        serialized = self._serialize_event(event)
-        stream_key = self._event_stream_key(job_key)
-        channel = self._event_channel_name(job_key)
-        ttl_seconds = max(
-            self._job_retention_seconds + self._active_job_lock_ttl_seconds,
-            self._job_retention_seconds,
-            1,
-        )
-        # list は再接続時のリプレイ用、pub/sub は今つながっている SSE への即時通知用。
-        # どちらか片方だけでは「取りこぼしなし」と「低遅延」を同時に満たせない。
-        try:
-            pipeline = redis_client.pipeline()
-            pipeline.rpush(stream_key, serialized)
-            pipeline.expire(stream_key, ttl_seconds)
-            pipeline.publish(channel, serialized)
-            pipeline.execute()
-        except Exception:
-            logger.exception("Failed to publish chat generation event to Redis.")
+        self._coordinator.publish_event(job_key, event)
 
     # Redis のイベントストリームから指定されたシーケンスIDより後のイベントを読み出す
     # Read events from the Redis event stream after the specified sequence ID
@@ -2599,126 +2794,40 @@ class ChatGenerationService:
         *,
         after_sequence_id: int = 0,
     ) -> list[ChatGenerationEvent]:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return []
-        try:
-            raw_items = redis_client.lrange(self._event_stream_key(job_key), 0, -1)
-        except Exception:
-            logger.exception("Failed to read Redis chat generation event stream.")
-            return []
-
-        events: list[ChatGenerationEvent] = []
-        for item in raw_items:
-            # Redis クライアント設定により bytes/str が混在しうる。ここでは str だけを扱い、
-            # pub/sub 側の bytes デコードとは分けておく。
-            if not isinstance(item, str):
-                continue
-            event = self._deserialize_event(item)
-            if event is None:
-                continue
-            if event.sequence_id <= after_sequence_id:
-                continue
-            events.append(event)
-        return events
+        return self._coordinator.read_events(
+            job_key,
+            after_sequence_id=after_sequence_id,
+        )
 
     # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
     # Attempt to acquire the Redis active job lock for the specified job key
     def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return True, None
-
-        lock_key = self._active_lock_key(job_key)
-        lock_token = uuid.uuid4().hex
-        # NX + TTL でプロセス間の二重生成を防ぐ。TTL はプロセス異常終了時にロックが残り続けないための保険。
-        try:
-            acquired = redis_client.set(
-                lock_key,
-                lock_token,
-                nx=True,
-                ex=self._active_job_lock_ttl_seconds,
-            )
-        except Exception:
-            logger.exception(
-                "Redis chat generation lock acquisition failed; falling back to in-memory."
-            )
-            return True, None
-
-        if acquired:
-            return True, lock_token
-        return False, None
+        return self._coordinator.try_acquire_active_job_lock(job_key)
 
     # 自分が取得した Redis アクティブジョブロックを解放する
     # Release the Redis active job lock that was acquired by this instance
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
-        if not lock_token:
-            return
-
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return
-
-        lua_script = """
-local key = KEYS[1]
-local token = ARGV[1]
-if redis.call('GET', key) == token then
-  return redis.call('DEL', key)
-end
-return 0
-"""
-        # 自分が取得したロックだけを消すため、GET と DEL を Lua で不可分に実行する。
-        # TTL 切れ後に別プロセスが取り直したロックを誤って解放しないため。
-        try:
-            redis_client.eval(lua_script, 1, self._active_lock_key(job_key), lock_token)
-        except Exception:
-            logger.exception("Redis chat generation lock release failed.")
+        self._coordinator.release_active_job_lock(job_key, lock_token)
 
     # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
     # Check if a Redis active job lock exists for the specified job key
     def _has_distributed_active_lock(self, job_key: str) -> bool:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return False
-        try:
-            return bool(redis_client.exists(self._active_lock_key(job_key)))
-        except Exception:
-            logger.exception("Redis chat generation lock existence check failed.")
-            return False
+        return self._coordinator.has_active_lock(job_key)
 
     # 所有プロセス以外が取得したロックを強制的に削除する（応答不能なワーカー対策）
     # Force-delete an active lock held by an unresponsive worker
     def _force_release_active_job_lock(self, job_key: str) -> None:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return
-        try:
-            redis_client.delete(self._active_lock_key(job_key))
-        except Exception:
-            logger.exception("Redis chat generation lock force release failed.")
+        self._coordinator.force_release_active_job_lock(job_key)
 
     # 指定ジョブに対する停止要求マーカーが立っているかを確認する
     # Check whether a stop-request marker is set for the specified job
     def _is_remote_cancel_requested(self, job_key: str) -> bool:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return False
-        try:
-            return bool(redis_client.exists(self._cancel_request_key(job_key)))
-        except Exception:
-            logger.exception("Redis chat generation cancel-request check failed.")
-            return False
+        return self._coordinator.is_remote_cancel_requested(job_key)
 
     # 停止要求マーカーを削除する（新しい生成ジョブが古い要求で止まらないようにする）
     # Clear the stop-request marker so a new job is not aborted by a stale request
     def _clear_remote_cancel_request(self, job_key: str) -> None:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return
-        try:
-            redis_client.delete(self._cancel_request_key(job_key))
-        except Exception:
-            logger.exception("Redis chat generation cancel-request clear failed.")
+        self._coordinator.clear_remote_cancel_request(job_key)
 
     # プロセス内に実行中のジョブが残っているかを確認する
     # Check whether this process still holds a running job
@@ -2739,121 +2848,32 @@ return 0
     # 停止要求を Pub/Sub で配信し、ジョブを所有するワーカーの停止完了を待つ
     # Broadcast the stop request and wait for the owning worker to release the lock
     def _request_remote_cancel(self, job_key: str) -> bool:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return False
-        if not self._has_distributed_active_lock(job_key):
-            return False
-
-        # マーカーは Pub/Sub 通知を取りこぼしたワーカーへの保険。
-        # 生成ジョブ側が定期的に参照して自力で停止できるようにする。
-        # The marker backs up the pub/sub notification: a worker that missed the message
-        # still sees it while polling and stops on its own.
-        try:
-            redis_client.set(
-                self._cancel_request_key(job_key),
-                "1",
-                ex=REMOTE_CANCEL_REQUEST_TTL_SECONDS,
-            )
-        except Exception:
-            logger.exception("Redis chat generation cancel-request publish failed.")
-
-        try:
-            redis_client.publish(_CANCEL_CHANNEL_NAME, job_key)
-        except Exception:
-            logger.exception("Redis chat generation cancel broadcast failed.")
-            return False
-
-        deadline = time.monotonic() + self._remote_cancel_timeout_seconds
-        while True:
-            if not self._has_distributed_active_lock(job_key):
-                return True
-            if time.monotonic() >= deadline:
-                break
-            time.sleep(REMOTE_CANCEL_POLL_INTERVAL_SECONDS)
-
-        # 所有ワーカーが応答しない場合でも、ロックを残すとルームが TTL 切れまで
-        # 新規生成を拒否し続ける。マーカーは残すので、生きていれば後から自力停止する。
-        # If the owning worker never answers, leaving the lock would reject new generations
-        # until it expires. Drop it; the marker stays so a live owner still stops itself.
-        logger.warning(
-            "Timed out waiting for the owning worker to cancel a chat generation job.",
-            extra={"job_key": job_key},
-        )
-        self._force_release_active_job_lock(job_key)
-        return True
+        return self._coordinator.request_remote_cancel(job_key)
 
     # 他ワーカーからの停止要求を購読し、自プロセスのジョブをキャンセルするループ
     # Subscribe to stop requests from other workers and cancel this process's jobs
     def _run_cancel_listener(self) -> None:
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            self._release_cancel_listener_slot()
-            return
-
-        pubsub = None
-        try:
-            pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
-            pubsub.subscribe(_CANCEL_CHANNEL_NAME)
-            while True:
-                message = pubsub.get_message(timeout=1.0)
-                if message and message.get("type") == "message":
-                    job_key = _decode_redis_text(message.get("data"))
-                    if job_key:
-                        self._cancel_local_job(job_key)
-                # 実行中ジョブが無くなったら購読を畳み、次の生成開始時に再購読する。
-                # Stop subscribing once no job is running; the next job restarts the listener.
-                if self._release_cancel_listener_slot_if_idle():
-                    return
-        except Exception:
-            logger.exception("Chat generation cancel listener stopped unexpectedly.")
-            self._release_cancel_listener_slot()
-        finally:
-            if pubsub is not None:
-                try:
-                    pubsub.close()
-                except Exception:
-                    logger.exception("Failed to close the chat generation cancel listener.")
+        self._coordinator.run_cancel_listener()
 
     # 購読スレッドの登録を解除する
     # Deregister the listener thread slot
     def _release_cancel_listener_slot(self) -> None:
-        with self._cancel_listener_lock:
-            if self._cancel_listener_thread is threading.current_thread():
-                self._cancel_listener_thread = None
+        self._coordinator.release_cancel_listener_slot()
 
     # 実行中ジョブが無い場合にだけ購読スレッドの登録を解除する
     # Deregister the listener thread slot only while no job is running
     def _release_cancel_listener_slot_if_idle(self) -> bool:
-        with self._cancel_listener_lock:
-            if self._has_running_local_jobs():
-                return False
-            if self._cancel_listener_thread is threading.current_thread():
-                self._cancel_listener_thread = None
-            return True
+        return self._coordinator.release_cancel_listener_slot_if_idle()
 
     # 停止要求を購読するスレッドが起動していることを保証する
     # Ensure the thread subscribing to stop requests is running
     def _ensure_cancel_listener(self) -> None:
-        redis_client = self._get_redis_client()
-        if redis_client is None or not hasattr(redis_client, "pubsub"):
-            return
-        with self._cancel_listener_lock:
-            thread = self._cancel_listener_thread
-            if thread is not None and thread.is_alive():
-                return
-            thread = threading.Thread(
-                target=self._run_cancel_listener,
-                name="chat-generation-cancel-listener",
-                daemon=True,
-            )
-            self._cancel_listener_thread = thread
-            thread.start()
+        self._coordinator.ensure_cancel_listener()
 
     # Redis が有効で分散ストリーミングに対応しているかを確認する
     # Check if Redis is enabled and supports distributed streaming
     def supports_distributed_streaming(self) -> bool:
-        return self._get_redis_client() is not None
+        return self._coordinator.supports_distributed_streaming()
 
     # メモリ上のジョブ状態をリセットし、必要に応じて実行中ジョブをキャンセルする
     # Reset the in-memory job state and optionally cancel running jobs
@@ -2938,14 +2958,7 @@ return 0
             if local_job is not None:
                 return True
 
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return False
-        try:
-            return bool(redis_client.exists(self._event_stream_key(job_key)))
-        except Exception:
-            logger.exception("Redis chat generation replay-state check failed.")
-            return False
+        return self._coordinator.has_replay_history(job_key)
 
     # 指定したジョブキーに対応するローカルジョブオブジェクトを取得する
     # Retrieve the local job object corresponding to the specified job key
@@ -2972,96 +2985,13 @@ return 0
 
         # ローカルにジョブがない場合でも、Redis のイベント履歴があれば再接続として扱う。
         # これは複数プロセス構成で SSE 接続先が生成元と異なる場合に必要。
-        redis_client = self._get_redis_client()
-        if redis_client is None:
-            return
-
-        cursor = max(after_sequence_id, 0)
-
-        terminal_seen = False
-        for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
-            cursor = max(cursor, event.sequence_id)
-            if event.event in _TERMINAL_EVENTS:
-                terminal_seen = True
-            yield event
-        if terminal_seen:
-            return
-
-        if not self.has_active_generation(job_key):
-            return
-
-        channel = self._event_channel_name(job_key)
-        pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
-        idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
-        next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
-        try:
-            pubsub.subscribe(channel)
-
-            # subscribe 直前に list へ書かれたイベントを先に読む。
-            # pub/sub は購読前のメッセージを保持しないため、この二段読みで取りこぼしを埋める。
-            for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
-                cursor = max(cursor, event.sequence_id)
-                if event.event in _TERMINAL_EVENTS:
-                    terminal_seen = True
-                idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
-                yield event
-            if terminal_seen:
-                return
-
-            while True:
-                message = pubsub.get_message(timeout=1.0)
-                if message and message.get("type") == "message":
-                    raw_data = _decode_redis_text(message.get("data"))
-                    if raw_data is not None:
-                        deserialized_event = self._deserialize_event(raw_data)
-                        if deserialized_event is not None and deserialized_event.sequence_id > cursor:
-                            cursor = deserialized_event.sequence_id
-                            idle_deadline = (
-                                time.monotonic() + self._distributed_stream_idle_timeout_seconds
-                            )
-                            yield deserialized_event
-                            next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
-                            if deserialized_event.event in _TERMINAL_EVENTS:
-                                return
-                    continue
-
-                if (
-                    self._sse_heartbeat_seconds
-                    and time.monotonic() >= next_heartbeat_at
-                ):
-                    next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
-                    yield None
-
-                if not self.has_active_generation(job_key):
-                    # ロック消滅直後は pub/sub の最後の通知がまだ届かないことがあるため、
-                    # 終了判定の前に list をもう一度読んで終端イベントを回収する。
-                    saw_new = False
-                    for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
-                        saw_new = True
-                        cursor = max(cursor, event.sequence_id)
-                        idle_deadline = (
-                            time.monotonic() + self._distributed_stream_idle_timeout_seconds
-                        )
-                        yield event
-                        if event.event in _TERMINAL_EVENTS:
-                            return
-                    if not saw_new:
-                        return
-                    continue
-
-                if time.monotonic() >= idle_deadline:
-                    logger.warning(
-                        "Timed out waiting for distributed chat generation events.",
-                        extra={"job_key": job_key, "after_sequence_id": after_sequence_id},
-                    )
-                    raise ChatGenerationStreamTimeoutError(
-                        "応答ストリームが一定時間更新されなかったため接続を終了しました。再試行してください。"
-                    )
-        finally:
-            try:
-                pubsub.close()
-            except Exception:
-                logger.exception("Failed to close Redis pubsub for chat generation stream.")
+        # A job absent from this process is still a reconnection when Redis holds its event
+        # history, which happens whenever the SSE connection lands on another worker.
+        yield from self._coordinator.iter_distributed_events(
+            job_key,
+            after_sequence_id=after_sequence_id,
+            has_active_generation=self.has_active_generation,
+        )
 
     # 新しいチャット応答生成ジョブを開始する
     # Start a new chat response generation job
