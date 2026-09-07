@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock
 
 from services.guest_prompt_service import (
-    GuestPromptLimitExceeded,
+    GuestPromptLimitExceededError,
     claim_guest_prompts_for_user,
     create_guest_shared_prompt,
     get_or_create_guest_prompt_token,
@@ -72,7 +72,7 @@ class GuestPromptServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_recent_submission_leaves_rollback_to_caller(self):
         repository = _Repository(retry_after=321)
         session = AsyncMock()
-        with self.assertRaises(GuestPromptLimitExceeded) as raised:
+        with self.assertRaises(GuestPromptLimitExceededError) as raised:
             await create_guest_shared_prompt(
                 "guest-token-which-is-long-enough-to-be-valid",
                 "203.0.113.10",

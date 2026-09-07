@@ -55,7 +55,8 @@ class AdminApiTestCase(unittest.TestCase):
         self.assertIsNone(request.scope["session_id"])
         self.assertEqual(request.scope["_session_ids_to_delete"], {"existing-admin-session"})
 
-    # 日本語: ログイン成功時のリダイレクト先(nextパラメータ)に外部URLが指定された場合、拒否されてデフォルトURLにフォールバックされることを検証します。
+    # 日本語: ログイン成功時のリダイレクト先(nextパラメータ)に外部URLが指定された場合、
+    #         拒否されてデフォルトURLにフォールバックされることを検証します。
     # English: Verify that external URLs in the next parameter are rejected and fall back to the default URL on login.
     def test_login_rejects_external_next_url(self):
         password = "admin-test-password"
@@ -142,7 +143,8 @@ class AdminApiTestCase(unittest.TestCase):
         self.assertEqual(payload["selected_table"], "users")
         self.assertEqual(payload["column_names"], ["id"])
 
-    # 日本語: クエリパラメータに無効または不正なテーブル名（SQLインジェクションなど）が指定された際に、処理が拒否されダッシュボードデータを安全に読み込むことを検証します。
+    # 日本語: クエリパラメータに無効または不正なテーブル名（SQLインジェクションなど）が指定された際に、
+    #         処理が拒否されダッシュボードデータを安全に読み込むことを検証します。
     # English: Verify that requests with invalid/malicious table names in query parameters are rejected and load dashboard safely.
     def test_dashboard_rejects_invalid_table_query(self):
         request = make_request(session={"is_admin": True}, query_string=b"table=users;DROP TABLE users")

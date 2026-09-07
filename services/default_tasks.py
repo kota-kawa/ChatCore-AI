@@ -49,12 +49,12 @@ def load_default_tasks(
         tasks = json.load(fp)
 
     if not isinstance(tasks, list):
-        raise ValueError("default_tasks.json must contain a list.")
+        raise TypeError("default_tasks.json must contain a list.")
 
     normalized: list[dict] = []
     for index, task in enumerate(tasks):
         if not isinstance(task, dict):
-            raise ValueError("Each default task must be an object.")
+            raise TypeError("Each default task must be an object.")
 
         normalized.append(
             {
@@ -77,21 +77,19 @@ def load_default_tasks(
 def default_task_payloads(locale: str = "ja") -> list[dict]:
     # APIレスポンス向けに is_default を付与した形へ変換する
     # Build API payload objects with is_default metadata.
-    payloads = []
-    for task in load_default_tasks(locale):
-        payloads.append(
-            {
-                "system_task_key": task.get("system_task_key"),
-                "name": task["name"],
-                "prompt_template": task["prompt_template"],
-                "response_rules": task["response_rules"],
-                "output_skeleton": task["output_skeleton"],
-                "input_examples": task["input_examples"],
-                "output_examples": task["output_examples"],
-                "is_default": True,
-            }
-        )
-    return payloads
+    return [
+        {
+            "system_task_key": task.get("system_task_key"),
+            "name": task["name"],
+            "prompt_template": task["prompt_template"],
+            "response_rules": task["response_rules"],
+            "output_skeleton": task["output_skeleton"],
+            "input_examples": task["input_examples"],
+            "output_examples": task["output_examples"],
+            "is_default": True,
+        }
+        for task in load_default_tasks(locale)
+    ]
 
 
 @lru_cache(maxsize=4)

@@ -349,7 +349,7 @@ class GenerativeUiArtifactV1(BaseModel):
     # Validate and sanitize HTML content, ensuring no prohibited tags (e.g. script, iframe) are present.
     @field_validator("html")
     @classmethod
-    def _validate_html(_cls, value: str) -> str:
+    def _validate_html(cls, value: str) -> str:
         sanitized = _sanitize_html(value)
         if _BANNED_HTML_TAG_RE.search(sanitized):
             raise ValueError("HTML contains a forbidden tag.")
@@ -359,14 +359,14 @@ class GenerativeUiArtifactV1(BaseModel):
     # Sanitize CSS content to remove hazardous URL schemes or @import rules.
     @field_validator("css")
     @classmethod
-    def _validate_css(_cls, value: str) -> str:
+    def _validate_css(cls, value: str) -> str:
         return _sanitize_css(value)
 
     # JavaScriptコード内の安全性を検証し、不完全なscriptタグ終了をクリーンアップします。
     # Validate the safety of JavaScript fragments and sanitize unclosed script tag remnants.
     @field_validator("js")
     @classmethod
-    def _validate_js(_cls, value: str) -> str:
+    def _validate_js(cls, value: str) -> str:
         sanitized = _sanitize_script_end(value)
         _validate_javascript_safety(sanitized)
         return sanitized
@@ -487,7 +487,8 @@ def _escape_json_string_newlines(source: str) -> str:
     escaped = False
     index = 0
     # モデル出力では JSON 文字列内に生改行が混ざることがあるため、文字列の外側は触らず、内側の改行だけを JSON として読める形に変換します。
-    # Since raw newlines might be mixed in JSON strings in model outputs, convert only internal newlines into a format readable as JSON without touching the outside of strings.
+    # Since raw newlines might be mixed in JSON strings in model outputs,
+    # convert only internal newlines into a format readable as JSON without touching the outside of strings.
     while index < len(source):
         char = source[index]
         if in_string:
@@ -1029,11 +1030,7 @@ def _is_safe_resource_url(value: str) -> bool:
     url = value.strip()
     if not url:
         return True
-    return (
-        url.startswith("data:")
-        or url.startswith("blob:")
-        or url.startswith("#")
-    )
+    return url.startswith(("data:", "blob:", "#"))
 
 
 # CSS定義から危険な @import や url() 表現を除去・サニタイズします。
@@ -1047,7 +1044,7 @@ def _sanitize_css(value: str) -> str:
     # Inspect and replace url() references in CSS blocks with safe values.
     def replace_url(match: re.Match[str]) -> str:
         url = match.group("value").strip()
-        if url.startswith("data:") or url.startswith("blob:") or url.startswith("#"):
+        if url.startswith(("data:", "blob:", "#")):
             return match.group(0)
         return "url(\"data:,\")"
 
@@ -1081,8 +1078,7 @@ def _sanitize_html(value: str) -> str:
 
     sanitized = _EVENT_ATTR_RE.sub(replace_event_attr, sanitized)
     sanitized = _STYLE_ATTR_RE.sub(replace_style_attr, sanitized)
-    sanitized = _NAV_ATTR_RE.sub(replace_nav_attr, sanitized)
-    return sanitized
+    return _NAV_ATTR_RE.sub(replace_nav_attr, sanitized)
 
 
 # libraries指定の表記ゆれを正規化し、JS本文からの推定も合わせてライブラリ一覧を組み立てます。
@@ -1454,9 +1450,10 @@ def normalize_response_with_artifacts(
         recover_explicit_output_variants=requested_artifact,
     )
 
-    button_candidates: list[_ArtifactCandidate] = []
-    for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
-        button_candidates.append(_ArtifactCandidate(raw_json=match.group("json"), span=match.span()))
+    button_candidates: list[_ArtifactCandidate] = [
+        _ArtifactCandidate(raw_json=match.group("json"), span=match.span())
+        for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text)
+    ]
 
     all_candidates = sorted(candidates + button_candidates, key=lambda c: c.span)
     malformed_fence_spans = _extract_malformed_artifact_fence_spans(

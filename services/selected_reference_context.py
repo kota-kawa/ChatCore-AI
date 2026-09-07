@@ -367,7 +367,7 @@ def _load_overview_if_unmatched(
         return None
     statuses = [
         payload.get("status")
-        for (source, _), payload in zip(lookups, payloads)
+        for (source, _), payload in zip(lookups, payloads, strict=True)
         if source == PERSONAL_KNOWLEDGE_SOURCE
     ]
     if statuses != ["no_results"]:
@@ -491,7 +491,7 @@ def augment_messages_with_selected_references(
                 query=normalized_query,
                 payload=dict(payload),
             )
-            for (source, _), payload in zip(lookups, payloads)
+            for (source, _), payload in zip(lookups, payloads, strict=True)
         )
         trace_results.extend(
             SelectedReferenceLookupTrace(
@@ -506,7 +506,7 @@ def augment_messages_with_selected_references(
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
         f"{_safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
-        for (source, _), payload in zip(lookups, payloads)
+        for (source, _), payload in zip(lookups, payloads, strict=True)
     ]
 
     overview_payload = _load_overview_if_unmatched(lookups, payloads, personal_overview)
@@ -573,7 +573,7 @@ async def augment_messages_with_selected_references_async(
                 query=normalized_query,
                 payload=dict(payload),
             )
-            for (source, _), payload in zip(lookups, payloads)
+            for (source, _), payload in zip(lookups, payloads, strict=True)
         )
         trace_results.extend(
             SelectedReferenceLookupTrace(
@@ -588,13 +588,13 @@ async def augment_messages_with_selected_references_async(
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
         f"{_safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
-        for (source, _), payload in zip(lookups, payloads)
+        for (source, _), payload in zip(lookups, payloads, strict=True)
     ]
 
     overview_payload = None
     personal_statuses = [
         payload.get("status")
-        for (source, _), payload in zip(lookups, payloads)
+        for (source, _), payload in zip(lookups, payloads, strict=True)
         if source == PERSONAL_KNOWLEDGE_SOURCE
     ]
     if personal_statuses == ["no_results"]:

@@ -100,7 +100,16 @@ class UserSkillPromptTests(unittest.TestCase):
             recent_messages=[{"role": "user", "content": "question"}],
         )
         contents = [message["content"] for message in messages]
-        self.assertLess(contents.index("<project_instructions>\nThe following are instructions specific to this project. Follow them with priority in every conversation inside the project.\nproject\n</project_instructions>"), contents.index("<enabled_user_skills>skill</enabled_user_skills>"))
+        self.assertLess(
+            contents.index(
+                "<project_instructions>\n"
+                "The following are instructions specific to this project."
+                " Follow them with priority in every conversation inside the project.\n"
+                "project\n"
+                "</project_instructions>"
+            ),
+            contents.index("<enabled_user_skills>skill</enabled_user_skills>"),
+        )
         self.assertLess(contents.index("<enabled_user_skills>skill</enabled_user_skills>"), contents.index("task"))
 
 

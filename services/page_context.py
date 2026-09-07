@@ -108,10 +108,11 @@ def _read_file_head(rel_path: str, max_lines: int) -> str:
         text = "\n".join(head)
         if len(lines) > max_lines:
             text += f"\n// ... ({len(lines) - max_lines} 行省略)"
-        return text
     except Exception:
         logger.exception("Failed to read %s", full_path)
         return ""
+    else:
+        return text
 
 
 # 日本語: 現在のURLパスに対応する画面のソースコードおよびAPI機能カタログを結合したコンテキスト文字列を返します。

@@ -631,10 +631,13 @@ def _final_image_layout(
         anchor_end = _find_llm_image_anchor_end(text, image_part, after_offset=body_start)
         if anchor_end is None and placement == "start":
             anchor_end = body_start
-        if anchor_end is None and placement == "after_paragraph":
-            if paragraph_index < len(boundaries):
-                anchor_end = boundaries[paragraph_index]
-                paragraph_index += 1
+        if (
+            anchor_end is None
+            and placement == "after_paragraph"
+            and paragraph_index < len(boundaries)
+        ):
+            anchor_end = boundaries[paragraph_index]
+            paragraph_index += 1
         if anchor_end is None:
             unlocated.append((index, image_part))
         else:
@@ -678,7 +681,7 @@ def build_web_search_image_parts_at_offsets(
     normalized_text = text if isinstance(text, str) else str(text or "")
     raw_parts: list[dict[str, Any]] = []
     cursor = 0
-    for image_part, raw_offset in zip(image_parts, offsets):
+    for image_part, raw_offset in zip(image_parts, offsets, strict=True):
         offset = max(cursor, min(int(raw_offset), len(normalized_text)))
         raw_parts.append({"type": "text", "text": normalized_text[cursor:offset]})
         raw_parts.append(image_part)

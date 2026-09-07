@@ -54,7 +54,17 @@ class PromptResourceRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         session.flush.assert_awaited_once()
 
     async def test_list_and_get_map_text_content_to_public_content_key(self):
-        first = PromptResource(id=1, prompt_id=3, path="scripts/run.py", role="script", text_content="print(1)", language="python", media_type="text/x-python", size_bytes=8, sort_order=0)
+        first = PromptResource(
+            id=1,
+            prompt_id=3,
+            path="scripts/run.py",
+            role="script",
+            text_content="print(1)",
+            language="python",
+            media_type="text/x-python",
+            size_bytes=8,
+            sort_order=0,
+        )
         session = AsyncMock()
         session.execute.side_effect = [_ScalarResult([first]), _ScalarResult([first])]
         repository = PromptResourceRepository()

@@ -17,7 +17,7 @@ from services.prompt_categories import PROMPT_CATEGORIES
 from services.prompt_resources import MAX_SKILL_RESOURCE_PATH_LENGTH
 from services.prompt_types import CONTENT_FORMATS, MEDIA_TYPES
 from services.shared_content_service import (
-    InvalidSharedContentCursor,
+    InvalidSharedContentCursorError,
     PublicSharedContentPage,
     PublicSkillResourceMetadata,
     SharedContentService,
@@ -88,7 +88,7 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
             return await service.list_public_content(**kwargs)
-        except InvalidSharedContentCursor as exc:
+        except InvalidSharedContentCursorError as exc:
             raise ToolError("カーソルが不正か、異なる検索条件のものです。") from exc
         except ValueError as exc:
             raise ToolError(str(exc)) from exc

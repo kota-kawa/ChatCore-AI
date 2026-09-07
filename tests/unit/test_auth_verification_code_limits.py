@@ -14,7 +14,8 @@ def make_request(path, json_body, session=None):
     return build_request(method="POST", path=path, json_body=json_body, session=session)
 
 
-# 登録確認メールやログインコードの有効期限、試行回数上限（ブルートフォース保護）、セッションIDローテーションなどの挙動を検証するテストクラス。
+# 登録確認メールやログインコードの有効期限、試行回数上限（ブルートフォース保護）、
+# セッションIDローテーションなどの挙動を検証するテストクラス。
 # Test class to check verification/login code limits, expiration, maximum attempts, and session ID rotation.
 class VerificationCodeLimitsTestCase(unittest.TestCase):
     # 新規登録メール送信時に、認証コードが一般セッションではなく専用トランザクションへ分離されることを検証します。
@@ -247,7 +248,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("login_verification_code", session)
         self.assertNotIn("login_temp_user_id", session)
 
-    # ログイン処理時のデフォルトタスク複製処理でエラーが発生した場合でも、ユーザーのログイン処理自体は成功（堅牢性）と扱われることを検証します。
+    # ログイン処理時のデフォルトタスク複製処理でエラーが発生した場合でも、
+    # ユーザーのログイン処理自体は成功（堅牢性）と扱われることを検証します。
     # Verify that a failure in copying default tasks does not block the user from logging in successfully (resilience).
     def test_verify_login_code_keeps_success_when_copy_default_tasks_fails(self):
         session = {
@@ -279,7 +281,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertEqual(session["user_id"], 12)
 
     # 登録確認コード検証成功時に、ユーザーが確認済み(is_verified)となり、セッションIDがローテーションされることを検証します。
-    # Verify that successful registration code verification marks the user as verified, rotates the session ID, and sets the session as permanent.
+    # Verify that successful registration code verification marks the user as verified,
+    # rotates the session ID, and sets the session as permanent.
     def test_verify_registration_code_sets_permanent_and_rotates_session(self):
         session = {
             "verification_code": "111111",

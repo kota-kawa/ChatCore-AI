@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import os
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -200,10 +200,8 @@ async def lifespan(app_instance: FastAPI):
                 shutdown_wait_safe = False
                 logger.warning("Timed out while waiting for periodic cleanup to stop.")
                 cleanup_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await cleanup_task
-                except asyncio.CancelledError:
-                    pass
             except Exception:
                 logger.exception("Periodic cleanup worker exited with an unexpected error.")
 

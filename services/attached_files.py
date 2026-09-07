@@ -95,10 +95,7 @@ class PreparedAttachedFile:
 def _get_item_value(item: Any, key: str, default: str = "") -> str:
     # 辞書型であるかオブジェクトであるかを判定して値を取得する
     # Determine if item is a dict or object and retrieve the value
-    if isinstance(item, dict):
-        value = item.get(key, default)
-    else:
-        value = getattr(item, key, default)
+    value = item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
 
     # 取得した値が None の場合はデフォルト値を返す
     # Return default if the retrieved value is None

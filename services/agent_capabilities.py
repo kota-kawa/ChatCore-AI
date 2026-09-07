@@ -205,30 +205,31 @@ def build_capability_context(pathname: str = "") -> str:
     for page in PAGES:
         marker = "（現在のページ）" if current == page else ""
         lines.append(f"- {page.label} {page.route}{marker}: {page.summary}")
-        for feature in page.features:
-            lines.append(f"  - {feature}")
+        lines.extend(f"  - {feature}" for feature in page.features)
 
     lines.append("\n共通ナビゲーション:")
     # グローバルアクションの情報を追加する
     # Add information for global actions
-    for action in GLOBAL_ACTIONS:
-        lines.append(f"- {action.label}: action={action.action}, target={action.target}, {action.description}")
+    lines.extend(
+        f"- {action.label}: action={action.action}, target={action.target}, {action.description}"
+        for action in GLOBAL_ACTIONS
+    )
 
     lines.append("\n型付きアクションAPI（CSSセレクタより優先して使う）:")
     # エージェントツールの情報を追加する
     # Add information for agent tools
-    for tool in AGENT_TOOLS:
-        lines.append(
-            f"- command={tool.command}; args={tool.args}; risk={tool.risk}; "
-            f"{tool.description} 検証: {tool.verifies}"
-        )
+    lines.extend(
+        f"- command={tool.command}; args={tool.args}; risk={tool.risk}; "
+        f"{tool.description} 検証: {tool.verifies}"
+        for tool in AGENT_TOOLS
+    )
 
     # 現在のページで利用可能な特定アクションを追加する
     # Add specific actions available on the current page
     if current:
         lines.append(f"\n現在ページで優先して使える操作: {current.label}")
-        for action in current.actions:
-            lines.append(
-                f"- {action.label}: action={action.action}, target={action.target}, {action.description}"
-            )
+        lines.extend(
+            f"- {action.label}: action={action.action}, target={action.target}, {action.description}"
+            for action in current.actions
+        )
     return "\n".join(lines)

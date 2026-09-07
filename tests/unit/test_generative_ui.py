@@ -286,6 +286,8 @@ document.getElementById('app').textContent = 'ready';
         """専用フェンス外のJSON風テキストはUIとして実行しない。"""
         # 行継続のバックスラッシュを含むJSON風テキスト
         # JSON-like text containing line continuation backslashes
+        # このモデル出力の再現データは一字一句そのままである必要があるため、行長チェックのみ除外します。
+        # This reproduction of a model output must stay verbatim, so only the line-length rule is waived.
         raw = r'''表示します。
 
 {
@@ -305,7 +307,7 @@ document.getElementById('app').textContent = 'ready';
 const app=document.getElementById('app');\
 const container=document.createElement('div');container.id='container';app.appendChild(container);\
 steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.textContent=s.label;b.dataset.idx=i;container.appendChild(b);});"
-}'''
+}'''  # noqa: E501
 
         # 正規化を実行
         # Run normalization
@@ -495,7 +497,10 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Artifact with alternative keys and embedded style/script tags
         artifact = {
             "name": "Alias UI",
-            "body": "<style>#app{color:red;}</style><div id=\"app\"></div><script>document.getElementById('app').textContent='ok';</script>",
+            "body": (
+                "<style>#app{color:red;}</style><div id=\"app\"></div>"
+                "<script>document.getElementById('app').textContent='ok';</script>"
+            ),
             "height": "1200px",
         }
 

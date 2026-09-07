@@ -151,8 +151,7 @@ async def _run(
     commit: bool = False,
 ) -> Any:
     if session is not None:
-        result = await operation(PasskeyRepository(session))
-        return result
+        return await operation(PasskeyRepository(session))
 
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:

@@ -37,7 +37,8 @@ class RequestContextMiddlewareTestCase(unittest.TestCase):
         self.logger.setLevel(self.original_level)
         self.logger.propagate = self.original_propagate
 
-    # リクエストIDヘッダーを送信したとき、それがレスポンスヘッダーに返り、ロガーから出力されるメッセージにリクエストIDやパス情報が動的に埋め込まれていることを検証します。
+    # リクエストIDヘッダーを送信したとき、それがレスポンスヘッダーに返り、
+    # ロガーから出力されるメッセージにリクエストIDやパス情報が動的に埋め込まれていることを検証します。
     # Verify that the X-Request-ID header is propagated to the response and injected into the log output details (id, method, path).
     def test_request_context_sets_response_header_and_log_fields(self):
         app = FastAPI()

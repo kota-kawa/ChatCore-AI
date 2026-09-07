@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from services.request_context import RequestContextFilter
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ログレコードを構造化されたJSON形式に変換するためのカスタムログフォーマッタクラス。
 # Custom log formatter class to structure log records into JSON strings.
 class JsonLogFormatter(logging.Formatter):
-    RESERVED_KEYS = {
+    RESERVED_KEYS: ClassVar[set[str]] = {
         "args",
         "created",
         "exc_info",

@@ -308,13 +308,15 @@ class EvidenceStore:
         merged = deepcopy(incoming)
         existing_source = existing.get("source")
         incoming_source = incoming.get("source")
-        if isinstance(existing_source, Mapping) and isinstance(incoming_source, Mapping):
-            # Repeated URLs keep the richest untrimmed page body while the search contexts
-            # retain every query that found the page.
-            if len(str(existing_source.get("page_text") or "")) > len(
-                str(incoming_source.get("page_text") or "")
-            ):
-                merged["source"] = deepcopy(dict(existing_source))
+        # Repeated URLs keep the richest untrimmed page body while the search contexts
+        # retain every query that found the page.
+        if (
+            isinstance(existing_source, Mapping)
+            and isinstance(incoming_source, Mapping)
+            and len(str(existing_source.get("page_text") or ""))
+            > len(str(incoming_source.get("page_text") or ""))
+        ):
+            merged["source"] = deepcopy(dict(existing_source))
 
         contexts: list[dict[str, Any]] = []
         for value in (*existing.get("search_contexts", []), *incoming["search_contexts"]):

@@ -39,7 +39,8 @@ class SecurityUtilsTestCase(unittest.TestCase):
         password_hash = hash_password("correct-password")
         self.assertFalse(verify_password("wrong-password", password_hash))
 
-    # パスワード照合処理において、不正な形式（ハッシュ値のフォーマットが崩れているものなど）のハッシュ値が渡された場合に安全に拒否されることを検証します。
+    # パスワード照合処理において、不正な形式（ハッシュ値のフォーマットが崩れているものなど）のハッシュ値が渡された場合に
+    # 安全に拒否されることを検証します。
     # Verify that password verification rejects malformed hash values safely.
     def test_verify_password_rejects_malformed_hash(self):
         # 不正なハッシュ文字列のフォーマットを渡して検証が失敗することを確認

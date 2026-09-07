@@ -6,7 +6,7 @@ from services.share_common import build_public_share_url
 from services.shared_content_service import (
     SHARED_CONTENT_MAX_LIMIT,
     SHARED_CONTENT_SNIPPET_LENGTH,
-    InvalidSharedContentCursor,
+    InvalidSharedContentCursorError,
     SharedContentService,
 )
 
@@ -109,7 +109,7 @@ class SharedContentServiceTestCase(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(repository.calls[-1][2]["cursor"], (created_at, 21))
         self.assertIsNotNone(second)
-        with self.assertRaises(InvalidSharedContentCursor):
+        with self.assertRaises(InvalidSharedContentCursorError):
             await service.list_public_content(query="different", category="coding", cursor=first.next_cursor, session=object())
 
     async def test_detail_loads_resource_metadata_and_legacy_script_from_same_session(self):

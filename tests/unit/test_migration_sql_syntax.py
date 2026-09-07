@@ -183,8 +183,10 @@ class MigrationTriggerOperationLengthTest(unittest.TestCase):
         # 全てのSQLブロックで、THENの後に続く文字列の長さをチェック
         # Check the length of strings following THEN in all SQL blocks
         for filename, sql in _all_migration_sql_blocks():
-            for match in self._THEN_STRING.finditer(sql):
-                violations.append((filename, match.group(1)))
+            violations.extend(
+                (filename, match.group(1))
+                for match in self._THEN_STRING.finditer(sql)
+            )
         self.assertFalse(
             violations,
             "THEN string(s) in migrations exceed VARCHAR(16): "

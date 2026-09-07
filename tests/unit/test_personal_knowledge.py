@@ -1,5 +1,6 @@
 import json
 import unittest
+from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
 from services.chat_agent_budget import AgentStepBudget
@@ -43,7 +44,7 @@ class _Fact:
 
 
 class _FactSearch:
-    facts = [_Fact()]
+    facts: ClassVar[list] = [_Fact()]
 
 
 class PersonalKnowledgeSearchTestCase(unittest.IsolatedAsyncioTestCase):

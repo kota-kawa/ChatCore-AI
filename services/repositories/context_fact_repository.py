@@ -467,9 +467,12 @@ class ContextFactRepository:
                     ContextFact.user_id == user_id,
                 )
             )
-            if current_status is not None and current_status != "active":
-                if await self.count_active(user_id) >= MAX_ACTIVE_CONTEXT_FACTS:
-                    raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
+            if (
+                current_status is not None
+                and current_status != "active"
+                and await self.count_active(user_id) >= MAX_ACTIVE_CONTEXT_FACTS
+            ):
+                raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
         changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
         if title is not None or content is not None or fact_type is not None:

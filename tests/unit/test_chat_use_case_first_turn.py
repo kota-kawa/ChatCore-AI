@@ -14,8 +14,10 @@ from tests.helpers.request_helpers import build_request
 # チャットの最初の発話（First Turn）において、不要なルーム履歴クエリがスキップされることを検証するテストクラス。
 # Test class to verify that empty/unnecessary room context queries are skipped during the first turn of a chat session.
 class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
-    # 認証されたユーザーの初回発話において、過去ログが存在しないため要約や長期記憶のデータベースクエリ取得処理がスキップされ、適切に記憶抽出とコンテキスト生成が行われることを検証します。
-    # Verify that the first turn of an authenticated user skips room summary and long-term memory queries (since they are empty), and correctly extracts facts and builds the prompt.
+    # 認証されたユーザーの初回発話において、過去ログが存在しないため要約や長期記憶のデータベースクエリ取得処理がスキップされ、
+    # 適切に記憶抽出とコンテキスト生成が行われることを検証します。
+    # Verify that the first turn of an authenticated user skips room summary and long-term memory queries (since they are empty),
+    # and correctly extracts facts and builds the prompt.
     def test_authenticated_first_turn_skips_empty_room_context_queries(self):
         user_message = "【タスク】レビュー\n【状況・作業環境】A&B"
         saved_messages = []

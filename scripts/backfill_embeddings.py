@@ -22,7 +22,10 @@ import argparse
 import asyncio
 import logging
 import sys
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -88,6 +91,17 @@ async def _store_embedding(table: str, row_id: int, embedding: list[float]) -> N
         )
 
 
+# 日本語: バックフィル対象テーブルの設定を型付きで保持し、辞書による受け渡しをやめます。
+# English: Holds one backfill target's configuration with real types instead of an untyped dict.
+@dataclass(frozen=True)
+class BackfillTarget:
+    label: str
+    table: str
+    columns: str
+    build_text: Callable[[tuple[Any, ...]], str]
+    store: Callable[[int, list[float]], Awaitable[None]]
+
+
 class BackfillStats:
     """Counters for one table's run."""
 
@@ -110,8 +124,8 @@ async def _backfill_table(
     label: str,
     table: str,
     columns: str,
-    build_text,
-    store,
+    build_text: Callable[[tuple[Any, ...]], str],
+    store: Callable[[int, list[float]], Awaitable[None]],
     include_existing: bool,
     limit: int | None,
     sleep_seconds: float,
@@ -179,12 +193,12 @@ async def _backfill_table(
     return stats
 
 
-def _memo_text(row: tuple) -> str:
+def _memo_text(row: tuple[Any, ...]) -> str:
     _, title, ai_response = row
     return build_memo_embedding_text(str(title or ""), str(ai_response or ""))
 
 
-def _fact_text(row: tuple) -> str:
+def _fact_text(row: tuple[Any, ...]) -> str:
     _, fact_type, title, content = row
     return build_context_fact_embedding_text(
         str(fact_type or ""), str(title or ""), str(content or "")
@@ -243,30 +257,26 @@ async def _async_main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    targets = []
+    targets: list[BackfillTarget] = []
     if args.target in ("all", "memos"):
         targets.append(
-            {
-                "label": "memo_entries",
-                "table": "memo_entries",
-                "columns": "title, ai_response",
-                "build_text": _memo_text,
-                "store": lambda row_id, embedding: _store_embedding(
-                    "memo_entries", row_id, embedding
-                ),
-            }
+            BackfillTarget(
+                label="memo_entries",
+                table="memo_entries",
+                columns="title, ai_response",
+                build_text=_memo_text,
+                store=lambda row_id, embedding: _store_embedding("memo_entries", row_id, embedding),
+            )
         )
     if args.target in ("all", "facts"):
         targets.append(
-            {
-                "label": "context_facts",
-                "table": "context_facts",
-                "columns": "fact_type, title, content",
-                "build_text": _fact_text,
-                "store": lambda row_id, embedding: _store_embedding(
-                    "context_facts", row_id, embedding
-                ),
-            }
+            BackfillTarget(
+                label="context_facts",
+                table="context_facts",
+                columns="fact_type, title, content",
+                build_text=_fact_text,
+                store=lambda row_id, embedding: _store_embedding("context_facts", row_id, embedding),
+            )
         )
 
     logger.info("Backfilling embeddings with model %s.", EMBEDDING_MODEL)
@@ -274,11 +284,11 @@ async def _async_main(argv: list[str] | None = None) -> int:
     pending = 0
     for target in targets:
         stats = await _backfill_table(
-            label=str(target["label"]),
-            table=str(target["table"]),
-            columns=str(target["columns"]),
-            build_text=target["build_text"],
-            store=target["store"],
+            label=target.label,
+            table=target.table,
+            columns=target.columns,
+            build_text=target.build_text,
+            store=target.store,
             include_existing=args.include_existing,
             limit=args.limit,
             sleep_seconds=args.sleep,

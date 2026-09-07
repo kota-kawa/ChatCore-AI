@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from services.cache import get_redis_client, is_redis_configured
 from services.db import session_scope
 from services.embeddings import get_embedding_health
 from services.repositories.health_repository import HealthRepository
+
+logger = logging.getLogger(__name__)
 
 
 # サービスの生存（Liveness）状態を示すステータスを返します。基本的に常に "ok" を返します。
@@ -31,6 +34,7 @@ async def get_readiness_status() -> tuple[dict[str, Any], int]:
             await HealthRepository(session).check_database()
         components["database"] = {"status": "ok", "required": True}
     except Exception as exc:
+        logger.exception("Readiness check failed while probing the database.")
         overall_ok = False
         components["database"] = {
             "status": "error",

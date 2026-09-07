@@ -144,7 +144,7 @@ async def api_create_memo(request: Request):
     data = await get_json(request)
     if data is None:
         form = await request.form()
-        data = {key: value for key, value in form.items()}
+        data = dict(form.items())
     if not isinstance(data, dict):
         data = {}
 

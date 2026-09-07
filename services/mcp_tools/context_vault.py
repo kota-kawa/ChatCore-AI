@@ -196,9 +196,10 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "save_context_fact", result.id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 競合検出を行いながら個人コンテキストを更新するMCPツール説明。
     @mcp.tool(
@@ -249,9 +250,10 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "update_context_fact", fact_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 履歴を残したまま個人コンテキストを無効化するMCPツール説明。
     @mcp.tool(
@@ -279,6 +281,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "deprecate_context_fact", fact_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result

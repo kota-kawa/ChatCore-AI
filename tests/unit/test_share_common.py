@@ -93,12 +93,12 @@ class ShareCommonTestCase(unittest.TestCase):
         self.assertEqual(received, [DEFAULT_SHARE_TOKEN_BYTES])
 
     def test_unique_violation_detection_reads_wrapped_sqlstate(self):
-        class UniqueViolation(Exception):
+        class UniqueViolationError(Exception):
             sqlstate = "23505"
 
         class WrappedError(Exception):
             def __init__(self):
-                self.orig = UniqueViolation()
+                self.orig = UniqueViolationError()
 
         self.assertTrue(is_unique_violation(WrappedError()))
         self.assertFalse(is_unique_violation(RuntimeError("other database error")))

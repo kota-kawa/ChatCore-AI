@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Annotated, Any, Literal
 
@@ -257,11 +258,9 @@ async def _publish(
         )
     except Exception:
         for attachment in attachments:
-            try:
+            # The original publication error is more useful to the MCP client.
+            with contextlib.suppress(Exception):
                 await run_blocking(delete_prompt_attachment, attachment)
-            except Exception:
-                # The original publication error is more useful to the MCP client.
-                pass
         raise
     return result
 

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from services.cache import get_redis_client, mark_redis_unavailable
+
+logger = logging.getLogger(__name__)
 
 EMAIL_AUTH_TRANSACTION_COOKIE_NAME = "email_auth_transaction"
 EMAIL_AUTH_TRANSACTION_KEY_PREFIX = "email_auth_transaction:"
@@ -295,15 +299,16 @@ def verify_email_auth_transaction(
             )
         except Exception as exc:
             if _pipeline_watch_error(exc):
+                # リトライループ内なので debug 止まりにしてログ洪水を避ける
+                # Keep this at debug because it sits inside the retry loop and would otherwise flood the log
+                logger.debug("Email auth transaction was modified concurrently; retrying the code verification.")
                 continue
             mark_redis_unavailable(exc)
             return EmailAuthVerificationResult(EMAIL_AUTH_RESULT_UNAVAILABLE)
         finally:
             if pipeline is not None:
-                try:
+                with contextlib.suppress(Exception):
                     pipeline.reset()
-                except Exception:
-                    pass
     return EmailAuthVerificationResult(EMAIL_AUTH_RESULT_CONFLICT)
 
 

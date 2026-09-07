@@ -75,7 +75,7 @@ def _process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
                 PROMPT_ATTACHMENT_WEBP_QUALITY,
                 PROMPT_ATTACHMENT_DISPLAY_MAX_BYTES,
             )
-            thumbnail, thumbnail_bytes = _encode_bounded_webp(
+            _thumbnail, thumbnail_bytes = _encode_bounded_webp(
                 image,
                 PROMPT_ATTACHMENT_THUMBNAIL_DIMENSION,
                 PROMPT_ATTACHMENT_THUMBNAIL_WEBP_QUALITY,

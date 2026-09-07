@@ -189,10 +189,10 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
         # Normalize Z with UTC offset formatting and parse to datetime
         normalized_last_activity_at = last_activity_at.replace("Z", "+00:00")
         return datetime.fromisoformat(normalized_last_activity_at), room_id
-    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error) as exc:
         # 不正なカーソルの場合はエラーをスロー
         # Raise ApiServiceError on malformed cursor strings
-        raise ApiServiceError("invalid cursor", 400)
+        raise ApiServiceError("invalid cursor", 400) from exc
 
 
 # ルームデータからページネーションカーソル用のBase64 URL Safe文字列を作成する関数

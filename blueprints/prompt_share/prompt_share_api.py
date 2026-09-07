@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
@@ -34,7 +35,7 @@ from services.error_messages import (
     MESSAGE_SHARED_SKILL_ADDED,
 )
 from services.guest_prompt_service import (
-    GuestPromptLimitExceeded,
+    GuestPromptLimitExceededError,
     create_guest_shared_prompt,
     get_or_create_guest_prompt_token,
 )
@@ -180,12 +181,12 @@ def _decode_prompt_feed_cursor(value: str | None) -> tuple[int, datetime, int] |
         padded = value + "=" * (-len(value) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
         if not isinstance(payload, dict):
-            raise ValueError
+            raise TypeError
         view_count = payload.get("view_count")
         prompt_id = payload.get("id")
         created_at = payload.get("created_at")
         if isinstance(view_count, bool) or isinstance(prompt_id, bool) or not isinstance(created_at, str):
-            raise ValueError
+            raise TypeError
         view_count = int(view_count)
         prompt_id = int(prompt_id)
         if view_count < 0 or prompt_id <= 0:
@@ -296,7 +297,7 @@ def _consume_prompt_comment_create_limits(request: Request, user_id: int) -> tup
         PROMPT_COMMENT_RATE_WINDOW_SECONDS,
         PROMPT_COMMENT_COOLDOWN_SECONDS,
     )
-    for (prefix, identifier, limit), window in zip(checks, windows):
+    for (prefix, identifier, limit), window in zip(checks, windows, strict=True):
         allowed, _, retry_after = consume_rate_limit(
             prefix,
             identifier,
@@ -343,10 +344,8 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
         )
     finally:
         if hasattr(file_obj, "seek"):
-            try:
+            with suppress(Exception):
                 file_obj.seek(0)
-            except Exception:
-                pass
 
 
 async def _get_prompts_with_flags(
@@ -413,12 +412,14 @@ async def get_prompt_attachment_media(filename: str):
         media_type = prompt_attachment_content_type(filename)
     except ValueError:
         return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
-    if not os.path.isfile(filepath):
+    # イベントループを止めないため、ファイル存在確認はワーカースレッドで行う。
+    # Run the blocking stat calls on the worker thread so the event loop is not blocked.
+    if not await run_blocking(os.path.isfile, filepath):
         try:
             filepath = resolve_legacy_prompt_attachment_path(filename)
         except ValueError:
             return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
-        if not os.path.isfile(filepath):
+        if not await run_blocking(os.path.isfile, filepath):
             return jsonify({"error": ERROR_PROMPT_ATTACHMENT_NOT_FOUND}, status_code=404)
     return FileResponse(
         filepath,
@@ -695,7 +696,7 @@ async def create_prompt(request: Request):
                 },
                 status_code=201,
             )
-        except GuestPromptLimitExceeded as exc:
+        except GuestPromptLimitExceededError as exc:
             return jsonify_rate_limited(str(exc), retry_after=exc.retry_after)
         except Exception:
             return log_and_internal_server_error(logger, "Failed to create guest shared prompt.")

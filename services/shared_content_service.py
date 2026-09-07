@@ -37,7 +37,7 @@ SHARED_CONTENT_MAX_QUERY_LENGTH = 500
 T = TypeVar("T")
 
 
-class InvalidSharedContentCursor(ValueError):
+class InvalidSharedContentCursorError(ValueError):
     """一覧カーソルが不正、または別の検索条件向けの場合に送出する。"""
 
 
@@ -309,7 +309,7 @@ class SharedContentService:
         locale: str = "ja",
         session: AsyncSession | None = None,
     ) -> list[dict[str, Any]]:
-        rows = await self._read(
+        return await self._read(
             session,
             lambda active: self._repository.get_public_feed(
                 active,
@@ -323,7 +323,6 @@ class SharedContentService:
                 locale=locale,
             ),
         )
-        return rows
 
     async def get_recommended_prompts(
         self,
@@ -973,7 +972,7 @@ class SharedContentService:
             created_at = payload.get("created_at")
             prompt_id = payload.get("id")
             if not isinstance(created_at, str) or isinstance(prompt_id, bool):
-                raise ValueError
+                raise TypeError
             parsed_id = int(prompt_id)
             if parsed_id <= 0:
                 raise ValueError
@@ -985,7 +984,7 @@ class SharedContentService:
             UnicodeDecodeError,
             binascii.Error,
         ) as exc:
-            raise InvalidSharedContentCursor("The shared-content cursor is invalid.") from exc
+            raise InvalidSharedContentCursorError("The shared-content cursor is invalid.") from exc
 
     def _summary_from_row(self, row: dict[str, Any]) -> PublicSharedContentSummary:
         axes = serialize_axes(row)

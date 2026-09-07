@@ -159,9 +159,11 @@ class EmailChangeConfirmRequest(RequestPayloadModel):
 # 日本語: ログイン認証コード入力用リクエストペイロード。
 # English: Request payload containing the authentication code for verification.
 class AuthCodeRequest(RequestPayloadModel):
-    # 認証コード送信用ペイロード
-    # Payload for verification/login code input.
-    authCode: str | None = None
+    # 認証コード送信用ペイロード。`authCode` はフロントエンドが送信する実際のJSONキーであり、
+    # 生成済みZodスキーマ（frontend/types/generated/api_schemas.ts）にも含まれるため改名できない。
+    # Payload for verification/login code input. `authCode` is the wire JSON key the frontend
+    # sends and is baked into the generated Zod schema, so the field cannot be renamed.
+    authCode: str | None = None  # noqa: N815
 
 
 # 日本語: 新しいチャットルームを作成する際のリクエストペイロード。

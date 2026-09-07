@@ -490,7 +490,7 @@ async def _get_payload(request: Request) -> dict:
     if data is not None:
         return data
     form = await request.form()
-    return {key: value for key, value in form.items()}
+    return dict(form.items())
 
 
 # 管理者ログインページへリダイレクトするエンドポイント

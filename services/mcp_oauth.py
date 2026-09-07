@@ -120,8 +120,11 @@ def _loopback_redirect_uris_match(registered: str, requested: str) -> bool:
     try:
         registered_url = urlparse(registered)
         requested_url = urlparse(requested)
-        registered_url.port
-        requested_url.port
+        # RFC 8252 のループバック比較ではポート値自体は使わないが、`.port` の評価が不正な
+        # ポート表記の検証になるため、ここで明示的に読み出して不正URIを弾く。
+        # The RFC 8252 loopback comparison ignores the port value itself, but evaluating
+        # `.port` validates the port syntax, so read both here to reject malformed URIs.
+        _ = (registered_url.port, requested_url.port)
     except ValueError:
         return False
 
@@ -414,10 +417,14 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
         client.scope = " ".join(MCP_ALLOWED_SCOPES)
         _validate_redirect_uris(client)
         _write_cimd_cache(client_id, client, MAX_CIMD_CACHE_SECONDS)
-        return client
     except Exception:
+        # 日本語: CIMD メタデータの取得や検証に失敗するとクライアントを拒否するため、原因が追えるよう記録します。
+        # English: A failed CIMD metadata fetch or validation rejects the client, so record why it happened.
+        logger.warning("Failed to load CIMD metadata for client %s; caching a negative result.", client_id, exc_info=True)
         _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
         return None
+    else:
+        return client
 
 
 async def _load_cimd_client(client_id: str) -> OAuthClientInformationFull | None:
@@ -926,13 +933,22 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
     async def load_authorization_code(self, client: OAuthClientInformationFull, authorization_code: str) -> StoredAuthorizationCode | None:
         return await _load_code(str(client.client_id), authorization_code)
 
-    async def exchange_authorization_code(self, client: OAuthClientInformationFull, authorization_code: StoredAuthorizationCode) -> OAuthToken:
+    async def exchange_authorization_code(
+        self,
+        client: OAuthClientInformationFull,
+        authorization_code: StoredAuthorizationCode,
+    ) -> OAuthToken:
         return await _consume_code_and_issue(authorization_code)
 
     async def load_refresh_token(self, client: OAuthClientInformationFull, refresh_token: str) -> StoredRefreshToken | None:
         return await _load_refresh(str(client.client_id), refresh_token)
 
-    async def exchange_refresh_token(self, client: OAuthClientInformationFull, refresh_token: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
+    async def exchange_refresh_token(
+        self,
+        client: OAuthClientInformationFull,
+        refresh_token: StoredRefreshToken,
+        scopes: list[str],
+    ) -> OAuthToken:
         return await _refresh_access_token(refresh_token, scopes)
 
     async def load_access_token(self, token: str) -> AccessToken | None:

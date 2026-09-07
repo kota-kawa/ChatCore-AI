@@ -13,6 +13,8 @@ from .error_messages import ERROR_INVALID_JSON
 from .i18n import translate, translate_text
 from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
 
+logger = logging.getLogger(__name__)
+
 # モデルの型変数
 # TypeVar for Pydantic models
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -51,6 +53,10 @@ async def get_json(request: Request) -> Any | None:
     try:
         return await request.json()
     except Exception:
+        # 具体的なパスではなくルートテンプレートを出し、URL 内のトークンをログに残さない
+        # Log the route template instead of the concrete path so URL tokens never reach the log
+        route = request.scope.get("route")
+        logger.debug("Failed to parse the request body as JSON for %s %s.", request.method, getattr(route, "path", "unknown route"))
         return None
 
 

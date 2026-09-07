@@ -19,7 +19,8 @@ def normalize_package_name(name: str) -> str:
 
 
 # 日本語: 指定された requirements ファイルを読み込み、完全一致（==）で固定されたパッケージ名とバージョンを解析して辞書として返します。
-# English: Read the specified requirements file, parse exact-pinning (==) packages, and return them as a package-to-version mapping dictionary.
+# English: Read the specified requirements file, parse exact-pinning (==) packages,
+#          and return them as a package-to-version mapping dictionary.
 def parse_requirements(path: Path) -> dict[str, str]:
     requirements: dict[str, str] = {}
     # 日本語: ファイルの各行を1行ずつ読み込み、空白行やコメント行を除いて処理します。
@@ -101,8 +102,10 @@ def is_pinned_image(image: str) -> bool:
     # English: If the latest tag is explicitly specified, it is considered unpinned.
     if tag == "latest":
         return False
-    # 日本語: postgres などの一部のイメージはメジャー・マイナーバージョン(例: 15.1)で固定、それ以外はセマンティックバージョニング(例: 1.2.3)で固定されているか判定します。
-    # English: Determine if specific images like postgres are pinned with major.minor (e.g. 15.1), and others are pinned with semver (e.g. 1.2.3).
+    # 日本語: postgres などの一部のイメージはメジャー・マイナーバージョン(例: 15.1)で固定、
+    #         それ以外はセマンティックバージョニング(例: 1.2.3)で固定されているか判定します。
+    # English: Determine if specific images like postgres are pinned with major.minor (e.g. 15.1),
+    #          and others are pinned with semver (e.g. 1.2.3).
     if repository.endswith("postgres"):
         return re.fullmatch(r"\d+\.\d+", tag) is not None
     return re.search(r"\d+\.\d+\.\d+", tag) is not None
@@ -126,9 +129,11 @@ def check_container_images() -> list[str]:
             *DOCKER_FROM.findall(text),
             *COMPOSE_IMAGE.findall(text),
         ]
-        for image in images:
-            if not is_pinned_image(image):
-                errors.append(f"{path.relative_to(REPO_ROOT)} uses an unpinned image: {image}")
+        errors.extend(
+            f"{path.relative_to(REPO_ROOT)} uses an unpinned image: {image}"
+            for image in images
+            if not is_pinned_image(image)
+        )
     return errors
 
 

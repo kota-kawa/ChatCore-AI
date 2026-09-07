@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import codecs
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # 取得済みのレスポンスボディ（bytes）を文字列へデコードするための文字コード解決モジュール。
 # Charset resolution used to decode an already-downloaded response body (bytes) into text.
@@ -122,6 +125,7 @@ def _charset_from_detection(raw: bytes) -> str | None:
     try:
         best = from_bytes(raw).best()
     except Exception:
+        logger.debug("Statistical charset detection failed for a %s byte body; leaving the charset unresolved.", len(raw))
         return None
     return _normalize_encoding(best.encoding if best is not None else None)
 

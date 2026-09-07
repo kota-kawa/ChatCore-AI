@@ -32,8 +32,10 @@ def make_request(
     )
 
 
-# 日本語: APIの入力検証（バリデーション：不正なJSON形式のハンドリング等）と出力のシリアライズ処理（日付のフォーマット、Web検索ソースのHTML整形等）をテストするクラス。
-# English: Test class to check API input validation (e.g. malformed JSON) and response serialization (e.g. datetimes, web search sources layout).
+# 日本語: APIの入力検証（バリデーション：不正なJSON形式のハンドリング等）
+#         と出力のシリアライズ処理（日付のフォーマット、Web検索ソースのHTML整形等）をテストするクラス。
+# English: Test class to check API input validation (e.g. malformed JSON)
+#          and response serialization (e.g. datetimes, web search sources layout).
 class ApiValidationAndSerializationTestCase(unittest.TestCase):
     # 日本語: タスクの並び順更新APIが、不正なJSON形式のリクエストに対して400エラーで拒否することを検証します。
     # English: Verify that the update tasks order API rejects malformed JSON payloads with a 400 error.

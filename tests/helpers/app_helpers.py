@@ -17,7 +17,8 @@ def build_session_test_app(*routers, secret_key="endpoint-test-secret", include_
     # English: Check if the helper route for dynamically setting session data during tests should be enabled.
     if include_test_session_route:
 
-        # 日本語: テスト用クライアントから送信されたJSONペイロードの内容を、リクエストのセッションに直接書き込むためのテスト専用APIエンドポイントです。
+        # 日本語: テスト用クライアントから送信されたJSONペイロードの内容を、
+        #         リクエストのセッションに直接書き込むためのテスト専用APIエンドポイントです。
         # English: A test-only API endpoint that directly writes the JSON payload sent by the test client into the request session.
         @app.post("/_test/session")
         async def set_test_session(request: Request):

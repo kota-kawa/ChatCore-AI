@@ -25,7 +25,7 @@ _GUEST_PROMPT_HASH_FALLBACK_SECRET = "chatcore-guest-prompt-hash-v1"
 _fallback_secret_warning_logged = False
 
 
-class GuestPromptLimitExceeded(ValueError):
+class GuestPromptLimitExceededError(ValueError):
     """Raised when the cookie or IP already posted within the rolling window."""
 
     def __init__(self, retry_after: int) -> None:
@@ -114,7 +114,7 @@ async def create_guest_shared_prompt(
             lock_keys=lock_keys,
         )
         if retry_after is not None:
-            raise GuestPromptLimitExceeded(retry_after)
+            raise GuestPromptLimitExceededError(retry_after)
         if prompt_id is None:
             raise RuntimeError("Guest shared prompt insert did not return an ID.")
         return prompt_id

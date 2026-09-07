@@ -2,6 +2,7 @@ import logging
 import os
 import secrets
 import time
+from contextlib import suppress
 
 from fastapi import Depends, Request
 from werkzeug.utils import secure_filename
@@ -127,7 +128,7 @@ def _detect_avatar_format(header: bytes) -> str | None:
         return "jpeg"
     # GIFのヘッダーを判定
     # Detect GIF header
-    if header.startswith(b"GIF87a") or header.startswith(b"GIF89a"):
+    if header.startswith((b"GIF87a", b"GIF89a")):
         return "gif"
     # WEBPのヘッダーを判定
     # Detect WEBP header
@@ -245,10 +246,8 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
         # ポインタを先頭に戻しておく
         # Rewind the file pointer for subsequent operations
         if hasattr(avatar_file_obj, "seek"):
-            try:
+            with suppress(Exception):
                 avatar_file_obj.seek(0)
-            except Exception:
-                pass
 
     # 保存されたアバター画像のURLパスを返す
     # Return the URL path to the saved avatar image
@@ -289,7 +288,7 @@ async def user_profile(request: Request):
     """
     GET: ユーザーのプロフィール情報を取得します。
     GET: Retrieves the user's profile details.
-    
+
     POST: ユーザーのプロフィール情報（ユーザー名、自己紹介、アバター画像等）を更新します。
     POST: Updates the user's profile details (username, bio, avatar, etc.).
     """
