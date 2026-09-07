@@ -461,79 +461,49 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   gap: 0.5rem;
 }
 
+/* カテゴリ別ガイドへのリンク列は本文の下に置く補助ナビ。上のカテゴリフィルターと
+   見た目が競合しないよう、枠・背景・影を持たせず区切り線とテキストリンクだけで構成する */
+/* The category guide links are a secondary nav below the feed: only a divider rule and text
+   links, so they never look like the interactive category filter cards above */
 :where(body.prompt-share-page, .prompt-share-page) .category-guides {
-  border: 1px solid rgba(69, 128, 196, 0.16);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 1rem;
+  width: min(1280px, 100%);
+  margin: 0.4rem auto 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(69, 128, 196, 0.2);
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .category-guides .section-header {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .category-guides h2 {
+:where(body.prompt-share-page, .prompt-share-page) .category-guides__title {
   margin: 0;
-  color: #1f4d7a;
-  line-height: 1.3;
-  font-size: clamp(1.08rem, 0.9vw + 0.94rem, 1.38rem);
+  color: var(--ps-text-muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .category-guide-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
   list-style: none;
-  margin: 0.85rem 0 0;
+  margin: 0.55rem 0 0;
   padding: 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .category-guide-link {
-  align-items: center;
-  border: 1px solid #dce7f3;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #20476f;
-  display: flex;
-  gap: 0.5rem;
-  min-height: 42px;
-  padding: 0.45rem 0.7rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .category-guide-link:hover {
-  border-color: rgba(72, 147, 224, 0.45);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.09);
-  transform: translateY(-1px);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .category-guide-link > i {
-  align-items: center;
-  background: rgba(72, 147, 224, 0.12);
-  border-radius: 999px;
+/* .prompt-share-page a { color: inherit } より詳細度で勝つため、リンク要素まで含めて指定する */
+/* The selector includes the anchor type so it outranks .prompt-share-page a { color: inherit } */
+:where(body.prompt-share-page, .prompt-share-page) a.category-guide-link {
   color: #3c7fcc;
-  display: inline-flex;
-  flex-shrink: 0;
-  height: 1.6rem;
-  justify-content: center;
-  width: 1.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.6;
+  transition: color 0.18s ease;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .category-guide-link > span:first-of-type {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .category-guide-link__action {
-  color: #3c7fcc;
-  flex-shrink: 0;
-  font-size: 0.78rem;
-  font-weight: 700;
+:where(body.prompt-share-page, .prompt-share-page) a.category-guide-link:hover,
+:where(body.prompt-share-page, .prompt-share-page) a.category-guide-link:focus-visible {
+  color: var(--ps-primary-strong);
+  text-decoration: underline;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .category-card {
@@ -704,6 +674,30 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   margin-bottom: 0;
   align-items: center;
   justify-content: flex-start;
+}
+
+/* 絞り込み中のカテゴリのガイドへ導く単一リンク。見出しの反対側へ寄せる */
+/* Single link to the active category's guide, pushed to the far side of the heading */
+:where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  color: var(--ps-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color 0.18s ease;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link:hover,
+:where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link:focus-visible {
+  color: var(--ps-primary-strong);
+  text-decoration: underline;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompts-list-guide-link i {
+  font-size: 0.78rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-toolbar {

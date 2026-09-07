@@ -94,7 +94,6 @@
     inset 0 1px 0 rgba(191, 219, 254, 0.4);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guides,
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .categories,
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
   background: rgba(17, 24, 39, 0.9);
@@ -102,15 +101,20 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guide-link {
-  background: #1f2937;
-  border-color: #374151;
-  color: #e5e7eb;
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guides {
+  border-top-color: rgba(148, 163, 184, 0.22);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guide-link__action,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guide-link > i {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.category-guide-link,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link {
   color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.category-guide-link:hover,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.category-guide-link:focus-visible,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link:hover,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link:focus-visible {
+  color: #bfdbfe;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .categories::before,
