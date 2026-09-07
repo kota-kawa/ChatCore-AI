@@ -461,6 +461,81 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   gap: 0.5rem;
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .category-guides {
+  border: 1px solid rgba(69, 128, 196, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 1rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guides .section-header {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guides h2 {
+  margin: 0;
+  color: #1f4d7a;
+  line-height: 1.3;
+  font-size: clamp(1.08rem, 0.9vw + 0.94rem, 1.38rem);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-link {
+  align-items: center;
+  border: 1px solid #dce7f3;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #20476f;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0.45rem 0.7rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-link:hover {
+  border-color: rgba(72, 147, 224, 0.45);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.09);
+  transform: translateY(-1px);
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-link > i {
+  align-items: center;
+  background: rgba(72, 147, 224, 0.12);
+  border-radius: 999px;
+  color: #3c7fcc;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 1.6rem;
+  justify-content: center;
+  width: 1.6rem;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-link > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .category-guide-link__action {
+  color: #3c7fcc;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .category-card {
   width: 100%;
   height: var(--prompt-category-card-height);

@@ -94,7 +94,8 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .categories,
-:where(body.prompt-share-page, .prompt-share-page) .prompts-list {
+  :where(body.prompt-share-page, .prompt-share-page) .category-guides,
+  :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
     border-radius: 14px;
     padding: 1.1rem 0.8rem;
   }

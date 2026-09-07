@@ -2,6 +2,7 @@ import type { GetServerSideProps } from "next";
 import { buildPromptPath } from "../lib/promptSlug";
 import { localizePublicPath } from "../lib/seo";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
+import { PROMPT_CATEGORY_KEYS } from "../scripts/prompt_share/prompt_category_registry";
 
 // Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
 // Normalize the Host header value (take the first if it's an array)
@@ -50,8 +51,19 @@ export type SitemapRoute = {
   path: string;
   changefreq: string;
   priority: string;
-  lastmod?: string;
+  lastmod?: string | null;
 };
+
+// 全カテゴリのガイドページを、投稿数に依存せずサイトマップへ掲載する。
+// Include every category guide in the sitemap regardless of its current post count.
+export const PROMPT_CATEGORY_SITEMAP_ROUTES: readonly SitemapRoute[] = PROMPT_CATEGORY_KEYS.map((category) => ({
+  path: `/prompt_share/category/${encodeURIComponent(category)}`,
+  changefreq: "weekly",
+  priority: "0.7",
+  // カテゴリガイド自体の内容は投稿更新と連動しないため、推測の更新日時を付けない。
+  // Category guide content is not tied to post updates, so omit a guessed last-modified date.
+  lastmod: null
+}));
 
 // サイトマップに含める公開プロンプトの最大件数（巨大化を防ぐ上限）
 // Maximum number of public prompts to include in the sitemap (cap to avoid bloat)
@@ -140,6 +152,7 @@ export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: re
   const normalizedOrigin = origin.replace(/\/+$/, "");
   const routes: readonly (SitemapRoute | (typeof PUBLIC_SITEMAP_ROUTES)[number])[] = [
     ...PUBLIC_SITEMAP_ROUTES,
+    ...PROMPT_CATEGORY_SITEMAP_ROUTES,
     ...extraRoutes
   ];
   const urls = routes
@@ -152,14 +165,14 @@ export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: re
       const englishUrl = normalizedOrigin ? `${normalizedOrigin}${englishPath}` : englishPath;
       // 個別ルートにlastmodが指定されていればそれを優先する
       // Prefer a route-specific lastmod when provided
-      const routeLastmod = ("lastmod" in route && route.lastmod) ? route.lastmod : lastmod;
+      const routeLastmod = "lastmod" in route ? route.lastmod : lastmod;
       return [
         "  <url>",
         `    <loc>${xmlEscape(loc)}</loc>`,
         `    <xhtml:link rel="alternate" hreflang="ja" href="${xmlEscape(japaneseUrl)}" />`,
         `    <xhtml:link rel="alternate" hreflang="en" href="${xmlEscape(englishUrl)}" />`,
         `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(japaneseUrl)}" />`,
-        `    <lastmod>${xmlEscape(routeLastmod)}</lastmod>`,
+        ...(routeLastmod ? [`    <lastmod>${xmlEscape(routeLastmod)}</lastmod>`] : []),
         `    <changefreq>${route.changefreq}</changefreq>`,
         `    <priority>${route.priority}</priority>`,
         "  </url>"
