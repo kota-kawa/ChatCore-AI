@@ -47,6 +47,41 @@ describe("MarkdownContent", () => {
     });
   });
 
+  it("shifts heading levels when headingOffset is set", async () => {
+    const { container } = render(
+      <MarkdownContent
+        text={"# 見出し\n\n## 小見出し"}
+        className="md-content"
+        headingOffset={2}
+      />
+    );
+
+    const host = container.querySelector(".md-content");
+
+    // ページ側のh1/h2と衝突しないよう、本文の見出しはh3以降に下げる。
+    // Body headings are shifted to h3 and deeper so they do not collide with the page's h1/h2.
+    await waitFor(() => {
+      expect(host?.querySelector("h1")).toBeNull();
+      expect(host?.querySelector("h3")?.textContent).toBe("見出し");
+      expect(host?.querySelector("h4")?.textContent).toBe("小見出し");
+    });
+  });
+
+  it("shifts heading levels in ssrHtml so SSR and client output match", () => {
+    const { container } = render(
+      <MarkdownContent
+        text={"# 見出し"}
+        ssrHtml={"<h1>サーバー描画済み</h1>"}
+        className="md-content"
+        headingOffset={2}
+      />
+    );
+
+    const host = container.querySelector(".md-content");
+    expect(host?.querySelector("h1")).toBeNull();
+    expect(host?.querySelector("h3")?.textContent).toBe("サーバー描画済み");
+  });
+
   it("renders the provided ssrHtml as-is on the initial render", () => {
     const { container } = render(
       <MarkdownContent
