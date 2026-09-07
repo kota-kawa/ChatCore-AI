@@ -1,8 +1,17 @@
-"""Async SQLAlchemy persistence for account-owned user data."""
+"""Async SQLAlchemy persistence for account-owned user data.
+
+This repository owns the ``users`` row itself: the profile fields, the
+sign-in email and the preferred locale, plus account deletion and the
+bundled task seed.  Authentication provider metadata stays in
+:mod:`services.repositories.auth_identity_repository`, and the Skill
+preference column stays with the Skill repository that owns that feature.
+"""
 
 from __future__ import annotations
 
-from sqlalchemy import delete, func, or_, select, text
+from typing import Any
+
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +29,61 @@ from services.models import (
 
 
 class UserRepository:
-    """Persistence boundary for account cleanup and default user content."""
+    """Repository for the ``users`` row, its profile fields and account cleanup.
+
+    The repository never commits.  Services own the transaction and pass an
+    isolated ``AsyncSession`` for one unit of work.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    # Profile and preferences ------------------------------------------------
+
+    async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
+        user = await self.session.get(User, user_id)
+        return self._serialize_user(user) if user is not None else None
+
+    async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        user = await self.session.scalar(select(User).where(User.email == email).limit(1))
+        return self._serialize_user(user) if user is not None else None
+
+    async def update_user_profile(
+        self,
+        user_id: int,
+        *,
+        username: str,
+        bio: str,
+        avatar_url: str | None,
+        llm_profile_context: str,
+    ) -> bool:
+        values: dict[str, Any] = {
+            "username": username,
+            "bio": bio,
+            "llm_profile_context": llm_profile_context,
+        }
+        if avatar_url is not None:
+            values["avatar_url"] = avatar_url
+        result = await self.session.execute(update(User).where(User.id == user_id).values(**values))
+        return bool(result.rowcount)
+
+    async def commit_email_change(self, user_id: int, new_email: str) -> bool:
+        current = await self.session.scalar(
+            select(User).where(func.lower(User.email) == func.lower(new_email)).with_for_update()
+        )
+        if current is not None and current.id != user_id:
+            return False
+        result = await self.session.execute(update(User).where(User.id == user_id).values(email=new_email))
+        return bool(result.rowcount)
+
+    async def get_user_preferred_locale(self, user_id: int) -> str | None:
+        return await self.session.scalar(select(User.preferred_locale).where(User.id == user_id))
+
+    async def update_user_preferred_locale(self, user_id: int, locale: str) -> bool:
+        result = await self.session.execute(update(User).where(User.id == user_id).values(preferred_locale=locale))
+        return bool(result.rowcount)
+
+    # Account lifecycle ------------------------------------------------------
 
     async def delete_account(self, user_id: int) -> bool:
         user = await self.session.scalar(
@@ -108,3 +168,24 @@ class UserRepository:
                 .on_conflict_do_nothing()
             )
             await self.session.execute(statement)
+
+    # Internal helpers -------------------------------------------------------
+
+    @staticmethod
+    def _serialize_user(user: User) -> dict[str, Any]:
+        # Authentication-provider metadata lives in ``user_auth_providers``.
+        # The legacy provider columns were removed from ``users`` when the ORM
+        # was aligned with the normalized schema, so keep this payload limited
+        # to fields owned by the User entity.
+        return {
+            "id": user.id,
+            "email": user.email,
+            "is_verified": user.is_verified,
+            "created_at": user.created_at,
+            "username": user.username,
+            "bio": user.bio,
+            "avatar_url": user.avatar_url,
+            "llm_profile_context": user.llm_profile_context,
+            "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
+            "preferred_locale": user.preferred_locale,
+        }

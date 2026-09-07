@@ -31,7 +31,6 @@ from services.models import (
     ChatRoomSummary,
     MemoryFact,
     SharedChatRoom,
-    User,
 )
 from services.repositories.chat_room_access import load_owned_room, serialize_room
 from services.share_common import (
@@ -500,51 +499,6 @@ class ChatRepository:
         await self.session.execute(statement)
         return summary
 
-    # Users and preferences --------------------------------------------------
-
-    async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
-        user = await self.session.get(User, user_id)
-        return self._serialize_user(user) if user is not None else None
-
-    async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
-        user = await self.session.scalar(select(User).where(User.email == email).limit(1))
-        return self._serialize_user(user) if user is not None else None
-
-    async def update_user_profile(
-        self,
-        user_id: int,
-        *,
-        username: str,
-        bio: str,
-        avatar_url: str | None,
-        llm_profile_context: str,
-    ) -> bool:
-        values: dict[str, Any] = {
-            "username": username,
-            "bio": bio,
-            "llm_profile_context": llm_profile_context,
-        }
-        if avatar_url is not None:
-            values["avatar_url"] = avatar_url
-        result = await self.session.execute(update(User).where(User.id == user_id).values(**values))
-        return bool(result.rowcount)
-
-    async def commit_email_change(self, user_id: int, new_email: str) -> bool:
-        current = await self.session.scalar(
-            select(User).where(func.lower(User.email) == func.lower(new_email)).with_for_update()
-        )
-        if current is not None and current.id != user_id:
-            return False
-        result = await self.session.execute(update(User).where(User.id == user_id).values(email=new_email))
-        return bool(result.rowcount)
-
-    async def get_user_preferred_locale(self, user_id: int) -> str | None:
-        return await self.session.scalar(select(User.preferred_locale).where(User.id == user_id))
-
-    async def update_user_preferred_locale(self, user_id: int, locale: str) -> bool:
-        result = await self.session.execute(update(User).where(User.id == user_id).values(preferred_locale=locale))
-        return bool(result.rowcount)
-
     # Internal helpers -------------------------------------------------------
 
     async def _load_room_tree(self, chat_room_id: str) -> tuple[dict[int, dict[str, Any]], int | None]:
@@ -654,22 +608,3 @@ class ChatRepository:
             if attached:
                 entry["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
         return entry
-
-    @staticmethod
-    def _serialize_user(user: User) -> dict[str, Any]:
-        # Authentication-provider metadata lives in ``user_auth_providers``.
-        # The legacy provider columns were removed from ``users`` when the ORM
-        # was aligned with the normalized schema, so keep this chat-facing
-        # payload limited to fields owned by the User entity.
-        return {
-            "id": user.id,
-            "email": user.email,
-            "is_verified": user.is_verified,
-            "created_at": user.created_at,
-            "username": user.username,
-            "bio": user.bio,
-            "avatar_url": user.avatar_url,
-            "llm_profile_context": user.llm_profile_context,
-            "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
-            "preferred_locale": user.preferred_locale,
-        }

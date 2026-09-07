@@ -28,6 +28,7 @@ from .repositories.chat_repository import (
 )
 from .repositories.project_repository import ProjectRepository
 from .repositories.task_repository import TaskRepository
+from .repositories.user_repository import UserRepository
 from .repositories.user_skill_repository import UserSkillRepository
 from .user_skills import (
     build_generative_ui_system_skill,
@@ -558,24 +559,37 @@ async def update_user_profile(
             llm_profile_context=llm_profile_context,
         ),
         session,
+        repository=UserRepository,
     )
 
 
 async def commit_email_change(user_id: int, new_email: str, *, session: AsyncSession | None = None) -> bool:
-    return await _write(lambda repo: repo.commit_email_change(user_id, new_email), session)
+    return await _write(
+        lambda repo: repo.commit_email_change(user_id, new_email),
+        session,
+        repository=UserRepository,
+    )
 
 
 async def get_user_by_id(user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_user_by_id(user_id), session)
+    return await _read(lambda repo: repo.get_user_by_id(user_id), session, repository=UserRepository)
 
 
 async def get_user_by_email(email: str, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_user_by_email(email), session)
+    return await _read(lambda repo: repo.get_user_by_email(email), session, repository=UserRepository)
 
 
 async def get_user_preferred_locale(user_id: int, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_user_preferred_locale(user_id), session)
+    return await _read(
+        lambda repo: repo.get_user_preferred_locale(user_id),
+        session,
+        repository=UserRepository,
+    )
 
 
 async def update_user_preferred_locale(user_id: int, locale: str, *, session: AsyncSession | None = None) -> bool:
-    return await _write(lambda repo: repo.update_user_preferred_locale(user_id, locale), session)
+    return await _write(
+        lambda repo: repo.update_user_preferred_locale(user_id, locale),
+        session,
+        repository=UserRepository,
+    )
