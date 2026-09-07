@@ -192,7 +192,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   const origin = host ? `${proto}://${host}` : "";
   const defaultOgImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
 
-  let payload: SharedPromptPayload = {};
+  let payload: SharedPromptPayload;
   let recommendedPrompts: SharedPrompt[] = [];
 
   try {
@@ -394,7 +394,10 @@ export default function SharedPromptPage({
         ogType="article"
         noindex={Boolean(payload.error || !prompt)}
         structuredData={structuredData}
-      />
+      >
+        {/* この画面専用のCSSは_appに載せず、このページからのみ読み込む / Page-only CSS is linked here instead of _app */}
+        <link rel="stylesheet" href="/static/css/pages/shared_prompt.css" />
+      </SeoHead>
 
       <div className="shared-prompt-page">
         {/* 他ページと共通の右下メニュー / Shared bottom-right menu used across pages */}

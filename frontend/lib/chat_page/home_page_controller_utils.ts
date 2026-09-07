@@ -18,6 +18,13 @@ export function buildTaskOrderForPersistence(tasks: NormalizedTask[]) {
     .filter((taskId): taskId is number => taskId !== null);
 }
 
+// 「思考中」プレースホルダーを取り除く。確定メッセージを積む直前に必ず通す。
+// Drop the "thinking" placeholder; always applied right before a settled
+// message is appended.
+export function removeThinkingMessages(messages: UiChatMessage[]): UiChatMessage[] {
+  return messages.filter((message) => message.sender !== "thinking");
+}
+
 export function isLatestChatTurnAnswered(messages: Pick<UiChatMessage, "sender">[]) {
   let latestUserIndex = -1;
   let latestAssistantIndex = -1;

@@ -12,7 +12,7 @@ import { PromptShareLpScope } from "../../components/prompt_share_lp/prompt_shar
 import { PromptShareLpUsage } from "../../components/prompt_share_lp/prompt_share_lp_usage";
 import { PromptShareLpValue } from "../../components/prompt_share_lp/prompt_share_lp_value";
 import { useTranslation } from "../../contexts/locale_context";
-import { absoluteUrl, localizedAbsoluteUrl } from "../../lib/seo";
+import { localizedAbsoluteUrl } from "../../lib/seo";
 import type { Locale } from "../../lib/i18n/config";
 
 const PROMPT_SHARE_LP_PATH = "/prompt_share/lp";

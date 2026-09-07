@@ -9,33 +9,18 @@ import {
 import {
   isLatestChatTurnAnswered,
   moveChatRoomToFront,
+  removeThinkingMessages as withoutThinkingMessages,
 } from "../../lib/chat_page/home_page_controller_utils";
-import {
-  prependUiChatMessagesWithinLimit,
-  rememberStreamEventId,
-} from "../../lib/chat_page/message_window";
+import { prependUiChatMessagesWithinLimit } from "../../lib/chat_page/message_window";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
-import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
-  advanceStreamPace,
-  clampToCodePointBoundary,
-  createStreamPace,
-} from "../../lib/chat_page/stream_smoothing";
+  consumeGenerationStream,
+  type GenerationStreamHost,
+} from "../../lib/chat_page/generation_stream_consumer";
 import {
-  normalizeCitationChipStreamBoundary,
-  splitStreamDisplayText,
-} from "../../lib/chat_page/stream_display_text";
-import {
-  WORD_REVEAL_DURATION_MS,
-  WORD_REVEAL_MAX_LAG_MS,
-  clampToRevealChunkBoundary,
-  clampToWordBoundary,
-} from "../../lib/chat_page/streaming_word_reveal";
-import {
-  getStreamingGenerativeUiDisplayText,
-  isGenerativeUiPending,
-  updateStreamingTextPart,
-} from "../../lib/chat_page/generative_ui_stream";
+  isUnrecoverableStreamStatus,
+  waitForGenerationStreamReconnect,
+} from "../../lib/chat_page/generation_stream_reconnect";
 import { getInitialThinkingState } from "../../lib/chat_page/thinking_status";
 import {
   appendStoredHistory,
@@ -56,7 +41,6 @@ import {
 } from "../../lib/chat_page/storage";
 import type {
   AttachedFile,
-  ChatGenerationPhase,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatMessagePart,
@@ -76,29 +60,6 @@ import {
 } from "../../scripts/core/runtime_validation";
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 import { useTranslation } from "../../contexts/locale_context";
-import { getWebSearchFailureStatus } from "../../lib/chat_page/web_search_failure_status";
-
-// SSE は回線切替時にブラウザから明示的なエラーとして通知されないことがある。
-// 最初はすぐ再接続し、以後は上限付きバックオフでサーバー側で継続中の生成へ戻る。
-// An SSE connection may end without a useful browser error during a network
-// handoff. Reconnect immediately once, then use capped backoff while the
-// generation continues on the server.
-const GENERATION_STREAM_RECONNECT_DELAYS_MS = [0, 500, 1_000, 2_000, 4_000, 8_000, 15_000];
-
-// ストリーム進行状態（復元用）を localStorage へ書き込む最短間隔。
-// チャンク毎に全文を同期書き込みすると応答が伸びるほどメインスレッドを
-// 塞ぐため、一定間隔にまとめる。復元データなのでこの粒度で十分。
-// Minimum interval for persisting stream progress (recovery data) to
-// localStorage. Writing the whole accumulated text on every chunk blocks the
-// main thread more as the reply grows; recovery data tolerates this cadence.
-const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
-
-// 最後に表示した語の開始待ちとフェードが終わるまで、完成メッセージへの切り替えを
-// 待つ。先に streaming=false にすると、その語の span が即座に外れて演出が消える。
-// Keep the message in streaming mode until the final queued word has started
-// and finished fading. Switching to streaming=false earlier removes its span
-// and makes the last part of a fast response snap into view.
-const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
 // サーバーが「該当ルームが見つかりません」を返したことを表すエラーコード。
 // Error code the server returns when the chat room no longer exists.
@@ -107,59 +68,6 @@ const CHAT_ROOM_NOT_FOUND_CODE = "chat.room_not_found";
 function isChatRoomNotFoundPayload(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") return false;
   return (payload as { code?: unknown }).code === CHAT_ROOM_NOT_FOUND_CODE;
-}
-
-function createAbortError(signal: AbortSignal) {
-  return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
-}
-
-function waitForDuration(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(createAbortError(signal));
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      window.clearTimeout(timerId);
-      reject(createAbortError(signal));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-function waitUntilOnline(signal: AbortSignal) {
-  if (typeof window === "undefined" || navigator.onLine !== false) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const onOnline = () => {
-      cleanup();
-      resolve();
-    };
-    const onAbort = () => {
-      cleanup();
-      reject(createAbortError(signal));
-    };
-    const cleanup = () => {
-      window.removeEventListener("online", onOnline);
-      signal.removeEventListener("abort", onAbort);
-    };
-
-    window.addEventListener("online", onOnline, { once: true });
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-async function waitForGenerationStreamReconnect(attempt: number, signal: AbortSignal) {
-  await waitUntilOnline(signal);
-  const delayIndex = Math.min(attempt, GENERATION_STREAM_RECONNECT_DELAYS_MS.length - 1);
-  await waitForDuration(GENERATION_STREAM_RECONNECT_DELAYS_MS[delayIndex], signal);
 }
 
 // Map server-side branch metadata onto a UI message so the branch navigator
@@ -175,59 +83,106 @@ function toBranchFields(entry: ChatHistoryMessagePayload): Partial<UiChatMessage
   return fields;
 }
 
-type UseHomePageGenerationActionsParams = {
+// 表示中のメッセージ列とID採番。
+// The rendered message list and its id sequence.
+export type HomePageMessageListPort = {
+  setMessages: Dispatch<SetStateAction<UiChatMessage[]>>;
+  messageSeqRef: MutableRefObject<number>;
+};
+
+// 生成の占有・中断・再開位置を持つハンドル群。
+// Handles owning generation ownership, aborting and the resume position.
+export type HomePageGenerationStreamPort = {
+  generationGuardRef: MutableRefObject<GenerationGuard | null>;
   abortControllerRef: MutableRefObject<AbortController | null>;
-  chatMessagesRef: RefObject<HTMLDivElement | null>;
+  streamLastEventIdByRoomRef: MutableRefObject<Map<string, number>>;
+  setIsGenerating: Dispatch<SetStateAction<boolean>>;
+};
+
+// 選択中のルームとサイドバーの一覧。
+// The selected chat room and the sidebar list.
+export type HomePageRoomSelectionPort = {
   currentRoomIdRef: MutableRefObject<string | null>;
   currentRoomMode: ChatRoomMode;
-  generationGuardRef: MutableRefObject<GenerationGuard | null>;
+  setCurrentRoomId: Dispatch<SetStateAction<string | null>>;
+  setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
+  setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
+};
+
+// 履歴ページングの状態。
+// Chat-history pagination state.
+export type HomePageHistoryPaginationPort = {
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
   isLoadingOlder: boolean;
-  personalKnowledgeEnabled: boolean;
-  sharedPromptsEnabled: boolean;
-  localStorageWarningShownRef: MutableRefObject<boolean>;
-  messageSeqRef: MutableRefObject<number>;
-  pendingAutoScrollRef: MutableRefObject<boolean>;
-  prependScrollRestoreRef: MutableRefObject<{ prevScrollHeight: number; prevScrollTop: number } | null>;
-  streamLastEventIdByRoomRef: MutableRefObject<Map<string, number>>;
-  setChatInput: Dispatch<SetStateAction<string>>;
-  setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
-  setCurrentRoomId: Dispatch<SetStateAction<string | null>>;
-  setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
   setHistoryNextBeforeId: Dispatch<SetStateAction<number | null>>;
-  setIsGenerating: Dispatch<SetStateAction<boolean>>;
   setIsLoadingOlder: Dispatch<SetStateAction<boolean>>;
-  setMessages: Dispatch<SetStateAction<UiChatMessage[]>>;
+};
+
+// スクロール位置の予約と復元。
+// Scroll-position requests and restoration.
+export type HomePageScrollRestorePort = {
+  chatMessagesRef: RefObject<HTMLDivElement | null>;
+  pendingAutoScrollRef: MutableRefObject<boolean>;
+  prependScrollRestoreRef: MutableRefObject<{ prevScrollHeight: number; prevScrollTop: number } | null>;
+};
+
+// 送信時に同送する参照設定。
+// Retrieval settings sent with each turn.
+export type HomePageRetrievalSettingsPort = {
+  personalKnowledgeEnabled: boolean;
+  sharedPromptsEnabled: boolean;
+};
+
+export type UseHomePageGenerationActionsParams = {
+  messageList: HomePageMessageListPort;
+  generationStream: HomePageGenerationStreamPort;
+  roomSelection: HomePageRoomSelectionPort;
+  historyPagination: HomePageHistoryPaginationPort;
+  scrollRestore: HomePageScrollRestorePort;
+  retrievalSettings: HomePageRetrievalSettingsPort;
+  setChatInput: Dispatch<SetStateAction<string>>;
 };
 
 export function useHomePageGenerationActions({
-  abortControllerRef,
-  chatMessagesRef,
-  currentRoomIdRef,
-  currentRoomMode,
-  generationGuardRef,
-  historyHasMore,
-  historyNextBeforeId,
-  isLoadingOlder,
-  personalKnowledgeEnabled,
-  sharedPromptsEnabled,
-  localStorageWarningShownRef,
-  messageSeqRef,
-  pendingAutoScrollRef,
-  prependScrollRestoreRef,
-  streamLastEventIdByRoomRef,
+  messageList,
+  generationStream,
+  roomSelection,
+  historyPagination,
+  scrollRestore,
+  retrievalSettings,
   setChatInput,
-  setChatRooms,
-  setCurrentRoomId,
-  setCurrentRoomMode,
-  setHistoryHasMore,
-  setHistoryNextBeforeId,
-  setIsGenerating,
-  setIsLoadingOlder,
-  setMessages,
 }: UseHomePageGenerationActionsParams) {
+  const { messageSeqRef, setMessages } = messageList;
+  const {
+    abortControllerRef,
+    generationGuardRef,
+    setIsGenerating,
+    streamLastEventIdByRoomRef,
+  } = generationStream;
+  const {
+    currentRoomIdRef,
+    currentRoomMode,
+    setChatRooms,
+    setCurrentRoomId,
+    setCurrentRoomMode,
+  } = roomSelection;
+  const {
+    historyHasMore,
+    historyNextBeforeId,
+    isLoadingOlder,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsLoadingOlder,
+  } = historyPagination;
+  const { chatMessagesRef, pendingAutoScrollRef, prependScrollRestoreRef } = scrollRestore;
+  const { personalKnowledgeEnabled, sharedPromptsEnabled } = retrievalSettings;
+
+  // 保存容量不足の警告は1セッション1回だけ出す。この hook 以外は読まない。
+  // The storage-quota warning appears once per session; no other consumer reads it.
+  const localStorageWarningShownRef = useRef(false);
+
   const { locale } = useTranslation();
   const localeRef = useRef(locale);
   localeRef.current = locale;
@@ -245,9 +200,10 @@ export function useHomePageGenerationActions({
     pendingAutoScrollRef.current = true;
   }, []);
 
-  const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
-    return list.filter((message) => message.sender !== "thinking");
-  }, []);
+  const removeThinkingMessages = useCallback(
+    (list: UiChatMessage[]) => withoutThinkingMessages(list),
+    [],
+  );
 
   const acquireGeneration = useCallback(
     (roomId: string) => {
@@ -481,714 +437,99 @@ export function useHomePageGenerationActions({
     };
   }, []);
 
-  const consumeStreamingChatResponse = useCallback(
-    async (
-      response: Response,
+  // 生成ストリームを開く唯一の窓口。再開時だけ Last-Event-ID を添える。
+  // The single entry point for opening a generation stream; Last-Event-ID is
+  // attached only when resuming an interrupted one.
+  const openGenerationStreamRequest = useCallback(
+    (roomId: string, signal: AbortSignal, headers?: Record<string, string>) =>
+      resilientFetch(
+        `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+        {
+          credentials: "same-origin",
+          signal,
+          headers,
+        },
+        { timeoutMs: 0 }
+      ),
+    [],
+  );
+
+  // 復元済みの進行状態から、記憶している最終イベントIDを引き上げる。
+  // Raise the remembered last event id from the persisted progress state.
+  const restoreStoredLastEventId = useCallback((roomId: string) => {
+    const storedGeneration = readStoredGenerationState(roomId);
+    if (!storedGeneration || storedGeneration.lastEventId <= 0) return;
+    const rememberedLastEventId = streamLastEventIdByRoomRef.current.get(roomId) ?? 0;
+    if (storedGeneration.lastEventId > rememberedLastEventId) {
+      streamLastEventIdByRoomRef.current.set(roomId, storedGeneration.lastEventId);
+    }
+  }, []);
+
+  // ストリーム消費ランタイムへ渡す注入口。画面更新・永続化・再接続の窓口を束ねる。
+  // The ports handed to the stream runtime: screen updates, persistence and
+  // reopening the stream.
+  const buildGenerationStreamHost = useCallback(
+    (
       generation: ActiveGeneration,
-      options?: { onUnansweredFailure?: (message: string) => void },
-    ): Promise<boolean> => {
+      onUnansweredFailure?: (message: string) => void,
+    ): GenerationStreamHost => {
       const { roomId } = generation;
 
-      const decoder = new TextDecoder();
-      const storedGeneration = readStoredGenerationState(roomId);
-      if (storedGeneration && storedGeneration.lastEventId > 0) {
-        const rememberedLastEventId = streamLastEventIdByRoomRef.current.get(roomId) ?? 0;
-        if (storedGeneration.lastEventId > rememberedLastEventId) {
-          streamLastEventIdByRoomRef.current.set(roomId, storedGeneration.lastEventId);
-        }
-      }
-
-      let streamingMessageId: string | null = null;
-      let streamedText = storedGeneration?.streamedText ?? "";
-      let streamingParts: ChatMessagePart[] | undefined;
-      type PendingFinalization = {
-        finalText: string;
-        persist: boolean;
-        parts?: ChatMessagePart[];
-      };
-      let pendingFinalization: PendingFinalization | null = null;
-      let revealCompletionPromise: Promise<void> | null = null;
-      let resolveRevealCompletion: (() => void) | null = null;
-      let finalRevealTimerId: number | null = null;
-
-      // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
-      // Constant-pace state. Restored text shows instantly instead of being
-      // replayed.
-      const initialDisplayText = splitStreamDisplayText(
-        getStreamingGenerativeUiDisplayText(streamedText),
-      );
-      const streamPace = createStreamPace(initialDisplayText.pacedText.length, performance.now());
-      let hasSeparatedInstantPrefix = Boolean(initialDisplayText.instantPrefix);
-
-      // localStorage への進行状態書き込みをスロットルするための保留値とタイマー。
-      // Pending values and timer used to throttle progress writes to localStorage.
-      let storedStateSyncTimerId: number | null = null;
-      let pendingStoredLastEventId = 0;
-      let hasPendingStoredStreamedText = false;
-      const flushStoredGenerationStateSync = () => {
-        storedStateSyncTimerId = null;
-        if (pendingStoredLastEventId <= 0 && !hasPendingStoredStreamedText) return;
-        const updates = {
-          ...(pendingStoredLastEventId > 0 ? { lastEventId: pendingStoredLastEventId } : {}),
-          ...(hasPendingStoredStreamedText ? { streamedText } : {}),
-        };
-        pendingStoredLastEventId = 0;
-        hasPendingStoredStreamedText = false;
-        updateStoredGenerationState(roomId, updates);
-      };
-      const scheduleStoredGenerationStateSync = () => {
-        if (storedStateSyncTimerId !== null) return;
-        storedStateSyncTimerId = window.setTimeout(
-          flushStoredGenerationStateSync,
-          STORED_GENERATION_STATE_SYNC_INTERVAL_MS,
-        );
-      };
-
-      // チャンク描画を 1 フレーム 1 回へ間引くための rAF ハンドル。あわせて
-      // 表示文字数を上限付きの等速ペースで進め、チャンクが塊のまま現れず文字が
-      // 流れるように見せる。排出しきるまでフレーム毎に自身を再スケジュールする。
-      // rAF handle that coalesces chunk rendering to once per frame. It also
-      // advances the visible length at a capped, steady pace so chunks read as
-      // flowing text instead of blocks, and reschedules until the backlog drains.
-      let chunkRenderRafId: number | null = null;
-      const finishPendingFinalization = () => {
-        const pending = pendingFinalization;
-        if (!pending) return;
-        pendingFinalization = null;
-        finalizeStreamingMessage(pending.finalText, pending.persist, pending.parts);
-        resolveRevealCompletion?.();
-        resolveRevealCompletion = null;
-      };
-      const flushStreamedChunkRender = () => {
-        chunkRenderRafId = null;
-        const streamId = streamingMessageId;
-        if (!streamId) return;
-        const fullDisplayText = getStreamingGenerativeUiDisplayText(streamedText);
-        const separatedDisplayText = splitStreamDisplayText(fullDisplayText);
-        const frameNow = performance.now();
-        if (!hasSeparatedInstantPrefix && separatedDisplayText.instantPrefix) {
-          // 不完全だった検索トレースが閉じた瞬間、そこまでHTMLへ費やしていた進捗を
-          // 本文へ持ち越さない。本文は先頭から通常のテンポで表示する。
-          // When an incomplete trace becomes complete, do not carry progress
-          // spent on its raw HTML into the answer body. Pace the body from zero.
-          streamPace.length = 0;
-          streamPace.rate = 0;
-          streamPace.lastTime = frameNow;
-          hasSeparatedInstantPrefix = true;
-        }
-        const smoothedLength = clampToCodePointBoundary(
-          separatedDisplayText.pacedText,
-          advanceStreamPace(streamPace, separatedDisplayText.pacedText.length, frameNow),
-        );
-        // 表示はチャンク境界まで巻き戻し、さらに語境界へ合わせる。文字単位で
-        // 伸ばすと生成中の行が毎フレーム折り返し直しになり、読んでいる文字が
-        // 動いてしまう（スマホで顕著）。かたまり単位で伸ばせば折り返しの変化が
-        // まばらになり、フェードインも1かたまりずつはっきり見える。
-        // Pull the visible length back to a chunk boundary, then to a word
-        // boundary. Growing character by character re-wraps the streaming line
-        // every frame and shifts the characters being read (worst on phones);
-        // growing in chunks makes re-wraps rare and each fade-in legible.
-        let displayLength = clampToCodePointBoundary(
-          separatedDisplayText.pacedText,
-          clampToWordBoundary(
-            separatedDisplayText.pacedText,
-            clampToRevealChunkBoundary(separatedDisplayText.pacedText, smoothedLength),
-          ),
-        );
-        displayLength = normalizeCitationChipStreamBoundary(
-          separatedDisplayText.pacedText,
-          displayLength,
-        );
-        // チップ内部のHTML文字数をペーシング待ちにしない。完成済みチップを一度に
-        // 表示したあとは、その直後の本文から通常速度で再開する。
-        // Skip markup bytes after atomically revealing a complete chip, then
-        // resume normal pacing with the text immediately after it.
-        if (displayLength > streamPace.length) streamPace.length = displayLength;
-        const displayText = [
-          separatedDisplayText.instantPrefix,
-          separatedDisplayText.pacedText.slice(0, displayLength),
-        ].join("");
-        const displayParts = updateStreamingTextPart(streamingParts, displayText);
-        const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
-
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return previous.map((message) => {
-            if (message.id !== streamId) return message;
-            return {
-              ...message,
-              text: displayText,
-              streaming: true,
-              generativeUiPending,
-              ...(displayParts ? { parts: displayParts } : {}),
-            };
-          });
-        });
-        if (smoothedLength < separatedDisplayText.pacedText.length) {
-          scheduleStreamedChunkRender();
-          return;
-        }
-        if (pendingFinalization && finalRevealTimerId === null) {
-          // 最終文字を streaming=true のDOMへ一度描画した後、そのCSSアニメーションが
-          // 完了する時間を確保してから完成状態へ切り替える。
-          // Render the final characters into the streaming DOM once, then give
-          // their CSS animation time to finish before switching to the clean
-          // completed markup.
-          finalRevealTimerId = window.setTimeout(() => {
-            finalRevealTimerId = null;
-            finishPendingFinalization();
-          }, STREAM_REVEAL_SETTLE_MS);
-        }
-      };
-      const scheduleStreamedChunkRender = () => {
-        if (chunkRenderRafId !== null) return;
-        chunkRenderRafId = window.requestAnimationFrame(flushStreamedChunkRender);
-      };
-      const cancelStreamedChunkRender = () => {
-        if (chunkRenderRafId !== null) {
-          window.cancelAnimationFrame(chunkRenderRafId);
-          chunkRenderRafId = null;
-        }
-      };
-
-      const queueStreamingMessageFinalization = (
-        finalText: string,
-        persist = true,
-        parts?: ChatMessagePart[],
-      ) => {
-        pendingFinalization = { finalText, persist, parts };
-        if (!revealCompletionPromise) {
-          revealCompletionPromise = new Promise<void>((resolve) => {
-            resolveRevealCompletion = resolve;
-          });
-        }
-        scheduleStreamedChunkRender();
-      };
-
-      const ensureStreamingMessage = () => {
-        if (streamingMessageId) return streamingMessageId;
-        streamingMessageId = nextMessageId("assistant-stream", messageSeqRef);
-        const newId = streamingMessageId;
-        const displayText = getStreamingGenerativeUiDisplayText(streamedText);
-        const displayParts = updateStreamingTextPart(streamingParts, displayText);
-        const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
-
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return [
-            ...removeThinkingMessages(previous),
-            {
-              id: newId,
-              sender: "assistant",
-              text: displayText,
-              streaming: true,
-              generativeUiPending,
-              ...(displayParts ? { parts: displayParts } : {}),
-            },
-          ];
-        });
-        return newId;
-      };
-
-      const updateThinkingStatus = (statusText: string, generationPhase: ChatGenerationPhase = "preparing") => {
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return previous.map((message) => {
-            if (message.sender !== "thinking") return message;
-            return {
-              ...message,
-              text: statusText,
-              generationPhase,
-            };
-          });
-        });
-      };
-
-      const finalizeStreamingMessage = (
-        finalText: string,
-        persist = true,
-        parts?: ChatMessagePart[],
-        // 途中までの回答として保存されたターンに印を付け、続きを生成する導線を出す。
-        // Mark a turn saved as a partial answer so the "continue" affordance can appear.
-        markPartial = false,
-      ) => {
-        // 確定テキストを保留中の途中描画で上書きしないようにキャンセルする。
-        // Cancel any pending partial render so it cannot overwrite the final text.
-        cancelStreamedChunkRender();
-        const finalDisplayText = finalText || getStreamingGenerativeUiDisplayText(streamedText);
-        const resolvedParts = Array.isArray(parts) && parts.length > 0
-          ? parts
-          : updateStreamingTextPart(streamingParts, finalDisplayText);
-        const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0;
-        if (!streamingMessageId) {
-          if (finalDisplayText || hasParts) {
+      return {
+        roomId,
+        abortSignal: generation.abortController.signal,
+        isActive: () => isGenerationActive(generation),
+        lastEventIdByRoom: streamLastEventIdByRoomRef.current,
+        localize,
+        messages: {
+          updateActiveMessages: (updater) => {
             setMessages((previous) => {
               if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return [
-                ...removeThinkingMessages(previous),
-                {
-                  id: nextMessageId("assistant", messageSeqRef),
-                  sender: "assistant",
-                  text: finalDisplayText,
-                  ...(hasParts ? { parts: resolvedParts } : {}),
-                  ...(markPartial ? { partial: true } : {}),
-                },
-              ];
+              return updater(previous);
             });
-          } else {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
-          if (persist && finalDisplayText && isGenerationActive(generation)) {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-              text: finalDisplayText,
-              sender: "bot",
-              ...(hasParts ? { parts: resolvedParts } : {}),
-            }));
-          }
-          clearStoredGenerationState(roomId);
-          return;
-        }
-
-        const streamId = streamingMessageId;
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return removeThinkingMessages(previous).map((message) => {
-            if (message.id !== streamId) return message;
-            return {
-              ...message,
-              text: finalDisplayText || message.text,
-              ...(hasParts ? { parts: resolvedParts } : {}),
-              streaming: false,
-              generativeUiPending: false,
-              partial: markPartial,
-            };
-          });
-        });
-
-        if (persist && finalDisplayText && isGenerationActive(generation)) {
-          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-            text: finalDisplayText,
-            sender: "bot",
-            ...(hasParts ? { parts: resolvedParts } : {}),
-          }));
-        }
-        clearStoredGenerationState(roomId);
+          },
+          createMessageId: (prefix) => nextMessageId(prefix, messageSeqRef),
+          appendErrorMessage: (message) => appendAssistantErrorMessage(roomId, message),
+          applyRoomTitle: (title) => applyRoomTitleUpdate(roomId, title),
+        },
+        storage: {
+          readGenerationState: () => readStoredGenerationState(roomId),
+          updateGenerationState: (updates) => {
+            updateStoredGenerationState(roomId, updates);
+          },
+          clearGenerationState: () => clearStoredGenerationState(roomId),
+          persistAssistantAnswer: (entry) => {
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, entry));
+          },
+        },
+        openStream: (lastEventId) =>
+          openGenerationStreamRequest(roomId, generation.abortController.signal, {
+            "Last-Event-ID": String(lastEventId),
+          }),
+        onUnansweredFailure,
       };
-
-      const persistInterruptedStream = (message: string) => {
-        if (streamedText.trim()) {
-          finalizeStreamingMessage(getStreamingGenerativeUiDisplayText(streamedText), true, streamingParts);
-          appendAssistantErrorMessage(roomId, message);
-          return;
-        }
-        // 1文字も届いていない = このターンには回答がない。呼び出し側が
-        // ユーザー発話の取り消しまで含めて後始末できるよう委譲する。
-        // Nothing arrived at all, so this turn has no answer. Let the caller
-        // clean up, including rolling back the user's own message.
-        const handleUnansweredFailure = options?.onUnansweredFailure;
-        if (handleUnansweredFailure) {
-          handleUnansweredFailure(message);
-          return;
-        }
-        appendAssistantErrorMessage(roomId, message);
-      };
-
-      if (streamedText) {
-        ensureStreamingMessage();
-      }
-
-      const openReconnectStream = async (): Promise<Response | "unavailable" | null> => {
-        const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
-        if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
-
-        try {
-          const reconnectResponse = await resilientFetch(
-            `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
-            {
-              credentials: "same-origin",
-              signal: generation.abortController.signal,
-              headers: { "Last-Event-ID": String(lastEventId) },
-            },
-            { timeoutMs: 0 }
-          );
-          if (!reconnectResponse.ok) {
-            if (reconnectResponse.status >= 400 && reconnectResponse.status < 500 && reconnectResponse.status !== 408 && reconnectResponse.status !== 429) {
-              return "unavailable";
-            }
-            return null;
-          }
-          return reconnectResponse;
-        } catch {
-          return null;
-        }
-      };
-
-      const processBlock = (block: string, streamState: { completed: boolean; streamError: string | null }) => {
-        const parsed = parseStreamEventBlock(block);
-        if (!parsed) return;
-        if (!isGenerationActive(generation)) return;
-
-        if (!rememberStreamEventId(streamLastEventIdByRoomRef.current, roomId, parsed.id)) return;
-        if (typeof parsed.id === "number" && parsed.id > 0) {
-          pendingStoredLastEventId = parsed.id;
-          scheduleStoredGenerationStateSync();
-        }
-
-        if (parsed.event === "chunk") {
-          const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
-          if (!text) return;
-          ensureStreamingMessage();
-          streamedText += text;
-          hasPendingStoredStreamedText = true;
-          scheduleStoredGenerationStateSync();
-          scheduleStreamedChunkRender();
-          return;
-        }
-
-        if (parsed.event === "response_parts_updated") {
-          // 直後に最新テキストで即時描画するため、保留中のチャンク描画は破棄する。
-          // Drop the pending chunk render; the immediate update below already
-          // carries the latest text.
-          cancelStreamedChunkRender();
-          const updatePayload = normalizeChatResponsePayload(parsed.data);
-          const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
-          // パーツ更新はテキストの書き換えを伴うため、ペーシングせず全文を出す。
-          // Parts updates rewrite the text, so show it in full without pacing.
-          const separatedDisplayText = splitStreamDisplayText(displayText);
-          streamPace.length = separatedDisplayText.pacedText.length;
-          hasSeparatedInstantPrefix ||= Boolean(separatedDisplayText.instantPrefix);
-          if (updatePayload.parts?.length) {
-            streamingParts = updateStreamingTextPart(updatePayload.parts, displayText);
-          }
-          const streamId = ensureStreamingMessage();
-          const displayParts = updateStreamingTextPart(streamingParts, displayText);
-          const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
-
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-            return previous.map((message) => {
-              if (message.id !== streamId) return message;
-              return {
-                ...message,
-                text: displayText,
-                streaming: true,
-                generativeUiPending,
-                ...(displayParts ? { parts: displayParts } : {}),
-              };
-            });
-          });
-          return;
-        }
-
-        if (parsed.event === "shared_prompt_search_started") {
-          updateThinkingStatus(
-            localize("共有プロンプトを検索しています", "Searching shared prompts"),
-            "web-search",
-          );
-          return;
-        }
-
-        if (parsed.event === "shared_prompt_search_completed") {
-          // 事前検索済みのクエリは再検索していないので、0件として扱わない
-          // An already prefetched query was not searched again, so it must not read as zero hits
-          if (parsed.data.status === "already_searched") {
-            updateThinkingStatus(
-              localize("取得済みの共有プロンプトを読み込んでいます", "Reading the shared prompts already retrieved"),
-              "web-search",
-            );
-            return;
-          }
-          const promptCount = typeof parsed.data.prompt_count === "number" ? parsed.data.prompt_count : 0;
-          updateThinkingStatus(
-            promptCount > 0
-              ? localize("見つかった共有プロンプトを読み込んでいます", "Reading the shared prompts that matched")
-              : localize("該当する共有プロンプトはありませんでした。思考中", "No shared prompt matched. Preparing an answer"),
-            promptCount > 0 ? "web-search" : "generating",
-          );
-          return;
-        }
-
-        if (parsed.event === "shared_prompt_search_failed") {
-          updateThinkingStatus(
-            localize("共有プロンプトの検索に失敗しました。思考中", "Shared prompt search failed. Preparing an answer"),
-            "generating",
-          );
-          return;
-        }
-
-        if (parsed.event === "personal_knowledge_search_started") {
-          updateThinkingStatus(
-            localize("メモとマイコンテキストを検索しています", "Searching your memos and My Context"),
-            "web-search",
-          );
-          return;
-        }
-
-        if (parsed.event === "personal_knowledge_search_completed") {
-          // 事前検索済みのクエリは再検索していないので、0件として扱わない
-          // An already prefetched query was not searched again, so it must not read as zero hits
-          if (parsed.data.status === "already_searched") {
-            updateThinkingStatus(
-              localize("取得済みのメモを読み込んでいます", "Reading the notes already retrieved"),
-              "web-search",
-            );
-            return;
-          }
-          const memoCount = typeof parsed.data.memo_count === "number" ? parsed.data.memo_count : 0;
-          const factCount =
-            typeof parsed.data.context_fact_count === "number" ? parsed.data.context_fact_count : 0;
-          updateThinkingStatus(
-            memoCount + factCount > 0
-              ? localize("見つかったメモを読み込んでいます", "Reading the notes that matched")
-              : localize("該当するメモはありませんでした。思考中", "No notes matched. Preparing an answer"),
-            memoCount + factCount > 0 ? "web-search" : "generating",
-          );
-          return;
-        }
-
-        if (parsed.event === "personal_knowledge_search_failed") {
-          updateThinkingStatus(
-            localize("メモの検索に失敗しました。思考中", "Note search failed. Preparing an answer"),
-            "generating",
-          );
-          return;
-        }
-
-        if (parsed.event === "web_search_started") {
-          updateThinkingStatus(localize("Web検索中", "Finding relevant information"), "web-search");
-          return;
-        }
-
-        if (parsed.event === "web_search_completed") {
-          updateThinkingStatus(localize("検索結果を読み込んでいます", "Reading search results"), "web-search");
-          return;
-        }
-
-        if (parsed.event === "web_search_failed") {
-          switch (getWebSearchFailureStatus(parsed.data.code)) {
-            case "configuration":
-              updateThinkingStatus(localize("検索設定を確認できませんでした。思考中", "Search settings were unavailable. Preparing an answer"), "generating");
-              break;
-            case "quota_exceeded":
-              updateThinkingStatus(localize("Web検索の上限に達しました。思考中", "The web search limit was reached. Preparing an answer"), "generating");
-              break;
-            case "request_failed":
-            default:
-              updateThinkingStatus(localize("Web検索に失敗しました。思考中", "Web search failed. Preparing an answer"), "generating");
-              break;
-          }
-          return;
-        }
-
-        if (parsed.event === "response_generation_started") {
-          updateThinkingStatus(localize("思考中", "Preparing an answer"), "generating");
-          return;
-        }
-
-        if (parsed.event === "done") {
-          streamState.completed = true;
-          const donePayload = normalizeChatResponsePayload(parsed.data);
-          const responseText = donePayload.response ?? streamedText;
-          applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          // 検索画像だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
-          // Web-search image parts alone are not an answer; mirror the server-side rule.
-          const hasAnswerParts =
-            donePayload.parts?.some((part) => part.type !== "web_search_image") ?? false;
-          if (!responseText.trim() && !hasAnswerParts) {
-            // 空の完了は「回答なし」。空の吹き出しを残さずエラーとして扱う。
-            // An empty completion means no answer: treat it as an error instead
-            // of leaving a blank bubble behind.
-            streamState.completed = false;
-            streamState.streamError = localize(
-              "AIからの回答が空でした。もう一度お試しください。",
-              "The AI returned an empty answer. Please try again.",
-            );
-            streamLastEventIdByRoomRef.current.delete(roomId);
-            clearStoredGenerationState(roomId);
-            return;
-          }
-          // 最終応答を表示キューへ渡し、未表示分と最後のフェードが完了してから
-          // streaming=false にする。高速応答でも末尾が一括表示されなくなる。
-          // Feed the final response through the display queue and only mark it
-          // complete after the remaining text and fade have drained.
-          ensureStreamingMessage();
-          streamedText = responseText;
-          queueStreamingMessageFinalization(responseText, true, donePayload.parts);
-          streamLastEventIdByRoomRef.current.delete(roomId);
-          return;
-        }
-
-        if (parsed.event === "incomplete") {
-          streamState.completed = true;
-          const incompletePayload = normalizeChatResponsePayload(parsed.data);
-          const finalText = incompletePayload.response ?? streamedText;
-          applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          finalizeStreamingMessage(finalText, false, incompletePayload.parts, true);
-          appendAssistantErrorMessage(
-            roomId,
-            typeof parsed.data.message === "string"
-              ? parsed.data.message
-              : localize(
-                  "回答の生成が途中で終了しました。途中までの回答は保存されています。",
-                  "The response ended early. The partial answer was saved.",
-                ),
-          );
-          streamLastEventIdByRoomRef.current.delete(roomId);
-          clearStoredGenerationState(roomId);
-          return;
-        }
-
-        if (parsed.event === "aborted") {
-          streamState.completed = true;
-          // 停止時にサーバーが保存した生成途中のテキストを優先して表示する。
-          // Prefer the partial text the server persisted on stop so it is not lost.
-          const abortedPayload = normalizeChatResponsePayload(parsed.data);
-          const finalText = abortedPayload.response ?? streamedText;
-          finalizeStreamingMessage(finalText, false, abortedPayload.parts);
-          clearStoredGenerationState(roomId);
-          return;
-        }
-
-        if (parsed.event === "error") {
-          streamState.streamError =
-            typeof parsed.data.message === "string"
-              ? parsed.data.message
-              : localize("ストリーミング生成中にエラーが発生しました。", "An error occurred while streaming the response.");
-        }
-      };
-
-      const readStreamResponse = async (streamResponse: Response) => {
-        if (!streamResponse.body) {
-          throw new Error(localize("ストリーム応答を受信できませんでした。", "No streaming response was received."));
-        }
-
-        const reader = streamResponse.body.getReader();
-        const streamState = {
-          completed: false,
-          streamError: null as string | null,
-        };
-        let buffer = "";
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (!isGenerationActive(generation)) return "inactive" as const;
-            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-            const blocks = buffer.split(/\r?\n\r?\n/);
-            buffer = blocks.pop() || "";
-            blocks.forEach((block) => processBlock(block, streamState));
-
-            if (streamState.streamError) break;
-            if (done) break;
-          }
-        } catch (error) {
-          if (generation.abortController.signal.aborted || !isGenerationActive(generation)) {
-            return "aborted" as const;
-          }
-          // Network handoffs usually surface as TypeError, but some browsers
-          // use AbortError when they tear down an existing SSE response.  Both
-          // mean the request itself was not cancelled by the user, so resume
-          // from the last event ID instead of treating the answer as failed.
-          if (error instanceof TypeError || (error as { name?: string })?.name === "AbortError") {
-            return "interrupted" as const;
-          }
-          throw error;
-        } finally {
-          reader.cancel().catch(() => {
-            // no-op
-          });
-        }
-
-        if (streamState.streamError) {
-          return {
-            status: "error" as const,
-            message: streamState.streamError,
-          };
-        }
-
-        return streamState.completed ? ("completed" as const) : ("interrupted" as const);
-      };
-
-      try {
-        let activeResponse = response;
-        let reconnectAttempt = 0;
-        while (isGenerationActive(generation)) {
-          const result = await readStreamResponse(activeResponse);
-          if (!isGenerationActive(generation)) return false;
-
-          if (result === "completed") {
-            if (revealCompletionPromise) await revealCompletionPromise;
-            return true;
-          }
-
-          if (result === "aborted" || result === "inactive") {
-            return false;
-          }
-
-          if (typeof result === "object" && result.status === "error") {
-            persistInterruptedStream(
-              streamedText
-                ? `${result.message} ここまでの応答を保存しました。`
-                : result.message,
-            );
-            return false;
-          }
-
-          try {
-            await waitForGenerationStreamReconnect(reconnectAttempt, generation.abortController.signal);
-          } catch (error) {
-            if (generation.abortController.signal.aborted || !isGenerationActive(generation)) return false;
-            throw error;
-          }
-          reconnectAttempt += 1;
-          if (!isGenerationActive(generation)) return false;
-
-          const reconnectResponse = await openReconnectStream();
-          if (reconnectResponse === "unavailable") {
-            persistInterruptedStream(
-              streamedText
-                ? localize("ストリームを再開できませんでした。ここまでの応答を保存しました。", "The stream could not be resumed. The response received so far was saved.")
-                : localize("ストリームを再開できませんでした。", "The stream could not be resumed."),
-            );
-            return false;
-          }
-          if (!reconnectResponse) {
-            // A lost Wi-Fi connection can make the first few reconnects fail
-            // even after the browser reports online. Keep the local progress
-            // and continue retrying until the user stops the generation.
-            continue;
-          }
-          activeResponse = reconnectResponse;
-        }
-        return false;
-      } finally {
-        // 途中終了時も保留分を確定させる。クリア済みの場合は
-        // updateStoredGenerationState が no-op になるため復活はしない。
-        // On any exit, settle pending work. If the stored state was already
-        // cleared, updateStoredGenerationState is a no-op, so nothing revives.
-        cancelStreamedChunkRender();
-        if (finalRevealTimerId !== null) {
-          window.clearTimeout(finalRevealTimerId);
-          finalRevealTimerId = null;
-        }
-        if (storedStateSyncTimerId !== null) {
-          window.clearTimeout(storedStateSyncTimerId);
-        }
-        flushStoredGenerationStateSync();
-      }
     },
     [
       appendAssistantErrorMessage,
       applyRoomTitleUpdate,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
-      removeThinkingMessages,
-      requestScrollToBottom,
+      openGenerationStreamRequest,
     ],
+  );
+
+  // SSE の解釈・文字送り・再接続は lib/chat_page/generation_stream_consumer.ts が持つ。
+  // ここは注入口を組み立てて委譲するだけ。
+  // Event interpretation, reveal pacing and reconnects live in
+  // lib/chat_page/generation_stream_consumer.ts; this only wires the ports.
+  const consumeStreamingChatResponse = useCallback(
+    (
+      response: Response,
+      generation: ActiveGeneration,
+      options?: { onUnansweredFailure?: (message: string) => void },
+    ): Promise<boolean> =>
+      consumeGenerationStream(response, buildGenerationStreamHost(generation, options?.onUnansweredFailure)),
+    [buildGenerationStreamHost],
   );
 
   const recoverInitialGenerationStream = useCallback(
@@ -1204,21 +545,12 @@ export function useHomePageGenerationActions({
         reconnectAttempt += 1;
 
         try {
-          const response = await resilientFetch(
-            `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
-            {
-              credentials: "same-origin",
-              signal: generation.abortController.signal,
-            },
-            { timeoutMs: 0 },
-          );
+          const response = await openGenerationStreamRequest(roomId, generation.abortController.signal);
           if (response.ok) return response;
 
           // A 4xx response means the original request was not accepted (or the
           // session is no longer valid); retries cannot safely recreate a POST.
-          if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
-            return null;
-          }
+          if (isUnrecoverableStreamStatus(response.status)) return null;
         } catch {
           if (generation.abortController.signal.aborted) return null;
         }
@@ -1226,7 +558,7 @@ export function useHomePageGenerationActions({
 
       return null;
     },
-    [isGenerationActive],
+    [isGenerationActive, openGenerationStreamRequest],
   );
 
   const connectToGenerationStream = useCallback(
@@ -1249,28 +581,14 @@ export function useHomePageGenerationActions({
       });
 
       const headers: Record<string, string> = {};
-      const storedGeneration = readStoredGenerationState(roomId);
-      if (storedGeneration && storedGeneration.lastEventId > 0) {
-        const rememberedLastEventId = streamLastEventIdByRoomRef.current.get(roomId) ?? 0;
-        if (storedGeneration.lastEventId > rememberedLastEventId) {
-          streamLastEventIdByRoomRef.current.set(roomId, storedGeneration.lastEventId);
-        }
-      }
+      restoreStoredLastEventId(roomId);
       const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
       if (typeof lastEventId === "number" && lastEventId > 0) {
         headers["Last-Event-ID"] = String(lastEventId);
       }
 
       try {
-        const response = await resilientFetch(
-          `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
-          {
-            credentials: "same-origin",
-            signal: generation.abortController.signal,
-            headers,
-          },
-          { timeoutMs: 0 }
-        );
+        const response = await openGenerationStreamRequest(roomId, generation.abortController.signal, headers);
 
         if (!response.ok) {
           const rawPayload = await readJsonBodySafe(response);
@@ -1300,8 +618,10 @@ export function useHomePageGenerationActions({
       appendAssistantErrorMessage,
       consumeStreamingChatResponse,
       isGenerationActive,
+      openGenerationStreamRequest,
       releaseGeneration,
       removeThinkingMessages,
+      restoreStoredLastEventId,
     ],
   );
 
@@ -1574,6 +894,234 @@ export function useHomePageGenerationActions({
     [createNewChatRoom, setChatRooms],
   );
 
+  // 復元用の進行状態を、このターンの開始位置へ初期化する。
+  // Reset the persisted progress state to the start of this turn.
+  const resetStoredGenerationProgress = useCallback((roomId: string, roomMode: ChatRoomMode) => {
+    streamLastEventIdByRoomRef.current.set(roomId, 0);
+    writeStoredGenerationState({
+      roomId,
+      roomMode,
+      lastEventId: 0,
+      streamedText: "",
+      updatedAt: Date.now(),
+    });
+  }, []);
+
+  // 送信したユーザー発話と「思考中」を楽観表示し、復元用の下書きを保存する。
+  // Optimistically render the sent user message plus the thinking placeholder,
+  // and persist the recovery draft for this turn.
+  const beginOutgoingTurn = useCallback(
+    (generation: ActiveGeneration, userMessage: UiChatMessage, roomMode: ChatRoomMode) => {
+      const { roomId } = generation;
+      const initialThinkingState = getInitialThinkingState(
+        personalKnowledgeEnabled,
+        sharedPromptsEnabled,
+        localeRef.current,
+      );
+      const thinkingMessage: UiChatMessage = {
+        id: nextMessageId("thinking", messageSeqRef),
+        sender: "thinking",
+        ...initialThinkingState,
+      };
+
+      setMessages((previous) => {
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+        return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
+      });
+      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: userMessage.text, sender: "user" }));
+      resetStoredGenerationProgress(roomId, roomMode);
+      requestScrollToBottom();
+    },
+    [
+      isGenerationActive,
+      notifyStoredHistoryWriteIssue,
+      personalKnowledgeEnabled,
+      sharedPromptsEnabled,
+      removeThinkingMessages,
+      requestScrollToBottom,
+      resetStoredGenerationProgress,
+    ],
+  );
+
+  // 回答が1件も返らなかったターンの後始末。ユーザー発話ごと取り消してから
+  // エラーを1件だけ表示するので、再送しても自分の発話が積み上がらない。
+  // Clean up a turn that produced no answer: roll the user's own message back
+  // and show a single error, so retrying never stacks up user bubbles.
+  const createUnansweredFailureHandler = useCallback(
+    (generation: ActiveGeneration, userMessageId: string, message: string, unsentInputText?: string) =>
+      (errorMessage: string) => {
+        if (!isGenerationActive(generation)) return;
+        clearStoredGenerationState(generation.roomId);
+        rollbackUnansweredUserMessage(generation.roomId, userMessageId, message, unsentInputText);
+        appendAssistantErrorMessage(generation.roomId, errorMessage);
+      },
+    [appendAssistantErrorMessage, isGenerationActive, rollbackUnansweredUserMessage],
+  );
+
+  // 中断されたターンから「思考中」だけを取り除く。エラー表示は出さない。
+  // Drop only the thinking placeholder from an aborted turn; no error is shown.
+  const removeThinkingAfterAbort = useCallback(
+    (generation: ActiveGeneration) => {
+      if (!isGenerationActive(generation)) return;
+      setMessages((previous) => {
+        if (currentRoomIdRef.current !== generation.roomId || !isGenerationActive(generation)) return previous;
+        return removeThinkingMessages(previous);
+      });
+    },
+    [isGenerationActive, removeThinkingMessages],
+  );
+
+  // SSE ではない JSON 応答を、確定済みの回答として1件積む。
+  // Append a non-SSE JSON reply as one settled answer message.
+  const appendJsonAssistantMessage = useCallback(
+    (generation: ActiveGeneration, data: { response?: string | null; parts?: ChatMessagePart[] }) => {
+      const { roomId } = generation;
+      setMessages((previous) => {
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+        return [
+          ...removeThinkingMessages(previous),
+          {
+            id: nextMessageId("assistant", messageSeqRef),
+            sender: "assistant",
+            text: data.response ?? "",
+            ...(data.parts?.length ? { parts: data.parts } : {}),
+          },
+        ];
+      });
+    },
+    [isGenerationActive, removeThinkingMessages],
+  );
+
+  const postChatMessageRequest = useCallback(
+    (
+      generation: ActiveGeneration,
+      payload: { message: string; model: string; attachedFiles?: AttachedFile[] },
+    ) =>
+      resilientFetch(
+        "/api/chat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            message: payload.message,
+            chat_room_id: generation.roomId,
+            model: payload.model,
+            use_personal_knowledge: personalKnowledgeEnabled,
+            use_shared_prompts: sharedPromptsEnabled,
+            attached_files:
+              payload.attachedFiles?.map((f) => ({
+                name: f.name,
+                content: f.content ?? "",
+                media_type: f.mediaType ?? "",
+                data_base64: f.dataBase64 ?? "",
+              })) ?? [],
+          }),
+          signal: generation.abortController.signal,
+        },
+        { timeoutMs: 0 }
+      ),
+    [personalKnowledgeEnabled, sharedPromptsEnabled],
+  );
+
+  // ルームがサーバー上に無いだけなら、作り直して同じ本文をもう一度送る。
+  // ここで諦めると、その画面からは二度とチャットを続けられなくなる。
+  // When only the room is missing, recreate it and send the same message
+  // once more; giving up here would leave the chat permanently unusable.
+  const resendAfterMissingChatRoom = useCallback(
+    async (
+      generation: ActiveGeneration,
+      message: string,
+      roomMode: ChatRoomMode,
+      notFoundResponse: Response,
+      resend: () => Promise<Response>,
+    ): Promise<Response | { failureMessage: string }> => {
+      const notFoundPayload = await readJsonBodySafe(notFoundResponse);
+      const restored =
+        isChatRoomNotFoundPayload(notFoundPayload) &&
+        isGenerationActive(generation) &&
+        (await restoreMissingChatRoom(generation.roomId, message, roomMode));
+
+      if (restored) return resend();
+
+      return {
+        failureMessage: extractApiErrorMessage(
+          notFoundPayload,
+          localize("チャットの送信に失敗しました。", "The message could not be sent."),
+          notFoundResponse.status,
+        ),
+      };
+    },
+    [isGenerationActive, restoreMissingChatRoom],
+  );
+
+  // JSON 応答の処理。回答があれば表示・保存し、無ければ未回答として扱う。
+  // Handle a JSON reply: render and persist an answer, or treat the turn as
+  // unanswered when there is none.
+  const applyJsonChatResponse = useCallback(
+    async (
+      generation: ActiveGeneration,
+      response: Response,
+      handleUnansweredFailure: (message: string) => void,
+    ): Promise<boolean> => {
+      const rawPayload = await readJsonBodySafe(response);
+      const data = normalizeChatResponsePayload(rawPayload);
+      const answered = response.ok && Boolean(data.response || data.parts?.length);
+
+      if (!answered) {
+        handleUnansweredFailure(
+          extractApiErrorMessage(
+            rawPayload,
+            localize("予期しないエラーが発生しました。", "An unexpected error occurred."),
+            response.ok ? undefined : response.status,
+          ),
+        );
+        return false;
+      }
+
+      appendJsonAssistantMessage(generation, data);
+
+      if (data.response && isGenerationActive(generation)) {
+        notifyStoredHistoryWriteIssue(appendStoredHistory(generation.roomId, { text: data.response, sender: "bot" }));
+        applyRoomTitleUpdate(generation.roomId, data.roomTitle);
+      }
+      clearStoredGenerationState(generation.roomId);
+      // 回答が届いても画面は動かさない。見落とすと困るエラーだけ下端へ送る。
+      // An arriving answer never moves the view; only an error, which must not
+      // be missed, still pulls the view to the bottom.
+      return true;
+    },
+    [
+      appendJsonAssistantMessage,
+      applyRoomTitleUpdate,
+      isGenerationActive,
+      notifyStoredHistoryWriteIssue,
+    ],
+  );
+
+  // The POST may have reached the server even when the client loses the
+  // response during a Wi-Fi/mobile handoff. Do not resend it (which could
+  // create a duplicate turn); attach to the generation the server already
+  // started instead.
+  const attachToServerSideGeneration = useCallback(
+    async (
+      generation: ActiveGeneration,
+      handleUnansweredFailure: (message: string) => void,
+      error: unknown,
+    ): Promise<boolean> => {
+      const recoveredResponse = await recoverInitialGenerationStream(generation.roomId, generation);
+      if (recoveredResponse && isGenerationActive(generation)) {
+        return consumeStreamingChatResponse(recoveredResponse, generation, {
+          onUnansweredFailure: handleUnansweredFailure,
+        });
+      }
+
+      handleUnansweredFailure(error instanceof Error ? error.message : String(error));
+      return false;
+    },
+    [consumeStreamingChatResponse, isGenerationActive, recoverInitialGenerationStream],
+  );
+
   const generateResponse = useCallback(
     async (
       message: string,
@@ -1598,94 +1146,25 @@ export function useHomePageGenerationActions({
         text: message,
         attachedFileNames: attachedFiles?.length ? attachedFiles.map((f) => f.name) : undefined,
       };
-      const initialThinkingState = getInitialThinkingState(
-        personalKnowledgeEnabled,
-        sharedPromptsEnabled,
-        localeRef.current,
+      beginOutgoingTurn(generation, userMessage, roomMode);
+
+      const handleUnansweredFailure = createUnansweredFailureHandler(
+        generation,
+        userMessage.id,
+        message,
+        options?.unsentInputText,
       );
-      const thinkingMessage: UiChatMessage = {
-        id: nextMessageId("thinking", messageSeqRef),
-        sender: "thinking",
-        ...initialThinkingState,
-      };
-
-      setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-        return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
-      });
-      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: message, sender: "user" }));
-      streamLastEventIdByRoomRef.current.set(roomId, 0);
-      writeStoredGenerationState({
-        roomId,
-        roomMode,
-        lastEventId: 0,
-        streamedText: "",
-        updatedAt: Date.now(),
-      });
-      requestScrollToBottom();
-
-      // 回答が1件も返らなかったターンの後始末。ユーザー発話ごと取り消してから
-      // エラーを1件だけ表示するので、再送しても自分の発話が積み上がらない。
-      // Clean up a turn that produced no answer: roll the user's own message back
-      // and show a single error, so retrying never stacks up user bubbles.
-      const handleUnansweredFailure = (errorMessage: string) => {
-        if (!isGenerationActive(generation)) return;
-        clearStoredGenerationState(roomId);
-        rollbackUnansweredUserMessage(roomId, userMessage.id, message, options?.unsentInputText);
-        appendAssistantErrorMessage(roomId, errorMessage);
-      };
-
-      const postChatMessage = () =>
-        resilientFetch(
-          "/api/chat",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({
-              message,
-              chat_room_id: roomId,
-              model,
-              use_personal_knowledge: personalKnowledgeEnabled,
-              use_shared_prompts: sharedPromptsEnabled,
-              attached_files:
-                attachedFiles?.map((f) => ({
-                  name: f.name,
-                  content: f.content ?? "",
-                  media_type: f.mediaType ?? "",
-                  data_base64: f.dataBase64 ?? "",
-                })) ?? [],
-            }),
-            signal: generation.abortController.signal,
-          },
-          { timeoutMs: 0 }
-        );
+      const postChatMessage = () => postChatMessageRequest(generation, { message, model, attachedFiles });
 
       try {
         let response = await postChatMessage();
-        // ルームがサーバー上に無いだけなら、作り直して同じ本文をもう一度送る。
-        // ここで諦めると、その画面からは二度とチャットを続けられなくなる。
-        // When only the room is missing, recreate it and send the same message
-        // once more; giving up here would leave the chat permanently unusable.
         if (response.status === 404) {
-          const notFoundPayload = await readJsonBodySafe(response);
-          const restored =
-            isChatRoomNotFoundPayload(notFoundPayload) &&
-            isGenerationActive(generation) &&
-            (await restoreMissingChatRoom(roomId, message, roomMode));
-
-          if (restored) {
-            response = await postChatMessage();
-          } else {
-            handleUnansweredFailure(
-              extractApiErrorMessage(
-                notFoundPayload,
-                localize("チャットの送信に失敗しました。", "The message could not be sent."),
-                response.status,
-              ),
-            );
+          const resent = await resendAfterMissingChatRoom(generation, message, roomMode, response, postChatMessage);
+          if ("failureMessage" in resent) {
+            handleUnansweredFailure(resent.failureMessage);
             return false;
           }
+          response = resent;
         }
 
         const contentType = response.headers.get("content-type") || "";
@@ -1695,89 +1174,32 @@ export function useHomePageGenerationActions({
           });
         }
 
-        const rawPayload = await readJsonBodySafe(response);
-        const data = normalizeChatResponsePayload(rawPayload);
-        const answered = response.ok && Boolean(data.response || data.parts?.length);
-
-        if (!answered) {
-          handleUnansweredFailure(
-            extractApiErrorMessage(
-              rawPayload,
-              localize("予期しないエラーが発生しました。", "An unexpected error occurred."),
-              response.ok ? undefined : response.status,
-            ),
-          );
-          return false;
-        }
-
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return [
-            ...removeThinkingMessages(previous),
-            {
-              id: nextMessageId("assistant", messageSeqRef),
-              sender: "assistant",
-              text: data.response ?? "",
-              ...(data.parts?.length ? { parts: data.parts } : {}),
-            },
-          ];
-        });
-
-        if (data.response && isGenerationActive(generation)) {
-          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
-          applyRoomTitleUpdate(roomId, data.roomTitle);
-        }
-        clearStoredGenerationState(roomId);
-        // 回答が届いても画面は動かさない。見落とすと困るエラーだけ下端へ送る。
-        // An arriving answer never moves the view; only an error, which must not
-        // be missed, still pulls the view to the bottom.
-        return true;
+        return await applyJsonChatResponse(generation, response, handleUnansweredFailure);
       } catch (error) {
         if (generation.abortController.signal.aborted) {
-          if (isGenerationActive(generation)) {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
+          removeThinkingAfterAbort(generation);
           return false;
         }
 
-        // The POST may have reached the server even when the client loses the
-        // response during a Wi-Fi/mobile handoff. Do not resend it (which could
-        // create a duplicate turn); attach to the generation the server already
-        // started instead.
-        const recoveredResponse = await recoverInitialGenerationStream(roomId, generation);
-        if (recoveredResponse && isGenerationActive(generation)) {
-          return consumeStreamingChatResponse(recoveredResponse, generation, {
-            onUnansweredFailure: handleUnansweredFailure,
-          });
-        }
-
-        handleUnansweredFailure(error instanceof Error ? error.message : String(error));
-        return false;
+        return await attachToServerSideGeneration(generation, handleUnansweredFailure, error);
       } finally {
         releaseGeneration(generation);
       }
     },
     [
       acquireGeneration,
-      appendAssistantErrorMessage,
-      applyRoomTitleUpdate,
+      applyJsonChatResponse,
+      attachToServerSideGeneration,
+      beginOutgoingTurn,
       consumeStreamingChatResponse,
+      createUnansweredFailureHandler,
       currentRoomMode,
-      isGenerationActive,
       markChatRoomActive,
-      notifyStoredHistoryWriteIssue,
-      personalKnowledgeEnabled,
-      sharedPromptsEnabled,
-      recoverInitialGenerationStream,
+      postChatMessageRequest,
       refreshActivePath,
       releaseGeneration,
-      removeThinkingMessages,
-      requestScrollToBottom,
-      restoreMissingChatRoom,
-      rollbackUnansweredUserMessage,
+      removeThinkingAfterAbort,
+      resendAfterMissingChatRoom,
     ],
   );
 
@@ -1804,8 +1226,10 @@ export function useHomePageGenerationActions({
     }
   }, [disconnectActiveGeneration]);
 
-  const editAndRegenerateMessage = useCallback(
-    async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
+  // 編集対象より後ろを、画面と表示キャッシュの両方から切り落とす。
+  // Trim everything after the edit target from both the screen and the cache.
+  const truncateHistoryForEdit = useCallback(
+    (roomId: string, trailingUserCount: number) => {
       setMessages((previous) => {
         const userIndices: number[] = [];
         previous.forEach((m, i) => {
@@ -1825,6 +1249,13 @@ export function useHomePageGenerationActions({
         const targetStoredIdx = userStoredIndices[userStoredIndices.length - 1 - trailingUserCount];
         notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx)));
       }
+    },
+    [notifyStoredHistoryWriteIssue, removeThinkingMessages],
+  );
+
+  const editAndRegenerateMessage = useCallback(
+    async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
+      truncateHistoryForEdit(roomId, trailingUserCount);
 
       const generation = acquireGeneration(roomId);
       if (!generation) return;
@@ -1835,42 +1266,13 @@ export function useHomePageGenerationActions({
         sender: "user",
         text: newMessage,
       };
-      const initialThinkingState = getInitialThinkingState(
-        personalKnowledgeEnabled,
-        sharedPromptsEnabled,
-        localeRef.current,
-      );
-      const thinkingMsg: UiChatMessage = {
-        id: nextMessageId("thinking", messageSeqRef),
-        sender: "thinking",
-        ...initialThinkingState,
-      };
-
-      setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-        return [...removeThinkingMessages(previous), userMsg, thinkingMsg];
-      });
-      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: newMessage, sender: "user" }));
-      streamLastEventIdByRoomRef.current.set(roomId, 0);
-      writeStoredGenerationState({
-        roomId,
-        roomMode: currentRoomMode,
-        lastEventId: 0,
-        streamedText: "",
-        updatedAt: Date.now(),
-      });
-      requestScrollToBottom();
+      beginOutgoingTurn(generation, userMsg, currentRoomMode);
 
       // 編集した発話も回答が返らなければサーバー側で破棄される。画面にだけ残すと
       // 送り直すたびに自分の発話が積み上がるため、同じように取り消す。
       // An edited message is discarded server-side when no answer comes back, so
       // roll it back here too instead of stacking it on every retry.
-      const handleUnansweredFailure = (errorMessage: string) => {
-        if (!isGenerationActive(generation)) return;
-        clearStoredGenerationState(roomId);
-        rollbackUnansweredUserMessage(roomId, userMsg.id, newMessage);
-        appendAssistantErrorMessage(roomId, errorMessage);
-      };
+      const handleUnansweredFailure = createUnansweredFailureHandler(generation, userMsg.id, newMessage);
 
       try {
         const response = await resilientFetch(
@@ -1904,18 +1306,7 @@ export function useHomePageGenerationActions({
         const rawPayload = await readJsonBodySafe(response);
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-            return [
-              ...removeThinkingMessages(previous),
-              {
-                id: nextMessageId("assistant", messageSeqRef),
-                sender: "assistant",
-                text: data.response ?? "",
-                ...(data.parts?.length ? { parts: data.parts } : {}),
-              },
-            ];
-          });
+          appendJsonAssistantMessage(generation, data);
           if (data.response) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
           }
@@ -1933,12 +1324,7 @@ export function useHomePageGenerationActions({
         );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          if (isGenerationActive(generation)) {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
+          removeThinkingAfterAbort(generation);
           return;
         }
         handleUnansweredFailure(error instanceof Error ? error.message : String(error));
@@ -1948,24 +1334,26 @@ export function useHomePageGenerationActions({
     },
     [
       acquireGeneration,
-      appendAssistantErrorMessage,
+      appendJsonAssistantMessage,
+      beginOutgoingTurn,
       consumeStreamingChatResponse,
+      createUnansweredFailureHandler,
       currentRoomMode,
-      isGenerationActive,
       markChatRoomActive,
       notifyStoredHistoryWriteIssue,
       personalKnowledgeEnabled,
       sharedPromptsEnabled,
       refreshActivePath,
       releaseGeneration,
-      removeThinkingMessages,
-      requestScrollToBottom,
-      rollbackUnansweredUserMessage,
+      removeThinkingAfterAbort,
+      truncateHistoryForEdit,
     ],
   );
 
-  const regenerateLastResponse = useCallback(
-    async (model: string, roomId: string) => {
+  // 直前の回答（と表示キャッシュの最後のbot発話）を取り消して再生成に備える。
+  // Drop the previous answer (and the last cached bot entry) before regenerating.
+  const truncateLastAnswerForRegenerate = useCallback(
+    (roomId: string) => {
       setMessages((previous) => {
         let lastAssistantIdx = -1;
         for (let i = previous.length - 1; i >= 0; i--) {
@@ -1989,11 +1377,15 @@ export function useHomePageGenerationActions({
       if (lastBotLocalIdx >= 0) {
         notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx)));
       }
+    },
+    [notifyStoredHistoryWriteIssue, removeThinkingMessages],
+  );
 
-      const generation = acquireGeneration(roomId);
-      if (!generation) return;
-      markChatRoomActive(roomId);
-
+  // 再生成は新しいユーザー発話を伴わないので、「思考中」だけを積む。
+  // A regeneration adds no user message, so only the thinking placeholder appears.
+  const beginRegeneratedTurn = useCallback(
+    (generation: ActiveGeneration) => {
+      const { roomId } = generation;
       const thinkingId = nextMessageId("thinking", messageSeqRef);
       const initialThinkingState = getInitialThinkingState(
         personalKnowledgeEnabled,
@@ -2011,15 +1403,28 @@ export function useHomePageGenerationActions({
           },
         ];
       });
-      streamLastEventIdByRoomRef.current.set(roomId, 0);
-      writeStoredGenerationState({
-        roomId,
-        roomMode: currentRoomMode,
-        lastEventId: 0,
-        streamedText: "",
-        updatedAt: Date.now(),
-      });
+      resetStoredGenerationProgress(roomId, currentRoomMode);
       requestScrollToBottom();
+    },
+    [
+      currentRoomMode,
+      isGenerationActive,
+      personalKnowledgeEnabled,
+      sharedPromptsEnabled,
+      removeThinkingMessages,
+      requestScrollToBottom,
+      resetStoredGenerationProgress,
+    ],
+  );
+
+  const regenerateLastResponse = useCallback(
+    async (model: string, roomId: string) => {
+      truncateLastAnswerForRegenerate(roomId);
+
+      const generation = acquireGeneration(roomId);
+      if (!generation) return;
+      markChatRoomActive(roomId);
+      beginRegeneratedTurn(generation);
 
       try {
         const response = await resilientFetch(
@@ -2049,18 +1454,7 @@ export function useHomePageGenerationActions({
         const rawPayload = await readJsonBodySafe(response);
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-            return [
-              ...removeThinkingMessages(previous),
-              {
-                id: nextMessageId("assistant", messageSeqRef),
-                sender: "assistant",
-                text: data.response ?? "",
-                ...(data.parts?.length ? { parts: data.parts } : {}),
-              },
-            ];
-          });
+          appendJsonAssistantMessage(generation, data);
           if (data.response) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
           }
@@ -2085,12 +1479,7 @@ export function useHomePageGenerationActions({
         requestScrollToBottom();
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          if (isGenerationActive(generation)) {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
+          removeThinkingAfterAbort(generation);
           return;
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -2105,8 +1494,9 @@ export function useHomePageGenerationActions({
     [
       acquireGeneration,
       appendAssistantErrorMessage,
+      appendJsonAssistantMessage,
+      beginRegeneratedTurn,
       consumeStreamingChatResponse,
-      currentRoomMode,
       isGenerationActive,
       markChatRoomActive,
       notifyStoredHistoryWriteIssue,
@@ -2114,8 +1504,10 @@ export function useHomePageGenerationActions({
       sharedPromptsEnabled,
       refreshActivePath,
       releaseGeneration,
+      removeThinkingAfterAbort,
       removeThinkingMessages,
       requestScrollToBottom,
+      truncateLastAnswerForRegenerate,
     ],
   );
 

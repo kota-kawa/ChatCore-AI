@@ -48,7 +48,7 @@ function stripPreviewText(value: string) {
     .replace(/`([^`]+)`/g, "$1")
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[#>*_\-]/g, " ")
+    .replace(/[#>*_-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -97,7 +97,7 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
   const ogImageUrl = origin ? `${origin}/static/Chat-Core-OG-compressed.jpg` : "/static/Chat-Core-OG-compressed.jpg";
 
-  let payload: SharedChatPayload = {};
+  let payload: SharedChatPayload;
 
   try {
     const res = await resilientFetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`);

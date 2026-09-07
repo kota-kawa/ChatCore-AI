@@ -1,5 +1,4 @@
 // components/chat/popup_menu.ts (chat-specific)
-import { getStoredThemePreference, setThemePreference, resolveTheme } from "../../core/theme";
 
 const chatTemplate = document.createElement("template");
 chatTemplate.innerHTML = `

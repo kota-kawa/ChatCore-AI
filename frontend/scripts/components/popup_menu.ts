@@ -1,5 +1,4 @@
 // components/popup_menu.ts
-import { getStoredThemePreference, setThemePreference, resolveTheme } from "../core/theme";
 
 const template = document.createElement("template");
 template.innerHTML = `

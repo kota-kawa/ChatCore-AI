@@ -49,7 +49,7 @@ function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: Bo
         if (part.type === "interactive_buttons") {
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
-              <InteractiveButtons buttons={part.buttons} messageId={`btn-${index}`} />
+              <InteractiveButtons buttons={part.buttons} />
             </div>
           );
         }

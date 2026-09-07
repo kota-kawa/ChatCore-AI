@@ -3,7 +3,6 @@ import { STORAGE_KEYS } from "./constants";
 let loggedInState: boolean | null = null;
 let currentChatRoomIdLoaded = false;
 let currentChatRoomIdState: string | null = null;
-let isTaskOrderEditingState = false;
 
 function dispatchAuthStateChange(loggedIn: boolean) {
   document.dispatchEvent(
@@ -41,8 +40,4 @@ function ensureCurrentChatRoomIdLoaded() {
 export function getCurrentChatRoomId() {
   ensureCurrentChatRoomIdLoaded();
   return currentChatRoomIdState;
-}
-
-export function isTaskOrderEditing() {
-  return isTaskOrderEditingState;
 }

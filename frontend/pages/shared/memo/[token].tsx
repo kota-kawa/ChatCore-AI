@@ -75,7 +75,7 @@ export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async
   const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
   const ogImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
 
-  let payload: SharedMemoPayload = {};
+  let payload: SharedMemoPayload;
 
   try {
     const res = await resilientFetch(`${backendUrl}/memo/api/shared?token=${encodeURIComponent(token)}`);
@@ -141,7 +141,10 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         ogType="article"
         noindex={Boolean(payload.error || !memo)}
         structuredData={structuredData}
-      />
+      >
+        {/* この画面専用のCSSは_appに載せず、このページからのみ読み込む / Page-only CSS is linked here instead of _app */}
+        <link rel="stylesheet" href="/static/css/pages/shared_memo.css" />
+      </SeoHead>
 
       <div className="shared-memo-page">
         {/* エラー時はエラーメッセージを表示 / Show error message on failure */}

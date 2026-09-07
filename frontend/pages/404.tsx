@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { SeoHead } from "../components/SeoHead";
 import { useTranslation } from "../contexts/locale_context";
 
@@ -17,9 +19,9 @@ export default function NotFoundPage() {
           <h1>{t("notFound.heading")}</h1>
           <p>{t("notFound.description")}</p>
           {/* トップページへの導線 / Link back to the top page */}
-          <a href="/" className="cc-texture-btn cc-texture-btn--indigo cc-press">
+          <Link href="/" className="cc-texture-btn cc-texture-btn--indigo cc-press">
             {t("notFound.backHome")}
-          </a>
+          </Link>
         </div>
       </main>
     </>

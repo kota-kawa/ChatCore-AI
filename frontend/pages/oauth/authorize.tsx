@@ -105,7 +105,10 @@ export default function McpOAuthAuthorizePage() {
         description={english ? "Review the Chat Core permissions requested by an external AI service." : "外部AIサービスへ許可するChat Coreの権限を確認します。"}
         canonicalPath="/oauth/authorize"
         noindex
-      />
+      >
+        {/* この画面専用のCSSは_appに載せず、このページからのみ読み込む / Page-only CSS is linked here instead of _app */}
+        <link rel="stylesheet" href="/static/css/pages/oauth_authorize/oauth_authorize.css" />
+      </SeoHead>
 
       <main className="oauth-authorize-page">
         <section className="oauth-authorize-card" aria-labelledby="oauth-authorize-title">

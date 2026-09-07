@@ -5,9 +5,12 @@ import {
   normalizeChatResponsePayload,
   normalizeChatHistoryMessages,
   normalizeChatHistoryPagination,
+  normalizeChatHistoryPayload,
   normalizeChatRoom,
   normalizeChatRooms,
   normalizeChatRoomsPayload,
+  normalizeGenerationStatusPayload,
+  normalizeShareChatRoomPayload,
 } from "../lib/chat_page/api_contract";
 
 test("normalizeChatRoom normalizes incomplete payloads", () => {
@@ -255,5 +258,178 @@ test("normalizers keep the three library declaration and drop unknown ones", () 
   assert.deepEqual(
     part?.type === "sandbox_artifact" ? part.artifact.libraries : undefined,
     ["three"],
+  );
+});
+
+// 日本語: ここから下は、生成 Zod スキーマ（`types/generated/api_schemas.ts`）へ置き換えた
+//         正規化関数が、壊れたペイロードでも従来どおりの既定値へ落ちることを固定するテストです。
+// English: The tests below pin the fallback behaviour of the normalizers that now validate through the
+//          generated Zod schemas (`types/generated/api_schemas.ts`) when the payload is malformed.
+
+test("normalizeChatHistoryPagination falls back on malformed pagination fields", () => {
+  assert.deepEqual(
+    normalizeChatHistoryPagination({ has_more: "yes", next_before_id: "12" }),
+    { hasMore: false, nextBeforeId: null },
+  );
+  assert.deepEqual(normalizeChatHistoryPagination(undefined), { hasMore: false, nextBeforeId: null });
+  assert.deepEqual(normalizeChatHistoryPagination("not-an-object"), { hasMore: false, nextBeforeId: null });
+  assert.deepEqual(normalizeChatHistoryPagination({ has_more: null, next_before_id: null }), {
+    hasMore: false,
+    nextBeforeId: null,
+  });
+});
+
+test("normalizeChatHistoryPagination keeps the lenient non-integer cursor behaviour", () => {
+  // 日本語: 生成スキーマは整数のみを許すが、従来の正規化は有限の非整数も通していたため互換を保つ。
+  // English: The generated schema allows integers only, but the previous normalizer passed finite
+  //          non-integers through, so that leniency is preserved.
+  assert.deepEqual(normalizeChatHistoryPagination({ has_more: true, next_before_id: 4.5 }), {
+    hasMore: true,
+    nextBeforeId: 4.5,
+  });
+  assert.deepEqual(normalizeChatHistoryPagination({ next_before_id: Number.POSITIVE_INFINITY }), {
+    hasMore: false,
+    nextBeforeId: null,
+  });
+  assert.deepEqual(normalizeChatHistoryPagination({ next_before_id: Number.NaN }), {
+    hasMore: false,
+    nextBeforeId: null,
+  });
+});
+
+test("normalizeChatHistoryMessages falls back for malformed entries", () => {
+  assert.deepEqual(normalizeChatHistoryMessages("not-an-array"), []);
+  assert.deepEqual(normalizeChatHistoryMessages([null, 7, "x"]), [
+    { id: undefined, message: undefined, sender: undefined, timestamp: undefined },
+    { id: undefined, message: undefined, sender: undefined, timestamp: undefined },
+    { id: undefined, message: undefined, sender: undefined, timestamp: undefined },
+  ]);
+  assert.deepEqual(
+    normalizeChatHistoryMessages([
+      {
+        id: "5",
+        message: { text: "hello" },
+        sender: 3,
+        timestamp: 20260101,
+        message_parts: "broken",
+        attached_file_names: "broken",
+        sibling_ids: "broken",
+        version_index: "broken",
+        version_count: 0,
+      },
+    ]),
+    [{ id: undefined, message: undefined, sender: undefined, timestamp: undefined }],
+  );
+});
+
+test("normalizeChatHistoryMessages keeps good entries next to a malformed sibling", () => {
+  const normalized = normalizeChatHistoryMessages([
+    { id: 4, message: "kept", sender: "user", timestamp: "2026-01-01" },
+    { id: "bad", message: 42 },
+  ]);
+
+  assert.equal(normalized.length, 2);
+  assert.equal(normalized[0]?.message, "kept");
+  assert.equal(normalized[1]?.message, undefined);
+});
+
+test("normalizeChatHistoryPayload falls back on malformed payloads", () => {
+  assert.deepEqual(normalizeChatHistoryPayload(undefined), {
+    error: undefined,
+    messages: [],
+    pagination: { hasMore: false, nextBeforeId: null },
+    roomMode: "normal",
+  });
+  assert.deepEqual(
+    normalizeChatHistoryPayload({
+      error: { message: "boom" },
+      messages: "broken",
+      pagination: "broken",
+      room_mode: 7,
+    }),
+    {
+      error: undefined,
+      messages: [],
+      pagination: { hasMore: false, nextBeforeId: null },
+      roomMode: "normal",
+    },
+  );
+});
+
+test("normalizeChatHistoryPayload ignores malformed contract siblings", () => {
+  // 日本語: `detail` / `params` / `code` が壊れていても、読み取る項目は落ちない
+  //         （生成スキーマをペイロード全体で `parse` していないことの担保）。
+  // English: Broken `detail` / `params` / `code` must not drop the fields we read, proving the generated
+  //          schema is not applied to the whole payload with `parse`.
+  const normalized = normalizeChatHistoryPayload({
+    error: "history unavailable",
+    detail: 12345,
+    params: "broken",
+    code: 500,
+    messages: [{ id: 9, message: "hello", sender: "assistant", timestamp: "2026-01-01" }],
+    pagination: { has_more: true, next_before_id: 3 },
+    room_mode: "temporary",
+  });
+
+  assert.deepEqual(normalized, {
+    error: "history unavailable",
+    messages: [{ id: 9, message: "hello", sender: "assistant", timestamp: "2026-01-01" }],
+    pagination: { hasMore: true, nextBeforeId: 3 },
+    roomMode: "temporary",
+  });
+});
+
+test("normalizeGenerationStatusPayload falls back on malformed payloads", () => {
+  assert.deepEqual(normalizeGenerationStatusPayload(undefined), {
+    error: undefined,
+    is_generating: false,
+    has_replayable_job: false,
+  });
+  assert.deepEqual(normalizeGenerationStatusPayload([1, 2, 3]), {
+    error: undefined,
+    is_generating: false,
+    has_replayable_job: false,
+  });
+  assert.deepEqual(
+    normalizeGenerationStatusPayload({ error: 500, is_generating: "true", has_replayable_job: 1 }),
+    { error: undefined, is_generating: false, has_replayable_job: false },
+  );
+  assert.deepEqual(
+    normalizeGenerationStatusPayload({
+      error: "generation failed",
+      detail: 12345,
+      params: "broken",
+      is_generating: true,
+      has_replayable_job: false,
+    }),
+    { error: "generation failed", is_generating: true, has_replayable_job: false },
+  );
+});
+
+test("normalizeChatResponsePayload falls back on malformed payloads", () => {
+  assert.deepEqual(normalizeChatResponsePayload(undefined), {
+    response: undefined,
+    error: undefined,
+    roomTitle: undefined,
+  });
+  assert.deepEqual(
+    normalizeChatResponsePayload({ response: 5, error: {}, room_title: 9, parts: "broken" }),
+    { response: undefined, error: undefined, roomTitle: undefined },
+  );
+  assert.deepEqual(
+    normalizeChatResponsePayload({ response: "answer", detail: 12345, params: "broken", code: 200 }),
+    { response: "answer", error: undefined, roomTitle: undefined },
+  );
+});
+
+test("normalizeShareChatRoomPayload falls back on malformed payloads", () => {
+  assert.deepEqual(normalizeShareChatRoomPayload(undefined), { shareUrl: undefined });
+  assert.deepEqual(normalizeShareChatRoomPayload({ share_url: 42 }), { shareUrl: undefined });
+  assert.deepEqual(normalizeShareChatRoomPayload({ share_url: null, detail: 12345 }), {
+    shareUrl: undefined,
+  });
+  assert.deepEqual(
+    normalizeShareChatRoomPayload({ share_url: "https://example.com/s/abc", share_token: 5 }),
+    { shareUrl: "https://example.com/s/abc" },
   );
 });

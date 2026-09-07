@@ -1,4 +1,3 @@
-import type { Collection } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
 import {
