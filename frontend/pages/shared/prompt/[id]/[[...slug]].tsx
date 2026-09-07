@@ -84,6 +84,13 @@ type SharedPromptPageProps = {
 
 type SharedPromptResponse = SharedPromptPayload;
 
+// 投稿本文の見出しを下げる段数。ページはh1=プロンプト名・h2=セクション見出しを使うため、
+// 本文の`#`/`##`をそのまま出すとh1が重複し見出し階層が壊れる。本文はh3以降に収める。
+// How many levels the post body headings are shifted. The page already uses h1 for the prompt name
+// and h2 for section headings, so emitting a body `#`/`##` as-is duplicates the h1 and breaks the
+// outline. Keep the body at h3 and deeper.
+const BODY_HEADING_OFFSET = 2;
+
 // 日付文字列を表示用フォーマットに変換する
 // Convert date string to display format
 function formatDate(value?: string) {
@@ -446,21 +453,21 @@ export default function SharedPromptPage({
             {!isSkillPrompt ? (
               <section className="shared-prompt-section">
                 <h2><i className="bi bi-file-earmark-text" aria-hidden="true" /> {english ? "Content" : "内容"}</h2>
-                <MarkdownContent text={prompt.content || ""} ssrHtml={promptHtml.content} className="md-content" />
+                <MarkdownContent text={prompt.content || ""} ssrHtml={promptHtml.content} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.input_examples ? (
               <section className="shared-prompt-section">
                 <h2><i className="bi bi-box-arrow-in-right" aria-hidden="true" /> {english ? "Input example" : "入力例"}</h2>
-                <MarkdownContent text={prompt.input_examples} ssrHtml={promptHtml.inputExamples} className="md-content" />
+                <MarkdownContent text={prompt.input_examples} ssrHtml={promptHtml.inputExamples} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.output_examples ? (
               <section className="shared-prompt-section">
                 <h2><i className="bi bi-box-arrow-right" aria-hidden="true" /> {english ? "Output example" : "出力例"}</h2>
-                <MarkdownContent text={prompt.output_examples} ssrHtml={promptHtml.outputExamples} className="md-content" />
+                <MarkdownContent text={prompt.output_examples} ssrHtml={promptHtml.outputExamples} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 
@@ -468,7 +475,7 @@ export default function SharedPromptPage({
             {prompt.skill_markdown ? (
               <section className="shared-prompt-section">
                 <h2><i className="bi bi-stars" aria-hidden="true" /> {english ? "SKILL definition (Markdown)" : "SKILL定義 (Markdown)"}</h2>
-                <MarkdownContent text={prompt.skill_markdown} ssrHtml={promptHtml.skillMarkdown} className="md-content" />
+                <MarkdownContent text={prompt.skill_markdown} ssrHtml={promptHtml.skillMarkdown} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 

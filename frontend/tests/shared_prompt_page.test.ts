@@ -133,3 +133,38 @@ test("shared prompt page renders labels in the requested locale during SSR", () 
   assert.doesNotMatch(englishHtml, /プロンプト/);
   assert.match(japaneseHtml, /shared-prompt-pill">フォーマット: プロンプト</);
 });
+
+// ページのh1はプロンプト名、h2はセクション見出しなので、本文Markdown由来の見出しは
+// そのまま出すとh1が重複して見出し階層が壊れる。SSR出力で2段下げを固定する。
+// The page uses h1 for the prompt name and h2 for section headings, so body headings from Markdown
+// would duplicate the h1 and break the outline. Lock the two-level shift into the SSR output.
+test("shared prompt page demotes body headings so the page keeps a single h1", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SharedPromptPage, {
+      payload: {
+        prompt: {
+          id: 55,
+          title: "見出しを含むプロンプト",
+          category: "business",
+          content: "# 本文の見出し",
+          content_format: "prompt",
+          media_type: "text"
+        }
+      },
+      recommendedPrompts: [],
+      promptHtml: {
+        content: "<h1>本文の見出し</h1><h2>本文の小見出し</h2>",
+        inputExamples: "",
+        outputExamples: "",
+        skillMarkdown: "",
+        skillPythonScript: ""
+      },
+      pageUrl: "https://chatcore-ai.com/shared/prompt/55/heading-prompt",
+      defaultOgImageUrl: "https://chatcore-ai.com/static/img.jpg"
+    })
+  );
+
+  assert.equal(html.match(/<h1[\s>]/g)?.length, 1);
+  assert.match(html, /<h3>本文の見出し<\/h3>/);
+  assert.match(html, /<h4>本文の小見出し<\/h4>/);
+});

@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useState } from "react";
+import { demoteMarkdownHeadings } from "../scripts/core/markdown_headings";
 import { createMarkdownHtmlRenderer } from "../scripts/core/markdown_safe_html";
 
 // ブラウザ環境用のMarkdownレンダラー（初回利用時に生成して使い回す）
@@ -23,11 +24,14 @@ type Props = {
   // SSRで事前サニタイズ済みのHTML。指定時はそれをそのまま描画する（クローラにも本文が見える）。
   // Pre-sanitized HTML rendered on the server. When provided it is rendered as-is (visible to crawlers too).
   ssrHtml?: string;
+  // 本文の見出しを下げる段数。ページ側の見出し階層（h1=タイトル, h2=セクション）と衝突させないために使う。
+  // How many levels to shift the body headings, so they do not collide with the page hierarchy (h1 = title, h2 = section).
+  headingOffset?: number;
 };
 
 // MarkdownテキストをレンダリングするReactコンポーネント
 // React component that renders Markdown text as safe HTML
-export default function MarkdownContent({ text, className, id, ssrHtml }: Props) {
+export default function MarkdownContent({ text, className, id, ssrHtml, headingOffset }: Props) {
   // Markdown変換とサニタイズは DOM (marked→DOMPurify→document) に依存するためブラウザ側でのみ実行できる。
   // ssrHtml 指定時はサーバー・クライアントとも同じHTMLを描画するためハイドレーション不一致は起きない。
   // 未指定時は SSR とハイドレーション初回を空にしてサーバー出力と一致させ、マウント後に本文を挿入する。
@@ -44,11 +48,13 @@ export default function MarkdownContent({ text, className, id, ssrHtml }: Props)
 
   // ssrHtml・テキスト・マウント状態が変わった場合のみHTMLを再計算する
   // Recompute HTML only when ssrHtml, text, or mount state changes
+  // headingOffsetはSSR側の出力にも同じ値で適用され、サーバー・クライアントで同一HTMLになる
+  // headingOffset is applied to the SSR output with the same value, so both sides render identical HTML
   const html = useMemo(() => {
-    if (typeof ssrHtml === "string") return ssrHtml;
-    if (!isMounted) return "";
-    return renderMarkdownToSafeHtml(text);
-  }, [ssrHtml, text, isMounted]);
+    const source = typeof ssrHtml === "string" ? ssrHtml : isMounted ? renderMarkdownToSafeHtml(text) : "";
+    if (!headingOffset) return source;
+    return demoteMarkdownHeadings(source, headingOffset);
+  }, [ssrHtml, text, isMounted, headingOffset]);
 
   return <div id={id} className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }

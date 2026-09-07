@@ -278,13 +278,20 @@
   color: var(--sp-heading);
 }
 
-.shared-prompt-page .md-content h1 {
+/* 投稿本文の見出しはページ側の階層を守るため2段下げて描画される（h1→h3, h2→h4, h3→h5）。
+   段を下げても本文内での見た目の順序が変わらないよう、h3以降に元のスケールを割り当てる。 */
+/* Body headings are rendered two levels deeper to protect the page outline (h1→h3, h2→h4, h3→h5).
+   Assign the original scale from h3 down so the visual order inside the body is unchanged. */
+.shared-prompt-page .md-content h1,
+.shared-prompt-page .md-content h3 {
   font-size: 1.3rem;
   border-bottom: 1px solid var(--sp-tint-strong);
   padding-bottom: 0.3rem;
 }
-.shared-prompt-page .md-content h2 { font-size: 1.12rem; }
-.shared-prompt-page .md-content h3 { font-size: 1rem; }
+.shared-prompt-page .md-content h2,
+.shared-prompt-page .md-content h4 { font-size: 1.12rem; }
+.shared-prompt-page .md-content h5 { font-size: 1rem; }
+.shared-prompt-page .md-content h6 { font-size: 0.95rem; }
 
 .shared-prompt-page .md-content ul,
 .shared-prompt-page .md-content ol {

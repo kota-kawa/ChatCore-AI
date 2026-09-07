@@ -2,6 +2,8 @@ import { memo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 
 import MarkdownContent from "../MarkdownContent";
+import { buildPromptPath } from "../../lib/promptSlug";
+import { localizePublicPath } from "../../lib/seo";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
@@ -148,6 +150,25 @@ function PromptCardComponent({
   const cardPreview = truncateContent(
     cardPreviewSource || (contentFormatValue === "skill" ? t("promptShare.skillOpenHelp") : "")
   );
+
+  // 個別ページの正規URL。カード本体はモーダルを開くが、タイトルは実リンクとして出して
+  // クローラーの発見経路（sitemapだけに頼らない内部リンク）と別タブで開く操作を確保する。
+  // Canonical URL of the detail page. The card body still opens the modal, but the title is a real
+  // link so crawlers have an internal path (not just the sitemap) and users can open it in a new tab.
+  // 楽観的に追加された投稿などIDが未確定のカードはリンクにしない（遷移先が存在しない）
+  // Cards without a settled ID (e.g. optimistically inserted posts) stay unlinked: there is no target yet
+  const promptDetailPath = prompt.id === undefined || prompt.id === null || prompt.id === ""
+    ? ""
+    : localizePublicPath(buildPromptPath(prompt.id, prompt.title), locale);
+
+  // 素の左クリックは既存どおりモーダル表示に任せ（親のonClickへバブリングさせる）、
+  // 修飾キー付き・中クリックはブラウザ既定のリンク遷移を通す。
+  // A plain left click keeps the modal behavior (the event bubbles to the parent onClick), while
+  // modifier and middle clicks fall through to the browser's default link navigation.
+  const handleTitleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+  };
 
   return (
     <div
@@ -311,7 +332,15 @@ function PromptCardComponent({
       {/* The title comes before the reference image so the reader sees what the post is first */}
       {/* 文字数で切らず、CSSの2行クランプに任せてカード幅いっぱいまで見せる */}
       {/* No character cap here: the CSS two-line clamp lets the title use the card's full width */}
-      <h3>{prompt.title}</h3>
+      <h3>
+        {promptDetailPath ? (
+          <a href={promptDetailPath} className="prompt-card__title-link" onClick={handleTitleClick}>
+            {prompt.title}
+          </a>
+        ) : (
+          prompt.title
+        )}
+      </h3>
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
