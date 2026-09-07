@@ -24,7 +24,7 @@ def make_shared_read_request(token: str):
     return build_request(
         method="GET",
         path="/api/shared_chat_room",
-        query_string=f"token={token}".encode("utf-8"),
+        query_string=f"token={token}".encode(),
         session={},
     )
 
@@ -168,7 +168,7 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         # 日本語: 存在しないトークンを指定してリクエストを作成
         # English: Create a request with a non-existent token
         request = make_shared_read_request("missing")
-        
+
         # 日本語: 共有リンクが見つからないエラーを返すようにモック化
         # English: Mock the shared room lookup to return a 404 error
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):

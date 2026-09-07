@@ -7,7 +7,6 @@ import mimetypes
 import re
 from pathlib import PurePosixPath
 
-
 MAX_SKILL_RESOURCES = 50
 MAX_SKILL_RESOURCE_PATH_LENGTH = 255
 MAX_SKILL_RESOURCE_BYTES = 1024 * 1024

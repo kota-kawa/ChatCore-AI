@@ -33,9 +33,8 @@ async def _read(operation, session: AsyncSession | None):
 async def _write(operation, session: AsyncSession | None):
     if session is not None:
         return await operation(ChatRepository(session))
-    async with session_scope() as scoped:
-        async with scoped.begin():
-            return await operation(ChatRepository(scoped))
+    async with session_scope() as scoped, scoped.begin():
+        return await operation(ChatRepository(scoped))
 
 
 async def list_room_memory_facts(

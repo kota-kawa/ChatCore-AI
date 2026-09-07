@@ -47,7 +47,7 @@ class ResolveCharsetTest(unittest.TestCase):
     # HTMLでないコンテンツでは meta 宣言を参照しないことを検証します。
     # Verify meta declarations are ignored for non-HTML content.
     def test_ignores_meta_charset_for_non_html(self):
-        raw = "<meta charset='shift_jis'> 実際はUTF-8のプレーンテキスト".encode("utf-8")
+        raw = "<meta charset='shift_jis'> 実際はUTF-8のプレーンテキスト".encode()
         resolved = url_charset.resolve_charset(raw, content_type="text/plain", is_html=False)
         self.assertEqual(resolved, codecs.lookup("utf-8").name)
         # HTML として扱った場合は同じ宣言が使われることを対比で確認する
@@ -60,13 +60,13 @@ class ResolveCharsetTest(unittest.TestCase):
     # 宣言が無くUTF-8として解釈できる本文は、統計的推定より優先してUTF-8と判定されることを検証します。
     # Verify undeclared bodies that decode cleanly as UTF-8 win over statistical detection.
     def test_prefers_strict_utf8_over_detection_for_undeclared_body(self):
-        raw = "宣言のない日本語ページ本文です。".encode("utf-8")
+        raw = "宣言のない日本語ページ本文です。".encode()
         self.assertEqual(url_charset.resolve_charset(raw), codecs.lookup("utf-8").name)
 
     # 末尾が途中で切れたUTF-8本文でも、推定へ落ちずUTF-8と判定されることを検証します。
     # Verify a UTF-8 body truncated mid-character is still resolved as UTF-8.
     def test_treats_truncated_utf8_body_as_utf8(self):
-        raw = "打ち切られた日本語本文".encode("utf-8")[:-1]
+        raw = "打ち切られた日本語本文".encode()[:-1]
         self.assertEqual(url_charset.resolve_charset(raw), codecs.lookup("utf-8").name)
 
     # UTF-8として解釈できない本文では統計的推定へフォールバックすることを検証します。
@@ -83,7 +83,7 @@ class ResolveCharsetTest(unittest.TestCase):
     # BOM がヘッダー宣言より優先されることを検証します。
     # Verify a BOM takes precedence over the header declaration.
     def test_bom_takes_precedence_over_header(self):
-        raw = codecs.BOM_UTF8 + "テキスト".encode("utf-8")
+        raw = codecs.BOM_UTF8 + "テキスト".encode()
         resolved = url_charset.resolve_charset(raw, content_type="text/html; charset=euc-jp")
         self.assertEqual(resolved, codecs.lookup("utf-8-sig").name)
 
@@ -125,13 +125,13 @@ class DecodeResponseBodyTest(unittest.TestCase):
     # BOM 付き UTF-8 のデコード結果に BOM が残らないことを検証します。
     # Verify the BOM is stripped from decoded UTF-8 text.
     def test_strips_utf8_bom(self):
-        raw = codecs.BOM_UTF8 + "本文".encode("utf-8")
+        raw = codecs.BOM_UTF8 + "本文".encode()
         self.assertEqual(url_charset.decode_response_body(raw), "本文")
 
     # サイズ上限で途中打ち切りされたマルチバイト文字があっても例外にならないことを検証します。
     # Verify decoding does not raise when a multibyte character is truncated by the size cap.
     def test_replaces_truncated_multibyte_sequence(self):
-        raw = "あいうえお".encode("utf-8")[:-1]
+        raw = "あいうえお".encode()[:-1]
         result = url_charset.decode_response_body(raw, content_type="text/html; charset=utf-8")
         self.assertIn("あいうえ", result)
 

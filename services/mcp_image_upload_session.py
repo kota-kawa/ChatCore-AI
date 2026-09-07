@@ -10,7 +10,7 @@ import re
 import shutil
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Any
 from uuid import uuid4
 
@@ -51,7 +51,7 @@ def _upload_root() -> str:
 
 
 def _owner_digest(user_id: int, client_id: str) -> str:
-    owner = f"{int(user_id)}\0{str(client_id)}"
+    owner = f"{int(user_id)}\0{client_id!s}"
     return hashlib.sha256(owner.encode("utf-8")).hexdigest()
 
 
@@ -95,8 +95,12 @@ def _read_metadata(directory: str) -> dict[str, Any]:
             value = json.load(file_obj)
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
         raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED) from exc
+    # このモジュールは全ての失敗を ValueError で表現し、呼び出し元（services/mcp_server.py）が
+    # ValueError だけを捕捉してユーザー向けメッセージへ変換するため、型不一致でも ValueError を保つ。
+    # This module reports every failure as ValueError because its caller (services/mcp_server.py)
+    # catches only ValueError to build the user-facing message, so keep it even for a type mismatch.
     if not isinstance(value, dict):
-        raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED)
+        raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED)  # noqa: TRY004
     return value
 
 
@@ -109,11 +113,15 @@ def _write_metadata(directory: str, metadata: dict[str, Any]) -> None:
 
 @contextmanager
 def _session_lock(directory: str):
-    try:
-        lock_file = open(os.path.join(directory, ".lock"), "a+b")
-    except OSError as exc:
-        raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED) from exc
-    with lock_file:
+    with ExitStack() as stack:
+        # ロックファイルを開く段階の OSError だけをアップロード期限切れエラーへ変換する。
+        # ExitStack が確実にクローズするため、ロック本体の例外はそのまま呼び出し元へ伝える。
+        # Convert only an OSError from opening the lock file into the upload-expired error.
+        # ExitStack guarantees the close, and errors from the locked body propagate unchanged.
+        try:
+            lock_file = stack.enter_context(open(os.path.join(directory, ".lock"), "a+b"))
+        except OSError as exc:
+            raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED) from exc
         if fcntl is not None:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:

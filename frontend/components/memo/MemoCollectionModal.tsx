@@ -1,4 +1,3 @@
-import type { Collection } from "../../lib/memo/types";
 import { useTranslation } from "../../contexts/locale_context";
 import {
   useMemoPageListContext,

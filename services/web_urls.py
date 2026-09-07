@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import Request
@@ -36,7 +36,7 @@ def url_for(request: Request, endpoint: str, **values: Any) -> str:
     if "filename" in values and "path" not in values:
         values["path"] = values.pop("filename")
 
-    path_param_names: List[str] = []
+    path_param_names: list[str] = []
     for route in request.app.router.routes:
         if getattr(route, "name", None) == endpoint:
             path_param_names = list(getattr(route, "param_convertors", {}).keys())

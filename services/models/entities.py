@@ -17,7 +17,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    desc,
     ForeignKey,
     Index,
     Integer,
@@ -26,9 +25,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    desc,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, CHAR, DOUBLE_PRECISION, JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, CHAR, DOUBLE_PRECISION, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -226,7 +227,8 @@ class Task(Base):
         Index("idx_task_with_examples_system_task_key", "system_task_key"),
         Index("idx_task_with_examples_active_user_order", "user_id", "display_order", "id", postgresql_where=text("deleted_at IS NULL")),
         Index("idx_task_with_examples_active_user_name", "user_id", "name", postgresql_where=text("deleted_at IS NULL")),
-        Index("idx_task_with_examples_active_user_source_prompt", "user_id", "source_prompt_id", postgresql_where=text("deleted_at IS NULL")),
+        Index("idx_task_with_examples_active_user_source_prompt", "user_id", "source_prompt_id",
+              postgresql_where=text("deleted_at IS NULL")),
         Index("uq_task_with_examples_active_shared_normalized_name", text("lower(btrim(name))"), unique=True,
               postgresql_where=text("user_id IS NULL AND deleted_at IS NULL")),
         Index("uq_task_with_examples_active_user_normalized_name", "user_id", text("lower(btrim(name))"), unique=True,
@@ -301,14 +303,23 @@ class Prompt(Base):
         Index("idx_prompts_user_created_at", "user_id", desc("created_at")),
         Index("idx_prompts_active_public_created_at", "is_public", desc("created_at"), postgresql_where=text("deleted_at IS NULL")),
         Index("idx_prompts_active_user_created_at", "user_id", desc("created_at"), postgresql_where=text("deleted_at IS NULL")),
-        Index("idx_prompts_active_public_created_at_id", desc("created_at"), desc("id"), postgresql_where=text("is_public = TRUE AND deleted_at IS NULL")),
+        Index("idx_prompts_active_public_created_at_id", desc("created_at"), desc("id"),
+              postgresql_where=text("is_public = TRUE AND deleted_at IS NULL")),
         Index("idx_prompts_public_category", "category", postgresql_where=text("is_public = TRUE")),
-        Index("idx_prompts_public_author_trgm", "author", postgresql_using="gin", postgresql_ops={"author": "gin_trgm_ops"}, postgresql_where=text("is_public = TRUE")),
+        Index("idx_prompts_public_author_trgm", "author", postgresql_using="gin", postgresql_ops={"author": "gin_trgm_ops"},
+              postgresql_where=text("is_public = TRUE")),
         Index("idx_prompts_system_prompt_locale", "system_prompt_key", "content_locale"),
-        Index("idx_prompts_public_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}, postgresql_where=text("is_public = TRUE")),
-        Index("idx_prompts_public_content_trgm", "content", postgresql_using="gin", postgresql_ops={"content": "gin_trgm_ops"}, postgresql_where=text("is_public = TRUE")),
-        Index("idx_prompts_public_description_trgm", "description", postgresql_using="gin", postgresql_ops={"description": "gin_trgm_ops"}, postgresql_where=text("is_public = TRUE AND description IS NOT NULL")),
-        Index("idx_prompts_public_skill_markdown_trgm", text("(COALESCE(attributes ->> 'skill_markdown', ''))"), postgresql_using="gin", postgresql_ops={"(COALESCE(attributes ->> 'skill_markdown', ''))": "gin_trgm_ops"}, postgresql_where=text("is_public = TRUE AND deleted_at IS NULL AND content_format = 'skill'")),
+        Index("idx_prompts_public_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"},
+              postgresql_where=text("is_public = TRUE")),
+        Index("idx_prompts_public_content_trgm", "content", postgresql_using="gin", postgresql_ops={"content": "gin_trgm_ops"},
+              postgresql_where=text("is_public = TRUE")),
+        Index("idx_prompts_public_description_trgm", "description", postgresql_using="gin",
+              postgresql_ops={"description": "gin_trgm_ops"},
+              postgresql_where=text("is_public = TRUE AND description IS NOT NULL")),
+        Index("idx_prompts_public_skill_markdown_trgm", text("(COALESCE(attributes ->> 'skill_markdown', ''))"),
+              postgresql_using="gin",
+              postgresql_ops={"(COALESCE(attributes ->> 'skill_markdown', ''))": "gin_trgm_ops"},
+              postgresql_where=text("is_public = TRUE AND deleted_at IS NULL AND content_format = 'skill'")),
     )
 
 
@@ -450,7 +461,8 @@ class MemoEntry(Base):
         Index("idx_memo_entries_user_updated_id", "user_id", desc("updated_at"), desc("id")),
         Index("idx_memo_entries_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
         Index("idx_memo_entries_response_trgm", "ai_response", postgresql_using="gin", postgresql_ops={"ai_response": "gin_trgm_ops"}),
-        Index("idx_memo_entries_embedding_vector_hnsw", "embedding_vector", postgresql_using="hnsw", postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
+        Index("idx_memo_entries_embedding_vector_hnsw", "embedding_vector", postgresql_using="hnsw",
+              postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
     )
 
 
@@ -548,15 +560,19 @@ class ContextFact(Base):
         CheckConstraint("status IN ('active', 'deprecated')", name="chk_context_facts_status"),
         CheckConstraint("source_kind IN ('manual', 'mcp', 'chat', 'import')", name="ck_context_facts_source_kind"),
         CheckConstraint("importance BETWEEN 0 AND 100", name="ck_context_facts_importance"),
-        CheckConstraint("idempotency_key_hash IS NULL OR idempotency_key_hash ~ '^[0-9a-f]{64}$'", name="ck_context_facts_idempotency_key_hash"),
-        CheckConstraint("idempotency_payload_hash IS NULL OR idempotency_payload_hash ~ '^[0-9a-f]{64}$'", name="ck_context_facts_idempotency_payload_hash"),
-        CheckConstraint("(idempotency_key_hash IS NULL) = (idempotency_payload_hash IS NULL)", name="ck_context_facts_idempotency_hash_pair"),
+        CheckConstraint("idempotency_key_hash IS NULL OR idempotency_key_hash ~ '^[0-9a-f]{64}$'",
+                        name="ck_context_facts_idempotency_key_hash"),
+        CheckConstraint("idempotency_payload_hash IS NULL OR idempotency_payload_hash ~ '^[0-9a-f]{64}$'",
+                        name="ck_context_facts_idempotency_payload_hash"),
+        CheckConstraint("(idempotency_key_hash IS NULL) = (idempotency_payload_hash IS NULL)",
+                        name="ck_context_facts_idempotency_hash_pair"),
         UniqueConstraint("idempotency_key_hash", name="uq_context_facts_idempotency_key_hash"),
         Index("idx_context_facts_user_status_type", "user_id", "status", "fact_type", desc("updated_at")),
         Index("idx_context_facts_user_updated_id", "user_id", desc("updated_at"), desc("id")),
         Index("idx_context_facts_user_digest", "user_id", "status", desc("importance"), desc("updated_at"), desc("id")),
         Index("idx_context_facts_content_trgm", "content", postgresql_using="gin", postgresql_ops={"content": "gin_trgm_ops"}),
-        Index("idx_context_facts_embedding_hnsw", "embedding_vector", postgresql_using="hnsw", postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
+        Index("idx_context_facts_embedding_hnsw", "embedding_vector", postgresql_using="hnsw",
+              postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
     )
 
 
@@ -581,7 +597,8 @@ class ContextFactCandidate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
-        CheckConstraint("fact_type IN ('preference', 'profile', 'project', 'decision', 'reference')", name="chk_context_fact_candidates_fact_type"),
+        CheckConstraint("fact_type IN ('preference', 'profile', 'project', 'decision', 'reference')",
+                        name="chk_context_fact_candidates_fact_type"),
         CheckConstraint("char_length(title) >= 1", name="chk_context_fact_candidates_title"),
         CheckConstraint("char_length(content) BETWEEN 1 AND 2000", name="chk_context_fact_candidates_content"),
         CheckConstraint("source_kind IN ('manual', 'mcp', 'chat', 'import')", name="chk_context_fact_candidates_source_kind"),
@@ -591,7 +608,8 @@ class ContextFactCandidate(Base):
         CheckConstraint("fingerprint ~ '^[0-9a-f]{64}$'", name="chk_context_fact_candidates_fingerprint"),
         CheckConstraint("revision >= 1", name="chk_context_fact_candidates_revision"),
         Index("idx_context_fact_candidates_user_status", "user_id", "status", desc("created_at"), desc("id")),
-        Index("uq_context_fact_candidates_pending_fingerprint", "user_id", "fingerprint", unique=True, postgresql_where=text("status = 'pending'")),
+        Index("uq_context_fact_candidates_pending_fingerprint", "user_id", "fingerprint", unique=True,
+              postgresql_where=text("status = 'pending'")),
         Index("idx_context_fact_candidates_promoted_fact", "promoted_fact_id", postgresql_where=text("promoted_fact_id IS NOT NULL")),
     )
 
@@ -664,7 +682,9 @@ class McpOAuthClient(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (CheckConstraint("registration_method IN ('dcr', 'cimd', 'pre_registered')", name="mcp_oauth_clients_registration_method_check"),)
+    __table_args__ = (
+        CheckConstraint("registration_method IN ('dcr', 'cimd', 'pre_registered')", name="mcp_oauth_clients_registration_method_check"),
+    )
 
 
 class McpOAuthGrant(Base):
@@ -682,7 +702,9 @@ class McpOAuthGrant(Base):
     display_name: Mapped[str | None] = mapped_column(String(100))
     scope_version: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("1"))
 
-    __table_args__ = (Index("idx_mcp_oauth_grants_active_user", "user_id", desc("created_at"), postgresql_where=text("revoked_at IS NULL")),)
+    __table_args__ = (
+        Index("idx_mcp_oauth_grants_active_user", "user_id", desc("created_at"), postgresql_where=text("revoked_at IS NULL")),
+    )
 
 
 class McpOAuthUserClient(Base):

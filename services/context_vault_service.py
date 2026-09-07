@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from hashlib import sha256
-from typing import Any, Awaitable, Callable, Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
@@ -69,9 +70,8 @@ async def _transaction(
         return await operation(session)
     for attempt in range(MAX_DB_WRITE_ATTEMPTS):
         try:
-            async with session_scope() as db:
-                async with db.begin():
-                    return await operation(db)
+            async with session_scope() as db, db.begin():
+                return await operation(db)
         except ApiServiceError:
             raise
         except SQLAlchemyError as exc:

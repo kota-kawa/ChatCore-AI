@@ -15,8 +15,8 @@ from services.chat_service import list_user_skills, set_user_skill_enabled
 from services.repositories.chat_repository import ChatRepository
 from services.request_models import CreateUserSkillRequest, UpdateUserSkillStateRequest
 from services.user_skills import (
-    GENERATIVE_UI_SKILL_INSTRUCTIONS,
     GENERATIVE_UI_EXECUTION_CONTRACT,
+    GENERATIVE_UI_SKILL_INSTRUCTIONS,
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     build_chat_skills_context,
     build_enabled_user_skills_prompt,
@@ -100,7 +100,16 @@ class UserSkillPromptTests(unittest.TestCase):
             recent_messages=[{"role": "user", "content": "question"}],
         )
         contents = [message["content"] for message in messages]
-        self.assertLess(contents.index("<project_instructions>\nThe following are instructions specific to this project. Follow them with priority in every conversation inside the project.\nproject\n</project_instructions>"), contents.index("<enabled_user_skills>skill</enabled_user_skills>"))
+        self.assertLess(
+            contents.index(
+                "<project_instructions>\n"
+                "The following are instructions specific to this project."
+                " Follow them with priority in every conversation inside the project.\n"
+                "project\n"
+                "</project_instructions>"
+            ),
+            contents.index("<enabled_user_skills>skill</enabled_user_skills>"),
+        )
         self.assertLess(contents.index("<enabled_user_skills>skill</enabled_user_skills>"), contents.index("task"))
 
 

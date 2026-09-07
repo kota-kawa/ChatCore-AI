@@ -30,11 +30,11 @@ class GeneratedApiSchemasTestCase(unittest.TestCase):
         # スキーマファイルの内容を読み込み
         # Read the content of the schema file
         content = generated_file.read_text(encoding="utf-8")
-        
+
         # ファイルからフィンガープリントのハッシュ値を抽出
         # Extract the fingerprint hash value from the file
         match = re.search(r"^// Schema fingerprint: ([0-9a-f]{64})$", content, re.MULTILINE)
-        
+
         # フィンガープリントが存在することを検証
         # Assert that the fingerprint is present
         self.assertIsNotNone(

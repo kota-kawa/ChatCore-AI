@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -12,7 +12,6 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
 from services import mcp_oauth
-
 
 SERVER_URL = "https://chat.example.test/mcp"
 
@@ -145,7 +144,7 @@ class McpOAuthTestCase(unittest.TestCase):
             scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
             resource=SERVER_URL,
             replaced_at=replaced_at,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         return SimpleNamespace(
             token=token,
@@ -246,7 +245,7 @@ class McpOAuthTestCase(unittest.TestCase):
         repository = MagicMock()
         repository.load_refresh_token = AsyncMock(
             return_value=self._refresh_record(
-                replaced_at=datetime.now(timezone.utc) - timedelta(seconds=5)
+                replaced_at=datetime.now(UTC) - timedelta(seconds=5)
             )
         )
         repository.revoke_grant_family = AsyncMock()
@@ -265,7 +264,7 @@ class McpOAuthTestCase(unittest.TestCase):
         repository = MagicMock()
         repository.load_refresh_token = AsyncMock(
             return_value=self._refresh_record(
-                replaced_at=datetime.now(timezone.utc)
+                replaced_at=datetime.now(UTC)
                 - timedelta(
                     seconds=mcp_oauth.REFRESH_TOKEN_ROTATION_GRACE_SECONDS + 60
                 )

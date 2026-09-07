@@ -11,12 +11,21 @@ from typing import Any
 from anthropic import Anthropic
 from anthropic import (
     APIConnectionError as AnthropicAPIConnectionError,
+)
+from anthropic import (
     APIStatusError as AnthropicAPIStatusError,
+)
+from anthropic import (
     APITimeoutError as AnthropicAPITimeoutError,
+)
+from anthropic import (
     AuthenticationError as AnthropicAuthenticationError,
+)
+from anthropic import (
     RateLimitError as AnthropicRateLimitError,
 )
 from openai import OpenAI
+
 try:
     from openai import (
         APIConnectionError,
@@ -37,39 +46,9 @@ except ImportError:  # pragma: no cover - depends on SDK version
     AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
     RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
+from services.env_settings import env_int
 from services.llm_model_limits import get_model_max_output_tokens
 from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
-
-
-# 環境変数から正の整数値を取得します。無効な場合はデフォルト値を返します。
-# Retrieve a positive integer from environment variables, returning the default if invalid.
-def _get_positive_int_env(name: str, default: int) -> int:
-    # 正の整数のみ採用し、無効値は安全側で既定値へ戻します。
-    # Accept only positive integers and fallback to default on invalid values.
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-# 環境変数から0以上の整数値を取得します。無効な場合はデフォルト値を返します。
-# Retrieve a non-negative integer from environment variables, returning the default if invalid.
-def _get_non_negative_int_env(name: str, default: int) -> int:
-    # 0以上の整数を採用し、無効値は既定値へ戻します（再試行回数などで0を許容します）。
-    # Accept zero or positive integers (e.g. retry counts) and fallback on invalid values.
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value >= 0 else default
-
 
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
@@ -90,7 +69,7 @@ CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
 # against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
 # code) mid-stream, so raise the default. Provider-specific hard caps are applied below before
 # a request is sent.
-LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
+LLM_MAX_TOKENS = env_int("LLM_MAX_TOKENS", 16384)
 # 出力枠はフェーズごとに分ける。単一の上限を全フェーズで共有すると、調査ステップに
 # 過剰な枠を与えたまま、本文を書く最終回答フェーズが足りなくなる。
 # フェーズ別の値は LLM_MAX_TOKENS から派生させない。運用環境が古い LLM_MAX_TOKENS
@@ -101,7 +80,7 @@ LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
 # 判断ループと継続は本文そのものを書く。長い調査の後でも1パスで書き切れる枠を確保する。
 # The decision loop and its continuations write the body itself, so they need room to finish
 # a long research answer in a single pass.
-LLM_ANSWER_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS_ANSWER", 32768)
+LLM_ANSWER_MAX_TOKENS = env_int("LLM_MAX_TOKENS_ANSWER", 32768)
 # Provider-specific maximums, such as Qwen's smaller Groq output cap, are applied by
 # max_output_tokens_for_model without reducing the shared answer budget for other models.
 
@@ -132,7 +111,7 @@ def max_output_tokens_for_model(
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
 # Retry transient connection failures by default; configurable via env var.
-LLM_MAX_RETRIES = _get_non_negative_int_env("LLM_MAX_RETRIES", 2)
+LLM_MAX_RETRIES = env_int("LLM_MAX_RETRIES", 2, minimum=0)
 
 REDACTED_SENSITIVE_VALUE = "[REDACTED-SENSITIVE]"
 OPENAI_MARKDOWN_REENABLE_PREFIX = "Formatting re-enabled"
@@ -318,13 +297,11 @@ class LlmToolSchemaError(LlmProviderError):
     the recovery is to replay the step without tools, which the caller performs.
     """
 
-    pass
 
 
 class LlmRequestValidationError(LlmProviderError):
     """The provider rejected request parameters before generation started."""
 
-    pass
 
 
 # 認証エラーによるLLMプロバイダエラーに関する例外クラス。
@@ -747,7 +724,7 @@ def _sanitize_conversation_messages(
         new_msg = dict(message)
         role = str(new_msg.get("role", "user"))
         raw_content = new_msg.get("content")
-        
+
         if raw_content is None:
             content = None
             redacted_content = None
@@ -756,7 +733,7 @@ def _sanitize_conversation_messages(
             redacted_content = _redact_sensitive_text(content)
             if redacted_content != content:
                 redacted_message_count += 1
-        
+
         new_msg["role"] = role
         new_msg["content"] = redacted_content
         sanitized_messages.append(new_msg)
@@ -781,15 +758,19 @@ def _prepare_openai_responses_input(
         new_msg = dict(message)
         role = str(new_msg.get("role", "user"))
         raw_content = new_msg.get("content")
-        
+
         if raw_content is None:
             normalized_content = None
+        elif isinstance(raw_content, str):
+            normalized_content = raw_content
         else:
-            normalized_content = raw_content if isinstance(raw_content, str) else str(raw_content)
+            normalized_content = str(raw_content)
 
         if role == "system":
-            # Responses API では従来の system 相当を developer として渡します。先頭の developer message に Markdown を明示的に許可し、通常回答の装飾が失われないようにします。
-            # Pass the legacy system messages as developer messages in the Responses API. Explicitly enable Markdown for the leading developer message to preserve formatting.
+            # Responses API では従来の system 相当を developer として渡します。
+            # 先頭の developer message に Markdown を明示的に許可し、通常回答の装飾が失われないようにします。
+            # Pass the legacy system messages as developer messages in the Responses API.
+            # Explicitly enable Markdown for the leading developer message to preserve formatting.
             role = "developer"
             if normalized_content is not None and not markdown_reenabled:
                 stripped_content = normalized_content.lstrip()
@@ -852,7 +833,6 @@ def get_groq_response(
                 }
                 for tc in tool_calls
             ])
-        return message.content
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -860,6 +840,8 @@ def get_groq_response(
             fallback_message="Groq API call failed.",
             model_name=model_name,
         )
+    else:
+        return message.content
 
 
 # OpenAI互換API用のストリーム応答ジェネレータを構築して返す
@@ -933,8 +915,10 @@ def _get_openai_compatible_response_stream(
 
             tool_calls = getattr(delta, "tool_calls", None)
             if tool_calls:
-                # OpenAI互換ストリーミングでは tool_call の name/arguments が複数 chunk に分割されます。index ごとに連結し、通常テキスト chunk と同じ iterator で最後に JSON として返します。
-                # In OpenAI-compatible streaming, the name/arguments of tool_calls are split across multiple chunks. Concat them by index and return as JSON via the same iterator at the end.
+                # OpenAI互換ストリーミングでは tool_call の name/arguments が複数 chunk に分割されます。
+                # index ごとに連結し、通常テキスト chunk と同じ iterator で最後に JSON として返します。
+                # In OpenAI-compatible streaming, the name/arguments of tool_calls are split across multiple chunks.
+                # Concat them by index and return as JSON via the same iterator at the end.
                 for tc in tool_calls:
                     index = int(getattr(tc, "index", 0) or 0)
                     part = tool_call_parts.setdefault(
@@ -1362,7 +1346,8 @@ def get_openai_response(
     try:
         if has_tool_context:
             # Responses API は既存の tool/result 会話履歴と形が合わないため、tool を使うターンだけ Chat Completions 側に寄せます。
-            # Since Responses API does not fit existing tool/result conversation formats, route only the tool usage turns to the Chat Completions API.
+            # Since Responses API does not fit existing tool/result conversation formats,
+            # route only the tool usage turns to the Chat Completions API.
             request_kwargs: dict[str, Any] = {
                 "model": model_name,
                 "messages": sanitized_messages,
@@ -1395,7 +1380,7 @@ def get_openai_response(
                     for tc in tool_calls
                 ])
             return message.content or ""
-        
+
         response = openai_client.responses.create(
             model=model_name,
             input=sanitized_messages,
@@ -1405,7 +1390,6 @@ def get_openai_response(
                 generation_phase=generation_phase,
             ),
         )
-        return response.output_text
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1414,6 +1398,8 @@ def get_openai_response(
             model_name=model_name,
             generation_phase=generation_phase,
         )
+    else:
+        return response.output_text
 
 
 # OpenAI Responses APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
@@ -1651,7 +1637,6 @@ def _get_openai_responses_json_response(
             **_openai_responses_reasoning_kwargs(model_name),
             text={"format": {"type": "json_object"}},
         )
-        return response.output_text
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1659,6 +1644,8 @@ def _get_openai_responses_json_response(
             fallback_message="OpenAI Responses JSON API call failed.",
             model_name=model_name,
         )
+    else:
+        return response.output_text
 
 
 # 指定されたモデルを使用してJSON形式のLLM応答を取得する

@@ -4,8 +4,8 @@ import json
 import re
 from typing import Any
 
-from services.llm import LlmProviderError, get_llm_response
 from services.i18n import build_response_language_policy, infer_response_language
+from services.llm import LlmProviderError, get_llm_response
 from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"

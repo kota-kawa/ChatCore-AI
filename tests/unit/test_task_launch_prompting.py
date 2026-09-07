@@ -2,13 +2,17 @@ import asyncio
 import json
 import re
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.messages import chat
 from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
+)
+from services.chat_prompt import (
     build_base_system_prompt as _build_base_system_prompt,
+)
+from services.chat_prompt import (
     build_user_profile_prompt as _build_user_profile_prompt,
 )
 from services.user_skills import (
@@ -426,7 +430,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             session={},
         )
         saved_messages = []
-        fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
 
         def append_message(_sid, _room_id, sender, message, *args, **kwargs):
             saved_messages.append(

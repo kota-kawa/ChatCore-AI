@@ -3,10 +3,10 @@ import logging
 import os
 import re
 from functools import wraps
-from typing import Optional
 from urllib.parse import urlencode
 
 from fastapi import Depends, Request
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import RedirectResponse
 
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
@@ -15,23 +15,38 @@ from services.auth_limits import (
     consume_admin_login_limit,
     get_auth_limit_service,
 )
-from services.security import verify_password
 from services.repositories.admin_repository import (
     add_column_if_valid as repository_add_column_if_valid,
+)
+from services.repositories.admin_repository import (
     build_add_column_sql,
     build_create_table_sql,
     build_drop_column_sql,
     build_drop_table_sql,
-    create_table as repository_create_table,
-    drop_column_if_valid as repository_drop_column_if_valid,
-    drop_table_if_exists as repository_drop_table_if_exists,
-    fetch_table_columns as repository_fetch_table_columns,
-    fetch_table_preview as repository_fetch_table_preview,
-    fetch_tables as repository_fetch_tables,
-    load_dashboard_data as repository_load_dashboard_data,
     quote_identifier,
 )
-from sqlalchemy.exc import SQLAlchemyError
+from services.repositories.admin_repository import (
+    create_table as repository_create_table,
+)
+from services.repositories.admin_repository import (
+    drop_column_if_valid as repository_drop_column_if_valid,
+)
+from services.repositories.admin_repository import (
+    drop_table_if_exists as repository_drop_table_if_exists,
+)
+from services.repositories.admin_repository import (
+    fetch_table_columns as repository_fetch_table_columns,
+)
+from services.repositories.admin_repository import (
+    fetch_table_preview as repository_fetch_table_preview,
+)
+from services.repositories.admin_repository import (
+    fetch_tables as repository_fetch_tables,
+)
+from services.repositories.admin_repository import (
+    load_dashboard_data as repository_load_dashboard_data,
+)
+from services.security import verify_password
 from services.session_middleware import rotate_session_identifier
 from services.web import (
     flash,
@@ -475,7 +490,7 @@ async def _get_payload(request: Request) -> dict:
     if data is not None:
         return data
     form = await request.form()
-    return {key: value for key, value in form.items()}
+    return dict(form.items())
 
 
 # 管理者ログインページへリダイレクトするエンドポイント
@@ -507,7 +522,7 @@ async def api_login(
     payload = await _get_payload(request)
     password = payload.get("password") or ""
     next_url = sanitize_next_path(payload.get("next"), default="/admin")
-    
+
     # 管理者ログインのレートリミットを検証・消費
     # Verify and deduct admin login limit bucket.
     allowed, limit_error = consume_admin_login_limit(
@@ -649,7 +664,7 @@ def _build_drop_column_sql(table_name: str, column_name: str):
 
 # 管理用ダッシュボードに必要なテーブル一覧と選択テーブルの詳細データをDBからロードする関数
 # Load all database tables metadata, column definitions, and row previews for the selected table.
-async def _load_dashboard_data(selected_table: Optional[str]) -> dict:
+async def _load_dashboard_data(selected_table: str | None) -> dict:
     """
     存在する全ベーステーブルの一覧、および選択されたテーブルの構造とプレビューレコードをまとめてDBから取得する。
     Retrieve aggregated table lists, metadata details, and first 100 entries for the select target table.
@@ -697,7 +712,7 @@ async def _add_column_if_valid(table_name: str, column_name: str, column_type: s
 
 # テーブル内にカラムが2つ以上ある場合のみ安全にカラムを削除する関数
 # Drop the specified column from the table if it exists and is not the last remaining column.
-async def _drop_column_if_valid(table_name: str, column_name: str) -> tuple[str, Optional[str]]:
+async def _drop_column_if_valid(table_name: str, column_name: str) -> tuple[str, str | None]:
     """
     対象テーブルと削除列の存在、およびテーブル構成列数が1より多い（最後の列でない）ことを検証の上で、DROP COLUMNを実行する。
     Enforce schema requirements (e.g. table must not become empty), then execute ALTER TABLE DROP COLUMN query.
@@ -734,17 +749,17 @@ async def api_dashboard(request: Request):
     # クエリ引数から選択テーブル名を安全にロード
     # Safely retrieve selection target from request parameters.
     selected_table_raw = (request.query_params.get("table") or "").strip()
-    selected_table: Optional[str] = selected_table_raw or None
+    selected_table: str | None = selected_table_raw or None
     if selected_table is not None and not _is_safe_sql_identifier(selected_table):
         selected_table = None
         flash(request, "Invalid table selection.", "error")
-    
+
     tables: list[str] = []
     column_names: list[str] = []
     column_details: list[dict[str, object]] = []
     existing_columns: list[str] = []
     rows: list[tuple] = []
-    error: Optional[str] = None
+    error: str | None = None
 
     try:
         dashboard_data = await _load_dashboard_data(selected_table)
@@ -1238,7 +1253,7 @@ async def api_delete_column(request: Request):
         if status != "ok" or target_column is None:
             flash(request, "カラムの削除に失敗しました。", "error")
             return jsonify({"status": "fail", "error": "Column deletion failed."}, status_code=500)
-        
+
         flash(
             request,
             f"カラム '{target_column}' をテーブル '{table_name}' から削除しました。",

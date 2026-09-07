@@ -121,7 +121,8 @@ class ExtractUrlsFromTextTest(unittest.TestCase):
         self.assertEqual(result, ["https://example.com"])
 
 
-# SSRF（Server-Side Request Forgery）対策としてのURL安全性チェック（ローカルIPやプライベートIP、リンクローカル、DNSエラー等のブロック）をテストするクラス。
+# SSRF（Server-Side Request Forgery）対策としてのURL安全性チェック
+# （ローカルIPやプライベートIP、リンクローカル、DNSエラー等のブロック）をテストするクラス。
 # Test class to verify URL safety checks (blocking local, private, and link-local IPs) to prevent SSRF.
 class IsSafeUrlTest(unittest.TestCase):
     # パブリック（グローバル）IPを持つ安全なURLが許可されることを検証します。
@@ -183,7 +184,8 @@ class IsSafeUrlTest(unittest.TestCase):
         self.assertFalse(url_fetcher._is_safe_url("https:///path"))
 
 
-# HTML文書から本文テキストをクリーンに抽出する処理（スクリプト、スタイル、ナビゲーションタグの除外やHTMLエンティティのデコード等）をテストするクラス。
+# HTML文書から本文テキストをクリーンに抽出する処理
+# （スクリプト、スタイル、ナビゲーションタグの除外やHTMLエンティティのデコード等）をテストするクラス。
 # Test class to check HTML text extraction and cleanup logic (excluding scripts, styles, navs, and decoding entities).
 class ExtractTextFromHtmlTest(unittest.TestCase):
     # HTMLボディ内のテキスト本文が適切に抽出されることを検証します。
@@ -548,7 +550,8 @@ class FetchUrlRedirectTest(unittest.TestCase):
     def _ok_response(self, body: bytes = b"<p>final</p>") -> _StreamedResponse:
         return _StreamedResponse(body)
 
-    # リダイレクト先としてプライベートIP/リンクローカルIPなどの安全でないアドレスが指定された際、リクエストが中止されNoneが返ることを検証します。
+    # リダイレクト先としてプライベートIP/リンクローカルIPなどの安全でないアドレスが指定された際、
+    # リクエストが中止されNoneが返ることを検証します。
     # Verify that redirects leading to unsafe/private IPs are blocked and return None.
     def test_rejects_redirect_to_internal_address(self):
         redirect = self._redirect_response("http://169.254.169.254/latest/meta-data/")
@@ -624,7 +627,8 @@ class FetchUrlRedirectTest(unittest.TestCase):
         self.assertIsNone(result)
         self.assertLessEqual(mock_get.call_count, url_fetcher.MAX_REDIRECT_HOPS + 1)
 
-    # 自動リダイレクト追従（requestsのデフォルトの動き）が、リクエストレベルで明示的に無効化(allow_redirects=False)されていることを検証します。
+    # 自動リダイレクト追従（requestsのデフォルトの動き）が、
+    # リクエストレベルで明示的に無効化(allow_redirects=False)されていることを検証します。
     # Verify that requests are called with allow_redirects=False to manually control the redirect chain validation.
     def test_disables_auto_redirects_at_request_level(self):
         captured: dict = {}

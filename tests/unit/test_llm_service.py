@@ -1,6 +1,7 @@
 import json
 import unittest
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from services import llm
@@ -84,11 +85,13 @@ class LlmServiceTestCase(unittest.TestCase):
     Test class for verifying API client routing, error mapping, and streaming parsing in LLM service integration.
     """
 
+    # docstring は文字列リテラルなので折り返すと本文が変わるため、行長チェックのみ除外します。
+    # The docstring is a string literal whose text would change if rewrapped, so only the line-length rule is waived.
     def test_prepare_openai_responses_input_converts_system_to_developer_and_reenables_markdown(self):
         """
         OpenAI APIの仕様に合わせ、入力メッセージの"system"ロールが"developer"に変換され、Markdown再有効化接頭辞が適用されることを検証します。
         Verify that input message "system" roles are converted to "developer" and prepend the markdown re-enable prefix for OpenAI API compatibility.
-        """
+        """  # noqa: E501
         # メッセージの準備を実行
         # Execute message preparation
         prepared = llm._prepare_openai_responses_input(
@@ -222,7 +225,7 @@ class LlmServiceTestCase(unittest.TestCase):
     def test_provider_error_mapping_detects_context_length_exceeded(self):
         class _FakeStatusError(Exception):
             status_code = 400
-            body = {
+            body: ClassVar[dict] = {
                 "error": {
                     "code": "context_length_exceeded",
                     "message": "This model's maximum context length is 131072 tokens.",
@@ -241,7 +244,7 @@ class LlmServiceTestCase(unittest.TestCase):
     def test_provider_error_mapping_does_not_misclassify_output_token_limit(self):
         class _FakeStatusError(Exception):
             status_code = 400
-            body = {
+            body: ClassVar[dict] = {
                 "error": {
                     "message": (
                         "`max_completion_tokens` must be less than or equal to `16384`, "
@@ -285,7 +288,7 @@ class LlmServiceTestCase(unittest.TestCase):
     def test_provider_error_mapping_detects_tool_use_failed_code(self):
         class _FakeStatusError(Exception):
             status_code = 400
-            body = {"error": {"code": "tool_use_failed", "message": "Failed to call a function."}}
+            body: ClassVar[dict] = {"error": {"code": "tool_use_failed", "message": "Failed to call a function."}}
 
         with patch.object(llm, "APIStatusError", _FakeStatusError):
             mapped = llm._map_provider_exception(
@@ -368,9 +371,10 @@ class LlmServiceTestCase(unittest.TestCase):
                 llm.GROQ_MODEL,
                 generation_phase="research",
             )
+            # 日本語: 打ち切り例外が出るまでに届いたチャンクだけが emitted に残ることを確認します。
+            # English: Only the chunks delivered before the cutoff error remain in emitted.
             with self.assertRaises(llm.LlmOutputLimitError):
-                for chunk in stream:
-                    emitted.append(chunk)
+                emitted.extend(stream)
 
         self.assertEqual(len(emitted), 1)
         self.assertEqual(json.loads(emitted[0])[0]["function"]["name"], "web_search")
@@ -1148,11 +1152,13 @@ class LlmServiceTestCase(unittest.TestCase):
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
+    # docstring は文字列リテラルなので折り返すと本文が変わるため、行長チェックのみ除外します。
+    # The docstring is a string literal whose text would change if rewrapped, so only the line-length rule is waived.
     def test_get_openai_response_stream_with_tool_history_uses_chat_completions(self):
         """
         メッセージ履歴の中にツール呼び出し履歴（tool/assistant role）が含まれている場合、OpenAI responses APIではなく従来のチャットコンプリーションが利用されることを検証します。
         Verify that OpenAI streaming falls back to chat.completions.create stream when messages contain tool invocation history.
-        """
+        """  # noqa: E501
         mock_openai = MagicMock()
         mock_stream = _MockStream(_mock_stream_chunk("final"))
         mock_openai.chat.completions.create.return_value = mock_stream

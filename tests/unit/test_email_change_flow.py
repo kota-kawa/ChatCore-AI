@@ -4,9 +4,9 @@ import unittest
 from unittest.mock import patch
 
 from blueprints.chat.profile import (
+    EMAIL_CHANGE_SESSION_KEY,
     EMAIL_CHANGE_STAGE_CURRENT,
     EMAIL_CHANGE_STAGE_NEW,
-    EMAIL_CHANGE_SESSION_KEY,
     confirm_email_change,
     request_email_change,
 )

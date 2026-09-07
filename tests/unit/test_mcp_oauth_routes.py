@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from blueprints.mcp_oauth import patch_client, patch_connection, post_client
 from tests.helpers.request_helpers import build_request
 
+
 class McpOAuthRouteTestCase(unittest.TestCase):
     def test_post_client_issues_a_public_client_when_secret_is_not_requested(self):
         request = build_request(

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 
 from services.attached_files import encode_attached_files_for_storage
 
@@ -60,7 +59,7 @@ class EphemeralChatStore:
 
     # ISO文字列またはdatetimeを datetime へ正規化します。
     # Normalize an ISO string or datetime value into a datetime.
-    def _parse_timestamp(self, value: object) -> Optional[datetime]:
+    def _parse_timestamp(self, value: object) -> datetime | None:
         # 値が存在しない場合は None を返します。
         # Return None when the value is missing.
         if not value:
@@ -76,7 +75,7 @@ class EphemeralChatStore:
 
     # 有効期限の起点となる「最終利用時刻」を取得します。
     # Retrieve the last-activity timestamp used as the expiry baseline.
-    def _expiry_baseline(self, room: dict) -> Optional[datetime]:
+    def _expiry_baseline(self, room: dict) -> datetime | None:
         # 有効期限は作成時刻ではなく最終利用時刻から数える。会話中に突然ルームが
         # 消えて「該当ルームが見つかりません」になるのを防ぐため。
         # Expiry is counted from the last activity instead of the creation time so
@@ -156,7 +155,7 @@ class EphemeralChatStore:
 
     # 指定されたチャットルームを取得します。期限切れの場合は自動的に削除します。
     # Retrieve the specified chat room. Deletes the room automatically if it has expired.
-    def get_room(self, sid: str, room_id: str) -> Optional[dict]:
+    def get_room(self, sid: str, room_id: str) -> dict | None:
         # 取得時にも期限切れを判定し、期限超過ルームは削除して None を返す
         # Validate expiry on read and delete expired rooms before returning None.
         redis_client = self._get_redis()

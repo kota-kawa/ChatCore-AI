@@ -8,7 +8,6 @@ shared between concurrent tasks.
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -22,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from .env_settings import env_bool, env_float, env_int, env_text
 from .runtime_config import is_production_env
 
 logger = logging.getLogger(__name__)
@@ -40,15 +40,10 @@ _RETRYABLE_SQLSTATES = {
 }
 
 
-def _env(name: str, default: str | None = None) -> str | None:
-    value = os.getenv(name)
-    return value if value else default
-
-
 def resolve_database_url() -> str:
     """Return a psycopg 3 async SQLAlchemy URL without reading secret files."""
 
-    configured = _env("DATABASE_URL")
+    configured = env_text("DATABASE_URL")
     if configured:
         for prefix in ("postgresql://", "postgres://"):
             if configured.startswith(prefix):
@@ -57,14 +52,14 @@ def resolve_database_url() -> str:
             return configured
         raise ValueError("DATABASE_URL must use a PostgreSQL URL scheme.")
 
-    user = _env("POSTGRES_USER")
-    password = _env("POSTGRES_PASSWORD")
-    database = _env("POSTGRES_DB")
+    user = env_text("POSTGRES_USER")
+    password = env_text("POSTGRES_PASSWORD")
+    database = env_text("POSTGRES_DB")
     if user is None or password is None or database is None:
         raise ValueError("POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB are required.")
 
-    host = (_env("POSTGRES_HOST", "db") or "db").split(",", 1)[0].strip()
-    port = _env("POSTGRES_PORT", "5432") or "5432"
+    host = (env_text("POSTGRES_HOST", "db") or "db").split(",", 1)[0].strip()
+    port = env_text("POSTGRES_PORT", "5432") or "5432"
     from urllib.parse import quote_plus
 
     return (
@@ -73,36 +68,18 @@ def resolve_database_url() -> str:
     )
 
 
-def _positive_int(name: str, default: int) -> int:
-    raw = _env(name)
-    try:
-        value = int(raw) if raw is not None else default
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-def _positive_float(name: str, default: float) -> float:
-    raw = _env(name)
-    try:
-        value = float(raw) if raw is not None else default
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
 def _pool_size() -> int:
     if is_production_env():
-        return _positive_int(
+        return env_int(
             "DB_POOL_MAX_CONN_PRODUCTION",
-            _positive_int("DB_POOL_MAX_CONN", 10),
+            env_int("DB_POOL_MAX_CONN", 10),
         )
-    return _positive_int("DB_POOL_MAX_CONN", 10)
+    return env_int("DB_POOL_MAX_CONN", 10)
 
 
 def _warn_if_pool_capacity_is_unsafe(pool_size: int) -> None:
-    workers = _positive_int("WEB_CONCURRENCY", 1)
-    max_connections_raw = _env("POSTGRES_MAX_CONNECTIONS")
+    workers = env_int("WEB_CONCURRENCY", 1)
+    max_connections_raw = env_text("POSTGRES_MAX_CONNECTIONS")
     if max_connections_raw is None:
         return
     try:
@@ -110,8 +87,8 @@ def _warn_if_pool_capacity_is_unsafe(pool_size: int) -> None:
     except ValueError:
         return
     # Blue/Green deployments can briefly run both colors against the same DB.
-    deployment_multiplier = 2 if (_env("BLUE_GREEN_DEPLOYMENT", "false") or "false").lower() in {"1", "true", "yes"} else 1
-    reserved = _positive_int("DB_CONNECTION_HEADROOM", 10)
+    deployment_multiplier = 2 if env_bool("BLUE_GREEN_DEPLOYMENT") else 1
+    reserved = env_int("DB_CONNECTION_HEADROOM", 10)
     required = deployment_multiplier * workers * pool_size + reserved
     if required >= max_connections:
         logger.warning(
@@ -139,10 +116,10 @@ def get_engine() -> AsyncEngine:
         resolve_database_url(),
         pool_size=pool_size,
         max_overflow=0,
-        pool_timeout=_positive_float("DB_POOL_ACQUIRE_TIMEOUT_SECONDS", 10.0),
+        pool_timeout=env_float("DB_POOL_ACQUIRE_TIMEOUT_SECONDS", 10.0),
         pool_pre_ping=True,
-        pool_recycle=_positive_int("DB_POOL_RECYCLE_SECONDS", 1800),
-        echo=(_env("SQLALCHEMY_ECHO", "false") or "false").lower() in {"1", "true", "yes"},
+        pool_recycle=env_int("DB_POOL_RECYCLE_SECONDS", 1800),
+        echo=env_bool("SQLALCHEMY_ECHO"),
     )
     _session_factory = async_sessionmaker(
         bind=_engine,

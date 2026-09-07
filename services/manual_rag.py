@@ -355,6 +355,5 @@ def search_manual(query: str, top_k: int = TOP_K, *, locale: str = "ja") -> str:
     if not chunks:
         return ""
     parts = ["[Operation manual (reference)]"]
-    for chunk in chunks:
-        parts.append(f"\n### {chunk.heading}\n{chunk.content}")
+    parts.extend(f"\n### {chunk.heading}\n{chunk.content}" for chunk in chunks)
     return "\n".join(parts)

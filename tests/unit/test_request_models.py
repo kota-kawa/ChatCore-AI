@@ -3,6 +3,7 @@ import unittest
 from pydantic import ValidationError
 
 from services.request_models import (
+    MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     AddTaskRequest,
     ChatMessageRequest,
     ChatRoomIdsRequest,
@@ -11,7 +12,6 @@ from services.request_models import (
     PromptLikeRequest,
     PromptTaskCreateRequest,
     PromptUpdateRequest,
-    MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
 )

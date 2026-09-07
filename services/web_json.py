@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, TypeVar
+from typing import Any, TypeVar
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
@@ -9,9 +9,11 @@ from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse
 
 from .api_errors import ApiServiceError
-from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
 from .error_messages import ERROR_INVALID_JSON
 from .i18n import translate, translate_text
+from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
+
+logger = logging.getLogger(__name__)
 
 # モデルの型変数
 # TypeVar for Pydantic models
@@ -51,6 +53,10 @@ async def get_json(request: Request) -> Any | None:
     try:
         return await request.json()
     except Exception:
+        # 具体的なパスではなくルートテンプレートを出し、URL 内のトークンをログに残さない
+        # Log the route template instead of the concrete path so URL tokens never reach the log
+        route = request.scope.get("route")
+        logger.debug("Failed to parse the request body as JSON for %s %s.", request.method, getattr(route, "path", "unknown route"))
         return None
 
 
@@ -97,7 +103,7 @@ def jsonify_rate_limited(
 ) -> JSONResponse:
     # レートリミット制限のエラーレスポンスを生成し、Retry-Afterヘッダーを付与する
     # Generate a rate-limit error response and apply the Retry-After header.
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         error_key: translate_text(message),
         "code": "rate_limit.exceeded",
     }
@@ -127,7 +133,7 @@ def log_and_internal_server_error(
         if message == DEFAULT_INTERNAL_ERROR_MESSAGE
         else translate_text(message)
     )
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         error_key: localized_message,
         "code": "internal_error",
     }
@@ -141,14 +147,14 @@ async def require_json_dict(
     *,
     error_message: str = ERROR_INVALID_JSON,
     status: str | None = None,
-) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
+) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     # リクエストボディがdictであることを保証し、違う場合は400を返す
     # Ensure request body is a dict; otherwise return HTTP 400 response.
     data = await get_json(request)
     if isinstance(data, dict):
         return data, None
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "error": translate_text(error_message),
         "code": "request.invalid_json",
     }
@@ -158,7 +164,7 @@ async def require_json_dict(
 
 
 def validate_payload_model(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     model_class: type[ModelT],
     *,
     error_message: str,
@@ -173,7 +179,7 @@ def validate_payload_model(
             return validate(data), None
         return model_class.parse_obj(data), None  # pragma: no cover - pydantic v1 fallback
     except ValidationError:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             error_key: translate_text(error_message),
             "code": "request.validation_error",
         }

@@ -4,10 +4,10 @@ import unittest
 from unittest.mock import patch
 
 from blueprints.chat.projects import (
+    assign_room_project_endpoint,
     create_project_endpoint,
     delete_project_endpoint,
     list_projects_endpoint,
-    assign_room_project_endpoint,
 )
 from services.api_errors import ForbiddenOperationError
 from tests.helpers.request_helpers import build_request

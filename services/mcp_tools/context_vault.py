@@ -27,8 +27,8 @@ from services.mcp_oauth import MCP_CONTEXT_READ_SCOPE, MCP_CONTEXT_WRITE_SCOPE
 from services.mcp_tools.common import audit_tool_success, consume_tool_limit, require_actor
 from services.request_models import (
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
-    MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
     MAX_CONTEXT_FACT_TITLE_LENGTH,
+    MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
     ContextFactType,
     McpContextFactDeprecateRequest,
     McpContextFactSaveRequest,
@@ -196,9 +196,10 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "save_context_fact", result.id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 競合検出を行いながら個人コンテキストを更新するMCPツール説明。
     @mcp.tool(
@@ -249,9 +250,10 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "update_context_fact", fact_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 履歴を残したまま個人コンテキストを無効化するMCPツール説明。
     @mcp.tool(
@@ -279,6 +281,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "deprecate_context_fact", fact_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result

@@ -114,7 +114,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(second_a, (False, "1日1回までです"))
         self.assertEqual(first_b, (True, None))
 
-    # 信頼されていない中間プロキシ/クライアントからのX-Forwarded-Forヘッダー情報が無視され、直接の接続元IPでレート制限されることを検証します。
+    # 信頼されていない中間プロキシ/クライアントからのX-Forwarded-Forヘッダー情報が無視され、
+    # 直接の接続元IPでレート制限されることを検証します。
     # Verify that X-Forwarded-For headers from untrusted clients are ignored, using the connection IP instead.
     def test_guest_chat_limit_ignores_forwarded_for_from_untrusted_client(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"

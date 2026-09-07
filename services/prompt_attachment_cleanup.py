@@ -9,7 +9,6 @@ from services.db import session_scope
 from services.prompt_attachment_storage import cleanup_unreferenced_prompt_attachments
 from services.repositories.prompt_attachment_repository import PromptAttachmentRepository
 
-
 logger = logging.getLogger(__name__)
 
 

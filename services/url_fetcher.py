@@ -5,10 +5,10 @@ import logging
 import re
 import socket
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Iterator
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
@@ -428,9 +428,11 @@ def _resolve_safe_ip(url: str) -> str | None:
         ip = ipaddress.ip_address(ip_str)
         if any(ip in net for net in _BLOCKED_NETWORKS):
             return None
-        return ip_str
     except Exception:
+        logger.debug("Failed to resolve a safe IP for URL %s; treating it as unsafe.", url, exc_info=True)
         return None
+    else:
+        return ip_str
 
 
 def _is_safe_url(url: str) -> bool:

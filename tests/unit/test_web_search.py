@@ -193,7 +193,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ):
                 with patch.object(web_search, "get_seconds_until_monthly_reset", return_value=60):
                     with patch.object(web_search.http_client, "get") as mock_get:
-                        with self.assertRaises(web_search.WebSearchQuotaExceeded) as cm:
+                        with self.assertRaises(web_search.WebSearchQuotaExceededError) as cm:
                             web_search.search_brave_llm_context("example query")
 
         self.assertEqual(cm.exception.limit, 500)

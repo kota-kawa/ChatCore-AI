@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import secrets
@@ -373,15 +374,14 @@ class HybridSessionMiddleware:
             pipeline.execute()
         except Exception as exc:
             if exc.__class__.__name__ == "WatchError":
+                logger.debug("Session was modified concurrently; skipping this conditional Redis save.")
                 return None
             mark_redis_unavailable(exc)
             return False
         finally:
             if pipeline is not None:
-                try:
+                with contextlib.suppress(Exception):
                     pipeline.reset()
-                except Exception:
-                    pass
         return True
 
     @staticmethod

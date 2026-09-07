@@ -40,11 +40,9 @@ def make_request(method="GET", path="/memo/api", json_body=None, session=None, q
 
 
 async def collect_streaming_body(response):
-    chunks = []
     # 日本語: 非同期の対象データを順番に処理します。
     # English: Process each asynchronous target item in order.
-    async for chunk in response.body_iterator:
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in response.body_iterator]
     return b"".join(chunks)
 
 

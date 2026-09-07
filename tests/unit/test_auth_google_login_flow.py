@@ -989,7 +989,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(request.session["user_id"], 99)
         mock_create.assert_called_once()
-        args, kwargs = mock_create.call_args
+        kwargs = mock_create.call_args.kwargs
         self.assertEqual(kwargs["provider_user_id"], "google-oidc-456")
 
     # 日本語: Google ID が数値として返された場合でも文字列として処理することを確認します。
@@ -1026,7 +1026,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(request.session["user_id"], 100)
-        args, kwargs = mock_create.call_args
+        kwargs = mock_create.call_args.kwargs
         self.assertEqual(kwargs["provider_user_id"], "123456789")
 
 

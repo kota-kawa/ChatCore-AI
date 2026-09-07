@@ -4,11 +4,11 @@ import html
 import math
 import re
 
-from services.web_search import strip_web_search_citation_html
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     USER_SKILLS_TOKEN_BUDGET,
 )
+from services.web_search import strip_web_search_citation_html
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
@@ -257,9 +257,8 @@ def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, s
         return []
 
     recent_start = len(messages)
-    recent_count = 0
     recent_tokens = 0
-    for index in range(len(messages) - 1, -1, -1):
+    for recent_count, index in enumerate(reversed(range(len(messages)))):
         message_tokens = estimate_token_count(messages[index].get("content", ""))
         # Always retain the latest pair. Older messages are retained only while
         # they fit the rolling token window.
@@ -269,7 +268,6 @@ def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, s
         ):
             break
         recent_start = index
-        recent_count += 1
         recent_tokens += message_tokens
 
     return messages[:recent_start]
@@ -335,13 +333,11 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
         )
     if user_points:
         sections.append("<user_points>")
-        for point in user_points:
-            sections.append(f"- {point}")
+        sections.extend(f"- {point}" for point in user_points)
         sections.append("</user_points>")
     if assistant_points:
         sections.append("<assistant_points>")
-        for point in assistant_points:
-            sections.append(f"- {point}")
+        sections.extend(f"- {point}" for point in assistant_points)
         sections.append("</assistant_points>")
     return render_summary_context(sections, len(archived_messages)), len(archived_messages)
 
@@ -455,8 +451,7 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     ]
     # ファクト項目を箇条書きで追加する
     # Append fact entries as bullet points
-    for fact in normalized_facts:
-        sections.append(f"- {fact}")
+    sections.extend(f"- {fact}" for fact in normalized_facts)
     sections.append("</memory_facts>")
     content = "\n".join(sections)
     return {

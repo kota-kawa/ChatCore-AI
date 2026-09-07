@@ -60,13 +60,16 @@ def _parse_queries(raw: str) -> list[str]:
     try:
         loaded = json.loads(text)
     except Exception:
+        logger.debug("Reference query rewrite response was not pure JSON; retrying with the outermost JSON block.")
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:
+            logger.warning("Reference query rewrite response contained no JSON object; skipping query rewriting.")
             return []
         try:
             loaded = json.loads(text[start : end + 1])
         except Exception:
+            logger.warning("Failed to parse the reference query rewrite response as JSON; skipping query rewriting.")
             return []
     if not isinstance(loaded, dict):
         return []

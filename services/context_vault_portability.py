@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import re
-import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Literal, TypeVar
 
@@ -86,9 +86,8 @@ async def _transaction(
         return await operation(session)
     for attempt in range(MAX_DB_WRITE_ATTEMPTS):
         try:
-            async with session_scope() as db:
-                async with db.begin():
-                    return await operation(db)
+            async with session_scope() as db, db.begin():
+                return await operation(db)
         except ApiServiceError:
             raise
         except SQLAlchemyError as exc:
@@ -323,7 +322,7 @@ async def build_export(
         )
 
     facts = [_portable_fact(row) for row in rows]
-    exported_at = datetime.now(timezone.utc).isoformat()
+    exported_at = datetime.now(UTC).isoformat()
     if export_format == "json":
         document = ContextVaultExportDocument(
             format=CONTEXT_VAULT_FORMAT,
@@ -419,7 +418,7 @@ async def preview_import(
     if not can_import:
         warnings.append(WARNING_CONTEXT_VAULT_IMPORT_ACTIVE_LIMIT)
 
-    expires_at = datetime.now(timezone.utc) + timedelta(
+    expires_at = datetime.now(UTC) + timedelta(
         seconds=IMPORT_PREVIEW_TOKEN_TTL_SECONDS
     )
     return ContextVaultImportPreviewResponse(

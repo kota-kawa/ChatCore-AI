@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ from services.models import ContextFact, MemoEntry
 class EmbeddingBackfillRepository:
     """Read missing vectors and persist regenerated values."""
 
-    _TABLE_SPECS = {
+    _TABLE_SPECS: ClassVar[dict[str, tuple[Any, tuple[Any, ...]]]] = {
         "memo_entries": (MemoEntry, (MemoEntry.title, MemoEntry.ai_response)),
         "context_facts": (
             ContextFact,

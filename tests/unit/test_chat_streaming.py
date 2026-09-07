@@ -7,24 +7,23 @@ from unittest.mock import AsyncMock, patch
 from starlette.responses import StreamingResponse
 
 from blueprints.chat.messages import (
+    _iter_llm_stream_events,
+    _iter_serialized_stream_events,
     _paginate_ephemeral_chat_history,
     chat,
     chat_edit_and_regenerate,
-    chat_regenerate,
-    _iter_llm_stream_events,
-    _iter_serialized_stream_events,
     chat_generation_status,
     chat_generation_stream,
+    chat_regenerate,
     get_chat_history,
 )
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
-    _budgeted_web_search_result_tool_payload,
-    _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
+    _budgeted_web_search_result_tool_payload,
+    _web_search_result_tool_payload,
     build_generation_key,
     clear_generation_job_state,
     has_active_generation,
@@ -40,6 +39,7 @@ from services.chat_turn_state import (
     strip_turn_state_update,
     strip_turn_state_update_chunks,
 )
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -55,14 +55,14 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
 )
 from services.web_search import (
-    create_web_evidence_context_budget,
-    WebEvidenceContextBudget,
-    WebSearchQuotaExceeded,
-    WebSearchResult,
-    WebSearchSource,
     WEB_SEARCH_ERROR_REQUEST_FAILED,
     WEB_SEARCH_MAX_CONTEXT_CHARS,
     WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
+    WebEvidenceContextBudget,
+    WebSearchQuotaExceededError,
+    WebSearchResult,
+    WebSearchSource,
+    create_web_evidence_context_budget,
 )
 from services.web_search_images import WebSearchImageCandidate
 from tests.helpers.request_helpers import build_request
@@ -596,11 +596,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                                             # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
                                             # English: Async helper to consume and concatenate stream response chunks
                                             async def _consume():
-                                                chunks = []
                                                 # 日本語: レスポンスボディのチャンクを順番に受信して連結する
                                                 # English: Receive and concatenate response body chunks in order
-                                                async for chunk in response.body_iterator:
-                                                    chunks.append(chunk)
+                                                chunks = [chunk async for chunk in response.body_iterator]
                                                 return b"".join(chunks)
 
                                             body = asyncio.run(_consume()).decode("utf-8")
@@ -1397,7 +1395,8 @@ class ChatStreamingTestCase(unittest.TestCase):
 
 
     # 日本語: モデルが真似て書いた出典チップHTMLを表示・保存の双方から取り除き、正規のmarkerだけをチップ化することを検証します。
-    # English: Verify chip markup echoed by the model is removed from both the stream and the persisted body, while a real marker still resolves.
+    # English: Verify chip markup echoed by the model is removed from both the stream and the persisted body,
+    #          while a real marker still resolves.
     def test_background_generation_job_strips_citation_chip_html_echoed_by_model(self):
         persisted_records = []
         search_result = WebSearchResult(
@@ -2521,7 +2520,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
                 "services.chat_generation.search_brave_llm_context",
-                side_effect=WebSearchQuotaExceeded(limit=100, retry_after_seconds=3600),
+                side_effect=WebSearchQuotaExceededError(limit=100, retry_after_seconds=3600),
             ),
             self.assertLogs("services.chat_generation", level="WARNING") as log_cm,
         ):
@@ -3089,6 +3088,49 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("圧縮後に生成した回答", body)
         self.assertIn("event: done", body)
 
+    # 日本語: 入力超過の回復経路ごとに、直前のやり取りが残ることを検証するヘルパーです。
+    # English: Helper asserting the previous exchange survives one input-recovery path.
+    def _assert_context_recovery_keeps_previous_exchange(self, recovery, recent, optional):
+        calls = []
+
+        def stream(messages, _model, **_kwargs):
+            calls.append(messages)
+            if recovery == "provider_rejection" and len(calls) == 1:
+                raise LlmInputLimitError("too long")
+            self.assertEqual(
+                [m for m in messages if m["role"] != "system"], recent,
+            )
+            self.assertFalse(any(m.get("content") == optional for m in messages))
+            return _direct_answer_stream(
+                "B supports a growing team.",
+                state={"objective": "Compare plans A and B as the team grows."},
+            )
+
+        def fits(messages, *_args):
+            return recovery != "local_budget" or not any(
+                m.get("content") == optional for m in messages
+            )
+
+        with (
+            patch("services.chat_generation.request_fits_context", side_effect=fits),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+        ):
+            job = start_generation_job(
+                f"guest:sid-followup-{recovery}:default",
+                conversation_messages=[
+                    {"role": "system", "content": "Base guidance"},
+                    {"role": "system", "content": optional},
+                    *recent,
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(calls), 2 if recovery == "provider_rejection" else 1)
+        self.assertIn("event: done", body)
+        self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
+
     def test_context_recovery_keeps_the_previous_exchange_before_intent_resolution(self):
         recent = [
             {"role": "user", "content": "Compare plans A and B for a small team."},
@@ -3098,45 +3140,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         optional = "Optional background " * 2000
         for recovery in ("provider_rejection", "local_budget"):
             with self.subTest(recovery=recovery):
-                calls = []
-
-                def stream(messages, _model, **_kwargs):
-                    calls.append(messages)
-                    if recovery == "provider_rejection" and len(calls) == 1:
-                        raise LlmInputLimitError("too long")
-                    self.assertEqual(
-                        [m for m in messages if m["role"] != "system"], recent,
-                    )
-                    self.assertFalse(any(m.get("content") == optional for m in messages))
-                    return _direct_answer_stream(
-                        "B supports a growing team.",
-                        state={"objective": "Compare plans A and B as the team grows."},
-                    )
-
-                def fits(messages, *_args):
-                    return recovery != "local_budget" or not any(
-                        m.get("content") == optional for m in messages
-                    )
-
-                with (
-                    patch("services.chat_generation.request_fits_context", side_effect=fits),
-                    patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-                ):
-                    job = start_generation_job(
-                        f"guest:sid-followup-{recovery}:default",
-                        conversation_messages=[
-                            {"role": "system", "content": "Base guidance"},
-                            {"role": "system", "content": optional},
-                            *recent,
-                        ],
-                        model="openai/gpt-oss-120b",
-                        persist_response=lambda _: None,
-                    )
-                    body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
-
-                self.assertEqual(len(calls), 2 if recovery == "provider_rejection" else 1)
-                self.assertIn("event: done", body)
-                self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
+                self._assert_context_recovery_keeps_previous_exchange(
+                    recovery, recent, optional,
+                )
 
     def test_resolved_followup_objective_survives_input_recovery_after_search(self):
         objective = "Compare plans A and B for a team growing to 50 people."
@@ -3750,11 +3756,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
         # English: Async helper to consume and concatenate stream response chunks
         async def _consume():
-            chunks = []
             # 日本語: 非同期の対象データを順番に処理します。
             # English: Process each asynchronous target item in order.
-            async for chunk in stream_response.body_iterator:
-                chunks.append(chunk)
+            chunks = [chunk async for chunk in stream_response.body_iterator]
             return b"".join(chunks)
 
         body = asyncio.run(_consume()).decode("utf-8")
@@ -3812,11 +3816,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
         # English: Async helper to consume and concatenate stream response chunks
         async def _consume():
-            chunks = []
             # 日本語: 非同期の対象データを順番に処理します。
             # English: Process each asynchronous target item in order.
-            async for chunk in stream_response.body_iterator:
-                chunks.append(chunk)
+            chunks = [chunk async for chunk in stream_response.body_iterator]
             return b"".join(chunks)
 
         body = asyncio.run(_consume()).decode("utf-8")
@@ -3861,11 +3863,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
         # English: Async helper to consume and concatenate stream response chunks
         async def _consume():
-            chunks = []
             # 日本語: 非同期の対象データを順番に処理します。
             # English: Process each asynchronous target item in order.
-            async for chunk in stream_response.body_iterator:
-                chunks.append(chunk)
+            chunks = [chunk async for chunk in stream_response.body_iterator]
             return b"".join(chunks)
 
         body = asyncio.run(_consume()).decode("utf-8")
@@ -3906,11 +3906,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
         # English: Async helper to consume and concatenate stream response chunks
         async def _consume():
-            chunks = []
             # 日本語: 非同期の対象データを順番に処理します。
             # English: Process each asynchronous target item in order.
-            async for chunk in stream_response.body_iterator:
-                chunks.append(chunk)
+            chunks = [chunk async for chunk in stream_response.body_iterator]
             return b"".join(chunks)
 
         body = asyncio.run(_consume()).decode("utf-8")

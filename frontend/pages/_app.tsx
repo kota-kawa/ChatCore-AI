@@ -38,10 +38,13 @@ import "../public/prompt_share/static/css/pages/prompt_share.button-system.css";
 import "../public/prompt_share/static/css/pages/prompt_share.dark-mode.css";
 import "../public/prompt_share/static/css/pages/prompt_manage.css";
 import "../public/static/css/pages/user_settings/user_settings.css";
-import "../public/static/css/pages/oauth_authorize/oauth_authorize.css";
-import "../public/static/css/pages/shared_memo.css";
-import "../public/static/css/pages/shared_prompt.css";
 import "../public/static/css/pages/chat/shared_chat.css";
+// 単一ページからのみ到達し、残りのグローバル束とセレクタが重ならないページCSSは
+// _app に載せず、所有ページの next/head から <link> で読み込む（STYLING_STRATEGY.md 参照）。
+// oauth_authorize.css / shared_memo.css / shared_prompt.css がこれに該当する。
+// Page CSS that is reachable from exactly one page and shares no selector with the remaining
+// global bundle is linked from the owning page's next/head instead of _app (see STYLING_STRATEGY.md):
+// oauth_authorize.css, shared_memo.css and shared_prompt.css.
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
 import "../scripts/core/csrf";

@@ -40,6 +40,7 @@ def _sanitize_title(raw_title: str) -> str:
         try:
             payload = json.loads(title)
         except Exception:
+            logger.debug("Chat room title candidate was not valid JSON; using the raw text instead.")
             payload = None
         if isinstance(payload, dict):
             title = str(payload.get("title") or "").strip()

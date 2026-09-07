@@ -21,10 +21,11 @@ class PromptResourceRepository:
 
     @staticmethod
     def _field(resource: object, name: str, default: str = "") -> str:
-        if isinstance(resource, Mapping):
-            value = resource.get(name, default)
-        else:
-            value = getattr(resource, name, default)
+        value = (
+            resource.get(name, default)
+            if isinstance(resource, Mapping)
+            else getattr(resource, name, default)
+        )
         return str(value if value is not None else default)
 
     async def insert_many(

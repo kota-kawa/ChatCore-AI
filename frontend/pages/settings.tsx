@@ -275,7 +275,7 @@ export default function UserSettingsPage() {
       // This closure's `t` stays bound to the pre-switch locale, so fetch the toast copy
       // with the post-switch locale explicitly rather than relying on `t`.
       showToast(translate(savedLocale, "settings.languageSaved"), { variant: "success" });
-    } catch (error) {
+    } catch {
       if (localeRequestRef.current !== requestId) return;
       setLocale(previousLocale);
       showToast(translate(previousLocale, "settings.languageSaveFailed"), { variant: "error" });

@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from services.share_common import (
@@ -66,7 +66,7 @@ class ShareCommonTestCase(unittest.TestCase):
     def test_lifecycle_uses_the_same_active_expired_and_revoked_flags(self):
         active = TokenShareLifecycle(
             "token",
-            datetime.now(timezone.utc) + timedelta(days=1),
+            datetime.now(UTC) + timedelta(days=1),
             None,
         )
         self.assertTrue(active.is_active)
@@ -93,12 +93,12 @@ class ShareCommonTestCase(unittest.TestCase):
         self.assertEqual(received, [DEFAULT_SHARE_TOKEN_BYTES])
 
     def test_unique_violation_detection_reads_wrapped_sqlstate(self):
-        class UniqueViolation(Exception):
+        class UniqueViolationError(Exception):
             sqlstate = "23505"
 
         class WrappedError(Exception):
             def __init__(self):
-                self.orig = UniqueViolation()
+                self.orig = UniqueViolationError()
 
         self.assertTrue(is_unique_violation(WrappedError()))
         self.assertFalse(is_unique_violation(RuntimeError("other database error")))

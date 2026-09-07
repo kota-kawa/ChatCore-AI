@@ -300,6 +300,12 @@ export default function AdminDashboard() {
               </div>
             </div>
             <nav className="flex flex-wrap gap-3">
+              {/* 日本語: この「管理トップへ戻る」は /admin 自身へのリンクで、目的は再読み込みによる管理画面の初期化。
+                       next/link ではクライアント遷移になり同一ルートでは何も起きないため、意図的に <a> を使う。
+                  English: This "back to admin top" link points at /admin itself; the intent is a full reload that
+                           resets the console. next/link would client-navigate to the same route and do nothing,
+                           so a plain <a> is used deliberately. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo cc-press inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50"
                 href="/admin"

@@ -4,10 +4,9 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from blueprints.chat.rooms import MAX_FORKED_MESSAGES, fork_shared_chat_room
-from services.chat_service import fork_shared_chat_into_db_room
 from services.api_errors import ResourceNotFoundError
+from services.chat_service import fork_shared_chat_into_db_room
 from tests.helpers.request_helpers import build_request
-
 
 SHARED_PAYLOAD = {
     "room": {"id": "room-1", "title": "共有された会話"},

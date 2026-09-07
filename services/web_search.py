@@ -9,17 +9,21 @@ import threading
 import time
 from concurrent.futures import (
     ThreadPoolExecutor,
-    TimeoutError as FuturesTimeoutError,
     as_completed,
 )
+from concurrent.futures import (
+    TimeoutError as FuturesTimeoutError,
+)
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from functools import partial
 from html import escape
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from services import http_client
 from services.chat_prompt import insert_after_leading_system_messages
+from services.env_settings import env_float, env_int_in_range
 from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
 from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
@@ -439,7 +443,7 @@ class WebEvidenceContextBudget:
             )
 
 
-class WebSearchQuotaExceeded(RuntimeError):
+class WebSearchQuotaExceededError(RuntimeError):
     # Brave Web検索の月間制限クォータを超過した際のエラークラス
     # Exception raised when the Brave web search monthly quota is exceeded.
     def __init__(self, limit: int, retry_after_seconds: int) -> None:
@@ -468,43 +472,22 @@ def is_web_search_enabled() -> bool:
     return _web_search_enabled()
 
 
-def _get_positive_int_env(name: str, default: int, *, minimum: int = 1, maximum: int = 100) -> int:
-    # 環境変数から正の整数値を取得し、範囲内に収めて返す
-    # Retrieve a positive integer value from an environment variable, clamped to a range.
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return min(max(value, minimum), maximum)
-
-
-def _get_positive_float_env(name: str, default: float) -> float:
-    # 環境変数から正の実数値を取得して返す
-    # Retrieve a positive float value from an environment variable.
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
+# 日本語: Web検索の各種上限は既定で 1〜100 の範囲へ丸めます。呼び出し側で minimum／maximum を上書きできます。
+# English: Web-search limits clamp into 1..100 by default; call sites may override minimum/maximum.
+_bounded_int_env = partial(env_int_in_range, minimum=1, maximum=100)
 
 
 def create_web_page_fetch_budget() -> WebPageFetchBudget:
     """Create the bounded page-fetch budget used for a single answer."""
     return WebPageFetchBudget(
-        max_attempts=_get_positive_int_env(
+        max_attempts=_bounded_int_env(
             "WEB_SEARCH_LINK_FOLLOW_MAX_PAGES",
             WEB_SEARCH_LINK_FOLLOW_MAX_TOTAL_PAGES,
             minimum=1,
             maximum=WEB_SEARCH_LINK_FOLLOW_MAX_TOTAL_PAGES,
         ),
         timeout_seconds=min(
-            _get_positive_float_env(
+            env_float(
                 "WEB_SEARCH_LINK_FOLLOW_TIMEOUT_SECONDS",
                 WEB_SEARCH_LINK_FOLLOW_OVERALL_TIMEOUT_SECONDS,
             ),
@@ -704,10 +687,10 @@ def _redact_secretish_text(value: str) -> str:
     # Mask tokens in the string that look like sensitive credentials.
     if not value:
         return ""
-    redacted_tokens: list[str] = []
-    for token in value.split():
-        redacted_tokens.append("[REDACTED-SENSITIVE]" if _looks_sensitive(token) else token)
-    return " ".join(redacted_tokens)
+    return " ".join(
+        "[REDACTED-SENSITIVE]" if _looks_sensitive(token) else token
+        for token in value.split()
+    )
 
 
 def _strip_markdown_code_fence(text: str) -> str:
@@ -737,13 +720,16 @@ def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
         # LLM が説明文つきで JSON を返すことがあるため、最外の JSON object だけを救出する。
         # それでも壊れている場合は呼び出し側で失敗として扱う。
         # Extract the outermost JSON block if parsing the entire string fails.
+        logger.debug("Web search LLM response was not pure JSON; retrying with the outermost JSON block.")
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:
+            logger.warning("Web search LLM response contained no JSON object; the caller will treat it as a failure.")
             return None
         try:
             loaded = json.loads(text[start : end + 1])
         except Exception:
+            logger.warning("Failed to parse the web search LLM response as JSON; the caller will treat it as a failure.")
             return None
     return loaded if isinstance(loaded, dict) else None
 
@@ -1087,9 +1073,9 @@ def _parse_brave_context_response(
     raw_sources = payload.get("sources")
     sources_metadata: dict[str, dict[str, Any]] = {}
     if isinstance(raw_sources, dict):
-        for url, meta in raw_sources.items():
-            if isinstance(meta, dict):
-                sources_metadata[url] = meta
+        sources_metadata = {
+            url: meta for url, meta in raw_sources.items() if isinstance(meta, dict)
+        }
     elif isinstance(raw_sources, list):
         for meta in raw_sources:
             if isinstance(meta, dict) and "url" in meta:
@@ -1146,7 +1132,7 @@ def _parse_brave_context_response(
 
     return WebSearchResult(
         query=query,
-        searched_at=datetime.now(timezone.utc).isoformat(),
+        searched_at=datetime.now(UTC).isoformat(),
         sources=tuple(sources),
         freshness=freshness,
     )
@@ -1449,19 +1435,19 @@ def enrich_sources_with_page_content(
         return result
 
     budget = page_fetch_budget or create_web_page_fetch_budget()
-    root_limit = _get_positive_int_env(
+    root_limit = _bounded_int_env(
         "WEB_SEARCH_FETCH_TOP_N",
         WEB_SEARCH_PAGE_FETCH_DEFAULT_TOP_N,
         minimum=1,
         maximum=WEB_SEARCH_PAGE_FETCH_MAX_TOP_N,
     )
-    max_depth = _get_positive_int_env(
+    max_depth = _bounded_int_env(
         "WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH",
         WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH,
         minimum=1,
         maximum=WEB_SEARCH_LINK_FOLLOW_MAX_DEPTH,
     )
-    target_pages = _get_positive_int_env(
+    target_pages = _bounded_int_env(
         "WEB_SEARCH_LINK_FOLLOW_TARGET_PAGES",
         WEB_SEARCH_LINK_FOLLOW_TARGET_PAGES,
         minimum=1,
@@ -1489,7 +1475,7 @@ def enrich_sources_with_page_content(
     if not root_documents:
         return result
 
-    max_chars = _get_positive_int_env(
+    max_chars = _bounded_int_env(
         "WEB_SEARCH_PAGE_TEXT_MAX_CHARS",
         WEB_SEARCH_PAGE_TEXT_MAX_CHARS,
         minimum=500,
@@ -1727,7 +1713,7 @@ def search_brave_llm_context(
 
     allowed, _, monthly_limit = consume_brave_web_search_monthly_quota()
     if not allowed:
-        raise WebSearchQuotaExceeded(
+        raise WebSearchQuotaExceededError(
             monthly_limit,
             get_seconds_until_monthly_reset(),
         )
@@ -1736,16 +1722,16 @@ def search_brave_llm_context(
         "q": normalized_query,
         "country": country,
         "search_lang": language,
-        "count": _get_positive_int_env("BRAVE_SEARCH_COUNT", 10, minimum=1, maximum=50),
-        "maximum_number_of_urls": _get_positive_int_env("BRAVE_SEARCH_MAX_URLS", 6, minimum=1, maximum=50),
-        "maximum_number_of_tokens": _get_positive_int_env(
+        "count": _bounded_int_env("BRAVE_SEARCH_COUNT", 10, minimum=1, maximum=50),
+        "maximum_number_of_urls": _bounded_int_env("BRAVE_SEARCH_MAX_URLS", 6, minimum=1, maximum=50),
+        "maximum_number_of_tokens": _bounded_int_env(
             "BRAVE_SEARCH_MAX_TOKENS",
             WEB_SEARCH_DEFAULT_MAX_TOKENS,
             minimum=1024,
             maximum=32768,
         ),
-        "maximum_number_of_snippets": _get_positive_int_env("BRAVE_SEARCH_MAX_SNIPPETS", 18, minimum=1, maximum=100),
-        "maximum_number_of_snippets_per_url": _get_positive_int_env(
+        "maximum_number_of_snippets": _bounded_int_env("BRAVE_SEARCH_MAX_SNIPPETS", 18, minimum=1, maximum=100),
+        "maximum_number_of_snippets_per_url": _bounded_int_env(
             "BRAVE_SEARCH_MAX_SNIPPETS_PER_URL",
             4,
             minimum=1,
@@ -1766,12 +1752,12 @@ def search_brave_llm_context(
             "X-Subscription-Token": api_key,
         },
         params=params,
-        timeout=_get_positive_float_env("BRAVE_SEARCH_TIMEOUT_SECONDS", WEB_SEARCH_DEFAULT_TIMEOUT_SECONDS),
+        timeout=env_float("BRAVE_SEARCH_TIMEOUT_SECONDS", WEB_SEARCH_DEFAULT_TIMEOUT_SECONDS),
     )
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
-        raise ValueError("Unexpected Brave Search response.")
+        raise TypeError("Unexpected Brave Search response.")
 
     result = _parse_brave_context_response(payload, normalized_query, freshness=freshness)
     result = enrich_sources_with_page_content(
@@ -1821,7 +1807,7 @@ def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResul
 
     return WebSearchResult(
         query=" / ".join(queries[:5]),
-        searched_at=searched_at or datetime.now(timezone.utc).isoformat(),
+        searched_at=searched_at or datetime.now(UTC).isoformat(),
         sources=tuple(combined_sources),
     )
 
@@ -2370,7 +2356,7 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
         if source.link_depth >= 1:
             item_classes += " web-search-sources__item--followed"
         sources_lines.append(
-            (
+
                 f'<li class="{item_classes}">'
                 f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
                 f"{build_source_favicon_html(source)}"
@@ -2381,7 +2367,7 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
                 "</span>"
                 '<span class="web-search-sources__external">↗</span>'
                 "</a></li>"
-            )
+
         )
 
     if not sources_lines:

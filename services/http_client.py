@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import os
 import threading
 from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
+
+from services.env_settings import env_int
 
 # 外部HTTP呼び出し（Web検索・メール送信など）で再利用する共有 requests.Session。
 # TCP/TLS コネクションをプールして使い回すことで、リクエスト毎の接続確立コストと
@@ -23,23 +24,8 @@ _session_lock = threading.Lock()
 _session: requests.Session | None = None
 
 
-# 環境変数から正の整数を取得する（不正値・非正値は既定値へフォールバック）
-# Read a positive int env var, falling back to the default on invalid/non-positive input.
-def _get_positive_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        parsed = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
-
-# コネクションプール付きの HTTPAdapter を構築する
-# Build an HTTPAdapter backed by a connection pool.
 def _build_adapter() -> HTTPAdapter:
-    pool_maxsize = _get_positive_int_env("HTTP_POOL_MAXSIZE", 32)
+    pool_maxsize = env_int("HTTP_POOL_MAXSIZE", 32)
     return HTTPAdapter(
         pool_connections=pool_maxsize,
         pool_maxsize=pool_maxsize,

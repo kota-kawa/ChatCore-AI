@@ -18,7 +18,6 @@ from services.prompt_types import (
 from services.shared_content_service import SharedContentService
 from services.web import jsonify, log_and_internal_server_error
 
-
 search_bp = APIRouter(prefix="/search")
 logger = logging.getLogger(__name__)
 

@@ -92,7 +92,7 @@ export function stripMarkdownForDescription(value: string) {
     .replace(/`([^`]+)`/g, "$1") // インラインコードの削除 / Remove inline code
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ") // 画像リンクの削除 / Remove image links
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // リンクのテキストのみ抽出 / Extract text from links
-    .replace(/[#>*_\-]/g, " ") // 見出しやリストなどの記号を削除 / Remove formatting symbols
+    .replace(/[#>*_-]/g, " ") // 見出しやリストなどの記号を削除 / Remove formatting symbols
     .replace(/\s+/g, " ") // 余分な空白をまとめる / Collapse whitespaces
     .trim();
 }

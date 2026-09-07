@@ -319,7 +319,7 @@ class InputBudgetTestCase(unittest.TestCase):
 
         self.assertGreater(count, 0)
         self.assertLess(estimate_messages_tokens(compacted), original_tokens)
-        for index, message in enumerate(compacted):
+        for message in compacted:
             if message.get("role") != "tool":
                 continue
             payload = json.loads(message["content"])

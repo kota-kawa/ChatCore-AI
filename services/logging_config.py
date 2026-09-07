@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from services.request_context import RequestContextFilter
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ログレコードを構造化されたJSON形式に変換するためのカスタムログフォーマッタクラス。
 # Custom log formatter class to structure log records into JSON strings.
 class JsonLogFormatter(logging.Formatter):
-    RESERVED_KEYS = {
+    RESERVED_KEYS: ClassVar[set[str]] = {
         "args",
         "created",
         "exc_info",
@@ -62,7 +62,7 @@ class JsonLogFormatter(logging.Formatter):
     # Format the log record (timestamp, level, message, request ID, etc.) into a JSON-serialized string.
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

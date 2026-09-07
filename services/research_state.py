@@ -9,8 +9,9 @@ leading/trailing excerpts.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from services.chat_context import estimate_token_count
 from services.chat_prompt import insert_after_leading_system_messages
@@ -43,8 +44,12 @@ def is_reference_context_message(message: Mapping[str, Any]) -> bool:
     if message.get("role") != "system":
         return False
     content = str(message.get("content") or "").lstrip()
-    return content.startswith("<selected_reference_context>") or content.startswith(
-        ("<web_search_context ", "<web_search_context>")
+    return content.startswith(
+        (
+            "<selected_reference_context>",
+            "<web_search_context ",
+            "<web_search_context>",
+        )
     )
 
 
@@ -81,7 +86,7 @@ class EvidenceReference:
     url: str = ""
     external_path: str = ""
 
-    def with_search_id(self, search_id: str) -> "EvidenceReference":
+    def with_search_id(self, search_id: str) -> EvidenceReference:
         if not search_id or search_id in self.search_ids:
             return self
         return EvidenceReference(
@@ -94,19 +99,20 @@ class EvidenceReference:
         )
 
     def as_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {
+        return {
             "evidence_id": self.evidence_id,
             "source_type": self.source_type,
             "search_ids": list(self.search_ids),
+            **{
+                key: value
+                for key, value in (
+                    ("title", self.title),
+                    ("url", self.url),
+                    ("external_path", self.external_path),
+                )
+                if value
+            },
         }
-        for key, value in (
-            ("title", self.title),
-            ("url", self.url),
-            ("external_path", self.external_path),
-        ):
-            if value:
-                result[key] = value
-        return result
 
 
 @dataclass(frozen=True)
@@ -122,20 +128,21 @@ class SearchExecution:
     status: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {
+        return {
             "search_id": self.search_id,
             "tool_name": self.tool_name,
             "query": self.query,
             "evidence_ids": list(self.evidence_ids),
+            **{
+                key: value
+                for key, value in (
+                    ("searched_at", self.searched_at),
+                    ("freshness", self.freshness),
+                    ("status", self.status),
+                )
+                if value
+            },
         }
-        for key, value in (
-            ("searched_at", self.searched_at),
-            ("freshness", self.freshness),
-            ("status", self.status),
-        ):
-            if value:
-                result[key] = value
-        return result
 
 
 @dataclass
@@ -419,11 +426,11 @@ class TurnState:
 
 __all__ = [
     "DEFAULT_TURN_STATE_MAX_TOKENS",
+    "TURN_STATE_CLOSE_MARKER",
+    "TURN_STATE_MARKER",
     "EvidenceReference",
     "Fact",
     "SearchExecution",
-    "TURN_STATE_CLOSE_MARKER",
-    "TURN_STATE_MARKER",
     "TurnState",
     "TurnStateProjectionError",
     "is_reference_context_message",

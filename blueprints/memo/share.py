@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # 共有リンクの作成・取得・更新・取り消しと、公開共有メモの取得
 # Share link create / state / refresh / revoke plus the public shared-memo read
-
 import logging
 
 from fastapi import Request
@@ -13,6 +12,7 @@ from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
     ERROR_TOKEN_REQUIRED,
 )
+from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     MemoShareCreateRequest,
     ShareMemoRequest,
@@ -25,8 +25,6 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-
-from services.repositories.memo_helpers import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr

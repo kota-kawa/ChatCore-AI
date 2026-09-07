@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import os
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -151,8 +151,7 @@ async def _run(
     commit: bool = False,
 ) -> Any:
     if session is not None:
-        result = await operation(PasskeyRepository(session))
-        return result
+        return await operation(PasskeyRepository(session))
 
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:

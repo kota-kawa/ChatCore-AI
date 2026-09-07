@@ -7,6 +7,8 @@ from services.llm_context_budget import (
     DEFAULT_CONTEXT_WINDOW_TOKENS,
     GPT_OSS_120B_MODEL,
     MODEL_CONTEXT_WINDOWS,
+    QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
+    QWEN_3_6_27B_MODEL,
     LlmContextBudget,
     estimate_messages_tokens,
     estimate_request_tokens,
@@ -16,8 +18,6 @@ from services.llm_context_budget import (
     get_model_context_window,
     get_model_max_output_tokens,
     get_output_reserved_tokens,
-    QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
-    QWEN_3_6_27B_MODEL,
     request_fits_context,
 )
 

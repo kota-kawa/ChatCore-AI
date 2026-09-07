@@ -1,0 +1,102 @@
+# 日本語: バックエンド共通の静的解析設定（Ruff / mypy）を一箇所に集約します。
+# English: Centralizes backend static-analysis configuration (Ruff / mypy) in a single place.
+
+[tool.ruff]
+# 日本語: 日本語コメントは全角幅で計算されるため、行長は 140 に設定しています。
+# English: Japanese comments are measured at full width, so the line limit is set to 140.
+line-length = 140
+target-version = "py314"
+# 日本語: 適用済みの Alembic リビジョンは書き換え禁止のため、静的解析の対象から除外します。
+# English: Applied Alembic revisions must not be rewritten, so they are excluded from linting.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "E",     # pycodestyle errors
+    "F",     # Pyflakes
+    "G",     # flake8-logging-format
+    "I",     # isort
+    "LOG",   # flake8-logging
+    "N",     # pep8-naming
+    "PERF",  # Perflint
+    "PIE",   # flake8-pie
+    "RET",   # flake8-return
+    "RUF",   # Ruff-specific rules
+    # 日本語: 例外を黙って捨てる `except: pass` / `except: continue` を禁止します（S ルールはこの2件だけ採用）。
+    # English: Forbid silently discarded exceptions via `except: pass` / `except: continue` (only these two S rules are adopted).
+    "S110",
+    "S112",
+    "SIM",   # flake8-simplify
+    "TRY",   # tryceratops
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    # 日本語: FastAPI の Depends()/Query() は既定値として呼び出す設計なので許容します。
+    # English: FastAPI intentionally calls Depends()/Query() in default arguments.
+    "B008",
+    # 日本語: 日本語の文字列・コメントは全角記号を含むため、あいまい文字の検出を無効化します。
+    # English: Japanese strings and comments contain full-width punctuation, so ambiguous-character rules are disabled.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # 日本語: 例外に文脈付きメッセージを渡す既存方針を維持します。
+    # English: Keeps the existing convention of passing contextual messages to exceptions.
+    "TRY003",
+    # 日本語: try 内 raise は既存のバリデーション記述と衝突するため許容します。
+    # English: Raising inside try conflicts with the existing validation style, so it is allowed.
+    "TRY301",
+    # 日本語: PEP 695 のジェネリクス構文と StrEnum への書き換えは、意味の変わる箇所があるため段階移行とします。
+    # English: Rewrites to PEP 695 generics and StrEnum can change semantics, so they are migrated separately.
+    "UP042",
+    "UP047",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 日本語: テストでは patch のネストが読みやすいため with 文の統合を強制しません。
+# English: Nested patch blocks read better in tests, so combined with-statements are not enforced there.
+"tests/**" = ["SIM117"]
+# 日本語: 以下は LLM プロンプト本文やメール HTML テンプレートを保持するモジュールです。
+#         行を折り返すと送信される文面そのものが変わるため、行長チェックのみ除外します。
+# English: The modules below hold LLM prompt text or e-mail HTML templates.
+#          Rewrapping their lines would change the text that is actually sent, so only the line-length rule is waived.
+"blueprints/chat/tasks.py" = ["E501"]
+"services/agent_capabilities.py" = ["E501"]
+"services/chat_prompt.py" = ["E501"]
+"services/chat_summary.py" = ["E501"]
+"services/context_vault_extraction.py" = ["E501"]
+"services/email_service.py" = ["E501"]
+"services/memo_agent_actions.py" = ["E501"]
+"services/memory_extraction.py" = ["E501"]
+"services/page_actions.py" = ["E501"]
+"services/prompt_assist.py" = ["E501"]
+"services/user_skills.py" = ["E501"]
+"services/web_search.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.14"
+# 日本語: 型付けは段階的に広げます。files に挙げたモジュールだけを検査対象とし、追加時はここに 1 行足します。
+# English: Typing expands gradually. Only the modules listed in `files` are enforced; add a line here to widen the surface.
+files = [
+    "scripts",
+    "services/api_errors.py",
+    "services/env_settings.py",
+    "services/error_messages.py",
+    "services/runtime_config.py",
+]
+# 日本語: 未検査モジュールからのエラーは報告せず、対象モジュールの型だけを厳格に見ます。
+# English: Errors from modules outside the enforced surface stay silent so only the targets are held strict.
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+strict_equality = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_return_any = true

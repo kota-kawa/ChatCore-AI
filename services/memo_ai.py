@@ -94,14 +94,14 @@ def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
         data = _extract_json(raw)
         title = str(data.get("title") or "").strip()[:SUGGEST_TITLE_MAX_LEN]
 
-        return {"title": title}
-
     except LlmProviderError:
         logger.warning("LLM unavailable for memo suggestion; using fallback.")
         return _fallback_suggest(ai_response)
     except Exception:
         logger.warning("Memo AI suggestion failed; using fallback.", exc_info=True)
         return _fallback_suggest(ai_response)
+    else:
+        return {"title": title}
 
 
 # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。

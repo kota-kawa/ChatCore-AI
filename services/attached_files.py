@@ -6,11 +6,12 @@ import html
 import json
 import re
 import zipfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any, Iterator
+from typing import Any
 
 from defusedxml import ElementTree as SafeElementTree
 
@@ -94,11 +95,8 @@ class PreparedAttachedFile:
 def _get_item_value(item: Any, key: str, default: str = "") -> str:
     # 辞書型であるかオブジェクトであるかを判定して値を取得する
     # Determine if item is a dict or object and retrieve the value
-    if isinstance(item, dict):
-        value = item.get(key, default)
-    else:
-        value = getattr(item, key, default)
-    
+    value = item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
+
     # 取得した値が None の場合はデフォルト値を返す
     # Return default if the retrieved value is None
     if value is None:
@@ -112,7 +110,7 @@ def _normalize_filename(raw_name: Any) -> str:
     # パス区切り文字を統一し、ファイル名の末尾部分のみを切り出す
     # Unify path separators and extract only the final part of the filename
     normalized = str(raw_name or "").strip().replace("\\", "/").rsplit("/", 1)[-1].strip()
-    
+
     # 空文字や特殊ディレクトリ記号、長すぎるファイル名をチェックする
     # Check for empty values, special directory symbols, or filenames that are too long
     if not normalized or normalized in {".", ".."}:
@@ -148,7 +146,7 @@ def _decode_base64_file(filename: str, data_base64: str) -> bytes:
     encoded = "".join(str(data_base64 or "").split())
     if encoded.lower().startswith("data:") and "," in encoded:
         encoded = encoded.split(",", 1)[1]
-    
+
     # サイズチェックとデコード処理
     # Perform size checks and decode the content
     if not encoded:

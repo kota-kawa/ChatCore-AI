@@ -54,7 +54,7 @@ class _ExtractedCandidateInput(BaseModel):
     confidence: float = Field(default=0, ge=0, le=1)
 
     @model_validator(mode="after")
-    def _require_non_blank_text(self) -> "_ExtractedCandidateInput":
+    def _require_non_blank_text(self) -> _ExtractedCandidateInput:
         if not self.title.strip() or not self.content.strip():
             raise ValueError("Extracted candidate text must not be blank.")
         return self
@@ -74,9 +74,8 @@ async def _transaction(
 
     for attempt in range(MAX_DB_WRITE_ATTEMPTS):
         try:
-            async with session_scope() as db:
-                async with db.begin():
-                    return await operation(db)
+            async with session_scope() as db, db.begin():
+                return await operation(db)
         except ApiServiceError:
             raise
         except SQLAlchemyError as exc:

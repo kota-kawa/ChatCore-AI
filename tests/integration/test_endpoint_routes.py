@@ -4,11 +4,11 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from blueprints.auth import auth_bp
 from blueprints.memo import memo_bp
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
-from sqlalchemy.exc import SQLAlchemyError
 from tests.helpers.app_helpers import build_session_test_app
 
 
@@ -150,7 +150,10 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 await self._set_session(client, {"user_id": 7})
                 with patch(
                     "blueprints.memo._fetch_memo_summaries",
-                    return_value={"total": 1, "memos": [{"id": sample["id"], "title": sample["title"], "created_at": "2024-01-01T09:30:00"}]},
+                    return_value={
+                        "total": 1,
+                        "memos": [{"id": sample["id"], "title": sample["title"], "created_at": "2024-01-01T09:30:00"}],
+                    },
                 ):
                     response = await client.get("/memo/api/recent?limit=5")
 

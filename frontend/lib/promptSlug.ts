@@ -11,6 +11,9 @@ const SHARED_PROMPT_BASE_PATH = "/shared/prompt";
 
 // 制御文字（C0範囲とDEL）にマッチする正規表現。リテラルに制御文字を埋め込まないよう明示的に構築する。
 // Matches control characters (C0 range and DEL). Built explicitly to avoid embedding raw control characters in source.
+// 日本語: 制御文字の除去自体が目的のため、no-control-regex はこの定義に限って無効化する。
+// English: Stripping control characters is the goal here, so no-control-regex is disabled for this definition only.
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = new RegExp("[\\u0000-\\u001f\\u007f]+", "g");
 
 // URLで問題になりうる記号・区切り文字にマッチする正規表現。

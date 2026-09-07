@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Tuple, TypeVar
+from typing import Any, TypeVar
 
 from fastapi import Request
 from pydantic import BaseModel
@@ -11,27 +11,53 @@ from .api_errors import ApiServiceError
 from .error_messages import ERROR_INVALID_JSON
 from .web_constants import (
     BASE_DIR as _BASE_DIR,
+)
+from .web_constants import (
     DEFAULT_INTERNAL_ERROR_MESSAGE,
 )
 from .web_json import (
     get_json as _get_json,
+)
+from .web_json import (
     jsonify as _jsonify,
-    log_and_internal_server_error as _log_and_internal_server_error,
+)
+from .web_json import (
     jsonify_rate_limited as _jsonify_rate_limited,
+)
+from .web_json import (
     jsonify_service_error as _jsonify_service_error,
+)
+from .web_json import (
+    log_and_internal_server_error as _log_and_internal_server_error,
+)
+from .web_json import (
     require_json_dict as _require_json_dict,
+)
+from .web_json import (
     validate_payload_model as _validate_payload_model,
 )
 from .web_session import (
     flash as _flash,
+)
+from .web_session import (
     get_flashed_messages as _get_flashed_messages,
+)
+from .web_session import (
     set_session_permanent as _set_session_permanent,
 )
 from .web_urls import (
     frontend_login_url as _frontend_login_url,
+)
+from .web_urls import (
     frontend_url as _frontend_url,
+)
+from .web_urls import (
     redirect_to_frontend as _redirect_to_frontend,
+)
+from .web_urls import (
     sanitize_next_path as _sanitize_next_path,
+)
+from .web_urls import (
     url_for as _url_for,
 )
 
@@ -108,7 +134,7 @@ async def require_json_dict(
     *,
     error_message: str = ERROR_INVALID_JSON,
     status: str | None = None,
-) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
+) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     # リクエストのペイロードがJSONの辞書であることを保証する
     # Ensure request payload is a JSON dictionary
     return await _require_json_dict(
@@ -119,7 +145,7 @@ async def require_json_dict(
 
 
 def validate_payload_model(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     model_class: type[ModelT],
     *,
     error_message: str,
@@ -151,7 +177,7 @@ def flash(request: Request, message: str, category: str = "message") -> None:
 
 def get_flashed_messages(
     request: Request, *, with_categories: bool = False
-) -> List[str] | List[Tuple[str, str]]:
+) -> list[str] | list[tuple[str, str]]:
     # セッションからフラッシュメッセージを取得する
     # Retrieve flash messages from the session
     return _get_flashed_messages(request, with_categories=with_categories)

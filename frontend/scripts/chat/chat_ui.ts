@@ -540,7 +540,7 @@ function ensureMarkedParser() {
         }
         const language = lang.split(" ")[0] || "plaintext";
 
-        let highlighted = text;
+        let highlighted: string;
         try {
           if (hljs.getLanguage(language)) {
             highlighted = hljs.highlight(text, { language }).value;
@@ -582,7 +582,7 @@ function ensureMarkedParser() {
         }
         const language = lang.split(" ")[0] || "plaintext";
 
-        let highlighted = text;
+        let highlighted: string;
         try {
           if (hljs.getLanguage(language)) {
             highlighted = hljs.highlight(text, { language }).value;

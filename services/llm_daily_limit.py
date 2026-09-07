@@ -10,7 +10,6 @@ from fastapi import Request
 
 from services.cache import get_redis_client
 
-
 DEFAULT_LLM_DAILY_API_LIMIT = 300
 LLM_DAILY_API_LIMIT_ENV = "LLM_DAILY_API_LIMIT"
 _LLM_DAILY_COUNT_KEY_PREFIX = "llm:daily_api_total"
@@ -66,10 +65,11 @@ def _seconds_until_next_month() -> int:
     # 月次クォータのキー期限を「翌月1日の0時」までに合わせます。
     # Compute TTL that expires at the first day of the next month.
     now = datetime.now()
-    if now.month == 12:
-        first_of_next_month = datetime(now.year + 1, 1, 1)
-    else:
-        first_of_next_month = datetime(now.year, now.month + 1, 1)
+    first_of_next_month = (
+        datetime(now.year + 1, 1, 1)
+        if now.month == 12
+        else datetime(now.year, now.month + 1, 1)
+    )
     seconds = int((first_of_next_month - now).total_seconds())
     return max(seconds, 1)
 
@@ -158,10 +158,11 @@ return {1, current}
             allowed = int(result[0]) == 1
             current = int(result[1])
             remaining = max(limit - current, 0)
-            return allowed, remaining
         except Exception:
             logger.exception("Redis quota tracking failed; falling back to in-memory.")
             return None
+        else:
+            return allowed, remaining
 
     # Redisが利用できない場合に、オンメモリで利用回数を1カウント消費します。無効になった期間のキーは自動的に削除します。
     # Consume one usage count in-memory as fallback. Expired keys are automatically pruned.

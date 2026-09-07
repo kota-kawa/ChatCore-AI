@@ -5,22 +5,15 @@ import binascii
 import hashlib
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
-from typing import Any, Mapping, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import AnyHttpUrl, BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.db import session_scope
-from services.prompt_categories import category_keys_matching, normalize_category
-from services.prompt_types import CONTENT_FORMATS, CONTENT_FORMAT_SKILL, MEDIA_TYPES, serialize_axes
-from services.repositories.prompt_resource_repository import PromptResourceRepository
-from services.repositories.chat_repository import ChatRepository
-from services.repositories.shared_content_repository import SharedContentRepository
-from services.repositories.prompt_view_repository import PromptViewRepository
-from services.share_common import ShareContentKind, build_public_share_url, build_share_url
 from services.error_messages import (
     ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_SHARED_SKILL_INVALID_TYPE,
@@ -28,8 +21,14 @@ from services.error_messages import (
     MESSAGE_SHARED_SKILL_ADDED,
     MESSAGE_SHARED_SKILL_ALREADY_ADDED,
 )
+from services.prompt_categories import category_keys_matching, normalize_category
+from services.prompt_types import CONTENT_FORMAT_SKILL, CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
+from services.repositories.chat_repository import ChatRepository
+from services.repositories.prompt_resource_repository import PromptResourceRepository
+from services.repositories.prompt_view_repository import PromptViewRepository
+from services.repositories.shared_content_repository import SharedContentRepository
+from services.share_common import ShareContentKind, build_public_share_url, build_share_url
 from services.user_skills import normalize_user_skill_instructions
-
 
 SHARED_CONTENT_DEFAULT_LIMIT = 20
 SHARED_CONTENT_MAX_LIMIT = 50
@@ -38,7 +37,7 @@ SHARED_CONTENT_MAX_QUERY_LENGTH = 500
 T = TypeVar("T")
 
 
-class InvalidSharedContentCursor(ValueError):
+class InvalidSharedContentCursorError(ValueError):
     """一覧カーソルが不正、または別の検索条件向けの場合に送出する。"""
 
 
@@ -129,9 +128,8 @@ class SharedContentService:
     ) -> T:
         if session is not None:
             return await operation(session)
-        async with session_scope() as owned_session:
-            async with owned_session.begin():
-                return await operation(owned_session)
+        async with session_scope() as owned_session, owned_session.begin():
+            return await operation(owned_session)
 
     async def list_public_content(
         self,
@@ -311,7 +309,7 @@ class SharedContentService:
         locale: str = "ja",
         session: AsyncSession | None = None,
     ) -> list[dict[str, Any]]:
-        rows = await self._read(
+        return await self._read(
             session,
             lambda active: self._repository.get_public_feed(
                 active,
@@ -325,7 +323,6 @@ class SharedContentService:
                 locale=locale,
             ),
         )
-        return rows
 
     async def get_recommended_prompts(
         self,
@@ -975,7 +972,7 @@ class SharedContentService:
             created_at = payload.get("created_at")
             prompt_id = payload.get("id")
             if not isinstance(created_at, str) or isinstance(prompt_id, bool):
-                raise ValueError
+                raise TypeError
             parsed_id = int(prompt_id)
             if parsed_id <= 0:
                 raise ValueError
@@ -987,7 +984,7 @@ class SharedContentService:
             UnicodeDecodeError,
             binascii.Error,
         ) as exc:
-            raise InvalidSharedContentCursor("The shared-content cursor is invalid.") from exc
+            raise InvalidSharedContentCursorError("The shared-content cursor is invalid.") from exc
 
     def _summary_from_row(self, row: dict[str, Any]) -> PublicSharedContentSummary:
         axes = serialize_axes(row)

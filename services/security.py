@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import secrets
-from typing import Optional
 
 _CODE_LOWER_BOUND = 100000
 _CODE_RANGE = 900000
@@ -35,7 +34,7 @@ def hash_password(
     password: str,
     *,
     iterations: int = _DEFAULT_PBKDF2_ITERATIONS,
-    salt: Optional[bytes] = None,
+    salt: bytes | None = None,
 ) -> str:
     # 日本語: パラメータの妥当性をチェックし、PBKDF2 でハッシュ化し、scheme$iterations$salt$digest 形式で保存します。
     # English: Validate parameters, hash with PBKDF2, and encode as scheme$iterations$salt$digest.

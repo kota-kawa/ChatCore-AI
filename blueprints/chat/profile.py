@@ -2,18 +2,19 @@ import logging
 import os
 import secrets
 import time
+from contextlib import suppress
 
 from fastapi import Depends, Request
 from werkzeug.utils import secure_filename
 
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
-from services.avatar_storage import AVATAR_UPLOAD_DIR, build_avatar_public_url
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
     get_auth_limit_service,
 )
+from services.avatar_storage import AVATAR_UPLOAD_DIR, build_avatar_public_url
 from services.chat_service import (
     commit_email_change,
     get_user_by_email,
@@ -127,7 +128,7 @@ def _detect_avatar_format(header: bytes) -> str | None:
         return "jpeg"
     # GIFのヘッダーを判定
     # Detect GIF header
-    if header.startswith(b"GIF87a") or header.startswith(b"GIF89a"):
+    if header.startswith((b"GIF87a", b"GIF89a")):
         return "gif"
     # WEBPのヘッダーを判定
     # Detect WEBP header
@@ -161,7 +162,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     """
     # 拡張子・Content-Type・マジックバイトを検証し、サイズ制限付きで保存する
     # Validate extension/content-type/signature and persist with a strict size cap.
-    
+
     # ファイル名を安全な形に変換
     # Sanitize the filename
     safe_filename = secure_filename(str(original_filename or ""))
@@ -184,7 +185,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     # Rewind the file pointer if possible
     if hasattr(avatar_file_obj, "seek"):
         avatar_file_obj.seek(0)
-        
+
     # 先頭16バイトを読み取ってマジックバイトから画像形式を特定
     # Read the first 16 bytes and detect the image format from magic bytes
     header = avatar_file_obj.read(16)
@@ -213,7 +214,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     # アップロードディレクトリが存在しない場合は作成
     # Create the upload directory if it does not exist
     os.makedirs(upload_dir, exist_ok=True)
-    
+
     # 保存用の一意なファイル名を生成
     # Generate a unique stored filename
     stored_filename = (
@@ -245,10 +246,8 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
         # ポインタを先頭に戻しておく
         # Rewind the file pointer for subsequent operations
         if hasattr(avatar_file_obj, "seek"):
-            try:
+            with suppress(Exception):
                 avatar_file_obj.seek(0)
-            except Exception:
-                pass
 
     # 保存されたアバター画像のURLパスを返す
     # Return the URL path to the saved avatar image
@@ -270,7 +269,7 @@ async def _update_user_profile(user_id, username, email, bio, avatar_url, llm_pr
     # is kept in the signature for backwards compatibility with the test
     # fixtures but is no longer written to the database.
     _ = email  # intentionally ignored; see docstring above
-    
+
     await update_user_profile(
         user_id,
         username=username,
@@ -289,7 +288,7 @@ async def user_profile(request: Request):
     """
     GET: ユーザーのプロフィール情報を取得します。
     GET: Retrieves the user's profile details.
-    
+
     POST: ユーザーのプロフィール情報（ユーザー名、自己紹介、アバター画像等）を更新します。
     POST: Updates the user's profile details (username, bio, avatar, etc.).
     """
@@ -536,7 +535,7 @@ async def request_email_change(
     # 6桁の認証コードを生成
     # Generate verification code
     code = generate_verification_code()
-    
+
     # セッションに進捗状態・コード・タイムスタンプ等を記録
     # Record change progress state, code, and timestamps in session
     locale = resolve_request_email_locale(request)
@@ -677,7 +676,7 @@ async def confirm_email_change(
 
     stage = str(state.get('stage') or EMAIL_CHANGE_STAGE_NEW)
     new_email = state['new_email']
-    
+
     # 段階1: 現在のメールアドレス確認完了。段階2（変更先アドレス確認）へ移行しメールを送信
     # Stage 1: Current email verified. Transition to Stage 2 (verify new email) and send email.
     if stage == EMAIL_CHANGE_STAGE_CURRENT:

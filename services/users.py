@@ -14,7 +14,6 @@ from .i18n import Locale, normalize_locale
 from .repositories.auth_identity_repository import AuthIdentityRepository
 from .repositories.user_repository import UserRepository
 
-
 DEFAULT_USERNAME = "ユーザー"
 EMAIL_AUTH_PROVIDER = "email"
 GOOGLE_AUTH_PROVIDER = "google"

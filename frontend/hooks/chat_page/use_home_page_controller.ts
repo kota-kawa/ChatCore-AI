@@ -260,7 +260,6 @@ export function useHomePageController() {
 
   const {
     closeShareModal,
-    createShareLink,
     openShareModal,
     copyShareLink,
     shareWithNativeSheet,
@@ -277,7 +276,6 @@ export function useHomePageController() {
 
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
-  const localStorageWarningShownRef = useRef(false);
   const loadingMoreChatRoomsRef = useRef(false);
   // Tracks whether the user has scrolled past the first sidebar page. Once true,
   // background revalidation of the first page must not rewind the pagination
@@ -323,30 +321,31 @@ export function useHomePageController() {
     stopGeneration,
     removeStoredHistory,
   } = useHomePageGenerationActions({
-    abortControllerRef,
-    chatMessagesRef,
-    currentRoomIdRef,
-    currentRoomMode,
-    generationGuardRef,
-    historyHasMore,
-    historyNextBeforeId,
-    isLoadingOlder,
-    personalKnowledgeEnabled,
-    sharedPromptsEnabled,
-    localStorageWarningShownRef,
-    messageSeqRef,
-    pendingAutoScrollRef,
-    prependScrollRestoreRef,
-    streamLastEventIdByRoomRef,
+    messageList: { messageSeqRef, setMessages },
+    generationStream: {
+      abortControllerRef,
+      generationGuardRef,
+      setIsGenerating,
+      streamLastEventIdByRoomRef,
+    },
+    roomSelection: {
+      currentRoomIdRef,
+      currentRoomMode,
+      setChatRooms,
+      setCurrentRoomId,
+      setCurrentRoomMode,
+    },
+    historyPagination: {
+      historyHasMore,
+      historyNextBeforeId,
+      isLoadingOlder,
+      setHistoryHasMore,
+      setHistoryNextBeforeId,
+      setIsLoadingOlder,
+    },
+    scrollRestore: { chatMessagesRef, pendingAutoScrollRef, prependScrollRestoreRef },
+    retrievalSettings: { personalKnowledgeEnabled, sharedPromptsEnabled },
     setChatInput,
-    setChatRooms,
-    setCurrentRoomId,
-    setCurrentRoomMode,
-    setHistoryHasMore,
-    setHistoryNextBeforeId,
-    setIsGenerating,
-    setIsLoadingOlder,
-    setMessages,
   });
   const hasCurrentRoom = Boolean(currentRoomId);
   const {
@@ -457,7 +456,6 @@ export function useHomePageController() {
   });
 
   const {
-    loadChatRooms,
     switchChatRoom,
     showSetupForm,
     handleAccessChat,

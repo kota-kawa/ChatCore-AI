@@ -8,12 +8,14 @@ import os
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import partial
 from threading import Lock
 from typing import Any
 
 from fastapi import Request
 
 from services.cache import get_redis_client
+from services.env_settings import env_int_in_range
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +44,9 @@ DEFAULT_TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
 
 # 環境変数から正の整数値を取得するヘルパー関数
 # Helper function to get a positive integer from environment variables
-def _get_positive_int_env(name: str, default: int) -> int:
-    raw_value = os.getenv(name, str(default))
-    try:
-        parsed = int(raw_value)
-    except (TypeError, ValueError):
-        # パースに失敗した場合は警告ログを出力し、デフォルト値を返す
-        # If parsing fails, log a warning and return the default value
-        logger.warning("Invalid %s value %r. Falling back to %s.", name, raw_value, default)
-        return default
-    return max(parsed, 0)
+# 日本語: レート制限値は 0 を「無効」として扱うため負値は 0 へ丸め、解析できない値は警告してから既定値へ戻します。
+# English: Rate limits treat 0 as "disabled", so negatives clamp to 0 while unparsable values warn and fall back to the default.
+_limit_from_env = partial(env_int_in_range, minimum=0, warn_on_invalid=True)
 
 
 # 文字列からIPアドレスオブジェクトを安全に解析・パースする
@@ -81,10 +76,11 @@ def _parse_ip_address(raw_value: str | None) -> ipaddress.IPv4Address | ipaddres
 # Get the list of trusted proxy IP networks
 def _get_trusted_proxy_networks() -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
     raw_value = os.getenv(TRUSTED_PROXY_IPS_ENV)
-    if raw_value is None:
-        raw_entries = DEFAULT_TRUSTED_PROXY_IPS
-    else:
-        raw_entries = tuple(entry.strip() for entry in raw_value.split(","))
+    raw_entries = (
+        DEFAULT_TRUSTED_PROXY_IPS
+        if raw_value is None
+        else tuple(entry.strip() for entry in raw_value.split(","))
+    )
 
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     # 各エントリーをIPネットワークオブジェクトに変換
@@ -261,12 +257,13 @@ return {1, current, key_ttl}
             current = int(result[1])
             retry_after = max(int(result[2]), 1)
             remaining = max(limit - current, 0)
-            return allowed, remaining, retry_after
         except Exception:
             # エラー発生時は警告ログを出力し、メモリ上での判定にフォールバックするために None を返す
             # On error, log exception and return None to fall back to in-memory evaluation
             logger.exception("Redis auth rate limiting failed; falling back to in-memory.")
             return None
+        else:
+            return allowed, remaining, retry_after
 
     # メモリ上でレート制限の判定と加算を行う（スレッドセーフ）
     # Evaluate and increment the rate limit in memory (thread-safe)
@@ -297,12 +294,12 @@ return {1, current, key_ttl}
             # 上限超過時のリトライ待ち時間を計算して返す
             # Calculate and return retry duration if the limit is exceeded
             if current >= limit:
-                retry_after = max(int(math.ceil(expires_at - now)), 1)
+                retry_after = max(math.ceil(expires_at - now), 1)
                 return False, 0, retry_after
 
             current += 1
             self._in_memory_windows[key] = (current, expires_at)
-            retry_after = max(int(math.ceil(expires_at - now)), 1)
+            retry_after = max(math.ceil(expires_at - now), 1)
             remaining = max(limit - current, 0)
             return True, remaining, retry_after
 
@@ -345,7 +342,7 @@ return {1, current, key_ttl}
     # Consume the daily limit for guest user chats
     def consume_guest_chat_daily_limit(self, request: Request) -> tuple[bool, str | None]:
         client_ip = get_request_client_ip(request)
-        daily_limit = _get_positive_int_env(
+        daily_limit = _limit_from_env(
             GUEST_CHAT_DAILY_LIMIT_ENV,
             DEFAULT_GUEST_CHAT_DAILY_LIMIT,
         )
@@ -365,19 +362,19 @@ return {1, current, key_ttl}
         client_ip = get_request_client_ip(request)
         normalized_email = (email or "").strip().lower()
 
-        per_ip_limit = _get_positive_int_env(
+        per_ip_limit = _limit_from_env(
             "AUTH_EMAIL_PER_IP_LIMIT",
             DEFAULT_AUTH_EMAIL_PER_IP_LIMIT,
         )
-        per_email_limit = _get_positive_int_env(
+        per_email_limit = _limit_from_env(
             "AUTH_EMAIL_PER_EMAIL_LIMIT",
             DEFAULT_AUTH_EMAIL_PER_EMAIL_LIMIT,
         )
-        window_seconds = _get_positive_int_env(
+        window_seconds = _limit_from_env(
             "AUTH_EMAIL_WINDOW_SECONDS",
             DEFAULT_AUTH_EMAIL_WINDOW_SECONDS,
         )
-        cooldown_seconds = _get_positive_int_env(
+        cooldown_seconds = _limit_from_env(
             "AUTH_EMAIL_COOLDOWN_SECONDS",
             DEFAULT_AUTH_EMAIL_COOLDOWN_SECONDS,
         )
@@ -439,11 +436,11 @@ return {1, current, key_ttl}
     # Consume the rate limit for administrator logins
     def consume_admin_login_limit(self, request: Request) -> tuple[bool, str | None]:
         client_ip = get_request_client_ip(request)
-        per_ip_limit = _get_positive_int_env(
+        per_ip_limit = _limit_from_env(
             "ADMIN_LOGIN_PER_IP_LIMIT",
             DEFAULT_ADMIN_LOGIN_PER_IP_LIMIT,
         )
-        window_seconds = _get_positive_int_env(
+        window_seconds = _limit_from_env(
             "ADMIN_LOGIN_WINDOW_SECONDS",
             DEFAULT_ADMIN_LOGIN_WINDOW_SECONDS,
         )
@@ -469,11 +466,11 @@ return {1, current, key_ttl}
     # Consume the rate limit for passkey authentication options generation
     def consume_passkey_auth_options_limit(self, request: Request) -> tuple[bool, str | None]:
         client_ip = get_request_client_ip(request)
-        per_ip_limit = _get_positive_int_env(
+        per_ip_limit = _limit_from_env(
             "PASSKEY_AUTH_OPTIONS_PER_IP_LIMIT",
             DEFAULT_PASSKEY_AUTH_OPTIONS_PER_IP_LIMIT,
         )
-        window_seconds = _get_positive_int_env(
+        window_seconds = _limit_from_env(
             "PASSKEY_AUTH_WINDOW_SECONDS",
             DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS,
         )
@@ -505,15 +502,15 @@ return {1, current, key_ttl}
         client_ip = get_request_client_ip(request)
         normalized_email = (email or "").strip().lower()
 
-        per_email_limit = _get_positive_int_env(
+        per_email_limit = _limit_from_env(
             "VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT",
             DEFAULT_VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT,
         )
-        per_ip_limit = _get_positive_int_env(
+        per_ip_limit = _limit_from_env(
             "VERIFICATION_ATTEMPT_PER_IP_LIMIT",
             DEFAULT_VERIFICATION_ATTEMPT_PER_IP_LIMIT,
         )
-        window_seconds = _get_positive_int_env(
+        window_seconds = _limit_from_env(
             "VERIFICATION_ATTEMPT_WINDOW_SECONDS",
             DEFAULT_VERIFICATION_ATTEMPT_WINDOW_SECONDS,
         )
@@ -558,11 +555,11 @@ return {1, current, key_ttl}
     # Consume the rate limit for passkey verification attempts
     def consume_passkey_auth_verify_limit(self, request: Request) -> tuple[bool, str | None]:
         client_ip = get_request_client_ip(request)
-        per_ip_limit = _get_positive_int_env(
+        per_ip_limit = _limit_from_env(
             "PASSKEY_AUTH_VERIFY_PER_IP_LIMIT",
             DEFAULT_PASSKEY_AUTH_VERIFY_PER_IP_LIMIT,
         )
-        window_seconds = _get_positive_int_env(
+        window_seconds = _limit_from_env(
             "PASSKEY_AUTH_WINDOW_SECONDS",
             DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS,
         )

@@ -42,9 +42,8 @@ async def _in_transaction(
     """Run one repository operation in an isolated transaction when needed."""
     if session is not None:
         return await operation(session)
-    async with session_scope() as owned_session:
-        async with owned_session.begin():
-            return await operation(owned_session)
+    async with session_scope() as owned_session, owned_session.begin():
+        return await operation(owned_session)
 
 
 def _row_dict(row: Any) -> dict[str, Any]:

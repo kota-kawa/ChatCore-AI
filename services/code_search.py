@@ -91,11 +91,10 @@ class CodeSnippet:
 # Extract keywords used for grep from the query
 def _extract_search_terms(query: str) -> list[str]:
     """クエリから grep に使うキーワードを抽出する。ASCII 優先、日本語はマッピング経由。"""
-    terms: list[str] = []
-
     # ASCII 英数字の識別子（3文字以上）
-    for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_]{2,}", query):
-        terms.append(word.lower())
+    terms: list[str] = [
+        word.lower() for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_]{2,}", query)
+    ]
 
     # 日本語 → 英語マッピング
     for ja, en_list in _JA_TO_EN.items():
@@ -228,9 +227,9 @@ def search_codebase(query: str, max_snippets: int = MAX_SNIPPETS) -> str:
         return ""
 
     parts = ["【コードベース検索結果】"]
-    for s in snippets:
-        parts.append(
-            f"\n**{s.rel_path}** (行 {s.start_line}–{s.end_line}, マッチ行 {s.match_line})\n"
-            f"```{s.lang}\n{s.content}\n```"
-        )
+    parts.extend(
+        f"\n**{s.rel_path}** (行 {s.start_line}–{s.end_line}, マッチ行 {s.match_line})\n"
+        f"```{s.lang}\n{s.content}\n```"
+        for s in snippets
+    )
     return "\n".join(parts)

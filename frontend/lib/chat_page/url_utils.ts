@@ -1,4 +1,4 @@
-const URL_RE = /https?:\/\/[^\s<>"'`()\[\]{}|\\^]+/gi;
+const URL_RE = /https?:\/\/[^\s<>"'`()[\]{}|\\^]+/gi;
 const MAX_DETECTED_URLS = 3;
 
 /**

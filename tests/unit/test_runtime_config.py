@@ -95,7 +95,8 @@ class RuntimeConfigTestCase(unittest.TestCase):
         ):
             self.assertEqual(get_session_same_site(), "none")
 
-    # 本番環境以外（開発環境など）において SameSite 'none' を指定した際、セキュアな本番環境専用設定であるため適用が拒否され 'lax' になることを検証します。
+    # 本番環境以外（開発環境など）において SameSite 'none' を指定した際、
+    # セキュアな本番環境専用設定であるため適用が拒否され 'lax' になることを検証します。
     # Verify that get session same site rejects 'none' outside production and falls back to 'lax'.
     def test_get_session_same_site_rejects_none_outside_production(self):
         # 開発環境で none を上書き指定した際に拒否されることを検証

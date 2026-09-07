@@ -1,8 +1,8 @@
 # app.py
+import asyncio
 import logging
 import os
-import asyncio
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -20,23 +20,24 @@ from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError  # noqa: E402
 
 from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
 from services.auth_limits import AuthLimitService  # noqa: E402
-from services.chat_generation import ChatGenerationService  # noqa: E402
 from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
 )
+from services.cache import try_acquire_single_flight  # noqa: E402
+from services.chat_generation import ChatGenerationService  # noqa: E402
+from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.db import dispose_engine  # noqa: E402
-from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
+from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
 from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
-from services.logging_config import configure_logging  # noqa: E402
 from services.locale_middleware import LocaleMiddleware  # noqa: E402
-from services.cache import try_acquire_single_flight  # noqa: E402
-from services.csrf import get_or_create_csrf_token  # noqa: E402
-from services.request_context import RequestContextMiddleware  # noqa: E402
+from services.logging_config import configure_logging  # noqa: E402
+from services.mcp_config import is_mcp_enabled  # noqa: E402
 from services.prompt_attachment_cleanup import cleanup_orphaned_prompt_attachments  # noqa: E402
-from services.request_body_limit import RequestBodySizeLimitMiddleware  # noqa: E402
 from services.prompt_attachment_storage import PROMPT_ATTACHMENT_MAX_REQUEST_BYTES  # noqa: E402
+from services.request_body_limit import RequestBodySizeLimitMiddleware  # noqa: E402
+from services.request_context import RequestContextMiddleware  # noqa: E402
 from services.runtime_config import (  # noqa: E402
     get_session_same_site,
     get_session_secret_key,
@@ -45,7 +46,6 @@ from services.runtime_config import (  # noqa: E402
 from services.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
-from services.mcp_config import is_mcp_enabled  # noqa: E402
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.
@@ -123,7 +123,7 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
             await asyncio.wait_for(
                 stop_event.wait(), timeout=CLEANUP_INTERVAL_SECONDS
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
 
 
@@ -196,14 +196,12 @@ async def lifespan(app_instance: FastAPI):
             cleanup_stop_event.set()
             try:
                 await asyncio.wait_for(asyncio.shield(cleanup_task), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 shutdown_wait_safe = False
                 logger.warning("Timed out while waiting for periodic cleanup to stop.")
                 cleanup_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await cleanup_task
-                except asyncio.CancelledError:
-                    pass
             except Exception:
                 logger.exception("Periodic cleanup worker exited with an unexpected error.")
 
@@ -283,17 +281,17 @@ async def readyz():
 
 # 各 Router を読み込んでエンドポイント定義を登録可能にする
 # Import routers so endpoint definitions are attached.
-from blueprints.auth import auth_bp  # noqa: E402
-from blueprints.verification import verification_bp  # noqa: E402
-from blueprints.chat import chat_bp  # noqa: E402
-from blueprints.prompt_share import prompt_share_bp  # noqa: E402
-from blueprints.prompt_share.prompt_share_api import prompt_share_api_bp  # noqa: E402
-from blueprints.prompt_share.prompt_search import search_bp  # noqa: E402
-from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp  # noqa: E402
 from blueprints.admin import admin_bp  # noqa: E402
-from blueprints.memo import memo_bp  # noqa: E402
+from blueprints.auth import auth_bp  # noqa: E402
+from blueprints.chat import chat_bp  # noqa: E402
 from blueprints.context_vault import context_vault_bp  # noqa: E402
 from blueprints.mcp_oauth import mcp_oauth_bp  # noqa: E402
+from blueprints.memo import memo_bp  # noqa: E402
+from blueprints.prompt_share import prompt_share_bp  # noqa: E402
+from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp  # noqa: E402
+from blueprints.prompt_share.prompt_search import search_bp  # noqa: E402
+from blueprints.prompt_share.prompt_share_api import prompt_share_api_bp  # noqa: E402
+from blueprints.verification import verification_bp  # noqa: E402
 
 # ルーティングテーブルに各 Router を登録する
 # Register all routers into the app routing table.
@@ -311,7 +309,7 @@ app.include_router(mcp_oauth_bp)
 
 
 if is_mcp_enabled():
-    from services.mcp_server import (  # noqa: E402
+    from services.mcp_server import (
         get_mcp_asgi_app,
         get_oauth_authorization_metadata,
         get_oauth_protected_resource_metadata,

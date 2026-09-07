@@ -6,10 +6,10 @@ import os
 import re
 import tempfile
 import time
-from urllib.parse import urlsplit
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Protocol
-from contextlib import contextmanager
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 try:
@@ -17,8 +17,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - only relevant on non-POSIX hosts
     fcntl = None
 
+from services.env_settings import env_int
 from services.web_constants import BASE_DIR
-
 
 PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV = "PROMPT_SHARE_UPLOAD_DIR"
 PROMPT_ATTACHMENT_PUBLIC_URL_PREFIX = "/prompt_share/api/media"
@@ -40,18 +40,9 @@ _IMAGE_CONTENT_TYPES = {
 }
 
 
-def _positive_int_env(name: str, default: int) -> int:
-    raw = str(os.getenv(name, "") or "").strip()
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
 PROMPT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
 PROMPT_ATTACHMENT_MAX_REQUEST_BYTES = 6 * 1024 * 1024
-PROMPT_ATTACHMENT_USER_QUOTA_BYTES = _positive_int_env(
+PROMPT_ATTACHMENT_USER_QUOTA_BYTES = env_int(
     "PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES",
     100 * 1024 * 1024,
 )

@@ -19,14 +19,11 @@ function copyTextWithExecCommand(text: string): boolean {
   textArea.select();
   textArea.setSelectionRange(0, text.length);
 
-  let copied = false;
   try {
-    copied = document.execCommand("copy");
+    return document.execCommand("copy");
   } finally {
     document.body.removeChild(textArea);
   }
-
-  return copied;
 }
 /**
  * Copy text using the async Clipboard API, with the legacy DOM fallback kept

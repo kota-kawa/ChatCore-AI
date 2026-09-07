@@ -77,7 +77,7 @@ class AgentStepBudget:
     tool_calls: int = 0
 
     @classmethod
-    def from_environment(cls) -> "AgentStepBudget":
+    def from_environment(cls) -> AgentStepBudget:
         return cls(
             max_llm_turns=get_max_llm_turns(),
             max_tool_calls=get_max_tool_calls(),

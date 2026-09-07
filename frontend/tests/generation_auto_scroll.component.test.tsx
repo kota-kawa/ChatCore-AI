@@ -126,36 +126,40 @@ function useGenerationHarness(scrollRef: { current: boolean }, messagesRef: { cu
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const currentRoomIdRef = useRef<string | null>("room-1");
   const generationGuardRef = useRef(createGenerationGuard());
-  const localStorageWarningShownRef = useRef(false);
   const messageSeqRef = useRef(0);
   const prependScrollRestoreRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const streamLastEventIdByRoomRef = useRef(new Map<string, number>());
 
   const actions = useHomePageGenerationActions({
-    abortControllerRef,
-    chatMessagesRef,
-    currentRoomIdRef,
-    currentRoomMode: "normal",
-    generationGuardRef,
-    historyHasMore: false,
-    historyNextBeforeId: null,
-    isLoadingOlder: false,
-    personalKnowledgeEnabled: false,
-    sharedPromptsEnabled: false,
-    localStorageWarningShownRef,
-    messageSeqRef,
-    pendingAutoScrollRef: scrollRef,
-    prependScrollRestoreRef,
-    streamLastEventIdByRoomRef,
+    messageList: { messageSeqRef, setMessages },
+    generationStream: {
+      abortControllerRef,
+      generationGuardRef,
+      setIsGenerating,
+      streamLastEventIdByRoomRef,
+    },
+    roomSelection: {
+      currentRoomIdRef,
+      currentRoomMode: "normal",
+      setChatRooms,
+      setCurrentRoomId,
+      setCurrentRoomMode,
+    },
+    historyPagination: {
+      historyHasMore: false,
+      historyNextBeforeId: null,
+      isLoadingOlder: false,
+      setHistoryHasMore,
+      setHistoryNextBeforeId,
+      setIsLoadingOlder,
+    },
+    scrollRestore: {
+      chatMessagesRef,
+      pendingAutoScrollRef: scrollRef,
+      prependScrollRestoreRef,
+    },
+    retrievalSettings: { personalKnowledgeEnabled: false, sharedPromptsEnabled: false },
     setChatInput,
-    setChatRooms,
-    setCurrentRoomId,
-    setCurrentRoomMode,
-    setHistoryHasMore,
-    setHistoryNextBeforeId,
-    setIsGenerating,
-    setIsLoadingOlder,
-    setMessages,
   });
 
   return actions;

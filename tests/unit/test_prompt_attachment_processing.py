@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from PIL import Image

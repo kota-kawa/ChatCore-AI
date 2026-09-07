@@ -3,8 +3,8 @@ from __future__ import annotations
 import html
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 import requests
 

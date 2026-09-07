@@ -20,7 +20,6 @@ from services.web import jsonify, require_json_dict, validate_payload_model
 
 from . import chat_bp
 
-
 logger = logging.getLogger(__name__)
 
 

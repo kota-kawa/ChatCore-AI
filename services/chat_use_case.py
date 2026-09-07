@@ -1,37 +1,59 @@
+"""
+チャット投稿エンドポイント（POST /api/chat）のユースケースです。
+Use case behind the chat post endpoint (POST /api/chat).
+
+execute() は各フェーズを順に呼ぶオーケストレーターに留め、実処理はフェーズごとの
+プライベートメソッドへ分けています。1リクエストの間だけ引き回す状態は _ChatPostTurn に集約します。
+execute() stays an orchestrator that calls one phase after another; the work itself lives in a
+private method per phase. State carried across a single request is bundled in _ChatPostTurn.
+"""
+
 from __future__ import annotations
 
 import asyncio
 import html
 import inspect
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
 from fastapi import Request
+from starlette.responses import Response
 
 from services.api_errors import ApiServiceError
+from services.async_utils import run_blocking
 from services.attached_files import (
     AttachedFileValidationError,
+    PreparedAttachedFile,
     decode_attached_files_from_storage,
     format_attached_files_for_prompt,
     prepare_attached_files,
 )
-from services.async_utils import run_blocking
-from services.chat_generation import ChatGenerationAlreadyRunningError
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
-from services.user_skills import (
-    build_chat_skills_context,
-    build_enabled_user_skills_prompt,
+from services.auth_limits import AuthLimitService
+from services.chat_async_bridge import _run_async_callback
+from services.chat_generation import ChatGenerationAlreadyRunningError, ChatGenerationService
+from services.chat_post_dependencies import (
+    ChatPostBackgroundDependencies,
+    ChatPostGenerationDependencies,
+    ChatPostLimitDependencies,
+    ChatPostPersistenceDependencies,
+    ChatPostPromptDependencies,
+    ChatPostRoomDependencies,
+    ChatPostUseCaseDependencies,
+    ChatPostWebDependencies,
 )
-from services.generative_ui import normalize_response_with_artifact_retry
-from services.message_parts_display import normalize_message_parts_for_display
+from services.chat_title import build_initial_title_candidates, generate_chat_room_title
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
+from services.generative_ui import GenerativeUiMode, normalize_response_with_artifact_retry
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
     LlmRateLimitError,
     LlmServiceError,
 )
+from services.llm_daily_limit import LlmDailyLimitService
+from services.message_parts_display import normalize_message_parts_for_display
 from services.request_models import ChatMessageRequest
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
@@ -39,7 +61,9 @@ from services.selected_reference_context import (
 )
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
+from services.user_skills import build_chat_skills_context
 from services.web_search import (
+    WebSearchResult,
     combine_web_search_results,
     deserialize_web_search_results,
     extract_prior_web_search_results,
@@ -53,7 +77,24 @@ from services.web_search_trace import (
     build_web_search_trace_markdown,
     selected_reference_steps,
 )
-from services.chat_title import build_initial_title_candidates, generate_chat_room_title
+
+# 日本語: 依存グループはこのモジュール経由でも参照されてきたため、再エクスポートを維持する。
+# English: The dependency groups have always been reachable through this module, so they are re-exported.
+__all__ = [
+    "ChatPostBackgroundDependencies",
+    "ChatPostGenerationDependencies",
+    "ChatPostLimitDependencies",
+    "ChatPostPersistenceDependencies",
+    "ChatPostPromptDependencies",
+    "ChatPostRoomDependencies",
+    "ChatPostUseCase",
+    "ChatPostUseCaseDependencies",
+    "ChatPostWebDependencies",
+]
+
+# 生成中の重複リクエストを弾く際の文言
+# Message returned when a generation is already running for the room.
+_GENERATION_ALREADY_RUNNING_MESSAGE = "このチャットルームでは回答を生成中です。完了までお待ちください。"
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -61,70 +102,70 @@ async def _maybe_await(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
-def _run_async_callback(coroutine_factory: Callable[[], Awaitable[Any]]) -> Any:
-    """Bridge async persistence callbacks into the synchronous generation worker."""
-    return asyncio.run(coroutine_factory())
+# 1リクエストの処理中だけ受け渡す作業状態
+# Working state carried across the phases of a single request
+@dataclass
+class _ChatPostTurn:
+    """
+    execute() の各フェーズが読み書きする、このターン限りの状態です。フェーズ間で
+    十数個のローカル変数を引数として引き回さないために存在します。
+    Per-turn state read and written by the phases of execute(). It exists so phases do not have
+    to thread a dozen local variables through their signatures.
+    """
 
+    request: Request
+    session: dict[str, Any]
+    auth_limit_service: AuthLimitService | None
+    llm_daily_limit_service: LlmDailyLimitService | None
+    chat_generation_service: ChatGenerationService | None
+    # 日本語: セッションに user_id キーがあるか。ルーム保存先の分岐に使う元の条件をそのまま保つ。
+    # English: Whether the session carries a user_id key, preserving the original branch condition.
+    authenticated: bool = False
+    user_message: str = ""
+    chat_room_id: str = ""
+    model: str = ""
+    attached_files: list[Any] = field(default_factory=list)
+    use_personal_knowledge: bool = False
+    use_shared_prompts: bool = False
+    formatted_user_message: str = ""
+    user_id: int | None = None
+    sid: str | None = None
+    room_mode: str = "temporary"
+    prepared_attached_files: list[PreparedAttachedFile] = field(default_factory=list)
+    saved_user_message_id: int | None = None
+    should_auto_title_room: bool = False
+    all_messages: list[dict[str, Any]] = field(default_factory=list)
+    normalized_all_messages: list[dict[str, Any]] = field(default_factory=list)
+    active_task_request: dict[str, Any] | None = None
+    task_prompt: str | None = None
+    user_profile_prompt: str | None = None
+    user_skills_prompt: str | None = None
+    generative_ui_enabled: bool = True
+    project_instructions: str | None = None
+    room_summary: str = ""
+    memory_facts: list[str] = field(default_factory=list)
+    conversation_messages: list[dict[str, Any]] = field(default_factory=list)
+    prior_web_search_results: list[WebSearchResult] = field(default_factory=list)
+    generation_key: str = ""
+    personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
+    shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
+    selected_reference_trace: list[SelectedReferenceLookupTrace] = field(default_factory=list)
+    ui_mode: GenerativeUiMode | None = None
+    bot_reply: str = ""
+    message_parts: list[dict[str, Any]] | None = None
+    saved_assistant_message_id: int | None = None
 
-# 投稿時のチャット処理で使用する外部モジュールやリポジトリの依存関係を集約したクラス
-# A class aggregating external dependencies and repositories utilized in chat posting
-@dataclass(frozen=True)
-class ChatPostUseCaseDependencies:
-    cleanup_ephemeral_chats: Callable[[], Any]
-    require_json_dict: Callable[..., Any]
-    validate_payload_model: Callable[..., Any]
-    jsonify: Callable[..., Any]
-    jsonify_rate_limited: Callable[..., Any]
-    jsonify_service_error: Callable[..., Any]
-    log_and_internal_server_error: Callable[..., Any]
-    validate_model_name: Callable[[str], Any]
-    consume_guest_chat_daily_limit: Callable[..., Any]
-    get_seconds_until_tomorrow: Callable[[], int]
-    validate_guest_room_access: Callable[..., Any]
-    resolve_authenticated_room_target: Callable[..., Any]
-    ensure_ephemeral_room: Callable[..., Any]
-    get_temporary_user_store_key: Callable[[int], str]
-    ephemeral_store: Any
-    save_message_to_db: Callable[..., Any]
-    get_active_leaf_id: Callable[..., Any]
-    get_chat_room_messages: Callable[..., Any]
-    get_room_web_search_contexts: Callable[..., Any]
-    normalize_messages_for_llm: Callable[..., Any]
-    find_latest_task_launch_request: Callable[..., Any]
-    load_task_prompt_data: Callable[..., Any]
-    build_task_prompt: Callable[..., Any]
-    get_user_by_id: Callable[..., Any]
-    build_user_profile_prompt: Callable[..., Any]
-    get_room_summary: Callable[..., Any]
-    list_room_memory_facts: Callable[..., Any]
-    remember_facts_from_message: Callable[..., Any]
-    rename_chat_room_if_current_title_in: Callable[..., Any]
-    load_project_context: Callable[..., Any]
-    build_context_messages: Callable[..., Any]
-    build_base_system_prompt: Callable[..., Any]
-    build_generation_key: Callable[..., Any]
-    has_active_generation: Callable[..., Any]
-    consume_llm_daily_quota: Callable[..., Any]
-    cleanup_unanswered_user_messages: Callable[..., Any]
-    get_seconds_until_daily_reset: Callable[[], int]
-    is_streaming_model: Callable[[str], bool]
-    search_personal_knowledge: Callable[..., Any]
-    search_shared_prompts: Callable[..., Any]
-    start_generation_job: Callable[..., Any]
-    build_llm_stream_response: Callable[..., Any]
-    iter_llm_stream_events: Callable[..., Any]
-    get_llm_response: Callable[..., Any]
-    decide_generative_ui_mode: Callable[..., Any]
-    is_retryable_llm_error: Callable[[BaseException], bool]
-    rebuild_room_summary: Callable[..., Any]
-    should_extract_context: Callable[[int], bool]
-    schedule_context_extraction: Callable[..., Any]
-    submit_background_task: Callable[..., Any]
-    get_session_id: Callable[[dict], str]
-    logger: Any
-    # Optional defaults keep focused unit-test doubles backward compatible.
-    load_enabled_user_skills: Callable[..., Any] | None = None
-    build_user_skills_prompt: Callable[..., Any] = build_enabled_user_skills_prompt
+    # 添付本文をDBへ渡すかどうかで引数の有無が変わるため、キーワード辞書として組み立てる
+    # Built as a keyword dict because the argument is only passed when attachments exist
+    def attachment_content_kwargs(self) -> dict[str, Any]:
+        if not self.prepared_attached_files:
+            return {}
+        return {"attached_file_contents": self.prepared_attached_files}
+
+    # 通常ルーム（DB保存対象）かどうか
+    # Whether this turn targets a DB-backed normal room
+    def targets_normal_room(self) -> bool:
+        return self.user_id is not None and self.room_mode == "normal"
 
 
 # チャット投稿処理（メッセージ保存、RAG/Web検索、LLM呼び出し/ストリーミング、タイトル生成、要約更新）を担うユースケースクラス
@@ -142,6 +183,1029 @@ class ChatPostUseCase:
         self.deps = dependencies
         self.default_model = default_model
         self.locale = locale
+
+    # リクエストを受け取り、メッセージの検証・コンテキスト補強・AI応答生成・DB保存などの一連の流れを実行する
+    # Receive a request and execute the entire workflow including validation, context augmentation, AI generation, and database updates
+    async def execute(
+        self,
+        request: Request,
+        *,
+        auth_limit_service: AuthLimitService | None,
+        llm_daily_limit_service: LlmDailyLimitService | None,
+        chat_generation_service: ChatGenerationService | None,
+    ) -> Response:
+        turn = _ChatPostTurn(
+            request=request,
+            session=request.session,
+            auth_limit_service=auth_limit_service,
+            llm_daily_limit_service=llm_daily_limit_service,
+            chat_generation_service=chat_generation_service,
+        )
+
+        for phase in (
+            self._parse_request,
+            self._consume_guest_daily_limit,
+            self._resolve_room_target,
+            self._store_user_message,
+        ):
+            early_response = await phase(turn)
+            if early_response is not None:
+                return early_response
+
+        await self._build_llm_history(turn)
+        await self._load_prompt_context(turn)
+        self._build_conversation_messages(turn)
+        await self._load_prior_web_search_results(turn)
+
+        for guard in (self._reject_active_generation, self._consume_llm_daily_quota):
+            early_response = await guard(turn)
+            if early_response is not None:
+                return early_response
+
+        await self._augment_with_selected_references(turn)
+        await self._decide_generative_ui_mode(turn)
+
+        # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
+        # Start a background generation job if the model supports streaming
+        if self.deps.generation.is_streaming_model(turn.model):
+            return self._start_streaming_generation(turn)
+        return await self._respond_without_streaming(turn)
+
+    # ------------------------------------------------------------------
+    # フェーズ1: リクエストの検証 / Phase 1: request validation
+    # ------------------------------------------------------------------
+    async def _parse_request(self, turn: _ChatPostTurn) -> Response | None:
+        """一時チャットを掃除し、リクエストJSONとモデル名を検証します / Clean ephemeral chats, then validate the JSON body and model."""
+        deps = self.deps
+
+        # 一時チャットのクリーンアップとリクエストJSONのパース・検証
+        # Cleanup ephemeral chats and parse/validate the request JSON payload
+        await run_blocking(deps.rooms.cleanup_ephemeral_chats)
+        data, error_response = await deps.web.require_json_dict(turn.request)
+        if error_response is not None:
+            return error_response
+
+        payload, validation_error = deps.web.validate_payload_model(
+            data,
+            ChatMessageRequest,
+            error_message="'message' が必要です。",
+        )
+        if validation_error is not None:
+            return validation_error
+
+        turn.user_message = payload.message
+        turn.chat_room_id = payload.chat_room_id
+        turn.model = payload.model or self.default_model
+        turn.attached_files = payload.attached_files or []
+        turn.use_personal_knowledge = bool(payload.use_personal_knowledge)
+        turn.use_shared_prompts = bool(payload.use_shared_prompts)
+
+        # モデル名の検証
+        # Validate the requested model name
+        try:
+            deps.limits.validate_model_name(turn.model)
+        except LlmInvalidModelError as exc:
+            return deps.web.jsonify({"error": str(exc)}, status_code=400)
+
+        turn.authenticated = "user_id" in turn.session
+        turn.user_id = turn.session.get("user_id")
+        turn.formatted_user_message = html.escape(turn.user_message).replace("\n", "<br>")
+        return None
+
+    async def _consume_guest_daily_limit(self, turn: _ChatPostTurn) -> Response | None:
+        """ゲスト投稿の日次上限を消費します / Consume the guest daily post limit."""
+        deps = self.deps
+
+        # ゲスト制限の消費判定
+        # Consume guest limits
+        if turn.authenticated:
+            return None
+        allowed, message = await run_blocking(
+            deps.limits.consume_guest_chat_daily_limit,
+            turn.request,
+            service=turn.auth_limit_service,
+        )
+        if not allowed:
+            return deps.web.jsonify_rate_limited(
+                message or "1日10回までです",
+                retry_after=deps.limits.get_seconds_until_tomorrow(),
+            )
+        return None
+
+    # ------------------------------------------------------------------
+    # フェーズ2: ルームの解決 / Phase 2: room resolution
+    # ------------------------------------------------------------------
+    async def _resolve_room_target(self, turn: _ChatPostTurn) -> Response | None:
+        """ルーム所有権およびアクセス権のバリデーション / Validate room ownership and access permissions."""
+        deps = self.deps
+
+        if turn.authenticated:
+            try:
+                room_mode, sid, legacy_response = await _maybe_await(
+                    deps.rooms.resolve_authenticated_room_target(
+                        turn.chat_room_id,
+                        turn.user_id,
+                        "他ユーザーのチャットルームには投稿できません",
+                    )
+                )
+                if legacy_response is not None:
+                    return legacy_response
+            except ApiServiceError as exc:
+                return deps.web.jsonify_service_error(exc)
+            except Exception:
+                return deps.web.log_and_internal_server_error(
+                    deps.logger,
+                    "Failed to validate chat room ownership before posting.",
+                )
+            turn.room_mode = room_mode
+            turn.sid = sid
+            return None
+
+        sid, guest_error = await deps.rooms.validate_guest_room_access(turn.session, turn.chat_room_id)
+        if guest_error is not None:
+            return guest_error
+        turn.sid = sid
+        return None
+
+    # ------------------------------------------------------------------
+    # フェーズ3: ユーザー発話の保存 / Phase 3: persisting the user message
+    # ------------------------------------------------------------------
+    async def _store_user_message(self, turn: _ChatPostTurn) -> Response | None:
+        """添付を検証し、ルーム種別に応じてユーザー発話を保存します / Validate attachments, then store the user message per room type."""
+        deps = self.deps
+
+        # 添付ファイルのアップロード準備と検証
+        # Prepare and validate uploaded attachment files
+        try:
+            turn.prepared_attached_files = await run_blocking(prepare_attached_files, turn.attached_files)
+        except AttachedFileValidationError as exc:
+            return deps.web.jsonify({"error": str(exc)}, status_code=400)
+
+        # 一時ルームと通常ルームで分岐し、ユーザー発話メッセージを保存する
+        # Save the user message depending on temporary vs. normal room mode
+        if turn.authenticated:
+            if turn.room_mode == "temporary":
+                await self._store_user_message_in_temporary_room(turn)
+            else:
+                await self._store_user_message_in_normal_room(turn)
+        else:
+            await self._store_guest_user_message(turn)
+        return None
+
+    async def _store_user_message_in_temporary_room(self, turn: _ChatPostTurn) -> None:
+        """ログイン中の一時ルームへ発話を保存します / Store the message in a signed-in user's temporary room."""
+        deps = self.deps
+
+        # ログイン中でも temporary room は DB に保存せず、ユーザー単位の一時ストアに閉じ込める。
+        # sid ではなく user_id 由来のキーを使うため、同じユーザーの再読み込みにも耐える。
+        turn.sid = deps.rooms.get_temporary_user_store_key(turn.user_id)
+        await run_blocking(deps.rooms.ensure_ephemeral_room, turn.sid, turn.chat_room_id)
+        await run_blocking(
+            deps.rooms.ephemeral_store.append_message,
+            turn.sid,
+            turn.chat_room_id,
+            "user",
+            turn.formatted_user_message,
+            **turn.attachment_content_kwargs(),
+        )
+        turn.all_messages = await run_blocking(
+            deps.rooms.ephemeral_store.get_messages,
+            turn.sid,
+            turn.chat_room_id,
+        )
+
+    async def _store_user_message_in_normal_room(self, turn: _ChatPostTurn) -> None:
+        """DB保存ルームへ発話を保存し、初回ターンかどうかを判定します / Store the message in a DB-backed room and detect a first turn."""
+        deps = self.deps
+
+        attached_file_name_list = (
+            [f.name for f in turn.prepared_attached_files] if turn.prepared_attached_files else None
+        )
+        # New turns extend the active branch: parent is the current branch tip.
+        parent_message_id = await _maybe_await(deps.persistence.get_active_leaf_id(turn.chat_room_id))
+        # 初回発話では assistant 応答がまだないため、DB から履歴を読み直さず最小文脈を作る。
+        # このフラグは、後段の初回タイトル自動生成にも使う。
+        turn.should_auto_title_room = parent_message_id is None
+        turn.saved_user_message_id = await _maybe_await(
+            deps.persistence.save_message_to_db(
+                turn.chat_room_id,
+                turn.formatted_user_message,
+                "user",
+                attached_file_name_list,
+                parent_message_id,
+                **turn.attachment_content_kwargs(),
+            )
+        )
+        if turn.should_auto_title_room:
+            turn.all_messages = [{"role": "user", "content": turn.formatted_user_message}]
+        else:
+            turn.all_messages = await _maybe_await(deps.persistence.get_chat_room_messages(turn.chat_room_id))
+
+    async def _store_guest_user_message(self, turn: _ChatPostTurn) -> None:
+        """未ログインの一時ルームへ発話を保存します / Store the message in a guest's temporary room."""
+        deps = self.deps
+
+        await run_blocking(
+            deps.rooms.ephemeral_store.append_message,
+            turn.sid,
+            turn.chat_room_id,
+            "user",
+            turn.formatted_user_message,
+            **turn.attachment_content_kwargs(),
+        )
+        turn.all_messages = await run_blocking(
+            deps.rooms.ephemeral_store.get_messages,
+            turn.sid,
+            turn.chat_room_id,
+        )
+
+    # ------------------------------------------------------------------
+    # フェーズ4: LLM向け履歴の組み立て / Phase 4: building the LLM history
+    # ------------------------------------------------------------------
+    async def _build_llm_history(self, turn: _ChatPostTurn) -> None:
+        """
+        履歴を正規化し、添付とURL本文を参照資料として差し込みます
+        Normalize history and inject attachments and URL bodies as reference material.
+        """
+        # メッセージ履歴を LLM 向けに正規化
+        # Normalize message history for LLM compatibility
+        turn.normalized_all_messages = self.deps.prompts.normalize_messages_for_llm(turn.all_messages)
+        self._reattach_prior_uploads(turn)
+        await self._prepend_reference_blocks(turn)
+
+    def _reattach_prior_uploads(self, turn: _ChatPostTurn) -> None:
+        """過去ターンの添付を、その発話に紐づく参照資料として戻します / Re-attach earlier uploads to the message they belong to."""
+        # 過去ターンの添付も、そのメッセージに紐づく参照資料として再投入する。
+        # 最新ターンの添付は下の prefix_blocks で追加するため、ここでは重複を避ける。
+        # Reintroduce earlier uploads with the turn they belong to. The newest
+        # upload is added below through prefix_blocks, so it is not duplicated.
+        normalized_all_messages = turn.normalized_all_messages
+        latest_user_index = next(
+            (
+                index
+                for index in range(len(normalized_all_messages) - 1, -1, -1)
+                if normalized_all_messages[index].get("role") == "user"
+            ),
+            None,
+        )
+        if latest_user_index is None:
+            return
+
+        updated_messages = list(normalized_all_messages)
+        for index, message in enumerate(normalized_all_messages):
+            if index == latest_user_index or message.get("role") != "user":
+                continue
+            prior_attached_files = decode_attached_files_from_storage(
+                message.get("attached_file_contents")
+            )
+            if not prior_attached_files:
+                continue
+            updated_messages[index] = {
+                **message,
+                "content": (
+                    f"{format_attached_files_for_prompt(prior_attached_files)}\n\n"
+                    f"{message.get('content', '')}"
+                ),
+            }
+        turn.normalized_all_messages = updated_messages
+
+    async def _prepend_reference_blocks(self, turn: _ChatPostTurn) -> None:
+        """
+        取得したURL本文と今回の添付を最新発話へ前置します
+        Prepend fetched URL bodies and this turn's attachments to the latest message.
+        """
+        # Build context blocks to prepend to the last user message.
+        # Order: fetched URL content → attached file content → user message text.
+        prefix_blocks: list[str] = []
+
+        # メッセージからのURL抽出およびコンテンツ取得
+        # Extract URLs from the user message and fetch their web contents
+        urls_in_message = extract_urls_from_text(turn.user_message)
+        if urls_in_message:
+            # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
+            # system message に混ぜると、外部ページ本文が指示階層を持っているように見えやすい。
+            fetched_urls = await run_blocking(fetch_urls_content, urls_in_message)
+            if fetched_urls:
+                url_xml = "\n".join(
+                    f'<url href="{url}">\n{content}\n</url>'
+                    for url, content in fetched_urls.items()
+                )
+                prefix_blocks.append(f"<fetched_urls>\n{url_xml}\n</fetched_urls>")
+            else:
+                prefix_blocks.append(
+                    "<fetched_urls_status>\n"
+                    "The linked page content could not be retrieved. Do not summarize or infer details "
+                    "from the URL alone; ask the user for the page text or another accessible source if "
+                    "the request depends on it.\n"
+                    "</fetched_urls_status>"
+                )
+
+        if turn.prepared_attached_files:
+            prefix_blocks.append(format_attached_files_for_prompt(turn.prepared_attached_files))
+
+        normalized_all_messages = turn.normalized_all_messages
+        if prefix_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
+            prefix = "\n\n".join(prefix_blocks)
+            last_msg = normalized_all_messages[-1]
+            turn.normalized_all_messages = [
+                *normalized_all_messages[:-1],
+                {**last_msg, "content": f"{prefix}\n\n{last_msg.get('content', '')}"},
+            ]
+
+    # ------------------------------------------------------------------
+    # フェーズ5: プロンプト文脈の読み込み / Phase 5: loading prompt context
+    # ------------------------------------------------------------------
+    async def _load_prompt_context(self, turn: _ChatPostTurn) -> None:
+        """タスク定義・スキル・プロジェクト・記憶をまとめて読み込みます / Load task definitions, skills, project context and memory."""
+        await self._load_task_prompt(turn)
+        await self._load_user_skills_and_profile(turn)
+        await self._load_project_instructions(turn)
+        await self._load_room_memory(turn)
+
+    async def _load_task_prompt(self, turn: _ChatPostTurn) -> None:
+        """最新のタスク起動リクエストと定義プロンプトの読み込み / Load the latest task launch request and corresponding task definitions."""
+        deps = self.deps
+
+        turn.active_task_request = deps.prompts.find_latest_task_launch_request(turn.normalized_all_messages)
+        prompt_data = None
+        if turn.active_task_request is not None:
+            task_id = turn.active_task_request.get("task_id")
+            if task_id is None:
+                prompt_data = await deps.prompts.load_task_prompt_data(
+                    turn.active_task_request["task"], turn.user_id
+                )
+            else:
+                prompt_data = await deps.prompts.load_task_prompt_data(
+                    turn.active_task_request["task"], turn.user_id, task_id
+                )
+
+        turn.task_prompt = deps.prompts.build_task_prompt(prompt_data) if prompt_data else None
+
+    async def _load_user_skills_and_profile(self, turn: _ChatPostTurn) -> None:
+        """ユーザープロフィールプロンプトと有効なスキル文脈の構築 / Build the user profile prompt and enabled-skill context."""
+        deps = self.deps
+
+        enabled_user_skills: list[dict[str, Any]] = []
+        user = None
+        if turn.user_id is not None:
+            try:
+                if deps.prompts.load_enabled_user_skills is not None:
+                    enabled_user_skills = list(
+                        await _maybe_await(deps.prompts.load_enabled_user_skills(turn.user_id)) or []
+                    )
+            except Exception:
+                deps.logger.warning("Failed to load enabled user skills; proceeding without them.")
+            try:
+                user = await _maybe_await(deps.prompts.get_user_by_id(turn.user_id))
+                turn.user_profile_prompt = deps.prompts.build_user_profile_prompt(user)
+            except Exception:
+                deps.logger.warning("Failed to load user profile context; proceeding without it.")
+
+        turn.user_skills_prompt, turn.generative_ui_enabled = build_chat_skills_context(
+            enabled_user_skills,
+            user,
+            locale=self.locale,
+            prompt_builder=deps.prompts.build_user_skills_prompt,
+        )
+
+    async def _load_project_instructions(self, turn: _ChatPostTurn) -> None:
+        """
+        通常のユーザーセッションの場合、所属プロジェクトの指示を読み込む
+        For normal user sessions, load the owning project's instructions.
+        """
+        deps = self.deps
+
+        if not turn.targets_normal_room():
+            return
+        try:
+            project_context = await _maybe_await(deps.persistence.load_project_context(turn.chat_room_id))
+            if project_context:
+                turn.project_instructions = str(project_context.get("instructions") or "") or None
+        except Exception:
+            deps.logger.warning("Failed to load project context; proceeding without it.")
+
+    async def _load_room_memory(self, turn: _ChatPostTurn) -> None:
+        """
+        通常のユーザーセッションの場合、要約とパーソナル記憶情報の読み込みと抽出
+        For normal user sessions, load summaries and extract/load personal memory facts.
+        """
+        deps = self.deps
+
+        if not turn.targets_normal_room():
+            return
+        if not turn.should_auto_title_room:
+            try:
+                summary_payload = await _maybe_await(deps.persistence.get_room_summary(turn.chat_room_id))
+                turn.room_summary = str((summary_payload or {}).get("summary") or "")
+            except Exception:
+                deps.logger.warning("Failed to load room summary; proceeding without it.")
+            try:
+                turn.memory_facts = await _maybe_await(
+                    deps.persistence.list_room_memory_facts(turn.chat_room_id)
+                )
+            except Exception:
+                deps.logger.warning("Failed to load memory facts; proceeding without them.")
+        if turn.saved_user_message_id is not None:
+            self._defer_memory_fact_update(turn)
+
+    def _defer_memory_fact_update(self, turn: _ChatPostTurn) -> None:
+        """記憶抽出を応答経路の外へ回します / Move memory extraction off the response path."""
+        deps = self.deps
+        chat_room_id = turn.chat_room_id
+        user_id = turn.user_id
+        user_message = turn.user_message
+        saved_user_message_id = turn.saved_user_message_id
+
+        # 記憶抽出は元メッセージIDと結びつけて保存する。抽出自体がLLM呼び出しに
+        # なったため応答経路から外す。今ターンの発話は履歴としてそのまま文脈に
+        # 入っているので、抽出結果が要るのは次ターン以降であり遅延は問題ない。
+        # Memory extraction is tied to the source message id. It now costs an
+        # LLM call, so it runs off the response path: this turn already carries
+        # the user's message verbatim, and the extracted facts are only needed
+        # from the next turn onward.
+        try:
+            deps.background.submit_background_task(
+                _run_async_callback,
+                lambda: deps.persistence.remember_facts_from_message(
+                    chat_room_id,
+                    user_id,
+                    user_message,
+                    source_message_id=saved_user_message_id,
+                ),
+            )
+        except Exception:
+            deps.logger.warning(
+                "Failed to schedule memory fact update for chat room %s.",
+                chat_room_id,
+            )
+
+    # ------------------------------------------------------------------
+    # フェーズ6: 会話メッセージの構築 / Phase 6: assembling conversation messages
+    # ------------------------------------------------------------------
+    def _build_conversation_messages(self, turn: _ChatPostTurn) -> None:
+        """システムプロンプトおよびコンテキストメッセージの構築 / Assemble context messages including base system prompts."""
+        deps = self.deps
+
+        turn.conversation_messages = deps.prompts.build_context_messages(
+            base_system_prompt=deps.prompts.build_base_system_prompt(),
+            user_profile_prompt=turn.user_profile_prompt,
+            task_prompt=turn.task_prompt,
+            room_summary=turn.room_summary,
+            memory_facts=turn.memory_facts,
+            recent_messages=turn.normalized_all_messages,
+            project_instructions=turn.project_instructions,
+            user_skills_prompt=turn.user_skills_prompt,
+            generative_ui_enabled=turn.generative_ui_enabled,
+        )
+
+    async def _load_prior_web_search_results(self, turn: _ChatPostTurn) -> None:
+        """
+        過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
+        Load prior-turn search results to re-inject as reference context during generation.
+        """
+        deps = self.deps
+
+        if turn.targets_normal_room():
+            # 初回ターンは過去履歴が無いため、無駄なDB照会を避ける。
+            # Skip the lookup on the first turn since there is no prior history yet.
+            turn.prior_web_search_results = (
+                []
+                if turn.should_auto_title_room
+                else deserialize_web_search_results(
+                    await _maybe_await(deps.persistence.get_room_web_search_contexts(turn.chat_room_id))
+                )
+            )
+        else:
+            turn.prior_web_search_results = extract_prior_web_search_results(turn.all_messages)
+
+    # ------------------------------------------------------------------
+    # フェーズ7: 生成前のガード / Phase 7: pre-generation guards
+    # ------------------------------------------------------------------
+    async def _reject_active_generation(self, turn: _ChatPostTurn) -> Response | None:
+        """生成キーの構築と二重送信防止ロック / Build the generation key and check for active running jobs."""
+        deps = self.deps
+
+        turn.generation_key = deps.generation.build_generation_key(
+            chat_room_id=turn.chat_room_id,
+            user_id=turn.user_id,
+            sid=turn.sid,
+        )
+        if deps.generation.has_active_generation(turn.generation_key, service=turn.chat_generation_service):
+            return deps.web.jsonify(
+                {"error": _GENERATION_ALREADY_RUNNING_MESSAGE},
+                status_code=409,
+            )
+        return None
+
+    async def _consume_llm_daily_quota(self, turn: _ChatPostTurn) -> Response | None:
+        """LLM利用クォータ制限のチェック / Check daily LLM usage quotas."""
+        deps = self.deps
+
+        quota_user_key: str | None
+        if turn.user_id is not None:
+            quota_user_key = f"user:{turn.user_id}"
+        elif turn.sid:
+            quota_user_key = f"sid:{turn.sid}"
+        else:
+            quota_user_key = None
+        can_access_llm, _, daily_limit = await run_blocking(
+            deps.limits.consume_llm_daily_quota,
+            service=turn.llm_daily_limit_service,
+            user_key=quota_user_key,
+        )
+        if can_access_llm:
+            return None
+
+        # quota 失敗時にユーザー発話だけを残すと、次回の文脈が「未回答の発話」から始まる。
+        # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
+        await self._discard_unanswered_user_message(turn)
+        return deps.web.jsonify_rate_limited(
+            (
+                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=deps.limits.get_seconds_until_daily_reset(),
+        )
+
+    # ------------------------------------------------------------------
+    # フェーズ8: 参照元の事前検索とUIモード判定 / Phase 8: reference prefetch and UI mode
+    # ------------------------------------------------------------------
+    async def _augment_with_selected_references(self, turn: _ChatPostTurn) -> None:
+        """
+        選択された参照元を生成前に検索し、参照文脈へ入れます
+        Prefetch the selected reference sources into the context before generation.
+        """
+        deps = self.deps
+
+        # 選択されたメモ／共有プロンプトは、モデルがツールを呼ぶかどうかに任せず、
+        # 生成開始前に必ず検索して参照文脈へ入れる。ツール自体も追加検索用に残す。
+        # Always load user-selected memo/shared-prompt sources before generation instead
+        # of relying on the model to decide whether to call their tools. Keep the tools
+        # available as well so the model can retry with narrower keywords when needed.
+        selected_references = build_selected_reference_searchers(
+            user_id=turn.user_id,
+            use_personal_knowledge=turn.use_personal_knowledge,
+            use_shared_prompts=turn.use_shared_prompts,
+            search_personal_knowledge=deps.generation.search_personal_knowledge,
+            search_shared_prompts=deps.generation.search_shared_prompts,
+        )
+        turn.personal_knowledge_search = selected_references.personal_knowledge
+        turn.shared_prompt_search = selected_references.shared_prompt
+        turn.selected_reference_trace = []
+        turn.conversation_messages = await augment_messages_with_selected_references_async(
+            turn.conversation_messages,
+            query=turn.user_message,
+            personal_knowledge_search=turn.personal_knowledge_search,
+            shared_prompt_search=turn.shared_prompt_search,
+            personal_overview=selected_references.personal_overview,
+            unavailable_sources=selected_references.unavailable_sources,
+            trace_results=turn.selected_reference_trace,
+        )
+
+    async def _decide_generative_ui_mode(self, turn: _ChatPostTurn) -> None:
+        """生成UIのモードをモデルへ問い合わせます / Ask the model for the generative UI mode."""
+        deps = self.deps
+
+        # UI_MODE is a structured semantic decision made by the selected
+        # conversation model. Do not infer it from the user's text here.
+        if turn.generative_ui_enabled:
+            try:
+                turn.ui_mode = await run_blocking(
+                    deps.generation.decide_generative_ui_mode,
+                    turn.conversation_messages,
+                    turn.model,
+                )
+            except Exception:
+                deps.logger.warning(
+                    "Failed to decide generative UI mode; continuing without intent recovery.",
+                    exc_info=True,
+                )
+                turn.ui_mode = None
+        else:
+            turn.ui_mode = "NONE"
+
+    # ------------------------------------------------------------------
+    # フェーズ9a: ストリーミング生成 / Phase 9a: streaming generation
+    # ------------------------------------------------------------------
+    def _start_streaming_generation(self, turn: _ChatPostTurn) -> Response:
+        """バックグラウンド生成ジョブを開始し、SSEレスポンスを返します / Start the background generation job and return the SSE response."""
+        deps = self.deps
+
+        on_finished: Callable[[], None] | None = None
+        persist_response: Callable[..., dict[str, Any] | None]
+        if turn.targets_normal_room():
+            persist_response, on_finished = self._build_normal_room_stream_callbacks(turn)
+        else:
+            persist_response = partial(
+                deps.rooms.ephemeral_store.append_message,
+                turn.sid,
+                turn.chat_room_id,
+                "assistant",
+            )
+
+        try:
+            job = deps.generation.start_generation_job(
+                turn.generation_key,
+                conversation_messages=turn.conversation_messages,
+                model=turn.model,
+                persist_response=persist_response,
+                on_finished=on_finished,
+                on_error=partial(
+                    _run_async_callback,
+                    lambda: _maybe_await(
+                        deps.persistence.cleanup_unanswered_user_messages(
+                            turn.chat_room_id,
+                            user_id=turn.user_id,
+                            sid=turn.sid,
+                        )
+                    ),
+                ),
+                service=turn.chat_generation_service,
+                prior_web_search_results=turn.prior_web_search_results,
+                personal_knowledge_search=turn.personal_knowledge_search,
+                shared_prompt_search=turn.shared_prompt_search,
+                selected_reference_trace=turn.selected_reference_trace,
+                ui_mode=turn.ui_mode,
+            )
+        except ChatGenerationAlreadyRunningError:
+            return deps.web.jsonify(
+                {"error": _GENERATION_ALREADY_RUNNING_MESSAGE},
+                status_code=409,
+            )
+
+        return deps.web.build_llm_stream_response(deps.web.iter_llm_stream_events(job))
+
+    def _build_normal_room_stream_callbacks(
+        self,
+        turn: _ChatPostTurn,
+    ) -> tuple[Callable[..., dict[str, Any] | None], Callable[[], None]]:
+        """DB保存ルーム向けの保存・完了コールバックを組み立てます / Build the persist and completion callbacks for a DB-backed room."""
+        deps = self.deps
+        chat_room_id = turn.chat_room_id
+        model = turn.model
+        user_id = turn.user_id
+        room_mode = turn.room_mode
+        user_message = turn.user_message
+        saved_user_message_id = turn.saved_user_message_id
+        should_auto_title_room = turn.should_auto_title_room
+
+        title_candidates = build_initial_title_candidates(
+            user_message,
+            task_launch_request=turn.active_task_request,
+        )
+
+        def persist_response(
+            response: str,
+            *,
+            message_parts: list[dict[str, Any]] | None = None,
+            web_search_context: list[dict[str, Any]] | None = None,
+        ) -> dict[str, Any] | None:
+            assistant_message_id = _run_async_callback(
+                lambda: _maybe_await(
+                    deps.persistence.save_message_to_db(
+                        chat_room_id,
+                        response,
+                        "assistant",
+                        None,
+                        saved_user_message_id,
+                        message_parts,
+                        None,
+                        web_search_context,
+                    )
+                )
+            )
+            self._defer_context_extraction(
+                user_id=user_id,
+                room_mode=room_mode,
+                chat_room_id=chat_room_id,
+                assistant_message_id=assistant_message_id,
+                user_message=user_message,
+                assistant_response=response,
+            )
+            # 初回応答を保存できた後にだけタイトルを自動生成する。
+            # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
+            if not should_auto_title_room:
+                return None
+            generated_title = _run_async_callback(
+                lambda: self._generate_and_rename_room(
+                    chat_room_id=chat_room_id,
+                    user_message=user_message,
+                    assistant_response=response,
+                    allowed_current_titles=title_candidates,
+                )
+            )
+            if generated_title:
+                return {"room_title": generated_title}
+            return None
+
+        def on_finished() -> None:
+            try:
+                updated_messages = _run_async_callback(
+                    lambda: _maybe_await(deps.persistence.get_chat_room_messages(chat_room_id))
+                )
+                # 要約はストリーミング完了後に一度だけ更新する。
+                # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
+                _run_async_callback(
+                    lambda: _maybe_await(
+                        deps.persistence.rebuild_room_summary(
+                            chat_room_id,
+                            updated_messages,
+                            model=model,
+                        )
+                    )
+                )
+            except Exception:
+                deps.logger.warning(
+                    "Failed to rebuild room summary after streaming response for %s.",
+                    chat_room_id,
+                )
+
+        return persist_response, on_finished
+
+    # ------------------------------------------------------------------
+    # フェーズ9b: 非ストリーミング生成 / Phase 9b: non-streaming generation
+    # ------------------------------------------------------------------
+    async def _respond_without_streaming(self, turn: _ChatPostTurn) -> Response:
+        """
+        互換用の同期経路で応答を生成し、保存してから返します
+        Generate, persist and return the reply on the synchronous compatibility path.
+        """
+        deps = self.deps
+
+        # 対応モデルは通常ストリーミング経路へ入る。互換用の同期経路では事前検索Plannerを
+        # 起動せず、取得済みの参照だけでモデル自身に回答させる。
+        # Supported models normally use the streaming agent loop. This compatibility fallback
+        # never runs a separate search planner; it answers from already available references.
+        turn.conversation_messages = inject_prior_web_search_context(
+            turn.conversation_messages, turn.prior_web_search_results
+        )
+
+        error_response = await self._request_llm_reply(turn)
+        if error_response is not None:
+            return error_response
+
+        await self._finalize_reply(turn)
+        empty_reply_response = await self._reject_empty_reply(turn)
+        if empty_reply_response is not None:
+            return empty_reply_response
+
+        generated_room_title = await self._persist_assistant_reply(turn)
+        await self._rebuild_room_summary_after_reply(turn)
+
+        response_payload: dict[str, Any] = {"response": turn.bot_reply}
+        if turn.message_parts:
+            response_payload["parts"] = turn.message_parts
+        if generated_room_title:
+            response_payload["room_title"] = generated_room_title
+        return deps.web.jsonify(response_payload)
+
+    async def _request_llm_reply(self, turn: _ChatPostTurn) -> Response | None:
+        """LLMを呼び出し、失敗はユーザー向けレスポンスへ変換します / Call the LLM and turn failures into user-facing responses."""
+        deps = self.deps
+
+        try:
+            bot_reply = await run_blocking(
+                deps.generation.get_llm_response, turn.conversation_messages, turn.model
+            )
+        except LlmInvalidModelError as exc:
+            await self._discard_unanswered_user_message(turn)
+            return deps.web.jsonify({"error": str(exc)}, status_code=400)
+        except LlmRateLimitError as exc:
+            await self._discard_unanswered_user_message(turn)
+            return deps.web.jsonify_rate_limited(
+                "AI提供元が混み合っています。時間をおいて再試行してください。",
+                retry_after=(
+                    exc.retry_after_seconds
+                    if exc.retry_after_seconds is not None
+                    else 10
+                ),
+            )
+        except LlmAuthenticationError:
+            deps.logger.exception(
+                "LLM authentication/configuration error while generating chat response."
+            )
+            await self._discard_unanswered_user_message(turn)
+            return deps.web.jsonify(
+                {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
+                status_code=502,
+            )
+        except LlmServiceError as exc:
+            retryable = deps.generation.is_retryable_llm_error(exc)
+            deps.logger.exception(
+                "Failed to get LLM response (retryable=%s).",
+                retryable,
+            )
+            await self._discard_unanswered_user_message(turn)
+            return deps.web.jsonify(
+                {
+                    "error": "AI応答の生成に失敗しました。時間をおいて再試行してください。",
+                    "retryable": retryable,
+                },
+                status_code=502,
+            )
+
+        turn.bot_reply = bot_reply
+        return None
+
+    async def _finalize_reply(self, turn: _ChatPostTurn) -> None:
+        """トレース前置・UIパーツ正規化・出典解決を保存前に確定します / Settle trace, UI parts and citations before persisting."""
+        self._prepend_selected_reference_trace(turn)
+        await self._normalize_generated_reply(turn)
+        self._resolve_reply_citations(turn)
+
+        # 保存直前にトレース分割と本文内の画像位置を確定する。
+        # Finalize trace splitting and inline image placement before persisting.
+        if turn.message_parts:
+            turn.message_parts = normalize_message_parts_for_display(turn.message_parts) or None
+
+    def _prepend_selected_reference_trace(self, turn: _ChatPostTurn) -> None:
+        """参照検索のステップを本文の先頭へ付けます / Prepend the reference-lookup steps to the reply body."""
+        web_search_trace_steps: list[TraceStep] = selected_reference_steps(
+            turn.selected_reference_trace
+        )
+        if web_search_trace_steps:
+            web_search_trace_steps.append(answer_step([]))
+        trace_block = build_web_search_trace_markdown(
+            None,
+            steps=web_search_trace_steps,
+        )
+        # 本文の無いターンにトレースだけを前置すると空判定をすり抜け、「回答までの
+        # ステップ」だけの応答が保存される。本文があるときだけ前置する。
+        # Prepending the trace to an empty body would slip past the empty-answer guard and
+        # persist a steps-only reply, so only a non-empty body receives the trace.
+        if trace_block and turn.bot_reply.strip():
+            turn.bot_reply = f"{trace_block}\n\n{turn.bot_reply}"
+
+    async def _normalize_generated_reply(self, turn: _ChatPostTurn) -> None:
+        """
+        生成UIアーティファクトを検証し、本文とパーツへ分解します
+        Validate generated UI artifacts and split the reply into text and parts.
+        """
+        deps = self.deps
+
+        normalized_response = await run_blocking(
+            partial(
+                normalize_response_with_artifact_retry,
+                conversation_messages=turn.conversation_messages,
+                model=turn.model,
+                generate_response=deps.generation.get_llm_response,
+                user_request=turn.user_message,
+                ui_mode=turn.ui_mode,
+            ),
+            turn.bot_reply,
+        )
+        if normalized_response.validation_errors:
+            deps.logger.warning(
+                "One or more generated UI artifacts failed validation and were omitted.",
+                extra={"validation_errors": normalized_response.validation_errors},
+            )
+        turn.bot_reply = normalized_response.text
+        turn.message_parts = normalized_response.parts
+
+    def _resolve_reply_citations(self, turn: _ChatPostTurn) -> None:
+        """出典marker を検証済みの検索結果へ解決します / Resolve citation markers against the validated search evidence."""
+        deps = self.deps
+
+        # モデルが真似て書いた出典チップHTMLを、引用marker解決の前に取り除く。
+        # Remove chip markup echoed by the model before resolving citation markers.
+        turn.bot_reply = strip_web_search_citation_html(turn.bot_reply)
+        citation_evidence = combine_web_search_results(
+            turn.prior_web_search_results
+        )
+        if citation_evidence is None:
+            return
+
+        citation_resolution = resolve_web_search_citations(
+            turn.bot_reply,
+            citation_evidence,
+        )
+        if citation_resolution.invalid_markers:
+            deps.logger.warning(
+                "Removed invalid web search citation markers from generated response.",
+                extra={
+                    "invalid_marker_count": len(citation_resolution.invalid_markers)
+                },
+            )
+        turn.bot_reply = citation_resolution.text
+        if turn.message_parts:
+            turn.message_parts = [
+                (
+                    {**part, "text": turn.bot_reply}
+                    if part.get("type") == "text"
+                    else part
+                )
+                for part in turn.message_parts
+            ]
+
+    async def _reject_empty_reply(self, turn: _ChatPostTurn) -> Response | None:
+        """空の応答を保存せずエラーとして返します / Reject an empty reply instead of persisting it."""
+        deps = self.deps
+
+        # 本文もUIパーツも空なら回答が無いのと同じ。空の応答を保存すると空の吹き出しが
+        # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。
+        # An empty body with no UI parts is the same as no answer at all. Persisting
+        # it would leave a blank bubble and let unanswered user messages pile up.
+        if turn.bot_reply.strip() or turn.message_parts:
+            return None
+
+        deps.logger.warning(
+            "Chat generation produced an empty response.",
+            extra={"chat_room_id": turn.chat_room_id, "model": turn.model},
+        )
+        await self._discard_unanswered_user_message(turn)
+        return deps.web.jsonify(
+            {"error": ERROR_CHAT_EMPTY_RESPONSE, "retryable": True},
+            status_code=502,
+        )
+
+    async def _persist_assistant_reply(self, turn: _ChatPostTurn) -> str | None:
+        """応答を保存し、初回ターンなら生成したタイトルを返します / Persist the reply and return the generated title on a first turn."""
+        deps = self.deps
+
+        # この互換経路は検索を行わないため、このターンの検索結果は保存しない。
+        # This compatibility path never searches, so it stores no results for later turns.
+        this_turn_web_search = None
+
+        if not turn.targets_normal_room():
+            turn.sid = turn.sid or deps.rooms.get_session_id(turn.session)
+            await run_blocking(
+                deps.rooms.ephemeral_store.append_message,
+                turn.sid,
+                turn.chat_room_id,
+                "assistant",
+                turn.bot_reply,
+                turn.message_parts or None,
+                None,
+                this_turn_web_search,
+            )
+            return None
+
+        turn.saved_assistant_message_id = await _maybe_await(
+            deps.persistence.save_message_to_db(
+                turn.chat_room_id,
+                turn.bot_reply,
+                "assistant",
+                None,
+                turn.saved_user_message_id,
+                turn.message_parts or None,
+                None,
+                this_turn_web_search,
+            )
+        )
+        self._defer_context_extraction(
+            user_id=turn.user_id,
+            room_mode=turn.room_mode,
+            chat_room_id=turn.chat_room_id,
+            assistant_message_id=turn.saved_assistant_message_id,
+            user_message=turn.user_message,
+            assistant_response=turn.bot_reply,
+        )
+        if not turn.should_auto_title_room:
+            return None
+        title_candidates = build_initial_title_candidates(
+            turn.user_message,
+            task_launch_request=turn.active_task_request,
+        )
+        return await self._generate_and_rename_room(
+            chat_room_id=turn.chat_room_id,
+            user_message=turn.user_message,
+            assistant_response=turn.bot_reply,
+            allowed_current_titles=title_candidates,
+        )
+
+    async def _rebuild_room_summary_after_reply(self, turn: _ChatPostTurn) -> None:
+        """保存済みの応答を含めてルーム要約を作り直します / Rebuild the room summary including the persisted reply."""
+        deps = self.deps
+
+        if not (turn.targets_normal_room() and turn.saved_assistant_message_id is not None):
+            return
+        try:
+            all_messages = await _maybe_await(deps.persistence.get_chat_room_messages(turn.chat_room_id))
+            await _maybe_await(
+                deps.persistence.rebuild_room_summary(
+                    turn.chat_room_id,
+                    all_messages,
+                    model=turn.model,
+                )
+            )
+        except Exception:
+            deps.logger.warning(
+                "Failed to rebuild room summary for chat room %s.",
+                turn.chat_room_id,
+            )
+
+    # ------------------------------------------------------------------
+    # 共通ヘルパー / Shared helpers
+    # ------------------------------------------------------------------
+    async def _discard_unanswered_user_message(self, turn: _ChatPostTurn) -> None:
+        """回答が付かなかったこのターンのユーザー発話を掃除します / Clean up this turn's unanswered user message."""
+        await _maybe_await(
+            self.deps.persistence.cleanup_unanswered_user_messages(
+                turn.chat_room_id,
+                user_id=turn.user_id,
+                sid=turn.sid,
+            )
+        )
 
     async def _generate_and_rename_room(
         self,
@@ -162,7 +1226,7 @@ class ChatPostUseCase:
             return None
         try:
             updated = await _maybe_await(
-                self.deps.rename_chat_room_if_current_title_in(
+                self.deps.persistence.rename_chat_room_if_current_title_in(
                     chat_room_id,
                     title,
                     allowed_current_titles,
@@ -187,9 +1251,9 @@ class ChatPostUseCase:
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:
-            if not await _maybe_await(self.deps.should_extract_context(user_id)):
+            if not await _maybe_await(self.deps.background.should_extract_context(user_id)):
                 return
-            self.deps.schedule_context_extraction(
+            self.deps.background.schedule_context_extraction(
                 user_id,
                 room_id=chat_room_id,
                 assistant_message_id=assistant_message_id,
@@ -218,7 +1282,7 @@ class ChatPostUseCase:
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:
-            self.deps.submit_background_task(
+            self.deps.background.submit_background_task(
                 _run_async_callback,
                 lambda: self._maybe_schedule_context_extraction(
                     user_id=user_id,
@@ -235,805 +1299,3 @@ class ChatPostUseCase:
                 chat_room_id,
                 exc_info=True,
             )
-
-    # リクエストを受け取り、メッセージの検証・コンテキスト補強・AI応答生成・DB保存などの一連の流れを実行する
-    # Receive a request and execute the entire workflow including validation, context augmentation, AI generation, and database updates
-    async def execute(
-        self,
-        request: Request,
-        *,
-        auth_limit_service: Any,
-        llm_daily_limit_service: Any,
-        chat_generation_service: Any,
-    ) -> Any:
-        deps = self.deps
-
-        # 一時チャットのクリーンアップとリクエストJSONのパース・検証
-        # Cleanup ephemeral chats and parse/validate the request JSON payload
-        await run_blocking(deps.cleanup_ephemeral_chats)
-        data, error_response = await deps.require_json_dict(request)
-        if error_response is not None:
-            return error_response
-
-        payload, validation_error = deps.validate_payload_model(
-            data,
-            ChatMessageRequest,
-            error_message="'message' が必要です。",
-        )
-        if validation_error is not None:
-            return validation_error
-
-        user_message = payload.message
-        chat_room_id = payload.chat_room_id
-        model = payload.model or self.default_model
-        attached_files = payload.attached_files or []
-        use_personal_knowledge = bool(payload.use_personal_knowledge)
-        use_shared_prompts = bool(payload.use_shared_prompts)
-
-        # モデル名の検証
-        # Validate the requested model name
-        try:
-            deps.validate_model_name(model)
-        except LlmInvalidModelError as exc:
-            return deps.jsonify({"error": str(exc)}, status_code=400)
-
-        # ゲスト制限の消費判定とセッション/ユーザーの初期化
-        # Consume guest limits and initialize session/user details
-        session = request.session
-        if "user_id" not in session:
-            allowed, message = await run_blocking(
-                deps.consume_guest_chat_daily_limit,
-                request,
-                service=auth_limit_service,
-            )
-            if not allowed:
-                return deps.jsonify_rate_limited(
-                    message or "1日10回までです",
-                    retry_after=deps.get_seconds_until_tomorrow(),
-                )
-
-        sid = None
-        room_mode = "temporary"
-        user_id = session.get("user_id")
-        saved_user_message_id: int | None = None
-        should_auto_title_room = False
-        formatted_user_message = html.escape(user_message).replace("\n", "<br>")
-
-        # ルーム所有権およびアクセス権のバリデーション
-        # Validate room ownership and access permissions
-        if "user_id" in session:
-            try:
-                room_mode, sid, legacy_response = await _maybe_await(
-                    deps.resolve_authenticated_room_target(
-                    chat_room_id,
-                    user_id,
-                    "他ユーザーのチャットルームには投稿できません",
-                    )
-                )
-                if legacy_response is not None:
-                    return legacy_response
-            except ApiServiceError as exc:
-                return deps.jsonify_service_error(exc)
-            except Exception:
-                return deps.log_and_internal_server_error(
-                    deps.logger,
-                    "Failed to validate chat room ownership before posting.",
-                )
-
-        else:
-            sid, guest_error = await deps.validate_guest_room_access(session, chat_room_id)
-            if guest_error is not None:
-                return guest_error
-
-        # 添付ファイルのアップロード準備と検証
-        # Prepare and validate uploaded attachment files
-        try:
-            prepared_attached_files = await run_blocking(prepare_attached_files, attached_files)
-        except AttachedFileValidationError as exc:
-            return deps.jsonify({"error": str(exc)}, status_code=400)
-
-        # 一時ルームと通常ルームで分岐し、ユーザー発話メッセージを保存する
-        # Save the user message depending on temporary vs. normal room mode
-        if "user_id" in session:
-            if room_mode == "temporary":
-                # ログイン中でも temporary room は DB に保存せず、ユーザー単位の一時ストアに閉じ込める。
-                # sid ではなく user_id 由来のキーを使うため、同じユーザーの再読み込みにも耐える。
-                sid = deps.get_temporary_user_store_key(user_id)
-                await run_blocking(deps.ensure_ephemeral_room, sid, chat_room_id)
-                attachment_content_kwargs = (
-                    {"attached_file_contents": prepared_attached_files}
-                    if prepared_attached_files
-                    else {}
-                )
-                await run_blocking(
-                    deps.ephemeral_store.append_message,
-                    sid,
-                    chat_room_id,
-                    "user",
-                    formatted_user_message,
-                    **attachment_content_kwargs,
-                )
-                all_messages = await run_blocking(
-                    deps.ephemeral_store.get_messages,
-                    sid,
-                    chat_room_id,
-                )
-            else:
-                attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
-                # New turns extend the active branch: parent is the current branch tip.
-                parent_message_id = await _maybe_await(deps.get_active_leaf_id(chat_room_id))
-                # 初回発話では assistant 応答がまだないため、DB から履歴を読み直さず最小文脈を作る。
-                # このフラグは、後段の初回タイトル自動生成にも使う。
-                should_auto_title_room = parent_message_id is None
-                attachment_content_kwargs = (
-                    {"attached_file_contents": prepared_attached_files}
-                    if prepared_attached_files
-                    else {}
-                )
-                saved_user_message_id = await _maybe_await(
-                    deps.save_message_to_db(
-                    chat_room_id,
-                    formatted_user_message,
-                    "user",
-                    attached_file_name_list,
-                    parent_message_id,
-                    **attachment_content_kwargs,
-                    )
-                )
-                if should_auto_title_room:
-                    all_messages = [{"role": "user", "content": formatted_user_message}]
-                else:
-                    all_messages = await _maybe_await(deps.get_chat_room_messages(chat_room_id))
-        else:
-            attachment_content_kwargs = (
-                {"attached_file_contents": prepared_attached_files}
-                if prepared_attached_files
-                else {}
-            )
-            await run_blocking(
-                deps.ephemeral_store.append_message,
-                sid,
-                chat_room_id,
-                "user",
-                formatted_user_message,
-                **attachment_content_kwargs,
-            )
-            all_messages = await run_blocking(
-                deps.ephemeral_store.get_messages,
-                sid,
-                chat_room_id,
-            )
-
-        # メッセージ履歴を LLM 向けに正規化
-        # Normalize message history for LLM compatibility
-        normalized_all_messages = deps.normalize_messages_for_llm(all_messages)
-
-        # 過去ターンの添付も、そのメッセージに紐づく参照資料として再投入する。
-        # 最新ターンの添付は下の prefix_blocks で追加するため、ここでは重複を避ける。
-        # Reintroduce earlier uploads with the turn they belong to. The newest
-        # upload is added below through prefix_blocks, so it is not duplicated.
-        latest_user_index = next(
-            (
-                index
-                for index in range(len(normalized_all_messages) - 1, -1, -1)
-                if normalized_all_messages[index].get("role") == "user"
-            ),
-            None,
-        )
-        if latest_user_index is not None:
-            updated_messages = list(normalized_all_messages)
-            for index, message in enumerate(normalized_all_messages):
-                if index == latest_user_index or message.get("role") != "user":
-                    continue
-                attached_files = decode_attached_files_from_storage(
-                    message.get("attached_file_contents")
-                )
-                if not attached_files:
-                    continue
-                updated_messages[index] = {
-                    **message,
-                    "content": (
-                        f"{format_attached_files_for_prompt(attached_files)}\n\n"
-                        f"{message.get('content', '')}"
-                    ),
-                }
-            normalized_all_messages = updated_messages
-
-        # Build context blocks to prepend to the last user message.
-        # Order: fetched URL content → attached file content → user message text.
-        prefix_blocks: list[str] = []
-
-        # メッセージからのURL抽出およびコンテンツ取得
-        # Extract URLs from the user message and fetch their web contents
-        urls_in_message = extract_urls_from_text(user_message)
-        if urls_in_message:
-            # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
-            # system message に混ぜると、外部ページ本文が指示階層を持っているように見えやすい。
-            fetched_urls = await run_blocking(fetch_urls_content, urls_in_message)
-            if fetched_urls:
-                url_xml = "\n".join(
-                    f'<url href="{url}">\n{content}\n</url>'
-                    for url, content in fetched_urls.items()
-                )
-                prefix_blocks.append(f"<fetched_urls>\n{url_xml}\n</fetched_urls>")
-            else:
-                prefix_blocks.append(
-                    "<fetched_urls_status>\n"
-                    "The linked page content could not be retrieved. Do not summarize or infer details "
-                    "from the URL alone; ask the user for the page text or another accessible source if "
-                    "the request depends on it.\n"
-                    "</fetched_urls_status>"
-                )
-
-        if prepared_attached_files:
-            prefix_blocks.append(format_attached_files_for_prompt(prepared_attached_files))
-
-        if prefix_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
-            prefix = "\n\n".join(prefix_blocks)
-            last_msg = normalized_all_messages[-1]
-            normalized_all_messages = list(normalized_all_messages[:-1]) + [
-                {**last_msg, "content": f"{prefix}\n\n{last_msg.get('content', '')}"}
-            ]
-
-        # 最新のタスク起動リクエストと定義プロンプトの読み込み
-        # Load the latest task launch request and corresponding task definitions
-        active_task_request = deps.find_latest_task_launch_request(normalized_all_messages)
-        prompt_data = None
-        if active_task_request is not None:
-            task_id = active_task_request.get("task_id")
-            if task_id is None:
-                prompt_data = await deps.load_task_prompt_data(active_task_request["task"], user_id)
-            else:
-                prompt_data = await deps.load_task_prompt_data(
-                    active_task_request["task"], user_id, task_id
-                )
-
-        task_prompt = deps.build_task_prompt(prompt_data) if prompt_data else None
-        enabled_user_skills: list[dict[str, Any]] = []
-        room_summary = ""
-        memory_facts: list[str] = []
-        user = None
-        user_profile_prompt = None
-        project_instructions: str | None = None
-
-        # ユーザープロフィールプロンプトの構築
-        # Build the user profile prompt
-        if user_id is not None:
-            try:
-                if deps.load_enabled_user_skills is not None:
-                    enabled_user_skills = list(
-                        await _maybe_await(deps.load_enabled_user_skills(user_id)) or []
-                    )
-            except Exception:
-                deps.logger.warning("Failed to load enabled user skills; proceeding without them.")
-            try:
-                user = await _maybe_await(deps.get_user_by_id(user_id))
-                user_profile_prompt = deps.build_user_profile_prompt(user)
-            except Exception:
-                deps.logger.warning("Failed to load user profile context; proceeding without it.")
-
-        user_skills_prompt, generative_ui_enabled = build_chat_skills_context(
-            enabled_user_skills,
-            user,
-            locale=self.locale,
-            prompt_builder=deps.build_user_skills_prompt,
-        )
-
-        # 通常のユーザーセッションの場合、所属プロジェクトの指示を読み込む
-        # For normal user sessions, load the owning project's instructions.
-        if user_id is not None and room_mode == "normal":
-            try:
-                project_context = await _maybe_await(deps.load_project_context(chat_room_id))
-                if project_context:
-                    project_instructions = str(project_context.get("instructions") or "") or None
-            except Exception:
-                deps.logger.warning("Failed to load project context; proceeding without it.")
-
-        # 通常のユーザーセッションの場合、要約とパーソナル記憶情報の読み込みと抽出
-        # For normal user sessions, load summaries and extract/load personal memory facts
-        if user_id is not None and room_mode == "normal":
-            if not should_auto_title_room:
-                try:
-                    summary_payload = await _maybe_await(deps.get_room_summary(chat_room_id))
-                    room_summary = str((summary_payload or {}).get("summary") or "")
-                except Exception:
-                    deps.logger.warning("Failed to load room summary; proceeding without it.")
-                try:
-                    memory_facts = await _maybe_await(deps.list_room_memory_facts(chat_room_id))
-                except Exception:
-                    deps.logger.warning("Failed to load memory facts; proceeding without them.")
-            if saved_user_message_id is not None:
-                # 記憶抽出は元メッセージIDと結びつけて保存する。抽出自体がLLM呼び出しに
-                # なったため応答経路から外す。今ターンの発話は履歴としてそのまま文脈に
-                # 入っているので、抽出結果が要るのは次ターン以降であり遅延は問題ない。
-                # Memory extraction is tied to the source message id. It now costs an
-                # LLM call, so it runs off the response path: this turn already carries
-                # the user's message verbatim, and the extracted facts are only needed
-                # from the next turn onward.
-                try:
-                    deps.submit_background_task(
-                        _run_async_callback,
-                        lambda: deps.remember_facts_from_message(
-                            chat_room_id,
-                            user_id,
-                            user_message,
-                            source_message_id=saved_user_message_id,
-                        ),
-                    )
-                except Exception:
-                    deps.logger.warning(
-                        "Failed to schedule memory fact update for chat room %s.",
-                        chat_room_id,
-                    )
-
-        # システムプロンプトおよびコンテキストメッセージの構築
-        # Assemble context messages including base system prompts
-        conversation_messages = deps.build_context_messages(
-            base_system_prompt=deps.build_base_system_prompt(),
-            user_profile_prompt=user_profile_prompt,
-            task_prompt=task_prompt,
-            room_summary=room_summary,
-            memory_facts=memory_facts,
-            recent_messages=normalized_all_messages,
-            project_instructions=project_instructions,
-            user_skills_prompt=user_skills_prompt,
-            generative_ui_enabled=generative_ui_enabled,
-        )
-
-        # 過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
-        # Load prior-turn search results to re-inject as reference context during generation.
-        if user_id is not None and room_mode == "normal":
-            # 初回ターンは過去履歴が無いため、無駄なDB照会を避ける。
-            # Skip the lookup on the first turn since there is no prior history yet.
-            prior_web_search_results = (
-                []
-                if should_auto_title_room
-                    else deserialize_web_search_results(
-                    await _maybe_await(deps.get_room_web_search_contexts(chat_room_id))
-                )
-            )
-        else:
-            prior_web_search_results = extract_prior_web_search_results(all_messages)
-
-        # 生成キーの構築と二重送信防止ロック
-        # Build the generation key and check for active running jobs
-        generation_key = deps.build_generation_key(
-            chat_room_id=chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        if deps.has_active_generation(generation_key, service=chat_generation_service):
-            return deps.jsonify(
-                {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
-                status_code=409,
-            )
-
-        # LLM利用クォータ制限のチェック
-        # Check daily LLM usage quotas
-        quota_user_key: str | None
-        if user_id is not None:
-            quota_user_key = f"user:{user_id}"
-        elif sid:
-            quota_user_key = f"sid:{sid}"
-        else:
-            quota_user_key = None
-        can_access_llm, _, daily_limit = await run_blocking(
-            deps.consume_llm_daily_quota,
-            service=llm_daily_limit_service,
-            user_key=quota_user_key,
-        )
-        if not can_access_llm:
-            # quota 失敗時にユーザー発話だけを残すと、次回の文脈が「未回答の発話」から始まる。
-            # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify_rate_limited(
-                (
-                    f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
-                    "日付が変わってから再度お試しください。"
-                ),
-                retry_after=deps.get_seconds_until_daily_reset(),
-            )
-
-        # 選択されたメモ／共有プロンプトは、モデルがツールを呼ぶかどうかに任せず、
-        # 生成開始前に必ず検索して参照文脈へ入れる。ツール自体も追加検索用に残す。
-        # Always load user-selected memo/shared-prompt sources before generation instead
-        # of relying on the model to decide whether to call their tools. Keep the tools
-        # available as well so the model can retry with narrower keywords when needed.
-        selected_references = build_selected_reference_searchers(
-            user_id=user_id,
-            use_personal_knowledge=use_personal_knowledge,
-            use_shared_prompts=use_shared_prompts,
-            search_personal_knowledge=deps.search_personal_knowledge,
-            search_shared_prompts=deps.search_shared_prompts,
-        )
-        personal_knowledge_search = selected_references.personal_knowledge
-        shared_prompt_search = selected_references.shared_prompt
-        selected_reference_trace: list[SelectedReferenceLookupTrace] = []
-        conversation_messages = await augment_messages_with_selected_references_async(
-            conversation_messages,
-            query=user_message,
-            personal_knowledge_search=personal_knowledge_search,
-            shared_prompt_search=shared_prompt_search,
-            personal_overview=selected_references.personal_overview,
-            unavailable_sources=selected_references.unavailable_sources,
-            trace_results=selected_reference_trace,
-        )
-        # UI_MODE is a structured semantic decision made by the selected
-        # conversation model. Do not infer it from the user's text here.
-        if generative_ui_enabled:
-            try:
-                ui_mode = await run_blocking(
-                    deps.decide_generative_ui_mode,
-                    conversation_messages,
-                    model,
-                )
-            except Exception:
-                deps.logger.warning(
-                    "Failed to decide generative UI mode; continuing without intent recovery.",
-                    exc_info=True,
-                )
-                ui_mode = None
-        else:
-            ui_mode = "NONE"
-
-        # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
-        # Start a background generation job if the model supports streaming
-        if deps.is_streaming_model(model):
-            on_finished = None
-            if user_id is not None and room_mode == "normal":
-
-                title_candidates = build_initial_title_candidates(
-                    user_message,
-                    task_launch_request=active_task_request,
-                )
-
-                def persist_response(
-                    response: str,
-                    *,
-                    message_parts: list[dict[str, Any]] | None = None,
-                    web_search_context: list[dict[str, Any]] | None = None,
-                ) -> dict[str, Any] | None:
-                    assistant_message_id = _run_async_callback(
-                        lambda: _maybe_await(
-                            deps.save_message_to_db(
-                                chat_room_id,
-                                response,
-                                "assistant",
-                                None,
-                                saved_user_message_id,
-                                message_parts,
-                                None,
-                                web_search_context,
-                            )
-                        )
-                    )
-                    self._defer_context_extraction(
-                        user_id=user_id,
-                        room_mode=room_mode,
-                        chat_room_id=chat_room_id,
-                        assistant_message_id=assistant_message_id,
-                        user_message=user_message,
-                        assistant_response=response,
-                    )
-                    # 初回応答を保存できた後にだけタイトルを自動生成する。
-                    # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
-                    if not should_auto_title_room:
-                        return None
-                    generated_title = _run_async_callback(
-                        lambda: self._generate_and_rename_room(
-                            chat_room_id=chat_room_id,
-                            user_message=user_message,
-                            assistant_response=response,
-                            allowed_current_titles=title_candidates,
-                        )
-                    )
-                    if generated_title:
-                        return {"room_title": generated_title}
-                    return None
-
-                def on_finished() -> None:
-                    try:
-                        updated_messages = _run_async_callback(
-                            lambda: _maybe_await(deps.get_chat_room_messages(chat_room_id))
-                        )
-                        # 要約はストリーミング完了後に一度だけ更新する。
-                        # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
-                        _run_async_callback(
-                            lambda: _maybe_await(
-                                deps.rebuild_room_summary(
-                                    chat_room_id,
-                                    updated_messages,
-                                    model=model,
-                                )
-                            )
-                        )
-                    except Exception:
-                        deps.logger.warning(
-                            "Failed to rebuild room summary after streaming response for %s.",
-                            chat_room_id,
-                        )
-            else:
-                persist_response = partial(
-                    deps.ephemeral_store.append_message,
-                    sid,
-                    chat_room_id,
-                    "assistant",
-                )
-
-            try:
-                job = deps.start_generation_job(
-                    generation_key,
-                    conversation_messages=conversation_messages,
-                    model=model,
-                    persist_response=persist_response,
-                    on_finished=on_finished,
-                    on_error=partial(
-                        _run_async_callback,
-                        lambda: _maybe_await(
-                            deps.cleanup_unanswered_user_messages(
-                                chat_room_id,
-                                user_id=user_id,
-                                sid=sid,
-                            )
-                        ),
-                    ),
-                    service=chat_generation_service,
-                    prior_web_search_results=prior_web_search_results,
-                    personal_knowledge_search=personal_knowledge_search,
-                    shared_prompt_search=shared_prompt_search,
-                    selected_reference_trace=selected_reference_trace,
-                    ui_mode=ui_mode,
-                )
-            except ChatGenerationAlreadyRunningError:
-                return deps.jsonify(
-                    {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
-                    status_code=409,
-                )
-
-            return deps.build_llm_stream_response(deps.iter_llm_stream_events(job))
-
-        # 対応モデルは通常ストリーミング経路へ入る。互換用の同期経路では事前検索Plannerを
-        # 起動せず、取得済みの参照だけでモデル自身に回答させる。
-        # Supported models normally use the streaming agent loop. This compatibility fallback
-        # never runs a separate search planner; it answers from already available references.
-        conversation_messages = inject_prior_web_search_context(
-            conversation_messages, prior_web_search_results
-        )
-        response_messages = conversation_messages
-
-        try:
-            bot_reply = await run_blocking(deps.get_llm_response, response_messages, model)
-        except LlmInvalidModelError as exc:
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify({"error": str(exc)}, status_code=400)
-        except LlmRateLimitError as exc:
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify_rate_limited(
-                "AI提供元が混み合っています。時間をおいて再試行してください。",
-                retry_after=(
-                    exc.retry_after_seconds
-                    if exc.retry_after_seconds is not None
-                    else 10
-                ),
-            )
-        except LlmAuthenticationError:
-            deps.logger.exception(
-                "LLM authentication/configuration error while generating chat response."
-            )
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify(
-                {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
-                status_code=502,
-            )
-        except LlmServiceError as exc:
-            retryable = deps.is_retryable_llm_error(exc)
-            deps.logger.exception(
-                "Failed to get LLM response (retryable=%s).",
-                retryable,
-            )
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify(
-                {
-                    "error": "AI応答の生成に失敗しました。時間をおいて再試行してください。",
-                    "retryable": retryable,
-                },
-                status_code=502,
-            )
-
-        web_search_trace_steps: list[TraceStep] = selected_reference_steps(
-            selected_reference_trace
-        )
-        if web_search_trace_steps:
-            web_search_trace_steps.append(answer_step([]))
-        trace_block = build_web_search_trace_markdown(
-            None,
-            steps=web_search_trace_steps,
-        )
-        # 本文の無いターンにトレースだけを前置すると空判定をすり抜け、「回答までの
-        # ステップ」だけの応答が保存される。本文があるときだけ前置する。
-        # Prepending the trace to an empty body would slip past the empty-answer guard and
-        # persist a steps-only reply, so only a non-empty body receives the trace.
-        if trace_block and bot_reply.strip():
-            bot_reply = f"{trace_block}\n\n{bot_reply}"
-
-        normalized_response = await run_blocking(
-            partial(
-                normalize_response_with_artifact_retry,
-                conversation_messages=response_messages,
-                model=model,
-                generate_response=deps.get_llm_response,
-                user_request=user_message,
-                ui_mode=ui_mode,
-            ),
-            bot_reply,
-        )
-        if normalized_response.validation_errors:
-            deps.logger.warning(
-                "One or more generated UI artifacts failed validation and were omitted.",
-                extra={"validation_errors": normalized_response.validation_errors},
-            )
-        bot_reply = normalized_response.text
-        message_parts = normalized_response.parts
-
-        # モデルが真似て書いた出典チップHTMLを、引用marker解決の前に取り除く。
-        # Remove chip markup echoed by the model before resolving citation markers.
-        bot_reply = strip_web_search_citation_html(bot_reply)
-        citation_evidence = combine_web_search_results(
-            prior_web_search_results
-        )
-        if citation_evidence is not None:
-            citation_resolution = resolve_web_search_citations(
-                bot_reply,
-                citation_evidence,
-            )
-            if citation_resolution.invalid_markers:
-                deps.logger.warning(
-                    "Removed invalid web search citation markers from generated response.",
-                    extra={
-                        "invalid_marker_count": len(citation_resolution.invalid_markers)
-                    },
-                )
-            bot_reply = citation_resolution.text
-            if message_parts:
-                message_parts = [
-                    (
-                        {**part, "text": bot_reply}
-                        if part.get("type") == "text"
-                        else part
-                    )
-                    for part in message_parts
-                ]
-
-        # 保存直前にトレース分割と本文内の画像位置を確定する。
-        # Finalize trace splitting and inline image placement before persisting.
-        if message_parts:
-            message_parts = normalize_message_parts_for_display(message_parts) or None
-
-        # この互換経路は検索を行わないため、このターンの検索結果は保存しない。
-        # This compatibility path never searches, so it stores no results for later turns.
-        this_turn_web_search = None
-
-        # 本文もUIパーツも空なら回答が無いのと同じ。空の応答を保存すると空の吹き出しが
-        # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。
-        # An empty body with no UI parts is the same as no answer at all. Persisting
-        # it would leave a blank bubble and let unanswered user messages pile up.
-        if not bot_reply.strip() and not message_parts:
-            deps.logger.warning(
-                "Chat generation produced an empty response.",
-                extra={"chat_room_id": chat_room_id, "model": model},
-            )
-            await _maybe_await(
-                deps.cleanup_unanswered_user_messages(
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                )
-            )
-            return deps.jsonify(
-                {"error": ERROR_CHAT_EMPTY_RESPONSE, "retryable": True},
-                status_code=502,
-            )
-
-        saved_assistant_message_id: int | None = None
-        generated_room_title: str | None = None
-        if user_id is not None and room_mode == "normal":
-            saved_assistant_message_id = await _maybe_await(
-                deps.save_message_to_db(
-                chat_room_id,
-                bot_reply,
-                "assistant",
-                None,
-                saved_user_message_id,
-                message_parts or None,
-                None,
-                this_turn_web_search,
-                )
-            )
-            self._defer_context_extraction(
-                user_id=user_id,
-                room_mode=room_mode,
-                chat_room_id=chat_room_id,
-                assistant_message_id=saved_assistant_message_id,
-                user_message=user_message,
-                assistant_response=bot_reply,
-            )
-            if should_auto_title_room:
-                title_candidates = build_initial_title_candidates(
-                    user_message,
-                    task_launch_request=active_task_request,
-                )
-                generated_room_title = await self._generate_and_rename_room(
-                    chat_room_id=chat_room_id,
-                    user_message=user_message,
-                    assistant_response=bot_reply,
-                    allowed_current_titles=title_candidates,
-                )
-        else:
-            sid = sid or deps.get_session_id(session)
-            await run_blocking(
-                deps.ephemeral_store.append_message,
-                sid,
-                chat_room_id,
-                "assistant",
-                bot_reply,
-                message_parts or None,
-                None,
-                this_turn_web_search,
-            )
-
-        if (
-            user_id is not None
-            and room_mode == "normal"
-            and saved_assistant_message_id is not None
-        ):
-            try:
-                all_messages = await _maybe_await(deps.get_chat_room_messages(chat_room_id))
-                await _maybe_await(
-                    deps.rebuild_room_summary(
-                        chat_room_id,
-                        all_messages,
-                        model=model,
-                    )
-                )
-            except Exception:
-                deps.logger.warning(
-                    "Failed to rebuild room summary for chat room %s.",
-                    chat_room_id,
-                )
-
-        response_payload = {"response": bot_reply}
-        if message_parts:
-            response_payload["parts"] = message_parts
-        if generated_room_title:
-            response_payload["room_title"] = generated_room_title
-        return deps.jsonify(response_payload)

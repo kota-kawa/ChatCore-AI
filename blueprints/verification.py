@@ -5,16 +5,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from blueprints.auth_common import _claim_guest_prompts_after_login
+from blueprints.auth_support import await_result
 from blueprints.email_auth_support import (
     clear_legacy_email_auth_session,
     email_auth_failure_response,
     email_auth_unavailable_response,
     load_dedicated_email_auth_transaction,
 )
-from blueprints.auth_support import await_result
-
-from services.async_utils import run_blocking
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
+from services.async_utils import run_blocking
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
@@ -23,7 +22,6 @@ from services.auth_limits import (
 )
 from services.auth_session import establish_authenticated_session
 from services.csrf import require_csrf
-from services.email_service import resolve_request_email_locale, send_email
 from services.email_auth_transaction import (
     EMAIL_AUTH_RESULT_EXHAUSTED,
     EMAIL_AUTH_RESULT_EXPIRED,
@@ -39,22 +37,23 @@ from services.email_auth_transaction import (
     store_email_auth_transaction,
     verify_email_auth_transaction,
 )
+from services.email_service import resolve_request_email_locale, send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
-    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
+    get_seconds_until_daily_reset,
 )
 from services.request_models import AuthCodeRequest, EmailRequest
+from services.runtime_config import is_production_env
 from services.security import constant_time_compare, generate_verification_code
 from services.users import (
+    copy_default_tasks_for_user,
     create_user,
     get_user_by_email,
-    set_user_verified,
     get_user_by_id,
-    copy_default_tasks_for_user,
+    set_user_verified,
 )
-from services.runtime_config import is_production_env
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -503,7 +502,7 @@ async def api_verify_registration_code(
     # ユーザーを認証済みに更新
     # Set the user status to verified.
     await await_result(set_user_verified(user_id))                 # ユーザーを認証済みに
-    
+
     # 共通の初期タスクを新規ユーザー用に複製
     # Copy shared default tasks to this newly verified user.
     await await_result(copy_default_tasks_for_user(user_id))       # ★ 共通タスクを複製 ★

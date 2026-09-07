@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+
 # メモ本体の一覧・作成・詳細・更新・削除・アーカイブ・ピン留め
 # Memo list, create, detail, update, delete, archive and pin endpoints
-
 import logging
-import asyncio
 
 from fastapi import Request
 from sqlalchemy.exc import SQLAlchemyError
 
 from services.api_errors import ApiServiceError
 from services.error_messages import ERROR_LOGIN_REQUIRED
+from services.repositories.memo_constants import DEFAULT_MEMO_LIST_LIMIT, MAX_MEMO_LIST_LIMIT
+from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     MemoCreateRequest,
     MemoToggleRequest,
@@ -25,9 +27,6 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-
-from services.repositories.memo_constants import DEFAULT_MEMO_LIST_LIMIT, MAX_MEMO_LIST_LIMIT
-from services.repositories.memo_helpers import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr
@@ -145,7 +144,7 @@ async def api_create_memo(request: Request):
     data = await get_json(request)
     if data is None:
         form = await request.form()
-        data = {key: value for key, value in form.items()}
+        data = dict(form.items())
     if not isinstance(data, dict):
         data = {}
 

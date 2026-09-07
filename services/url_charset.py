@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import codecs
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # 取得済みのレスポンスボディ（bytes）を文字列へデコードするための文字コード解決モジュール。
 # Charset resolution used to decode an already-downloaded response body (bytes) into text.
@@ -100,7 +103,7 @@ def _charset_from_strict_utf8(raw: bytes) -> str | None:
         return None
     # サイズ上限による末尾の途中切断だけは許容する（UTF-8 の最大長は4バイト）。
     # Tolerate only a trailing sequence cut short by the size cap (UTF-8 is 4 bytes max).
-    for trim in range(0, min(3, len(raw)) + 1):
+    for trim in range(min(3, len(raw)) + 1):
         candidate = raw[: len(raw) - trim] if trim else raw
         try:
             candidate.decode("utf-8")
@@ -122,6 +125,7 @@ def _charset_from_detection(raw: bytes) -> str | None:
     try:
         best = from_bytes(raw).best()
     except Exception:
+        logger.debug("Statistical charset detection failed for a %s byte body; leaving the charset unresolved.", len(raw))
         return None
     return _normalize_encoding(best.encoding if best is not None else None)
 

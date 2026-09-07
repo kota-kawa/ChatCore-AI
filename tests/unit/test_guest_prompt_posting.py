@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from blueprints.prompt_share.prompt_share_api import create_prompt
-from services.guest_prompt_service import GuestPromptLimitExceeded
+from services.guest_prompt_service import GuestPromptLimitExceededError
 from tests.helpers.request_helpers import build_request
 
 
@@ -90,7 +90,7 @@ class GuestPromptPostingTestCase(unittest.TestCase):
         request = make_request(self._payload(), session={})
         with patch(
             "blueprints.prompt_share.prompt_share_api.create_guest_shared_prompt",
-            new=AsyncMock(side_effect=GuestPromptLimitExceeded(123)),
+            new=AsyncMock(side_effect=GuestPromptLimitExceededError(123)),
         ):
             response = asyncio.run(create_prompt(request))
 

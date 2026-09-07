@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # コレクションの一覧・作成・更新・削除
 # Collection list, create, update and delete endpoints
-
 import logging
 
 from fastapi import Request
@@ -10,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from services.api_errors import ApiServiceError
 from services.error_messages import ERROR_LOGIN_REQUIRED
+from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     MemoCollectionCreateRequest,
     MemoCollectionUpdateRequest,
@@ -21,8 +21,6 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-
-from services.repositories.memo_helpers import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr

@@ -127,7 +127,7 @@ jobs:
       - name: Run light lint checks
         run: |
           set -euo pipefail
-          python -m ruff check app.py blueprints services tests --select E9,F63,F7,F82
+          python -m ruff check app.py blueprints services scripts tests --select E9,F63,F7,F82
 
   lint_full:
     name: Ruff Lint (Full)
@@ -154,12 +154,47 @@ jobs:
       - name: Run full lint checks
         run: |
           set -euo pipefail
-          python -m ruff check app.py blueprints services tests
+          python -m ruff check app.py blueprints services scripts tests
 
       - name: Verify migration expand/contract safety
         run: |
           set -euo pipefail
           python scripts/check_migration_safety.py --baseline 20260824_03
+
+      - name: Verify environment variable documentation
+        run: |
+          set -euo pipefail
+          python scripts/check_env_documentation.py
+
+  typecheck_backend:
+    name: Backend Type Check (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
+            requirements-dev.txt
+
+      - name: Install type-check dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements.txt -c requirements.lock
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run mypy on the enforced typing surface
+        run: |
+          set -euo pipefail
+          python -m mypy
 
   dead_code:
     name: Dead Code Check (Vulture)
@@ -377,7 +412,7 @@ jobs:
       - name: Show coverage report
         run: |
           set -euo pipefail
-          python -m coverage report -m --omit="tests/*"
+          python -m coverage report -m --omit="tests/*" --fail-under=70
 
       - name: Export coverage XML
         run: |
@@ -412,6 +447,10 @@ jobs:
       - name: Verify frontend import resolution
         working-directory: frontend
         run: npm run check:imports
+
+      - name: Run frontend lint
+        working-directory: frontend
+        run: npm run lint
 
       - name: Run frontend typecheck
         working-directory: frontend
@@ -468,7 +507,7 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [version_lock_check, dependency_audit, lint, lint_full, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+    needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # The first PostgreSQL 15 -> 18 logical dump/restore can legitimately take
     # longer than an ordinary blue/green application deployment.

@@ -262,9 +262,10 @@ def register_memo_tools(mcp: FastMCP) -> None:
             payload = McpMemoCreateRequest(title=title, content=content)
             result = _mutation_result(await create_memo(actor.user_id, payload))
             audit_tool_success(actor, "create_memo", result.memo_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 競合検出を行いながら非公開メモを更新するMCPツール説明。
     @mcp.tool(
@@ -302,9 +303,10 @@ def register_memo_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(await update_memo(actor.user_id, memo_id, payload))
             audit_tool_success(actor, "update_memo", memo_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result
 
     # 日本語: 競合検出を行いながらメモ本文末尾へ追記するMCPツール説明。
     @mcp.tool(
@@ -343,6 +345,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
             )
             result = _mutation_result(await append_memo(actor.user_id, memo_id, payload))
             audit_tool_success(actor, "append_memo_content", memo_id)
-            return result
         except Exception as exc:
             raise _tool_error(exc) from exc
+        else:
+            return result

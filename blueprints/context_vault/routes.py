@@ -6,7 +6,6 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import Response
 
-from services.repositories.memo_helpers import user_id_from_session
 from services.api_errors import ApiServiceError
 from services.context_vault_candidate_service import (
     DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
@@ -17,16 +16,16 @@ from services.context_vault_candidate_service import (
     reject_candidate,
     update_extraction_settings,
 )
+from services.context_vault_portability import (
+    build_export,
+    confirm_import,
+    preview_import,
+)
 from services.context_vault_service import (
     MAX_CONTEXT_LIST_LIMIT,
     create_fact,
     list_facts,
     update_fact,
-)
-from services.context_vault_portability import (
-    build_export,
-    confirm_import,
-    preview_import,
 )
 from services.csrf import require_csrf
 from services.error_messages import (
@@ -40,6 +39,7 @@ from services.error_messages import (
     ERROR_CONTEXT_VAULT_PORTABILITY_FAILED,
     ERROR_LOGIN_REQUIRED,
 )
+from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
     ContextFactCandidateApproveRequest,

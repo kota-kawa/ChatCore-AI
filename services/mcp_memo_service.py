@@ -9,6 +9,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api_errors import ApiServiceError
+from services.db import session_scope
+from services.embeddings import embeddings_available, generate_embedding
 from services.memo_embedding_service import schedule_embedding
 from services.repositories.memo_helpers import ensure_title
 from services.repositories.memo_repository import (
@@ -16,11 +19,10 @@ from services.repositories.memo_repository import (
     fetch_memo_detail,
     fetch_memo_summaries,
     insert_memo,
+)
+from services.repositories.memo_repository import (
     update_memo as update_memo_record,
 )
-from services.api_errors import ApiServiceError
-from services.db import session_scope
-from services.embeddings import embeddings_available, generate_embedding
 from services.request_models import (
     MAX_MEMO_STORED_CONTENT_LENGTH,
     McpMemoAppendRequest,
@@ -266,9 +268,8 @@ async def create_memo(
 
     if session is not None:
         return await operation(session)
-    async with session_scope() as db:
-        async with db.begin():
-            memo = await operation(db)
+    async with session_scope() as db, db.begin():
+        memo = await operation(db)
     schedule_embedding(
         memo.id,
         title,
@@ -311,9 +312,8 @@ async def append_memo(
 
     if session is not None:
         return await operation(session)
-    async with session_scope() as db:
-        async with db.begin():
-            memo = await operation(db)
+    async with session_scope() as db, db.begin():
+        memo = await operation(db)
     schedule_embedding(
         memo.id,
         memo.title,

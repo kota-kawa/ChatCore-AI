@@ -38,7 +38,6 @@ from services.models import (
 from services.prompt_types import normalize_content_format, normalize_media_type
 from services.search_terms import build_like_pattern, split_search_terms
 
-
 SNIPPET_SOURCE_MAX_LENGTH = 1000
 
 

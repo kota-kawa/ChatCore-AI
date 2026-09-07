@@ -120,6 +120,11 @@ export function isVisibleElement(element: Element | null) {
  */
 export function isSafeInternalPath(path: string | undefined): path is string {
   if (!path || !path.startsWith("/") || path.startsWith("//")) return false;
+  // 日本語: 制御文字はヘッダー分割やURL偽装に悪用されるため、ここでは意図的に制御文字クラスで拒否する。
+  //         no-control-regex は「うっかり埋め込み」を検出するルールなので、この検査だけ無効化する。
+  // English: Control characters are rejected on purpose because they enable header splitting and URL spoofing.
+  //          no-control-regex targets accidental embedding, so it is disabled for this deliberate check only.
+  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f]/.test(path)) return false;
   return !/^\/[a-z][a-z0-9+.-]*:/i.test(path);
 }
@@ -372,7 +377,7 @@ export async function* readSseStream(response: Response): AsyncGenerator<AiAgent
  * Build an error object from an AI agent HTTP error response
  */
 export async function buildAiAgentHttpError(response: Response): Promise<Error> {
-  let payload: ErrorPayload | null = null;
+  let payload: ErrorPayload | null;
   try {
     payload = await response.clone().json() as ErrorPayload;
   } catch {

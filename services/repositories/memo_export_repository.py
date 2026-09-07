@@ -20,9 +20,8 @@ async def _in_transaction(
 ) -> T:
     if session is not None:
         return await operation(session)
-    async with session_scope() as owned_session:
-        async with owned_session.begin():
-            return await operation(owned_session)
+    async with session_scope() as owned_session, owned_session.begin():
+        return await operation(owned_session)
 
 
 async def fetch_memos_for_export(

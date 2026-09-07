@@ -165,7 +165,7 @@ export async function readSelectedChatAttachments(
       const attachment = await readChatAttachmentFile(file);
       selected.push(attachment);
       names.add(file.name);
-    } catch (error) {
+    } catch {
       notifyError(`「${file.name}」を読み取れませんでした。`);
     }
   }

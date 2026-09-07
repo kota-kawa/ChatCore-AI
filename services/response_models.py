@@ -237,7 +237,7 @@ class ContextVaultPortableFact(BaseModel):
     importance: int = Field(ge=0, le=100)
 
     @model_validator(mode="after")
-    def _require_non_blank_text(self) -> "ContextVaultPortableFact":
+    def _require_non_blank_text(self) -> ContextVaultPortableFact:
         if not self.title.strip() or not self.content.strip():
             raise ValueError("Portable context title and content must not be blank.")
         if "\x00" in self.title or "\x00" in self.content:

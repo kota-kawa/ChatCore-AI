@@ -24,7 +24,7 @@ class _Scope:
         return self
 
 
-class _PostgresUniqueViolation(Exception):
+class _PostgresUniqueViolationError(Exception):
     sqlstate = "23505"
 
 
@@ -61,7 +61,7 @@ class MemoShareTokenTestCase(unittest.IsolatedAsyncioTestCase):
         session.execute.assert_not_awaited()
 
     async def test_unique_token_collision_retries_with_a_new_async_session(self):
-        duplicate = IntegrityError("insert", {}, _PostgresUniqueViolation())
+        duplicate = IntegrityError("insert", {}, _PostgresUniqueViolationError())
         with patch(
             "services.memo_share._create_once",
             new=AsyncMock(
