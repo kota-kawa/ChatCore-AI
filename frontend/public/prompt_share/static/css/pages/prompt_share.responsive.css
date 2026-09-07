@@ -94,7 +94,6 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .categories,
-  :where(body.prompt-share-page, .prompt-share-page) .category-guides,
   :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
     border-radius: 14px;
     padding: 1.1rem 0.8rem;
@@ -102,6 +101,16 @@
 
   :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
     gap: 0.88rem;
+  }
+
+  /* 見出しが折り返す幅では、ガイドリンクを右端ではなく見出しの下に左揃えで置く */
+  /* Once the heading wraps, the guide link sits left-aligned under it instead of far right */
+  :where(body.prompt-share-page, .prompt-share-page) a.prompts-list-guide-link {
+    margin-left: 0;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .category-guide-list {
+    gap: 0.3rem 0.9rem;
   }
 
   /* 端末幅に合わせて列数を増やし、狭いタブレット幅で余白が広がりすぎないようにする */

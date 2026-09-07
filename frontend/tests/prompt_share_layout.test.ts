@@ -140,6 +140,94 @@ test("prompt share layout places load more after the final prompt card", () => {
   assert.match(html, /さらに読み込む/);
 });
 
+// カテゴリ別ガイドの導線に関するテストは、必要なpropsだけを差し替えて組み立てる
+// Tests for the category guide links build props from a base set with only the fields they vary
+function createLayoutProps(
+  overrides: Partial<React.ComponentProps<typeof PromptSharePageLayout>> = {}
+): React.ComponentProps<typeof PromptSharePageLayout> {
+  return {
+    authUiReady: true,
+    currentUserId: null,
+    isLoggedIn: false,
+    searchInput: "",
+    onSearchInputChange: noop,
+    onSearchInputKeyDown: noop,
+    onSearch: noop,
+    onOpenComposerModal: noop,
+    categories: [
+      { value: "all", label: "すべて", iconClass: "bi bi-grid" },
+      { value: "writing", label: "文章作成", iconClass: "bi bi-pencil" },
+      { value: "research", label: "調査", iconClass: "bi bi-search" }
+    ],
+    selectedCategory: "all",
+    onCategoryClick: noop,
+    contentFormatFilters: [],
+    selectedContentFormatFilter: "all",
+    onContentFormatFilterClick: noop,
+    mediaTypeFilters: [],
+    selectedMediaTypeFilter: "all",
+    onMediaTypeFilterClick: noop,
+    selectedCategoryTitle: "全てのプロンプト",
+    promptCountMeta: "公開プロンプト: 0件を表示",
+    hasMoreResults: false,
+    isLoadingMoreResults: false,
+    onLoadMoreResults: noop,
+    isPromptsLoading: false,
+    hasPromptFeedback: false,
+    visiblePrompts: [],
+    feedbackToShow: null,
+    openDropdownPromptId: null,
+    likePendingIds: new Set<string>(),
+    actionEffectIds: new Set<string>(),
+    addAsTaskPendingIds: new Set<string>(),
+    memoSavePendingIds: new Set<string>(),
+    onOpenDetail: noop,
+    onOpenComments: noop,
+    onOpenShare: noop,
+    onToggleDropdown: noop,
+    onCloseDropdown: noop,
+    onAddAsTask: noop,
+    onSaveAsMemo: noop,
+    onToggleLike: noop,
+    onOpenAuthorProfile: noop,
+    onEditPrompt: noop,
+    ...overrides
+  };
+}
+
+// ガイドリンクはカテゴリフィルターと重複して見えないよう、一覧より後ろに置く
+// The guide links sit after the feed so they do not read as a second set of category filters
+test("prompt share layout keeps the category guide nav after the prompt feed", () => {
+  const html = renderToStaticMarkup(React.createElement(PromptSharePageLayout, createLayoutProps()));
+
+  assert.ok(html.indexOf("prompt-feed-section") < html.indexOf("category-guides"));
+  assert.ok(html.indexOf("category-list") < html.indexOf("category-guides"));
+  assert.match(html, /href="\/prompt_share\/category\/writing"/);
+  assert.match(html, /href="\/prompt_share\/category\/research"/);
+  // 「すべて」にはガイドページが無いのでリンクしない
+  // "All" has no guide page, so it must not be linked
+  assert.ok(!html.includes('href="/prompt_share/category/all"'));
+});
+
+// 絞り込み中のカテゴリのガイドへは、一覧見出しの横から1本だけ導線を出す
+// Only one link to the active category's guide is offered, next to the feed heading
+test("prompt share layout links the active category guide from the feed heading", () => {
+  const withoutCategory = renderToStaticMarkup(
+    React.createElement(PromptSharePageLayout, createLayoutProps())
+  );
+  assert.ok(!withoutCategory.includes("prompts-list-guide-link"));
+
+  const withCategory = renderToStaticMarkup(
+    React.createElement(PromptSharePageLayout, createLayoutProps({
+      selectedCategory: "writing",
+      selectedCategoryTitle: "文章作成のプロンプト"
+    }))
+  );
+  assert.match(withCategory, /prompts-list-guide-link/);
+  assert.match(withCategory, /文章作成のガイドを見る/);
+  assert.equal(withCategory.match(/prompts-list-guide-link/g)?.length, 1);
+});
+
 test("prompt share detail modal highlights prompt content and metadata", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptShareDetailModal, {

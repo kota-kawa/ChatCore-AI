@@ -65,6 +65,12 @@ type PromptSharePageLayoutProps = {
   children?: ReactNode;
 };
 
+// カテゴリ別ガイドページのパス。一覧見出しの横と末尾のガイドナビで同じ形を使う
+// Path of a category guide page, shared by the feed heading link and the guide nav at the end
+function getCategoryGuideHref(categoryValue: string) {
+  return `/prompt_share/category/${encodeURIComponent(categoryValue)}`;
+}
+
 function PromptCardSkeletonGrid() {
   const { t } = useTranslation();
   return (
@@ -157,6 +163,12 @@ export function PromptSharePageLayout({
     : getPromptMediaLabel(value, locale);
   const firstImageIndex = visiblePrompts.findIndex(
     (candidate) => Boolean(candidate.reference_image_url)
+  );
+  // ガイドを持つカテゴリ（「すべて」以外）だけを、末尾のガイドナビと見出し横リンクの対象にする
+  // Only categories with a guide page (everything but "all") feed the guide nav and heading link
+  const guideCategories = categories.filter((category) => category.value !== "all");
+  const selectedGuideCategory = guideCategories.find(
+    (category) => category.value === selectedCategory
   );
   return (
     <div className="prompt-share-page cc-page-rise">
@@ -274,30 +286,6 @@ export function PromptSharePageLayout({
           </ul>
         </section>
 
-        {/* カテゴリ別の公開ガイドへの通常リンク。検索エンジンが各ページを辿れるようにする */}
-        {/* Crawlable links to public category guides so search engines can discover every page */}
-        <section className="category-guides" aria-labelledby="category-guides-title">
-          <div className="section-header section-header--compact">
-            <h2 id="category-guides-title">{t("promptShare.categoryGuides")}</h2>
-            <p className="section-description">{t("promptShare.categoryGuidesDescription")}</p>
-          </div>
-          <ul className="category-guide-list">
-            {categories.filter((category) => category.value !== "all").map((category) => (
-              <li key={category.value}>
-                <Link
-                  href={`/prompt_share/category/${encodeURIComponent(category.value)}`}
-                  locale={locale}
-                  className="category-guide-link"
-                >
-                  <i className={category.iconClass} aria-hidden="true"></i>
-                  <span>{getCategoryLabel(category)}</span>
-                  <span className="category-guide-link__action">{t("promptShare.browseCategory")}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         {/* カテゴリフィルターと2軸フィルターを並べたサイドバー的セクション */}
         {/* Category and two-axis filter controls for narrowing down the prompt list */}
         <section className="categories" aria-labelledby="categories-title">
@@ -377,6 +365,18 @@ export function PromptSharePageLayout({
         <section id="prompt-feed-section" data-agent-id="prompt.results" className="prompts-list" aria-labelledby="selected-category-title">
           <div className="section-header prompts-list-header section-header--compact">
             <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
+            {/* カテゴリで絞り込んだときだけ、そのカテゴリのガイドへの導線を1本だけ出す */}
+            {/* Surface a single link to the matching guide only while a category filter is active */}
+            {selectedGuideCategory ? (
+              <Link
+                href={getCategoryGuideHref(selectedGuideCategory.value)}
+                locale={locale}
+                className="prompts-list-guide-link"
+              >
+                {t("promptShare.browseCategoryGuide", { category: getCategoryLabel(selectedGuideCategory) })}
+                <i className="bi bi-arrow-right" aria-hidden="true"></i>
+              </Link>
+            ) : null}
           </div>
 
           <div className="prompt-toolbar">
@@ -463,6 +463,29 @@ export function PromptSharePageLayout({
             </div>
           ) : null}
         </section>
+
+        {/* カテゴリ別ガイドへの網羅リンク。検索エンジンが各ページを辿れるようにしつつ、
+            上のカテゴリフィルターと見た目で競合しないよう本文の下にテキストリンクだけを置く */}
+        {/* Complete set of crawlable links to the category guides; kept below the feed as plain
+            text links so they never compete visually with the category filters above */}
+        <nav className="category-guides" aria-labelledby="category-guides-title">
+          <h2 id="category-guides-title" className="category-guides__title">
+            {t("promptShare.categoryGuides")}
+          </h2>
+          <ul className="category-guide-list">
+            {guideCategories.map((category) => (
+              <li key={category.value}>
+                <Link
+                  href={getCategoryGuideHref(category.value)}
+                  locale={locale}
+                  className="category-guide-link"
+                >
+                  {getCategoryLabel(category)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </main>
 
       {/* モーダルなど子コンポーネントをページ末尾に差し込む */}
