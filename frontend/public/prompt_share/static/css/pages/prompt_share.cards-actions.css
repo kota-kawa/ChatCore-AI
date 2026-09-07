@@ -322,6 +322,18 @@
   overflow-wrap: anywhere;
 }
 
+/* タイトルは個別ページへの実リンクだが、カード内では見出しの見た目を保つ */
+/* The title is a real link to the detail page, but keeps the heading look inside the card */
+.prompt-share-page .prompt-card > h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.prompt-share-page .prompt-card > h3 a:hover,
+.prompt-share-page .prompt-card > h3 a:focus-visible {
+  text-decoration: underline;
+}
+
 .prompt-share-page .prompt-card__content {
   margin: 0;
   position: relative;
