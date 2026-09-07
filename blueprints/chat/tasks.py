@@ -6,30 +6,39 @@ from typing import Any
 from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
-from services.repositories.memo_helpers import parse_memo_text
-from services.repositories.memo_repository import fetch_memo_detail
+from services.agent_capabilities import build_capability_context
+from services.api_errors import (
+    DEFAULT_RETRY_AFTER_SECONDS,
+    ApiServiceError,
+    ResourceNotFoundError,
+    parse_retry_after_seconds,
+)
+from services.async_utils import run_blocking
 from services.auth_limits import (
     AuthLimitService,
     consume_rate_limit,
     get_auth_limit_service,
     get_request_client_ip,
 )
-from services.api_errors import (
-    ApiServiceError,
-    DEFAULT_RETRY_AFTER_SECONDS,
-    ResourceNotFoundError,
-    parse_retry_after_seconds,
-)
-from services.async_utils import run_blocking
-from services.agent_capabilities import build_capability_context
 from services.chat_service import (
     add_task as add_task_record,
+)
+from services.chat_service import (
     delete_task as delete_task_record,
+)
+from services.chat_service import (
     edit_task as edit_task_record,
+)
+from services.chat_service import (
     fetch_tasks,
+)
+from services.chat_service import (
     update_tasks_order as update_tasks_order_record,
 )
+from services.code_search import search_codebase
 from services.default_tasks import default_task_payloads
+from services.i18n import build_response_language_policy, get_request_locale
+from services.intent_classifier import classify_intent
 from services.llm import (
     GPT_OSS_120B_MODEL,
     LlmAuthenticationError,
@@ -43,13 +52,10 @@ from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_ai_agent_monthly_quota,
     consume_llm_daily_quota,
+    get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
     get_seconds_until_monthly_reset,
-    get_llm_daily_limit_service,
 )
-from services.code_search import search_codebase
-from services.intent_classifier import classify_intent
-from services.i18n import build_response_language_policy, get_request_locale
 from services.manual_rag import search_manual
 from services.memo_agent_actions import (
     build_memo_edit_messages,
@@ -59,6 +65,8 @@ from services.memo_agent_actions import (
 from services.page_actions import build_action_messages, parse_action_response
 from services.page_context import get_page_context
 from services.prompt_assist import create_prompt_assist_payload
+from services.repositories.memo_helpers import parse_memo_text
+from services.repositories.memo_repository import fetch_memo_detail
 from services.request_models import (
     AddTaskRequest,
     AiAgentRequest,
@@ -70,8 +78,8 @@ from services.request_models import (
 from services.web import (
     jsonify,
     jsonify_rate_limited,
-    log_and_internal_server_error,
     jsonify_service_error,
+    log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
 )
@@ -188,7 +196,7 @@ def _consume_prompt_assist_limits(
     Verifies and consumes rate limits for the prompt assist API per IP and user.
     """
     client_ip = get_request_client_ip(request)
-    
+
     # IPアドレスレベルでのレート制限チェック
     # Check rate limit on IP address level
     allowed, _, retry_after = consume_rate_limit(
@@ -240,7 +248,7 @@ def _consume_ai_agent_limits(
     Verifies and consumes rate limits for the AI agent API per IP and actor.
     """
     client_ip = get_request_client_ip(request)
-    
+
     # IPレベルでのレート制限チェック
     # Check rate limit on IP level
     allowed, _, retry_after = consume_rate_limit(
@@ -287,7 +295,7 @@ def _ai_agent_sse(event: str, payload: dict[str, Any]) -> bytes:
     Formats event type and payload dict into SSE byte payload.
     """
     body = json.dumps(payload, ensure_ascii=False)
-    return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {body}\n\n".encode()
 
 
 # AIエージェントに送信するメッセージ履歴リストを組み立てる関数
@@ -304,7 +312,7 @@ def _build_ai_agent_messages(
     # 履歴を直近12件に制限
     # Limit recent context to last 12 messages
     recent_messages = payload.messages[-12:]
-    
+
     # ページ情報に応じた能力・権限のコンテキストを付与
     # Append capability context based on current page path
     language_instruction = build_response_language_policy(locale)
@@ -322,7 +330,7 @@ def _build_ai_agent_messages(
             f"{rag_context}\n"
             "===== END OF REFERENCE MATERIAL ====="
         )
-    
+
     # LLM用のメッセージリストを作成
     # Construct message objects list for LLM API call
     conversation_messages = [{"role": "system", "content": system_content}]
@@ -348,7 +356,7 @@ async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str
     memo = await fetch_memo_detail(user_id, memo_id)
     title = (memo.get("title") or "Saved memo").strip()
     memo_text = parse_memo_text(memo.get("ai_response") or "").strip()
-    
+
     # メモが上限サイズを超えている場合は切り捨て
     # Truncate content if it exceeds character limits
     if len(memo_text) > AI_AGENT_MEMO_CONTEXT_MAX_LENGTH:
@@ -533,7 +541,7 @@ async def update_tasks_order(request: Request):
     user_id = request.session.get("user_id")
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
-        
+
     # スキーマバリデーション
     # Validate order parameters
     payload, validation_error = validate_payload_model(
@@ -578,7 +586,7 @@ async def delete_task(request: Request):
     user_id = request.session.get("user_id")
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
-        
+
     # スキーマバリデーション
     # Validate delete parameter payload
     payload, validation_error = validate_payload_model(
@@ -728,7 +736,7 @@ async def prompt_assist(
         request,
         llm_daily_limit_service,
     )
-    
+
     # JSONリクエストの取得
     # Extract request payload
     data, error_response = await require_json_dict(request)
@@ -853,7 +861,7 @@ async def ai_agent(
         request,
         llm_daily_limit_service,
     )
-    
+
     # リクエストデータ取得
     # Extract request payload
     data, error_response = await require_json_dict(request)
@@ -873,7 +881,7 @@ async def ai_agent(
     user_id = request.session.get("user_id")
     locale = get_request_locale(request)
     actor_key = f"user:{user_id}" if user_id else f"guest:{get_session_id(request.session)}"
-    
+
     # 呼び出し頻度（レート制限）のチェック
     # Check IP and Actor rate limits
     can_access, limit_message = await run_blocking(
@@ -959,7 +967,7 @@ async def ai_agent(
                 return
 
             yield _ai_agent_sse("progress", {"message": "依頼内容を確認中..."})
-            
+
             # 意図分類器を用いて「アクション実行」「ページ説明」「マニュアル検索」などを判別
             # Classify intention (action execution, help, manual search, etc.)
             intent = await run_blocking(classify_intent, last_user_message, current_page)

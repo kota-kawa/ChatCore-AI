@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 from services import mcp_server
 from services.response_models import ContextDigestResponse, ContextFactResponse
 
-
 MCP_ENVIRONMENT = {
     "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
     "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",

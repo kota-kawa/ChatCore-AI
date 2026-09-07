@@ -10,7 +10,7 @@ import secrets
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import Any
 from urllib.parse import urlparse
@@ -32,6 +32,8 @@ from mcp.server.auth.provider import (
 )
 from mcp.shared.auth import (
     InvalidRedirectUriError as McpInvalidRedirectUriError,
+)
+from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthToken,
 )
@@ -45,11 +47,11 @@ from services.mcp_config import (
     get_mcp_public_base_url,
     get_mcp_server_url,
 )
-from services.runtime_config import get_session_secret_key
-from services.url_fetcher import _pin_dns, _resolve_safe_ip
 from services.repositories.mcp_oauth_repository import (
     McpOAuthRepository,
 )
+from services.runtime_config import get_session_secret_key
+from services.url_fetcher import _pin_dns, _resolve_safe_ip
 
 MCP_PROMPTS_READ_SCOPE = "prompts:read"
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
@@ -175,7 +177,7 @@ class StoredRefreshToken(RefreshToken):
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _digest(value: str) -> str:
@@ -290,7 +292,7 @@ def _validate_redirect_uri(redirect_uri: str) -> None:
         or not parsed.netloc
         or parsed.username is not None
         or parsed.password is not None
-        or port is not None and not 1 <= port <= 65535
+        or (port is not None and not 1 <= port <= 65535)
     ):
         raise RegistrationError("invalid_redirect_uri", "Redirect URI is invalid.")
     if parsed.scheme != "https" and not (parsed.scheme == "http" and is_loopback):
@@ -457,15 +459,14 @@ async def _store_client(client: OAuthClientInformationFull) -> None:
     encrypted = None
     if client.client_secret:
         encrypted = _fernet().encrypt(client.client_secret.encode("utf-8")).decode("ascii")
-    async with session_scope() as session:
-        async with session.begin():
-            await _oauth_repository.store_client(
-                session,
-                client_id=str(client.client_id),
-                metadata=_serialize_client(client),
-                encrypted_secret=encrypted,
-                registration_method="dcr",
-            )
+    async with session_scope() as session, session.begin():
+        await _oauth_repository.store_client(
+            session,
+            client_id=str(client.client_id),
+            metadata=_serialize_client(client),
+            encrypted_secret=encrypted,
+            registration_method="dcr",
+        )
 
 
 async def _user_client_is_authorized_for_user(client_id: str, user_id: int) -> bool:
@@ -540,25 +541,24 @@ async def issue_user_client(
         else None
     )
 
-    async with session_scope() as session:
-        async with session.begin():
-            locked_user = await _oauth_repository.lock_user(session, user_id)
-            if locked_user is None or not bool(locked_user.is_verified):
-                raise ValueError("Only verified users can issue connector credentials.")
-            active = await _oauth_repository.count_active_user_clients(session, user_id)
-            if active >= MAX_CLIENTS_PER_USER:
-                raise ClientLimitReachedError(
-                    f"You can keep at most {MAX_CLIENTS_PER_USER} credentials."
-                )
-            await _oauth_repository.insert_personal_client(
-                session,
-                client_id=client_id,
-                metadata=_serialize_client(client),
-                encrypted_secret=encrypted_secret,
-                user_id=user_id,
-                provider=MANUAL_CLIENT_PROVIDER,
-                label=cleaned_label,
+    async with session_scope() as session, session.begin():
+        locked_user = await _oauth_repository.lock_user(session, user_id)
+        if locked_user is None or not bool(locked_user.is_verified):
+            raise ValueError("Only verified users can issue connector credentials.")
+        active = await _oauth_repository.count_active_user_clients(session, user_id)
+        if active >= MAX_CLIENTS_PER_USER:
+            raise ClientLimitReachedError(
+                f"You can keep at most {MAX_CLIENTS_PER_USER} credentials."
             )
+        await _oauth_repository.insert_personal_client(
+            session,
+            client_id=client_id,
+            metadata=_serialize_client(client),
+            encrypted_secret=encrypted_secret,
+            user_id=user_id,
+            provider=MANUAL_CLIENT_PROVIDER,
+            label=cleaned_label,
+        )
 
     return {
         "client_id": client_id,
@@ -602,11 +602,10 @@ async def list_user_clients(user_id: int) -> dict[str, Any]:
 async def update_user_client_label(user_id: int, client_id: str, label: str) -> bool:
     """Update a personal credential's display label without rotating its secret."""
     cleaned_label = _clean_user_label(label)
-    async with session_scope() as session:
-        async with session.begin():
-            return await _oauth_repository.update_user_client_label(
-                session, user_id, client_id, cleaned_label
-            )
+    async with session_scope() as session, session.begin():
+        return await _oauth_repository.update_user_client_label(
+            session, user_id, client_id, cleaned_label
+        )
 
 
 async def revoke_user_client(user_id: int, client_id: str) -> bool:
@@ -618,9 +617,8 @@ async def revoke_user_client(user_id: int, client_id: str) -> bool:
     Revoking a credential also revokes the grants and tokens created with it, so
     the external connection stops working immediately.
     """
-    async with session_scope() as session:
-        async with session.begin():
-            return await _oauth_repository.revoke_user_client(session, user_id, client_id)
+    async with session_scope() as session, session.begin():
+        return await _oauth_repository.revoke_user_client(session, user_id, client_id)
 
 
 async def _create_authorization_code(user_id: int, request_data: dict[str, Any]) -> str:
@@ -630,23 +628,22 @@ async def _create_authorization_code(user_id: int, request_data: dict[str, Any])
     grant_id = uuid4()
     now = _utc_now()
     client_host = _display_client_host(client, params["redirect_uri"])
-    async with session_scope() as session:
-        async with session.begin():
-            await _oauth_repository.create_grant_and_code(
-                session,
-                grant_id=grant_id,
-                user_id=user_id,
-                client_id=str(client.client_id),
-                client_name=client.client_name or str(client.client_id),
-                client_host=client_host,
-                scopes=params["scopes"],
-                scope_version=MCP_OAUTH_SCOPE_VERSION,
-                code_digest=_digest(raw_code),
-                redirect_uri=params["redirect_uri"],
-                code_challenge=params["code_challenge"],
-                resource=params["resource"],
-                expires_at=now + timedelta(seconds=AUTHORIZATION_CODE_TTL_SECONDS),
-            )
+    async with session_scope() as session, session.begin():
+        await _oauth_repository.create_grant_and_code(
+            session,
+            grant_id=grant_id,
+            user_id=user_id,
+            client_id=str(client.client_id),
+            client_name=client.client_name or str(client.client_id),
+            client_host=client_host,
+            scopes=params["scopes"],
+            scope_version=MCP_OAUTH_SCOPE_VERSION,
+            code_digest=_digest(raw_code),
+            redirect_uri=params["redirect_uri"],
+            code_challenge=params["code_challenge"],
+            resource=params["resource"],
+            expires_at=now + timedelta(seconds=AUTHORIZATION_CODE_TTL_SECONDS),
+        )
     return raw_code
 
 
@@ -659,19 +656,18 @@ async def _issue_tokens(grant_id: UUID, client_id: str, scopes: list[str], resou
     access_token = secrets.token_urlsafe(32)
     refresh_token = secrets.token_urlsafe(32)
     now = _utc_now()
-    async with session_scope() as session:
-        async with session.begin():
-            await _oauth_repository.insert_tokens(
-                session,
-                grant_id=grant_id,
-                client_id=client_id,
-                scopes=scopes,
-                resource=resource,
-                access_token_digest=_digest(access_token),
-                access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
-                refresh_token_digest=_digest(refresh_token),
-                refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-            )
+    async with session_scope() as session, session.begin():
+        await _oauth_repository.insert_tokens(
+            session,
+            grant_id=grant_id,
+            client_id=client_id,
+            scopes=scopes,
+            resource=resource,
+            access_token_digest=_digest(access_token),
+            access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
+            refresh_token_digest=_digest(refresh_token),
+            refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+        )
     return OAuthToken(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -696,53 +692,51 @@ async def _revoke_if_legacy_scope_grant(
 
 
 async def _load_code(client_id: str, raw_code: str) -> StoredAuthorizationCode | None:
-    async with session_scope() as session:
-        async with session.begin():
-            record = await _oauth_repository.load_authorization_code(
-                session, client_id, _digest(raw_code)
-            )
-            if record is None:
-                return None
-            if await _revoke_if_legacy_scope_grant(
-                session, record.code.grant_id, record.scope_version
-            ):
-                return None
-            return StoredAuthorizationCode(
-                code=raw_code,
-                client_id=client_id,
-                scopes=list(record.code.scopes),
-                expires_at=record.code.expires_at.timestamp(),
-                redirect_uri=record.code.redirect_uri,
-                redirect_uri_provided_explicitly=True,
-                code_challenge=record.code.code_challenge,
-                resource=record.code.resource,
-                subject=str(record.user_id),
-                grant_id=record.code.grant_id,
-            )
+    async with session_scope() as session, session.begin():
+        record = await _oauth_repository.load_authorization_code(
+            session, client_id, _digest(raw_code)
+        )
+        if record is None:
+            return None
+        if await _revoke_if_legacy_scope_grant(
+            session, record.code.grant_id, record.scope_version
+        ):
+            return None
+        return StoredAuthorizationCode(
+            code=raw_code,
+            client_id=client_id,
+            scopes=list(record.code.scopes),
+            expires_at=record.code.expires_at.timestamp(),
+            redirect_uri=record.code.redirect_uri,
+            redirect_uri_provided_explicitly=True,
+            code_challenge=record.code.code_challenge,
+            resource=record.code.resource,
+            subject=str(record.user_id),
+            grant_id=record.code.grant_id,
+        )
 
 
 async def _consume_code_and_issue(code: StoredAuthorizationCode) -> OAuthToken:
     access_token = secrets.token_urlsafe(32)
     refresh_token = secrets.token_urlsafe(32)
     now = _utc_now()
-    async with session_scope() as session:
-        async with session.begin():
-            consumed = await _oauth_repository.consume_authorization_code(
-                session, _digest(code.code)
-            )
-            if not consumed:
-                raise TokenError("invalid_grant", "Authorization code was already used.")
-            await _oauth_repository.insert_tokens(
-                session,
-                grant_id=code.grant_id,
-                client_id=code.client_id,
-                scopes=code.scopes,
-                resource=code.resource or get_mcp_server_url(),
-                access_token_digest=_digest(access_token),
-                access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
-                refresh_token_digest=_digest(refresh_token),
-                refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-            )
+    async with session_scope() as session, session.begin():
+        consumed = await _oauth_repository.consume_authorization_code(
+            session, _digest(code.code)
+        )
+        if not consumed:
+            raise TokenError("invalid_grant", "Authorization code was already used.")
+        await _oauth_repository.insert_tokens(
+            session,
+            grant_id=code.grant_id,
+            client_id=code.client_id,
+            scopes=code.scopes,
+            resource=code.resource or get_mcp_server_url(),
+            access_token_digest=_digest(access_token),
+            access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
+            refresh_token_digest=_digest(refresh_token),
+            refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+        )
     return OAuthToken(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -752,32 +746,31 @@ async def _consume_code_and_issue(code: StoredAuthorizationCode) -> OAuthToken:
 
 
 async def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
-    async with session_scope() as session:
-        async with session.begin():
-            record = await _oauth_repository.load_refresh_token(
-                session, client_id, _digest(raw_token)
-            )
-            if record is None:
-                return None
-            if await _revoke_if_legacy_scope_grant(
-                session, record.token.grant_id, record.scope_version
-            ):
-                return None
-            replaced_at = record.token.replaced_at
-            if replaced_at is not None and replaced_at <= _utc_now() - timedelta(
-                seconds=REFRESH_TOKEN_ROTATION_GRACE_SECONDS
-            ):
-                await _revoke_grant_family(session, record.token.grant_id)
-                return None
-            return StoredRefreshToken(
-                token=raw_token,
-                client_id=client_id,
-                scopes=list(record.token.scopes),
-                expires_at=int(record.token.expires_at.timestamp()),
-                subject=str(record.user_id),
-                grant_id=record.token.grant_id,
-                resource=record.token.resource,
-            )
+    async with session_scope() as session, session.begin():
+        record = await _oauth_repository.load_refresh_token(
+            session, client_id, _digest(raw_token)
+        )
+        if record is None:
+            return None
+        if await _revoke_if_legacy_scope_grant(
+            session, record.token.grant_id, record.scope_version
+        ):
+            return None
+        replaced_at = record.token.replaced_at
+        if replaced_at is not None and replaced_at <= _utc_now() - timedelta(
+            seconds=REFRESH_TOKEN_ROTATION_GRACE_SECONDS
+        ):
+            await _revoke_grant_family(session, record.token.grant_id)
+            return None
+        return StoredRefreshToken(
+            token=raw_token,
+            client_id=client_id,
+            scopes=list(record.token.scopes),
+            expires_at=int(record.token.expires_at.timestamp()),
+            subject=str(record.user_id),
+            grant_id=record.token.grant_id,
+            resource=record.token.resource,
+        )
 
 
 async def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
@@ -809,41 +802,40 @@ async def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) 
     new_refresh_token = secrets.token_urlsafe(32)
     access_token = secrets.token_urlsafe(32)
     now = _utc_now()
-    async with session_scope() as session:
-        async with session.begin():
-            record = await _oauth_repository.load_refresh_token(
-                session,
-                refresh.client_id,
-                _digest(refresh.token),
-                for_update=True,
-            )
-            if record is None:
-                raise TokenError("invalid_grant", "Refresh token is no longer valid.")
-            if await _revoke_if_legacy_scope_grant(
-                session, record.token.grant_id, record.scope_version
-            ):
-                raise TokenError("invalid_grant", "Refresh token requires reauthorization.")
-            replaced_at = record.token.replaced_at
-            if replaced_at is not None and replaced_at <= _utc_now() - timedelta(
-                seconds=REFRESH_TOKEN_ROTATION_GRACE_SECONDS
-            ):
-                await _revoke_grant_family(session, record.token.grant_id)
-                raise TokenError("invalid_grant", "Refresh token reuse was detected.")
-            if not await _oauth_repository.mark_refresh_rotated(
-                session, _digest(refresh.token), now
-            ):
-                raise TokenError("invalid_grant", "Refresh token is no longer valid.")
-            await _oauth_repository.insert_tokens(
-                session,
-                grant_id=record.token.grant_id,
-                client_id=refresh.client_id,
-                scopes=requested_scopes,
-                resource=record.token.resource,
-                access_token_digest=_digest(access_token),
-                access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
-                refresh_token_digest=_digest(new_refresh_token),
-                refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-            )
+    async with session_scope() as session, session.begin():
+        record = await _oauth_repository.load_refresh_token(
+            session,
+            refresh.client_id,
+            _digest(refresh.token),
+            for_update=True,
+        )
+        if record is None:
+            raise TokenError("invalid_grant", "Refresh token is no longer valid.")
+        if await _revoke_if_legacy_scope_grant(
+            session, record.token.grant_id, record.scope_version
+        ):
+            raise TokenError("invalid_grant", "Refresh token requires reauthorization.")
+        replaced_at = record.token.replaced_at
+        if replaced_at is not None and replaced_at <= _utc_now() - timedelta(
+            seconds=REFRESH_TOKEN_ROTATION_GRACE_SECONDS
+        ):
+            await _revoke_grant_family(session, record.token.grant_id)
+            raise TokenError("invalid_grant", "Refresh token reuse was detected.")
+        if not await _oauth_repository.mark_refresh_rotated(
+            session, _digest(refresh.token), now
+        ):
+            raise TokenError("invalid_grant", "Refresh token is no longer valid.")
+        await _oauth_repository.insert_tokens(
+            session,
+            grant_id=record.token.grant_id,
+            client_id=refresh.client_id,
+            scopes=requested_scopes,
+            resource=record.token.resource,
+            access_token_digest=_digest(access_token),
+            access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
+            refresh_token_digest=_digest(new_refresh_token),
+            refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+        )
     return OAuthToken(
         access_token=access_token,
         refresh_token=new_refresh_token,
@@ -853,26 +845,25 @@ async def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) 
 
 
 async def _load_access(raw_token: str) -> AccessToken | None:
-    async with session_scope() as session:
-        async with session.begin():
-            record = await _oauth_repository.load_access_token(session, _digest(raw_token))
-            if record is None or record.token.resource != get_mcp_server_url():
-                return None
-            if await _revoke_if_legacy_scope_grant(
-                session, record.grant_id, record.scope_version
-            ):
-                return None
-            await _oauth_repository.touch_access_token(
-                session, _digest(raw_token), record.grant_id
-            )
-            return AccessToken(
-                token=raw_token,
-                client_id=record.token.client_id,
-                scopes=list(record.token.scopes),
-                expires_at=int(record.token.expires_at.timestamp()),
-                resource=record.token.resource,
-                subject=str(record.user_id),
-            )
+    async with session_scope() as session, session.begin():
+        record = await _oauth_repository.load_access_token(session, _digest(raw_token))
+        if record is None or record.token.resource != get_mcp_server_url():
+            return None
+        if await _revoke_if_legacy_scope_grant(
+            session, record.grant_id, record.scope_version
+        ):
+            return None
+        await _oauth_repository.touch_access_token(
+            session, _digest(raw_token), record.grant_id
+        )
+        return AccessToken(
+            token=raw_token,
+            client_id=record.token.client_id,
+            scopes=list(record.token.scopes),
+            expires_at=int(record.token.expires_at.timestamp()),
+            resource=record.token.resource,
+            subject=str(record.user_id),
+        )
 
 
 class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorizationCode, StoredRefreshToken, AccessToken]):
@@ -1030,11 +1021,10 @@ async def revoke_connection(user_id: int, grant_id: str) -> bool:
         parsed_grant_id = UUID(grant_id)
     except (TypeError, ValueError):
         return False
-    async with session_scope() as session:
-        async with session.begin():
-            return await _oauth_repository.revoke_connection(
-                session, user_id, parsed_grant_id
-            )
+    async with session_scope() as session, session.begin():
+        return await _oauth_repository.revoke_connection(
+            session, user_id, parsed_grant_id
+        )
 
 
 async def update_connection_display_name(user_id: int, grant_id: str, display_name: str) -> bool:
@@ -1044,14 +1034,12 @@ async def update_connection_display_name(user_id: int, grant_id: str, display_na
         parsed_grant_id = UUID(grant_id)
     except (TypeError, ValueError):
         return False
-    async with session_scope() as session:
-        async with session.begin():
-            return await _oauth_repository.update_connection_display_name(
-                session, user_id, parsed_grant_id, cleaned_name
-            )
+    async with session_scope() as session, session.begin():
+        return await _oauth_repository.update_connection_display_name(
+            session, user_id, parsed_grant_id, cleaned_name
+        )
 
 
 async def revoke_token_value(raw_token: str) -> None:
-    async with session_scope() as session:
-        async with session.begin():
-            await _oauth_repository.revoke_token_value(session, _digest(raw_token))
+    async with session_scope() as session, session.begin():
+        await _oauth_repository.revoke_token_value(session, _digest(raw_token))

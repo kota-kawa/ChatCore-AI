@@ -1,10 +1,10 @@
 import asyncio
-from io import BytesIO
 import json
 import os
 import tempfile
 import time
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from PIL import Image
@@ -18,8 +18,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from services.error_messages import ERROR_PROMPT_ATTACHMENT_NOT_FOUND
 from services.prompt_attachment_storage import (
     PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV,
-    get_prompt_attachment_upload_root,
     get_prompt_attachment_storage,
+    get_prompt_attachment_upload_root,
     normalize_prompt_attachment_public_url,
     resolve_prompt_attachment_path,
 )

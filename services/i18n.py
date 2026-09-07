@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from fastapi import Request
 
-
 Locale = Literal["ja", "en"]
 SUPPORTED_LOCALES: tuple[Locale, ...] = ("ja", "en")
 DEFAULT_LOCALE: Locale = "ja"

@@ -130,7 +130,7 @@ class EmailRequest(RequestPayloadModel):
     email: NonEmptyStr
 
     @model_validator(mode="after")
-    def _normalize_email(self) -> "EmailRequest":
+    def _normalize_email(self) -> EmailRequest:
         self.email = _validate_email_address(self.email)
         return self
 
@@ -143,7 +143,7 @@ class EmailChangeRequest(RequestPayloadModel):
     new_email: NonEmptyStr
 
     @model_validator(mode="after")
-    def _normalize_new_email(self) -> "EmailChangeRequest":
+    def _normalize_new_email(self) -> EmailChangeRequest:
         self.new_email = _validate_email_address(self.new_email)
         return self
 
@@ -269,7 +269,7 @@ class UpdateTasksOrderRequest(RequestPayloadModel):
     order: list[PositiveInt] = Field(min_length=1, max_length=MAX_TASKS_PER_USER)
 
     @model_validator(mode="after")
-    def validate_unique_task_ids(self) -> "UpdateTasksOrderRequest":
+    def validate_unique_task_ids(self) -> UpdateTasksOrderRequest:
         if len(self.order) != len(set(self.order)):
             raise ValueError("order must not contain duplicate task IDs")
         return self
@@ -369,7 +369,7 @@ class SkillResourceInput(BaseModel):
     media_type: str = Field(default="", max_length=128)
 
     @model_validator(mode="after")
-    def validate_text_resource(self) -> "SkillResourceInput":
+    def validate_text_resource(self) -> SkillResourceInput:
         self.path = validate_resource_path(self.path)
         self.content = validate_resource_content(self.content)
         if self.role not in SKILL_RESOURCE_ROLES:
@@ -462,7 +462,7 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     )
 
     @model_validator(mode="after")
-    def validate_two_axis(self) -> "SharedPromptCreateRequest":
+    def validate_two_axis(self) -> SharedPromptCreateRequest:
         # 日本語: 軸の値を正規化し、フォーマットが宣言する属性のみ採用・検証します。
         # English: Normalize the axes and keep/validate only the attributes the format declares.
         # 日本語: カテゴリはレジストリの許可リストで検証し、正準キーへ正規化します。
@@ -534,7 +534,7 @@ class PromptUpdateRequest(RequestPayloadModel):
     output_examples: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
 
     @model_validator(mode="after")
-    def validate_category(self) -> "PromptUpdateRequest":
+    def validate_category(self) -> PromptUpdateRequest:
         # 日本語: カテゴリをレジストリで検証し、未設定を含む正準キーへ正規化します。
         # English: Validate against the registry and normalize to a canonical key, including unset.
         normalized_category = normalize_category(self.category)
@@ -574,7 +574,7 @@ class MemoCreateRequest(RequestPayloadModel):
     background_color: str | None = Field(default=None, max_length=20, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
     @model_validator(mode="after")
-    def _require_content(self) -> "MemoCreateRequest":
+    def _require_content(self) -> MemoCreateRequest:
         # 日本語: 保存する回答内容が空でないことを確認します。
         # English: Ensure that the response text is not empty before saving.
         if not self.ai_response.strip():
@@ -610,7 +610,7 @@ class McpMemoUpdateRequest(BaseModel):
     allow_shared_content_change: bool = False
 
     @model_validator(mode="after")
-    def _require_update(self) -> "McpMemoUpdateRequest":
+    def _require_update(self) -> McpMemoUpdateRequest:
         if self.title is None and self.content is None:
             raise ValueError("更新するタイトルまたは本文を指定してください。")
         if self.content is not None and not self.content.strip():
@@ -627,7 +627,7 @@ class McpMemoCreateRequest(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)
 
     @model_validator(mode="after")
-    def _require_content(self) -> "McpMemoCreateRequest":
+    def _require_content(self) -> McpMemoCreateRequest:
         if not self.content.strip():
             raise ValueError("メモ本文を空にはできません。")
         return self
@@ -644,7 +644,7 @@ class McpMemoAppendRequest(BaseModel):
     allow_shared_content_change: bool = False
 
     @model_validator(mode="after")
-    def _require_text(self) -> "McpMemoAppendRequest":
+    def _require_text(self) -> McpMemoAppendRequest:
         if not self.text.strip():
             raise ValueError("追記内容を空にはできません。")
         return self
@@ -661,7 +661,7 @@ class ContextFactCreateRequest(RequestPayloadModel):
     importance: int = Field(default=DEFAULT_CONTEXT_FACT_IMPORTANCE, ge=0, le=100)
 
     @model_validator(mode="after")
-    def _require_values(self) -> "ContextFactCreateRequest":
+    def _require_values(self) -> ContextFactCreateRequest:
         if not self.title.strip():
             raise ValueError("タイトルを入力してください。")
         if not self.content.strip():
@@ -681,7 +681,7 @@ class ContextFactUpdateRequest(RequestPayloadModel):
     importance: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
-    def _require_change(self) -> "ContextFactUpdateRequest":
+    def _require_change(self) -> ContextFactUpdateRequest:
         if (
             self.title is None
             and self.content is None
@@ -726,7 +726,7 @@ class ContextFactCandidateApproveRequest(RequestPayloadModel):
     importance: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
-    def _require_non_blank_edits(self) -> "ContextFactCandidateApproveRequest":
+    def _require_non_blank_edits(self) -> ContextFactCandidateApproveRequest:
         if self.title is not None and not self.title.strip():
             raise ValueError("タイトルを空にはできません。")
         if self.content is not None and not self.content.strip():
@@ -762,7 +762,7 @@ class McpContextFactSaveRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _require_values(self) -> "McpContextFactSaveRequest":
+    def _require_values(self) -> McpContextFactSaveRequest:
         if not self.title.strip():
             raise ValueError("タイトルを空にはできません。")
         if not self.content.strip():
@@ -782,7 +782,7 @@ class McpContextFactUpdateRequest(BaseModel):
     importance: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
-    def _require_update(self) -> "McpContextFactUpdateRequest":
+    def _require_update(self) -> McpContextFactUpdateRequest:
         if (
             self.title is None
             and self.content is None

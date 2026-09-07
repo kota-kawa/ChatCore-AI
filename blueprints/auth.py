@@ -57,19 +57,19 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
     ResidentKeyRequirement = None
     UserVerificationRequirement = None
 
-from blueprints.auth_account import (  # noqa: E402
+from blueprints.auth_account import (
     api_current_user,
     api_delete_user_account,
     login,
     logout,
     register_page,
 )
-from blueprints.auth_common import (  # noqa: E402
+from blueprints.auth_common import (
     _append_query_params,
     _build_absolute_url_from_reference,
+    _claim_guest_prompts_after_login,
     _clear_google_oauth_session,
     _clear_google_oauth_state,
-    _claim_guest_prompts_after_login,
     _clear_login_verification_session,
     _copy_default_tasks_after_login,
     _google_callback_redirect_target,
@@ -81,13 +81,13 @@ from blueprints.auth_common import (  # noqa: E402
     _resolve_llm_daily_limit_service,
     _user_id_from_session,
 )
-from blueprints.auth_email import (  # noqa: E402
+from blueprints.auth_email import (
     api_send_email_code,
     api_send_login_code,
     api_verify_email_code,
     api_verify_login_code,
 )
-from blueprints.auth_google import (  # noqa: E402
+from blueprints.auth_google import (
     _build_google_authorization_response,
     _build_google_login_host_redirect,
     _clean_google_field,
@@ -97,7 +97,7 @@ from blueprints.auth_google import (  # noqa: E402
     google_callback,
     google_login,
 )
-from blueprints.auth_passkeys import (  # noqa: E402
+from blueprints.auth_passkeys import (
     api_delete_passkey,
     api_list_passkeys,
     api_passkey_authenticate_options,
@@ -105,13 +105,13 @@ from blueprints.auth_passkeys import (  # noqa: E402
     api_passkey_register_options,
     api_passkey_register_verify,
 )
-from blueprints.verification import (  # noqa: E402
+from blueprints.verification import (
     api_send_verification_email,
     api_verify_registration_code,
 )
-from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds  # noqa: E402
-from services.async_utils import run_blocking  # noqa: E402
-from services.auth_limits import (  # noqa: E402
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
+from services.async_utils import run_blocking
+from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
     consume_passkey_auth_options_limit,
@@ -119,10 +119,9 @@ from services.auth_limits import (  # noqa: E402
     consume_verification_attempt_limit,
     get_auth_limit_service,
 )
-from services.auth_session import establish_authenticated_session  # noqa: E402
-from services.csrf import require_csrf  # noqa: E402
-from services.email_service import send_email  # noqa: E402
-from services.email_auth_transaction import (  # noqa: E402
+from services.auth_session import establish_authenticated_session
+from services.csrf import require_csrf
+from services.email_auth_transaction import (
     EMAIL_AUTH_RESULT_CONFLICT,
     EMAIL_AUTH_RESULT_EXHAUSTED,
     EMAIL_AUTH_RESULT_EXPIRED,
@@ -144,23 +143,24 @@ from services.email_auth_transaction import (  # noqa: E402
     store_email_auth_transaction,
     verify_email_auth_transaction,
 )
-from services.guest_prompt_service import (  # noqa: E402
-    claim_guest_prompts_for_user,
-    get_guest_prompt_token,
-)
-from services.google_oauth_transaction import (  # noqa: E402
+from services.email_service import send_email
+from services.google_oauth_transaction import (
     GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME,
     GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS,
     consume_google_oauth_transaction,
     store_google_oauth_transaction,
 )
-from services.llm_daily_limit import (  # noqa: E402
+from services.guest_prompt_service import (
+    claim_guest_prompts_for_user,
+    get_guest_prompt_token,
+)
+from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
-    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
+    get_seconds_until_daily_reset,
 )
-from services.passkeys import (  # noqa: E402
+from services.passkeys import (
     PASSKEY_CHALLENGE_TTL_SECONDS,
     clear_passkey_session,
     create_passkey,
@@ -178,10 +178,10 @@ from services.passkeys import (  # noqa: E402
     store_passkey_registration_ceremony,
     update_passkey_usage,
 )
-from services.request_models import AuthCodeRequest, EmailRequest  # noqa: E402
-from services.runtime_config import is_production_env  # noqa: E402
-from services.security import constant_time_compare, generate_verification_code  # noqa: E402
-from services.users import (  # noqa: E402
+from services.request_models import AuthCodeRequest, EmailRequest
+from services.runtime_config import is_production_env
+from services.security import constant_time_compare, generate_verification_code
+from services.users import (
     ACCOUNT_DELETE_CONFIRMATION_TEXT,
     GOOGLE_AUTH_PROVIDER,
     copy_default_tasks_for_user,
@@ -194,7 +194,7 @@ from services.users import (  # noqa: E402
     set_user_verified,
     update_user_profile_from_google_if_unset,
 )
-from services.web import (  # noqa: E402
+from services.web import (
     frontend_login_url,
     frontend_url,
     jsonify,
@@ -252,11 +252,7 @@ auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")(api_ve
 __all__ = [
     "ACCOUNT_DELETE_CONFIRMATION_TEXT",
     "AUTH_FAILURE_STATUS_CODE",
-    "AuthCodeRequest",
-    "AuthLimitService",
-    "AuthenticatorSelectionCriteria",
     "DEFAULT_RETRY_AFTER_SECONDS",
-    "EmailRequest",
     "EMAIL_AUTH_RESULT_CONFLICT",
     "EMAIL_AUTH_RESULT_EXHAUSTED",
     "EMAIL_AUTH_RESULT_EXPIRED",
@@ -271,7 +267,6 @@ __all__ = [
     "EMAIL_AUTH_TRANSACTION_SCOPE_KEY",
     "EMAIL_AUTH_TRANSACTION_TTL_SECONDS",
     "EMAIL_AUTH_UNAVAILABLE_ERROR",
-    "Flow",
     "GOOGLE_AUTH_PROVIDER",
     "GOOGLE_CODE_VERIFIER_SESSION_KEY",
     "GOOGLE_LOGIN_UNAVAILABLE_ERROR",
@@ -279,13 +274,18 @@ __all__ = [
     "GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME",
     "GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS",
     "GOOGLE_SCOPES",
-    "GoogleAuthError",
     "LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS",
     "LOGIN_VERIFICATION_CODE_TTL_SECONDS",
-    "LlmDailyLimitService",
-    "OAuth2Error",
     "PASSKEY_CHALLENGE_TTL_SECONDS",
     "PASSKEY_UNAVAILABLE_ERROR",
+    "AuthCodeRequest",
+    "AuthLimitService",
+    "AuthenticatorSelectionCriteria",
+    "EmailRequest",
+    "Flow",
+    "GoogleAuthError",
+    "LlmDailyLimitService",
+    "OAuth2Error",
     "PublicKeyCredentialDescriptor",
     "PublicKeyCredentialHint",
     "RedirectResponse",
@@ -295,10 +295,10 @@ __all__ = [
     "_build_absolute_url_from_reference",
     "_build_google_authorization_response",
     "_build_google_login_host_redirect",
+    "_claim_guest_prompts_after_login",
     "_clean_google_field",
     "_clear_google_oauth_session",
     "_clear_google_oauth_state",
-    "_claim_guest_prompts_after_login",
     "_clear_login_verification_session",
     "_copy_default_tasks_after_login",
     "_fetch_google_user_info",
@@ -329,22 +329,22 @@ __all__ = [
     "auth_bp",
     "base64url_to_bytes",
     "bytes_to_base64url",
+    "claim_guest_prompts_for_user",
+    "clear_email_auth_transaction_cookie",
     "clear_passkey_session",
     "constant_time_compare",
-    "clear_email_auth_transaction_cookie",
-    "consume_google_oauth_transaction",
     "consume_auth_email_daily_quota",
     "consume_auth_email_send_limits",
+    "consume_google_oauth_transaction",
     "consume_passkey_auth_options_limit",
     "consume_passkey_auth_verify_limit",
     "consume_verification_attempt_limit",
-    "claim_guest_prompts_for_user",
     "copy_default_tasks_for_user",
     "create_passkey",
     "create_user",
+    "delete_email_auth_transaction",
     "delete_passkey",
     "delete_user_account",
-    "delete_email_auth_transaction",
     "establish_authenticated_session",
     "frontend_login_url",
     "frontend_url",
@@ -352,8 +352,8 @@ __all__ = [
     "generate_registration_options",
     "generate_verification_code",
     "get_auth_limit_service",
-    "get_email_auth_transaction",
     "get_credential_lookup_id",
+    "get_email_auth_transaction",
     "get_guest_prompt_token",
     "get_llm_daily_limit_service",
     "get_passkey_authentication_ceremony",
@@ -389,19 +389,19 @@ __all__ = [
     "run_blocking",
     "sanitize_next_path",
     "send_email",
+    "set_email_auth_transaction_cookie",
     "set_session_permanent",
     "set_user_verified",
-    "set_email_auth_transaction_cookie",
+    "store_email_auth_transaction",
+    "store_google_oauth_transaction",
     "store_passkey_authentication_ceremony",
     "store_passkey_registration_ceremony",
-    "store_google_oauth_transaction",
-    "store_email_auth_transaction",
     "time",
     "update_passkey_usage",
     "update_user_profile_from_google_if_unset",
     "url_for",
     "validate_payload_model",
     "verify_authentication_response",
-    "verify_registration_response",
     "verify_email_auth_transaction",
+    "verify_registration_response",
 ]

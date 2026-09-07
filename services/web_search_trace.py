@@ -7,9 +7,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from html import escape
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from .message_parts_display import ANSWER_TRACE_DETAILS_CLASS
 from .selected_reference_context import (

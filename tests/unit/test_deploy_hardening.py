@@ -3,7 +3,6 @@ import subprocess
 import unittest
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "deploy" / "blue_green_deploy.sh"
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"

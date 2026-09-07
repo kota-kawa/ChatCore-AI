@@ -4,11 +4,11 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from blueprints.auth import auth_bp
 from blueprints.memo import memo_bp
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
-from sqlalchemy.exc import SQLAlchemyError
 from tests.helpers.app_helpers import build_session_test_app
 
 

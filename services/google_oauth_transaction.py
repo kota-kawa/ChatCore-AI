@@ -6,7 +6,6 @@ from typing import Any
 
 from services.cache import get_redis_client, mark_redis_unavailable
 
-
 GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS = 600
 GOOGLE_OAUTH_TRANSACTION_KEY_PREFIX = "google_oauth_transaction:"
 GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME = "google_oauth_transaction"

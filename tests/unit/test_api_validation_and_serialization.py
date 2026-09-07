@@ -4,11 +4,11 @@ import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import services.chat_use_case as chat_use_case
 from blueprints.auth import api_send_login_code
 from blueprints.chat.messages import chat
 from blueprints.chat.tasks import update_tasks_order
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
-import services.chat_use_case as chat_use_case
 from services.research_state import is_reference_context_message
 from tests.helpers.request_helpers import build_request
 

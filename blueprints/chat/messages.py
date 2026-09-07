@@ -1,8 +1,8 @@
 import asyncio
-import re
-import json
 import html
+import json
 import logging
+import re
 from collections.abc import Awaitable, Callable, Iterator
 from functools import partial
 from typing import Any
@@ -10,76 +10,30 @@ from typing import Any
 from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
+from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
-from services.background_executor import submit_background_task
 from services.attached_files import (
     decode_attached_files_from_storage,
     format_attached_files_for_prompt,
 )
-from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
-from services.context_vault_candidate_service import should_extract_context
-from services.context_vault_extraction import schedule_context_extraction
-from services.chat_service import (
-    list_enabled_user_skills,
-    delete_unanswered_user_messages,
-    fetch_chat_history_page,
-    get_project_context,
-    get_task_prompt_data,
-    get_user_by_id,
-    save_message_to_db,
-    get_chat_room_messages,
-    get_room_web_search_contexts,
-    get_active_path,
-    get_active_leaf_id,
-    rename_chat_room_if_current_title_in,
-    switch_chat_branch,
-    validate_room_owner,
+from services.auth_limits import (
+    AuthLimitService,
+    consume_guest_chat_daily_limit,
+    get_auth_limit_service,
+    get_seconds_until_tomorrow,
 )
+from services.background_executor import submit_background_task
 from services.chat_context import build_context_messages
-from services.chat_prompt import (
-    BASE_SYSTEM_PROMPT as BASE_SYSTEM_PROMPT,
-    build_base_system_prompt as _build_base_system_prompt,
-    build_task_prompt as _build_task_prompt,
-    build_user_profile_prompt as _build_user_profile_prompt,
-)
-from services.user_skills import (
-    build_chat_skills_context,
-    build_enabled_user_skills_prompt,
-)
-from services.personal_knowledge import search_personal_knowledge_for_tool
-from services.selected_reference_context import (
-    SelectedReferenceLookupTrace,
-    augment_messages_with_selected_references_async,
-)
-from services.selected_reference_sources import build_selected_reference_searchers
-from services.shared_prompt_lookup import search_shared_prompts_for_tool
-from services.web_search import (
-    deserialize_web_search_results,
-    extract_prior_web_search_results,
-    inject_prior_web_search_context,
-)
-from services.web_search_trace import (
-    answer_step,
-    build_web_search_trace_markdown,
-    selected_reference_steps,
-)
-from services.generative_ui import (
-    build_message_parts_context,
-    decide_generative_ui_mode,
-    normalize_response_with_artifact_retry,
-)
-from services.chat_state import (
-    get_room_summary,
-    list_room_memory_facts,
-    rebuild_room_summary,
-    remember_facts_from_message,
+from services.chat_contract import (
+    CHAT_HISTORY_PAGE_SIZE_DEFAULT,
+    CHAT_HISTORY_PAGE_SIZE_MAX,
 )
 from services.chat_generation import (
     DEFAULT_SSE_HEARTBEAT_SECONDS,
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
-    ChatGenerationService,
     ChatGenerationJob,
+    ChatGenerationService,
     ChatGenerationStreamTimeoutError,
     build_generation_key,
     cancel_generation_job,
@@ -90,34 +44,79 @@ from services.chat_generation import (
     iter_generation_events,
     start_generation_job,
 )
-from services.auth_limits import (
-    AuthLimitService,
-    consume_guest_chat_daily_limit,
-    get_seconds_until_tomorrow,
-    get_auth_limit_service,
+from services.chat_prompt import (
+    BASE_SYSTEM_PROMPT as BASE_SYSTEM_PROMPT,
 )
-from services.api_errors import ApiServiceError
+from services.chat_prompt import (
+    build_base_system_prompt as _build_base_system_prompt,
+)
+from services.chat_prompt import (
+    build_task_prompt as _build_task_prompt,
+)
+from services.chat_prompt import (
+    build_user_profile_prompt as _build_user_profile_prompt,
+)
+from services.chat_service import (
+    delete_unanswered_user_messages,
+    fetch_chat_history_page,
+    get_active_leaf_id,
+    get_active_path,
+    get_chat_room_messages,
+    get_project_context,
+    get_room_web_search_contexts,
+    get_task_prompt_data,
+    get_user_by_id,
+    list_enabled_user_skills,
+    rename_chat_room_if_current_title_in,
+    save_message_to_db,
+    switch_chat_branch,
+    validate_room_owner,
+)
+from services.chat_state import (
+    get_room_summary,
+    list_room_memory_facts,
+    rebuild_room_summary,
+    remember_facts_from_message,
+)
+from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
+from services.context_vault_candidate_service import should_extract_context
+from services.context_vault_extraction import schedule_context_extraction
+from services.error_messages import (
+    ERROR_CHAT_ROOM_NOT_FOUND,
+)
+from services.generative_ui import (
+    build_message_parts_context,
+    decide_generative_ui_mode,
+    normalize_response_with_artifact_retry,
+)
 from services.i18n import get_request_locale
-from services.llm_daily_limit import (
-    LlmDailyLimitService,
-    consume_llm_daily_quota,
-    get_seconds_until_daily_reset,
-    get_llm_daily_limit_service,
-)
 from services.llm import (
-    get_llm_response,
     CLAUDE_DEFAULT_MODEL,
-    is_streaming_model,
-    is_retryable_llm_error,
     LlmAuthenticationError,
     LlmInvalidModelError,
     LlmRateLimitError,
     LlmServiceError,
+    get_llm_response,
+    is_retryable_llm_error,
+    is_streaming_model,
     validate_model_name,
 )
-from services.chat_contract import (
-    CHAT_HISTORY_PAGE_SIZE_DEFAULT,
-    CHAT_HISTORY_PAGE_SIZE_MAX,
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_llm_daily_quota,
+    get_llm_daily_limit_service,
+    get_seconds_until_daily_reset,
+)
+from services.personal_knowledge import search_personal_knowledge_for_tool
+from services.selected_reference_context import (
+    SelectedReferenceLookupTrace,
+    augment_messages_with_selected_references_async,
+)
+from services.selected_reference_sources import build_selected_reference_searchers
+from services.shared_prompt_lookup import search_shared_prompts_for_tool
+from services.user_skills import (
+    build_chat_skills_context,
+    build_enabled_user_skills_prompt,
 )
 from services.web import (
     jsonify,
@@ -127,19 +126,26 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-from services.error_messages import (
-    ERROR_CHAT_ROOM_NOT_FOUND,
+from services.web_search import (
+    deserialize_web_search_results,
+    extract_prior_web_search_results,
+    inject_prior_web_search_context,
+)
+from services.web_search_trace import (
+    answer_step,
+    build_web_search_trace_markdown,
+    selected_reference_steps,
 )
 
 from . import (
     chat_bp,
-    get_session_id,
+    cleanup_ephemeral_chats,
+    ephemeral_store,
     get_guest_room_ids,
+    get_session_id,
     get_temporary_user_store_key,
     register_guest_room,
     unregister_guest_room,
-    cleanup_ephemeral_chats,
-    ephemeral_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,7 +263,7 @@ def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None =
     # Encode one JSON payload as an SSE event.
     body = json.dumps(payload, ensure_ascii=False)
     id_line = f"id: {sequence_id}\n" if sequence_id is not None else ""
-    return f"{id_line}event: {event}\ndata: {body}\n\n".encode("utf-8")
+    return f"{id_line}event: {event}\ndata: {body}\n\n".encode()
 
 
 # バックグラウンドの生成ジョブイベントを Server-Sent Event (SSE) ペイロードとして反復取得するジェネレータ

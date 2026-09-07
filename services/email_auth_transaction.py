@@ -10,7 +10,6 @@ from typing import Any
 
 from services.cache import get_redis_client, mark_redis_unavailable
 
-
 EMAIL_AUTH_TRANSACTION_COOKIE_NAME = "email_auth_transaction"
 EMAIL_AUTH_TRANSACTION_KEY_PREFIX = "email_auth_transaction:"
 EMAIL_AUTH_TRANSACTION_SCOPE_KEY = "_email_auth_transaction"

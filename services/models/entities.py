@@ -17,7 +17,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    desc,
     ForeignKey,
     Index,
     Integer,
@@ -26,9 +25,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    desc,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, CHAR, DOUBLE_PRECISION, JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, CHAR, DOUBLE_PRECISION, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base

@@ -5,7 +5,6 @@ from typing import Any
 
 from services.i18n import get_current_locale
 
-
 MAX_USER_SKILLS = 20
 MAX_USER_SKILL_NAME_LENGTH = 100
 MAX_USER_SKILL_INSTRUCTIONS_LENGTH = 12_000

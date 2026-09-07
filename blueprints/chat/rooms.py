@@ -7,17 +7,17 @@ from typing import Any
 
 from fastapi import Depends, Request
 
+from services.api_errors import ApiServiceError
+from services.async_utils import run_blocking
 from services.auth_limits import (
     AuthLimitService,
     consume_guest_chat_daily_limit,
-    get_seconds_until_tomorrow,
     get_auth_limit_service,
+    get_seconds_until_tomorrow,
 )
-from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
 from services.chat_service import (
-    create_or_get_shared_chat_token,
     create_chat_room_in_db,
+    create_or_get_shared_chat_token,
     delete_chat_room_for_user,
     delete_chat_rooms_for_user,
     fork_shared_chat_into_db_room,
@@ -26,9 +26,12 @@ from services.chat_service import (
     rename_chat_room_in_db,
     validate_room_owner,
 )
+from services.error_messages import (
+    ERROR_CHAT_ROOM_NOT_FOUND,
+    ERROR_LOGIN_REQUIRED,
+    ERROR_TOKEN_REQUIRED,
+)
 from services.project_service import assign_room_to_project
-from services.share_common import build_public_share_url
-
 from services.request_models import (
     ChatRoomIdRequest,
     ChatRoomIdsRequest,
@@ -37,6 +40,7 @@ from services.request_models import (
     RenameChatRoomRequest,
     ShareChatRoomRequest,
 )
+from services.share_common import build_public_share_url
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -44,11 +48,6 @@ from services.web import (
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
-)
-from services.error_messages import (
-    ERROR_CHAT_ROOM_NOT_FOUND,
-    ERROR_LOGIN_REQUIRED,
-    ERROR_TOKEN_REQUIRED,
 )
 
 from . import (
@@ -180,12 +179,12 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
         # Decode the URL-safe Base64 encoded ascii string to utf-8 bytes
         decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
         payload = json.loads(decoded)
-        
+
         last_activity_at = payload.get("last_activity_at") or payload.get("created_at")
         room_id = payload.get("id")
         if not isinstance(last_activity_at, str) or not isinstance(room_id, str) or not room_id:
             raise ValueError
-            
+
         # Z（UTC）をタイムゾーンオフセット形式に正規化してdatetimeオブジェクトを生成
         # Normalize Z with UTC offset formatting and parse to datetime
         normalized_last_activity_at = last_activity_at.replace("Z", "+00:00")
@@ -207,7 +206,7 @@ def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
     room_id = room.get("id")
     if not isinstance(last_activity_at, str) or not isinstance(room_id, str) or not room_id:
         return None
-    
+
     # 辞書をコンパクトなJSON文字列にする
     # Convert dict to a compact JSON string
     payload = json.dumps(
@@ -335,11 +334,11 @@ async def new_chat_room(
     # 制限サービスを解決
     # Resolve the AuthLimitService instance
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    
+
     # 期限切れのエフェメラルチャットルームを自動クリーンアップ
     # Automatically clean up expired guest/temporary rooms
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # リクエストデータが辞書型であることを要求
     # Verify request body is a JSON dictionary
     data, error_response = await require_json_dict(request)
@@ -452,7 +451,7 @@ async def get_chat_rooms(request: Request):
             limit, cursor = _resolve_room_list_pagination(request)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
-            
+
         # has_moreを判定するため、limitより1件多く取得を試みる
         # Fetch 1 extra item to check if there are subsequent pages
         fetch_limit = limit + 1
@@ -508,7 +507,7 @@ async def delete_chat_room(request: Request):
     Deletes the specified chat room from either database or ephemeral store depending on its mode.
     """
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # リクエストデータ取得
     # Extract request payload
     data, error_response = await require_json_dict(request)
@@ -527,7 +526,7 @@ async def delete_chat_room(request: Request):
 
     room_id = payload.room_id
     session = request.session
-    
+
     if "user_id" in session:
         # ログインユーザー：
         try:
@@ -540,7 +539,7 @@ async def delete_chat_room(request: Request):
             )
             if legacy_response is not None:
                 return legacy_response
-                
+
             # 一時ルームの場合、エフェメラルストアから削除
             # Delete temporary room from ephemeral store
             if room_mode == "temporary":
@@ -583,7 +582,7 @@ async def delete_chat_rooms(request: Request):
     Bulk deletes multiple chat rooms owned by the active authenticated user.
     """
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # リクエストデータ取得
     # Extract request payload
     data, error_response = await require_json_dict(request)
@@ -629,7 +628,7 @@ async def rename_chat_room(request: Request):
     Renames the title of the specified chat room.
     """
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # リクエストパース
     # Parse request payload
     data, error_response = await require_json_dict(request)
@@ -700,7 +699,7 @@ async def share_chat_room(request: Request):
     Generates a share token and URL to share the chat room (only normal persisted rooms can be shared).
     """
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # リクエストデータ取得
     # Extract request payload
     data, error_response = await require_json_dict(request)
@@ -774,7 +773,7 @@ async def shared_chat_room(request: Request):
     Retrieves the title and message history of a publicly shared chat room via its share token.
     """
     await run_blocking(cleanup_ephemeral_chats)
-    
+
     # トークンをクエリパラメータから取得
     # Extract the token query parameter
     token = (request.query_params.get("token") or "").strip()

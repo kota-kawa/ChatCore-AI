@@ -7,12 +7,12 @@ import httpx
 from fastapi import FastAPI
 
 from blueprints.auth import (
-    auth_bp,
     api_passkey_authenticate_options,
     api_passkey_authenticate_verify,
     api_send_email_code,
     api_send_login_code,
     api_verify_login_code,
+    auth_bp,
 )
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
 from tests.helpers.app_helpers import build_session_test_app

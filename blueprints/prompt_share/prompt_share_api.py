@@ -39,7 +39,6 @@ from services.guest_prompt_service import (
     get_or_create_guest_prompt_token,
 )
 from services.i18n import get_request_locale
-from services.prompt_attachment_upload import save_prompt_attachment
 from services.prompt_attachment_storage import (
     PROMPT_ATTACHMENT_MAX_BYTES,
     PROMPT_ATTACHMENT_MAX_REQUEST_BYTES,
@@ -48,6 +47,7 @@ from services.prompt_attachment_storage import (
     resolve_legacy_prompt_attachment_path,
     resolve_prompt_attachment_path,
 )
+from services.prompt_attachment_upload import save_prompt_attachment
 from services.prompt_categories import normalize_category
 from services.prompt_types import (
     CONTENT_FORMATS,
@@ -72,7 +72,6 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-
 
 prompt_share_api_bp = APIRouter(
     prefix="/prompt_share/api",

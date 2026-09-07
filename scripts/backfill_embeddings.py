@@ -80,13 +80,12 @@ async def _count_pending(table: str, *, include_existing: bool) -> int:
 
 async def _store_embedding(table: str, row_id: int, embedding: list[float]) -> None:
     """Persist one vector in an isolated native-async transaction."""
-    async with session_scope() as session:
-        async with session.begin():
-            await EmbeddingBackfillRepository(session).store_embedding(
-                table,
-                row_id,
-                embedding,
-            )
+    async with session_scope() as session, session.begin():
+        await EmbeddingBackfillRepository(session).store_embedding(
+            table,
+            row_id,
+            embedding,
+        )
 
 
 class BackfillStats:

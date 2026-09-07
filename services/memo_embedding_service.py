@@ -22,13 +22,12 @@ async def store_memo_embedding(
     """Persist one vector in a short-lived native async transaction."""
     if not embedding:
         return
-    async with session_scope() as session:
-        async with session.begin():
-            await MemoEmbeddingRepository(session).store(
-                memo_id,
-                embedding,
-                expected_revision,
-            )
+    async with session_scope() as session, session.begin():
+        await MemoEmbeddingRepository(session).store(
+            memo_id,
+            embedding,
+            expected_revision,
+        )
 
 
 def schedule_embedding(

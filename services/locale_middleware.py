@@ -9,6 +9,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from services.chat_service import get_user_preferred_locale
 from services.i18n import (
     LOCALE_COOKIE_NAME,
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
@@ -19,8 +20,6 @@ from services.i18n import (
     reset_current_locale,
     set_current_locale,
 )
-from services.chat_service import get_user_preferred_locale
-
 
 LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 logger = logging.getLogger(__name__)

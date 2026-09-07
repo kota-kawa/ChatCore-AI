@@ -51,7 +51,7 @@ def _upload_root() -> str:
 
 
 def _owner_digest(user_id: int, client_id: str) -> str:
-    owner = f"{int(user_id)}\0{str(client_id)}"
+    owner = f"{int(user_id)}\0{client_id!s}"
     return hashlib.sha256(owner.encode("utf-8")).hexdigest()
 
 

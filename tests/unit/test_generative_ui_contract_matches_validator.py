@@ -1,6 +1,5 @@
 import unittest
 
-from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.generative_ui import (
     MAX_ARTIFACT_CSS_CHARS,
     MAX_ARTIFACT_HEIGHT,
@@ -10,6 +9,7 @@ from services.generative_ui import (
     MIN_ARTIFACT_HEIGHT,
     normalize_response_with_artifacts,
 )
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 
 
 def _non_text_parts(parts) -> list:

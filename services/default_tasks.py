@@ -220,11 +220,10 @@ async def ensure_default_tasks_seeded() -> int:
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:
-            async with session_scope() as session:
-                async with session.begin():
-                    return await seed_default_tasks(
-                        session, default_task_rows(include_key=True)
-                    )
+            async with session_scope() as session, session.begin():
+                return await seed_default_tasks(
+                    session, default_task_rows(include_key=True)
+                )
         except SQLAlchemyError as exc:
             # Retry only transient PostgreSQL failures. session_scope rolls back
             # the failed transaction before the next isolated attempt.

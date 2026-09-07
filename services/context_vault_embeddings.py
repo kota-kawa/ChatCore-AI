@@ -28,13 +28,12 @@ async def _store_embedding(
     embedding: list[float],
     expected_revision: int | None,
 ) -> None:
-    async with session_scope() as session:
-        async with session.begin():
-            await ContextFactRepository(session).store_embedding(
-                fact_id,
-                embedding,
-                expected_revision,
-            )
+    async with session_scope() as session, session.begin():
+        await ContextFactRepository(session).store_embedding(
+            fact_id,
+            embedding,
+            expected_revision,
+        )
 
 
 def schedule_embedding(

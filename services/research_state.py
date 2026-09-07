@@ -9,8 +9,9 @@ leading/trailing excerpts.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from services.chat_context import estimate_token_count
 from services.chat_prompt import insert_after_leading_system_messages
@@ -81,7 +82,7 @@ class EvidenceReference:
     url: str = ""
     external_path: str = ""
 
-    def with_search_id(self, search_id: str) -> "EvidenceReference":
+    def with_search_id(self, search_id: str) -> EvidenceReference:
         if not search_id or search_id in self.search_ids:
             return self
         return EvidenceReference(
@@ -419,11 +420,11 @@ class TurnState:
 
 __all__ = [
     "DEFAULT_TURN_STATE_MAX_TOKENS",
+    "TURN_STATE_CLOSE_MARKER",
+    "TURN_STATE_MARKER",
     "EvidenceReference",
     "Fact",
     "SearchExecution",
-    "TURN_STATE_CLOSE_MARKER",
-    "TURN_STATE_MARKER",
     "TurnState",
     "TurnStateProjectionError",
     "is_reference_context_message",

@@ -27,8 +27,8 @@ from services.mcp_oauth import MCP_CONTEXT_READ_SCOPE, MCP_CONTEXT_WRITE_SCOPE
 from services.mcp_tools.common import audit_tool_success, consume_tool_limit, require_actor
 from services.request_models import (
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
-    MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
     MAX_CONTEXT_FACT_TITLE_LENGTH,
+    MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
     ContextFactType,
     McpContextFactDeprecateRequest,
     McpContextFactSaveRequest,

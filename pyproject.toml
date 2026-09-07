@@ -1,0 +1,72 @@
+# 日本語: バックエンド共通の静的解析設定（Ruff / mypy）を一箇所に集約します。
+# English: Centralizes backend static-analysis configuration (Ruff / mypy) in a single place.
+
+[tool.ruff]
+# 日本語: 日本語コメントは全角幅で計算されるため、行長は 140 に設定しています。
+# English: Japanese comments are measured at full width, so the line limit is set to 140.
+line-length = 140
+target-version = "py314"
+# 日本語: 適用済みの Alembic リビジョンは書き換え禁止のため、静的解析の対象から除外します。
+# English: Applied Alembic revisions must not be rewritten, so they are excluded from linting.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "E",     # pycodestyle errors
+    "F",     # Pyflakes
+    "G",     # flake8-logging-format
+    "I",     # isort
+    "LOG",   # flake8-logging
+    "N",     # pep8-naming
+    "PERF",  # Perflint
+    "PIE",   # flake8-pie
+    "RET",   # flake8-return
+    "RUF",   # Ruff-specific rules
+    "SIM",   # flake8-simplify
+    "TRY",   # tryceratops
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    # 日本語: FastAPI の Depends()/Query() は既定値として呼び出す設計なので許容します。
+    # English: FastAPI intentionally calls Depends()/Query() in default arguments.
+    "B008",
+    # 日本語: 日本語の文字列・コメントは全角記号を含むため、あいまい文字の検出を無効化します。
+    # English: Japanese strings and comments contain full-width punctuation, so ambiguous-character rules are disabled.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # 日本語: 例外に文脈付きメッセージを渡す既存方針を維持します。
+    # English: Keeps the existing convention of passing contextual messages to exceptions.
+    "TRY003",
+    # 日本語: try 内 raise は既存のバリデーション記述と衝突するため許容します。
+    # English: Raising inside try conflicts with the existing validation style, so it is allowed.
+    "TRY301",
+    # 日本語: PEP 695 のジェネリクス構文と StrEnum への書き換えは、意味の変わる箇所があるため段階移行とします。
+    # English: Rewrites to PEP 695 generics and StrEnum can change semantics, so they are migrated separately.
+    "UP042",
+    "UP047",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 日本語: テストでは patch のネストが読みやすいため with 文の統合を強制しません。
+# English: Nested patch blocks read better in tests, so combined with-statements are not enforced there.
+"tests/**" = ["SIM117"]
+
+[tool.mypy]
+python_version = "3.14"
+# 日本語: 段落的に型付けを広げるため、既定はゆるく保ち files で対象を限定します。
+# English: Defaults stay lenient so typing can expand gradually; `files` limits the enforced surface.
+files = ["services/api_errors.py", "services/env_settings.py", "services/error_messages.py", "services/runtime_config.py", "scripts"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+strict_equality = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_return_any = true

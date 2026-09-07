@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.models import User, UserAuthProvider
 
-
 _AUTH_USER_FIELDS = (
     "id",
     "email",

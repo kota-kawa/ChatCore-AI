@@ -10,8 +10,8 @@ from blueprints.context_vault.routes import (
     api_list_context_fact_candidates,
     api_list_context_facts,
     api_reject_context_fact_candidate,
-    api_update_context_fact,
     api_update_context_extraction_settings,
+    api_update_context_fact,
 )
 from services.api_errors import ApiServiceError
 from services.response_models import (

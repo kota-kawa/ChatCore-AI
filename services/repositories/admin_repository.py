@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import text
@@ -11,7 +11,6 @@ from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.db import session_scope
-
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
@@ -194,19 +193,17 @@ async def create_table(
     table_options: str = "",
 ) -> None:
     statement = build_create_table_sql(table_name, columns, table_options)
-    async with session_scope() as session:
-        async with session.begin():
-            await session.execute(text(statement))
+    async with session_scope() as session, session.begin():
+        await session.execute(text(statement))
 
 
 async def drop_table_if_exists(table_name: str) -> bool:
-    async with session_scope() as session:
-        async with session.begin():
-            tables = await fetch_tables(session)
-            if table_name not in tables:
-                return False
-            await session.execute(text(build_drop_table_sql(table_name)))
-            return True
+    async with session_scope() as session, session.begin():
+        tables = await fetch_tables(session)
+        if table_name not in tables:
+            return False
+        await session.execute(text(build_drop_table_sql(table_name)))
+        return True
 
 
 async def add_column_if_valid(
@@ -215,34 +212,32 @@ async def add_column_if_valid(
     column_type: str,
     modifiers: list[str],
 ) -> str:
-    async with session_scope() as session:
-        async with session.begin():
-            tables = await fetch_tables(session)
-            if table_name not in tables:
-                return "missing_table"
-            columns = await fetch_table_columns(session, table_name)
-            if column_name.lower() in {str(column["name"]).lower() for column in columns}:
-                return "duplicate_column"
-            await session.execute(
-                text(build_add_column_sql(table_name, column_name, column_type, modifiers))
-            )
-            return "ok"
+    async with session_scope() as session, session.begin():
+        tables = await fetch_tables(session)
+        if table_name not in tables:
+            return "missing_table"
+        columns = await fetch_table_columns(session, table_name)
+        if column_name.lower() in {str(column["name"]).lower() for column in columns}:
+            return "duplicate_column"
+        await session.execute(
+            text(build_add_column_sql(table_name, column_name, column_type, modifiers))
+        )
+        return "ok"
 
 
 async def drop_column_if_valid(
     table_name: str, column_name: str
 ) -> tuple[str, str | None]:
-    async with session_scope() as session:
-        async with session.begin():
-            tables = await fetch_tables(session)
-            if table_name not in tables:
-                return "missing_table", None
-            columns = await fetch_table_columns(session, table_name)
-            lookup = {str(column["name"]).lower(): str(column["name"]) for column in columns}
-            target_column = lookup.get(column_name.lower())
-            if target_column is None:
-                return "missing_column", None
-            if len(columns) <= 1:
-                return "last_column", None
-            await session.execute(text(build_drop_column_sql(table_name, target_column)))
-            return "ok", target_column
+    async with session_scope() as session, session.begin():
+        tables = await fetch_tables(session)
+        if table_name not in tables:
+            return "missing_table", None
+        columns = await fetch_table_columns(session, table_name)
+        lookup = {str(column["name"]).lower(): str(column["name"]) for column in columns}
+        target_column = lookup.get(column_name.lower())
+        if target_column is None:
+            return "missing_column", None
+        if len(columns) <= 1:
+            return "last_column", None
+        await session.execute(text(build_drop_column_sql(table_name, target_column)))
+        return "ok", target_column

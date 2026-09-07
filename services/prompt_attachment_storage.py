@@ -6,10 +6,10 @@ import os
 import re
 import tempfile
 import time
-from urllib.parse import urlsplit
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Protocol
-from contextlib import contextmanager
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 try:
@@ -18,7 +18,6 @@ except ModuleNotFoundError:  # pragma: no cover - only relevant on non-POSIX hos
     fcntl = None
 
 from services.web_constants import BASE_DIR
-
 
 PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV = "PROMPT_SHARE_UPLOAD_DIR"
 PROMPT_ATTACHMENT_PUBLIC_URL_PREFIX = "/prompt_share/api/media"

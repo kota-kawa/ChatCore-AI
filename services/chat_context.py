@@ -4,11 +4,11 @@ import html
 import math
 import re
 
-from services.web_search import strip_web_search_citation_html
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     USER_SKILLS_TOKEN_BUDGET,
 )
+from services.web_search import strip_web_search_citation_html
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。

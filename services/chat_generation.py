@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-import json
-import os
 import inspect
+import json
+import logging
+import os
 import threading
 import time
 import uuid
@@ -15,40 +15,6 @@ from typing import Any
 
 from fastapi import Request
 
-from .background_executor import submit_background_task
-from .chat_context_recovery import build_recovery_base_messages
-from .chat_agent_budget import (
-    DEFAULT_MAX_LLM_TURNS,
-    DEFAULT_MAX_TOOL_CALLS,
-    MAX_LLM_TURNS_LIMIT,
-    MAX_TOOL_CALLS_LIMIT,
-    AgentStepBudget,
-)
-from .chat_answer_continuation import (
-    FinalAnswerContinuationStalledError,
-    looks_like_restarted_answer,
-    splice_restarted_answer,
-    stream_final_answer_with_recovery,
-    strip_continuation_overlap,
-)
-from .chat_generation_telemetry import ChatGenerationTelemetry
-from .chat_input_budget import (
-    estimate_messages_chars,
-)
-from .llm_context_budget import (
-    estimate_request_tokens,
-    get_context_budget,
-    request_fits_context,
-)
-from .research_state import (
-    TurnState,
-    TurnStateProjectionError,
-)
-from .chat_evidence_store import (
-    EvidenceStore,
-    GET_EVIDENCE_TOOL_NAME,
-    get_evidence_tool_definition,
-)
 from services.cache import get_redis_client
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
@@ -63,20 +29,39 @@ from services.message_parts_display import (
     normalize_message_parts_for_display,
 )
 
-from .personal_knowledge import (
-    PERSONAL_KNOWLEDGE_TOOL_NAME,
-    get_personal_knowledge_tool_definition,
+from .background_executor import submit_background_task
+from .chat_agent_budget import (
+    DEFAULT_MAX_LLM_TURNS,
+    DEFAULT_MAX_TOOL_CALLS,
+    MAX_LLM_TURNS_LIMIT,
+    MAX_TOOL_CALLS_LIMIT,
+    AgentStepBudget,
 )
-from .shared_prompt_lookup import (
-    SHARED_PROMPT_TOOL_NAME,
-    get_shared_prompt_tool_definition,
+from .chat_answer_continuation import (
+    FinalAnswerContinuationStalledError,
+    looks_like_restarted_answer,
+    splice_restarted_answer,
+    stream_final_answer_with_recovery,
+    strip_continuation_overlap,
 )
-from .selected_reference_context import (
-    PERSONAL_KNOWLEDGE_SOURCE,
-    SHARED_PROMPT_SOURCE,
-    SelectedReferenceLookupTrace,
+from .chat_context_recovery import build_recovery_base_messages
+from .chat_evidence_store import (
+    GET_EVIDENCE_TOOL_NAME,
+    EvidenceStore,
+    get_evidence_tool_definition,
 )
-
+from .chat_generation_telemetry import ChatGenerationTelemetry
+from .chat_input_budget import (
+    estimate_messages_chars,
+)
+from .chat_prompt import insert_after_leading_system_messages
+from .chat_turn_state import (
+    TurnStateUpdateFilter,
+    build_turn_loop_messages,
+    parse_turn_state_update,
+    strip_turn_state_update,
+    strip_turn_state_update_chunks,
+)
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -90,17 +75,36 @@ from .llm import (
     get_llm_response_stream,
     is_retryable_llm_error,
 )
-from .chat_turn_state import (
-    TurnStateUpdateFilter,
-    build_turn_loop_messages,
-    parse_turn_state_update,
-    strip_turn_state_update,
-    strip_turn_state_update_chunks,
+from .llm_context_budget import (
+    estimate_request_tokens,
+    get_context_budget,
+    request_fits_context,
 )
-from .chat_prompt import insert_after_leading_system_messages
+from .personal_knowledge import (
+    PERSONAL_KNOWLEDGE_TOOL_NAME,
+    get_personal_knowledge_tool_definition,
+)
+from .research_state import (
+    TurnState,
+    TurnStateProjectionError,
+)
+from .selected_reference_context import (
+    PERSONAL_KNOWLEDGE_SOURCE,
+    SHARED_PROMPT_SOURCE,
+    SelectedReferenceLookupTrace,
+)
+from .shared_prompt_lookup import (
+    SHARED_PROMPT_TOOL_NAME,
+    get_shared_prompt_tool_definition,
+)
 from .web_search import (
+    WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
+    WEB_SEARCH_ERROR_REQUEST_FAILED,
     WEB_SEARCH_MAX_CONTEXT_CHARS,
     WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
+    WebEvidenceContextBudget,
+    WebSearchQuotaExceeded,
+    WebSearchResult,
     build_web_search_evidence_policy_message,
     combine_web_search_results,
     create_web_evidence_context_budget,
@@ -111,15 +115,10 @@ from .web_search import (
     normalize_web_search_freshness,
     resolve_web_search_citations,
     search_brave_llm_context,
+    serialize_web_search_result,
     split_web_search_citation_stream_text,
     strip_web_search_citation_html,
-    serialize_web_search_result,
     with_web_search_citations,
-    WebSearchQuotaExceeded,
-    WebEvidenceContextBudget,
-    WebSearchResult,
-    WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
-    WEB_SEARCH_ERROR_REQUEST_FAILED,
 )
 from .web_search_images import (
     append_web_search_image_parts,

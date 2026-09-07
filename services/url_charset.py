@@ -100,7 +100,7 @@ def _charset_from_strict_utf8(raw: bytes) -> str | None:
         return None
     # サイズ上限による末尾の途中切断だけは許容する（UTF-8 の最大長は4バイト）。
     # Tolerate only a trailing sequence cut short by the size cap (UTF-8 is 4 bytes max).
-    for trim in range(0, min(3, len(raw)) + 1):
+    for trim in range(min(3, len(raw)) + 1):
         candidate = raw[: len(raw) - trim] if trim else raw
         try:
             candidate.decode("utf-8")

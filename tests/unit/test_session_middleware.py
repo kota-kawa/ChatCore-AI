@@ -8,11 +8,11 @@ from starlette.datastructures import MutableHeaders
 
 from services.session_middleware import (
     REDIS_BACKEND,
+    SESSION_IDS_TO_DELETE_SCOPE_KEY,
     SESSION_ORIGINAL_DATA_SCOPE_KEY,
     SESSION_ORIGINAL_ID_SCOPE_KEY,
     SESSION_RESTORE_RESTORED,
     SESSION_RESTORE_STATUS_SCOPE_KEY,
-    SESSION_IDS_TO_DELETE_SCOPE_KEY,
     PermanentSessionMiddleware,
 )
 

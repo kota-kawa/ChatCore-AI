@@ -1,7 +1,6 @@
 import json
 import unittest
 
-from services.user_skills import GENERATIVE_UI_SKILL_INSTRUCTIONS
 from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
@@ -12,6 +11,7 @@ from services.generative_ui import (
     requested_artifact_quality_issues,
     validate_artifact_payload,
 )
+from services.user_skills import GENERATIVE_UI_SKILL_INSTRUCTIONS
 from services.web_search_trace import build_web_search_trace_markdown
 
 # 有効なアーティファクトの定義

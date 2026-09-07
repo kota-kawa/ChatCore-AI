@@ -15,8 +15,8 @@ from services.chat_service import list_user_skills, set_user_skill_enabled
 from services.repositories.chat_repository import ChatRepository
 from services.request_models import CreateUserSkillRequest, UpdateUserSkillStateRequest
 from services.user_skills import (
-    GENERATIVE_UI_SKILL_INSTRUCTIONS,
     GENERATIVE_UI_EXECUTION_CONTRACT,
+    GENERATIVE_UI_SKILL_INSTRUCTIONS,
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     build_chat_skills_context,
     build_enabled_user_skills_prompt,

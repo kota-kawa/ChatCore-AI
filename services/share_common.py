@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import os
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from services.datetime_serialization import serialize_datetime_iso
 from services.web_constants import DEFAULT_FRONTEND_URL
@@ -168,7 +169,7 @@ class TokenShareLifecycle:
         # PostgreSQL columns in older environments are naive UTC values, while
         # some callers/tests provide aware values.  Compare like with like.
         if expires_at.tzinfo is not None:
-            current = datetime.now(timezone.utc)
+            current = datetime.now(UTC)
         return expires_at <= current
 
     @property
@@ -203,7 +204,7 @@ class TokenShareLifecycle:
         share_token: str | None,
         expires_at: datetime | None,
         revoked_at: datetime | None,
-    ) -> "TokenShareLifecycle":
+    ) -> TokenShareLifecycle:
         return cls(share_token, expires_at, revoked_at)
 
 
@@ -225,16 +226,16 @@ __all__ = [
     "DEFAULT_SHARE_TOKEN_BYTES",
     "SHARED_TOKEN_MAX_COLLISION_RETRIES",
     "SHARED_TOKEN_RETRY_BACKOFF_SECONDS",
+    "UNIQUE_VIOLATION_PGCODE",
     "ShareContentKind",
     "TokenShareLifecycle",
-    "UNIQUE_VIOLATION_PGCODE",
+    "build_public_share_url",
     "build_share_path",
     "build_share_url",
-    "build_public_share_url",
-    "resolve_share_base_url",
     "build_shared_content_path",
     "build_shared_content_url",
     "generate_share_token",
     "is_unique_violation",
+    "resolve_share_base_url",
     "serialize_token_share_lifecycle",
 ]

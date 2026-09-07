@@ -20,7 +20,6 @@ from services.web import (
     validate_payload_model,
 )
 
-
 prompt_manage_api_bp = APIRouter(
     prefix="/prompt_manage/api",
     dependencies=[Depends(require_csrf)],

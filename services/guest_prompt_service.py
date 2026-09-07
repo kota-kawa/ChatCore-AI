@@ -120,9 +120,8 @@ async def create_guest_shared_prompt(
         return prompt_id
 
     if session is None:
-        async with session_scope() as owned_session:
-            async with owned_session.begin():
-                return await operation(owned_session)
+        async with session_scope() as owned_session, owned_session.begin():
+            return await operation(owned_session)
     return await operation(session)
 
 
@@ -148,7 +147,6 @@ async def claim_guest_prompts_for_user(
         )
 
     if session is None:
-        async with session_scope() as owned_session:
-            async with owned_session.begin():
-                return await operation(owned_session)
+        async with session_scope() as owned_session, owned_session.begin():
+            return await operation(owned_session)
     return await operation(session)

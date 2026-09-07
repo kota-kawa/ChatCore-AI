@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import base64
-from io import BytesIO
 import os
 import tempfile
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from PIL import Image

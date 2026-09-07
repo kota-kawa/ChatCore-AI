@@ -11,27 +11,24 @@ from typing import Any
 from fastapi import Request
 
 from services.api_errors import ApiServiceError
+from services.async_utils import run_blocking
 from services.attached_files import (
     AttachedFileValidationError,
     decode_attached_files_from_storage,
     format_attached_files_for_prompt,
     prepare_attached_files,
 )
-from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
+from services.chat_title import build_initial_title_candidates, generate_chat_room_title
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
-from services.user_skills import (
-    build_chat_skills_context,
-    build_enabled_user_skills_prompt,
-)
 from services.generative_ui import normalize_response_with_artifact_retry
-from services.message_parts_display import normalize_message_parts_for_display
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
     LlmRateLimitError,
     LlmServiceError,
 )
+from services.message_parts_display import normalize_message_parts_for_display
 from services.request_models import ChatMessageRequest
 from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
@@ -39,6 +36,10 @@ from services.selected_reference_context import (
 )
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
+from services.user_skills import (
+    build_chat_skills_context,
+    build_enabled_user_skills_prompt,
+)
 from services.web_search import (
     combine_web_search_results,
     deserialize_web_search_results,
@@ -53,7 +54,6 @@ from services.web_search_trace import (
     build_web_search_trace_markdown,
     selected_reference_steps,
 )
-from services.chat_title import build_initial_title_candidates, generate_chat_room_title
 
 
 async def _maybe_await(value: Any) -> Any:

@@ -7,39 +7,67 @@ from fastapi import APIRouter, Depends
 from services.csrf import require_csrf
 from services.embeddings import embeddings_available, generate_embedding
 from services.memo_ai import suggest_title
+from services.memo_embedding_service import schedule_embedding as _schedule_embedding
 from services.memo_share import (
     create_or_get_shared_memo_token,
     get_memo_share_state,
     get_shared_memo_payload,
     revoke_shared_memo_token,
 )
-from services.memo_embedding_service import schedule_embedding as _schedule_embedding
-from services.share_common import build_public_share_url
 from services.repositories.memo_export_repository import (
     fetch_memos_for_export as _fetch_memos_for_export,
-)
-from .export_formats import (
-    build_csv_export as _build_csv_export,
-    build_json_export as _build_json_export,
-    build_markdown_export as _build_markdown_export,
 )
 from services.repositories.memo_helpers import ensure_title as _ensure_title
 from services.repositories.memo_repository import (
     bulk_action as _bulk_action,
+)
+from services.repositories.memo_repository import (
     delete_collection as _delete_collection,
+)
+from services.repositories.memo_repository import (
     delete_memo as _delete_memo,
+)
+from services.repositories.memo_repository import (
     fetch_collections as _fetch_collections,
+)
+from services.repositories.memo_repository import (
     fetch_memo_detail as _fetch_memo_detail,
+)
+from services.repositories.memo_repository import (
     fetch_memo_summaries as _fetch_memo_summaries,
+)
+from services.repositories.memo_repository import (
     insert_collection as _insert_collection,
+)
+from services.repositories.memo_repository import (
     insert_memo as _insert_memo,
+)
+from services.repositories.memo_repository import (
     reorder_memo as _reorder_memo,
+)
+from services.repositories.memo_repository import (
     set_memo_archive_state as _set_memo_archive_state,
+)
+from services.repositories.memo_repository import (
     set_memo_pin_state as _set_memo_pin_state,
+)
+from services.repositories.memo_repository import (
     update_collection as _update_collection,
+)
+from services.repositories.memo_repository import (
     update_memo as _update_memo,
 )
+from services.share_common import build_public_share_url
 
+from .export_formats import (
+    build_csv_export as _build_csv_export,
+)
+from .export_formats import (
+    build_json_export as _build_json_export,
+)
+from .export_formats import (
+    build_markdown_export as _build_markdown_export,
+)
 
 # CSRF保護を設定したメモ機能用APIRouterの初期化。機能別モジュールはこの router にハンドラを登録する。
 # Initialize the memo APIRouter with CSRF protection; the feature modules register their handlers on it.
@@ -61,7 +89,15 @@ def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
 # その後、テストが `blueprints.memo` から直接 import できるようハンドラ名を再エクスポートする。
 # Import the route modules so their handlers register on the router (registration order = import order),
 # then re-export the handler names so tests can keep importing them from `blueprints.memo`.
-from . import memos, suggest, bulk, reorder, export, collections, share, pages  # noqa: F401, E402
+from . import bulk, collections, export, memos, pages, reorder, share, suggest  # noqa: F401, E402
+from .bulk import api_bulk_memo  # noqa: E402
+from .collections import (  # noqa: E402
+    api_create_collection,
+    api_delete_collection,
+    api_list_collections,
+    api_update_collection,
+)
+from .export import api_export_memos  # noqa: E402
 from .memos import (  # noqa: E402
     api_archive_memo,
     api_create_memo,
@@ -71,16 +107,8 @@ from .memos import (  # noqa: E402
     api_recent_memos,
     api_update_memo,
 )
-from .suggest import api_suggest_memo  # noqa: E402
-from .bulk import api_bulk_memo  # noqa: E402
+from .pages import create_memo  # noqa: E402
 from .reorder import api_reorder_memo  # noqa: E402
-from .export import api_export_memos  # noqa: E402
-from .collections import (  # noqa: E402
-    api_create_collection,
-    api_delete_collection,
-    api_list_collections,
-    api_update_collection,
-)
 from .share import (  # noqa: E402
     api_memo_share_detail,
     api_memo_share_refresh,
@@ -88,7 +116,7 @@ from .share import (  # noqa: E402
     api_share_memo,
     api_shared_memo,
 )
-from .pages import create_memo  # noqa: E402
+from .suggest import api_suggest_memo  # noqa: E402
 
 # 外部に公開されるモジュールAPIの定義
 # Exported module API components.
@@ -133,8 +161,8 @@ __all__ = [
     "api_suggest_memo",
     "api_update_collection",
     "api_update_memo",
-    "create_or_get_shared_memo_token",
     "create_memo",
+    "create_or_get_shared_memo_token",
     "embeddings_available",
     "generate_embedding",
     "get_memo_share_state",

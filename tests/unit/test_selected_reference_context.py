@@ -4,10 +4,10 @@ from unittest.mock import Mock, patch
 
 from services.selected_reference_context import (
     MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS,
-    CandidateQueryPlan,
     PERSONAL_KNOWLEDGE_SOURCE,
     PERSONAL_OVERVIEW_TAG,
     SHARED_PROMPT_SOURCE,
+    CandidateQueryPlan,
     augment_messages_with_selected_references,
 )
 

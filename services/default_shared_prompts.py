@@ -180,19 +180,18 @@ async def ensure_default_shared_prompts() -> int:
     # Seed missing public sample prompts under the sample owner account.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:
-            async with session_scope() as session:
-                async with session.begin():
-                    owner_user_id = await ensure_sample_prompt_owner(
-                        session,
-                        email=SAMPLE_PROMPT_OWNER_EMAIL,
-                        username=SAMPLE_PROMPT_OWNER_NAME,
-                    )
-                    return await seed_default_shared_prompts(
-                        session,
-                        owner_user_id=owner_user_id,
-                        owner_name=SAMPLE_PROMPT_OWNER_NAME,
-                        prompts=DEFAULT_SHARED_PROMPTS,
-                    )
+            async with session_scope() as session, session.begin():
+                owner_user_id = await ensure_sample_prompt_owner(
+                    session,
+                    email=SAMPLE_PROMPT_OWNER_EMAIL,
+                    username=SAMPLE_PROMPT_OWNER_NAME,
+                )
+                return await seed_default_shared_prompts(
+                    session,
+                    owner_user_id=owner_user_id,
+                    owner_name=SAMPLE_PROMPT_OWNER_NAME,
+                    prompts=DEFAULT_SHARED_PROMPTS,
+                )
         except SQLAlchemyError as exc:
             if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                 await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)

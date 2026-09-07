@@ -1,8 +1,7 @@
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 migration_path = (
     Path(__file__).resolve().parents[2]

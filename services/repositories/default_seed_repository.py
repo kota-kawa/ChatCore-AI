@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.models import Prompt, Task, User, UserAuthProvider
 
-
 DEFAULT_TASK_SEED_ADVISORY_LOCK_ID = 743_241_901
 DEFAULT_SHARED_PROMPT_SEED_ADVISORY_LOCK_ID = 743_241_902
 

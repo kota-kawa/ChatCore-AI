@@ -5,7 +5,6 @@ import re
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).parents[1]
 EXACT_REQUIREMENT = re.compile(r"^[A-Za-z0-9_.-]+==[^<>=!~]+$")
 DOCKER_FROM = re.compile(r"^\s*FROM\s+(?P<image>\S+)", re.MULTILINE)

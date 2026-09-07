@@ -21,7 +21,6 @@ from services.web import (
 
 from . import chat_bp
 
-
 logger = logging.getLogger(__name__)
 
 

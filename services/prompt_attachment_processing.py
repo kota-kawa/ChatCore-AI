@@ -7,13 +7,12 @@ storage implementation can upload the same variants without changing API code.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from io import BytesIO
 import threading
 import warnings
+from dataclasses import dataclass
+from io import BytesIO
 
 from PIL import Image, ImageOps, UnidentifiedImageError
-
 
 PROMPT_ATTACHMENT_MAX_PIXELS = 16_000_000
 PROMPT_ATTACHMENT_MAX_DIMENSION = 2_048

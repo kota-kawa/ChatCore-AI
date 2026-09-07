@@ -10,7 +10,6 @@ from fastapi import Request
 
 from services.cache import get_redis_client
 
-
 DEFAULT_LLM_DAILY_API_LIMIT = 300
 LLM_DAILY_API_LIMIT_ENV = "LLM_DAILY_API_LIMIT"
 _LLM_DAILY_COUNT_KEY_PREFIX = "llm:daily_api_total"

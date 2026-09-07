@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.dialects.postgresql import dialect
 
-from services.repositories.memo_repository import update_memo
 from services.api_errors import ApiServiceError
+from services.repositories.memo_repository import update_memo
 
 
 def existing_memo(**overrides):

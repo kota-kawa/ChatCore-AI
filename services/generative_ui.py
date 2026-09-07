@@ -3,16 +3,17 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from html import escape as escape_html, unescape as unescape_html
-from typing import Any, Callable, Literal
+from html import escape as escape_html
+from html import unescape as unescape_html
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from services.llm import get_llm_json_response
 from services.message_parts_display import normalize_message_parts_for_display
-
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +323,7 @@ class InteractiveButtonsV1(BaseModel):
     # 選択タイプが「複数選択」の場合に、optionsリストが空でないことを検証します。
     # Validate that options are provided and non-empty when the button type is multiple_choice.
     @model_validator(mode="after")
-    def _validate_options(self) -> "InteractiveButtonsV1":
+    def _validate_options(self) -> InteractiveButtonsV1:
         if self.type == "multiple_choice" and not self.options:
             raise ValueError("options is required for multiple_choice")
         if self.options:
@@ -373,7 +374,7 @@ class GenerativeUiArtifactV1(BaseModel):
     # HTML、CSS、JavaScript of the total character length.
     # Validate that the combined character length of HTML, CSS, and JS does not exceed the limit.
     @model_validator(mode="after")
-    def _validate_total_size(self) -> "GenerativeUiArtifactV1":
+    def _validate_total_size(self) -> GenerativeUiArtifactV1:
         if len(self.html) + len(self.css) + len(self.js) > MAX_ARTIFACT_TOTAL_CHARS:
             raise ValueError("Sandbox artifact is too large.")
         return self
@@ -1452,7 +1453,7 @@ def normalize_response_with_artifacts(
         recover_truncated=recover_truncated,
         recover_explicit_output_variants=requested_artifact,
     )
-    
+
     button_candidates: list[_ArtifactCandidate] = []
     for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
         button_candidates.append(_ArtifactCandidate(raw_json=match.group("json"), span=match.span()))

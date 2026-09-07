@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.dialects.postgresql import JSONB, dialect as postgresql_dialect
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.schema import CreateIndex
 from sqlalchemy.types import Text
 

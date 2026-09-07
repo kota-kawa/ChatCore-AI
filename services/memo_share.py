@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-import secrets
 from typing import Any, TypeVar
 
 from sqlalchemy.exc import IntegrityError
@@ -56,9 +56,8 @@ async def _in_transaction(
 ) -> T:
     if session is not None:
         return await operation(session)
-    async with session_scope() as owned_session:
-        async with owned_session.begin():
-            return await operation(owned_session)
+    async with session_scope() as owned_session, owned_session.begin():
+        return await operation(owned_session)
 
 
 def _is_unique_violation(exc: BaseException) -> bool:
@@ -111,16 +110,15 @@ async def create_or_get_shared_memo_token(
     for attempt in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
         token = generate_share_token(secrets.token_urlsafe)
         try:
-            async with session_scope() as owned_session:
-                async with owned_session.begin():
-                    return await _create_once(
-                        owned_session,
-                        memo_id,
-                        user_id,
-                        token,
-                        expires_at,
-                        force_refresh=force_refresh,
-                    )
+            async with session_scope() as owned_session, owned_session.begin():
+                return await _create_once(
+                    owned_session,
+                    memo_id,
+                    user_id,
+                    token,
+                    expires_at,
+                    force_refresh=force_refresh,
+                )
         except IntegrityError as exc:
             if not _is_unique_violation(exc) or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
                 raise

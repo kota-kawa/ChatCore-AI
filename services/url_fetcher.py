@@ -5,10 +5,10 @@ import logging
 import re
 import socket
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Iterator
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import requests

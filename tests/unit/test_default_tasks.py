@@ -8,10 +8,12 @@ from services.default_tasks import (
     default_task_payloads,
     default_task_rows,
     ensure_default_tasks_seeded,
-    localize_system_task,
     load_default_tasks,
+    localize_system_task,
     resolve_system_task_key,
 )
+
+
 @asynccontextmanager
 async def _session_scope():
     class _Transaction:

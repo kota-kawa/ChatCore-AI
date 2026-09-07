@@ -26,6 +26,7 @@ from services.request_models import (  # noqa: E402
     ContextFactUpdateRequest,
     ContextVaultImportConfirmRequest,
     ContextVaultImportPreviewRequest,
+    CreateUserSkillRequest,
     DeleteTaskRequest,
     EditTaskRequest,
     EmailRequest,
@@ -45,18 +46,17 @@ from services.request_models import (  # noqa: E402
     PromptUpdateRequest,
     RenameChatRoomRequest,
     ShareChatRoomRequest,
-    ShareMemoRequest,
     SharedPromptCreateRequest,
+    ShareMemoRequest,
     UpdateTasksOrderRequest,
-    CreateUserSkillRequest,
     UpdateUserSkillStateRequest,
 )
 from services.response_models import (  # noqa: E402
     ApiDetailObject,
     ApiErrorPayload,
+    ChatGenerationStatusResponse,
     ChatHistoryMessage,
     ChatHistoryPagination,
-    ChatGenerationStatusResponse,
     ChatHistoryResponse,
     ChatJsonResponse,
     ContextDigestGroup,
@@ -76,14 +76,15 @@ from services.response_models import (  # noqa: E402
     LocalePreferenceResponse,
     MemoSaveResponse,
     MyPromptsApiResponse,
-    PromptRecordApi,
     PromptManageMutationApiResponse,
+    PromptRecordApi,
     ShareChatRoomResponse,
     StoredChatHistoryEntry,
     UserSkillApi,
-    UserSkillsApiResponse,
     UserSkillMutationApiResponse,
+    UserSkillsApiResponse,
 )
+
 FRONTEND_GENERATED_DIR = REPO_ROOT / "frontend" / "types" / "generated"
 GENERATED_FILE = FRONTEND_GENERATED_DIR / "api_schemas.ts"
 

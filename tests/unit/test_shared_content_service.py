@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 from services.share_common import build_public_share_url
 from services.shared_content_service import (
-    InvalidSharedContentCursor,
     SHARED_CONTENT_MAX_LIMIT,
     SHARED_CONTENT_SNIPPET_LENGTH,
+    InvalidSharedContentCursor,
     SharedContentService,
 )
 

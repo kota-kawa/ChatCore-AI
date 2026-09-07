@@ -7,24 +7,23 @@ from unittest.mock import AsyncMock, patch
 from starlette.responses import StreamingResponse
 
 from blueprints.chat.messages import (
+    _iter_llm_stream_events,
+    _iter_serialized_stream_events,
     _paginate_ephemeral_chat_history,
     chat,
     chat_edit_and_regenerate,
-    chat_regenerate,
-    _iter_llm_stream_events,
-    _iter_serialized_stream_events,
     chat_generation_status,
     chat_generation_stream,
+    chat_regenerate,
     get_chat_history,
 )
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.chat_generation import (
-    _budgeted_web_search_result_tool_payload,
-    _web_search_result_tool_payload,
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
+    _budgeted_web_search_result_tool_payload,
+    _web_search_result_tool_payload,
     build_generation_key,
     clear_generation_job_state,
     has_active_generation,
@@ -40,6 +39,7 @@ from services.chat_turn_state import (
     strip_turn_state_update,
     strip_turn_state_update_chunks,
 )
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -55,14 +55,14 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
 )
 from services.web_search import (
-    create_web_evidence_context_budget,
+    WEB_SEARCH_ERROR_REQUEST_FAILED,
+    WEB_SEARCH_MAX_CONTEXT_CHARS,
+    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
     WebEvidenceContextBudget,
     WebSearchQuotaExceeded,
     WebSearchResult,
     WebSearchSource,
-    WEB_SEARCH_ERROR_REQUEST_FAILED,
-    WEB_SEARCH_MAX_CONTEXT_CHARS,
-    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS,
+    create_web_evidence_context_budget,
 )
 from services.web_search_images import WebSearchImageCandidate
 from tests.helpers.request_helpers import build_request

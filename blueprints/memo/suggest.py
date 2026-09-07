@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+
 # AI によるメモタイトル提案
 # AI title suggestion for a memo body
-
 import logging
-import asyncio
 
 from fastapi import Request
 
 from services.error_messages import ERROR_LOGIN_REQUIRED
 from services.i18n import get_request_locale
+from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import MemoSuggestRequest
 from services.web import (
     jsonify,
@@ -17,8 +18,6 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
-
-from services.repositories.memo_helpers import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr

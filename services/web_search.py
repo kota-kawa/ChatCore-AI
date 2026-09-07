@@ -9,11 +9,13 @@ import threading
 import time
 from concurrent.futures import (
     ThreadPoolExecutor,
-    TimeoutError as FuturesTimeoutError,
     as_completed,
 )
+from concurrent.futures import (
+    TimeoutError as FuturesTimeoutError,
+)
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -1146,7 +1148,7 @@ def _parse_brave_context_response(
 
     return WebSearchResult(
         query=query,
-        searched_at=datetime.now(timezone.utc).isoformat(),
+        searched_at=datetime.now(UTC).isoformat(),
         sources=tuple(sources),
         freshness=freshness,
     )
@@ -1821,7 +1823,7 @@ def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResul
 
     return WebSearchResult(
         query=" / ".join(queries[:5]),
-        searched_at=searched_at or datetime.now(timezone.utc).isoformat(),
+        searched_at=searched_at or datetime.now(UTC).isoformat(),
         sources=tuple(combined_sources),
     )
 
@@ -2370,7 +2372,7 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
         if source.link_depth >= 1:
             item_classes += " web-search-sources__item--followed"
         sources_lines.append(
-            (
+
                 f'<li class="{item_classes}">'
                 f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
                 f"{build_source_favicon_html(source)}"
@@ -2381,7 +2383,7 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
                 "</span>"
                 '<span class="web-search-sources__external">↗</span>'
                 "</a></li>"
-            )
+
         )
 
     if not sources_lines:

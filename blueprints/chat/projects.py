@@ -6,12 +6,12 @@ from fastapi import Request
 from services.api_errors import ApiServiceError
 from services.error_messages import ERROR_LOGIN_REQUIRED
 from services.project_service import (
+    assign_room_to_project,
     create_project,
     delete_project,
     get_project,
     list_projects,
     update_project,
-    assign_room_to_project,
 )
 from services.request_models import (
     AssignRoomProjectRequest,

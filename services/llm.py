@@ -11,12 +11,21 @@ from typing import Any
 from anthropic import Anthropic
 from anthropic import (
     APIConnectionError as AnthropicAPIConnectionError,
+)
+from anthropic import (
     APIStatusError as AnthropicAPIStatusError,
+)
+from anthropic import (
     APITimeoutError as AnthropicAPITimeoutError,
+)
+from anthropic import (
     AuthenticationError as AnthropicAuthenticationError,
+)
+from anthropic import (
     RateLimitError as AnthropicRateLimitError,
 )
 from openai import OpenAI
+
 try:
     from openai import (
         APIConnectionError,
@@ -318,13 +327,11 @@ class LlmToolSchemaError(LlmProviderError):
     the recovery is to replay the step without tools, which the caller performs.
     """
 
-    pass
 
 
 class LlmRequestValidationError(LlmProviderError):
     """The provider rejected request parameters before generation started."""
 
-    pass
 
 
 # 認証エラーによるLLMプロバイダエラーに関する例外クラス。
@@ -747,7 +754,7 @@ def _sanitize_conversation_messages(
         new_msg = dict(message)
         role = str(new_msg.get("role", "user"))
         raw_content = new_msg.get("content")
-        
+
         if raw_content is None:
             content = None
             redacted_content = None
@@ -756,7 +763,7 @@ def _sanitize_conversation_messages(
             redacted_content = _redact_sensitive_text(content)
             if redacted_content != content:
                 redacted_message_count += 1
-        
+
         new_msg["role"] = role
         new_msg["content"] = redacted_content
         sanitized_messages.append(new_msg)
@@ -781,7 +788,7 @@ def _prepare_openai_responses_input(
         new_msg = dict(message)
         role = str(new_msg.get("role", "user"))
         raw_content = new_msg.get("content")
-        
+
         if raw_content is None:
             normalized_content = None
         else:
@@ -1395,7 +1402,7 @@ def get_openai_response(
                     for tc in tool_calls
                 ])
             return message.content or ""
-        
+
         response = openai_client.responses.create(
             model=model_name,
             input=sanitized_messages,

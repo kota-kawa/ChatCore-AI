@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from services.web_search import WebSearchResult, WebSearchSource
 

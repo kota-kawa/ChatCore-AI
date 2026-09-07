@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[2]
     / "alembic"

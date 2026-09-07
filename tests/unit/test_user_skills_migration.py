@@ -1,6 +1,5 @@
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 MIGRATION = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20260828_01_add_user_skills.py"
 

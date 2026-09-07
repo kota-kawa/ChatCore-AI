@@ -24,16 +24,10 @@ from services.mcp_config import (
     get_mcp_allowed_hosts,
     get_mcp_allowed_origins,
     get_mcp_encryption_keys,
+    get_mcp_public_base_url,
     get_mcp_publish_rate_limit_per_day,
     get_mcp_publish_rate_limit_per_hour,
-    get_mcp_public_base_url,
     get_mcp_server_url,
-)
-from services.mcp_oauth import (
-    ChatCoreOAuthProvider,
-    MCP_ALLOWED_SCOPES,
-    MCP_DEFAULT_SCOPES,
-    MCP_PROMPTS_WRITE_SCOPE,
 )
 from services.mcp_image_upload_session import (
     MCP_IMAGE_UPLOAD_CHUNK_MAX_LENGTH,
@@ -44,6 +38,12 @@ from services.mcp_image_upload_session import (
     delete_consumed_mcp_image_upload,
     delete_mcp_image_upload,
 )
+from services.mcp_oauth import (
+    MCP_ALLOWED_SCOPES,
+    MCP_DEFAULT_SCOPES,
+    MCP_PROMPTS_WRITE_SCOPE,
+    ChatCoreOAuthProvider,
+)
 from services.mcp_prompt_publishing import (
     MCP_PROMPT_IMAGE_BASE64_MAX_LENGTH,
     MCP_PROMPT_IMAGE_FILENAME_MAX_LENGTH,
@@ -53,8 +53,8 @@ from services.mcp_prompt_publishing import (
 )
 from services.mcp_request_protection import McpRequestProtectionMiddleware
 from services.mcp_tools.common import (
-    McpActor,
     TOOL_REQUIRED_SCOPES,
+    McpActor,
     audit_tool_success,
     consume_tool_limit,
     require_actor,
@@ -62,8 +62,8 @@ from services.mcp_tools.common import (
 from services.mcp_tools.context_vault import register_context_vault_tools
 from services.mcp_tools.memos import register_memo_tools
 from services.mcp_tools.shared_content import register_shared_content_tools
-from services.prompt_categories import PROMPT_CATEGORIES
 from services.prompt_attachment_storage import delete_prompt_attachment
+from services.prompt_categories import PROMPT_CATEGORIES
 from services.prompt_resources import MAX_SKILL_RESOURCES
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
@@ -73,8 +73,8 @@ from services.request_models import (
     SharedPromptCreateRequest,
     SkillResourceInput,
 )
-from services.shared_prompt_service import create_shared_prompt
 from services.share_common import ShareContentKind, build_public_share_url
+from services.shared_prompt_service import create_shared_prompt
 
 _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None

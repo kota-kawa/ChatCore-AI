@@ -17,7 +17,6 @@ from services.shared_content_service import (
     PublicSkillResourceMetadata,
 )
 
-
 MCP_ENVIRONMENT = {
     "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
     "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",

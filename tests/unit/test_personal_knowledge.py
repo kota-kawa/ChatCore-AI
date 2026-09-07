@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 from services.chat_agent_budget import AgentStepBudget
 from services.chat_evidence_store import EvidenceStore
 from services.chat_generation import ChatGenerationJob
-from services.research_state import TurnState
 from services.personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     PersonalKnowledgeResult,
@@ -13,6 +12,7 @@ from services.personal_knowledge import (
     build_personal_overview,
     search_personal_knowledge,
 )
+from services.research_state import TurnState
 
 
 class _Memo:
