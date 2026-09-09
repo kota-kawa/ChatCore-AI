@@ -2,14 +2,18 @@ import { SETTINGS_NAV_ITEMS } from "../../scripts/user/settings/constants";
 import type { SettingsSection } from "../../scripts/user/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
 
-// 設定画面の左側に表示するナビゲーションサイドバー
-// Navigation sidebar displayed on the left side of the settings page
+// 設定画面のナビゲーション。デスクトップでは左の縦リスト、768px 以下では上部の折り返すタブ列になる。
+// 「戻る」は見出しの左に置き、ページ上に浮かせない。
+// Settings navigation: a vertical rail on desktop, a wrapping tab row at the top below 768px.
+// The back button sits next to the heading instead of floating over the page.
 export function SettingsSidebar({
   activeSection,
-  onSectionSelect
+  onSectionSelect,
+  onBack
 }: {
   activeSection: SettingsSection;
   onSectionSelect: (section: SettingsSection) => void;
+  onBack: () => void;
 }) {
   const { t } = useTranslation();
   const labels: Record<SettingsSection, string> = {
@@ -18,8 +22,18 @@ export function SettingsSidebar({
     notifications: t("settings.notifications"), security: t("settings.security")
   };
   return (
-    <nav className="settings-sidebar">
+    <nav className="settings-sidebar" aria-label={t("settings.heading")}>
       <div className="sidebar-header">
+        <button
+          type="button"
+          className="settings-back-btn"
+          onClick={onBack}
+          data-tooltip={t("common.back")}
+          aria-label={t("common.back")}
+          data-tooltip-placement="bottom"
+        >
+          <i className="bi bi-arrow-left" aria-hidden="true"></i>
+        </button>
         <h3>{t("settings.heading")}</h3>
       </div>
 
@@ -38,15 +52,11 @@ export function SettingsSidebar({
                 onSectionSelect(item.section);
               }}
             >
-              <i className={item.iconClass}></i> {labels[item.section]}
+              <i className={item.iconClass} aria-hidden="true"></i> {labels[item.section]}
             </button>
           </li>
         ))}
       </ul>
-
-      <div className="sidebar-footer">
-        <p>&copy; 2026 ChatCore-AI</p>
-      </div>
     </nav>
   );
 }

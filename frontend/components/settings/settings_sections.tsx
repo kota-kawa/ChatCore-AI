@@ -31,6 +31,41 @@ import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 import type { Locale } from "../../lib/i18n/config";
 
+// 各セクション共通の見出し。h2 と 1 行の説明を左に、件数などの短い補足を右に置く。
+// ヒーロー帯やアイコンバッジは使わず、カードの外に見出しを出して現在位置を読みやすくする。
+// Shared section header: h2 + one-line lead on the left, a short aside (e.g. a count) on the right.
+// No hero band or icon badge; the heading sits above the card so the current section reads at a glance.
+function SettingsSectionHeader({
+  title,
+  lead,
+  aside
+}: {
+  title: string;
+  lead?: string;
+  aside?: ReactNode;
+}) {
+  return (
+    <header className="settings-section-header">
+      <div className="settings-section-header__text">
+        <h2>{title}</h2>
+        {lead ? <p className="settings-section-lead">{lead}</p> : null}
+      </div>
+      {aside ? <div className="settings-section-header__aside">{aside}</div> : null}
+    </header>
+  );
+}
+
+// 件数表示 — 見出し右側の短い補足。件数の更新を読み上げるため role=status を維持する
+// Count aside for the section header; keeps role=status so count updates are announced
+function PromptsCount({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="settings-section-count" role="status" aria-live="polite">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </p>
+  );
+}
+
 export function LanguageSettingsSection({
   isActive,
   locale,
@@ -50,10 +85,8 @@ export function LanguageSettingsSection({
       data-section="language"
       hidden={!isActive}
     >
+      <SettingsSectionHeader title={t("settings.languageHeading")} lead={t("settings.languageDescription")} />
       <div className="settings-card">
-        <h2>{t("settings.languageHeading")}</h2>
-        <p className="settings-section-lead">{t("settings.languageDescription")}</p>
-
         {/* radiogroup ロールでスクリーンリーダーに言語の選択グループを認識させる / radiogroup role helps screen readers recognize the group of language choices */}
         <div
           className="language-options"
@@ -135,13 +168,13 @@ export function ProfileSettingsSection({
   const { t } = useTranslation();
   return (
     <div id="profile-section" className={`settings-section${isActive ? " active" : ""}`}>
-      {/* 保存成功時に settings-card--save-success クラスを付与してアニメーションを発火する / Add save-success class on success to trigger the animation */}
-      <div className={`settings-card${profileSaveEffectActive ? " settings-card--save-success" : ""}`}>
-        <h2>{t("settings.profileHeading")}</h2>
+      <SettingsSectionHeader title={t("settings.profileHeading")} />
+      <div className="settings-card">
+        {/* 保存結果はカード先頭に 1 行で示す。演出は付けず、文言とアイコンだけで伝える / The save result is one line at the top of the card — no animation, just text and an icon */}
         {profileSaveStatus ? (
           <p
             key={`${profileSaveStatus.tone}-${profileSaveEffectToken}`}
-            className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}${profileSaveStatus.tone === "success" && profileSaveEffectActive ? " settings-inline-feedback--celebrate" : ""}`}
+            className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}`}
             role={profileSaveStatus.tone === "error" ? "alert" : "status"}
             aria-live={profileSaveStatus.tone === "error" ? "assertive" : "polite"}
           >
@@ -162,21 +195,16 @@ export function ProfileSettingsSection({
               {t("settings.avatar")}
             </label>
             <div className="avatar-preview-wrapper">
-              <img
-                id="avatarPreview"
-                src={avatarPreviewUrl}
-                alt="Avatar Preview"
-                className="avatar-preview"
-              />
+              <img id="avatarPreview" src={avatarPreviewUrl} alt="Avatar Preview" className="avatar-preview" />
+              {/* 画像に重ねた丸ボタンではなく、隣に文字入りのボタンを置く / A labelled button beside the picture instead of a round overlay */}
               <button
                 type="button"
                 className="change-avatar-btn"
                 id="changeAvatarBtn"
-                data-tooltip={t("settings.chooseAvatar")}
-                data-tooltip-placement="bottom"
                 onClick={() => avatarInputRef.current?.click()}
               >
-                <i className="bi bi-pencil-fill"></i>
+                <i className="bi bi-image" aria-hidden="true"></i>
+                {t("settings.chooseAvatar")}
               </button>
             </div>
             <input
@@ -209,6 +237,9 @@ export function ProfileSettingsSection({
             <label className="form-label" htmlFor="email">
               {t("settings.email")}
             </label>
+            <p className="form-help-text" id="email-help">
+              {t("settings.emailHelp")}
+            </p>
             <input
               type="email"
               id="email"
@@ -216,11 +247,9 @@ export function ProfileSettingsSection({
               className="custom-form-control"
               placeholder="example@domain.com"
               value={profileForm.email}
+              aria-describedby="email-help"
               readOnly
             />
-            <p className="form-help-text">
-              {t("settings.emailHelp")}
-            </p>
           </div>
 
           <div className="form-group">
@@ -243,6 +272,9 @@ export function ProfileSettingsSection({
             <label className="form-label" htmlFor="llmProfileContext">
               {t("settings.aiContext")}
             </label>
+            <p className="form-help-text" id="llmProfileContext-help">
+              {t("settings.aiContextHelp")}
+            </p>
             <textarea
               id="llmProfileContext"
               name="llmProfileContext"
@@ -250,11 +282,9 @@ export function ProfileSettingsSection({
               className="custom-form-control"
               placeholder={t("settings.aiContextPlaceholder")}
               value={profileForm.llmProfileContext}
+              aria-describedby="llmProfileContext-help"
               onChange={onProfileInputChange}
             ></textarea>
-            <p className="form-help-text">
-              {t("settings.aiContextHelp")}
-            </p>
           </div>
 
           <div className="button-group">
@@ -298,12 +328,8 @@ export function AppearanceSettingsSection({
   };
   return (
     <div id="appearance-section" className={`settings-section${isActive ? " active" : ""}`}>
+      <SettingsSectionHeader title={t("settings.appearance")} lead={t("settings.appearanceDescription")} />
       <div className="settings-card">
-        <h2>{t("settings.appearance")}</h2>
-        <p className="settings-section-lead">
-          {t("settings.appearanceDescription")}
-        </p>
-
         {/* radiogroup ロールでスクリーンリーダーにグループを認識させる / radiogroup role helps screen readers recognize the group of theme choices */}
         <div className="theme-options" role="radiogroup" aria-label={t("settings.themeSelection")}>
           {THEME_OPTIONS.map((option) => {
@@ -335,43 +361,6 @@ export function AppearanceSettingsSection({
         </div>
       </div>
     </div>
-  );
-}
-
-// 投稿／いいねプロンプト両セクションで共有するヒーローヘッダー
-// Shared hero header for both the authored and liked prompt sections — mirrors the security center layout
-function PromptsHero({
-  icon,
-  eyebrow,
-  title,
-  lead,
-  statLabel,
-  statValue
-}: {
-  icon: string;
-  eyebrow: string;
-  title: string;
-  lead: string;
-  statLabel: string;
-  statValue: string;
-}) {
-  return (
-    <header className="prompts-hero">
-      <div className="prompts-hero__intro">
-        <span className="prompts-hero__icon" aria-hidden="true">
-          <i className={`bi ${icon}`}></i>
-        </span>
-        <div>
-          <p className="prompts-hero__eyebrow">{eyebrow}</p>
-          <h2>{title}</h2>
-          <p className="prompts-hero__lead">{lead}</p>
-        </div>
-      </div>
-      <div className="prompts-hero__stat" role="status" aria-live="polite">
-        <span className="prompts-hero__stat-label">{statLabel}</span>
-        <strong className="prompts-hero__stat-value">{statValue}</strong>
-      </div>
-    </header>
   );
 }
 
@@ -413,18 +402,20 @@ export function AuthoredPromptsSection({
   const { t } = useTranslation();
   return (
     <div id="prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card settings-card--prompts">
-        <PromptsHero
-          icon="bi-megaphone"
-          eyebrow="Shared prompts"
-          title={t("settings.prompts")}
-          lead={t("settings.publishedLead")}
-          statLabel={t("settings.publishedCount")}
-          statValue={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
-        />
+      <SettingsSectionHeader
+        title={t("settings.prompts")}
+        lead={t("settings.publishedLead")}
+        aside={(
+          <PromptsCount
+            label={t("settings.publishedCount")}
+            value={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
+          />
+        )}
+      />
+      <div className="settings-prompts">
 
         {/* ローディング・エラー・空状態の 3 パターンを排他的に表示する / Show loading, error, or empty state exclusively — only one at a time */}
-        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} className="mb-4" /> : null}
+        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} /> : null}
         {!loading && error ? (
           <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
             <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
@@ -466,17 +457,19 @@ export function LikedPromptsSection({
   const { t } = useTranslation();
   return (
     <div id="liked-prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card settings-card--prompts">
-        <PromptsHero
-          icon="bi-heart-fill"
-          eyebrow="Liked prompts"
-          title={t("settings.likedPrompts")}
-          lead={t("settings.likedLead")}
-          statLabel={t("settings.savedCount")}
-          statValue={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
-        />
+      <SettingsSectionHeader
+        title={t("settings.likedPrompts")}
+        lead={t("settings.likedLead")}
+        aside={(
+          <PromptsCount
+            label={t("settings.savedCount")}
+            value={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
+          />
+        )}
+      />
+      <div className="settings-prompts">
 
-        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} className="mb-4" /> : null}
+        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} /> : null}
         {!loading && error ? (
           <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
             <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
@@ -509,8 +502,8 @@ export function NotificationsSettingsSection({ isActive }: { isActive: boolean }
       id="notifications-section"
       className={`settings-section${isActive ? " active" : ""}`}
     >
+      <SettingsSectionHeader title={t("settings.notifications")} />
       <div className="settings-card">
-        <h2>{t("settings.notifications")}</h2>
         <p>{t("settings.notificationsComingSoon")}</p>
       </div>
     </div>
@@ -738,21 +731,9 @@ export function SecuritySettingsSection({
     : t("settings.neverUsed");
   return (
     <div id="security-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card settings-card--security">
-        <header className="security-hero">
-          <div className="security-hero__intro">
-            <span className="security-hero__icon" aria-hidden="true">
-              <i className="bi bi-shield-check"></i>
-            </span>
-            <div>
-              <p className="security-hero__eyebrow">Security center</p>
-              <h2>{t("settings.securityHeading")}</h2>
-              <p className="security-hero__lead">
-                {t("settings.securityLead")}
-              </p>
-            </div>
-          </div>
-
+      <div className="security-center">
+        <SettingsSectionHeader title={t("settings.securityHeading")} lead={t("settings.securityLead")} />
+        {/* 現状の 3 項目を罫線付きの行で並べる。ヒーロー帯・ぼかし・装飾は置かない / Three status rows with 1px borders; no hero band, blur or ornament */}
           <div className="security-overview" role="list" aria-label={t("settings.securityOverview")}>
             <div className="security-overview__item" role="listitem">
               <span className="security-overview__icon" aria-hidden="true">
@@ -793,7 +774,6 @@ export function SecuritySettingsSection({
               </span>
             </div>
           </div>
-        </header>
 
         <nav className="security-jump-nav" aria-label={t("settings.securityMenu")}>
           <a href="#security-sign-in">
@@ -810,7 +790,6 @@ export function SecuritySettingsSection({
         <div className="security-stack">
           <section id="security-sign-in" className="security-group" aria-labelledby="security-sign-in-title">
             <div className="security-group__heading">
-              <span className="security-group__number">01</span>
               <div>
                 <h3 id="security-sign-in-title">{t("settings.signInVerification")}</h3>
                 <p>{t("settings.signInHelp")}</p>
@@ -820,9 +799,6 @@ export function SecuritySettingsSection({
           {/* メールアドレス変更パネル — 2 段階確認コードフローを含む / Email-change panel — includes two-step verification code flow */}
           <div className="security-panel security-panel--email">
             <div className="security-panel__head">
-              <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-envelope-at"></i>
-              </span>
               <div className="security-panel__heading">
                 <h3>{t("settings.changeEmail")}</h3>
                 <p className="security-panel__description">
@@ -951,9 +927,6 @@ export function SecuritySettingsSection({
           {/* Passkey 登録パネル — ブラウザ非対応時はボタンを無効化する / Passkey registration panel — buttons disabled when browser lacks support */}
           <div className="security-panel security-panel--passkeys">
             <div className="security-panel__head">
-              <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-fingerprint"></i>
-              </span>
               <div className="security-panel__heading">
                 <h3>Passkey</h3>
                 <p className="security-panel__description">
@@ -1002,7 +975,6 @@ export function SecuritySettingsSection({
             </div>
             <div className="security-panel__subhead">
               <div>
-                <span className="security-panel__kicker">Trusted devices</span>
                 <h4>{t("settings.registeredDevices")}</h4>
               </div>
               <span className="security-count" aria-label={t("settings.passkeysCount", { count: passkeys.length })}>
@@ -1023,9 +995,6 @@ export function SecuritySettingsSection({
               ) : (
                 passkeys.map((passkey) => (
                   <div key={passkey.id} className="passkey-item">
-                    <span className="passkey-item__icon" aria-hidden="true">
-                      <i className="bi bi-shield-lock-fill"></i>
-                    </span>
                     <div className="passkey-item__body">
                       <strong className="passkey-item__title">{passkey.label}</strong>
                       <dl className="security-meta">
@@ -1069,7 +1038,6 @@ export function SecuritySettingsSection({
 
           <section id="security-connections" className="security-group" aria-labelledby="security-connections-title">
             <div className="security-group__heading">
-              <span className="security-group__number">02</span>
               <div>
                 <h3 id="security-connections-title">{t("settings.connections")}</h3>
                 <p>{t("settings.connectionsHelp")}</p>
@@ -1079,9 +1047,6 @@ export function SecuritySettingsSection({
 
           <div className="security-panel" id="connected-ai-services">
             <div className="security-panel__head">
-              <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-robot"></i>
-              </span>
               <div className="security-panel__heading">
                 <h3>{t("settings.connectedAi")}</h3>
                 <p className="security-panel__description">
@@ -1119,9 +1084,6 @@ export function SecuritySettingsSection({
               ) : (
                 mcpOAuthConnections.map((connection) => (
                   <div key={connection.id} className="passkey-item">
-                    <span className="passkey-item__icon" aria-hidden="true">
-                      <i className="bi bi-robot"></i>
-                    </span>
                     <div className="passkey-item__body">
                       <EditableSecurityName
                         value={connection.display_name || ""}
@@ -1178,9 +1140,6 @@ export function SecuritySettingsSection({
 
           <div className="security-panel security-panel--advanced">
             <div className="security-panel__head">
-              <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-plug-fill"></i>
-              </span>
               <div className="security-panel__heading">
                 <h3>{locale === "en" ? "MCP connection" : "MCP接続"}</h3>
                 <p className="security-panel__description">
@@ -1276,7 +1235,6 @@ export function SecuritySettingsSection({
             </details>
             <div className="security-panel__subhead">
               <div>
-                <span className="security-panel__kicker">Credentials</span>
                 <h4>{t("settings.savedCredentials")}</h4>
               </div>
               <button
@@ -1305,9 +1263,6 @@ export function SecuritySettingsSection({
               ) : (
                 mcpOAuthClients.map((client) => (
                   <div key={client.client_id} className="passkey-item">
-                    <span className="passkey-item__icon" aria-hidden="true">
-                      <i className="bi bi-key-fill"></i>
-                    </span>
                     <div className="passkey-item__body">
                       <EditableSecurityName
                         value={client.label}
@@ -1357,7 +1312,6 @@ export function SecuritySettingsSection({
           {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}
           <section id="security-danger-zone" className="security-group security-group--danger" aria-labelledby="security-danger-title">
             <div className="security-group__heading">
-              <span className="security-group__number">03</span>
               <div>
                 <h3 id="security-danger-title">{t("settings.dangerousActions")}</h3>
                 <p>{t("settings.dangerLead")}</p>
@@ -1365,9 +1319,6 @@ export function SecuritySettingsSection({
             </div>
           <div className="security-panel security-panel--danger">
             <div className="account-delete-header">
-              <span className="security-panel__icon security-panel__icon--danger" aria-hidden="true">
-                <i className="bi bi-exclamation-triangle"></i>
-              </span>
               <div className="account-delete-header__text">
                 <h3>{t("settings.deleteAccount")}</h3>
                 <p className="account-delete-copy">

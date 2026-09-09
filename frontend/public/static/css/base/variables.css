@@ -168,6 +168,22 @@
   --settings-text-muted: #6c757d;
   --settings-border-color: #dee2e6;
   --settings-input-bg: #ffffff;
+  /* 設定画面（pages/user_settings）の面・強調・危険色。不透明な面と 1px 罫線で組む前提のトークン。
+     Settings page (pages/user_settings) surface, accent and danger tokens for opaque surfaces with 1px borders. */
+  --settings-text-primary: #1a1a1a;
+  --settings-surface-muted: #f4f5f7;
+  --settings-accent: var(--primary-dark);
+  --settings-accent-hover: var(--primary-dark-hover);
+  --settings-accent-text: #ffffff;
+  --settings-accent-soft: rgba(15, 122, 81, 0.1);
+  --settings-focus-ring: 0 0 0 3px rgba(15, 122, 81, 0.28);
+  --settings-danger: var(--danger-color);
+  --settings-danger-hover: var(--danger-hover);
+  --settings-danger-soft: rgba(220, 38, 38, 0.08);
+  --settings-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --settings-radius-surface: 14px;
+  --settings-radius-card: 10px;
+  --settings-radius-control: 8px;
 
   --breakpoint-sm: 576px;
   --breakpoint-md: 768px;
@@ -244,4 +260,15 @@
   --settings-text-muted: #9ca3af;
   --settings-border-color: rgba(148, 163, 184, 0.3);
   --settings-input-bg: #0f172a;
+  --settings-text-primary: #e5e7eb;
+  --settings-surface-muted: #1b2333;
+  --settings-accent: #19c37d;
+  --settings-accent-hover: #34d399;
+  --settings-accent-text: #062c1e;
+  --settings-accent-soft: rgba(25, 195, 125, 0.16);
+  --settings-focus-ring: 0 0 0 3px rgba(25, 195, 125, 0.32);
+  --settings-danger: #f87171;
+  --settings-danger-hover: #ef4444;
+  --settings-danger-soft: rgba(248, 113, 113, 0.14);
+  --settings-shadow: 0 1px 2px rgba(2, 6, 23, 0.4);
 }
