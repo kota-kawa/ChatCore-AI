@@ -21,7 +21,9 @@ type ChatShareModalProps = {
 };
 
 // チャット履歴を共有するためのリンク生成・コピー・SNSシェアを提供するモーダルコンポーネント
-// Modal component for sharing chat history by generating, copying, and sharing on SNS
+// 共通モーダル面（cc-modal）の小サイズで描き、中身はプロンプト共有の共有モーダルと同じ cc-share-modal。
+// Modal component for sharing chat history by generating, copying, and sharing on SNS.
+// Drawn on the small shared modal surface (cc-modal); the body is the same cc-share-modal as Prompt Share.
 export function ChatShareModal({
   shareModalOpen,
   shareStatus,
@@ -42,46 +44,41 @@ export function ChatShareModal({
       isOpen={shareModalOpen}
       onClose={closeShareModal}
       id="chat-share-modal"
-      className="chat-share-modal cc-share-modal"
+      className="cc-modal cc-share-modal chat-share-modal"
       labelledBy="chat-share-title"
       initialFocusSelector="#chat-share-copy-btn"
     >
-      <div className="chat-share-modal__content cc-share-modal__content" tabIndex={-1}>
-        <ModalCloseButton
-          id="chat-share-close-btn"
-          className="chat-share-close-btn cc-share-modal__close"
-          label={t("chat.closeModal")}
-          onClick={closeShareModal}
-        />
-
-        <header className="chat-share-modal__header cc-share-modal__header">
-          <h2 id="chat-share-title">{t("chat.shareTitle")}</h2>
-          <p className="chat-share-modal__desc cc-share-modal__lead">
-            {t("chat.shareDescription")}
-          </p>
+      <div className="cc-modal__panel cc-modal__panel--sm cc-share-modal__content" tabIndex={-1}>
+        <header className="cc-modal__header cc-share-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="chat-share-title">{t("chat.shareTitle")}</h2>
+            <p className="cc-modal__lead cc-share-modal__lead">{t("chat.shareDescription")}</p>
+          </div>
+          <ModalCloseButton id="chat-share-close-btn" label={t("chat.closeModal")} onClick={closeShareModal} />
         </header>
 
-        <ShareDialogContent
-          bodyClassName="chat-share-modal__body"
-          shareUrl={shareUrl}
-          shareLoading={shareLoading}
-          shareStatus={{ text: shareStatus.message, isError: shareStatus.error }}
-          shareStatusId="chat-share-status"
-          shareStatusClassName="chat-share-status cc-share-modal__status"
-          shareStatusErrorClassName="chat-share-status--error cc-share-modal__status--error"
-          linkInputId="chat-share-link-input"
-          linkPlaceholder={locale === "en" ? "Preparing share link" : "共有リンクを準備しています"}
-          copyButtonId="chat-share-copy-btn"
-          onCopyLink={copyShareLink}
-          copyLabel={t("chat.copyLink")}
-          copiedLabel={t("common.copied")}
-          socialLinks={{ x: shareXUrl, line: shareLineUrl, facebook: shareFacebookUrl }}
-          socialLinkIds={{ x: "chat-share-sns-x", line: "chat-share-sns-line", facebook: "chat-share-sns-facebook" }}
-          supportsNativeShare={supportsNativeShare}
-          nativeShareButtonId="chat-share-web-btn"
-          nativeShareLabel={locale === "en" ? "Share from this device" : "端末で共有"}
-          onNativeShare={shareWithNativeSheet}
-        />
+        <div className="cc-modal__body">
+          <ShareDialogContent
+            shareUrl={shareUrl}
+            shareLoading={shareLoading}
+            shareStatus={{ text: shareStatus.message, isError: shareStatus.error }}
+            shareStatusId="chat-share-status"
+            shareStatusClassName="cc-share-modal__status"
+            shareStatusErrorClassName="cc-share-modal__status--error"
+            linkInputId="chat-share-link-input"
+            linkPlaceholder={locale === "en" ? "Preparing share link" : "共有リンクを準備しています"}
+            copyButtonId="chat-share-copy-btn"
+            onCopyLink={copyShareLink}
+            copyLabel={t("chat.copyLink")}
+            copiedLabel={t("common.copied")}
+            socialLinks={{ x: shareXUrl, line: shareLineUrl, facebook: shareFacebookUrl }}
+            socialLinkIds={{ x: "chat-share-sns-x", line: "chat-share-sns-line", facebook: "chat-share-sns-facebook" }}
+            supportsNativeShare={supportsNativeShare}
+            nativeShareButtonId="chat-share-web-btn"
+            nativeShareLabel={locale === "en" ? "Share from this device" : "端末で共有"}
+            onNativeShare={shareWithNativeSheet}
+          />
+        </div>
       </div>
     </ModalShell>
   );

@@ -126,7 +126,9 @@ describe("SkillSection", () => {
     expect(addButtons).toHaveLength(2);
     expect(addButtons.every((button) => button.tagName === "BUTTON")).toBe(true);
     expect(addButtons.some((button) => button.getAttribute("type") === "submit")).toBe(true);
-    expect(screen.getByRole("button", { name: "キャンセル" })).toHaveClass("custom-btn-secondary");
+    // モーダルのボタンは共通モーダル面（cc-modal）の部品に揃えたため、旧 custom-btn-secondary ではなく cc-modal__btn を確認する
+    // Modal buttons now use the shared cc-modal surface parts, so assert cc-modal__btn instead of the old custom-btn-secondary
+    expect(screen.getByRole("button", { name: "キャンセル" })).toHaveClass("cc-modal__btn");
   });
 
   it("marks the default Skill and does not expose delete", () => {

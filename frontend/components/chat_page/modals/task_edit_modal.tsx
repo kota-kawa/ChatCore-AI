@@ -16,7 +16,9 @@ type TaskEditModalProps = {
 };
 
 // タスクの各フィールド（名前・プロンプト・ルール・例など）を編集するモーダルコンポーネント
-// Modal component for editing task fields (name, prompt, rules, examples, etc.)
+// 共通モーダル面（cc-modal）の中サイズで描き、フォーム部品は custom-form-* を使う。
+// Modal component for editing task fields (name, prompt, rules, examples, etc.), drawn on the
+// medium shared modal surface (cc-modal) with the custom-form-* controls.
 export function TaskEditModal({
   taskEditModalOpen,
   taskEditForm,
@@ -31,167 +33,162 @@ export function TaskEditModal({
       isOpen={taskEditModalOpen}
       onClose={closeTaskEditModal}
       id="taskEditModal"
-      className="custom-modal"
+      className="cc-modal task-edit-modal"
       labelledBy="taskEditModalTitle"
       initialFocusSelector="#taskName"
     >
-      <div className="custom-modal-dialog">
-        <div className="custom-modal-content">
-          <div className="custom-modal-header">
-            <h5 className="custom-modal-title" id="taskEditModalTitle">{t("chat.editTask")}</h5>
-            <ModalCloseButton
-              className="custom-modal-close"
-              id="closeTaskEditModal"
-              label={t("chat.closeModal")}
-              onClick={closeTaskEditModal}
-            />
+      <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1}>
+        <header className="cc-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="taskEditModalTitle">{t("chat.editTask")}</h2>
           </div>
+          <ModalCloseButton id="closeTaskEditModal" label={t("chat.closeModal")} onClick={closeTaskEditModal} />
+        </header>
 
-          {/* タスク編集フォーム（送信はReactで制御するのでdefaultのsubmitを防ぐ）*/}
-          {/* Task edit form (prevent default submit as it's controlled by React) */}
-          <div className="custom-modal-body">
-            <form id="taskEditForm" onSubmit={(event) => event.preventDefault()}>
-              {/* タスク名 / Task name */}
-              <div className="custom-form-group">
-                <label htmlFor="taskName" className="custom-form-label">
-                  <span className="custom-form-label__required">{t("chat.taskTitle")}</span>
-                </label>
-                <input
-                  type="text"
-                  className="custom-form-control"
-                  id="taskName"
-                  name="name"
-                  placeholder={locale === "en" ? "For example: Write an email" : "例：メール作成"}
-                  required
-                  aria-required="true"
-                  value={taskEditForm.new_task}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      new_task: event.target.value,
-                    }));
-                  }}
-                />
-                <div className="custom-form-text">{locale === "en" ? "Enter a name for the task." : "タスクの名前を入力してください。"}</div>
-              </div>
+        {/* タスク編集フォーム（送信はReactで制御するのでdefaultのsubmitを防ぐ）*/}
+        {/* Task edit form (prevent default submit as it's controlled by React) */}
+        <form id="taskEditForm" className="cc-modal__form" onSubmit={(event) => event.preventDefault()}>
+          <div className="cc-modal__body">
+            {/* タスク名 / Task name */}
+            <div className="custom-form-group">
+              <label htmlFor="taskName" className="custom-form-label">
+                <span className="custom-form-label__required">{t("chat.taskTitle")}</span>
+              </label>
+              <input
+                type="text"
+                className="custom-form-control"
+                id="taskName"
+                name="name"
+                placeholder={locale === "en" ? "For example: Write an email" : "例：メール作成"}
+                required
+                aria-required="true"
+                value={taskEditForm.new_task}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    new_task: event.target.value,
+                  }));
+                }}
+              />
+              <div className="custom-form-text">{locale === "en" ? "Enter a name for the task." : "タスクの名前を入力してください。"}</div>
+            </div>
 
-              {/* プロンプトテンプレート / Prompt template */}
-              <div className="custom-form-group">
-                <label htmlFor="promptTemplate" className="custom-form-label">
-                  {locale === "en" ? "Prompt template" : "プロンプトテンプレート"}
-                </label>
-                <textarea
-                  className="custom-form-control"
-                  id="promptTemplate"
-                  name="prompt_template"
-                  rows={2}
-                  placeholder={locale === "en" ? "For example: Draft the email body…" : "例：メール本文の書き出し..."}
-                  value={taskEditForm.prompt_template}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      prompt_template: event.target.value,
-                    }));
-                  }}
-                ></textarea>
-                <div className="custom-form-text">{locale === "en" ? "The prompt template used when this task runs." : "タスク実行時に使用するプロンプトテンプレートです。"}</div>
-              </div>
+            {/* プロンプトテンプレート / Prompt template */}
+            <div className="custom-form-group">
+              <label htmlFor="promptTemplate" className="custom-form-label">
+                {locale === "en" ? "Prompt template" : "プロンプトテンプレート"}
+              </label>
+              <textarea
+                className="custom-form-control"
+                id="promptTemplate"
+                name="prompt_template"
+                rows={2}
+                placeholder={locale === "en" ? "For example: Draft the email body…" : "例：メール本文の書き出し..."}
+                value={taskEditForm.prompt_template}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    prompt_template: event.target.value,
+                  }));
+                }}
+              ></textarea>
+              <div className="custom-form-text">{locale === "en" ? "The prompt template used when this task runs." : "タスク実行時に使用するプロンプトテンプレートです。"}</div>
+            </div>
 
-              {/* 回答ルール / Response rules */}
-              <div className="custom-form-group">
-                <label htmlFor="responseRules" className="custom-form-label">
-                  {locale === "en" ? "Response rules" : "回答ルール"}
-                </label>
-                <textarea
-                  className="custom-form-control"
-                  id="responseRules"
-                  name="response_rules"
-                  rows={2}
-                  placeholder={locale === "en" ? "For example: Ask for missing details first. Lead with the conclusion." : "例：不足情報があれば先に確認する。結論から先に書く。"}
-                  value={taskEditForm.response_rules}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      response_rules: event.target.value,
-                    }));
-                  }}
-                ></textarea>
-                <div className="custom-form-text">{locale === "en" ? "Optional rules the AI should prioritize in its answer." : "回答時に優先させたいルールを任意で指定します。"}</div>
-              </div>
+            {/* 回答ルール / Response rules */}
+            <div className="custom-form-group">
+              <label htmlFor="responseRules" className="custom-form-label">
+                {locale === "en" ? "Response rules" : "回答ルール"}
+              </label>
+              <textarea
+                className="custom-form-control"
+                id="responseRules"
+                name="response_rules"
+                rows={2}
+                placeholder={locale === "en" ? "For example: Ask for missing details first. Lead with the conclusion." : "例：不足情報があれば先に確認する。結論から先に書く。"}
+                value={taskEditForm.response_rules}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    response_rules: event.target.value,
+                  }));
+                }}
+              ></textarea>
+              <div className="custom-form-text">{locale === "en" ? "Optional rules the AI should prioritize in its answer." : "回答時に優先させたいルールを任意で指定します。"}</div>
+            </div>
 
-              {/* 出力テンプレート / Output template */}
-              <div className="custom-form-group">
-                <label htmlFor="outputSkeleton" className="custom-form-label">
-                  {locale === "en" ? "Output template" : "出力テンプレート"}
-                </label>
-                <textarea
-                  className="custom-form-control"
-                  id="outputSkeleton"
-                  name="output_skeleton"
-                  rows={2}
-                  placeholder={locale === "en" ? "For example: ## Conclusion\n## Details\n## Next steps" : "例：## 結論\n## 詳細\n## 次の一手"}
-                  value={taskEditForm.output_skeleton}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      output_skeleton: event.target.value,
-                    }));
-                  }}
-                ></textarea>
-                <div className="custom-form-text">{locale === "en" ? "Optionally define the structure of the answer." : "回答の骨組みを任意で指定します。"}</div>
-              </div>
+            {/* 出力テンプレート / Output template */}
+            <div className="custom-form-group">
+              <label htmlFor="outputSkeleton" className="custom-form-label">
+                {locale === "en" ? "Output template" : "出力テンプレート"}
+              </label>
+              <textarea
+                className="custom-form-control"
+                id="outputSkeleton"
+                name="output_skeleton"
+                rows={2}
+                placeholder={locale === "en" ? "For example: ## Conclusion\n## Details\n## Next steps" : "例：## 結論\n## 詳細\n## 次の一手"}
+                value={taskEditForm.output_skeleton}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    output_skeleton: event.target.value,
+                  }));
+                }}
+              ></textarea>
+              <div className="custom-form-text">{locale === "en" ? "Optionally define the structure of the answer." : "回答の骨組みを任意で指定します。"}</div>
+            </div>
 
-              {/* 入力例 / Input examples */}
-              <div className="custom-form-group">
-                <label htmlFor="inputExamples" className="custom-form-label">
-                  {locale === "en" ? "Input example" : "入力例"}
-                </label>
-                <textarea
-                  className="custom-form-control"
-                  id="inputExamples"
-                  name="input_examples"
-                  rows={2}
-                  placeholder={locale === "en" ? "For example: What is today’s weather?" : "例：今日の天気は？"}
-                  value={taskEditForm.input_examples}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      input_examples: event.target.value,
-                    }));
-                  }}
-                ></textarea>
-                <div className="custom-form-text">{locale === "en" ? "An example of what a user might enter." : "ユーザーが入力する例です。"}</div>
-              </div>
+            {/* 入力例 / Input examples */}
+            <div className="custom-form-group">
+              <label htmlFor="inputExamples" className="custom-form-label">
+                {locale === "en" ? "Input example" : "入力例"}
+              </label>
+              <textarea
+                className="custom-form-control"
+                id="inputExamples"
+                name="input_examples"
+                rows={2}
+                placeholder={locale === "en" ? "For example: What is today’s weather?" : "例：今日の天気は？"}
+                value={taskEditForm.input_examples}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    input_examples: event.target.value,
+                  }));
+                }}
+              ></textarea>
+              <div className="custom-form-text">{locale === "en" ? "An example of what a user might enter." : "ユーザーが入力する例です。"}</div>
+            </div>
 
-              {/* 出力例 / Output examples */}
-              <div className="custom-form-group">
-                <label htmlFor="outputExamples" className="custom-form-label">
-                  {locale === "en" ? "Output example" : "出力例"}
-                </label>
-                <textarea
-                  className="custom-form-control"
-                  id="outputExamples"
-                  name="output_examples"
-                  rows={2}
-                  placeholder={locale === "en" ? "For example: It will be sunny." : "例：晴れです。"}
-                  value={taskEditForm.output_examples}
-                  onChange={(event) => {
-                    setTaskEditForm((previous) => ({
-                      ...previous,
-                      output_examples: event.target.value,
-                    }));
-                  }}
-                ></textarea>
-                <div className="custom-form-text">{locale === "en" ? "An example output for this task." : "タスク実行時の出力例です。"}</div>
-              </div>
-            </form>
+            {/* 出力例 / Output examples */}
+            <div className="custom-form-group">
+              <label htmlFor="outputExamples" className="custom-form-label">
+                {locale === "en" ? "Output example" : "出力例"}
+              </label>
+              <textarea
+                className="custom-form-control"
+                id="outputExamples"
+                name="output_examples"
+                rows={2}
+                placeholder={locale === "en" ? "For example: It will be sunny." : "例：晴れです。"}
+                value={taskEditForm.output_examples}
+                onChange={(event) => {
+                  setTaskEditForm((previous) => ({
+                    ...previous,
+                    output_examples: event.target.value,
+                  }));
+                }}
+              ></textarea>
+              <div className="custom-form-text">{locale === "en" ? "An example output for this task." : "タスク実行時の出力例です。"}</div>
+            </div>
           </div>
 
           {/* キャンセルと保存ボタン / Cancel and save buttons */}
-          <div className="custom-modal-footer">
+          <footer className="cc-modal__footer">
             <button
               type="button"
-              className="custom-btn-secondary"
+              className="cc-modal__btn"
               id="cancelTaskEditModal"
               onClick={closeTaskEditModal}
             >
@@ -199,7 +196,7 @@ export function TaskEditModal({
             </button>
             <button
               type="button"
-              className="primary-button"
+              className="cc-modal__btn cc-modal__btn--primary"
               id="saveTaskChanges"
               onClick={() => {
                 onSave();
@@ -207,8 +204,8 @@ export function TaskEditModal({
             >
               {t("common.save")}
             </button>
-          </div>
-        </div>
+          </footer>
+        </form>
       </div>
     </ModalShell>
   );
