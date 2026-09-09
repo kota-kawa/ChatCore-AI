@@ -4,19 +4,21 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { PromptShareDetailModal } from "../components/prompt_share/prompt_share_detail_modal";
+import { PromptShareDetailModalPanel } from "../components/prompt_share/prompt_share_detail_modal";
 import { PromptSharePageLayout } from "../components/prompt_share/prompt_share_page_layout";
 
 const noop = () => {};
 
-test("prompt share modal lock keeps the inline edit modal interactive", () => {
+// モーダルは ModalShell で body 直下に描かれる。ロック中はページ本体だけを止め、開いているモーダルは操作できる
+// Modals render under <body> via ModalShell: the lock stops the page and keeps the open modal interactive
+test("prompt share modal lock keeps the open modal interactive", () => {
   const css = readFileSync(
     new URL("../public/prompt_share/static/css/pages/prompt_share.foundation.css", import.meta.url),
     "utf8"
   );
 
-  assert.match(css, /:not\(#promptEditModalScope\)/);
-  assert.match(css, /ps-modal-open #promptEditModalScope[\s\S]*?pointer-events: auto;/);
+  assert.match(css, /ps-modal-open \.prompt-share-page > \*\s*\{\s*pointer-events: none;/);
+  assert.match(css, /ps-modal-open \.modal-base\.is-open\s*\{\s*pointer-events: auto;/);
 });
 
 test("prompt share layout renders crawlable page content before client API data loads", () => {
@@ -230,11 +232,9 @@ test("prompt share layout links the active category guide from the feed heading"
 
 test("prompt share detail modal highlights prompt content and metadata", () => {
   const html = renderToStaticMarkup(
-    React.createElement(PromptShareDetailModal, {
-      isOpen: true,
+    React.createElement(PromptShareDetailModalPanel, {
       isLoggedIn: true,
       activeView: "detail",
-      promptDetailModalRef: React.createRef<HTMLDivElement>(),
       commentsSectionRef: React.createRef<HTMLElement>(),
       commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
       detailPrompt: {
@@ -277,7 +277,7 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
   // 静的マークアップの時点ではMarkdown用コンテナが選ばれていることだけを確認する
   // The body renders as Markdown only after client-side mount, so the static
   // markup only confirms the Markdown container was chosen for this content
-  assert.match(html, /class="prompt-detail-markdown md-content"/);
+  assert.match(html, /class="cc-modal__prose prompt-detail-markdown md-content"/);
   // カテゴリキーが表示ラベルへ解決されることを検証する
   // The category key must be resolved to its display label
   assert.match(html, /仕事・ビジネス/);
@@ -289,11 +289,9 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
 // The shell must keep the settings-page preview modal's frame: heading block, examples panel
 test("prompt share detail modal keeps the settings-style shell", () => {
   const html = renderToStaticMarkup(
-    React.createElement(PromptShareDetailModal, {
-      isOpen: true,
+    React.createElement(PromptShareDetailModalPanel, {
       isLoggedIn: true,
       activeView: "detail",
-      promptDetailModalRef: React.createRef<HTMLDivElement>(),
       commentsSectionRef: React.createRef<HTMLElement>(),
       commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
       detailPrompt: {
@@ -330,9 +328,9 @@ test("prompt share detail modal keeps the settings-style shell", () => {
     })
   );
 
-  // 閉じる操作は他のモーダルと同じ丸ボタン1つだけ。冗長なフッターの「閉じる」は持たない
-  // Closing is reachable only from the same round button the other modals use; no footer close
-  assert.match(html, /<button type="button" class="close-btn" id="closePromptDetailModal"/);
+  // 閉じるボタンは全ページ共通の cc-modal__close。詳細モーダル専用の閉じるボタンは持たない
+  // The close button is the shared cc-modal__close; no detail-only close variant remains
+  assert.match(html, /<button(?=[^>]*id="closePromptDetailModal")(?=[^>]*class="cc-modal__close")/);
   assert.doesNotMatch(html, /prompt-detail-close/);
   assert.doesNotMatch(html, /prompt-detail-footer/);
   // ヘッダーは上に固定せず、本文と同じスクロール領域の中に置く
@@ -341,7 +339,7 @@ test("prompt share detail modal keeps the settings-style shell", () => {
   // 入出力例は1枚のパネルにまとめ、中を2枚のカードに割る
   // The examples share one panel that holds two cards
   assert.match(html, /prompt-detail-examples__grid/);
-  assert.equal(html.match(/class="prompt-detail-example"/g)?.length, 2);
+  assert.equal(html.match(/class="cc-modal__example prompt-detail-example"/g)?.length, 2);
   assert.ok(html.indexOf("入出力例") < html.indexOf("prompt-detail-examples__grid"));
 });
 
@@ -349,11 +347,9 @@ test("prompt share detail modal keeps the settings-style shell", () => {
 // Verifies the SNS-style author avatar renders as a button that links to the profile modal
 test("prompt share detail modal renders a clickable author byline when a user ID is present", () => {
   const html = renderToStaticMarkup(
-    React.createElement(PromptShareDetailModal, {
-      isOpen: true,
+    React.createElement(PromptShareDetailModalPanel, {
       isLoggedIn: true,
       activeView: "detail",
-      promptDetailModalRef: React.createRef<HTMLDivElement>(),
       commentsSectionRef: React.createRef<HTMLElement>(),
       commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
       detailPrompt: {
@@ -394,11 +390,9 @@ test("prompt share detail modal renders a clickable author byline when a user ID
   assert.match(html, /\/static\/uploads\/avatar-42\.png/);
 
   const withoutUserId = renderToStaticMarkup(
-    React.createElement(PromptShareDetailModal, {
-      isOpen: true,
+    React.createElement(PromptShareDetailModalPanel, {
       isLoggedIn: true,
       activeView: "detail",
-      promptDetailModalRef: React.createRef<HTMLDivElement>(),
       commentsSectionRef: React.createRef<HTMLElement>(),
       commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
       detailPrompt: {

@@ -156,13 +156,11 @@ function BodyCopyButton({ onCopy, disabled }: BodyCopyButtonProps) {
   );
 }
 
-// プロンプト詳細とコメントを切り替えて表示するモーダルコンポーネント
-// Modal that switches between prompt detail view and comments view via tabs
-export function PromptShareDetailModal({
-  isOpen,
+// モーダルの中身（パネル）。外殻の ModalShell とは分け、静的マークアップのテストでも描けるようにする
+// The modal's panel; kept apart from the ModalShell shell so static-markup tests can render it
+export function PromptShareDetailModalPanel({
   isLoggedIn,
   activeView,
-  promptDetailModalRef,
   commentsSectionRef,
   commentTextareaRef,
   detailPrompt,
@@ -180,23 +178,8 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose,
   onOpenAuthorProfile
-}: PromptShareDetailModalProps) {
+}: Omit<PromptShareDetailModalProps, "isOpen" | "promptDetailModalRef">) {
   const { locale, t } = useTranslation();
-
-  // 開いたときの初期フォーカス先。コメントから開いた場合は入力欄、それ以外は閉じるボタン。
-  // activeView は ref に写してから読むので、タブ切り替えでフォーカスが奪われることはない。
-  // Initial focus on open: the comment box when opened on comments, otherwise the close button.
-  // activeView is mirrored into a ref so switching tabs never re-runs the focus.
-  const activeViewRef = useRef(activeView);
-  useEffect(() => {
-    activeViewRef.current = activeView;
-  }, [activeView]);
-  const getInitialFocus = useCallback(() => {
-    if (activeViewRef.current === "comments") {
-      return commentTextareaRef.current || commentsSectionRef.current;
-    }
-    return promptDetailCloseButtonRef.current;
-  }, [commentTextareaRef, commentsSectionRef, promptDetailCloseButtonRef]);
 
   // promptがnullのときは安全なデフォルト値を使い、2軸表示を崩さない
   // Fall back to default axes when no prompt is loaded to keep axis-dependent rendering stable
@@ -255,17 +238,7 @@ export function PromptShareDetailModal({
   };
 
   return (
-    <ModalShell
-      isOpen={isOpen}
-      onClose={onClose}
-      id="promptDetailModal"
-      className="cc-modal prompt-share-modal prompt-detail-modal"
-      labelledBy="modalPromptTitle"
-      overlayRef={promptDetailModalRef}
-      getInitialFocus={getInitialFocus}
-    >
-      {/* 読む面。幅を最大にし、高さを固定してタブ切り替えで枠が動かないようにする */}
-      {/* A reading sheet: widest size with a fixed height so switching tabs never moves the frame */}
+    <>
       <div className="cc-modal__panel cc-modal__panel--xl cc-modal__panel--reader" tabIndex={-1}>
         {/* 上に固定するのはタブと閉じるボタンの1行だけ。見出しは本文と一緒にスクロールさせる */}
         {/* Only the tab row and the close button are pinned; the title scrolls with the body */}
@@ -611,6 +584,41 @@ export function PromptShareDetailModal({
           ) : null}
         </footer>
       </div>
+    </>
+  );
+}
+
+// プロンプト詳細とコメントを切り替えて表示するモーダルコンポーネント（外殻）
+// Modal that switches between prompt detail view and comments view via tabs (the shell)
+export function PromptShareDetailModal(props: PromptShareDetailModalProps) {
+  const { isOpen, onClose, activeView, promptDetailModalRef, commentTextareaRef, commentsSectionRef, promptDetailCloseButtonRef } = props;
+
+  // 開いたときの初期フォーカス先。コメントから開いた場合は入力欄、それ以外は閉じるボタン。
+  // activeView は ref に写してから読むので、タブ切り替えでフォーカスが奪われることはない。
+  // Initial focus on open: the comment box when opened on comments, otherwise the close button.
+  // activeView is mirrored into a ref so switching tabs never re-runs the focus.
+  const activeViewRef = useRef(activeView);
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
+  const getInitialFocus = useCallback(() => {
+    if (activeViewRef.current === "comments") {
+      return commentTextareaRef.current || commentsSectionRef.current;
+    }
+    return promptDetailCloseButtonRef.current;
+  }, [commentTextareaRef, commentsSectionRef, promptDetailCloseButtonRef]);
+
+  return (
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      id="promptDetailModal"
+      className="cc-modal prompt-share-modal prompt-detail-modal"
+      labelledBy="modalPromptTitle"
+      overlayRef={promptDetailModalRef}
+      getInitialFocus={getInitialFocus}
+    >
+      <PromptShareDetailModalPanel {...props} />
     </ModalShell>
   );
 }
