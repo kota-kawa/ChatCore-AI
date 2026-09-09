@@ -28,6 +28,8 @@ class ChatGenerationTelemetry:
     web_search_count: int = 0
     cached_web_search_count: int = 0
     lookup_call_count: int = 0
+    evidence_read_count: int = 0
+    read_budget_consumed: int = 0
     tools_withdrawn_by_budget: bool = False
     research_phase_used: bool = False
     final_answer_input_tokens: int = 0
@@ -84,6 +86,8 @@ class ChatGenerationTelemetry:
             "web_search_count": self.web_search_count,
             "cached_web_search_count": self.cached_web_search_count,
             "lookup_call_count": self.lookup_call_count,
+            "evidence_read_count": self.evidence_read_count,
+            "read_budget_consumed": self.read_budget_consumed,
             "tools_withdrawn_by_budget": self.tools_withdrawn_by_budget,
             "research_phase_used": self.research_phase_used,
             "final_answer_input_tokens": self.final_answer_input_tokens,

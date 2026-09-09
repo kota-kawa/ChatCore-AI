@@ -13,6 +13,7 @@
 - [0007: 調査ターンの回答契約を会話の末尾で渡す](0007-research-turn-answer-contract.md)
 - [0008: ツールスキーマの検証をプロバイダに委ねない](0008-provider-safe-tool-schemas.md)
 - [0009: 通常チャットを単一 TurnState と単一判断ループで実行する](0009-single-turn-state-chat-loop.md)
+- [0010: Web 出典は抜粋を保存し、本文は必要時に読む](0010-on-demand-web-page-reading.md)
 
 ## 追加・更新の基準
 

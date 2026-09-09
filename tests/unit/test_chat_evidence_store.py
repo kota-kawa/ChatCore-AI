@@ -197,11 +197,13 @@ class EvidenceStoreTestCase(unittest.TestCase):
         self.assertIn("evidence budget", payload["message"])
         kept_ids = [record["evidence_id"] for record in payload["evidence"]]
         self.assertEqual(kept_ids + payload.get("truncated_ids", []), requested)
-        # 予算内なら本文まで含めてそのまま返す。
-        # A retrieval that fits its budget keeps the complete bodies.
+        # 保存情報ツールは抜粋だけ返す。本文の内部保持には影響しない。
+        # Snippet retrieval does not expose or delete the internally held page body.
         untouched = store.execute_get_evidence({"evidence_ids": requested}, max_chars=0)
         self.assertEqual(untouched["status"], "ok")
-        self.assertEqual(untouched["evidence"][0]["source"]["page_text"], "a" * 4000)
+        self.assertNotIn("page_text", untouched["evidence"][0]["source"])
+        self.assertEqual(untouched["evidence"][0]["source"]["snippets"], ("complete snippet",))
+        self.assertEqual(store.get(first["evidence_id"])["source"]["page_text"], "a" * 4000)
 
     def test_get_evidence_tool_definition_uses_bounded_array_argument(self):
         definition = get_evidence_tool_definition()

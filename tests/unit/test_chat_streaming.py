@@ -17,6 +17,7 @@ from blueprints.chat.messages import (
     chat_regenerate,
     get_chat_history,
 )
+from services.chat_agent_budget import AgentStepBudget
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
@@ -372,7 +373,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             for message in forced
             if message.get("role") == "system"
         )
-        self.assertIn("search limit for this turn has been reached", system_contents)
+        self.assertIn("tool budgets for this turn have been exhausted", system_contents)
         self.assertIn("Do not call any tool", system_contents)
         self.assertIn("answer the original request now", system_contents)
         self.assertIn("Resolve the objective from the recent", system_contents)
@@ -395,7 +396,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             message["content"] for message in recovery if message.get("role") == "system"
         ]
         self.assertEqual(len(system_contents), 3)
-        self.assertIn("search limit for this turn has been reached", system_contents[1])
+        self.assertIn("tool budgets for this turn have been exhausted", system_contents[1])
         self.assertEqual(system_contents[2], TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT)
         self.assertEqual(recovery[-1], {"role": "user", "content": "鎌倉の紅葉を教えて"})
 
@@ -2247,6 +2248,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "取得済み情報で回答しました。"
 
         with (
+            patch(
+                "services.chat_generation.AgentStepBudget.from_environment",
+                return_value=AgentStepBudget(max_tool_calls=1, max_llm_turns=3, max_read_calls=0),
+            ),
             patch.dict(
                 "services.chat_generation.os.environ",
                 {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
@@ -2381,7 +2386,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 for message in _messages
                 if message.get("role") == "system"
             )
-            self.assertIn("search limit for this turn has been reached", system_contents)
+            self.assertIn("tool budgets for this turn have been exhausted", system_contents)
             self.assertIn("loop search 1", system_contents)
             yield _turn_state_update()
             yield "上限内で回答"
@@ -2422,9 +2427,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         # The superseded CHAT_AGENT_MAX_STEPS=10 maps to 5 reasoning turns and 5 tool calls,
         # which searches more than the old loop that had to reserve 3 steps to withdraw tools.
         self.assertEqual(mock_search.call_count, 5)
-        # ツール有効ステップ5回のあと、ツールを外した同じループが回答して終わる。
-        # Five tool-enabled steps, then the same loop answers once with the tools withdrawn.
-        self.assertEqual(stream_tools, [True] * 5 + [False])
+        # 検索枠を使い切っても読み取りは残る。不正な再検索要求も有限回で終える。
+        # Reading remains available; repeated requests for a withdrawn search still terminate.
+        self.assertEqual(stream_tools, [True] * (5 + AgentStepBudget(5, 5).max_read_calls) + [False])
         self.assertIn("上限内で回答", body)
 
     # 日本語: バックグラウンド生成ジョブが、応答生成の開始状態などを正しくステータスとして報告することを検証します。
