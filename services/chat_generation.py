@@ -69,6 +69,11 @@ from .chat_turn_state import (
     strip_turn_state_update,
     strip_turn_state_update_chunks,
 )
+from .chat_web_page_reader import (
+    READ_WEB_PAGE_TOOL_NAME,
+    WebPageReader,
+    read_web_page_tool_definition,
+)
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -123,7 +128,7 @@ from .web_search import (
     normalize_web_search_freshness,
     resolve_web_search_citations,
     search_brave_llm_context,
-    serialize_web_search_result,
+    serialize_web_search_result_for_storage,
     split_web_search_citation_stream_text,
     strip_web_search_citation_html,
     with_web_search_citations,
@@ -1217,6 +1222,7 @@ class ChatGenerationJob:
             page_fetch_budget=create_web_page_fetch_budget(),
             evidence_context_budget=evidence_context_budget,
             evidence_store=evidence_store,
+            web_page_reader=WebPageReader(evidence_store),
             turn_state=turn_state,
             turn_base_messages=[dict(message) for message in self._conversation_messages],
             latest_user_message=latest_user_message,
@@ -1225,7 +1231,14 @@ class ChatGenerationJob:
             web_search_trace_steps=selected_reference_steps(self._selected_reference_trace),
         )
         for prior_result in self._prior_web_search_results:
-            turn_state.record_evidence_refs(evidence_store.add_web_result(prior_result))
+            turn_state.record_search(
+                tool_name="web_search",
+                query=prior_result.query,
+                searched_at=prior_result.searched_at,
+                freshness=prior_result.freshness,
+                evidence_refs=evidence_store.add_web_result(prior_result),
+                status="prior_turn",
+            )
         for selected_trace in self._selected_reference_trace:
             selected_refs = evidence_store.add_reference_payload(
                 selected_trace.payload,
@@ -1609,6 +1622,7 @@ class ChatGenerationJob:
         if shared_prompt_tool is not None:
             configured_tools.append(shared_prompt_tool)
         configured_tools.append(get_evidence_tool_definition())
+        configured_tools.append(read_web_page_tool_definition())
         state.configured_tools = configured_tools
         state.telemetry.research_phase_used = bool(self._selected_reference_trace)
 
@@ -1624,12 +1638,13 @@ class ChatGenerationJob:
             if self._should_stop():
                 return True
 
-            tools_withdrawn = budget.tool_calls_exhausted
+            available_tools = self._available_agent_tools(state)
+            tools_withdrawn = not available_tools
             # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
             # Empty-answer recovery is also a tool-free answer request, but it is
             # accounted separately from budget exhaustion.
             force_answer = tools_withdrawn or state.empty_answer_recovery_attempted
-            active_tools = None if force_answer else state.configured_tools
+            active_tools = None if force_answer else available_tools
             if tools_withdrawn:
                 telemetry.tools_withdrawn_by_budget = True
             turn_messages = self._prepare_turn_messages(
@@ -1752,7 +1767,7 @@ class ChatGenerationJob:
         state.turn_state.apply_model_update(parse_turn_state_update(step_chunks))
         return ModelDecision(
             outcome="decided",
-            tool_calls=tool_calls_buffer,
+            tool_calls=[] if force_answer else tool_calls_buffer,
             step_chunks=step_chunks,
         )
 
@@ -1843,6 +1858,12 @@ class ChatGenerationJob:
             # ツールごとの実行と結果の追加
             # Execute each tool and append results
             func_name = tc.get("function", {}).get("name")
+            available_names = {
+                tool["function"]["name"] for tool in self._available_agent_tools(state)
+            }
+            if func_name not in available_names:
+                self._record_unsupported_tool_call(state, tc, func_name)
+                continue
             if (
                 func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
                 and self._personal_knowledge_search is not None
@@ -1883,8 +1904,8 @@ class ChatGenerationJob:
                 )
                 continue
 
-            if func_name == GET_EVIDENCE_TOOL_NAME:
-                self._run_get_evidence_tool_call(state, tc)
+            if func_name in (GET_EVIDENCE_TOOL_NAME, READ_WEB_PAGE_TOOL_NAME):
+                self._run_read_tool_call(state, tc)
                 continue
 
             if func_name != "web_search":
@@ -1893,34 +1914,60 @@ class ChatGenerationJob:
 
             self._run_web_search_tool_call(state, tc)
 
-    # 収集済み根拠の再取得ツールを1件実行するフェーズ。
-    # The phase that runs one evidence re-read tool call.
-    def _run_get_evidence_tool_call(
+    @staticmethod
+    def _available_agent_tools(state: ChatTurnRunState) -> list[dict[str, Any]]:
+        """Withdraw exhausted search/read tools independently."""
+        available = []
+        for tool in state.configured_tools:
+            name = tool["function"]["name"]
+            if name == GET_EVIDENCE_TOOL_NAME:
+                if state.budget.reads_exhausted or not len(state.evidence_store):
+                    continue
+            elif name == READ_WEB_PAGE_TOOL_NAME:
+                if state.budget.reads_exhausted or not state.evidence_store.has_web_records():
+                    continue
+            elif state.budget.tool_calls_exhausted:
+                continue
+            available.append(tool)
+        return available
+
+    # 保存情報と既知URLの本文を、検索とは独立した読み取り予算で取得する。
+    # Read stored evidence or a known page using a budget independent of searches.
+    def _run_read_tool_call(
         self,
         state: ChatTurnRunState,
         tool_call: dict[str, Any],
     ) -> None:
-        if state.budget.tool_calls_exhausted:
+        budget = state.budget
+        name = tool_call.get("function", {}).get("name")
+        if budget.reads_exhausted:
             payload = {
                 "status": "step_limit_reached",
-                "message": "The search limit has been reached.",
+                "message": "The reading budget has been reached. Use the evidence already read.",
             }
         else:
-            state.budget.start_tool_call()
-            state.telemetry.tool_calls = state.budget.tool_calls
-            # 再取得もプロンプトへ載るため、検索結果と同じ根拠予算で抑える。
-            # A re-read also enters the prompt, so it shares the evidence budget.
-            payload = state.evidence_store.execute_get_evidence(
-                tool_call.get("function", {}).get("arguments", "{}"),
-                max_chars=state.evidence_context_budget.message_limit(
-                    WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
-                ),
-            )
-            state.evidence_context_budget.consume(
-                len(json.dumps(payload, ensure_ascii=False))
-            )
+            budget.start_read_call()
+            state.telemetry.tool_calls = budget.tool_calls
+            arguments = tool_call.get("function", {}).get("arguments", "{}")
+            if name == READ_WEB_PAGE_TOOL_NAME:
+                payload = state.web_page_reader.execute_read_web_page(
+                    arguments, max_chars=budget.read_message_limit,
+                )
+                if payload.get("status") == "ok":
+                    state.web_search_trace_steps.append(TraceStep(
+                        title="参照先のページ本文を確認",
+                        detail="以前に見つけたURLから、回答に必要な箇所を読みました。",
+                        kind="read",
+                    ))
+            else:
+                payload = state.evidence_store.execute_get_evidence(
+                    arguments, max_chars=budget.read_message_limit,
+                )
+            budget.consume_read_chars(len(json.dumps(payload, ensure_ascii=False)))
+            state.telemetry.evidence_read_count = budget.read_calls
+            state.telemetry.read_budget_consumed = budget.read_chars
             state.turn_state.record_search(
-                tool_name=GET_EVIDENCE_TOOL_NAME,
+                tool_name=str(name),
                 status=str(payload.get("status") or "unknown"),
             )
         state.current_messages.append(_tool_result_message(tool_call, payload))
@@ -1935,11 +1982,15 @@ class ChatGenerationJob:
     ) -> None:
         if not state.budget.tool_calls_exhausted:
             state.budget.start_tool_call()
-            state.telemetry.tool_calls = state.budget.tool_calls
-            state.turn_state.record_search(
-                tool_name=str(func_name or "unknown_tool"),
-                status="unsupported_tool",
-            )
+        elif not state.budget.reads_exhausted:
+            # 取り下げ済みツールを繰り返すモデルにも有限の試行回数を適用する。
+            # An unavailable tool must not create an unbounded decision loop.
+            state.budget.start_read_call()
+        state.telemetry.tool_calls = state.budget.tool_calls
+        state.turn_state.record_search(
+            tool_name=str(func_name or "unknown_tool"),
+            status="unsupported_tool",
+        )
         state.current_messages.append(
             _tool_result_message(
                 tool_call,
@@ -2513,7 +2564,7 @@ class ChatGenerationJob:
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう永続化する
         # Serialize this turn's search results so later turns can reference them.
         serialized_web_search = [
-            serialize_web_search_result(
+            serialize_web_search_result_for_storage(
                 with_web_search_citations(result, resolved_citations)
             )
             for result in state.web_search_results

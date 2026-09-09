@@ -14,6 +14,10 @@ DEFAULT_MAX_LLM_TURNS = 6
 DEFAULT_MAX_TOOL_CALLS = 6
 MAX_LLM_TURNS_LIMIT = 10
 MAX_TOOL_CALLS_LIMIT = 10
+DEFAULT_MAX_READ_CALLS = 12
+DEFAULT_MAX_READ_CHARS = 48_000
+READ_MESSAGE_MAX_CHARS = 4_000
+READ_MESSAGE_MIN_CHARS = 512
 
 
 def _get_clamped_int_env(name: str, default: int, *, maximum: int) -> int:
@@ -75,6 +79,10 @@ class AgentStepBudget:
     max_tool_calls: int
     llm_turns: int = 0
     tool_calls: int = 0
+    max_read_calls: int = DEFAULT_MAX_READ_CALLS
+    max_read_chars: int = DEFAULT_MAX_READ_CHARS
+    read_calls: int = 0
+    read_chars: int = 0
 
     @classmethod
     def from_environment(cls) -> AgentStepBudget:
@@ -85,12 +93,31 @@ class AgentStepBudget:
 
     @property
     def max_steps(self) -> int:
-        """Displayed total, kept as the sum so progress events stay meaningful."""
+        """Displayed model/search total; page reads have a separate budget and counter."""
         return self.max_llm_turns + self.max_tool_calls
 
     @property
     def step(self) -> int:
         return self.llm_turns + self.tool_calls
+
+    @property
+    def total_tool_calls(self) -> int:
+        return self.tool_calls + self.read_calls
+
+    @property
+    def read_message_limit(self) -> int:
+        return min(READ_MESSAGE_MAX_CHARS, max(0, self.max_read_chars - self.read_chars))
+
+    @property
+    def reads_exhausted(self) -> bool:
+        return self.read_calls >= self.max_read_calls or self.read_message_limit < READ_MESSAGE_MIN_CHARS
+
+    def start_read_call(self) -> int:
+        self.read_calls += 1
+        return self.step
+
+    def consume_read_chars(self, size: int) -> None:
+        self.read_chars += max(0, size)
 
     @property
     def tool_calls_exhausted(self) -> bool:

@@ -1,6 +1,7 @@
 import unittest
 
 from services import llm
+from services.chat_web_page_reader import read_web_page_tool_definition
 from services.llm_tool_schema import (
     prepare_provider_tools,
     relax_tool_parameters_schema,
@@ -85,6 +86,7 @@ class LlmToolSchemaTests(unittest.TestCase):
             get_web_search_tool_definition(),
             get_personal_knowledge_tool_definition(),
             get_shared_prompt_tool_definition(),
+            read_web_page_tool_definition(),
         ]
 
         for tool in prepare_provider_tools(definitions):

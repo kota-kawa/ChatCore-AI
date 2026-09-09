@@ -1,6 +1,7 @@
 import json
 import os
 import unittest
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 from services import url_fetcher, web_search
@@ -1779,6 +1780,51 @@ def _sample_result(query="Python news", url="https://example.com/python", *, pag
 # 日本語: 過去検索結果の直列化・再注入機能を検証するテストクラスです。
 # English: Test case for prior web search serialization and re-injection helpers.
 class PriorWebSearchContextTestCase(unittest.TestCase):
+    def test_storage_roundtrip_preserves_references_without_page_content(self):
+        original = _sample_result(page_text="PRIVATE PAGE BODY " * 10000)
+        first_source = replace(
+            original.sources[0],
+            image_candidates=(web_search.WebSearchImageCandidate(url="https://example.com/image.png"),),
+        )
+        second_source = replace(first_source, url="https://example.com/second", snippets=("Second result",))
+        result = replace(original, sources=(first_source, second_source))
+        resolution = web_search.resolve_web_search_citations(
+            f"回答 [[source:{first_source.evidence_id}]]", result
+        )
+        result = web_search.with_web_search_citations(result, resolution.citations)
+
+        stored = web_search.serialize_web_search_result_for_storage(result)
+        restored = web_search.deserialize_web_search_result(stored)
+
+        self.assertNotIn("PRIVATE PAGE BODY", json.dumps(stored))
+        for source in stored["sources"]:
+            self.assertNotIn("page_text", source)
+            self.assertNotIn("image_candidates", source)
+        self.assertEqual(restored.query, result.query)
+        self.assertEqual(restored.searched_at, result.searched_at)
+        self.assertEqual(restored.citations, result.citations)
+        self.assertEqual([source.url for source in restored.sources], [source.url for source in result.sources])
+        self.assertEqual(restored.sources[0].snippets, first_source.snippets)
+        self.assertEqual(restored.sources[0].page_text, "")
+        self.assertEqual(restored.sources[0].image_candidates, ())
+        self.assertEqual(restored.sources[0].evidence_id, first_source.evidence_id)
+        # Persistence must leave the same-turn result (including image choices) intact.
+        self.assertEqual(result.sources[0].page_text, original.sources[0].page_text)
+        self.assertEqual(result.sources[0].image_candidates, first_source.image_candidates)
+
+    def test_storage_bounds_total_snippets_and_falls_back_to_page_excerpt(self):
+        original = _sample_result(page_text="  Page body\nwith details " * 10000)
+        limit = web_search.WEB_SEARCH_MAX_SNIPPET_CHARS
+        for snippets in (("x" * (limit - 1), "y" * 1000), ("x" * 10000,), (), ("  ", "\n")):
+            with self.subTest(snippets_count=len(snippets)):
+                result = replace(original, sources=(replace(original.sources[0], snippets=snippets),))
+                restored = web_search.deserialize_web_search_result(web_search.serialize_web_search_result_for_storage(result))
+                self.assertLessEqual(sum(len(text) for text in restored.sources[0].snippets), limit)
+                self.assertTrue(restored.sources[0].snippets)
+                if not any(text.strip() for text in snippets):
+                    self.assertTrue(restored.sources[0].snippets[0].startswith("Page body with details"))
+                self.assertEqual(restored.sources[0].page_text, "")
+
     def test_serialize_deserialize_roundtrip(self):
         result = _sample_result(page_text="full body text")
         restored = web_search.deserialize_web_search_result(

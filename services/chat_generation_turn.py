@@ -19,6 +19,7 @@ from .chat_agent_budget import AgentStepBudget
 from .chat_evidence_store import EvidenceStore
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_turn_state import TurnStateUpdateFilter
+from .chat_web_page_reader import WebPageReader
 from .research_state import TurnState
 from .web_search import (
     WebEvidenceContextBudget,
@@ -51,6 +52,7 @@ class ChatTurnRunState:
     # 収集済み根拠の保管庫（再取得ツールもここを引く）。
     # Store of collected evidence; the re-read tool also draws from it.
     evidence_store: EvidenceStore
+    web_page_reader: WebPageReader
     # モデルへ投影する調査状態。
     # The research state projected into each model decision.
     turn_state: TurnState
