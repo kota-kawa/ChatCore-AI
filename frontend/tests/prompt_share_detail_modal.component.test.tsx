@@ -74,7 +74,7 @@ describe("プロンプト詳細モーダルのMarkdown整形", () => {
   });
 
   it("説明を本文より前にプレーンテキストで表示する", () => {
-    const { container } = renderDetailModal({
+    renderDetailModal({
       ...basePrompt,
       description: "# 説明\n用途を短く紹介",
       content: "本文"
@@ -165,7 +165,7 @@ describe("プロンプト詳細モーダルの作例画像", () => {
 // Locks in the rule that default chips and the reference-image heading are not rendered, like on the card
 describe("プロンプト詳細モーダルのメタ表示", () => {
   it("既定のプロンプト×テキストではフォーマット・メディアのチップを表示しない", () => {
-    const { container } = renderDetailModal(basePrompt);
+    renderDetailModal(basePrompt);
 
     expect(document.querySelector("#modalPromptFormat")).toBeNull();
     expect(document.querySelector("#modalPromptMediaType")).toBeNull();
@@ -173,7 +173,7 @@ describe("プロンプト詳細モーダルのメタ表示", () => {
   });
 
   it("SKILL形式・画像メディアのときだけチップを表示する", () => {
-    const { container } = renderDetailModal({
+    renderDetailModal({
       ...basePrompt,
       content_format: "skill",
       skill_markdown: "# SKILL",

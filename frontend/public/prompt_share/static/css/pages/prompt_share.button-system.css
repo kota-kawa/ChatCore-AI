@@ -6,7 +6,6 @@
   .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
-  .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
@@ -80,7 +79,6 @@
   .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
-  .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
@@ -99,7 +97,6 @@
   .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
-  .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
@@ -132,8 +129,7 @@
     .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
-    .close-btn,
-    .prompt-image-clear-btn,
+      .prompt-image-clear-btn,
     .submit-btn,
     .prompt-actions-dropdown .dropdown-item
   ) {
@@ -147,8 +143,7 @@
     .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
-    .close-btn,
-    .prompt-image-clear-btn,
+      .prompt-image-clear-btn,
     .submit-btn,
     .prompt-actions-dropdown .dropdown-item
   ):hover:not(:disabled),
@@ -160,8 +155,7 @@
     .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
-    .close-btn,
-    .prompt-image-clear-btn,
+      .prompt-image-clear-btn,
     .submit-btn,
     .prompt-actions-dropdown .dropdown-item
   ):active:not(:disabled) {

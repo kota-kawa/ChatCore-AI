@@ -586,7 +586,7 @@ export function PromptShareComposerModal({
           <ModalCloseButton label={t("promptShare.closeComposer")} onClick={onClose} disabled={isPostSubmitting} />
         </header>
 
-        <div className="cc-modal__body post-modal-scroll">
+        <div className="cc-modal__body">
           {isGuest ? (
             <aside className="cc-modal__notice guest-post-notice" aria-label={t("promptShare.guestPostTitle")}>
               <i className="bi bi-person" aria-hidden="true"></i>

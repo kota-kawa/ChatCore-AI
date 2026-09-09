@@ -1111,10 +1111,6 @@
   }
 }
 
-/* ─────────────────────────── */
-/* 投稿したプロンプト用スタイル（モダン改善） */
-/* ─────────────────────────── */
-
 /* セキュリティセンターと揃えた、投稿／いいねプロンプトのカード幅とヒーロー */
 /* Wider card + hero header aligned with the security center for the prompt sections */
 :where(body.settings-page, .user-settings-page) .settings-card.settings-card--prompts {
@@ -1633,16 +1629,6 @@ body.settings-page,
   font-family: 'Roboto', sans-serif;
 }
 
-/* 共有ページでは編集モーダルだけに設定画面の共通フォームスタイルを適用する。 */
-/* On Prompt Share, apply the shared settings form styles only to the edit modal subtree. */
-.prompt-share-page .prompt-share-edit-modal-scope.user-settings-page {
-  display: contents;
-  min-height: 0;
-  padding: 0;
-  background: transparent;
-  font-family: inherit;
-}
-
 :where(body.settings-page, .user-settings-page) .user-settings-layout {
   display: flex;
   min-height: 100vh;
@@ -2035,11 +2021,6 @@ body.settings-page,
   opacity: var(--disabled-opacity, 0.6);
 }
 
-/* ─────────────────────────── */
-/* セキュリティセクションのアクションボタン */
-/* Security-section action buttons */
-/* ─────────────────────────── */
-
 /* パネル内のアクション行 — ヘッダー直下に自然に続く控えめな余白 / Action row inside a panel — sits calmly below the header */
 :where(body.settings-page, .user-settings-page) .security-actions {
   display: flex;
@@ -2277,9 +2258,7 @@ body.settings-page,
 /* ───────── スマホ版のみ「設定」テキストを中央揃え ───────── */
 @media (max-width: 576px) {
   :where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-header h3 {
-    /* 変更前（左寄せ・何も書かれていない状態） */
-    /* text-align: left; */
-
+    
     /* 変更後：中央揃え */
     text-align: center;
     width: 100%;   /* 幅いっぱいにして中央寄せを有効化 */
@@ -3018,32 +2997,6 @@ body.settings-page :where(
   background: rgba(239, 68, 68, 0.22);
   color: #fca5a5;
 }
-
-/* ─── プロンプト編集モーダル ─── */
-/* 詳細モーダルと同様に、ヘッダーと操作列を固定して本文だけをスクロールさせる。 */
-
-/* ─── プロンプト閲覧モーダル ─── */
-
-/* 見出しを「タイトル＋署名」の2段に収め、残りの縦幅は本文へ渡す
-   The header packs down to title + byline so the remaining height belongs to the body */
-
-/* ×ボタンが唯一の閉じる導線になったため、フッターの分だけ本文の縦幅を広げる
-   The × button is now the only close affordance, so the body reclaims the footer's height */
-
-/* 本文は枠の入れ子をやめ、カード自体を読む面にする（プロンプト共有の詳細モーダルと同じ組み）
-   The body drops the box-in-box and becomes the reading surface, as in the prompt share detail modal */
-
-/* 本文が長くても見出しに手が届くよう、スクロール内で固定する
-   Sticky within the scroller so the label stays reachable through a long body */
-
-/* 読み幅の上限は残しつつ左右中央に置き、余白が片側に寄らないようにする
-   The measure cap stays but the block is centred so the slack is symmetric */
-
-/* Markdown未使用時（内容なしメッセージ）だけ改行をそのまま保持する
-   Only the no-content fallback message needs literal newlines preserved */
-
-/* Markdownの見出し・箇条書き・コードなどを組み直す（グローバルの * リセット対策）
-   Restores heading/list/code typography for the Markdown-rendered body (countering the global * reset) */
 
 /* ─── ダークモード: 投稿／いいねプロンプトのヒーロー・空状態 ─── */
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-hero {

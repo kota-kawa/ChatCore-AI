@@ -157,9 +157,7 @@
 
   
 
-  /* アイコンを一回り小さくして、狭い画面でも見出しが不自然に折り返さない幅を本文に渡す
-     A slightly smaller icon hands the copy enough width to avoid awkward heading breaks */
-  
+    
 
   
 
@@ -167,11 +165,7 @@
 
   
 
-  /* 縦積みでは flex-basis が高さになるため、12rem のままだと
-     ファイル名チップが縦長の楕円に膨らむ。内容の高さに戻す。
-     Stacked, the flex-basis becomes a height, so a 12rem basis would inflate the
-     file name chip into a tall blob. Fall back to its content height. */
-  
+    
 
   
 
@@ -321,9 +315,7 @@
 
   
 
-  /* 44pxのアイコンを外し、狭い画面ではタイトルに横幅を渡す
-     The 44px icon steps aside so the title keeps its width on narrow screens */
-  
+    
 
   
 

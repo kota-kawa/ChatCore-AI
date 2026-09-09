@@ -1293,7 +1293,7 @@ export default function PromptSharePage({
             formState={editPromptForm}
             saving={isEditSaving}
             modalRef={editModalRef}
-            className="prompt-share-edit-modal-scope user-settings-page"
+            className="prompt-share-edit-modal-scope"
             onClose={() => {
               if (!isEditSaving) {
                 closeModal("edit");
