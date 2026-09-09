@@ -1,8 +1,12 @@
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import { ShareDialogContent } from "../ui/share_dialog_content";
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoPageModalsContext } from "../../contexts/memo_page/memo_page_context";
 
 // ── Share modal ──
+// 共通モーダル面（cc-modal）の小サイズに、共通の共有ダイアログ本体（cc-share-modal）を載せる。
+// Small shared modal surface (cc-modal) carrying the shared share-dialog body (cc-share-modal).
 export function MemoShareModal() {
   const {
     isShareModalOpen,
@@ -17,47 +21,45 @@ export function MemoShareModal() {
   } = useMemoPageModalsContext();
   const { t } = useTranslation();
   return (
-        <div
-          id="memo-share-modal"
-          className={`memo-share-modal cc-share-modal${isShareModalOpen ? " is-visible" : ""}`}
-          role="dialog"
-          aria-modal="true"
-          aria-hidden={isShareModalOpen ? "false" : "true"}
-          aria-labelledby="memoShareTitle"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeShareModal();
-            }
-          }}
-        >
-          <div className="memo-share-modal__content cc-share-modal__content" tabIndex={-1}>
-            <button type="button" className="memo-share-modal__close cc-share-modal__close" aria-label={t("memo.closeShare")} onClick={closeShareModal}>
-              <i className="bi bi-x-lg"></i>
-            </button>
-            <header className="memo-share-modal__header cc-share-modal__header">
-              <h3 id="memoShareTitle">{t("memo.share")}</h3>
-              <p className="cc-share-modal__lead">
-                {t("memo.shareDescription")}
-              </p>
-            </header>
-            <ShareDialogContent
-              bodyClassName="memo-share-modal__body"
-              shareUrl={shareUrl}
-              shareLoading={shareLoading}
-              shareStatus={shareStatus ? { text: shareStatus.text, isError: shareStatus.type === "error" } : null}
-              shareStatusClassName="memo-share-modal__status cc-share-modal__status"
-              shareStatusErrorClassName="memo-share-modal__status--error cc-share-modal__status--error"
-              linkInputId="memo-share-link-input"
-              linkPlaceholder={t("memo.preparingShareLink")}
-              onCopyLink={copyShareLink}
-              copyLabel={t("memo.copyLink")}
-              copiedLabel={t("common.copied")}
-              socialLinks={shareSnsLinks}
-              supportsNativeShare={supportsNativeShare}
-              nativeShareLabel={t("memo.shareOnDevice")}
-              onNativeShare={openNativeShareSheet}
-            />
+    <ModalShell
+      isOpen={isShareModalOpen}
+      onClose={closeShareModal}
+      id="memo-share-modal"
+      className="cc-modal cc-share-modal memo-modal-scope memo-share-modal"
+      labelledBy="memoShareTitle"
+      initialFocusSelector="#memo-share-copy-btn"
+    >
+      <div className="cc-modal__panel cc-modal__panel--sm cc-share-modal__content" tabIndex={-1}>
+        <header className="cc-modal__header cc-share-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="memoShareTitle">{t("memo.share")}</h2>
+            <p className="cc-modal__lead cc-share-modal__lead">{t("memo.shareDescription")}</p>
           </div>
+          <ModalCloseButton label={t("memo.closeShare")} onClick={closeShareModal} />
+        </header>
+
+        <div className="cc-modal__body">
+          <ShareDialogContent
+            shareUrl={shareUrl}
+            shareLoading={shareLoading}
+            shareStatus={shareStatus ? { text: shareStatus.text, isError: shareStatus.type === "error" } : null}
+            shareStatusId="memo-share-status"
+            shareStatusClassName="cc-share-modal__status"
+            shareStatusErrorClassName="cc-share-modal__status--error"
+            linkInputId="memo-share-link-input"
+            linkInputAriaLabel={t("memo.share")}
+            linkPlaceholder={t("memo.preparingShareLink")}
+            copyButtonId="memo-share-copy-btn"
+            onCopyLink={copyShareLink}
+            copyLabel={t("memo.copyLink")}
+            copiedLabel={t("common.copied")}
+            socialLinks={shareSnsLinks}
+            supportsNativeShare={supportsNativeShare}
+            nativeShareLabel={t("memo.shareOnDevice")}
+            onNativeShare={openNativeShareSheet}
+          />
         </div>
+      </div>
+    </ModalShell>
   );
 }

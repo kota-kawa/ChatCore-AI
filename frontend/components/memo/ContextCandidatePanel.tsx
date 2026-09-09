@@ -1,9 +1,7 @@
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
-import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import {
   approveContextCandidate as defaultApprove,
   loadContextCandidates as defaultLoad,
@@ -18,6 +16,8 @@ import {
 } from "../../lib/memo/context_types";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 
@@ -92,7 +92,6 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
   const [review, setReview] = useState<ReviewState | null>(null);
   const activeCursorRef = useRef<string | null>(null);
   const listVersionRef = useRef(0);
-  const modalRef = useRef<HTMLElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -117,21 +116,13 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
     setErrorText(null);
   }, []);
 
-  const closeReviewWithEscape = useCallback(() => {
-    if (busyCandidateId === null) closeReview();
-  }, [busyCandidateId, closeReview]);
-
   const getInitialModalFocus = useCallback(
-    () => titleInputRef.current ?? confirmButtonRef.current ?? modalRef.current,
+    () => titleInputRef.current ?? confirmButtonRef.current,
     [],
   );
 
-  useModalFocusTrap({
-    isOpen: review !== null,
-    containerRef: modalRef,
-    getInitialFocus: getInitialModalFocus,
-    onEscape: closeReviewWithEscape,
-  });
+  // フォーカストラップと Escape は ModalShell が担う。スクロールロックだけをここで持つ。
+  // ModalShell owns the focus trap and Escape; only the scroll lock lives here.
   useBodyScrollLock(review !== null);
 
   const refreshAfterApproval = async () => {
@@ -401,56 +392,40 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
         </button>
       )}
 
-      {review && typeof document !== "undefined" &&
-        createPortal(
-          <div className="memo-context-modal">
-            <div
-              className="memo-context-modal__overlay"
-              aria-hidden="true"
-              onClick={() => {
-                if (busyCandidateId === null) closeReview();
-              }}
-            />
-            <section
-              ref={modalRef}
-              className="memo-context-modal__content memo-context-candidate-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="context-candidate-modal-title"
-              tabIndex={-1}
-            >
-              <header className="memo-context-modal__header">
-                <div>
-                  <h2 id="context-candidate-modal-title">
-                    {review.kind === "approve" ? t("memo.editAndApproveTitle") : t("memo.rejectSuggestion")}
-                  </h2>
-                  <p>{review.candidate.title}</p>
-                </div>
-                <button
-                  type="button"
-                  className="memo-context-modal__close"
-                  aria-label={t("common.close")}
-                  onClick={closeReview}
-                  disabled={busyCandidateId !== null}
-                >
-                  <i className="bi bi-x-lg" aria-hidden="true" />
-                </button>
-              </header>
-
-              {errorText && (
-                <div className="memo-flash memo-flash--error" role="alert">
-                  {errorText}
-                </div>
-              )}
-
-              {review.kind === "approve" ? (
-                <form
-                  className="memo-context-candidate-modal__form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void submitApprovalReview();
-                  }}
-                >
+      {review && (
+        <ModalShell
+          isOpen
+          onClose={closeReview}
+          id="context-candidate-modal"
+          className="cc-modal memo-modal-scope memo-context-modal memo-context-candidate-modal"
+          labelledBy="context-candidate-modal-title"
+          dismissDisabled={busyCandidateId !== null}
+          getInitialFocus={getInitialModalFocus}
+        >
+          <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1}>
+            <header className="cc-modal__header">
+              <div className="cc-modal__heading">
+                <h2 className="cc-modal__title" id="context-candidate-modal-title">
+                  {review.kind === "approve" ? t("memo.editAndApproveTitle") : t("memo.rejectSuggestion")}
+                </h2>
+                <p className="cc-modal__lead">{review.candidate.title}</p>
+              </div>
+              <ModalCloseButton label={t("common.close")} onClick={closeReview} disabled={busyCandidateId !== null} />
+            </header>
+            {review.kind === "approve" ? (
+              <form
+                className="cc-modal__form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitApprovalReview();
+                }}
+              >
+                <div className="cc-modal__body memo-context-candidate-modal__form">
+                  {errorText && (
+                    <div className="cc-modal__notice memo-context-modal__error" role="alert">
+                      {errorText}
+                    </div>
+                  )}
                   <label>
                     <span>{t("memo.type")}</span>
                     <MemoSelect
@@ -518,43 +493,50 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                       }
                     />
                   </label>
-                  <div className="memo-context-candidate-modal__actions">
-                    <button type="button" onClick={closeReview} disabled={busyCandidateId !== null}>
-                      {t("common.cancel")}
-                    </button>
-                    <button
-                      ref={confirmButtonRef}
-                      type="submit"
-                      className="is-primary"
-                      disabled={busyCandidateId !== null}
-                    >
-                      {busyCandidateId !== null ? t("memo.approving") : t("memo.approveContent")}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="memo-context-candidate-modal__confirmation">
-                  <p>{t("memo.rejectConfirmation")}</p>
-                  <div className="memo-context-candidate-modal__actions">
-                    <button type="button" onClick={closeReview} disabled={busyCandidateId !== null}>
-                      {t("common.cancel")}
-                    </button>
-                    <button
-                      ref={confirmButtonRef}
-                      type="button"
-                      className="is-danger"
-                      onClick={() => void submitRejection()}
-                      disabled={busyCandidateId !== null}
-                    >
-                      {busyCandidateId !== null ? t("memo.rejecting") : t("memo.rejectAction")}
-                    </button>
-                  </div>
                 </div>
-              )}
-            </section>
-          </div>,
-          document.body,
-        )}
+                <footer className="cc-modal__footer">
+                  <button type="button" className="cc-modal__btn" onClick={closeReview} disabled={busyCandidateId !== null}>
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    ref={confirmButtonRef}
+                    type="submit"
+                    className="cc-modal__btn cc-modal__btn--primary"
+                    disabled={busyCandidateId !== null}
+                  >
+                    {busyCandidateId !== null ? t("memo.approving") : t("memo.approveContent")}
+                  </button>
+                </footer>
+              </form>
+            ) : (
+              <>
+                <div className="cc-modal__body memo-context-candidate-modal__confirmation">
+                  {errorText && (
+                    <div className="cc-modal__notice memo-context-modal__error" role="alert">
+                      {errorText}
+                    </div>
+                  )}
+                  <p>{t("memo.rejectConfirmation")}</p>
+                </div>
+                <footer className="cc-modal__footer">
+                  <button type="button" className="cc-modal__btn" onClick={closeReview} disabled={busyCandidateId !== null}>
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    ref={confirmButtonRef}
+                    type="button"
+                    className="cc-modal__btn cc-modal__btn--primary memo-context-modal__btn--danger"
+                    onClick={() => void submitRejection()}
+                    disabled={busyCandidateId !== null}
+                  >
+                    {busyCandidateId !== null ? t("memo.rejecting") : t("memo.rejectAction")}
+                  </button>
+                </footer>
+              </>
+            )}
+          </div>
+        </ModalShell>
+      )}
     </section>
   );
 }
