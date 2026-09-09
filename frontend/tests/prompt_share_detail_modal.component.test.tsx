@@ -80,7 +80,7 @@ describe("プロンプト詳細モーダルのMarkdown整形", () => {
       content: "本文"
     });
 
-    const description = container.querySelector(".prompt-detail-description");
+    const description = document.querySelector(".prompt-detail-description");
     const body = screen.getByText("本文");
     expect(description?.tagName).toBe("P");
     expect(description?.textContent).toBe("# 説明\n用途を短く紹介");
@@ -167,9 +167,9 @@ describe("プロンプト詳細モーダルのメタ表示", () => {
   it("既定のプロンプト×テキストではフォーマット・メディアのチップを表示しない", () => {
     const { container } = renderDetailModal(basePrompt);
 
-    expect(container.querySelector("#modalPromptFormat")).toBeNull();
-    expect(container.querySelector("#modalPromptMediaType")).toBeNull();
-    expect(container.querySelector("#modalPromptCategory")?.textContent).toContain("仕事・ビジネス");
+    expect(document.querySelector("#modalPromptFormat")).toBeNull();
+    expect(document.querySelector("#modalPromptMediaType")).toBeNull();
+    expect(document.querySelector("#modalPromptCategory")?.textContent).toContain("仕事・ビジネス");
   });
 
   it("SKILL形式・画像メディアのときだけチップを表示する", () => {
@@ -180,8 +180,8 @@ describe("プロンプト詳細モーダルのメタ表示", () => {
       media_type: "image"
     });
 
-    expect(container.querySelector("#modalPromptFormat")?.textContent).toContain("SKILL");
-    expect(container.querySelector("#modalPromptMediaType")?.textContent).toContain("画像");
+    expect(document.querySelector("#modalPromptFormat")?.textContent).toContain("SKILL");
+    expect(document.querySelector("#modalPromptMediaType")?.textContent).toContain("画像");
   });
 
   it("作例画像の見出しと補足文は表示しない", () => {

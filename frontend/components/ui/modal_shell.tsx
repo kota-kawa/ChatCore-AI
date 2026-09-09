@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
@@ -30,6 +30,9 @@ type ModalShellProps = {
   getInitialFocus?: () => HTMLElement | null;
   // getInitialFocus の簡易版。オーバーレイ内をこのセレクタで検索する / Simple form of getInitialFocus: query the overlay with this selector
   initialFocusSelector?: string;
+  // オーバーレイ要素を外から参照したい呼び出し元向け（スクロールロック等の既存管理と併用する）
+  // For callers that need the overlay element (e.g. to coordinate an existing scroll-lock manager)
+  overlayRef?: MutableRefObject<HTMLDivElement | null>;
   children: ReactNode;
 };
 
@@ -42,9 +45,18 @@ export function ModalShell({
   dismissDisabled = false,
   getInitialFocus,
   initialFocusSelector,
+  overlayRef: externalOverlayRef,
   children,
 }: ModalShellProps) {
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  // 内部 ref と外部 ref の両方に同じ要素を渡す / Feed the same element to the internal and external refs
+  const setOverlayRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      overlayRef.current = element;
+      if (externalOverlayRef) externalOverlayRef.current = element;
+    },
+    [externalOverlayRef],
+  );
 
   // SSR ではポータル先が無いため、マウント後にのみ描画する。
   // No portal target during SSR, so only render after mount.
@@ -77,7 +89,7 @@ export function ModalShell({
 
   return createPortal(
     <div
-      ref={overlayRef}
+      ref={setOverlayRef}
       id={id}
       className={`${className ? `${className} ` : ""}modal-base${isOpen ? " is-open" : ""}`}
       role="dialog"

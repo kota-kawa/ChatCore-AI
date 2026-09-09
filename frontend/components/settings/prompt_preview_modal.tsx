@@ -3,6 +3,8 @@ import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_ca
 import { getPromptReferenceImageUrl } from "../../scripts/prompt_share/formatters";
 import { toDisplayDate } from "../../scripts/user/settings/utils";
 import { useTranslation } from "../../contexts/locale_context";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 
 // 設定画面のカードから閲覧するプロンプト詳細に必要な共通データ
 // Shared prompt data needed by the settings-card preview modal
@@ -42,64 +44,43 @@ export function PromptPreviewModal({
   const sourceLabel = source === "authored" ? t("settings.prompts") : t("settings.likedPrompts");
 
   return (
-    <div
+    <ModalShell
+      isOpen
+      onClose={onClose}
       id="promptPreviewModal"
-      className="prompt-preview-modal"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="promptPreviewModalTitle"
-      onClick={(event) => {
-        // 背景領域だけをクリックした場合に閉じ、本文の選択操作は妨げない
-        // Only close from the backdrop, leaving text-selection inside untouched
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      className="cc-modal prompt-preview-modal"
+      labelledBy="promptPreviewModalTitle"
     >
-      <div className="prompt-preview-modal__dialog" role="document">
-        {/* 見出しは1行に絞り、出所は署名行のチップへ移して縦幅を詰める */}
-        {/* The title takes one line and the source moves into the byline as a chip, keeping the header short */}
-        <header className="prompt-preview-modal__header">
-          <div className="prompt-preview-modal__heading">
-            <span className="prompt-preview-modal__icon" aria-hidden="true">
-              <i className="bi bi-file-earmark-text"></i>
-            </span>
-            <div>
-              <h2 id="promptPreviewModalTitle">{prompt.title || t("promptShare.untitled")}</h2>
-              <div className="prompt-preview-modal__meta" aria-label={t("promptShare.promptInfo")}>
-                {isSkill ? (
-                  <span>
-                    <i className="bi bi-code-slash" aria-hidden="true"></i>
-                    SKILL
-                  </span>
-                ) : null}
+      {/* 読む面。プロンプト共有の詳細モーダルと同じ寸法で組む / A reading sheet sized like the prompt share detail modal */}
+      <div className="cc-modal__panel cc-modal__panel--xl cc-modal__panel--reader prompt-preview-modal__dialog" tabIndex={-1}>
+        <header className="cc-modal__header prompt-preview-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="promptPreviewModalTitle">{prompt.title || t("promptShare.untitled")}</h2>
+            <div className="cc-modal__meta prompt-preview-modal__meta" aria-label={t("promptShare.promptInfo")}>
+              {isSkill ? (
                 <span>
-                  <i className={`bi ${source === "authored" ? "bi-pencil-square" : "bi-heart"}`} aria-hidden="true"></i>
-                  {sourceLabel}
+                  <i className="bi bi-code-slash" aria-hidden="true"></i>
+                  SKILL
                 </span>
-                <span>
-                  <i className="bi bi-tag" aria-hidden="true"></i>
-                  {categoryLabel}
-                </span>
-                <time dateTime={prompt.createdAt}>
-                  <i className="bi bi-clock-history" aria-hidden="true"></i>
-                  {createdAtLabel}
-                </time>
-              </div>
+              ) : null}
+              <span>
+                <i className={`bi ${source === "authored" ? "bi-pencil-square" : "bi-heart"}`} aria-hidden="true"></i>
+                {sourceLabel}
+              </span>
+              <span>
+                <i className="bi bi-hash" aria-hidden="true"></i>
+                {categoryLabel}
+              </span>
+              <time dateTime={prompt.createdAt}>
+                <i className="bi bi-calendar3" aria-hidden="true"></i>
+                {createdAtLabel}
+              </time>
             </div>
           </div>
-          <button
-            type="button"
-            className="prompt-preview-modal__close"
-            aria-label={t("promptShare.closeDetails")}
-            onClick={onClose}
-          >
-            <i className="bi bi-x-lg" aria-hidden="true"></i>
-          </button>
+          <ModalCloseButton label={t("promptShare.closeDetails")} onClick={onClose} />
         </header>
 
-        <div className="prompt-preview-modal__body">
+        <div className="cc-modal__body prompt-preview-modal__body">
           {imageUrl ? (
             <figure className="prompt-preview-modal__image">
               <img
@@ -111,18 +92,18 @@ export function PromptPreviewModal({
           ) : null}
 
           {prompt.description?.trim() ? (
-            <section className="prompt-preview-modal__section prompt-preview-modal__description" aria-labelledby="promptPreviewDescriptionTitle">
-              <div className="prompt-preview-modal__section-heading">
-                <p id="promptPreviewDescriptionTitle">{t("promptShare.description")}</p>
+            <section className="cc-modal__section prompt-preview-modal__section prompt-preview-modal__description" aria-labelledby="promptPreviewDescriptionTitle">
+              <div className="cc-modal__section-head">
+                <p className="cc-modal__section-title" id="promptPreviewDescriptionTitle">{t("promptShare.description")}</p>
               </div>
               <p>{prompt.description}</p>
             </section>
           ) : null}
 
-          <section className="prompt-preview-modal__section" aria-labelledby="promptPreviewContentTitle">
-            <div className="prompt-preview-modal__section-heading">
-              <p>{promptBodyLabel}</p>
-              <span>{t("promptShare.characters", { count: formatNumber(promptBody.length) })}</span>
+          <section className="cc-modal__section prompt-preview-modal__section" aria-labelledby="promptPreviewContentTitle">
+            <div className="cc-modal__section-head">
+              <p className="cc-modal__section-title">{promptBodyLabel}</p>
+              <span className="cc-modal__section-meta">{t("promptShare.characters", { count: formatNumber(promptBody.length) })}</span>
             </div>
             {/* 本文はMarkdown記法を含む可能性があるため、フォーマット軸に関わらず常にMarkdownとして整形する */}
             {/* The body may contain Markdown syntax, so it is always rendered as Markdown regardless of the format axis */}
@@ -130,7 +111,7 @@ export function PromptPreviewModal({
               <MarkdownContent
                 id="promptPreviewContentTitle"
                 text={promptBody}
-                className="prompt-preview-modal__content prompt-preview-modal__markdown"
+                className="cc-modal__prose prompt-preview-modal__content prompt-preview-modal__markdown"
               />
             ) : (
               <p id="promptPreviewContentTitle" className="prompt-preview-modal__content">
@@ -140,20 +121,20 @@ export function PromptPreviewModal({
           </section>
 
           {hasExamples ? (
-            <section className="prompt-preview-modal__examples" aria-labelledby="promptPreviewExamplesTitle">
-              <div className="prompt-preview-modal__section-heading">
-                <p id="promptPreviewExamplesTitle">{t("promptShare.examples")}</p>
-                <span>{t("promptShare.supplemental")}</span>
+            <section className="cc-modal__section prompt-preview-modal__examples" aria-labelledby="promptPreviewExamplesTitle">
+              <div className="cc-modal__section-head">
+                <p className="cc-modal__section-title" id="promptPreviewExamplesTitle">{t("promptShare.examples")}</p>
+                <span className="cc-modal__section-meta">{t("promptShare.supplemental")}</span>
               </div>
-              <div className="prompt-preview-modal__example-grid">
+              <div className="cc-modal__example-grid prompt-preview-modal__example-grid">
                 {prompt.inputExamples.trim() ? (
-                  <article className="prompt-preview-modal__example">
+                  <article className="cc-modal__example prompt-preview-modal__example">
                     <h3><i className="bi bi-box-arrow-in-right" aria-hidden="true"></i>{t("promptShare.inputExample")}</h3>
                     <p>{prompt.inputExamples}</p>
                   </article>
                 ) : null}
                 {prompt.outputExamples.trim() ? (
-                  <article className="prompt-preview-modal__example">
+                  <article className="cc-modal__example prompt-preview-modal__example">
                     <h3><i className="bi bi-box-arrow-right" aria-hidden="true"></i>{t("promptShare.outputExample")}</h3>
                     <p>{prompt.outputExamples}</p>
                   </article>
@@ -163,6 +144,6 @@ export function PromptPreviewModal({
           ) : null}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

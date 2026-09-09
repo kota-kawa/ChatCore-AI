@@ -61,11 +61,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal::before,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal-content,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal .composer-hero,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal .post-form > *,
   :where(body.prompt-share-page, .prompt-share-page) .category-card,
   .prompt-share-page .prompt-card,
   .prompt-share-page .prompt-action-btn,
@@ -104,13 +99,6 @@
 
   :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
     animation: none;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal.show .post-modal-content,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal.show .composer-hero,
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal.show .post-form > * {
-    transform: none;
-    filter: none;
   }
 }
 

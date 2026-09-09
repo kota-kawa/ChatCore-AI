@@ -5,18 +5,11 @@
 }
 
 @media (max-width: 768px) {
-  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__header {
-    align-items: stretch;
-    flex-direction: column;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__add {
-    align-self: flex-start;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__meta {
-    grid-template-columns: 1fr;
-  }
+  
 
   .prompt-share-page #auth-buttons {
     z-index: var(--z-floating-controls, 65) !important;
@@ -142,107 +135,51 @@
     padding: 0.82rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-type-toggle {
-    grid-template-columns: 1fr;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-section {
-    padding: 1rem;
-    border-radius: 22px;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-section__header {
-    flex-direction: column;
-    gap: 0.45rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-section__description {
-    max-width: none;
-    text-align: left;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-field-grid--two {
-    grid-template-columns: 1fr;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__menu {
-    left: 0;
-    width: auto;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .ai-model-picker__options {
-    grid-template-columns: 1fr;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-hero {
-    flex-direction: column;
-    gap: 0.9rem;
-    padding: 1.1rem;
-    padding-right: 3.4rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-hero__chips {
-    justify-content: flex-start;
-    max-width: none;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-toggle {
-    padding: 0.82rem 0.86rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-type-option {
-    padding: 0.8rem 0.82rem;
-  }
+  
 
   /* アイコンを一回り小さくして、狭い画面でも見出しが不自然に折り返さない幅を本文に渡す
      A slightly smaller icon hands the copy enough width to avoid awkward heading breaks */
-  :where(body.prompt-share-page, .prompt-share-page) .image-upload-field {
-    gap: 0.7rem;
-    padding: 0.86rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 13px;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .image-upload-field__copy {
-    flex: 1 1 auto;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__meta {
-    align-items: stretch;
-    flex-direction: column;
-  }
+  
 
   /* 縦積みでは flex-basis が高さになるため、12rem のままだと
      ファイル名チップが縦長の楕円に膨らむ。内容の高さに戻す。
      Stacked, the flex-basis becomes a height, so a 12rem basis would inflate the
      file name chip into a tall blob. Fall back to its content height. */
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-image-preview__name {
-    flex: 0 0 auto;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-image-clear-btn {
-    width: 100%;
-    min-height: 44px;
-    justify-content: center;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .submit-btn {
-    width: 100%;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal-content {
-    width: 95%;
-    max-height: 86vh;
-  }
+  
 
   /* 詳細モーダルは下端に貼り付くシートにする（設定画面の閲覧モーダルと同じ）
      The detail modal becomes a bottom sheet, as in the settings preview modal */
@@ -250,18 +187,9 @@
     align-items: flex-end;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
-    width: 100%;
-    height: min(92dvh, 740px);
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 22px 22px 0 0;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-examples__grid {
-    grid-template-columns: 1fr;
-  }
+  
 
   /* プロフィールモーダルも詳細モーダルと同じくボトムシートにする
      The profile modal becomes a bottom sheet too, matching the detail modal */
@@ -269,33 +197,15 @@
     align-items: flex-end;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) #promptAuthorProfileModal .post-modal-content {
-    width: 100%;
-    height: min(90dvh, 720px);
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 22px 22px 0 0;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-share-dialog__sns {
-    grid-template-columns: 1fr;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-share-dialog {
-    padding: 1.2rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-share-dialog__header {
-    padding-right: 2.7rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-share-dialog__close {
-    width: 2.05rem;
-    height: 2.05rem;
-    top: 0.8rem;
-    right: 0.8rem;
-  }
+  
 
   :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn {
     width: 56px;
@@ -401,82 +311,35 @@
     min-height: 42px;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal-content {
-    width: 97%;
-    border-radius: 20px;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-hero {
-    padding: 0.92rem;
-    padding-right: 3.1rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .composer-section {
-    padding: 0.88rem;
-    border-radius: 20px;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .post-modal-scroll {
-    padding: 0.82rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
-    border-radius: 20px 20px 0 0;
-  }
+  
 
   /* 44pxのアイコンを外し、狭い画面ではタイトルに横幅を渡す
      The 44px icon steps aside so the title keeps its width on narrow screens */
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__icon {
-    display: none;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section,
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-media {
-    padding: 0.74rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section--body {
-    padding: 0;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header {
-    align-items: flex-start;
-  }
+  
 
   /* 固定見出しが2段にならないよう、狭い画面ではコピーボタンを1段に収める
      Keep the copy button on one row so the sticky header does not wrap on narrow screens. */
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header--sticky {
-    flex-wrap: nowrap;
-    /* 右側は閉じるボタンの逃げを残したまま、左だけ詰める
-       Only the left side tightens; the close button's clearance stays */
-    padding-left: 0.8rem;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page)
-    .prompt-detail-section__header--sticky
-    > .prompt-detail-section__actions {
-    width: auto;
-  }
+  
 
-  :where(body.prompt-share-page, .prompt-share-page)
-    .prompt-detail-section__header--sticky
-    .prompt-detail-copy-btn {
-    width: 38px;
-    height: 38px;
-  }
+  
 
-  .prompt-share-page .form-group input[type="text"],
+  
 
-  .prompt-share-page .form-group textarea,
-
-  .prompt-share-page .form-group select,
-
-  .prompt-share-page .submit-btn {
-    min-height: 48px;
-  }
-
-  .prompt-share-page .submit-btn {
-    width: 100%;
-    min-width: 0;
-  }
+  
 }

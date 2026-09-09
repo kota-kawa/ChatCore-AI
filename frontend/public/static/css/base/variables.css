@@ -100,10 +100,24 @@
   --transition-slow: 0.3s ease;
   --transition-sidebar: 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 
-  --modal-overlay: rgba(0, 0, 0, 0.45);
+  /* 共通モーダル面（components/modal_surface.css）のトークン。
+     ページ側は accent 系だけを差し替える。
+     Shared modal surface tokens (components/modal_surface.css); pages only override the accent. */
+  --modal-overlay: rgba(15, 23, 42, 0.5);
   --modal-surface: #ffffff;
-  --modal-border: rgba(0, 0, 0, 0.08);
-  --modal-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
+  --modal-surface-muted: #f4f5f7;
+  --modal-border: rgba(15, 23, 42, 0.12);
+  --modal-border-soft: rgba(15, 23, 42, 0.08);
+  --modal-shadow: 0 20px 56px rgba(15, 23, 42, 0.22);
+  --modal-radius: 14px;
+  --modal-text: #16202c;
+  --modal-text-muted: #5b6573;
+  --modal-accent: var(--primary-dark);
+  --modal-accent-hover: var(--primary-dark-hover);
+  --modal-accent-text: #ffffff;
+  --modal-accent-soft: rgba(15, 122, 81, 0.1);
+  --modal-focus-ring: 0 0 0 3px rgba(15, 122, 81, 0.28);
+  --modal-danger: var(--danger-color);
 
   --scrollbar-size: 10px;
   --scrollbar-size-thin: 8px;
@@ -188,10 +202,20 @@
   --surface-sidebar: #111827;
   --border-default: rgba(148, 163, 184, 0.28);
   --border-light: rgba(148, 163, 184, 0.22);
-  --modal-overlay: rgba(2, 6, 23, 0.72);
-  --modal-surface: #0f172a;
-  --modal-border: rgba(148, 163, 184, 0.3);
-  --modal-shadow: 0 16px 42px rgba(2, 6, 23, 0.58);
+  --modal-overlay: rgba(2, 6, 23, 0.7);
+  --modal-surface: #111827;
+  --modal-surface-muted: #1b2333;
+  --modal-border: rgba(148, 163, 184, 0.26);
+  --modal-border-soft: rgba(148, 163, 184, 0.16);
+  --modal-shadow: 0 20px 56px rgba(2, 6, 23, 0.6);
+  --modal-text: #e5e7eb;
+  --modal-text-muted: #9ca3af;
+  --modal-accent: #19c37d;
+  --modal-accent-hover: #34d399;
+  --modal-accent-text: #062c1e;
+  --modal-accent-soft: rgba(25, 195, 125, 0.16);
+  --modal-focus-ring: 0 0 0 3px rgba(25, 195, 125, 0.32);
+  --modal-danger: #f87171;
   --scrollbar-track: rgba(51, 65, 85, 0.42);
   --scrollbar-thumb: rgba(148, 163, 184, 0.5);
   --scrollbar-thumb-hover: rgba(148, 163, 184, 0.66);

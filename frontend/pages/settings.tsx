@@ -481,31 +481,6 @@ export default function UserSettingsPage() {
     };
   }, [profileSaveEffectToken]);
 
-  // 編集モーダルが開いている間、Escape キーでモーダルを閉じられるようにする
-  // While the edit modal is open, allow closing it with the Escape key
-  useEffect(() => {
-    if (!editPromptForm && !previewPrompt) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (previewPrompt) {
-        setPreviewPrompt(null);
-        return;
-      }
-      if (!promptSaving) {
-        setEditPromptForm(null);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [editPromptForm, previewPrompt, promptSaving]);
-
   // モーダルの開閉に合わせて body に modal-open クラスを付け外しし、背景スクロールを制御する
   // Toggle modal-open on body to prevent background scrolling when the modal is shown
   useEffect(() => {

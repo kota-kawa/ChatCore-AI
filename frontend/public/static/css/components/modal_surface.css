@@ -1,0 +1,682 @@
+/* modal_surface.css
+   全ページ共通の中央寄せモーダル面。ModalShell（.modal-base）に `cc-modal` を足し、
+   中身は panel / header / body / footer の 4 部品で組む。
+   - 面は不透明・1px 罫線・1 段の影。グラデーション・発光・ぼかしは持たない。
+   - 動きは開くときの 160ms のフェード＋わずかな持ち上がりのみ。
+   - 色は base/variables.css の --modal-* トークンだけを参照する。ページ固有の
+     アクセント（Prompt Share の青、メモの琥珀）は各ページのスコープで
+     --modal-accent 系を差し替える。
+   Shared centered-modal surface used on every page. Add `cc-modal` to the ModalShell
+   overlay (.modal-base) and compose the content from panel / header / body / footer.
+   - Opaque surface, 1px border, one shadow. No gradients, glows or blur.
+   - Motion is a single 160ms fade + slight rise on open.
+   - Colors come only from the --modal-* tokens in base/variables.css; page accents
+     (Prompt Share blue, memo amber) override the accent tokens in their own scope. */
+
+/* ── オーバーレイ / Overlay ─────────────────────────────────────────── */
+.cc-modal {
+  padding: var(--modal-viewport-padding, 1rem);
+  background: var(--modal-overlay);
+  color: var(--modal-text);
+}
+
+.cc-modal.is-open {
+  animation: cc-modal-overlay-in 0.16s ease both;
+}
+
+/* ── パネル / Panel ─────────────────────────────────────────────────── */
+.cc-modal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--cc-modal-width, 640px), 100%);
+  max-height: min(92dvh, 960px);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--modal-border);
+  border-radius: var(--modal-radius);
+  background: var(--modal-surface);
+  color: var(--modal-text);
+  box-shadow: var(--modal-shadow);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.cc-modal.is-open .cc-modal__panel {
+  animation: cc-modal-panel-in 0.16s ease both;
+}
+
+.cc-modal__panel:focus {
+  outline: none;
+}
+
+/* 幅は用途で 4 段階。読む面（詳細・プロフィール）は高さも固定して枠を安定させる。
+   Four width steps; reading sheets (detail / profile) also fix the height so the frame stays put. */
+.cc-modal__panel--sm { --cc-modal-width: 480px; }
+.cc-modal__panel--md { --cc-modal-width: 640px; }
+.cc-modal__panel--lg { --cc-modal-width: 780px; }
+.cc-modal__panel--xl { --cc-modal-width: 1040px; }
+
+.cc-modal__panel--reader {
+  height: min(92dvh, 900px);
+}
+
+/* ── ヘッダー / Header ─────────────────────────────────────────────── */
+.cc-modal__header {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--modal-border-soft);
+}
+
+.cc-modal__header--compact {
+  align-items: center;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  min-height: 52px;
+}
+
+.cc-modal__heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.cc-modal__title {
+  margin: 0;
+  color: var(--modal-text);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.cc-modal__lead {
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* 見出しの下に置く署名行（投稿者・カテゴリ・日付など）
+   The byline row under a title (author, category, date, ...) */
+.cc-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.9rem;
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.cc-modal__meta > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.cc-modal__meta i {
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+/* ── 閉じるボタン / Close button ───────────────────────────────────── */
+.cc-modal__close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: -0.25rem -0.4rem -0.25rem 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--modal-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cc-modal__close:hover {
+  background: var(--modal-surface-muted);
+  color: var(--modal-text);
+}
+
+.cc-modal__close:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── タブ / Tabs ───────────────────────────────────────────────────── */
+.cc-modal__tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+}
+
+.cc-modal__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--modal-text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.cc-modal__tab::after {
+  content: "";
+  position: absolute;
+  right: 0.75rem;
+  bottom: -1px;
+  left: 0.75rem;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.cc-modal__tab:hover {
+  color: var(--modal-text);
+}
+
+.cc-modal__tab.is-active {
+  color: var(--modal-text);
+}
+
+.cc-modal__tab.is-active::after {
+  background: var(--modal-accent);
+}
+
+.cc-modal__tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--modal-surface-muted);
+  color: var(--modal-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-modal__tab.is-active .cc-modal__tab-count {
+  background: var(--modal-accent-soft);
+  color: var(--modal-accent);
+}
+
+/* ── 本文 / Body ───────────────────────────────────────────────────── */
+.cc-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.cc-modal__body--flush {
+  padding: 0;
+}
+
+.cc-modal__body::-webkit-scrollbar {
+  width: var(--scrollbar-size-thin, 8px);
+}
+
+.cc-modal__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cc-modal__body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--scrollbar-radius, 999px);
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+/* form 要素で body と footer を包むときの縦組み
+   Column layout for a <form> that wraps a body and a footer */
+.cc-modal__form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ── 本文内のセクション / Sections inside the body ─────────────────── */
+.cc-modal__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cc-modal__section + .cc-modal__section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--modal-border-soft);
+}
+
+.cc-modal__section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.cc-modal__section-title {
+  margin: 0;
+  color: var(--modal-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.cc-modal__section-meta {
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 補足を伝える控えめな帯（ゲスト投稿の条件など）
+   A quiet notice band (e.g. guest posting conditions) */
+.cc-modal__notice {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--modal-border-soft);
+  border-radius: 10px;
+  background: var(--modal-surface-muted);
+  color: var(--modal-text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.cc-modal__notice i {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: var(--modal-accent);
+}
+
+.cc-modal__notice strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.cc-modal__notice p,
+.cc-modal__notice ul {
+  margin: 0.25rem 0 0;
+  padding-left: 0;
+}
+
+.cc-modal__notice ul {
+  padding-left: 1.1rem;
+}
+
+/* ── 読む面の Markdown / Markdown inside a reading sheet ─────────────────
+   グローバルの * リセットで見出しと箇条書きの階層が消えるため、モーダル内で組み直す。
+   The global * reset flattens headings and lists, so the modal restores them. */
+.cc-modal__prose {
+  color: var(--modal-text);
+  overflow-wrap: anywhere;
+}
+
+.cc-modal__prose > * {
+  margin-block: 0.65em;
+}
+
+.cc-modal__prose > :first-child {
+  margin-top: 0;
+}
+
+.cc-modal__prose > :last-child {
+  margin-bottom: 0;
+}
+
+.cc-modal__prose h1,
+.cc-modal__prose h2,
+.cc-modal__prose h3,
+.cc-modal__prose h4 {
+  margin: 1.4em 0 0.5em;
+  color: var(--modal-text);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.cc-modal__prose h1 { font-size: 1.25em; }
+.cc-modal__prose h2 { font-size: 1.15em; }
+.cc-modal__prose h3,
+.cc-modal__prose h4 { font-size: 1.02em; }
+
+.cc-modal__prose ul,
+.cc-modal__prose ol {
+  padding-inline-start: 1.6em;
+}
+
+.cc-modal__prose ul { list-style: disc; }
+.cc-modal__prose ol { list-style: decimal; }
+
+.cc-modal__prose li {
+  display: list-item;
+  margin-block: 0.3em;
+}
+
+.cc-modal__prose li > ul,
+.cc-modal__prose li > ol {
+  margin-block: 0.3em;
+}
+
+.cc-modal__prose blockquote {
+  margin-inline: 0;
+  padding: 0.2em 0 0.2em 0.9em;
+  border-left: 2px solid var(--modal-border);
+  color: var(--modal-text-muted);
+}
+
+.cc-modal__prose code {
+  padding: 0.12em 0.36em;
+  border-radius: 4px;
+  background: var(--modal-surface-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88em;
+}
+
+.cc-modal__prose pre {
+  overflow-x: auto;
+  padding: 0.85em 1em;
+  border: 1px solid var(--modal-border-soft);
+  border-radius: 8px;
+  background: var(--modal-surface-muted);
+  line-height: 1.7;
+}
+
+.cc-modal__prose pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.cc-modal__prose hr {
+  margin-block: 1.4em;
+  border: 0;
+  border-top: 1px solid var(--modal-border-soft);
+}
+
+.cc-modal__prose a {
+  color: var(--modal-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.cc-modal__prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.cc-modal__prose th,
+.cc-modal__prose td {
+  padding: 0.42em 0.7em;
+  border: 1px solid var(--modal-border);
+  text-align: left;
+}
+
+.cc-modal__prose th {
+  background: var(--modal-surface-muted);
+  font-weight: 700;
+}
+
+/* 2 列の補足カード（入出力例など） / Two-column supplemental cards (e.g. examples) */
+.cc-modal__example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cc-modal__example {
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--modal-border-soft);
+  border-radius: 10px;
+  background: var(--modal-surface-muted);
+}
+
+.cc-modal__example h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.45rem;
+  color: var(--modal-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.cc-modal__example h3 i {
+  color: var(--modal-text-muted);
+}
+
+.cc-modal__example p {
+  margin: 0;
+  color: var(--modal-text);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* ── フッター / Footer ─────────────────────────────────────────────── */
+.cc-modal__footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--modal-border-soft);
+  background: var(--modal-surface);
+}
+
+.cc-modal__footer-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.cc-modal__footer-note--error {
+  color: var(--modal-danger);
+}
+
+/* ── ボタン / Buttons ───────────────────────────────────────────────── */
+.cc-modal__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0 1rem;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--modal-surface);
+  color: var(--modal-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.cc-modal__btn:hover {
+  background: var(--modal-surface-muted);
+}
+
+.cc-modal__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cc-modal__btn--primary {
+  border-color: var(--modal-accent);
+  background: var(--modal-accent);
+  color: var(--modal-accent-text);
+}
+
+.cc-modal__btn--primary:hover:not(:disabled) {
+  border-color: var(--modal-accent-hover);
+  background: var(--modal-accent-hover);
+}
+
+.cc-modal__btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--modal-text-muted);
+}
+
+.cc-modal__btn--ghost:hover:not(:disabled) {
+  background: var(--modal-surface-muted);
+  color: var(--modal-text);
+}
+
+.cc-modal__btn--danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--modal-danger);
+}
+
+.cc-modal__btn--danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.cc-modal__btn--sm {
+  min-height: 32px;
+  padding: 0 0.7rem;
+  font-size: 0.82rem;
+}
+
+.cc-modal__btn i {
+  font-size: 1em;
+}
+
+/* ── フォーカス表示 / Focus ring ───────────────────────────────────── */
+.cc-modal__close:focus-visible,
+.cc-modal__tab:focus-visible,
+.cc-modal__btn:focus-visible {
+  outline: none;
+  box-shadow: var(--modal-focus-ring);
+}
+
+/* ── 動き / Motion ─────────────────────────────────────────────────── */
+@keyframes cc-modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cc-modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-modal.is-open,
+  .cc-modal.is-open .cc-modal__panel {
+    animation: none;
+  }
+}
+
+/* ── 狭い画面 / Narrow screens ─────────────────────────────────────
+   下端に寄せたシートにし、横幅いっぱいを使う。角は上だけ丸める。
+   Becomes a bottom sheet using the full width; only the top corners stay rounded. */
+@media (max-width: 640px) {
+  .cc-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .cc-modal__panel {
+    --cc-modal-width: 100%;
+    max-height: 94dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .cc-modal__panel--reader {
+    height: 94dvh;
+  }
+
+  .cc-modal__header {
+    padding: 0.85rem 1rem;
+  }
+
+  .cc-modal__header--compact {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .cc-modal__body {
+    padding: 1rem;
+  }
+
+  .cc-modal__footer {
+    padding: 0.75rem 1rem calc(0.75rem + var(--sai-bottom, 0px));
+  }
+
+  .cc-modal__footer .cc-modal__btn {
+    flex: 1 1 auto;
+  }
+
+  .cc-modal__footer-note {
+    flex-basis: 100%;
+  }
+
+  .cc-modal__example-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

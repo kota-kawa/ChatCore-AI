@@ -791,7 +791,7 @@ export default function PromptSharePage({
     (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => {
       event?.stopPropagation();
       setOpenDropdownPromptId(null);
-      openModal("share", promptShareCopyButtonRef.current);
+      openModal("share");
       void createPromptShareLink(prompt, false);
     },
     [createPromptShareLink, openModal]
@@ -806,7 +806,7 @@ export default function PromptSharePage({
       setDetailModalView("detail");
       setDetailPrompt(prompt);
       resetPromptComments();
-      openModal("detail", promptDetailCloseButtonRef.current);
+      openModal("detail");
       if (promptId) {
         recordOpenedPromptView(prompt);
         void loadPromptComments(promptId);
@@ -824,7 +824,7 @@ export default function PromptSharePage({
       setDetailModalView("comments");
       setDetailPrompt(prompt);
       resetPromptComments();
-      openModal("detail", promptCommentTextareaRef.current || promptCommentsSectionRef.current);
+      openModal("detail");
       if (promptId) {
         recordOpenedPromptView(prompt);
         void loadPromptComments(promptId);
@@ -865,7 +865,7 @@ export default function PromptSharePage({
       isGuestPost ? t("promptShare.guestPostHint") : t("promptShare.aiAssistHint"),
       "info"
     );
-    openModal("post", promptPostTitleInputRef.current);
+    openModal("post");
   }, [isGuestPost, openModal, setPromptPostStatus]);
 
   // カテゴリをクリックしたとき、検索中なら一覧をリセットしてから選択カテゴリを適用する
@@ -1289,24 +1289,20 @@ export default function PromptSharePage({
         {/* 本人のカードから開くインライン編集。設定画面と同じフォーム契約を再利用する。 */}
         {/* Inline editing opened from an owned card, reusing the settings form contract. */}
         {editPromptForm ? (
-          <div
-            id="promptEditModalScope"
+          <EditPromptModal
+            formState={editPromptForm}
+            saving={isEditSaving}
+            modalRef={editModalRef}
             className="prompt-share-edit-modal-scope user-settings-page"
-          >
-            <EditPromptModal
-              formState={editPromptForm}
-              saving={isEditSaving}
-              modalRef={editModalRef}
-              onClose={() => {
-                if (!isEditSaving) {
-                  closeModal("edit");
-                }
-              }}
-              onCategoryChange={handleEditPromptCategoryChange}
-              onChange={handleEditPromptChange}
-              onSubmit={handleEditPromptSubmit}
-            />
-          </div>
+            onClose={() => {
+              if (!isEditSaving) {
+                closeModal("edit");
+              }
+            }}
+            onCategoryChange={handleEditPromptCategoryChange}
+            onChange={handleEditPromptChange}
+            onSubmit={handleEditPromptSubmit}
+          />
         ) : null}
 
         {/* プロンプト投稿フォーム。ゲスト時はテキスト専用の制限付き Composer を表示する。 */}

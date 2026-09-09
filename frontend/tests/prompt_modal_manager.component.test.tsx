@@ -33,6 +33,9 @@ function PromptModalManagerHarness({ isEditSaving = false }: { isEditSaving?: bo
       <button type="button" onClick={() => openModal("edit")}>
         編集を開く
       </button>
+      <button type="button" onClick={() => closeModal("edit")}>
+        編集を閉じる
+      </button>
       <output>{activeModal || "none"}</output>
       <div
         aria-hidden={activeModal === "detail" ? "false" : "true"}
@@ -97,14 +100,31 @@ describe("usePromptModalManager", () => {
     expect(modal).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("保存中の編集モーダルはEscapeキーで閉じない", () => {
+  // 背景スクロールのロックは開いている間だけ掛かり、閉じると解除される
+  // The background scroll lock applies only while a modal is open and lifts on close
+  it("locks the page scroll while a modal is open", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    render(<PromptModalManagerHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "詳細を開く" }));
+    expect(document.body).toHaveClass("ps-modal-open");
+    expect(document.body.style.position).toBe("fixed");
+
+    fireEvent.click(screen.getByRole("button", { name: "詳細を閉じる" }));
+    expect(document.body).not.toHaveClass("ps-modal-open");
+    expect(document.body.style.position).toBe("");
+  });
+
+  // Escape 自体は ModalShell が扱うが、保存中は closeModal が閉じるのを拒む
+  // ModalShell owns Escape itself, but closeModal refuses to close while saving
+  it("保存中の編集モーダルは閉じない", () => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     render(<PromptModalManagerHarness isEditSaving />);
 
     fireEvent.click(screen.getByRole("button", { name: "編集を開く" }));
     expect(screen.getByText("edit")).toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "編集を閉じる" }));
 
     expect(screen.getByText("edit")).toBeInTheDocument();
   });

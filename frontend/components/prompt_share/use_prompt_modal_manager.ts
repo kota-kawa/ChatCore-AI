@@ -7,7 +7,6 @@ import {
 } from "react";
 
 import type { ModalKey } from "./prompt_share_page_types";
-import { getModalFocusableElements } from "./prompt_share_page_utils";
 
 type UsePromptModalManagerOptions = {
   isEditSaving: boolean;
@@ -23,8 +22,13 @@ type UsePromptModalManagerOptions = {
   promptAuthorProfileModalRef: MutableRefObject<HTMLDivElement | null>;
 };
 
-// モーダルの開閉、フォーカス復元、スクロールロック、Escape/Tab操作を管理する
-// Manages modal open/close state, focus restoration, scroll lock, and Escape/Tab keyboard behavior
+// ページ内で同時に 1 つだけ開くモーダルの状態と、背景スクロールのロック、
+// 閉じたあとのフォーカス復元を管理する。
+// 初期フォーカス・Tab の閉じ込め・Escape は各モーダルが使う ModalShell 側が担うため、
+// ここではキーボード操作を扱わない。
+// Tracks which single modal is open on the page, locks background scrolling, and restores
+// focus after close. Initial focus, Tab trapping and Escape belong to the ModalShell each
+// modal renders through, so no keyboard handling lives here.
 export function usePromptModalManager({
   isEditSaving,
   isPostSubmitting,
@@ -41,67 +45,46 @@ export function usePromptModalManager({
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
   const activeModalRef = useRef<ModalKey>(null);
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
-  const preferredFocusElementRef = useRef<HTMLElement | null>(null);
   const lockedScrollYRef = useRef(0);
   const hasModalLockRef = useRef(false);
+
+  // refs は呼び出し元との契約として受け取り続ける（DOM 参照はページ側の他処理が使う）
+  // The refs stay part of the contract; other page logic reads the DOM elements through them
+  void editModalRef;
+  void postModalRef;
+  void promptDetailModalRef;
+  void promptShareModalRef;
+  void promptAuthorProfileModalRef;
 
   useEffect(() => {
     activeModalRef.current = activeModal;
   }, [activeModal]);
 
-  // モーダルキーからDOMのref要素へのマッピングを提供する
-  // Maps a modal key to its corresponding DOM ref element
-  const getModalElement = useCallback((modal: Exclude<ModalKey, null>) => {
-    if (modal === "edit") return editModalRef.current;
-    if (modal === "post") return postModalRef.current;
-    if (modal === "detail") return promptDetailModalRef.current;
-    if (modal === "profile") return promptAuthorProfileModalRef.current;
-    return promptShareModalRef.current;
-  }, [editModalRef, postModalRef, promptAuthorProfileModalRef, promptDetailModalRef, promptShareModalRef]);
-
-  // モーダル内のフォーカス可能な要素を取得し、優先要素または先頭要素へフォーカスを移す
-  // Finds focusable elements inside a modal and moves focus to the preferred or first element
-  const focusModal = useCallback(
-    (modal: Exclude<ModalKey, null>) => {
-      const modalElement = getModalElement(modal);
-      if (!modalElement) {
-        return;
-      }
-
-      const focusableElements = getModalFocusableElements(modalElement);
-      const preferredElement = preferredFocusElementRef.current;
-      const fallbackTarget =
-        modalElement.querySelector<HTMLElement>(".post-modal-content") || modalElement;
-
-      const target =
-        (preferredElement && focusableElements.includes(preferredElement) ? preferredElement : null) ||
-        focusableElements[0] ||
-        fallbackTarget;
-
-      window.requestAnimationFrame(() => {
-        target.focus();
-      });
-    },
-    [getModalElement]
-  );
-
   // 指定されたモーダルを閉じ、モーダル種別ごとの状態をクリアする
-  // Closes the specified modal and clears modal-specific state
+  // 送信中・保存中のモーダルは閉じない（ModalShell の Escape 抑止と同じ条件）
+  // Closes the specified modal and clears modal-specific state; a submitting / saving
+  // modal stays open (the same condition ModalShell uses to block Escape)
   const closeModal = useCallback(
     (modal: Exclude<ModalKey, null>, options?: { rotateTrigger?: boolean }) => {
       void options;
       if (activeModalRef.current !== modal) {
         return false;
       }
+      if ((modal === "post" && isPostSubmitting) || (modal === "edit" && isEditSaving)) {
+        return false;
+      }
 
       // aria-hidden が反映される前にモーダル外へフォーカスを戻す。
       // React の state 更新後に復元すると、非表示になったモーダル内に
       // フォーカスが一時的に残り、支援技術向けの警告が発生する。
+      // Restore focus outside the modal before aria-hidden flips; restoring after the state
+      // update would leave focus inside a hidden modal for a moment and trigger AT warnings.
       const previousFocusedElement = previousFocusedElementRef.current;
       if (previousFocusedElement?.isConnected) {
         previousFocusedElement.focus();
       }
 
+      activeModalRef.current = null;
       setActiveModal(null);
       if (modal === "post") {
         onClosePost();
@@ -114,25 +97,24 @@ export function usePromptModalManager({
       }
       return true;
     },
-    [onCloseDetail, onCloseEdit, onCloseProfile, onClosePost]
+    [isEditSaving, isPostSubmitting, onCloseDetail, onCloseEdit, onCloseProfile, onClosePost]
   );
 
   // モーダルを開く前にトリガー要素を記録しておき、閉じた後にフォーカスを元の位置へ戻せるようにする
   // Records the trigger element before opening so focus can be restored when the modal closes
-  const openModal = useCallback((modal: Exclude<ModalKey, null>, preferredElement?: HTMLElement | null) => {
+  const openModal = useCallback((modal: Exclude<ModalKey, null>) => {
     previousFocusedElementRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    preferredFocusElementRef.current = preferredElement || null;
+    activeModalRef.current = modal;
     setActiveModal(modal);
   }, []);
 
-  // モーダルの開閉に応じてbodyのスクロールをロック/アンロックし、フォーカスを管理する
-  // Locks/unlocks body scroll when modals open/close and manages focus accordingly
+  // モーダルの開閉に応じてbodyのスクロールをロック/アンロックする
+  // Locks/unlocks body scroll when modals open/close
   useEffect(() => {
     if (!activeModal) {
       if (!hasModalLockRef.current) {
         previousFocusedElementRef.current = null;
-        preferredFocusElementRef.current = null;
         return;
       }
       // モーダルを閉じるときにスクロール位置を復元する
@@ -148,7 +130,6 @@ export function usePromptModalManager({
       hasModalLockRef.current = false;
 
       previousFocusedElementRef.current = null;
-      preferredFocusElementRef.current = null;
       return;
     }
 
@@ -165,77 +146,7 @@ export function usePromptModalManager({
       document.body.style.width = "100%";
       hasModalLockRef.current = true;
     }
-
-    focusModal(activeModal);
-  }, [activeModal, focusModal]);
-
-  // モーダル内でのキーボード操作（Escape・Tabトラップ）を処理してアクセシビリティを確保する
-  // Handles keyboard navigation inside modals (Escape to close, Tab trapping for accessibility)
-  useEffect(() => {
-    if (!activeModal) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-      const modalElement = getModalElement(activeModal);
-      if (!modalElement) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        // 投稿送信中はEscapeキーでモーダルを閉じない
-        // Prevent closing the modal with Escape while a post submission is in progress
-        if (
-          (activeModal === "post" && isPostSubmitting) ||
-          (activeModal === "edit" && isEditSaving)
-        ) {
-          return;
-        }
-        event.preventDefault();
-        closeModal(activeModal);
-        return;
-      }
-
-      if (event.key !== "Tab") {
-        return;
-      }
-
-      // Tabキーでフォーカスをモーダル内に閉じ込めるフォーカストラップ
-      // Focus trap: keeps Tab navigation confined within the modal
-      const focusableElements = getModalFocusableElements(modalElement);
-      if (focusableElements.length === 0) {
-        event.preventDefault();
-        const fallback = modalElement.querySelector<HTMLElement>(".post-modal-content");
-        fallback?.focus();
-        return;
-      }
-
-      const firstFocusable = focusableElements[0];
-      const lastFocusable = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-      if (event.shiftKey) {
-        if (!activeElement || activeElement === firstFocusable || !modalElement.contains(activeElement)) {
-          event.preventDefault();
-          lastFocusable.focus();
-        }
-        return;
-      }
-
-      if (!activeElement || activeElement === lastFocusable || !modalElement.contains(activeElement)) {
-        event.preventDefault();
-        firstFocusable.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeModal, closeModal, getModalElement, isEditSaving, isPostSubmitting]);
+  }, [activeModal]);
 
   return {
     activeModal,

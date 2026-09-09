@@ -1,11 +1,15 @@
-import type { ChangeEvent, FormEvent, RefObject } from "react";
+import type { ChangeEvent, FormEvent, MutableRefObject } from "react";
 
 import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import { PromptCategorySelect } from "./prompt_category_select";
 
 // プロンプト編集用のモーダルダイアログ — 保存中は全フォームを無効化する
-// Modal dialog for editing a prompt — disables all form controls while saving
+// 共通モーダル面（cc-modal）で描き、設定画面とプロンプト共有画面の両方から使う。
+// Modal dialog for editing a prompt — disables all form controls while saving.
+// Drawn on the shared modal surface (cc-modal) and used by both the settings and prompt share pages.
 export function EditPromptModal({
   formState,
   saving,
@@ -13,7 +17,8 @@ export function EditPromptModal({
   onCategoryChange,
   onChange,
   onSubmit,
-  modalRef
+  modalRef,
+  className
 }: {
   formState: EditPromptFormState;
   saving: boolean;
@@ -21,65 +26,44 @@ export function EditPromptModal({
   onCategoryChange: (value: string) => void;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  modalRef?: RefObject<HTMLDivElement | null>;
+  modalRef?: MutableRefObject<HTMLDivElement | null>;
+  // 呼び出し元ページのスコープ用クラス（配色の差し替えなど） / Page-scope classes from the caller (e.g. accent palette)
+  className?: string;
 }) {
   const { t, locale } = useTranslation();
   const isSkill = formState.contentFormat === "skill";
   const showExamples = !isSkill && formState.mediaType === "text";
   return (
-    <div
+    <ModalShell
+      isOpen
+      onClose={onClose}
       id="editModal"
-      className="edit-prompt-modal"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="editPromptModalTitle"
-      ref={modalRef}
-      onClick={(event) => {
-        // モーダル背景クリックでも閉じられるが、保存中は誤操作を防ぐためブロックする
-        // Allow closing by clicking the backdrop, but block it during save to prevent accidental dismissal
-        if (event.target === event.currentTarget && !saving) {
-          onClose();
-        }
-      }}
+      className={`cc-modal edit-prompt-modal${className ? ` ${className}` : ""}`}
+      labelledBy="editPromptModalTitle"
+      overlayRef={modalRef}
+      dismissDisabled={saving}
+      initialFocusSelector="#editTitle"
     >
-      <div className="edit-prompt-modal__dialog" role="document">
-        <div className="edit-prompt-modal__surface">
-          <header className="edit-prompt-modal__header">
-            <div className="edit-prompt-modal__heading">
-              <span className="edit-prompt-modal__icon" aria-hidden="true">
-                <i className="bi bi-pencil-square"></i>
-              </span>
-              <div>
-                <p className="edit-prompt-modal__eyebrow">{t("settings.prompts")}</p>
-                <h2 id="editPromptModalTitle">
-                  {locale === "en" ? "Edit prompt" : "プロンプトを編集"}
-                </h2>
-                <p className="edit-prompt-modal__lead">{t("promptShare.editLead")}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="edit-prompt-modal__close"
-              aria-label={t("common.close")}
-              onClick={onClose}
-              disabled={saving}
-            >
-              <i className="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </header>
+      <div className="cc-modal__panel cc-modal__panel--lg edit-prompt-modal__dialog" tabIndex={-1}>
+        <header className="cc-modal__header edit-prompt-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="editPromptModalTitle">
+              {locale === "en" ? "Edit prompt" : "プロンプトを編集"}
+            </h2>
+            <p className="cc-modal__lead edit-prompt-modal__lead">{t("promptShare.editLead")}</p>
+          </div>
+          <ModalCloseButton label={t("common.close")} onClick={onClose} disabled={saving} />
+        </header>
 
-          <form id="editForm" className="edit-prompt-modal__form" onSubmit={onSubmit}>
-            <div className="edit-prompt-modal__body">
+          <form id="editForm" className="cc-modal__form edit-prompt-modal__form" onSubmit={onSubmit}>
+            <div className="cc-modal__body edit-prompt-modal__body">
               {/* 編集対象のプロンプト ID を hidden フィールドで保持する / Hold the target prompt ID in a hidden field for form submission */}
               <input type="hidden" id="editPromptId" value={formState.id} readOnly />
 
-              <section className="edit-prompt-modal__section" aria-labelledby="editPromptBasicsTitle">
-                <div className="edit-prompt-modal__section-heading">
-                  <div>
-                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.basicInfo")}</p>
-                    <h3 id="editPromptBasicsTitle">{t("promptShare.improveDiscovery")}</h3>
-                  </div>
+              <section className="cc-modal__section edit-prompt-modal__section" aria-labelledby="editPromptBasicsTitle">
+                <div className="cc-modal__section-head">
+                  <h3 className="cc-modal__section-title" id="editPromptBasicsTitle">{t("promptShare.basicInfo")}</h3>
+                  <span className="cc-modal__section-meta">{t("promptShare.improveDiscovery")}</span>
                 </div>
                 <div className="edit-prompt-modal__grid">
                   <div className="edit-prompt-modal__field">
@@ -124,16 +108,13 @@ export function EditPromptModal({
                 </div>
               </section>
 
-              <section className="edit-prompt-modal__section" aria-labelledby="editPromptContentTitle">
-                <div className="edit-prompt-modal__section-heading">
-                  <div>
-                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.body")}</p>
-                    <h3 id="editPromptContentTitle">
-                      {isSkill
-                        ? (locale === "en" ? "SKILL definition" : "SKILL 定義")
-                        : (locale === "en" ? "Instructions for AI" : "AI に伝えたい内容")}
-                    </h3>
-                  </div>
+              <section className="cc-modal__section edit-prompt-modal__section" aria-labelledby="editPromptContentTitle">
+                <div className="cc-modal__section-head">
+                  <h3 className="cc-modal__section-title" id="editPromptContentTitle">
+                    {isSkill
+                      ? (locale === "en" ? "SKILL definition" : "SKILL 定義")
+                      : t("promptShare.body")}
+                  </h3>
                   <span className="edit-prompt-modal__required">{t("settings.required")}</span>
                 </div>
                 <div className="edit-prompt-modal__field">
@@ -152,13 +133,10 @@ export function EditPromptModal({
               </section>
 
               {showExamples ? (
-              <section className="edit-prompt-modal__section edit-prompt-modal__section--examples" aria-labelledby="editPromptExamplesTitle">
-                <div className="edit-prompt-modal__section-heading">
-                  <div>
-                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.examples")}</p>
-                    <h3 id="editPromptExamplesTitle">{t("promptShare.examplesHelp")}</h3>
-                  </div>
-                  <span className="edit-prompt-modal__optional">{t("common.optional")}</span>
+              <section className="cc-modal__section edit-prompt-modal__section edit-prompt-modal__section--examples" aria-labelledby="editPromptExamplesTitle">
+                <div className="cc-modal__section-head">
+                  <h3 className="cc-modal__section-title" id="editPromptExamplesTitle">{t("promptShare.examples")}</h3>
+                  <span className="cc-modal__section-meta">{t("promptShare.examplesHelp")}</span>
                 </div>
                 <div className="edit-prompt-modal__grid">
                   <div className="edit-prompt-modal__field">
@@ -191,10 +169,10 @@ export function EditPromptModal({
               ) : null}
             </div>
 
-            <footer className="edit-prompt-modal__footer">
+            <footer className="cc-modal__footer edit-prompt-modal__footer">
               <button
                 type="button"
-                className="edit-prompt-modal__button edit-prompt-modal__button--secondary"
+                className="cc-modal__btn edit-prompt-modal__button edit-prompt-modal__button--secondary"
                 onClick={onClose}
                 disabled={saving}
               >
@@ -202,16 +180,14 @@ export function EditPromptModal({
               </button>
               <button
                 type="submit"
-                className="edit-prompt-modal__button edit-prompt-modal__button--primary"
+                className="cc-modal__btn cc-modal__btn--primary edit-prompt-modal__button edit-prompt-modal__button--primary"
                 disabled={saving}
               >
-                <i className="bi bi-save" aria-hidden="true"></i>
                 {saving ? t("common.saving") : t("settings.saveChanges")}
               </button>
             </footer>
           </form>
-        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
