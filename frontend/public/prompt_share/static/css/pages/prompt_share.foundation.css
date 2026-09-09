@@ -71,21 +71,15 @@ body.prompt-share-page.ps-modal-open {
   overscroll-behavior: none;
 }
 
-/* 開いている各モーダルは背景ではなく操作対象として残す。
-   Keep each open modal interactive while the rest of the page is locked. */
-body.prompt-share-page.ps-modal-open .prompt-share-page > :not(#postModal):not(#promptEditModalScope):not(#promptDetailModal):not(#promptShareModal):not(#promptAuthorProfileModal) {
+/* モーダルは ModalShell で body 直下へ描かれるため、ロック中はページ本体だけを操作不能にし、
+   開いているモーダル（.modal-base.is-open）は操作対象として残す。
+   Modals render under <body> through ModalShell, so the lock only disables the page itself and
+   keeps the open modal (.modal-base.is-open) interactive. */
+body.prompt-share-page.ps-modal-open .prompt-share-page > * {
   pointer-events: none;
 }
 
-body.prompt-share-page.ps-modal-open #postModal.show,
-
-body.prompt-share-page.ps-modal-open #promptEditModalScope,
-
-body.prompt-share-page.ps-modal-open #promptDetailModal.show,
-
-body.prompt-share-page.ps-modal-open #promptShareModal.show,
-
-body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
+body.prompt-share-page.ps-modal-open .modal-base.is-open {
   pointer-events: auto;
 }
 
@@ -363,19 +357,7 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
 
 .prompt-share-page .meatball-menu:focus-visible,
 
-.prompt-share-page .close-btn:focus-visible,
-
-.prompt-share-page .prompt-share-dialog__close:focus-visible,
-
-.prompt-share-page .new-prompt-btn:focus-visible,
-
-.prompt-share-page .submit-btn:focus-visible,
-
-.prompt-share-page .prompt-share-dialog__sns a:focus-visible,
-
-.prompt-share-page .prompt-detail-tabs__button:focus-visible,
-
-.prompt-share-page .prompt-detail-copy-btn:focus-visible {
+.prompt-share-page .new-prompt-btn:focus-visible {
   outline: 3px solid rgba(26, 115, 232, 0.35);
   outline-offset: 2px;
 }

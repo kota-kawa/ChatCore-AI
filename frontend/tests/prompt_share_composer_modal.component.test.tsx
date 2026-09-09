@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PromptShareComposerModal } from "../components/prompt_share/prompt_share_composer_modal";
@@ -38,13 +38,26 @@ function ComposerHarness({
   const [postResources, setPostResources] = useState<PromptResource[]>([]);
   const [skillMarkdown, setSkillMarkdown] = useState("");
   const skillMarkdownRef = useRef<HTMLTextAreaElement | null>(null);
+  // 実ページと同じく安定した ref を渡す。毎レンダー新しい ref だと ModalShell の
+  // 初期フォーカスが再実行され、入力中にフォーカスを奪ってしまう
+  // Stable refs like the real page; a fresh ref per render re-runs ModalShell's initial
+  // focus and steals focus mid-typing
+  const postModalRef = useRef<HTMLDivElement | null>(null);
+  const promptPostTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const promptPostCategorySelectRef = useRef<HTMLSelectElement | null>(null);
+  const promptPostContentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptPostAiModelSelectRef = useRef<HTMLInputElement | null>(null);
+  const promptPostInputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptImageInputRef = useRef<HTMLInputElement | null>(null);
+  const promptAssistRootRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <PromptShareComposerModal
       isOpen
       isGuest={isGuest}
       isPostSubmitting={isPostSubmitting}
-      postModalRef={createRef<HTMLDivElement>()}
+      postModalRef={postModalRef}
       onClose={onClose}
       onSubmit={(event: FormEvent<HTMLFormElement>) => event.preventDefault()}
       contentFormat={contentFormat}
@@ -85,14 +98,14 @@ function ComposerHarness({
         message: statusMessage,
         variant: statusMessage ? "error" : "info"
       }}
-      promptPostTitleInputRef={createRef<HTMLInputElement>()}
-      promptPostCategorySelectRef={createRef<HTMLSelectElement>()}
-      promptPostContentTextareaRef={createRef<HTMLTextAreaElement>()}
-      promptPostAiModelSelectRef={createRef<HTMLInputElement>()}
-      promptPostInputExamplesRef={createRef<HTMLTextAreaElement>()}
-      promptPostOutputExamplesRef={createRef<HTMLTextAreaElement>()}
-      promptImageInputRef={createRef<HTMLInputElement>()}
-      promptAssistRootRef={createRef<HTMLDivElement>()}
+      promptPostTitleInputRef={promptPostTitleInputRef}
+      promptPostCategorySelectRef={promptPostCategorySelectRef}
+      promptPostContentTextareaRef={promptPostContentTextareaRef}
+      promptPostAiModelSelectRef={promptPostAiModelSelectRef}
+      promptPostInputExamplesRef={promptPostInputExamplesRef}
+      promptPostOutputExamplesRef={promptPostOutputExamplesRef}
+      promptImageInputRef={promptImageInputRef}
+      promptAssistRootRef={promptAssistRootRef}
       promptImagePreviewUrl={promptImagePreviewUrl}
       promptImagePreviewName={promptImagePreviewName}
       onReferenceImageChange={vi.fn()}
@@ -233,6 +246,9 @@ describe("新しいプロンプトを投稿モーダル", () => {
     render(<ComposerHarness />);
 
     const aiModelInput = document.getElementById("prompt-ai-model") as HTMLInputElement;
+    // 開いた直後の初期フォーカス（タイトル欄）が動いたあとで入力を始める
+    // Start typing only after the initial focus (title field) has settled
+    await vi.waitFor(() => expect(document.getElementById("prompt-title")).toHaveFocus());
     await user.type(aiModelInput, "自作のローカルLLM");
 
     expect(aiModelInput).toHaveValue("自作のローカルLLM");

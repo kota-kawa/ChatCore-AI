@@ -304,7 +304,7 @@ describe("設定画面のプロンプトカード詳細", () => {
   });
 
   it("閲覧モーダルでは本文の前に説明をプレーンテキストで表示する", () => {
-    const { container } = render(
+    render(
       <PromptPreviewModal
         prompt={{ ...authoredPrompt, description: "# 説明\n用途を短く紹介" }}
         source="authored"
@@ -312,11 +312,11 @@ describe("設定画面のプロンプトカード詳細", () => {
       />
     );
 
-    expect(container.querySelector(".prompt-preview-modal__description > p")?.textContent).toBe("# 説明\n用途を短く紹介");
+    expect(document.querySelector(".prompt-preview-modal__description > p")?.textContent).toBe("# 説明\n用途を短く紹介");
   });
 
   it("閲覧モーダルではサムネイルではなく表示用画像を表示する", () => {
-    const { container } = render(
+    render(
       <PromptPreviewModal
         prompt={{
           ...authoredPrompt,
@@ -332,7 +332,7 @@ describe("設定画面のプロンプトカード詳細", () => {
       />
     );
 
-    expect(container.querySelector(".prompt-preview-modal__image img")).toHaveAttribute(
+    expect(document.querySelector(".prompt-preview-modal__image img")).toHaveAttribute(
       "src",
       "/prompt_share/api/media/example.webp"
     );

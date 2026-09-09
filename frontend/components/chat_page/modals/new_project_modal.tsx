@@ -9,7 +9,9 @@ const MAX_PROJECT_NAME_LENGTH = 255;
 const MAX_PROJECT_INSTRUCTIONS_LENGTH = 20000;
 
 // 新規プロジェクト作成モーダル。名前と（任意の）カスタム指示を入力する。
-// New-project modal: enter a name and optional custom instructions.
+// 共通モーダル面（cc-modal）の小サイズで描く。
+// New-project modal: enter a name and optional custom instructions,
+// drawn on the small shared modal surface (cc-modal).
 export function NewProjectModal() {
   const { locale, t } = useTranslation();
   const {
@@ -43,32 +45,34 @@ export function NewProjectModal() {
       isOpen={isProjectModalOpen}
       onClose={closeNewProjectModal}
       id="new-project-modal"
-      className="new-project-modal"
+      className="cc-modal new-project-modal"
       labelledBy="new-project-title"
+      dismissDisabled={isSavingProject}
       initialFocusSelector="#new-project-name-input"
     >
-      <div className="new-project-modal__content" tabIndex={-1}>
-        <ModalCloseButton
-          id="new-project-close-btn"
-          className="new-project-modal__close"
-          label={t("chat.closeModal")}
-          onClick={closeNewProjectModal}
-        />
-
-        <header className="new-project-modal__header">
-          <h2 id="new-project-title">{t("chat.newProject")}</h2>
-          <p className="new-project-modal__desc">
-            {locale === "en" ? "Group related chats and apply shared custom instructions." : "関連するチャットをまとめ、共有のカスタム指示を設定できます。"}
-          </p>
+      <div className="cc-modal__panel cc-modal__panel--sm" tabIndex={-1}>
+        <header className="cc-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="new-project-title">{t("chat.newProject")}</h2>
+            <p className="cc-modal__lead">
+              {locale === "en" ? "Group related chats and apply shared custom instructions." : "関連するチャットをまとめ、共有のカスタム指示を設定できます。"}
+            </p>
+          </div>
+          <ModalCloseButton
+            id="new-project-close-btn"
+            label={t("chat.closeModal")}
+            onClick={closeNewProjectModal}
+            disabled={isSavingProject}
+          />
         </header>
 
-        <div className="new-project-modal__body">
-          <label className="new-project-field">
-            <span className="new-project-field__label">{t("chat.projectName")}</span>
+        <div className="cc-modal__body new-project-modal__body">
+          <label className="project-field">
+            <span className="project-field__label">{t("chat.projectName")}</span>
             <input
               id="new-project-name-input"
               type="text"
-              className="new-project-field__input"
+              className="project-field__input"
               placeholder={locale === "en" ? "For example: Product research" : "例: 新製品リサーチ"}
               maxLength={MAX_PROJECT_NAME_LENGTH}
               value={name}
@@ -82,11 +86,11 @@ export function NewProjectModal() {
             />
           </label>
 
-          <label className="new-project-field">
-            <span className="new-project-field__label">{locale === "en" ? "Custom instructions (optional)" : "カスタム指示（任意）"}</span>
+          <label className="project-field">
+            <span className="project-field__label">{locale === "en" ? "Custom instructions (optional)" : "カスタム指示（任意）"}</span>
             <textarea
               id="new-project-instructions-input"
-              className="new-project-field__textarea"
+              className="project-field__textarea"
               placeholder={locale === "en" ? "Instructions applied to every chat in this project (tone, role, output format, etc.)" : "このプロジェクト内の全会話に適用される指示（口調・役割・出力形式など）"}
               rows={5}
               maxLength={MAX_PROJECT_INSTRUCTIONS_LENGTH}
@@ -96,10 +100,10 @@ export function NewProjectModal() {
           </label>
         </div>
 
-        <div className="new-project-modal__actions">
+        <footer className="cc-modal__footer">
           <button
             type="button"
-            className="new-project-modal__cancel cc-press"
+            className="cc-modal__btn"
             onClick={closeNewProjectModal}
             disabled={isSavingProject}
           >
@@ -107,13 +111,13 @@ export function NewProjectModal() {
           </button>
           <button
             type="button"
-            className="primary-button new-project-modal__submit cc-press"
+            className="cc-modal__btn cc-modal__btn--primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
           >
             {isSavingProject ? t("common.saving") : t("chat.create")}
           </button>
-        </div>
+        </footer>
       </div>
     </ModalShell>
   );

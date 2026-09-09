@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -38,6 +38,17 @@ export function useModalFocusTrap({
   getInitialFocus,
   onEscape,
 }: UseModalFocusTrapOptions) {
+  // コールバックは ref 経由で最新を参照する。呼び出し元がインライン関数を渡しても
+  // （再レンダーごとに識別子が変わっても）初期フォーカスをやり直さないため。
+  // Callbacks are read through refs so that an inline function from the caller (a new
+  // identity on every render) never re-runs the initial focus while the user is typing.
+  const getInitialFocusRef = useRef(getInitialFocus);
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => {
+    getInitialFocusRef.current = getInitialFocus;
+    onEscapeRef.current = onEscape;
+  }, [getInitialFocus, onEscape]);
+
   useEffect(() => {
     // モーダルが開いていない場合は何もしない
     // Do nothing if the modal is not open
@@ -56,7 +67,7 @@ export function useModalFocusTrap({
       
       // 初期フォーカス要素を決定する
       // Determine the initial focus element
-      const initialFocus = getInitialFocus?.() ?? getFocusableElements(container)[0] ?? container;
+      const initialFocus = getInitialFocusRef.current?.() ?? getFocusableElements(container)[0] ?? container;
       initialFocus.focus();
     });
 
@@ -73,6 +84,7 @@ export function useModalFocusTrap({
 
       // Escapeキーが押された場合の処理
       // Handle the Escape key press
+      const onEscape = onEscapeRef.current;
       if (event.key === "Escape" && onEscape) {
         event.preventDefault();
         onEscape();
@@ -128,5 +140,5 @@ export function useModalFocusTrap({
         previousFocusedElement.focus();
       }
     };
-  }, [containerRef, getInitialFocus, isOpen, onEscape]);
+  }, [containerRef, isOpen]);
 }

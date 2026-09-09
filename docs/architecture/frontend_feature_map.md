@@ -45,6 +45,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 - `types/generated/api_schemas.ts`: Backend Pydantic model から生成される契約です。直接編集しません。
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。
 - `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。
+- `components/ui/modal_shell.tsx`（`ModalShell`）＋ `components/ui/modal_close_button.tsx` ＋ `public/static/css/components/modal_surface.css`: 全画面共通の中央寄せモーダル。`document.body` へポータルし、`is-open` の切替・フォーカストラップ・Escape／背景クリックの閉じる操作を持ちます。見た目は `cc-modal` の部品（panel / header / body / footer / btn）と `--modal-*` トークンで組み、ページはアクセント色だけを差し替えます。新しいモーダルはこれを使い、独自のオーバーレイや外殻 CSS を増やしません。
 
 共有モーダルのSNS URL生成、Web Share API、クリップボード操作、共有本文の表示は共通ランタイム／UI部品で処理します。チャット、メモ、プロンプト固有のURL発行とステータス文言は各adapterに残します。共有Chatのforkと公開PromptのTask／Skill取り込みは、共通の操作状態・二重実行防止・ボタン外観を使いながら、APIと遷移は機能ごとの契約を維持します。
 

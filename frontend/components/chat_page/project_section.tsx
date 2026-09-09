@@ -5,13 +5,15 @@ import {
   useHomePageProjectContext,
 } from "../../contexts/chat_page/home_page_context";
 import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
-import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
 
-// プロジェクト詳細オーバーレイ。指示・所属チャットを管理する。
-// Project detail overlay: manage instructions and member chats.
+// プロジェクト詳細モーダル。指示・所属チャットを管理する。
+// 共通モーダル面（cc-modal）の大サイズで描き、ModalShell 経由で body へポータルする。
+// Project detail modal: manage instructions and member chats. Drawn on the large shared
+// modal surface (cc-modal) and portalled to the body through ModalShell.
 export function ProjectSection() {
   const { locale, t } = useTranslation();
   const {
@@ -41,17 +43,6 @@ export function ProjectSection() {
 
   const isOpen = activeProjectId !== null;
 
-  const getInitialFocus = useCallback(() => {
-    return modalRef.current?.querySelector<HTMLElement>("#project-detail-close-btn") ?? null;
-  }, []);
-
-  useModalFocusTrap({
-    isOpen,
-    containerRef: modalRef,
-    getInitialFocus,
-    onEscape: closeProject,
-  });
-
   useBodyScrollLock(isOpen);
 
   const handleSaveDetails = useCallback(() => {
@@ -75,35 +66,27 @@ export function ProjectSection() {
     detail !== null && (name !== detail.name || instructions !== detail.instructions);
 
   return (
-    <div
-      ref={modalRef}
-      className="project-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="project-detail-title"
-      tabIndex={-1}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          closeProject();
-        }
-      }}
+    <ModalShell
+      isOpen
+      onClose={closeProject}
+      id="project-detail-modal"
+      className="cc-modal project-overlay"
+      labelledBy="project-detail-title"
+      overlayRef={modalRef}
+      initialFocusSelector="#project-detail-close-btn"
     >
-      <div className="project-overlay__panel" tabIndex={-1}>
-        <header className="project-overlay__header">
-          <ModalCloseButton
-            id="project-detail-close-btn"
-            className="project-overlay__close icon-button cc-press"
-            label={t("chat.closeModal")}
-            onClick={closeProject}
-          />
-          <span id="project-detail-title" className="project-overlay__title">
-            <i className="bi bi-folder2-open" aria-hidden="true"></i>
-            {locale === "en" ? "Project" : "プロジェクト"}
-          </span>
+      <div className="cc-modal__panel cc-modal__panel--lg" tabIndex={-1}>
+        <header className="cc-modal__header">
+          <div className="cc-modal__heading">
+            <h2 id="project-detail-title" className="cc-modal__title">
+              {locale === "en" ? "Project" : "プロジェクト"}
+            </h2>
+            {detail !== null ? <p className="cc-modal__lead">{detail.name}</p> : null}
+          </div>
           {detail !== null && (
             <button
               type="button"
-              className="project-overlay__delete cc-press"
+              className="cc-modal__btn cc-modal__btn--danger cc-modal__btn--sm project-overlay__delete"
               onClick={() => {
                 void deleteProject(detail.id, detail.name);
               }}
@@ -112,18 +95,19 @@ export function ProjectSection() {
               <span>{t("common.delete")}</span>
             </button>
           )}
+          <ModalCloseButton id="project-detail-close-btn" label={t("chat.closeModal")} onClick={closeProject} />
         </header>
 
         {isProjectDetailLoading && detail === null ? (
-          <div className="project-overlay__loading">
+          <div className="cc-modal__body project-overlay__loading">
             <InlineLoading label={t("common.loading")} />
           </div>
         ) : detail === null ? (
-          <div className="project-overlay__loading">{locale === "en" ? "Could not load the project." : "プロジェクトを読み込めませんでした。"}</div>
+          <div className="cc-modal__body project-overlay__loading">{locale === "en" ? "Could not load the project." : "プロジェクトを読み込めませんでした。"}</div>
         ) : (
-          <div className="project-overlay__body">
+          <div className="cc-modal__body">
             {/* 基本情報・カスタム指示 / Basic info and custom instructions */}
-            <section className="project-section-block">
+            <section className="cc-modal__section project-section-block">
               <label className="project-field">
                 <span className="project-field__label">{t("chat.projectName")}</span>
                 <input
@@ -149,7 +133,7 @@ export function ProjectSection() {
               <div className="project-section-block__actions">
                 <button
                   type="button"
-                  className="primary-button cc-press"
+                  className="cc-modal__btn cc-modal__btn--primary"
                   disabled={!hasUnsavedChanges || isSavingProject}
                   onClick={handleSaveDetails}
                 >
@@ -159,12 +143,10 @@ export function ProjectSection() {
             </section>
 
             {/* 所属チャット / Member chats */}
-            <section className="project-section-block">
-              <div className="project-section-block__heading">
-                <h3 className="project-section-block__title">
-                  <i className="bi bi-chat-left-text" aria-hidden="true"></i> {t("nav.chat")}
-                </h3>
-                <button type="button" className="project-newchat-btn cc-press" onClick={handleStartChatInProject}>
+            <section className="cc-modal__section project-section-block">
+              <div className="cc-modal__section-head">
+                <h3 className="cc-modal__section-title">{t("nav.chat")}</h3>
+                <button type="button" className="cc-modal__btn cc-modal__btn--sm" onClick={handleStartChatInProject}>
                   <i className="bi bi-plus-lg" aria-hidden="true"></i>
                   {locale === "en" ? "New chat in this project" : "このプロジェクトで新規チャット"}
                 </button>
@@ -177,7 +159,7 @@ export function ProjectSection() {
                     <li key={room.id}>
                       <button
                         type="button"
-                        className="project-chats__item cc-press"
+                        className="project-chats__item"
                         onClick={() => {
                           switchChatRoom(room.id, room.mode);
                           closeProject();
@@ -194,6 +176,6 @@ export function ProjectSection() {
           </div>
         )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -2,6 +2,8 @@ import { SeoHead } from "../../components/SeoHead";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { PromptCategorySelect } from "../../components/settings/prompt_category_select";
+import { ModalCloseButton } from "../../components/ui/modal_close_button";
+import { ModalShell } from "../../components/ui/modal_shell";
 import { Skeleton, SkeletonText } from "../../components/ui/skeleton";
 import "../../scripts/core/csrf";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
@@ -198,46 +200,33 @@ function PromptEditModal({
   const { t } = useTranslation();
   const showExamples = formState.contentFormat === "prompt" && formState.mediaType === "text";
   return (
-    <div
+    <ModalShell
+      isOpen
+      onClose={onClose}
       id="editModal"
-      className="modal show"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      style={{ display: "block", backgroundColor: "rgba(15, 23, 42, 0.5)" }}
-      onClick={(event) => {
-        {/* オーバーレイ背景クリックでモーダルを閉じる / Close modal on overlay background click */}
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      className="cc-modal prompt-manage-edit-modal prompt-share-edit-modal-scope"
+      labelledBy="promptManageEditTitle"
+      dismissDisabled={isSaving}
+      initialFocusSelector="#editTitle"
     >
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">
-              <i className="bi bi-pencil-square me-2"></i>{t("promptShare.editPrompt")}
-            </h5>
-            <button
-              type="button"
-              className="btn-close"
-              aria-label={t("common.close")}
-              onClick={onClose}
-              disabled={isSaving}
-            ></button>
+      <div className="cc-modal__panel cc-modal__panel--lg" tabIndex={-1}>
+        <header className="cc-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="promptManageEditTitle">{t("promptShare.editPrompt")}</h2>
           </div>
+          <ModalCloseButton label={t("common.close")} onClick={onClose} disabled={isSaving} />
+        </header>
 
-          <div className="modal-body">
-            <form id="editForm" className="modal-form" onSubmit={onSubmit}>
-              <input type="hidden" id="editPromptId" value={formState.id} readOnly />
+        <form id="editForm" className="cc-modal__form" onSubmit={onSubmit}>
+          <div className="cc-modal__body">
+            <input type="hidden" id="editPromptId" value={formState.id} readOnly />
 
-              <div className="form-group">
-                <label htmlFor="editTitle" className="form-label">
-                  {t("promptShare.titleLabel")}
-                </label>
+            <div className="edit-prompt-modal__grid">
+              <div className="edit-prompt-modal__field">
+                <label htmlFor="editTitle">{t("promptShare.titleLabel")}</label>
                 <input
                   type="text"
-                  className="form-control input-field"
+                  className="edit-prompt-modal__input"
                   id="editTitle"
                   name="title"
                   required
@@ -247,8 +236,8 @@ function PromptEditModal({
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="editCategory" className="form-label">
+              <div className="edit-prompt-modal__field">
+                <label htmlFor="editCategory">
                   {t("promptShare.category")} <span>{t("common.optional")}</span>
                 </label>
                 {/* カテゴリはレジストリの選択肢に限定する（自由入力はサーバー側で拒否される） */}
@@ -260,82 +249,79 @@ function PromptEditModal({
                   onChange={onCategoryChange}
                 />
               </div>
+            </div>
 
-              <div className="form-group">
-                <label htmlFor="editDescription" className="form-label">
-                  {t("promptShare.descriptionLabel")}
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editDescription"
-                  name="description"
-                  rows={3}
-                  maxLength={300}
-                  placeholder={t("promptShare.descriptionPlaceholder")}
-                  value={formState.description}
-                  onChange={onChange}
-                  disabled={isSaving}
-                ></textarea>
-              </div>
+            <div className="edit-prompt-modal__field">
+              <label htmlFor="editDescription">{t("promptShare.descriptionLabel")}</label>
+              <textarea
+                className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                id="editDescription"
+                name="description"
+                rows={3}
+                maxLength={300}
+                placeholder={t("promptShare.descriptionPlaceholder")}
+                value={formState.description}
+                onChange={onChange}
+                disabled={isSaving}
+              ></textarea>
+            </div>
 
-              <div className="form-group">
-                <label htmlFor="editContent" className="form-label">
-                  {t("promptShare.contentLabel")}
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editContent"
-                  name="content"
-                  rows={5}
-                  required
-                  value={formState.content}
-                  onChange={onChange}
-                  disabled={isSaving}
-                ></textarea>
-              </div>
+            <div className="edit-prompt-modal__field">
+              <label htmlFor="editContent">{t("promptShare.contentLabel")}</label>
+              <textarea
+                className="edit-prompt-modal__input edit-prompt-modal__textarea edit-prompt-modal__textarea--content"
+                id="editContent"
+                name="content"
+                rows={5}
+                required
+                value={formState.content}
+                onChange={onChange}
+                disabled={isSaving}
+              ></textarea>
+            </div>
 
-              {showExamples ? (<>
-              <div className="form-group">
-                <label htmlFor="editInputExamples" className="form-label">
-                  {t("promptShare.inputExample")}
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editInputExamples"
-                  name="inputExamples"
-                  rows={3}
-                  value={formState.inputExamples}
-                  onChange={onChange}
-                  disabled={isSaving}
-                ></textarea>
-              </div>
+            {showExamples ? (
+              <div className="edit-prompt-modal__grid">
+                <div className="edit-prompt-modal__field">
+                  <label htmlFor="editInputExamples">{t("promptShare.inputExample")}</label>
+                  <textarea
+                    className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                    id="editInputExamples"
+                    name="inputExamples"
+                    rows={3}
+                    value={formState.inputExamples}
+                    onChange={onChange}
+                    disabled={isSaving}
+                  ></textarea>
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="editOutputExamples" className="form-label">
-                  {t("promptShare.outputExample")}
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editOutputExamples"
-                  name="outputExamples"
-                  rows={3}
-                  value={formState.outputExamples}
-                  onChange={onChange}
-                  disabled={isSaving}
-                ></textarea>
+                <div className="edit-prompt-modal__field">
+                  <label htmlFor="editOutputExamples">{t("promptShare.outputExample")}</label>
+                  <textarea
+                    className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                    id="editOutputExamples"
+                    name="outputExamples"
+                    rows={3}
+                    value={formState.outputExamples}
+                    onChange={onChange}
+                    disabled={isSaving}
+                  ></textarea>
+                </div>
               </div>
-              </>) : null}
-
-              <div className="form-actions">
-                <button type="submit" className="btn btn-primary w-100 cc-press" disabled={isSaving}>
-                  <i className="bi bi-save me-2"></i>{isSaving ? t("promptShare.updating") : t("promptShare.update")}
-                </button>
-              </div>
-            </form>
+            ) : null}
           </div>
-        </div>
+
+          <footer className="cc-modal__footer">
+            <button type="button" className="cc-modal__btn" onClick={onClose} disabled={isSaving}>
+              {t("common.close")}
+            </button>
+            <button type="submit" className="cc-modal__btn cc-modal__btn--primary" disabled={isSaving}>
+              {isSaving ? t("promptShare.updating") : t("promptShare.update")}
+            </button>
+          </footer>
+        </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -389,22 +375,6 @@ export default function PromptManagePage() {
     };
   }, [editFormState]);
 
-  // 編集モーダルが開いている間はEscキーで閉じられるようにする（保存中は除く）
-  // Allow closing the edit modal with Escape key while it's open (disabled while saving)
-  useEffect(() => {
-    if (!editFormState) {
-      return;
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isSaving) {
-        setEditFormState(null);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [editFormState, isSaving]);
 
   // プロンプト一覧をメモ化して不要な再計算を防ぐ
   // Memoize the prompt list to prevent unnecessary recalculations

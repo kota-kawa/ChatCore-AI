@@ -90,13 +90,9 @@ export function useMemoPageController() {
 
   useMemoPageChrome({
     selectedMemo: detail.selectedMemo,
-    closeMemoDetail: detail.closeMemoDetail,
     isShareModalOpen: share.isShareModalOpen,
-    setIsShareModalOpen: share.setIsShareModalOpen,
     isCollectionPanelOpen: collections.isCollectionPanelOpen,
-    setIsCollectionPanelOpen: collections.setIsCollectionPanelOpen,
     isExportModalOpen: exporter.isExportModalOpen,
-    setIsExportModalOpen: exporter.setIsExportModalOpen,
   });
 
   // 各 hook の戻り値キーは互いに素なので、そのまま展開して 1 つのオブジェクトにする

@@ -1,9 +1,7 @@
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
-import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import {
   createContextFact as defaultCreate,
   loadContextFacts as defaultLoad,
@@ -21,6 +19,8 @@ import {
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import {
   ContextCandidatePanel,
   type ContextCandidateApi,
@@ -98,7 +98,6 @@ export function MyContextPanel({
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const activeLoadMoreRef = useRef<string | null>(null);
   const activeFilterKeyRef = useRef<string | null>(null);
-  const modalRef = useRef<HTMLElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}` : null;
@@ -167,21 +166,10 @@ export function MyContextPanel({
     setErrorText(null);
   }, []);
 
-  const getInitialModalFocus = useCallback(
-    () => titleInputRef.current ?? modalRef.current,
-    [],
-  );
+  const getInitialModalFocus = useCallback(() => titleInputRef.current, []);
 
-  const closeEditorWithEscape = useCallback(() => {
-    if (!submitting) closeEditor();
-  }, [closeEditor, submitting]);
-
-  useModalFocusTrap({
-    isOpen: editor !== null,
-    containerRef: modalRef,
-    getInitialFocus: getInitialModalFocus,
-    onEscape: closeEditorWithEscape,
-  });
+  // フォーカストラップと Escape は ModalShell が担う。スクロールロックだけをここで持つ。
+  // ModalShell owns the focus trap and Escape; only the scroll lock lives here.
   useBodyScrollLock(editor !== null);
 
   const handleSubmit = async () => {
@@ -349,113 +337,99 @@ export function MyContextPanel({
         </div>
       )}
 
-      {editor && typeof document !== "undefined" && createPortal(
-        <div className="memo-context-modal">
-          <div
-            className="memo-context-modal__overlay"
-            onClick={() => {
-              if (!submitting) closeEditor();
-            }}
-            aria-hidden="true"
-          />
-          <section
-            ref={modalRef}
-            className="memo-context-modal__content memo-context-editor"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="context-editor-title"
-            aria-describedby="context-editor-description"
-            aria-busy={submitting}
-            tabIndex={-1}
-          >
-            <header className="memo-context-modal__header">
-              <div>
-                <h2 id="context-editor-title">
+      {editor && (
+        <ModalShell
+          isOpen
+          onClose={closeEditor}
+          id="context-editor-modal"
+          className="cc-modal memo-modal-scope memo-context-modal memo-context-editor"
+          labelledBy="context-editor-title"
+          dismissDisabled={submitting}
+          getInitialFocus={getInitialModalFocus}
+        >
+          <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1} aria-busy={submitting}>
+            <header className="cc-modal__header">
+              <div className="cc-modal__heading">
+                <h2 className="cc-modal__title" id="context-editor-title">
                   {editor.mode === "create" ? t("memo.addContext") : t("memo.editContext")}
                 </h2>
-                <p id="context-editor-description">
+                <p className="cc-modal__lead" id="context-editor-description">
                   {t("memo.contextEditorDescription")}
                 </p>
               </div>
-              <button
-                type="button"
-                className="memo-context-modal__close"
-                aria-label={t("common.close")}
-                onClick={closeEditor}
-                disabled={submitting}
-              >
-                <i className="bi bi-x-lg" aria-hidden="true" />
-              </button>
+              <ModalCloseButton label={t("common.close")} onClick={closeEditor} disabled={submitting} />
             </header>
             <form
-              className="memo-context-editor__form"
+              className="cc-modal__form"
               onSubmit={(event) => {
                 event.preventDefault();
                 void handleSubmit();
               }}
             >
-              {errorText && (
-                <div className="memo-flash memo-flash--error" role="alert">
-                  {errorText}
+              <div className="cc-modal__body memo-context-editor__form">
+                {errorText && (
+                  <div className="cc-modal__notice memo-context-modal__error" role="alert">
+                    {errorText}
+                  </div>
+                )}
+                <div className="memo-context-editor__row">
+                  <span className="memo-context-editor__label">{t("memo.type")}</span>
+                  <MemoSelect
+                    id="context-fact-type"
+                    ariaLabel={t("memo.type")}
+                    value={editor.factType}
+                    onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
+                    options={localizedTypeOptions}
+                    className="memo-context-editor__select"
+                  />
+                  <span className="memo-context-editor__label">{t("memo.importance")}</span>
+                  <MemoSelect
+                    id="context-fact-importance"
+                    ariaLabel={t("memo.importance")}
+                    value={String(editor.importance)}
+                    onChange={(value) =>
+                      setEditor({
+                        ...editor,
+                        importance: Number(value) as ContextFactImportancePreset,
+                        importanceDirty: true,
+                      })
+                    }
+                    options={importanceOptions}
+                    className="memo-context-editor__importance-select"
+                  />
                 </div>
-              )}
-              <div className="memo-context-editor__row">
-                <span className="memo-context-editor__label">{t("memo.type")}</span>
-                <MemoSelect
-                  id="context-fact-type"
-                  ariaLabel={t("memo.type")}
-                  value={editor.factType}
-                  onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
-                  options={localizedTypeOptions}
-                  className="memo-context-editor__select"
-                />
-                <span className="memo-context-editor__label">{t("memo.importance")}</span>
-                <MemoSelect
-                  id="context-fact-importance"
-                  ariaLabel={t("memo.importance")}
-                  value={String(editor.importance)}
-                  onChange={(value) =>
-                    setEditor({
-                      ...editor,
-                      importance: Number(value) as ContextFactImportancePreset,
-                      importanceDirty: true,
-                    })
-                  }
-                  options={importanceOptions}
-                  className="memo-context-editor__importance-select"
-                />
+                <label className="memo-context-editor__field" htmlFor="context-fact-title">
+                  <span className="memo-context-editor__label">{t("memo.titleLabel")}</span>
+                  <input
+                    ref={titleInputRef}
+                    id="context-fact-title"
+                    className="memo-context-editor__title"
+                    type="text"
+                    maxLength={100}
+                    required
+                    placeholder={t("memo.contextTitlePlaceholder")}
+                    value={editor.title}
+                    onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+                  />
+                </label>
+                <label className="memo-context-editor__field" htmlFor="context-fact-content">
+                  <span className="memo-context-editor__label">{t("memo.content")}</span>
+                  <textarea
+                    id="context-fact-content"
+                    className="memo-context-editor__content"
+                    maxLength={2000}
+                    rows={4}
+                    required
+                    placeholder={t("memo.contextContentPlaceholder")}
+                    value={editor.content}
+                    onChange={(e) => setEditor({ ...editor, content: e.target.value })}
+                  />
+                </label>
               </div>
-              <label className="memo-context-editor__field" htmlFor="context-fact-title">
-                <span className="memo-context-editor__label">{t("memo.titleLabel")}</span>
-                <input
-                  ref={titleInputRef}
-                  id="context-fact-title"
-                  className="memo-context-editor__title"
-                  type="text"
-                  maxLength={100}
-                  required
-                  placeholder={t("memo.contextTitlePlaceholder")}
-                  value={editor.title}
-                  onChange={(e) => setEditor({ ...editor, title: e.target.value })}
-                />
-              </label>
-              <label className="memo-context-editor__field" htmlFor="context-fact-content">
-                <span className="memo-context-editor__label">{t("memo.content")}</span>
-                <textarea
-                  id="context-fact-content"
-                  className="memo-context-editor__content"
-                  maxLength={2000}
-                  rows={4}
-                  required
-                  placeholder={t("memo.contextContentPlaceholder")}
-                  value={editor.content}
-                  onChange={(e) => setEditor({ ...editor, content: e.target.value })}
-                />
-              </label>
-              <div className="memo-context-editor__actions">
+              <footer className="cc-modal__footer">
                 <button
                   type="button"
-                  className="memo-context-editor__cancel"
+                  className="cc-modal__btn"
                   onClick={closeEditor}
                   disabled={submitting}
                 >
@@ -463,16 +437,15 @@ export function MyContextPanel({
                 </button>
                 <button
                   type="submit"
-                  className="memo-context-editor__save"
+                  className="cc-modal__btn cc-modal__btn--primary"
                   disabled={submitting}
                 >
                   {submitting ? t("common.saving") : editor.mode === "create" ? t("memo.add") : t("memo.update")}
                 </button>
-              </div>
+              </footer>
             </form>
-          </section>
-        </div>,
-        document.body,
+          </div>
+        </ModalShell>
       )}
 
       {isLoading ? (

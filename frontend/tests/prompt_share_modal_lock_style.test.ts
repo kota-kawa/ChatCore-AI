@@ -19,18 +19,25 @@ const promptShareResponsiveCss = readFileSync(
   "utf8",
 );
 
-// プロフィールモーダルは共通の背景操作ロックから除外し、モーダル自身は操作可能なままにする。
-// The profile modal must be excluded from the page interaction lock and remain interactive itself.
-test("author profile modal stays interactive while the prompt-share page is modal-locked", () => {
+const sharedModalCss = readFileSync(
+  new URL("../public/static/css/components/modal_surface.css", import.meta.url),
+  "utf8",
+);
+
+// モーダルは ModalShell で body 直下へ描かれる。ロック中はページ本体だけを止め、
+// 開いているモーダルは操作できるままにする。
+// Modals render under <body> via ModalShell: the lock stops the page itself and keeps
+// the open modal interactive.
+test("open modals stay interactive while the prompt-share page is modal-locked", () => {
   assert.match(
     promptShareFoundationCss,
-    /:not\(#promptAuthorProfileModal\)\s*\{\s*pointer-events:\s*none\s*;/,
-    "the profile modal must not be treated as locked background content",
+    /body\.prompt-share-page\.ps-modal-open \.prompt-share-page > \*\s*\{\s*pointer-events:\s*none\s*;/,
+    "the page content must be treated as locked background",
   );
   assert.match(
     promptShareFoundationCss,
-    /#promptAuthorProfileModal\.show\s*\{\s*pointer-events:\s*auto\s*;/,
-    "the open profile modal must explicitly accept pointer input",
+    /body\.prompt-share-page\.ps-modal-open \.modal-base\.is-open\s*\{\s*pointer-events:\s*auto\s*;/,
+    "the open modal must explicitly accept pointer input",
   );
 });
 
@@ -65,8 +72,8 @@ test("the detail modal's example image keeps a large display height", () => {
   );
 });
 
-// 投稿モーダルの下端に貼り付くバーは廃止した。送信アクションは入力欄の続きとして流す。
-// The composer no longer pins a bar to the bottom: the submit action flows after the inputs.
+// 投稿モーダルの下端に貼り付くバーは持たない。送信アクションは入力欄の続きとして流す。
+// The composer never pins a bar to the bottom: the submit action flows after the inputs.
 test("the composer's submit action is not pinned to the bottom of the modal", () => {
   assert.doesNotMatch(
     promptShareModalCss,
@@ -122,76 +129,47 @@ test("the composer's image input and preview stay within the upload field width"
   assert.match(previewImageRule[1], /max-width:\s*100%;/);
 });
 
-// 詳細モーダルのヘッダーは上に貼り付けない。特にスマホでは本文の縦幅を削ってしまうため。
-// The detail modal's header must not be pinned: on phones it eats the body's height.
-test("the detail modal's header scrolls with the body instead of sticking", () => {
+// 詳細モーダルの見出しは上に貼り付けない（スマホで本文の縦幅を削るため）。
+// 固定するのはタブ行と閉じるボタンだけで、それは共通モーダル面のヘッダーが担う。
+// The detail title block is not pinned (on phones it eats the body's height); only the tab row
+// and close button stay, and that is the shared modal header's job.
+test("the detail modal's title block scrolls with the body instead of sticking", () => {
   const headerRule = promptShareModalCss.match(
-    /#promptDetailModal \.prompt-detail-header\s*\{([\s\S]*?)\}/,
+    /\.prompt-detail-header\s*\{([\s\S]*?)\}/,
   );
-  assert.ok(headerRule, "the detail modal must style its header");
+  assert.ok(headerRule, "the detail modal must style its title block");
   assert.doesNotMatch(
     headerRule[1],
     /position:\s*(sticky|fixed)/,
-    "the header must not be pinned to the top of the modal",
-  );
-
-  // 上端の色帯は持たない。カードやモーダルの端だけを塗るアクセントは使わない方針。
-  // No accent rail on the top edge: colouring just one edge of a card or modal is out.
-  assert.doesNotMatch(
-    promptShareModalCss,
-    /\.post-modal-content--(detail|composer)::before\s*\{/,
-    "the detail and composer sheets must not draw a coloured rail on their top edge",
+    "the title block must not be pinned to the top of the modal",
   );
 });
 
-// 閉じるボタンは他のモーダルと同じ丸ボタンを使う（詳細モーダル専用の角丸ボタンは持たない）
-// The close button reuses the other modals' round button; no detail-only variant remains
-test("the detail modal reuses the round close button shared with the other modals", () => {
-  assert.doesNotMatch(promptShareModalCss, /\.prompt-detail-close\b/);
-  assert.doesNotMatch(promptShareResponsiveCss, /\.prompt-detail-close\b/);
-  assert.match(
-    promptShareModalCss,
-    /\.prompt-share-page \.close-btn\s*\{[\s\S]*?border-radius:\s*50%;/,
-  );
+// モーダルの面は共通トークンで塗り、グラデーション・ぼかし・発光は持たない。
+// The modal surface is painted with shared tokens and carries no gradients, blur or glow.
+test("the prompt-share modal styles do not reintroduce decorative gradients or blur", () => {
+  const modalSection = promptShareModalCss.slice(promptShareModalCss.indexOf("Prompt Share のモーダル"));
+  assert.ok(modalSection.length > 0, "the prompt-share modal section must exist");
+  assert.doesNotMatch(modalSection, /gradient\(/, "no gradients in the modal styles");
+  assert.doesNotMatch(modalSection, /backdrop-filter/, "no backdrop blur in the modal styles");
+  assert.doesNotMatch(promptShareModalCss, /\.post-modal\b/, "the legacy .post-modal shell must be gone");
+  assert.match(sharedModalCss, /\.cc-modal__panel\s*\{[\s\S]*?background:\s*var\(--modal-surface\);/);
+  assert.doesNotMatch(sharedModalCss, /gradient\(|backdrop-filter/, "the shared surface stays flat");
 });
 
-// 固定されたコピー行が、右上の閉じるボタンの下へ潜り込まないだけの逃げを持つこと
-// The stuck copy row must keep enough clearance to never sit under the close button
-test("the sticky body header keeps clear of the close button", () => {
-  const stickyRule = promptShareModalCss.match(
-    /\.prompt-detail-section__header--sticky\s*\{([\s\S]*?)\}/,
-  );
-  assert.ok(stickyRule, "the body section must style its sticky header");
-
-  const padding = stickyRule[1].match(/padding:\s*[\d.]+rem\s+([\d.]+)rem/);
-  assert.ok(padding, "the sticky header must declare its horizontal padding");
-  assert.ok(
-    Number(padding[1]) >= 2.5,
-    "the right padding must clear the 2.45rem close button",
-  );
-});
-
-// Prompt Shareの編集モーダルは、設定画面の緑ではなくページ本体の青系で統一する。
-// The Prompt Share edit modal uses the page's blue palette instead of the settings page green.
-test("the Prompt Share edit modal uses the page blue palette", () => {
+// Prompt Share から開く編集モーダルは、設定画面の緑ではなくページの青をトークン差し替えで使う。
+// The edit modal opened from Prompt Share swaps in the page blue through tokens, not restyling.
+test("the Prompt Share edit modal uses the page blue palette through tokens", () => {
   assert.match(
     promptShareModalCss,
-    /#promptEditModalScope\s*\{[\s\S]*?--prompt-edit-accent:\s*var\(--ps-primary/,
+    /\.prompt-share-modal,\s*\.prompt-share-edit-modal-scope\s*\{[\s\S]*?--modal-accent:\s*#1a5fd0;/,
   );
   assert.match(
     promptShareModalCss,
-    /#promptEditModalScope \.edit-prompt-modal__header\s*\{[\s\S]*?rgba\(var\(--prompt-edit-accent-rgb\),\s*0\.2\)/,
+    /\.prompt-share-edit-modal-scope\s*\{[\s\S]*?--prompt-edit-accent:\s*var\(--modal-accent\);/,
   );
   assert.match(
     promptShareModalCss,
-    /#promptEditModalScope \.edit-prompt-modal__button--primary\s*\{[\s\S]*?linear-gradient\(135deg,\s*var\(--prompt-edit-accent\),\s*var\(--prompt-edit-accent-strong\)\)/,
-  );
-  assert.match(
-    promptShareModalCss,
-    /#promptEditModalScope \.prompt-category-select__option\.is-selected\s*\{[\s\S]*?linear-gradient\(135deg,\s*#3b8eff,\s*var\(--prompt-edit-accent-strong\)\)/,
-  );
-  assert.match(
-    promptShareModalCss,
-    /\[data-theme="dark"\] #promptEditModalScope\s*\{[\s\S]*?--prompt-edit-accent:\s*#60a5fa;/,
+    /\[data-theme="dark"\] \.prompt-share-modal,\s*\[data-theme="dark"\] \.prompt-share-edit-modal-scope\s*\{[\s\S]*?--modal-accent:\s*#7ab4ff;/,
   );
 });

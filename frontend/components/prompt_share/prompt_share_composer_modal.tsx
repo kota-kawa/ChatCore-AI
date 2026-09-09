@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -19,7 +20,8 @@ import type { ContentFormat, MediaType, PromptResource } from "../../scripts/pro
 import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
 import { SkillResourceEditor } from "./skill_resource_editor";
 import { useTranslation } from "../../contexts/locale_context";
-import { getPromptFormatLabel } from "../../scripts/prompt_share/formatters";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 
 // レジストリ駆動で描画する属性フィールドの、親が用意する状態バインディング。
@@ -497,7 +499,6 @@ export function PromptShareComposerModal({
   const activeMedia = getMediaType(resolvedMediaType);
   const attachmentRule = activeMedia.attachmentRule;
   const activeFieldKeys = new Set(getAttributeFields(resolvedContentFormat).map((field) => field.key));
-  const activeFormatLabel = getPromptFormatLabel(resolvedContentFormat, locale);
   const activePostType: ComposerPostType = resolvedContentFormat === "skill"
     ? "skill"
     : resolvedMediaType === "image"
@@ -558,42 +559,37 @@ export function PromptShareComposerModal({
     setShowSkillInfo(false);
   }, [resolvedContentFormat]);
 
+  // 開いたらタイトル入力欄へフォーカスする / Focus the title input on open
+  const getInitialFocus = useCallback(() => promptPostTitleInputRef.current, [promptPostTitleInputRef]);
+
   return (
-    <div
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
       id="postModal"
-      className={`post-modal${isOpen ? " show" : ""}`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="postModalTitle"
-      aria-hidden={isOpen ? "false" : "true"}
-      aria-busy={isPostSubmitting ? "true" : "false"}
-      data-submitting={isPostSubmitting ? "true" : "false"}
-      ref={postModalRef}
+      className="cc-modal prompt-share-modal prompt-composer-modal"
+      labelledBy="postModalTitle"
+      overlayRef={postModalRef}
+      dismissDisabled={isPostSubmitting}
+      getInitialFocus={getInitialFocus}
     >
-      <div className="post-modal-content post-modal-content--composer" tabIndex={-1}>
-        <button
-          type="button"
-          className="close-btn"
-          aria-label={t("promptShare.closeComposer")}
-          onClick={onClose}
-          disabled={isPostSubmitting}
-        >
-          &times;
-        </button>
-
-        <div className="post-modal-scroll">
-          <div className="composer-hero">
-            <div className="composer-hero__copy">
-              <p className="composer-hero__eyebrow">Prompt Share Composer</p>
-              <h2 id="postModalTitle">{t("promptShare.newPrompt")}</h2>
-            </div>
+      <div
+        className="cc-modal__panel cc-modal__panel--lg"
+        tabIndex={-1}
+        aria-busy={isPostSubmitting ? "true" : "false"}
+        data-submitting={isPostSubmitting ? "true" : "false"}
+      >
+        <header className="cc-modal__header">
+          <div className="cc-modal__heading">
+            <h2 className="cc-modal__title" id="postModalTitle">{t("promptShare.newPrompt")}</h2>
           </div>
+          <ModalCloseButton label={t("promptShare.closeComposer")} onClick={onClose} disabled={isPostSubmitting} />
+        </header>
 
+        <div className="cc-modal__body">
           {isGuest ? (
-            <aside className="guest-post-notice" aria-label={t("promptShare.guestPostTitle")}>
-              <div className="guest-post-notice__icon" aria-hidden="true">
-                <i className="bi bi-person"></i>
-              </div>
+            <aside className="cc-modal__notice guest-post-notice" aria-label={t("promptShare.guestPostTitle")}>
+              <i className="bi bi-person" aria-hidden="true"></i>
               <div>
                 <strong>{t("promptShare.guestPostTitle")}</strong>
                 <p>{t("promptShare.guestPostDescription")}</p>
@@ -612,10 +608,7 @@ export function PromptShareComposerModal({
             {/* --- Basics section: set prompt type, title, and category --- */}
             <section className="composer-section composer-section--primary" aria-labelledby="composerBasicsTitle">
               <div className="composer-section__header">
-                <div>
-                  <p className="composer-section__eyebrow">Basics</p>
-                  <h3 id="composerBasicsTitle">{t("promptShare.basicPostInfo")}</h3>
-                </div>
+                <h3 id="composerBasicsTitle">{t("promptShare.basicPostInfo")}</h3>
               </div>
 
               {/* ゲストでは投稿タイプを切り替えられない。ログイン後の既存投稿UIは従来どおり3択。 */}
@@ -711,7 +704,6 @@ export function PromptShareComposerModal({
             <section className="composer-section composer-section--content" aria-labelledby="composerContentTitle">
               <div className="composer-section__header">
                 <div>
-                  <p className="composer-section__eyebrow">{activeFormatLabel}</p>
                   <div className="composer-section__title-row">
                     <h3 id="composerContentTitle">
                       {resolvedContentFormat === "skill"
@@ -797,10 +789,7 @@ export function PromptShareComposerModal({
             {!isGuest ? (
             <section className="composer-section" aria-labelledby="composerMetaTitle">
               <div className="composer-section__header">
-                <div>
-                  <p className="composer-section__eyebrow">Details</p>
-                  <h3 id="composerMetaTitle">{t("promptShare.postSettings")}</h3>
-                </div>
+                <h3 id="composerMetaTitle">{t("promptShare.postSettings")}</h3>
               </div>
 
               <div className="composer-field-grid composer-field-grid--two">
@@ -1001,10 +990,7 @@ export function PromptShareComposerModal({
             {/* --- Examples section: shown only for text prompts --- */}
             <section className="composer-section" aria-labelledby="composerExamplesTitle" hidden={!showExamples}>
               <div className="composer-section__header">
-                <div>
-                  <p className="composer-section__eyebrow">Examples</p>
-                  <h3 id="composerExamplesTitle">{t("promptShare.examplesOptional")}</h3>
-                </div>
+                <h3 id="composerExamplesTitle">{t("promptShare.examplesOptional")}</h3>
               </div>
 
               {/* トグルをONにしたときだけ入出力例フィールドを展開する */}
@@ -1094,7 +1080,7 @@ export function PromptShareComposerModal({
               {/* Disable submit button during submission to prevent duplicate requests */}
               <button
                 type="submit"
-                className={`submit-btn${isPostSubmitting ? " is-loading" : ""}${
+                className={`cc-modal__btn cc-modal__btn--primary submit-btn${isPostSubmitting ? " is-loading" : ""}${
                   promptPostStatus.variant === "success" ? " is-success" : ""
                 }`}
                 disabled={isPostSubmitting}
@@ -1121,6 +1107,6 @@ export function PromptShareComposerModal({
           </form>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

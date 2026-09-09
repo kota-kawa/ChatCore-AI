@@ -196,23 +196,14 @@ body.prompt-manage-page,
 
 /* ─────────────────────────── */
 /* 8. モーダル＆フォーム         */
-/* ─────────────────────────── */
-:where(body.prompt-manage-page, .prompt-manage-page) .modal-content {
-  border-radius: 10px;
-  box-shadow: var(--ps-shadow);
-  border: 1px solid var(--ps-border-color);
-}
-:where(body.prompt-manage-page, .prompt-manage-page) .modal-header {
-  background: var(--ps-primary-color);
-  border-bottom: none;
-  padding: 1.25rem 1.5rem;
-}
-:where(body.prompt-manage-page, .prompt-manage-page) .modal-title {
-  color: #fff;
-  font-weight: 600;
-}
-:where(body.prompt-manage-page, .prompt-manage-page) .modal-body {
-  padding: 1.5rem;
+/* 編集モーダルの外殻は components/modal_surface.css（cc-modal）、
+   フィールドは user_settings.css の edit-prompt-modal__* を使う。
+   The edit modal's shell is the shared cc-modal surface and its fields are the
+   edit-prompt-modal__* styles from user_settings.css. */
+.prompt-manage-edit-modal .edit-prompt-modal__field + .edit-prompt-modal__field,
+.prompt-manage-edit-modal .edit-prompt-modal__grid + .edit-prompt-modal__field,
+.prompt-manage-edit-modal .edit-prompt-modal__field + .edit-prompt-modal__grid {
+  margin-top: 1rem;
 }
 
 :where(body.prompt-manage-page, .prompt-manage-page) .form-label {

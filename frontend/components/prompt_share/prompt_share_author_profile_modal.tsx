@@ -17,6 +17,8 @@ import {
 import type { PromptAuthorProfile } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";
+import { ModalCloseButton } from "../ui/modal_close_button";
+import { ModalShell } from "../ui/modal_shell";
 
 type PromptShareAuthorProfileModalProps = {
   isOpen: boolean;
@@ -149,46 +151,36 @@ export function PromptShareAuthorProfileModal({
   const postCount = profile ? profile.prompt_count : prompts.length;
 
   return (
-    <div
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
       id="promptAuthorProfileModal"
-      className={`post-modal${isOpen ? " show" : ""}`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="authorProfileModalTitle"
-      aria-hidden={isOpen ? "false" : "true"}
-      ref={authorProfileModalRef}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      className="cc-modal prompt-share-modal"
+      labelledBy="authorProfileModalTitle"
+      overlayRef={authorProfileModalRef}
     >
-      <div className="post-modal-content post-modal-content--author-profile" tabIndex={-1}>
-        <button
-          type="button"
-          className="close-btn"
-          aria-label={t("promptShare.closeAuthorProfile")}
-          onClick={onClose}
-        >
-          &times;
-        </button>
-
-        <header className="author-profile-header">
+      {/* 投稿者情報を上に固定し、投稿一覧だけをスクロールさせる読む面 */}
+      {/* A reading sheet: the author block stays put and only the post list scrolls */}
+      <div className="cc-modal__panel cc-modal__panel--md cc-modal__panel--reader" tabIndex={-1}>
+        <header className="cc-modal__header author-profile-header">
           <ProfileAvatarImage
             src={profile?.avatar_url || ""}
             alt={t("promptShare.authorAvatarAlt", { name: displayName })}
           />
-          <div className="author-profile-header__identity">
-            <h2 id="authorProfileModalTitle">{displayName}</h2>
-            <p className="author-profile-header__count">
-              {t("promptShare.authorPostCount", { count: formatNumber(postCount) })}
-            </p>
+          <div className="cc-modal__heading">
+            <div className="author-profile-header__identity">
+              <h2 className="cc-modal__title" id="authorProfileModalTitle">{displayName}</h2>
+              <p className="author-profile-header__count">
+                {t("promptShare.authorPostCount", { count: formatNumber(postCount) })}
+              </p>
+            </div>
+            <p className="cc-modal__lead author-profile-header__bio">{bio || t("promptShare.noBio")}</p>
           </div>
-          <p className="author-profile-header__bio">{bio || t("promptShare.noBio")}</p>
+          <ModalCloseButton label={t("promptShare.closeAuthorProfile")} onClick={onClose} />
         </header>
 
-        <div className="author-profile-body">
-          <h3 className="author-profile-body__label">{t("promptShare.authorPosts")}</h3>
+        <div className="cc-modal__body author-profile-body">
+          <h3 className="cc-modal__section-title author-profile-body__label">{t("promptShare.authorPosts")}</h3>
 
           {isLoading ? (
             <p className="author-profile-status">{t("promptShare.loading")}</p>
@@ -207,7 +199,7 @@ export function PromptShareAuthorProfileModal({
           {hasMore ? (
             <button
               type="button"
-              className="author-profile-load-more"
+              className="cc-modal__btn author-profile-load-more"
               disabled={isLoadingMore}
               onClick={onLoadMore}
             >
@@ -215,7 +207,7 @@ export function PromptShareAuthorProfileModal({
                 t("promptShare.loading")
               ) : (
                 <>
-                  <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginRight: "4px" }}></i>
+                  <i className="bi bi-chevron-down" aria-hidden="true"></i>
                   {t("promptShare.loadMore")}
                 </>
               )}
@@ -223,6 +215,6 @@ export function PromptShareAuthorProfileModal({
           ) : null}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
