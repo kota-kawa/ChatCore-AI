@@ -21,8 +21,9 @@ import { useTranslation } from "../../contexts/locale_context";
 
 // プロンプト共有ページのカードと同じ構造・同じ見た目を設定画面でも使うための土台コンポーネント。
 // 共有ページ側と揃えて「バッジ列 + 日付」「タイトル」「本文プレビュー」「操作列」の順に並べる。
+// 操作列のボタンはアイコンに文字ラベルを添え、ツールチップに頼らず何をするか読めるようにする。
 // Shared shell that mirrors the prompt share page card: badge row + date, title,
-// content preview, and an icon-only action row at the bottom.
+// content preview, and a labelled action row at the bottom (icon + text, no tooltip needed).
 function SettingsPromptCard({
   cardAttributes,
   title,
@@ -156,20 +157,18 @@ export function PromptCard({
             className="prompt-action-btn prompt-action-btn--edit cc-press"
             onClick={() => onEdit(prompt)}
             aria-label={t("common.edit")}
-            data-tooltip={t("common.edit")}
-            data-tooltip-placement="top"
           >
-            <i className="bi bi-pencil-square"></i>
+            <i className="bi bi-pencil-square" aria-hidden="true"></i>
+            <span>{t("common.edit")}</span>
           </button>
           <button
             type="button"
             className="prompt-action-btn prompt-action-btn--delete cc-press"
             onClick={() => onDelete(prompt)}
             aria-label={t("common.delete")}
-            data-tooltip={t("common.delete")}
-            data-tooltip-placement="top"
           >
-            <i className="bi bi-trash3"></i>
+            <i className="bi bi-trash3" aria-hidden="true"></i>
+            <span>{t("common.delete")}</span>
           </button>
         </>
       }
@@ -213,10 +212,9 @@ export function LikedPromptCard({
           className="prompt-action-btn prompt-action-btn--delete cc-press"
           onClick={() => onDelete(entry)}
           aria-label={t("promptShare.unlike")}
-          data-tooltip={t("promptShare.unlike")}
-          data-tooltip-placement="top"
         >
-          <i className="bi bi-heartbreak"></i>
+          <i className="bi bi-heartbreak" aria-hidden="true"></i>
+          <span>{t("promptShare.unlike")}</span>
         </button>
       }
     />

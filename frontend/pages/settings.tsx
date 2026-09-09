@@ -1294,34 +1294,20 @@ export default function UserSettingsPage() {
         description={locale === "en" ? "Manage your Chat Core profile, display, language, and security settings." : "Chat Coreのユーザー設定ページです。"}
         canonicalPath="/settings"
         noindex
-      >
-        <link
-          href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap"
-          rel="stylesheet"
-        />
-      </SeoHead>
+      />
 
       <div className="user-settings-page">
         <action-menu></action-menu>
 
         <div className="user-settings-layout">
           {/* サイドバーでセクションを切り替え、コンテンツ側で対応パネルを表示する / Sidebar switches sections; the content area shows the corresponding panel */}
-          <SettingsSidebar activeSection={activeSection} onSectionSelect={handleSectionSelect} />
+          <SettingsSidebar
+            activeSection={activeSection}
+            onSectionSelect={handleSectionSelect}
+            onBack={() => window.history.back()}
+          />
 
           <main className="settings-content">
-            <div className="mb-4">
-              <button
-                type="button"
-                className="settings-back-btn"
-                onClick={() => window.history.back()}
-                data-tooltip={t("common.back")}
-                aria-label={t("common.back")}
-                data-tooltip-placement="bottom"
-              >
-                <i className="bi bi-arrow-left"></i>
-              </button>
-            </div>
-
             <ProfileSettingsSection
               isActive={isSectionActive("profile")}
               profileSaveEffectActive={profileSaveEffectActive}
