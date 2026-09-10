@@ -169,12 +169,13 @@ export function ProfileSettingsSection({
   return (
     <div id="profile-section" className={`settings-section${isActive ? " active" : ""}`}>
       <SettingsSectionHeader title={t("settings.profileHeading")} />
-      <div className="settings-card">
-        {/* 保存結果はカード先頭に 1 行で示す。演出は付けず、文言とアイコンだけで伝える / The save result is one line at the top of the card — no animation, just text and an icon */}
+      {/* 保存成功時に settings-card--save-success クラスを付与して発光アニメーションを発火する / Add save-success class on success to trigger the glow animation */}
+      <div className={`settings-card${profileSaveEffectActive ? " settings-card--save-success" : ""}`}>
+        {/* 保存結果はカード先頭に 1 行で示す / The save result is one line at the top of the card */}
         {profileSaveStatus ? (
           <p
             key={`${profileSaveStatus.tone}-${profileSaveEffectToken}`}
-            className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}`}
+            className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}${profileSaveStatus.tone === "success" && profileSaveEffectActive ? " settings-inline-feedback--celebrate" : ""}`}
             role={profileSaveStatus.tone === "error" ? "alert" : "status"}
             aria-live={profileSaveStatus.tone === "error" ? "assertive" : "polite"}
           >
@@ -196,15 +197,17 @@ export function ProfileSettingsSection({
             </label>
             <div className="avatar-preview-wrapper">
               <img id="avatarPreview" src={avatarPreviewUrl} alt="Avatar Preview" className="avatar-preview" />
-              {/* 画像に重ねた丸ボタンではなく、隣に文字入りのボタンを置く / A labelled button beside the picture instead of a round overlay */}
+              {/* 画像の右下に重ねた丸い鉛筆ボタン。ラベルは aria-label とツールチップで示す / Round pencil button overlaid on the bottom-right; the label lives in aria-label and the tooltip */}
               <button
                 type="button"
                 className="change-avatar-btn"
                 id="changeAvatarBtn"
+                aria-label={t("settings.chooseAvatar")}
+                data-tooltip={t("settings.chooseAvatar")}
+                data-tooltip-placement="bottom"
                 onClick={() => avatarInputRef.current?.click()}
               >
-                <i className="bi bi-image" aria-hidden="true"></i>
-                {t("settings.chooseAvatar")}
+                <i className="bi bi-pencil-fill" aria-hidden="true"></i>
               </button>
             </div>
             <input
