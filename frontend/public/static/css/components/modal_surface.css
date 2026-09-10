@@ -598,6 +598,17 @@
   font-size: 0.82rem;
 }
 
+/* アイコン1つだけのボタン。文字ラベルを持たないので正方形にする
+   An icon-only button: no text label, so keep it square */
+.cc-modal__btn--icon {
+  width: 40px;
+  padding: 0;
+}
+
+.cc-modal__btn--sm.cc-modal__btn--icon {
+  width: 32px;
+}
+
 .cc-modal__btn i {
   font-size: 1em;
 }

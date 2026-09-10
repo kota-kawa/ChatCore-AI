@@ -25,7 +25,6 @@ import { PromptShareDetailImage } from "./prompt_share_detail_image";
 import { CopyButton } from "../ui/copy_button";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
-import { useCopyFeedback } from "../../hooks/use_copy_feedback";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -131,31 +130,6 @@ function AuthorMetaItem({ name, avatarUrl, authorUserId, onOpenProfile }: Author
   );
 }
 
-type BodyCopyButtonProps = {
-  onCopy: () => Promise<boolean>;
-  disabled: boolean;
-};
-
-// フッターに置く文字ラベル付きのコピーボタン。押すと数秒だけ「コピーしました」に変わる
-// The labelled copy button in the footer; the label reads "copied" for a few seconds after a click
-function BodyCopyButton({ onCopy, disabled }: BodyCopyButtonProps) {
-  const { t } = useTranslation();
-  const { copied, run } = useCopyFeedback();
-  return (
-    <button
-      type="button"
-      className={`cc-modal__btn cc-modal__btn--primary prompt-detail-copy-btn${copied ? " is-copied" : ""}`}
-      disabled={disabled}
-      onClick={() => {
-        void run(onCopy);
-      }}
-    >
-      <i className={`bi ${copied ? "bi-check-lg" : "bi-clipboard"}`} aria-hidden="true"></i>
-      {copied ? t("common.copied") : t("common.copy")}
-    </button>
-  );
-}
-
 // モーダルの中身（パネル）。外殻の ModalShell とは分け、静的マークアップのテストでも描けるようにする
 // The modal's panel; kept apart from the ModalShell shell so static-markup tests can render it
 export function PromptShareDetailModalPanel({
@@ -218,7 +192,6 @@ export function PromptShareDetailModalPanel({
     }
     try {
       await copyTextToClipboard(promptBody);
-      showToast(t("promptShare.bodyCopied"), { variant: "success" });
       return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
@@ -226,10 +199,9 @@ export function PromptShareDetailModalPanel({
     }
   };
 
-  const copyResource = async (path: string, content: string): Promise<boolean> => {
+  const copyResource = async (content: string): Promise<boolean> => {
     try {
       await copyTextToClipboard(content);
-      showToast(t("promptShare.resourceCopied", { path }), { variant: "success" });
       return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
@@ -379,9 +351,20 @@ export function PromptShareDetailModalPanel({
             >
               <div className="cc-modal__section-head">
                 <span className="cc-modal__section-title">{promptBodyLabel}</span>
-                <span className="cc-modal__section-meta">
-                  {promptBodyLength > 0 ? t("promptShare.characters", { count: promptBodyLength.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") }) : promptBodyHelper}
-                </span>
+                {/* フッターを廃止したので、本文コピーはこの見出し行の右端に置く */}
+                {/* The footer is gone, so the body copy button lives at the right of this heading row */}
+                <div className="prompt-detail-body-head__actions">
+                  <span className="cc-modal__section-meta">
+                    {promptBodyLength > 0 ? t("promptShare.characters", { count: promptBodyLength.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") }) : promptBodyHelper}
+                  </span>
+                  <CopyButton
+                    onCopy={copyPromptBody}
+                    label={t("common.copy")}
+                    copiedLabel={t("common.copied")}
+                    className="cc-modal__btn cc-modal__btn--sm cc-modal__btn--icon"
+                    disabled={!promptBody.trim()}
+                  />
+                </div>
               </div>
               {/* 本文はMarkdown記法を含む可能性があるため、フォーマット軸に関わらず常にMarkdownとして整形する */}
               {/* The body may contain Markdown syntax, so it is always rendered as Markdown regardless of the format axis */}
@@ -450,7 +433,7 @@ export function PromptShareDetailModalPanel({
                           </span>
                         </div>
                         <CopyButton
-                          onCopy={() => copyResource(resource.path, resource.content)}
+                          onCopy={() => copyResource(resource.content)}
                           label={t("common.copy")}
                           copiedLabel={t("common.copied")}
                           className="cc-modal__btn cc-modal__btn--sm prompt-detail-resource__copy"
@@ -572,17 +555,6 @@ export function PromptShareDetailModalPanel({
             )}
           </section>
         </div>
-
-        {/* 主操作（本文のコピー）と閉じるを常に手の届く下端に置く */}
-        {/* The main action (copy the body) and close stay reachable at the bottom edge */}
-        <footer className="cc-modal__footer">
-          <button type="button" className="cc-modal__btn" onClick={onClose}>
-            {t("common.close")}
-          </button>
-          {activeView === "detail" ? (
-            <BodyCopyButton onCopy={copyPromptBody} disabled={!promptBody.trim()} />
-          ) : null}
-        </footer>
       </div>
     </>
   );
