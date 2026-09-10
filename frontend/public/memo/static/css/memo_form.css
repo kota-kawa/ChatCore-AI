@@ -5236,11 +5236,19 @@ body.memo-page {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem 0.9rem;
+  padding-right: 4rem;
 }
 
 .memo-modal .memo-modal__heading {
-  flex: 1 1 240px;
+  flex: 0 1 clamp(220px, 30%, 360px);
   gap: 0.2rem;
+}
+
+.memo-modal .memo-modal__header > .cc-modal__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  margin: 0;
 }
 
 /* メモの背景色はヘッダー左端の細い色帯だけで示す
@@ -5301,10 +5309,52 @@ body.memo-page {
 .memo-modal .memo-modal__header-actions {
   display: flex;
   flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.memo-modal .memo-modal__header-actions > * {
+  flex: 0 0 auto;
+}
+
+/* 本文の切り替えはヘッダーの操作列にまとめ、本文の高さを最大化する
+   Keep the content switcher in the header action row so the body gets the full height */
+.memo-modal .memo-modal__tabs {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.15rem;
+  border: 1px solid var(--modal-border);
+  border-radius: 9px;
+  background: var(--modal-surface-muted);
+}
+
+.memo-modal .memo-modal__tabs .cc-modal__tab {
+  min-height: 32px;
+  padding: 0 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.memo-modal .memo-modal__tabs .cc-modal__tab::after {
+  display: none;
+}
+
+.memo-modal .memo-modal__tabs .cc-modal__tab.is-active {
+  background: var(--modal-surface);
+  color: var(--modal-text);
+}
+
+.memo-modal .memo-modal__tabs .cc-modal__tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .memo-modal .memo-select--detail-collection {
@@ -5428,12 +5478,6 @@ body.memo-page {
   min-height: 0;
 }
 
-.memo-modal .memo-modal__tabs {
-  flex: 0 0 auto;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid var(--modal-border-soft);
-}
-
 .memo-modal .memo-modal__edit-textarea {
   flex: 1 1 auto;
   width: 100%;
@@ -5495,8 +5539,15 @@ body.memo-page {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  flex: 0 0 auto;
+  min-height: 32px;
   min-width: 0;
+  max-width: 15rem;
   overflow: hidden;
+  padding: 0 0.2rem;
+  color: var(--modal-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6893,9 +6944,25 @@ body.memo-page {
 }
 
 @media (max-width: 640px) {
+  .memo-modal .memo-modal__header > .cc-modal__close {
+    top: 0.85rem;
+    right: 1rem;
+  }
+
   .memo-modal .memo-modal__header-actions {
     flex-basis: 100%;
     order: 4;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+    scrollbar-width: none;
+  }
+
+  .memo-modal .memo-modal__header-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .memo-modal .memo-modal__autosave-status {
+    max-width: 12rem;
   }
 
   .memo-modal .memo-modal__body {
