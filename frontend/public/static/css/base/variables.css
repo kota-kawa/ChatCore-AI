@@ -184,6 +184,10 @@
   --settings-radius-surface: 14px;
   --settings-radius-card: 10px;
   --settings-radius-control: 8px;
+  /* 保存成功時の発光演出 / Save-success glow effect */
+  --settings-save-glow-soft: rgba(15, 122, 81, 0.1);
+  --settings-save-glow-strong: rgba(15, 122, 81, 0.2);
+  --settings-save-sheen: rgba(255, 255, 255, 0.7);
 
   --breakpoint-sm: 576px;
   --breakpoint-md: 768px;
@@ -271,4 +275,7 @@
   --settings-danger-hover: #ef4444;
   --settings-danger-soft: rgba(248, 113, 113, 0.14);
   --settings-shadow: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --settings-save-glow-soft: rgba(25, 195, 125, 0.14);
+  --settings-save-glow-strong: rgba(25, 195, 125, 0.3);
+  --settings-save-sheen: rgba(255, 255, 255, 0.14);
 }

@@ -258,6 +258,31 @@ body.settings-page,
   line-height: 1.6;
 }
 
+/* 保存成功時: カードを一度だけ発光させ、光沢を左から右へ走らせる
+   On save success: the card glows once and a sheen sweeps across it */
+:where(body.settings-page, .user-settings-page) .settings-card--save-success {
+  /* 光沢がカードの外へはみ出さないよう、演出中だけ切り抜く / Clip while the sheen sweeps so it stays inside the card */
+  overflow: hidden;
+  animation: settings-save-card-glow 0.9s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .settings-card--save-success::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    color-mix(in srgb, var(--settings-save-sheen) 30%, transparent) 42%,
+    var(--settings-save-sheen) 50%,
+    transparent 58%
+  );
+  transform: translateX(-135%);
+  pointer-events: none;
+  animation: settings-save-card-sheen 0.9s ease;
+}
+
 /* ── 結果メッセージ / Inline feedback ───────────────────────────── */
 :where(body.settings-page, .user-settings-page) .settings-inline-feedback {
   display: flex;
@@ -300,6 +325,10 @@ body.settings-page,
 :where(body.settings-page, .user-settings-page) .settings-inline-feedback span {
   display: grid;
   gap: 0.15rem;
+}
+
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback--celebrate {
+  animation: settings-save-feedback-pop 0.48s ease;
 }
 
 /* ── 読み込み中 / Loading placeholders ──────────────────────────── */
@@ -388,11 +417,11 @@ body.settings-page,
   cursor: not-allowed;
 }
 
-/* アバター: 画像の隣に文字入りの「変更」ボタンを置く / Avatar: a labelled change button next to the picture */
+/* アバター: 画像の右下に鉛筆ボタンを重ねる / Avatar: a pencil button overlaid on the bottom-right of the picture */
 :where(body.settings-page, .user-settings-page) .avatar-preview-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
 }
 
 :where(body.settings-page, .user-settings-page) .avatar-preview {
@@ -403,6 +432,36 @@ body.settings-page,
   border-radius: 50%;
   background: var(--settings-surface-muted);
   object-fit: cover;
+}
+
+:where(body.settings-page, .user-settings-page) .change-avatar-btn {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 0;
+  padding: 0;
+  border: 3px solid var(--settings-card-bg);
+  border-radius: 50%;
+  background: var(--settings-accent);
+  color: var(--settings-accent-text);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+:where(body.settings-page, .user-settings-page) .change-avatar-btn:hover {
+  background: var(--settings-accent-hover);
+  transform: scale(1.08);
+}
+
+:where(body.settings-page, .user-settings-page) .change-avatar-btn i {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 /* 操作列: 主操作は右端に 1 つだけ / Action row: exactly one primary action, aligned right */
@@ -424,8 +483,7 @@ body.settings-page,
   .secondary-button,
   .ghost-button,
   .danger-button,
-  .danger-ghost-button,
-  .change-avatar-btn
+  .danger-ghost-button
 ) {
   display: inline-flex;
   align-items: center;
@@ -450,14 +508,13 @@ body.settings-page,
   .secondary-button,
   .ghost-button,
   .danger-button,
-  .danger-ghost-button,
-  .change-avatar-btn
+  .danger-ghost-button
 ) i {
   font-size: 1rem;
   line-height: 1;
 }
 
-:where(body.settings-page, .user-settings-page) :where(.secondary-button, .ghost-button, .change-avatar-btn):hover:not(:disabled) {
+:where(body.settings-page, .user-settings-page) :where(.secondary-button, .ghost-button):hover:not(:disabled) {
   border-color: var(--settings-text-muted);
   background: var(--settings-surface-muted);
 }
@@ -530,10 +587,97 @@ body.settings-page,
   opacity: var(--disabled-opacity, 0.6);
 }
 
+:where(body.settings-page, .user-settings-page) .profile-save-button {
+  position: relative;
+  overflow: hidden;
+}
+
 :where(body.settings-page, .user-settings-page) .profile-save-button__content {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+}
+
+/* 保存直後のボタン: 一度だけ脈打たせ、光沢を走らせる / Right after saving: the button pulses once with a sheen sweep */
+:where(body.settings-page, .user-settings-page) .profile-save-button--saved {
+  animation: settings-save-button-pulse 0.7s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .profile-save-button--saved::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.16) 35%,
+    rgba(255, 255, 255, 0.7) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  animation: settings-save-button-sheen 0.8s ease;
+}
+
+@keyframes settings-save-card-glow {
+  0% {
+    box-shadow: var(--settings-shadow);
+  }
+  45% {
+    box-shadow:
+      0 0 0 4px var(--settings-save-glow-soft),
+      0 18px 44px var(--settings-save-glow-strong);
+  }
+  100% {
+    box-shadow: var(--settings-shadow);
+  }
+}
+
+@keyframes settings-save-card-sheen {
+  from {
+    transform: translateX(-135%);
+  }
+  to {
+    transform: translateX(135%);
+  }
+}
+
+/* base/buttons.css がボタンの box-shadow を !important で消すため、発光は拡大と光沢で表す
+   base/buttons.css kills every button box-shadow with !important, so the button glows via scale + sheen */
+@keyframes settings-save-button-pulse {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes settings-save-button-sheen {
+  from {
+    transform: translateX(-130%);
+  }
+  to {
+    transform: translateX(130%);
+  }
+}
+
+@keyframes settings-save-feedback-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* アイコン＋ラベルの並び / Icon + label layout */
@@ -1829,11 +1973,6 @@ body.settings-page,
 }
 
 @media (max-width: 480px) {
-  :where(body.settings-page, .user-settings-page) .avatar-preview-wrapper {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   :where(body.settings-page, .user-settings-page) .security-meta__row {
     grid-template-columns: 1fr;
     gap: 0.1rem;
@@ -1845,8 +1984,26 @@ body.settings-page,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(body.settings-page, .user-settings-page) .security-action__spin {
+  :where(body.settings-page, .user-settings-page) .security-action__spin,
+  :where(body.settings-page, .user-settings-page) .settings-card--save-success,
+  :where(body.settings-page, .user-settings-page) .settings-card--save-success::after,
+  :where(body.settings-page, .user-settings-page) .settings-inline-feedback--celebrate,
+  :where(body.settings-page, .user-settings-page) .profile-save-button--saved,
+  :where(body.settings-page, .user-settings-page) .profile-save-button--saved::after {
     animation: none;
+  }
+
+  :where(body.settings-page, .user-settings-page) .settings-card--save-success::after,
+  :where(body.settings-page, .user-settings-page) .profile-save-button--saved::after {
+    content: none;
+  }
+
+  :where(body.settings-page, .user-settings-page) .change-avatar-btn {
+    transition: none;
+  }
+
+  :where(body.settings-page, .user-settings-page) .change-avatar-btn:hover {
+    transform: none;
   }
 }
 
