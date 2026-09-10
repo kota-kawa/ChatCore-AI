@@ -382,8 +382,9 @@ export default function SharedPromptPage({
 
   const copyResource = async (resource: PromptResource): Promise<boolean> => {
     try {
+      // 成功フィードバックはボタンのチェックマークだけにして、トーストは出さない
+      // The check mark on the button is the only success feedback; no toast
       await copyTextToClipboard(resource.content);
-      showToast(english ? `Copied ${resource.path}.` : `${resource.path} をコピーしました。`, { variant: "success" });
       return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : (english ? "Copy failed." : "コピーに失敗しました。"), { variant: "error" });

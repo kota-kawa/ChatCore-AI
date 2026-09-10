@@ -5505,6 +5505,12 @@ body.memo-page {
   color: var(--modal-accent);
 }
 
+/* フッター廃止で cc-modal__footer-note--error が外れたため、エラー色はここで持つ
+   The footer note class is gone, so the error colour lives here now */
+.memo-modal .memo-modal__autosave-status--error {
+  color: var(--modal-danger);
+}
+
 /* ── 詳細モーダル: メモエージェント / Detail modal: memo agent ───────── */
 .memo-modal .memo-modal__agent-panel {
   display: flex;

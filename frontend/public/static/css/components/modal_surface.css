@@ -150,6 +150,12 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+/* ヘッダー内の閉じるボタンは、左側の要素の幅に関わらず常に右端へ寄せる
+   Inside a header the close button always sits at the right edge, whatever precedes it */
+.cc-modal__header > .cc-modal__close {
+  margin-left: auto;
+}
+
 .cc-modal__close:hover {
   background: var(--modal-surface-muted);
   color: var(--modal-text);
@@ -590,6 +596,17 @@
   min-height: 32px;
   padding: 0 0.7rem;
   font-size: 0.82rem;
+}
+
+/* アイコン1つだけのボタン。文字ラベルを持たないので正方形にする
+   An icon-only button: no text label, so keep it square */
+.cc-modal__btn--icon {
+  width: 40px;
+  padding: 0;
+}
+
+.cc-modal__btn--sm.cc-modal__btn--icon {
+  width: 32px;
 }
 
 .cc-modal__btn i {

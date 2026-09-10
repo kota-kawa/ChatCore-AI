@@ -123,6 +123,21 @@ export function MemoDetailModal() {
             )}
             <div className="cc-modal__meta memo-modal__meta">
               <span className="memo-modal__date"><i className="bi bi-clock-history" aria-hidden="true"></i>{displayDate}</span>
+              {/* 閉じるだけのフッターを廃止したため、自動保存の状態はこの行に置く */}
+              {/* The footer only held a close button, so the autosave status moved to this row */}
+              {selectedMemo && (
+                <span
+                  className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
+                  {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                  {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
+                  {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                  {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
+                </span>
+              )}
             </div>
           </div>
           {selectedMemo && (
@@ -270,25 +285,6 @@ export function MemoDetailModal() {
             </>
           )}
         </div>
-
-        <footer className="cc-modal__footer memo-modal__footer">
-          {selectedMemo && (
-            <p
-              className={`cc-modal__footer-note memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}${detailSaveStatus === "error" ? " cc-modal__footer-note--error" : ""}`}
-              role="status"
-              aria-live="polite"
-            >
-              {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
-              {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-              {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
-              {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-              {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
-            </p>
-          )}
-          <button type="button" className="cc-modal__btn cc-modal__btn--primary" onClick={() => { void closeMemoDetail(); }}>
-            {t("common.close")}
-          </button>
-        </footer>
       </div>
     </ModalShell>
   );

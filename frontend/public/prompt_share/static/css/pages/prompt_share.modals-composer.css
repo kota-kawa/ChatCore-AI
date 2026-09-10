@@ -364,6 +364,17 @@
   border-radius: 10px;
 }
 
+/* 本文見出しの右側（文字数＋コピー）。見出しは baseline 揃えなのでボタンだけ中央に揃える
+   The right side of the body heading (length + copy). The heading is baseline-aligned,
+   so this group centres the button on its own */
+.prompt-detail-body-head__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .prompt-detail-resource__head {
   display: flex;
   align-items: center;
