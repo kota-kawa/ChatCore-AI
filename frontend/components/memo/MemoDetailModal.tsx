@@ -8,7 +8,6 @@ import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
-import { formatDateTime } from "../../lib/datetime";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { CopyButton } from "../ui/copy_button";
@@ -20,9 +19,9 @@ import {
 
 // ── Memo detail modal ──
 // 本文を読む／編集する面。共通モーダル面（cc-modal）の読む面サイズ（xl / reader）に、
-// ヘッダー＝タイトル入力と操作、本文＝編集・プレビュー（＋エージェント）、フッター＝保存状態と主操作を置く。
+// ヘッダー＝タイトル入力と操作・保存状態、本文＝編集・プレビュー（＋エージェント）を置く。
 // Reading / editing sheet on the shared modal surface (cc-modal, xl / reader): the header holds
-// the title input and actions, the body the editor / preview (+ agent), the footer the save state.
+// the title input, actions and save state, while the body holds the editor / preview (+ agent).
 export function MemoDetailModal() {
   const { collections } = useMemoPageListContext();
   const {
@@ -88,7 +87,6 @@ export function MemoDetailModal() {
   }, [isMemoAgentOpen]);
 
   const displayTitle = detailEditTitle || selectedMemo?.title || t("memo.savedMemo");
-  const displayDate = formatDateTime(selectedMemo?.updated_at || selectedMemo?.created_at) || selectedMemo?.created_at || "";
 
   return (
     <ModalShell
@@ -121,27 +119,30 @@ export function MemoDetailModal() {
                 aria-label={t("memo.titleLabel")}
               />
             )}
-            <div className="cc-modal__meta memo-modal__meta">
-              <span className="memo-modal__date"><i className="bi bi-clock-history" aria-hidden="true"></i>{displayDate}</span>
-              {/* 閉じるだけのフッターを廃止したため、自動保存の状態はこの行に置く */}
-              {/* The footer only held a close button, so the autosave status moved to this row */}
-              {selectedMemo && (
-                <span
-                  className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
-                  {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-                  {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
-                  {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-                  {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
-                </span>
-              )}
-            </div>
           </div>
           {selectedMemo && (
             <div className="memo-modal__header-actions">
+              <div className="cc-modal__tabs memo-modal__tabs" role="tablist" aria-label={t("memo.content")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!detailPreviewMode}
+                  className={`cc-modal__tab${!detailPreviewMode ? " is-active" : ""}`}
+                  onClick={() => setDetailPreviewMode(false)}
+                >
+                  <i className="bi bi-code-slash" aria-hidden="true"></i>{t("common.edit")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={detailPreviewMode}
+                  className={`cc-modal__tab${detailPreviewMode ? " is-active" : ""}`}
+                  onClick={() => setDetailPreviewMode(true)}
+                  disabled={!detailEditAiResponse.trim()}
+                >
+                  <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.preview")}
+                </button>
+              </div>
               {collections.length > 0 && (
                 <MemoSelect
                   id="memo-detail-collection"
@@ -199,6 +200,17 @@ export function MemoDetailModal() {
               >
                 <i className="bi bi-robot" aria-hidden="true"></i>
               </button>
+              <span
+                className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
+                role="status"
+                aria-live="polite"
+              >
+                {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
+                {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
+                {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
+              </span>
             </div>
           )}
           <ModalCloseButton label={t("common.close")} onClick={() => { void closeMemoDetail(); }} />
@@ -213,27 +225,6 @@ export function MemoDetailModal() {
           {!detailLoading && selectedMemo && (
             <>
               <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
-                <div className="cc-modal__tabs memo-modal__tabs" role="tablist" aria-label={t("memo.content")}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={!detailPreviewMode}
-                    className={`cc-modal__tab${!detailPreviewMode ? " is-active" : ""}`}
-                    onClick={() => setDetailPreviewMode(false)}
-                  >
-                    <i className="bi bi-code-slash" aria-hidden="true"></i>{t("common.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailPreviewMode}
-                    className={`cc-modal__tab${detailPreviewMode ? " is-active" : ""}`}
-                    onClick={() => setDetailPreviewMode(true)}
-                    disabled={!detailEditAiResponse.trim()}
-                  >
-                    <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.preview")}
-                  </button>
-                </div>
                 {detailPreviewMode ? (
                   <div className="memo-modal__preview-pane" role="tabpanel">
                     {detailEditAiResponse.trim()
