@@ -109,6 +109,12 @@ _TREE_SHARED_PAYLOAD_COLUMNS: tuple[Any, ...] = (
     ChatHistory.timestamp,
     ChatHistory.message_parts,
 )
+# 1投稿ぶんの文脈（LLM履歴＋過去ターンの検索結果）をまとめて取る列。
+# Columns that cover one chat post's whole context: LLM history plus prior web-search results.
+_TREE_TURN_CONTEXT_COLUMNS: tuple[Any, ...] = (
+    *_TREE_LLM_HISTORY_COLUMNS,
+    *_TREE_WEB_SEARCH_COLUMNS,
+)
 
 
 class ChatRepository:
@@ -140,6 +146,35 @@ class ChatRepository:
         attached_file_contents: list[Any] | None = None,
         web_search_context: list[dict[str, Any]] | None = None,
     ) -> int | None:
+        record = await self._insert_message(
+            chat_room_id,
+            message,
+            sender,
+            attached_file_names,
+            parent_id,
+            message_parts,
+            attached_file_contents,
+            web_search_context,
+        )
+        return record.id
+
+    async def _insert_message(
+        self,
+        chat_room_id: str,
+        message: str,
+        sender: str,
+        attached_file_names: list[str] | None = None,
+        parent_id: int | None = None,
+        message_parts: list[dict[str, Any]] | None = None,
+        attached_file_contents: list[Any] | None = None,
+        web_search_context: list[dict[str, Any]] | None = None,
+    ) -> ChatHistory:
+        """Append one message to the branch and return the stored row.
+
+        Returning the row lets a caller reuse the encoded JSONB values it just
+        wrote instead of reading the message back out of the database.
+        """
+
         if parent_id is None:
             room = (
                 await self.session.execute(
@@ -186,7 +221,58 @@ class ChatRepository:
                 .values(active_child_id=record.id)
             )
             await self.session.execute(update(ChatRoom).where(ChatRoom.id == chat_room_id).values(**room_updates))
-        return record.id
+        return record
+
+    async def store_user_message_and_load_turn_context(
+        self,
+        chat_room_id: str,
+        message: str,
+        sender: str = "user",
+        attached_file_names: list[str] | None = None,
+        message_parts: list[dict[str, Any]] | None = None,
+        attached_file_contents: list[Any] | None = None,
+    ) -> dict[str, Any]:
+        """Append one turn to the active branch and derive its context from a single tree read.
+
+        The chat-post use case used to run three separate room-tree queries per
+        request (branch tip, LLM history, prior web-search evidence), each in its
+        own transaction and therefore each taking a connection out of a pool with
+        no overflow.  Reading the tree once inside the same transaction that
+        appends the message yields the same values from a consistent snapshot.
+        """
+
+        nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=_TREE_TURN_CONTEXT_COLUMNS)
+        path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
+        # New turns extend the active branch: the parent is the current branch tip.
+        parent_id = int(path[-1]["id"]) if path else None
+        record = await self._insert_message(
+            chat_room_id,
+            message,
+            sender,
+            attached_file_names,
+            parent_id,
+            message_parts,
+            attached_file_contents,
+            None,
+        )
+        # 追記した行は、保存後に読み直した場合と同じ値を持つため、そのまま経路の末尾へ足す。
+        # The appended row already holds the stored values, so it extends the path as-is.
+        appended: dict[str, Any] = {
+            "id": record.id,
+            "message": record.message,
+            "sender": record.sender,
+            "message_parts": record.message_parts,
+            "attached_file_contents": record.attached_file_contents,
+            "web_search_context": record.web_search_context,
+        }
+        active_path = [*path, appended]
+        return {
+            "message_id": record.id,
+            "parent_message_id": parent_id,
+            "is_first_turn": parent_id is None,
+            "messages": self._path_to_llm_messages(active_path),
+            "web_search_contexts": self._path_to_web_search_contexts(active_path),
+        }
 
     async def copy_messages_into_room(self, chat_room_id: str, messages: list[dict[str, Any]]) -> int:
         parent_id: int | None = None

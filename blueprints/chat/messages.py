@@ -78,7 +78,6 @@ from services.chat_regeneration_pipeline import (
 from services.chat_service import (
     delete_unanswered_user_messages,
     fetch_chat_history_page,
-    get_active_leaf_id,
     get_active_path,
     get_chat_room_messages,
     get_project_context,
@@ -88,6 +87,7 @@ from services.chat_service import (
     list_enabled_user_skills,
     rename_chat_room_if_current_title_in,
     save_message_to_db,
+    store_user_message_and_load_turn_context,
     switch_chat_branch,
     validate_room_owner,
 )
@@ -642,9 +642,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             ),
             persistence=ChatPostPersistenceDependencies(
                 save_message_to_db=save_message_to_db,
-                get_active_leaf_id=get_active_leaf_id,
-                get_chat_room_messages=get_chat_room_messages,
-                get_room_web_search_contexts=get_room_web_search_contexts,
+                store_user_message_and_load_turn_context=store_user_message_and_load_turn_context,
                 get_room_summary=get_room_summary,
                 list_room_memory_facts=list_room_memory_facts,
                 remember_facts_from_message=remember_facts_from_message,

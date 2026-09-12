@@ -102,6 +102,16 @@ async def _maybe_await(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
+def _messages_including_reply(history: list[dict[str, Any]], reply: str) -> list[dict[str, Any]]:
+    """
+    このターンの履歴に保存済みの応答を足した一覧を返します。要約の入力はこれで確定するため、
+    ルーム全体を読み直す必要はありません。
+    Return this turn's history with the persisted reply appended. That is the whole summary input,
+    so the room does not have to be read back out of the database.
+    """
+    return [*history, {"role": "assistant", "content": reply}]
+
+
 # 1リクエストの処理中だけ受け渡す作業状態
 # Working state carried across the phases of a single request
 @dataclass
@@ -145,6 +155,11 @@ class _ChatPostTurn:
     room_summary: str = ""
     memory_facts: list[str] = field(default_factory=list)
     conversation_messages: list[dict[str, Any]] = field(default_factory=list)
+    # 日本語: 通常ルームでは、発話保存と同じルームツリー読み出しから得た過去ターンの
+    #         検索結果。改めて DB を読まないための引き渡し先。
+    # English: For DB-backed rooms, the prior-turn search evidence produced by the same
+    #          room-tree read that stored the message, so no second query is needed.
+    room_web_search_contexts: list[dict[str, Any]] = field(default_factory=list)
     prior_web_search_results: list[WebSearchResult] = field(default_factory=list)
     generation_key: str = ""
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
@@ -381,25 +396,26 @@ class ChatPostUseCase:
         attached_file_name_list = (
             [f.name for f in turn.prepared_attached_files] if turn.prepared_attached_files else None
         )
-        # New turns extend the active branch: parent is the current branch tip.
-        parent_message_id = await _maybe_await(deps.persistence.get_active_leaf_id(turn.chat_room_id))
-        # 初回発話では assistant 応答がまだないため、DB から履歴を読み直さず最小文脈を作る。
-        # このフラグは、後段の初回タイトル自動生成にも使う。
-        turn.should_auto_title_room = parent_message_id is None
-        turn.saved_user_message_id = await _maybe_await(
-            deps.persistence.save_message_to_db(
+        # 保存と文脈読み出しを1トランザクションへまとめる。新しい発話は能動枝の末尾へ繋がるため、
+        # 親の決定・LLM履歴・過去ターンの検索結果はすべて同じ1回のツリー読み出しから導ける。
+        # Persisting and loading share one transaction. A new turn extends the active branch, so the
+        # parent, the LLM history and the prior search evidence all come from the same tree read.
+        context = await _maybe_await(
+            deps.persistence.store_user_message_and_load_turn_context(
                 turn.chat_room_id,
                 turn.formatted_user_message,
                 "user",
                 attached_file_name_list,
-                parent_message_id,
-                **turn.attachment_content_kwargs(),
+                None,
+                turn.prepared_attached_files or None,
             )
         )
-        if turn.should_auto_title_room:
-            turn.all_messages = [{"role": "user", "content": turn.formatted_user_message}]
-        else:
-            turn.all_messages = await _maybe_await(deps.persistence.get_chat_room_messages(turn.chat_room_id))
+        turn.saved_user_message_id = context.get("message_id")
+        # 初回発話では assistant 応答がまだない。このフラグは初回タイトル自動生成にも使う。
+        # A first turn has no assistant reply yet; the flag also drives the initial auto-title.
+        turn.should_auto_title_room = bool(context.get("is_first_turn"))
+        turn.all_messages = list(context.get("messages") or [])
+        turn.room_web_search_contexts = list(context.get("web_search_contexts") or [])
 
     async def _store_guest_user_message(self, turn: _ChatPostTurn) -> None:
         """未ログインの一時ルームへ発話を保存します / Store the message in a guest's temporary room."""
@@ -663,18 +679,10 @@ class ChatPostUseCase:
         過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
         Load prior-turn search results to re-inject as reference context during generation.
         """
-        deps = self.deps
-
         if turn.targets_normal_room():
-            # 初回ターンは過去履歴が無いため、無駄なDB照会を避ける。
-            # Skip the lookup on the first turn since there is no prior history yet.
-            turn.prior_web_search_results = (
-                []
-                if turn.should_auto_title_room
-                else deserialize_web_search_results(
-                    await _maybe_await(deps.persistence.get_room_web_search_contexts(turn.chat_room_id))
-                )
-            )
+            # 発話保存と同じツリー読み出しで得た結果を使う。初回ターンでは空のまま。
+            # Reuse the evidence from the tree read that stored the message; empty on a first turn.
+            turn.prior_web_search_results = deserialize_web_search_results(turn.room_web_search_contexts)
         else:
             turn.prior_web_search_results = extract_prior_web_search_results(turn.all_messages)
 
@@ -848,6 +856,10 @@ class ChatPostUseCase:
         user_message = turn.user_message
         saved_user_message_id = turn.saved_user_message_id
         should_auto_title_room = turn.should_auto_title_room
+        # 要約入力はこのターンの履歴＋保存できた応答で決まる。DBを読み直さない。
+        # The summary input is this turn's history plus the reply that was persisted; no re-read.
+        history_before_reply = list(turn.all_messages)
+        persisted_reply: list[str] = []
 
         title_candidates = build_initial_title_candidates(
             user_message,
@@ -860,6 +872,7 @@ class ChatPostUseCase:
             message_parts: list[dict[str, Any]] | None = None,
             web_search_context: list[dict[str, Any]] | None = None,
         ) -> dict[str, Any] | None:
+            persisted_reply.append(response)
             assistant_message_id = _run_async_callback(
                 lambda: _maybe_await(
                     deps.persistence.save_message_to_db(
@@ -899,10 +912,12 @@ class ChatPostUseCase:
             return None
 
         def on_finished() -> None:
+            # 応答を保存できなかったターンは履歴が変わっていないため、要約も作り直さない。
+            # A turn whose reply was never persisted left the history unchanged, so skip the rebuild.
+            if not persisted_reply:
+                return
             try:
-                updated_messages = _run_async_callback(
-                    lambda: _maybe_await(deps.persistence.get_chat_room_messages(chat_room_id))
-                )
+                updated_messages = _messages_including_reply(history_before_reply, persisted_reply[-1])
                 # 要約はストリーミング完了後に一度だけ更新する。
                 # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
                 _run_async_callback(
@@ -1180,7 +1195,9 @@ class ChatPostUseCase:
         if not (turn.targets_normal_room() and turn.saved_assistant_message_id is not None):
             return
         try:
-            all_messages = await _maybe_await(deps.persistence.get_chat_room_messages(turn.chat_room_id))
+            # 保存済みの応答はこのターンの履歴の末尾に足したものと一致する。
+            # The persisted reply is exactly this turn's history with the reply appended.
+            all_messages = _messages_including_reply(turn.all_messages, turn.bot_reply)
             await _maybe_await(
                 deps.persistence.rebuild_room_summary(
                     turn.chat_room_id,

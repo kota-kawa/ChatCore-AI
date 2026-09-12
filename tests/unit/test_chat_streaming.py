@@ -3354,10 +3354,6 @@ class ChatStreamingTestCase(unittest.TestCase):
                 generation_finished.set()
             return len(stored_messages)
 
-        def active_leaf_id(room_id):
-            room_messages = [m for m in stored_messages if m[0] == room_id]
-            return len(room_messages) or None
-
         def get_messages(room_id):
             return [
                 {
@@ -3367,6 +3363,24 @@ class ChatStreamingTestCase(unittest.TestCase):
                 for stored_room_id, message, sender in stored_messages
                 if stored_room_id == room_id
             ]
+
+        def store_turn_context(
+            room_id,
+            message,
+            sender="user",
+            attached_file_names=None,
+            message_parts=None,
+            attached_file_contents=None,
+        ):
+            parent_id = len([m for m in stored_messages if m[0] == room_id]) or None
+            message_id = save_message(room_id, message, sender, attached_file_names, parent_id)
+            return {
+                "message_id": message_id,
+                "parent_message_id": parent_id,
+                "is_first_turn": parent_id is None,
+                "messages": get_messages(room_id),
+                "web_search_contexts": [],
+            }
 
         def fetch_history(room_id, limit, before_message_id=None):
             messages = [
@@ -3402,7 +3416,10 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
             patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
             patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
-            patch("blueprints.chat.messages.get_active_leaf_id", side_effect=active_leaf_id),
+            patch(
+                "blueprints.chat.messages.store_user_message_and_load_turn_context",
+                side_effect=store_turn_context,
+            ),
             patch("blueprints.chat.messages.get_chat_room_messages", side_effect=get_messages),
             patch("blueprints.chat.messages._fetch_chat_history", side_effect=fetch_history),
             patch("blueprints.chat.messages.get_user_by_id", return_value={}),

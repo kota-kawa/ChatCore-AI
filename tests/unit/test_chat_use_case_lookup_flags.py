@@ -51,9 +51,17 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
                 get_messages=Mock(return_value=[]),
             ),
             save_message_to_db=Mock(return_value=1),
-            get_active_leaf_id=Mock(return_value=None),
-            get_chat_room_messages=Mock(return_value=[{"role": "user", "content": "質問"}]),
-            get_room_web_search_contexts=Mock(return_value=[]),
+            # 保存と文脈読み出しは 1 つの境界に統合された。ここは初回ターン相当の結果を返す。
+            # Persisting and context loading share one boundary; this stands in for a first turn.
+            store_user_message_and_load_turn_context=Mock(
+                side_effect=lambda _room_id, message, *_args, **_kwargs: {
+                    "message_id": 1,
+                    "parent_message_id": None,
+                    "is_first_turn": True,
+                    "messages": [{"role": "user", "content": message}],
+                    "web_search_contexts": [],
+                }
+            ),
             normalize_messages_for_llm=lambda messages: [
                 {"role": item["role"], "content": str(item["content"])} for item in messages
             ],
