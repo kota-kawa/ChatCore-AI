@@ -193,5 +193,51 @@ class EphemeralChatStoreMemoryTest(unittest.TestCase):
             mock_warning.assert_called_once()
 
 
+# 日本語: Redis クライアント取得のリトライ挙動をまとめたテストです。
+# English: Group test cases for Redis client acquisition retry behaviour.
+class EphemeralChatStoreRedisLookupTest(unittest.TestCase):
+    # 日本語: 一度 None が返ってもキャッシュせず、次回に Redis を使い直すことを検証します。
+    # English: Verify a None result is not cached so the next call retries Redis.
+    def test_redis_client_is_retried_after_a_miss(self):
+        dummy_redis = DummyRedis()
+        clients = [None, dummy_redis]
+
+        # 日本語: 1回目は Redis 断を模して None、2回目以降はクライアントを返します。
+        # English: Return None first to emulate an outage, then hand back a client.
+        def fake_get_redis_client():
+            return clients.pop(0) if clients else dummy_redis
+
+        with patch(
+            "services.ephemeral_store.get_redis_client",
+            side_effect=fake_get_redis_client,
+        ):
+            store = EphemeralChatStore(expiration_seconds=60)
+
+            # 日本語: Redis が取れない間はメモリへ退避します。
+            # English: Fall back to memory while Redis is unavailable.
+            store.create_room("sid", "memory-room", "title")
+            self.assertEqual(dummy_redis.store, {})
+
+            # 日本語: 復旧後は再取得され、以後の書き込みが Redis に載ります。
+            # English: After recovery the client is fetched again and writes hit Redis.
+            store.create_room("sid", "redis-room", "title")
+            self.assertIn(store._key("sid", "redis-room"), dummy_redis.store)
+
+    # 日本語: 取得できたクライアントは再利用され、毎回作り直さないことを検証します。
+    # English: Verify an acquired client is reused instead of being rebuilt each time.
+    def test_redis_client_is_cached_once_available(self):
+        dummy_redis = DummyRedis()
+        with patch(
+            "services.ephemeral_store.get_redis_client",
+            return_value=dummy_redis,
+        ) as mock_get_client:
+            store = EphemeralChatStore(expiration_seconds=60)
+            store.create_room("sid", "room", "title")
+            store.get_room("sid", "room")
+            store.append_message("sid", "room", "user", "hello")
+
+            mock_get_client.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,18 +22,22 @@ class EphemeralChatStore:
         self.expiration_seconds = expiration_seconds
         self._memory = {}
         self._redis = None
-        self._redis_initialized = False
 
     # 遅延初期化でRedisクライアントを取得します。
     # Retrieve the Redis client using lazy initialization.
     def _get_redis(self):
         # Avoid network access during module import; CI/unit tests often import
         # chat routes without a Redis service available.
-        # Redisクライアントがまだ初期化されていない場合、初期化を行います。
-        # Initialize the Redis client if it has not been initialized yet.
-        if not self._redis_initialized:
+        # 取得できたクライアントだけをキャッシュする。None をキャッシュすると Redis 断や
+        # クールダウン中に一度空振りしただけで、そのワーカーは二度と Redis を使わなくなり、
+        # ゲストの履歴がプロセスローカルのメモリに閉じ込められてしまう。
+        # Cache only a real client. Caching None would latch this worker into the
+        # in-memory fallback for its whole lifetime after a single miss during a
+        # Redis outage or the retry cooldown, losing guest history across workers.
+        # 再取得のコストは `get_redis_client()` 側のクールダウンで抑えられている。
+        # The cost of retrying is bounded by the cooldown inside `get_redis_client()`.
+        if self._redis is None:
             self._redis = get_redis_client()
-            self._redis_initialized = True
         return self._redis
 
     # 一時チャットのRedisキーまたはメモリキーを生成します。
