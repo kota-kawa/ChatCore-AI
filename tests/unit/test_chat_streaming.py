@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -670,6 +671,88 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 無出力の判断は回答のみ要求で1度だけやり直し、それ以上は繰り返さない。
         # An empty decision is retried once as an answer-only request, never more.
         self.assertEqual(mock_stream.call_count, 2)
+
+    # 日本語: 生成失敗の後片付け（未回答発話の破棄など）が、ストリーム終端イベントの配信より
+    #         前に完了していることを検証します。順序が逆だと SSE 消費側が掃除前の履歴を読みます。
+    # English: Verify the failure cleanup finishes before the terminal stream event is delivered.
+    #          The reverse order lets SSE consumers read history the cleanup has not touched yet.
+    def test_generation_error_runs_cleanup_before_publishing_terminal_event(self):
+        cleanup_finished = threading.Event()
+
+        # 日本語: 実際の後片付けはDB操作で時間がかかるため、滞留を再現して順序違反を確実に捉える。
+        # English: Real cleanup hits the database, so linger here to catch an order violation.
+        def slow_cleanup():
+            time.sleep(0.05)
+            cleanup_finished.set()
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
+        ):
+            job = start_generation_job(
+                "guest:sid-cleanup-order:default",
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+                on_error=slow_cleanup,
+            )
+
+            # 各フレームを受け取った瞬間に後片付けの完了状態を記録する。
+            # Record whether cleanup had finished at the moment each frame arrived.
+            observed = [
+                (frame.decode("utf-8"), cleanup_finished.is_set())
+                for frame in _iter_llm_stream_events(job)
+            ]
+
+        error_frames = [
+            (frame, cleanup_done)
+            for frame, cleanup_done in observed
+            if "event: error" in frame
+        ]
+        self.assertEqual(len(error_frames), 1)
+        # 終端イベントを受け取った時点で後片付けは完了済みでなければならない。
+        # Cleanup must already be complete by the time the terminal event is received.
+        self.assertTrue(
+            error_frames[0][1],
+            "error event was delivered before the failure cleanup finished",
+        )
+        self.assertTrue(cleanup_finished.is_set())
+
+    # 日本語: 後片付けが例外を投げても、エラーイベント自体は必ず配信されることを検証します。
+    # English: Verify the error event is still delivered even when the cleanup callback raises.
+    def test_generation_error_event_is_published_when_cleanup_raises(self):
+        cleanup_calls = []
+
+        # 日本語: 後片付けが失敗する状況を再現する。
+        # English: Reproduce a failing cleanup callback.
+        def failing_cleanup():
+            cleanup_calls.append(True)
+            raise RuntimeError("cleanup failed")
+
+        # 日本語: ジョブは別スレッドで走るため、起動前からログを捕捉する。
+        # English: The job runs on another thread, so capture logs from before it starts.
+        with self.assertLogs("services.chat_generation", level="ERROR") as logs:
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
+            ):
+                job = start_generation_job(
+                    "guest:sid-cleanup-raises:default",
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda response: None,
+                    on_error=failing_cleanup,
+                )
+
+                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(cleanup_calls), 1)
+        self.assertIn("event: error", body)
+        self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        self.assertTrue(
+            any("Failed to run chat generation error callback." in entry for entry in logs.output),
+            "the cleanup failure must be logged instead of being swallowed",
+        )
 
     # 日本語: 最後の判断が内部封筒だけで本文を返さなかった場合、回答のみ要求で1度やり直し、
     # その本文を保存して done で終えることを検証します。
