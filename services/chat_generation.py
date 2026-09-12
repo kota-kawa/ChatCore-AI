@@ -833,8 +833,8 @@ class ChatGenerationJob:
         self._on_finished_called = True
         return self._on_finished
 
-    # エラー情報を設定し、errorイベントを発行してジョブを終了する
-    # Set error details, publish an error event, and terminate the job
+    # エラー情報を設定し、後片付けを終えてから errorイベントを発行してジョブを終了する
+    # Set error details, finish cleanup, then publish an error event and terminate the job
     def _handle_error(
         self,
         message: str,
@@ -843,12 +843,25 @@ class ChatGenerationJob:
         invoke_error_callback: bool = False,
     ) -> None:
         self.error_message = message
+        # 後片付けは done=True の配信より前に完了させる。SSE の消費側は終端イベントを
+        # 受け取った時点で履歴の再取得などへ進むため、順序が逆だと未回答のユーザー発話が
+        # まだ残った状態を読んでしまう。
+        # Finish cleanup before publishing the terminal (done=True) event. SSE consumers move
+        # on — reloading history, for instance — as soon as they see the stream end, so the
+        # reverse order lets them observe a user message the cleanup has not discarded yet.
+        self._run_error_callback(invoke_error_callback)
         self._publish("error", payload, done=True)
+
+    # エラーコールバックを実行する。失敗してもエラーイベントの配信は止めない。
+    # Run the error callback; a failure here must never block the error event.
+    def _run_error_callback(self, invoke_error_callback: bool) -> None:
         if not invoke_error_callback or self._on_error is None:
             return
         try:
             self._on_error()
         except Exception:
+            # 握りつぶさずログへ残す。掃除に失敗してもユーザーへはエラーを届ける。
+            # Log instead of swallowing silently: the user still gets the error event.
             logger.exception("Failed to run chat generation error callback.")
 
     # キャンセルを監視しながら、指定された秒数待機（スリープ）する
