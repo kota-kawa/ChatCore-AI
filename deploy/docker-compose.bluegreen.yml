@@ -179,6 +179,7 @@ services:
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
       - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
+      - AVATAR_UPLOAD_DIR=/app/data/uploads/avatars
       # Per-user total of normalized display + card variants (100 MiB default).
       - PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}
     ports:
@@ -188,6 +189,7 @@ services:
     volumes:
       # Both colors share one persistent upload store across traffic switches.
       - prompt_share_uploads:/app/data/uploads/prompt_share
+      - avatar_uploads:/app/data/uploads/avatars
     depends_on:
       db:
         condition: service_healthy
@@ -261,3 +263,5 @@ volumes:
   redis_data:
   prompt_share_uploads:
     name: ${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}
+  avatar_uploads:
+    name: ${AVATAR_UPLOAD_VOLUME:-chatcore-ai_avatar_uploads}

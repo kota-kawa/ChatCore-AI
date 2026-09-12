@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.avatar_storage import normalize_avatar_url
 from services.models import (
     GuestPromptSubmission,
     Prompt,
@@ -46,13 +47,27 @@ def _rowcount(result: Any) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
+# 日本語: 行に含まれるアバターURLの列名です。旧 `/static/uploads/...` が残った行も
+#         読み出し時に現行の配信URLへ読み替えます。
+# English: Row keys carrying an avatar URL. Rows still holding the legacy
+#          `/static/uploads/...` value are rewritten to the served URL on read.
+_AVATAR_ROW_KEYS = ("author_avatar_url", "avatar_url")
+
+
+def _normalize_row_avatars(row: dict[str, Any]) -> dict[str, Any]:
+    for key in _AVATAR_ROW_KEYS:
+        if key in row:
+            row[key] = normalize_avatar_url(row[key])
+    return row
+
+
 def _rows(result: Any) -> list[dict[str, Any]]:
-    return [dict(row) for row in result.mappings().all()]
+    return [_normalize_row_avatars(dict(row)) for row in result.mappings().all()]
 
 
 def _first(result: Any) -> dict[str, Any] | None:
     row = result.mappings().first()
-    return dict(row) if row is not None else None
+    return _normalize_row_avatars(dict(row)) if row is not None else None
 
 
 class SharedContentRepository:

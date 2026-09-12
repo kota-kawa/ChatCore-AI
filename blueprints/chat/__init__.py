@@ -77,7 +77,17 @@ def cleanup_ephemeral_chats():
 
 # ルートハンドラを import して APIRouter へ登録する
 # Import route modules so handlers are registered on APIRouter.
-from . import messages, preferences, profile, projects, rooms, skills, tasks, views  # noqa: F401, E402
+from . import (  # noqa: F401, E402
+    avatar_media,
+    messages,
+    preferences,
+    profile,
+    projects,
+    rooms,
+    skills,
+    tasks,
+    views,
+)
 
 __all__ = [
     "EXPIRATION_TIME",

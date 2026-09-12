@@ -59,7 +59,8 @@ erDiagram
 - メール認証の短命トランザクションは Redis の `email_auth_transaction:<id>` に保存し、コードdigest、ユーザー、flow、試行回数を専用HttpOnly Cookieと紐づけます。ログイン・新規登録の認証コードは一般セッションへ保存せず、Redisの `WATCH`／`MULTI`／`EXEC` による楽観的排他で検証・試行回数更新・消費を行います。
 - キャッシュ、日次・月次クォータ、single-flight lock、チャット生成のイベント協調は Redis を使います。
 - プロンプト共有画像の表示用・カード用 WebP は `PROMPT_SHARE_UPLOAD_DIR` の永続 Docker volume に保存されます。DB は添付 descriptor と参照関係の source of truth です。
-- エフェメラルチャットの削除、添付ファイルの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
+- アバター画像は `AVATAR_UPLOAD_DIR` の永続 Docker volume に保存し、`/api/user/avatars/<filename>` としてアプリが配信します。`users.avatar_url` が source of truth で、旧 `/static/uploads/<filename>` は読み出し時に `services/avatar_storage.py` の `normalize_avatar_url` が現行URLへ読み替えます。既定アイコン `/static/user-icon.png` は frontend の静的アセットです。
+- エフェメラルチャットの削除、添付ファイルとアバターの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
 
 ## スキーマ変更を追う場所
 

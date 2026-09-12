@@ -38,6 +38,28 @@ ERROR_SHARED_SKILL_CONTENT_MISSING = "追加できるSkill本文がありませ�
 MESSAGE_SHARED_SKILL_ADDED = "Skillに追加しました。"
 MESSAGE_SHARED_SKILL_ALREADY_ADDED = "すでにSkillに追加済みです。"
 ERROR_MEMO_NOT_FOUND_FOR_SHARE = "共有対象のメモが見つかりません。"
+
+# アバター画像のアップロードと配信でユーザーに提示する文言です。
+# User-facing messages for avatar image upload and delivery.
+ERROR_AVATAR_FILENAME_INVALID = "画像ファイル名が不正です。"
+ERROR_AVATAR_EXTENSION_UNSUPPORTED = "画像は JPG / PNG / GIF / WebP のいずれかを指定してください。"
+ERROR_AVATAR_MIME_UNSUPPORTED = "画像ファイルのみアップロードできます。"
+ERROR_AVATAR_FORMAT_UNDETECTED = "画像形式を判別できませんでした。"
+ERROR_AVATAR_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
+ERROR_AVATAR_CONTENT_TYPE_MISMATCH = "Content-Typeと画像形式が一致しません。"
+ERROR_AVATAR_TOO_LARGE = "画像サイズは5MB以下にしてください。"
+ERROR_AVATAR_NOT_FOUND = "アバター画像が見つかりません。"
+
+# プロフィール取得・更新エンドポイントでユーザーに提示する文言です。
+# User-facing messages for the profile read/update endpoint.
+ERROR_USER_NOT_FOUND = "ユーザーが存在しません"
+ERROR_USERNAME_REQUIRED = "ユーザー名は必須です"
+ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION = (
+    "メールアドレスを変更するには、新しいアドレス宛に送信される"
+    "認証コードによる確認が必要です。設定画面の「メールアドレス変更」"
+    "からお手続きください。"
+)
+MESSAGE_PROFILE_UPDATED = "プロフィールを更新しました"
 ERROR_INVALID_PROMPT_FEED_CURSOR = "プロンプト一覧のカーソルが不正です。"
 ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件が不正です。"
 ERROR_PROMPT_NOT_FOUND = "プロンプトが見つかりません"

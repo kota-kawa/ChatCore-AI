@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.avatar_storage import normalize_avatar_url
 from services.models import (
     ChatRoom,
     MemoEntry,
@@ -47,6 +48,19 @@ class UserRepository:
     async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         user = await self.session.scalar(select(User).where(User.email == email).limit(1))
         return self._serialize_user(user) if user is not None else None
+
+    async def list_active_avatar_urls(self) -> list[str]:
+        """Read every avatar URL still referenced by a user row.
+
+        アバターの孤児ファイル掃除は、プロンプト添付と同じく DB を正として
+        照合する。保存済みの値は正規化せずそのまま返し、旧形式のURLも
+        参照済みとして扱えるようにする。
+        English: The avatar reconciler treats the database as the source of
+        truth. Stored values are returned verbatim so legacy URLs still count
+        as referenced.
+        """
+        values = await self.session.scalars(select(User.avatar_url).where(User.avatar_url.is_not(None)))
+        return [str(value) for value in values if value]
 
     async def update_user_profile(
         self,
@@ -184,7 +198,9 @@ class UserRepository:
             "created_at": user.created_at,
             "username": user.username,
             "bio": user.bio,
-            "avatar_url": user.avatar_url,
+            # 旧 `/static/uploads/...` を現行の配信URLへ読み替えて返す。
+            # Rewrite the legacy `/static/uploads/...` value to the served URL.
+            "avatar_url": normalize_avatar_url(user.avatar_url),
             "llm_profile_context": user.llm_profile_context,
             "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
             "preferred_locale": user.preferred_locale,
