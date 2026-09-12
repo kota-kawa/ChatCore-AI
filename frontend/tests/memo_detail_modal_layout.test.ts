@@ -47,3 +47,25 @@ test("the memo detail action row stays one line and scrolls horizontally on phon
   assert.ok(bodyRule, "the memo body must keep a flex layout");
   assert.match(bodyRule[1], /overflow:\s*hidden/);
 });
+
+test("a coloured memo paints the whole detail modal surface, not just a band", () => {
+  const accentRule = memoCss.match(/\.memo-modal__content\.has-accent\s*\{([\s\S]*?)\}/);
+  assert.ok(accentRule, "the accented detail panel must be styled");
+  assert.match(
+    accentRule[1],
+    /background:\s*var\(--memo-detail-color\)/,
+    "the panel surface must take the memo's colour instead of the default white",
+  );
+  assert.match(
+    accentRule[1],
+    /--modal-surface:\s*color-mix\([^;]*var\(--memo-detail-color\)/,
+    "controls on the coloured panel must sit on a lighter mix of the same colour",
+  );
+  assert.match(accentRule[1], /--modal-text:\s*#202124/, "the coloured panel keeps dark text in both themes");
+
+  assert.doesNotMatch(
+    memoCss,
+    /\.memo-modal__content\.has-accent \.memo-modal__header::before/,
+    "the thin colour band is redundant once the whole surface carries the colour",
+  );
+});

@@ -1,5 +1,6 @@
 /* Compact personal Skill controls that sit below the task cards. */
 :where(body.chat-page, .chat-page-shell) .skill-section {
+  --skill-chip-row-width: 15rem;
   width: 100%;
   margin-top: 0.15rem;
   padding: 0.78rem 0.9rem 0.82rem;
@@ -88,10 +89,15 @@
   scrollbar-width: thin;
 }
 
+/* Skill のピルは名前の長さに関係なく同じ大きさにする。行幅を固定し、
+   名前だけが残りの幅を使って足りなければ省略記号で切る。
+   Every skill pill is the same size regardless of the name's length: the row width is
+   fixed and only the name takes the remaining space, truncating with an ellipsis. */
 :where(body.chat-page, .chat-page-shell) .skill-chip-row {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
+  flex: 0 0 var(--skill-chip-row-width);
+  width: var(--skill-chip-row-width);
   min-width: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.8);
@@ -107,8 +113,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 16rem;
   height: 36px;
   padding: 0 0.6rem 0 0.7rem;
   border: 0;
@@ -170,6 +176,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.32rem;
+  flex: 0 0 auto;
   height: 36px;
   padding: 0 0.62rem 0 0.55rem;
   border: 0;
@@ -228,6 +235,7 @@
 :where(body.chat-page, .chat-page-shell) .skill-chip__delete {
   width: 30px;
   height: 30px;
+  flex: 0 0 auto;
   margin-right: 3px;
   padding: 0;
   border: 0;
@@ -377,7 +385,10 @@
     overflow-x: visible;
   }
 
+  /* 縦積みでは主軸が縦になるため、固定幅の flex-basis を解除して横幅いっぱいにする */
+  /* Stacked rows run down the main axis, so drop the fixed basis and use the full width */
   :where(body.chat-page, .chat-page-shell) .skill-chip-row {
+    flex: 0 0 auto;
     width: 100%;
   }
 

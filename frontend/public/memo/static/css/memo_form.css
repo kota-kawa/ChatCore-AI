@@ -5251,16 +5251,31 @@ body.memo-page {
   margin: 0;
 }
 
-/* メモの背景色はヘッダー左端の細い色帯だけで示す
-   The memo's background color is shown only as a thin band at the header's left edge */
-.memo-modal__content.has-accent .memo-modal__header::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 4px;
+/* 色付きメモは、一覧のカード（.memo-item.has-accent）と同じように面そのものをその色にする。
+   差し替えるのは --modal-* トークンだけで、ヘッダーの操作部品やエージェント面は同じ色の
+   淡い混色にして面から浮かせる。配色はパステルなので、ダークテーマでもカードと同様に
+   明るい面＋濃い文字のままにする。
+   A coloured memo paints the whole modal surface, the same way its list card does. Only the
+   --modal-* tokens are swapped: the header controls and the agent panel sit on a lighter mix
+   of the same colour. The palette is pastel, so dark theme keeps the light surface and dark
+   text just like the card. */
+.memo-modal__content.has-accent {
+  --modal-surface: color-mix(in srgb, var(--memo-detail-color) 30%, #ffffff);
+  --modal-surface-muted: color-mix(in srgb, var(--memo-detail-color) 62%, #ffffff);
+  --modal-border: rgba(32, 33, 36, 0.22);
+  --modal-border-soft: rgba(32, 33, 36, 0.14);
+  --modal-text: #202124;
+  --modal-text-muted: #5f6368;
+  --modal-accent: #8f5a17;
+  --modal-accent-hover: #6f4410;
+  --modal-accent-text: #ffffff;
+  --modal-accent-soft: rgba(143, 90, 23, 0.12);
+  --modal-focus-ring: 0 0 0 3px rgba(143, 90, 23, 0.28);
+  --modal-danger: #b3261e;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.38);
   background: var(--memo-detail-color);
+  border-color: color-mix(in srgb, var(--memo-detail-color) 70%, rgba(32, 33, 36, 0.3));
+  color: var(--modal-text);
 }
 
 .memo-modal .memo-modal__title {
