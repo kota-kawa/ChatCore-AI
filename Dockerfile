@@ -21,25 +21,26 @@ COPY . .
 
 RUN chmod +x /app/docker/app-entrypoint.sh
 
-# [JP] 非root実行に切り替える。アプリが書き込むのは logs/、prompt-share の
-#      アップロード先（ボリュームマウント点）、アバター保存先、manual の埋め込み
+# [JP] 非root実行に切り替える。アプリが書き込むのは logs/、prompt-share と
+#      アバターのアップロード先（どちらもボリュームマウント点）、manual の埋め込み
 #      キャッシュだけなので、そこだけ所有権を移し、コード本体は root 所有の
-#      読み取り専用のまま残す。
+#      読み取り専用のまま残す。旧アバター保存先（frontend/public/static/uploads）
+#      は読み取り専用の互換パスになったため、所有権は移さない。
 # [EN] Switch to a non-root user. The app only writes to logs/, the prompt-share
-#      upload directory (a volume mount point), the avatar upload directory and
-#      the manual embedding cache, so only those change ownership; the source
-#      tree stays root-owned and read-only for the runtime user.
+#      and avatar upload directories (both volume mount points) and the manual
+#      embedding cache, so only those change ownership; the source tree stays
+#      root-owned and read-only for the runtime user. The former avatar location
+#      under frontend/public/static/uploads is now a read-only compatibility path.
 RUN groupadd --system --gid 10001 appuser \
     && useradd --system --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin appuser \
     && mkdir -p \
         /app/logs \
         /app/data/uploads/prompt_share \
-        /app/frontend/public/static/uploads \
+        /app/data/uploads/avatars \
         /app/docs/manual \
     && chown -R appuser:appuser \
         /app/logs \
         /app/data \
-        /app/frontend/public/static/uploads \
         /app/docs/manual
 
 USER appuser
