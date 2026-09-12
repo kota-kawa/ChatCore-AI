@@ -82,9 +82,12 @@
 - サブエージェントと git worktree は別の判断軸です。「作業を独立分割できるか」でサブエージェントを、「作業ツリーを共有すると壊れるか」で worktree を判断してください。
 - サブエージェントを使う: 読み取りのみの調査・レビュー、または担当ファイルを重複なく分割できる編集。担当範囲を明確に分け、原則として同じファイルを同時に編集させないでください。
 - worktree を使う（いずれか該当時）: 並列作業が同じ生成物（`frontend/types/generated/api_schemas.ts`、alembic の head、`package-lock.json` など）に触る／別 PR に分けるべき変更を同時に進める／破棄する可能性のある大規模リファクタ／作業ツリーにユーザーの未コミット変更がある。
-- worktree を使わない: `.env` と `frontend/node_modules` は git 管理外のため、新規 worktree では `npm run typecheck`／`npm run test`／`python3 app.py` が動きません。これらの検証が必要な作業と、数ファイル規模の変更は共有ツリーで行ってください。
+- worktree を使わない: 数ファイル規模の変更と、`python3 app.py` の起動が必要な作業。`.env` は git 管理外のため新規 worktree では起動できません。
+- **並行数の上限は worktree の本数ではなく「担当ファイルが重複しないこと」で決めてください。** 同時に走る作業どうしが同じファイルを編集する予定なら、worktree を増やしても解決しません。片方を待たせてください。重複が無ければ機械資源は制約になりません（worktree 1 本あたり数百 MB、`.git` は worktree 間で共有されます）。
 - DB／Redis／ポートは worktree 間で共有されるため、alembic migration の適用や `docker-compose up` を伴う作業は同時に 1 つだけにしてください。
-- 1 worktree = 1 ブランチ = 1 PR とし、同時に開く worktree は 2〜3 本までにしてください。
+- 1 worktree = 1 ブランチ = 1 PR とします。同時にオープンする PR の本数に上限は設けません。ただし並行数を上げるほど、1 本マージするたびに残りを `main` へリベースする手間が増えるため、本数を増やす前に重複の無い単位へ切れているかを確認してください。
+- `main` へのマージは、直前のマージで起動した CI の実行が完了してから行ってください。連続してマージすると、同じ concurrency group に入った先行の実行が打ち切られ、そのコミットの Deploy ジョブが実行されないまま「PR は緑」に見える状態が起こりえます。
+- worktree でフロントエンドを検証する場合は、`frontend/node_modules` を共有ツリーのものへシンボリックリンクしてください（`ln -s <共有ツリー>/frontend/node_modules <worktree>/frontend/node_modules`）。これで `npx tsc --noEmit`／`npx eslint .`／`npx vitest run`／`node scripts/run-logic-tests.cjs` が動きます。**リンク先の共有ツリーを壊すため、`npm install`／`npm ci`／`npm update` は実行しないでください。**
 - データベーススキーマを変更する場合は、新しい Alembic migration と関連テストを追加してください。適用済みまたは既存の migration ファイルを書き換えてはいけません。
 - 新しい依存関係を追加する前に、その必要性と既存の依存関係で代替できないことを確認してください。追加した場合は、理由と影響を PR に記載してください。
 - ユーザーへの説明や、作業・編集途中の経過報告はすべて日本語で表示してください。
