@@ -11,6 +11,7 @@ from blueprints.auth import (
     api_send_email_code,
     api_verify_email_code,
 )
+from services.error_messages import ERROR_PASSKEY_USAGE_UPDATE_FAILED
 from services.web import jsonify
 from tests.helpers.request_helpers import build_request
 
@@ -258,9 +259,9 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertIn("有効期限", payload["error"])
         self.assertNotIn("passkey_authentication", session)
 
-    # 日本語: 使用状況更新失敗するのとき、パスキーauthentication検証保持するログインことを検証します。
-    # English: Verify that passkey authentication verify keeps login when usage update fails.
-    def test_passkey_authentication_verify_keeps_login_when_usage_update_fails(self):
+    # 日本語: 署名カウンタの保存に失敗した場合、ログインさせずに500を返すことを検証します。
+    # English: Verify that a failed sign count update aborts the login and returns HTTP 500.
+    def test_passkey_authentication_verify_rejects_login_when_usage_update_fails(self):
         session = {
             "passkey_authentication": {
                 "challenge": "challenge-token",
@@ -304,9 +305,11 @@ class PasskeyRouteTestCase(unittest.TestCase):
                                             response = asyncio.run(api_passkey_authenticate_verify(request))
 
         payload = json.loads(response.body.decode())
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(payload["status"], "success")
-        self.assertEqual(session["user_id"], 7)
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(payload["status"], "fail")
+        self.assertEqual(payload["error"], ERROR_PASSKEY_USAGE_UPDATE_FAILED)
+        self.assertNotIn("user_id", session)
+        self.assertNotIn("passkey_authentication", session)
 
     # 日本語: レート制限のとき、パスキーauthentication検証返却する429ことを検証します。
     # English: Verify that passkey authentication verify returns 429 when rate limited.

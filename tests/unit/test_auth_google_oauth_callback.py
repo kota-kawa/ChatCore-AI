@@ -1,6 +1,12 @@
+import asyncio
 import unittest
+from unittest.mock import Mock, patch
 
-from blueprints.auth import _build_google_authorization_response
+from blueprints.auth import (
+    GOOGLE_CODE_VERIFIER_SESSION_KEY,
+    _build_google_authorization_response,
+    google_callback,
+)
 from tests.helpers.request_helpers import build_request
 
 
@@ -59,6 +65,89 @@ class GoogleOAuthCallbackUrlTestCase(unittest.TestCase):
         # 日本語: リクエストのホスト情報を使ったURLになることを確認
         # English: Confirm the result is based on the request's own host information
         self.assertEqual(actual, "http://localhost:5004/google-callback?code=devcode")
+
+
+# 日本語: コールバックがstate照合の先へ進めるよう、妥当なGoogleクライアント設定を返します。
+# English: Return a valid Google client configuration so the callback can progress past state verification.
+def valid_google_client_config():
+    return {
+        "web": {
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": [],
+            "javascript_origins": ["https://chatcore-ai.com"],
+        }
+    }
+
+
+# 日本語: レガシーセッション経路のstate照合を検証するテストクラス。
+# English: Test class for the legacy session path's OAuth state verification.
+class GoogleOAuthCallbackStateVerificationTestCase(unittest.TestCase):
+    # 日本語: stateクエリパラメータを省略したコールバックが、照合をすり抜けずに拒否されることを検証します。
+    # English: Verify that a callback without the state query parameter is rejected instead of skipping verification.
+    def test_rejects_callback_without_state_query_parameter(self):
+        # 日本語: セッションにはstateが残っているが、Googleからのstateは付与されていないリクエストを構築
+        # English: Build a request whose session still holds a state while the callback carries none
+        request = build_request(
+            method="GET",
+            path="/google-callback",
+            query_string=b"code=attacker-code",
+            session={
+                "google_oauth_state": "google-state",
+                "google_redirect_uri": "https://chatcore-ai.com/google-callback",
+                GOOGLE_CODE_VERIFIER_SESSION_KEY: "google-pkce-code-verifier",
+            },
+            scheme="https",
+            host_header="chatcore-ai.com",
+            server_host="chatcore-ai.com",
+            server_port=443,
+        )
+        fake_flow_class = Mock()
+
+        with patch("blueprints.auth.Flow", fake_flow_class), patch(
+            "blueprints.auth._google_client_config",
+            side_effect=valid_google_client_config,
+        ):
+            response = asyncio.run(google_callback(request))
+
+        # 日本語: ログイン画面へ差し戻され、トークン交換が一切開始されないことを確認
+        # English: Confirm the user is sent back to the login page and no token exchange is started
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
+        fake_flow_class.from_client_config.assert_not_called()
+        self.assertNotIn("google_oauth_state", request.session)
+
+    # 日本語: stateが一致しないコールバックも同様に拒否されることを検証します。
+    # English: Verify that a callback with a mismatched state is rejected as well.
+    def test_rejects_callback_with_mismatched_state(self):
+        request = build_request(
+            method="GET",
+            path="/google-callback",
+            query_string=b"code=attacker-code&state=other-state",
+            session={
+                "google_oauth_state": "google-state",
+                "google_redirect_uri": "https://chatcore-ai.com/google-callback",
+                GOOGLE_CODE_VERIFIER_SESSION_KEY: "google-pkce-code-verifier",
+            },
+            scheme="https",
+            host_header="chatcore-ai.com",
+            server_host="chatcore-ai.com",
+            server_port=443,
+        )
+        fake_flow_class = Mock()
+
+        with patch("blueprints.auth.Flow", fake_flow_class), patch(
+            "blueprints.auth._google_client_config",
+            side_effect=valid_google_client_config,
+        ):
+            response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
+        fake_flow_class.from_client_config.assert_not_called()
 
 
 if __name__ == "__main__":

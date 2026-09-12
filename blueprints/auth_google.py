@@ -328,8 +328,8 @@ async def google_callback(request: Request):
             return _google_oauth_failure_response(request, session)
 
         if (
-            isinstance(callback_state, str)
-            and not dep("constant_time_compare")(state, callback_state)
+            not isinstance(callback_state, str)
+            or not dep("constant_time_compare")(state, callback_state)
         ):
             dep("logger").warning(
                 "Google OAuth callback rejected because the callback state differs from the session state."

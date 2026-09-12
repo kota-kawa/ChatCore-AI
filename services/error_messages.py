@@ -8,6 +8,9 @@ from __future__ import annotations
 ERROR_LOGIN_REQUIRED = "ログインが必要です"
 ERROR_INVALID_JSON = "JSON形式が不正です。"
 ERROR_TOKEN_REQUIRED = "token is required"
+ERROR_PASSKEY_USAGE_UPDATE_FAILED = (
+    "Passkeyの利用状況を保存できなかったため、ログインを中止しました。しばらくしてからもう一度お試しください。"
+)
 
 # チャットや共有機能関連のエラーメッセージ定義です。
 # Error message definitions related to chat and sharing functionality.
@@ -41,6 +44,14 @@ ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED = "このメディアタイプはフ�
 ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID = "添付ファイル名が不正です。"
 ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED = "許可されていない形式の添付ファイルです。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
+# 添付の有無に関わらず適用されるプロンプト投稿のレート制限文言です。
+# Prompt posting rate limit messages, applied whether or not an attachment is present.
+ERROR_PROMPT_CREATE_RATE_LIMITED = (
+    "プロンプトの投稿回数が多すぎます。しばらく待ってから再試行してください。"
+)
+ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE = (
+    "プロンプトの投稿回数が多すぎます。{seconds}秒ほど待ってから再試行してください。"
+)
 ERROR_MCP_PROMPT_IMAGE_BASE64_INVALID = "画像のBase64データを読み取れませんでした。"
 ERROR_MCP_PROMPT_IMAGE_DATA_URL_INVALID = "画像データURLはBase64形式で指定してください。"
 ERROR_MCP_PROMPT_IMAGE_MIME_UNSUPPORTED = "対応していない画像のMIMEタイプです。"
