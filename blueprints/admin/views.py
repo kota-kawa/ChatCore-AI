@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import RedirectResponse
 
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
+from services.async_utils import run_blocking
 from services.auth_limits import (
     AuthLimitService,
     consume_admin_login_limit,
@@ -512,7 +513,8 @@ async def api_login(
 
     # 管理者ログインのレートリミットを検証・消費
     # Verify and deduct admin login limit bucket.
-    allowed, limit_error = consume_admin_login_limit(
+    allowed, limit_error = await run_blocking(
+        consume_admin_login_limit,
         request,
         service=resolved_auth_limit_service,
     )
@@ -528,7 +530,7 @@ async def api_login(
 
     # パスワード検証を実行
     # Check password correctness.
-    if _verify_admin_password(password):
+    if await run_blocking(_verify_admin_password, password):
         # セッションハイジャック対策としてセッションIDをローテーション
         # Rotate session identifiers to prevent fixation.
         rotate_session_identifier(request)
@@ -553,20 +555,6 @@ async def api_logout(request: Request):
     return jsonify(
         {"status": "success", "redirect": frontend_url("/admin/login")}
     )
-
-
-# 管理者セッションを破棄してログイン画面にリダイレクトするエンドポイント
-# Route endpoint to log out of the administrator session and redirect to login.
-@admin_bp.get("/logout", name="admin.logout")
-@admin_required
-async def logout(request: Request):
-    """
-    管理者ログアウト要求を受け、セッション破棄後にログイン画面へリダイレクト遷移する。
-    Invalidate administration privileges and redirect browser client back to login view.
-    """
-    request.session.pop("is_admin", None)
-    flash(request, "Logged out of administrator session.", "success")
-    return RedirectResponse(frontend_url("/admin/login"), status_code=302)
 
 
 # 管理用ダッシュボードに必要なテーブル一覧と選択テーブルの詳細データをDBからロードする関数
