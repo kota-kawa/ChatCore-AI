@@ -12,6 +12,7 @@ from services.models import (
     ChatHistory,
     ChatRoom,
     ContextFact,
+    McpOAuthGrant,
     MemoEntry,
     Prompt,
     PromptVersion,
@@ -100,6 +101,38 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertTrue(any("WHERE" in statement for statement in index_sql))
         self.assertTrue(any("idx_user_skills_user_source_prompt" in statement for statement in index_sql))
         self.assertTrue(any("idx_chat_rooms_user_last_activity_id" in statement for statement in index_sql))
+        # FK 子カラム側の索引。親1行の削除が子表を全走査しないために要る。
+        # Indexes on the FK child columns, so deleting one parent row does not scan the child table.
+        for index_name in (
+            "idx_memory_facts_room_scope_fact",
+            "idx_memory_facts_source_message_id",
+            "idx_guest_prompt_submissions_claimed_by_user",
+            "idx_user_skills_source_prompt_id",
+            "idx_task_with_examples_source_prompt_id",
+            "idx_mcp_oauth_codes_grant_id",
+            "idx_mcp_oauth_grants_client_id",
+            "idx_mcp_oauth_codes_client_id",
+            "idx_mcp_oauth_tokens_client_id",
+        ):
+            with self.subTest(index=index_name):
+                self.assertTrue(any(index_name in statement for statement in index_sql))
+
+    def test_mcp_oauth_client_id_columns_reference_the_client_table(self):
+        # 20260713_01 は user_id / grant_id にだけ REFERENCES を付け、client_id を素の TEXT の
+        # まま残していた。クライアント削除でグラント・トークンが孤児化する。
+        # 20260713_01 gave user_id and grant_id a REFERENCES clause and left client_id bare TEXT,
+        # which orphans grants and tokens when a client row is deleted.
+        constraint = next(
+            candidate
+            for candidate in McpOAuthGrant.__table__.foreign_key_constraints
+            if candidate.name == "fk_mcp_oauth_grants_client_id"
+        )
+        self.assertEqual([column.name for column in constraint.columns], ["client_id"])
+        self.assertEqual(
+            [element.target_fullname for element in constraint.elements],
+            ["mcp_oauth_clients.client_id"],
+        )
+        self.assertEqual(constraint.ondelete, "CASCADE")
 
 
 if __name__ == "__main__":
