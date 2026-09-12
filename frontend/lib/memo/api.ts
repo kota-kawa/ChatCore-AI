@@ -1,5 +1,6 @@
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { DEFAULT_LIMIT, MAX_MEMO_LIST_REQUEST_LIMIT } from "./constants";
 import type {
   BulkMemoActionInput,
   Collection,
@@ -13,6 +14,7 @@ import type {
   MemoListPayload,
   MemoListState,
   MemoReorderInput,
+  MemoSummary,
   MemoSuggestPayload,
   MemoUpdateInput,
   SharePayload,
@@ -22,9 +24,9 @@ import type {
 // Memo page data fetching
 // ---------------------------------------------------------------------------
 
-// 指定されたURLからメモ一覧を読み込む非同期関数
-// Async function to load the memo list from the specified URL
-export const loadMemoList = async (url: string): Promise<MemoListState> => {
+// メモ一覧の1ページ分をリクエストする内部関数
+// Internal helper that requests a single page of the memo list
+const loadMemoListPage = async (url: string): Promise<MemoListState> => {
   const res = await resilientFetch(url, { credentials: "same-origin" });
   const data: MemoListPayload = await res.json().catch(() => ({}));
   if (res.status === 401) return { memos: [], total: 0 };
@@ -37,6 +39,45 @@ export const loadMemoList = async (url: string): Promise<MemoListState> => {
     memos: Array.isArray(data.memos) ? data.memos : [],
     total: typeof data.total === "number" ? data.total : 0,
   };
+};
+
+// 指定されたURLからメモ一覧を読み込む非同期関数。
+// バックエンドは1リクエストあたり MAX_MEMO_LIST_REQUEST_LIMIT 件までしか返さないため、
+// URL の `limit` がそれを超える場合は offset をずらして続きを取得し、1つの配列に連結する。
+// Async function to load the memo list from the specified URL. The backend caps one request at
+// MAX_MEMO_LIST_REQUEST_LIMIT rows, so a `limit` above that is fetched as several offset-shifted
+// requests and concatenated into a single flat list.
+export const loadMemoList = async (url: string): Promise<MemoListState> => {
+  const [path, search = ""] = url.split("?");
+  const params = new URLSearchParams(search);
+  const requestedLimit = Number.parseInt(params.get("limit") ?? "", 10);
+  const wanted = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : DEFAULT_LIMIT;
+  const baseOffset = Math.max(0, Number.parseInt(params.get("offset") ?? "", 10) || 0);
+
+  const memos: MemoSummary[] = [];
+  const seen = new Set<string>();
+  let total = 0;
+  let fetchedRows = 0;
+
+  while (memos.length < wanted) {
+    const pageSize = Math.min(MAX_MEMO_LIST_REQUEST_LIMIT, wanted - memos.length);
+    params.set("limit", String(pageSize));
+    params.set("offset", String(baseOffset + fetchedRows));
+    const page = await loadMemoListPage(`${path}?${params.toString()}`);
+    total = page.total;
+    fetchedRows += page.memos.length;
+    // 取得中に他タブでメモが増減すると offset がずれて同じメモが返りうるので id で重複を除く
+    // A concurrent create/delete can shift the offsets and repeat a memo, so de-duplicate by id
+    for (const memo of page.memos) {
+      const id = String(memo.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      memos.push(memo);
+    }
+    if (page.memos.length < pageSize) break;
+  }
+
+  return { memos, total };
 };
 
 // メモのコレクション（タグ/フォルダ）一覧を読み込む非同期関数

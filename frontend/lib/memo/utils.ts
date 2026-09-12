@@ -25,17 +25,21 @@ export function parseMemoText(raw: string | null | undefined) {
   }
 }
 
-// メモ一覧を取得するためのURLを構築する関数
-// Function to build the URL for fetching the memo list
+// メモ一覧を取得するためのURLを構築する関数。`limit` は「もっと読み込む」で段階的に増える
+// 取得件数の上限で、省略時は既定値を使う。
+// Function to build the URL for fetching the memo list. `limit` is the ceiling raised step by step by
+// the "load more" control and falls back to the default when omitted.
 export function buildMemoListUrl(options: {
   query: string;
   sort: string;
   archiveScope: string;
   collectionId: number | null;
+  limit?: number;
+  offset?: number;
 }) {
   const params = new URLSearchParams();
-  params.set("limit", String(DEFAULT_LIMIT));
-  params.set("offset", "0");
+  params.set("limit", String(Math.max(1, Math.floor(options.limit ?? DEFAULT_LIMIT))));
+  params.set("offset", String(Math.max(0, Math.floor(options.offset ?? 0))));
   params.set("sort", options.sort);
   params.set("pinned_first", "1");
 

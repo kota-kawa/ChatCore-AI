@@ -5,6 +5,11 @@ import { absoluteUrl } from "../seo";
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_LIMIT = 50;
+// バックエンド（services/repositories/memo_constants.py の MAX_MEMO_LIST_LIMIT）が 1 リクエストで返す上限。
+// これを超える件数は offset をずらした複数リクエストに分割して取得する。
+// Mirrors MAX_MEMO_LIST_LIMIT in services/repositories/memo_constants.py: the most rows one request can
+// return. Anything beyond it is fetched as several offset-shifted requests.
+export const MAX_MEMO_LIST_REQUEST_LIMIT = 100;
 export const MEMO_ACTION_MENU_WIDTH = 168;
 export const MEMO_ACTION_MENU_ESTIMATED_HEIGHT = 172;
 export const MEMO_ACTION_MENU_GAP = 6;

@@ -42,6 +42,10 @@ type MemoPageListContextValue = Pick<
   | "hasActiveFilters"
   | "memos"
   | "totalMemoCount"
+  | "remainingMemoCount"
+  | "canLoadMoreMemos"
+  | "isLoadingMoreMemos"
+  | "loadMoreMemos"
   | "memoLoadError"
   | "memoListLoading"
   | "collections"
@@ -243,6 +247,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       hasActiveFilters: controller.hasActiveFilters,
       memos: controller.memos,
       totalMemoCount: controller.totalMemoCount,
+      remainingMemoCount: controller.remainingMemoCount,
+      canLoadMoreMemos: controller.canLoadMoreMemos,
+      isLoadingMoreMemos: controller.isLoadingMoreMemos,
+      loadMoreMemos: controller.loadMoreMemos,
       memoLoadError: controller.memoLoadError,
       memoListLoading: controller.memoListLoading,
       collections: controller.collections,
@@ -260,6 +268,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.hasActiveFilters,
       controller.memos,
       controller.totalMemoCount,
+      controller.remainingMemoCount,
+      controller.canLoadMoreMemos,
+      controller.isLoadingMoreMemos,
+      controller.loadMoreMemos,
       controller.memoLoadError,
       controller.memoListLoading,
       controller.collections,
