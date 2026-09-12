@@ -9,7 +9,7 @@ from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
+from services.async_utils import iterate_blocking, run_blocking
 from services.attached_files import decode_attached_files_from_storage
 from services.auth_limits import (
     AuthLimitService,
@@ -300,9 +300,19 @@ def _build_llm_stream_response(
     """
     # バックグラウンド生成ジョブを StreamingResponse へ変換して SSE 配信する
     # Wrap the background generation job with StreamingResponse for SSE delivery.
-
+    #
+    # 同期イテレータをそのまま渡すと Starlette が `iterate_in_threadpool` で回し、
+    # 次のイベントを待つ `next()` が anyio 既定 CapacityLimiter（40トークン）を
+    # ハートビート間隔ぶん占有する。進行中の SSE 1本につき1トークンを握り続けるため、
+    # 同時ストリームが40本を超えるとワーカー内の `run_in_threadpool` が全て止まる。
+    # `iterate_blocking` で SSE 専用プールへ逃がし、共有プールから切り離す。
+    # Handing Starlette a sync iterator makes it drive the stream through
+    # `iterate_in_threadpool`, where each blocking `next()` holds one of anyio's 40 default
+    # capacity tokens for a whole heartbeat interval. Past 40 concurrent streams every
+    # `run_in_threadpool` call in the worker stalls, so the iteration is offloaded to the
+    # dedicated SSE pool instead.
     return StreamingResponse(
-        events,
+        iterate_blocking(events),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

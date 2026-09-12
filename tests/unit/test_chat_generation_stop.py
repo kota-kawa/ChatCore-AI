@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from services.chat_generation import (
     REMOTE_CANCEL_CHECK_INTERVAL_SECONDS,
+    ChatGenerationAlreadyRunningError,
     ChatGenerationService,
 )
 from services.chat_turn_state import strip_turn_state_update
@@ -462,6 +463,63 @@ class ChatGenerationStopTestCase(unittest.TestCase):
             time.sleep(REMOTE_CANCEL_CHECK_INTERVAL_SECONDS + 0.2)
             self.assertFalse(job.is_done)
             job.cancel()
+
+
+# 日本語: Redis へ到達できるつもりで呼び出すと必ず失敗する疑似クライアント。
+# English: Fake client that always fails, standing in for a Redis that stops answering.
+class _UnavailableRedis:
+    # 日本語: ロック取得の SET を常に失敗させます。
+    # English: Always fail the SET used to take the lock.
+    def set(self, *args, **kwargs):
+        raise ConnectionError("redis is unavailable")
+
+
+# 日本語: Redis 障害時に分散ロックがフェイルクローズすることを検証するテストクラス。
+# English: Test class covering the distributed lock failing closed during a Redis outage.
+class ChatGenerationLockFailureTestCase(unittest.TestCase):
+    # 日本語: テストごとにジョブキーを用意します。
+    # English: Prepare the job key for each test.
+    def setUp(self):
+        self.job_key = "user:1:room-lock"
+
+    # 日本語: Redis が例外を返したとき、ロックを取得できたことにしないことを検証します。
+    # English: Verify a Redis failure is never reported as a successfully acquired lock.
+    def test_lock_acquisition_fails_closed_when_redis_raises(self):
+        service = ChatGenerationService(redis_client_getter=_UnavailableRedis)
+
+        with self.assertLogs("services.chat_generation_coordinator", level="ERROR"):
+            acquired, lock_token = service._coordinator.try_acquire_active_job_lock(self.job_key)
+
+        self.assertFalse(acquired)
+        self.assertIsNone(lock_token)
+
+    # 日本語: ロックを確認できないターンは生成を開始せず 409 相当の例外になることを検証します。
+    # English: Verify a turn whose lock cannot be checked never starts and raises the 409 error.
+    def test_generation_does_not_start_when_the_lock_cannot_be_taken(self):
+        service = ChatGenerationService(redis_client_getter=_UnavailableRedis)
+        started = []
+
+        with self.assertLogs("services.chat_generation_coordinator", level="ERROR"):
+            with self.assertRaises(ChatGenerationAlreadyRunningError):
+                service.start_generation_job(
+                    self.job_key,
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda response, **kwargs: started.append(response),
+                )
+
+        self.assertEqual(started, [])
+        self.assertIsNone(service.get_generation_job(self.job_key))
+
+    # 日本語: Redis 未設定（単一プロセス構成）では従来どおり生成を続行できることを検証します。
+    # English: Verify a deployment without Redis still proceeds as before.
+    def test_lock_is_granted_when_redis_is_not_configured(self):
+        service = ChatGenerationService(redis_client_getter=lambda: None)
+
+        acquired, lock_token = service._coordinator.try_acquire_active_job_lock(self.job_key)
+
+        self.assertTrue(acquired)
+        self.assertIsNone(lock_token)
 
 
 if __name__ == "__main__":

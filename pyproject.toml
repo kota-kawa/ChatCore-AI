@@ -83,6 +83,7 @@ python_version = "3.14"
 files = [
     "scripts",
     "services/api_errors.py",
+    "services/async_utils.py",
     "services/env_settings.py",
     "services/error_messages.py",
     "services/runtime_config.py",

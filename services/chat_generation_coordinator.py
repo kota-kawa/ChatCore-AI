@@ -250,7 +250,9 @@ class ChatGenerationCoordinator:
             return False
 
     # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
-    # Attempt to acquire the Redis active job lock for the specified job key
+    # Redis が応答しない場合はフェイルクローズ（未取得扱い）する。
+    # Attempt to acquire the Redis active job lock for the specified job key.
+    # Fails closed (reported as not acquired) when Redis does not answer.
     def try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
         redis_client = self.get_redis_client()
         if redis_client is None:
@@ -267,10 +269,19 @@ class ChatGenerationCoordinator:
                 ex=self._active_job_lock_ttl_seconds,
             )
         except Exception:
+            # ロック状態を確認できない以上、取得できたものとして扱ってはいけない。
+            # フェイルオープンすると Redis 障害中に複数ワーカーが同じターンを生成し、
+            # 回答の二重保存と LLM の二重課金が起きる。取得失敗として扱い、呼び出し側の
+            # 409（生成中）経路へ倒す。Redis 未設定・接続不可（クライアントが None）の
+            # 単一プロセス構成は上の分岐で従来どおり通す。
+            # A lock whose state cannot be read must not be treated as held. Failing open lets
+            # several workers generate the same turn during a Redis outage, double-saving the
+            # answer and double-billing the LLM, so this fails closed instead. Deployments with
+            # no reachable Redis at all still pass through the `is None` branch above.
             logger.exception(
-                "Redis chat generation lock acquisition failed; falling back to in-memory."
+                "Redis chat generation lock acquisition failed; refusing to start the job."
             )
-            return True, None
+            return False, None
 
         if acquired:
             return True, lock_token
