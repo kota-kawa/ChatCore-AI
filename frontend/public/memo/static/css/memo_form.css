@@ -7012,3 +7012,70 @@ body.memo-page {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ============================================================
+   Memo list — "load more" footer
+   一覧の末尾に置く追加読み込み。まだ取得していないメモが残るときだけ描画される。
+   ============================================================ */
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(191, 122, 23, 0.24);
+  border-radius: 999px;
+  padding: 0.42rem 1.15rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--memo-text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-button:hover:not(:disabled),
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-button:focus-visible {
+  background: #fff;
+  border-color: rgba(191, 122, 23, 0.44);
+  color: #8a5a12;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-button i {
+  font-size: 0.95rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-history__load-more-hint {
+  color: var(--memo-text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-history__load-more-button {
+  background: rgba(15, 23, 42, 0.58);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-history__load-more-button:hover:not(:disabled),
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-history__load-more-button:focus-visible {
+  background: rgba(30, 41, 59, 0.86);
+  border-color: rgba(251, 191, 36, 0.38);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-history__load-more-hint {
+  color: #94a3b8;
+}

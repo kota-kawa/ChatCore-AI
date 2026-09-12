@@ -19,6 +19,10 @@ export function MemoHistoryPanel() {
   const {
     activeCollection,
     totalMemoCount,
+    remainingMemoCount,
+    canLoadMoreMemos,
+    isLoadingMoreMemos,
+    loadMoreMemos,
     memoLoadError,
     memoListLoading,
     memos,
@@ -267,6 +271,25 @@ export function MemoHistoryPanel() {
                           {otherMemos.map(renderMemoCard)}
                         </ul>
                       </section>
+                    )}
+                    {canLoadMoreMemos && (
+                      <div className="memo-history__load-more">
+                        <button
+                          type="button"
+                          className="memo-history__load-more-button"
+                          onClick={loadMoreMemos}
+                          disabled={isLoadingMoreMemos}
+                        >
+                          <i
+                            className={`bi ${isLoadingMoreMemos ? "bi-arrow-repeat memo-spin" : "bi-arrow-down-circle"}`}
+                            aria-hidden="true"
+                          ></i>
+                          {isLoadingMoreMemos ? t("memo.loadingMore") : t("memo.loadMoreMemos")}
+                        </button>
+                        <span className="memo-history__load-more-hint">
+                          {t("memo.remainingCount", { count: remainingMemoCount })}
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
