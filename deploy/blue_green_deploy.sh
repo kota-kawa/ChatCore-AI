@@ -343,13 +343,79 @@ write_upstream_files() {
   write_text_as_root "${NGINX_UPSTREAM_DIR}/frontend_active.conf" "server 127.0.0.1:${frontend_port};"$'\n'
 }
 
+UPSTREAM_FILE_NAMES=(backend_active.conf frontend_active.conf)
+UPSTREAM_BACKUP_DIR=""
+
+discard_upstream_backup() {
+  if [ -n "${UPSTREAM_BACKUP_DIR}" ] && [ -d "${UPSTREAM_BACKUP_DIR}" ]; then
+    rm -rf "${UPSTREAM_BACKUP_DIR}"
+  fi
+  UPSTREAM_BACKUP_DIR=""
+}
+
+# [JP] upstream ファイルを書き換える前の内容を退避する。
+# [EN] Snapshot the current upstream files before they are rewritten.
+capture_upstream_backup() {
+  local name
+
+  discard_upstream_backup
+  UPSTREAM_BACKUP_DIR="$(mktemp -d)"
+  for name in "${UPSTREAM_FILE_NAMES[@]}"; do
+    if [ -f "${NGINX_UPSTREAM_DIR}/${name}" ]; then
+      cp "${NGINX_UPSTREAM_DIR}/${name}" "${UPSTREAM_BACKUP_DIR}/${name}"
+    fi
+  done
+}
+
+# [JP] 書き換えに失敗したときは必ず元の upstream ファイルへ戻す。
+# [EN] Always put the previous upstream files back when a rewrite fails.
+restore_upstream_backup() {
+  local name
+
+  if [ -z "${UPSTREAM_BACKUP_DIR}" ] || [ ! -d "${UPSTREAM_BACKUP_DIR}" ]; then
+    return 0
+  fi
+
+  for name in "${UPSTREAM_FILE_NAMES[@]}"; do
+    if [ -f "${UPSTREAM_BACKUP_DIR}/${name}" ]; then
+      run_root install -m 644 "${UPSTREAM_BACKUP_DIR}/${name}" "${NGINX_UPSTREAM_DIR}/${name}" || true
+    else
+      run_root rm -f "${NGINX_UPSTREAM_DIR}/${name}" || true
+    fi
+  done
+
+  discard_upstream_backup
+}
+
 write_active_upstreams() {
   local color="$1"
 
-  write_upstream_files "${color}"
-  install_nginx_site_config
+  capture_upstream_backup
 
-  nginx_test
+  if ! write_upstream_files "${color}"; then
+    restore_upstream_backup
+    return 1
+  fi
+
+  if ! install_nginx_site_config; then
+    restore_upstream_backup
+    return 1
+  fi
+
+  # [JP] nginx -t が落ちた時点で書き換え済みファイルを残すと、次の reload で
+  #      停止済みの色へトラフィックが流れる。必ず元へ戻してから失敗させる。
+  # [EN] Leaving a rewritten upstream file behind after a failed nginx -t would
+  #      send traffic to a stopped color on the next reload, so restore first.
+  if ! nginx_test; then
+    echo "nginx -t failed after pointing upstreams at ${color}; restoring the previous upstream files." >&2
+    restore_upstream_backup
+    if ! nginx_test; then
+      echo "Host Nginx configuration is still invalid after restoring the previous upstreams." >&2
+    fi
+    return 1
+  fi
+
+  discard_upstream_backup
   nginx_reload
 }
 
@@ -357,9 +423,16 @@ preflight_nginx_config() {
   local color="$1"
 
   echo "Checking host Nginx configuration before deployment..."
-  write_upstream_files "${color}"
+  capture_upstream_backup
+  if ! write_upstream_files "${color}"; then
+    restore_upstream_backup
+    return 1
+  fi
   if [ -n "${NGINX_SITE_PATH}" ]; then
-    install_nginx_site_config
+    if ! install_nginx_site_config; then
+      restore_upstream_backup
+      return 1
+    fi
   else
     echo "NGINX_SITE_PATH is unset; validating the existing host Nginx configuration." >&2
   fi
@@ -367,8 +440,11 @@ preflight_nginx_config() {
   if ! nginx_test; then
     echo "Host Nginx configuration test failed before application deployment." >&2
     echo "Fix the nginx -t error on the server, then rerun deployment." >&2
+    restore_upstream_backup
     return 1
   fi
+
+  discard_upstream_backup
 }
 
 detect_active_color() {
@@ -681,18 +757,42 @@ write_active_upstreams "${TARGET_COLOR}"
 printf "%s\n" "${TARGET_COLOR}" > "${STATE_FILE}"
 SWITCHED=1
 
+# [JP] ここから先は旧色のコンテナを削除するため、自動ロールバックできない。
+#      ERR トラップを解除しないと、後続の失敗で新色まで停止して全断になる。
+# [EN] The old color is removed below, so automatic rollback is no longer
+#      possible. Disarm the ERR trap here: otherwise a later failure would also
+#      stop the new color and take the whole site down.
+trap - ERR
+echo "Point of no return: automatic rollback is disabled from here on."
+
 if [ "${CURRENT_COLOR}" != "none" ]; then
   stop_color "${CURRENT_COLOR}"
 fi
 
-stop_legacy_services
+POST_SWITCH_FAILED=0
+
+if ! stop_legacy_services; then
+  echo "Failed to stop legacy services after the traffic switch." >&2
+  POST_SWITCH_FAILED=1
+fi
 
 # [JP] 旧バージョンの停止後、安全に破壊的マイグレーション（カラム削除等）を実行
 # [EN] After stopping the old version, safely run destructive migrations (e.g., DROP COLUMN)
-run_post_deploy_cleanup "${TARGET_COLOR}"
+if ! run_post_deploy_cleanup "${TARGET_COLOR}"; then
+  echo "Post-deployment Contract step failed after the traffic switch." >&2
+  echo "The ${TARGET_COLOR} deployment is serving traffic and was left running on purpose." >&2
+  echo "Investigate the failure and rerun the Contract step manually." >&2
+  POST_SWITCH_FAILED=1
+fi
 
-trap - ERR
-
-docker system prune -a -f >/dev/null 2>&1 || true
 compose ps
 echo "Active deployment color: ${TARGET_COLOR}"
+
+if [ "${POST_SWITCH_FAILED}" -ne 0 ]; then
+  echo "Traffic switch succeeded but post-switch steps failed; see the errors above." >&2
+  exit 1
+fi
+
+# [JP] 直近のイメージは即時ロールバックに必要なので、24時間より古いものだけ削除する。
+# [EN] Keep recent images so an immediate manual rollback stays possible.
+docker system prune -a -f --filter "until=24h" >/dev/null 2>&1 || true
