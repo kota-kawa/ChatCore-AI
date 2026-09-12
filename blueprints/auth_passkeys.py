@@ -13,6 +13,7 @@ from blueprints.auth_common import (
     _user_id_from_session,
 )
 from blueprints.auth_support import call_dependency, dep, get_auth_limit_service_dependency
+from services.error_messages import ERROR_PASSKEY_USAGE_UPDATE_FAILED
 
 
 async def api_list_passkeys(request: Request):
@@ -288,9 +289,8 @@ async def api_passkey_authenticate_verify(
             status_code=400,
         )
 
-    dep("establish_authenticated_session")(request, int(passkey["user_id"]), user["email"])
-    dep("clear_passkey_session")(request.session)
-
+    # 署名カウンタは認証器のクローン検知に使うため、保存できないままログインさせない。
+    # The sign count drives authenticator clone detection, so never sign in when it cannot be stored.
     try:
         await call_dependency(
             "update_passkey_usage",
@@ -300,10 +300,16 @@ async def api_passkey_authenticate_verify(
             credential_device_type=str(verified.credential_device_type.value),
         )
     except Exception:
-        dep("logger").exception(
-            "Passkey authentication: failed to update credential usage for passkey %s",
-            passkey["id"],
+        dep("clear_passkey_session")(request.session)
+        return dep("log_and_internal_server_error")(
+            dep("logger"),
+            f"Passkey authentication: failed to update credential usage for passkey {passkey['id']}",
+            status="fail",
+            message=ERROR_PASSKEY_USAGE_UPDATE_FAILED,
         )
+
+    dep("establish_authenticated_session")(request, int(passkey["user_id"]), user["email"])
+    dep("clear_passkey_session")(request.session)
 
     await _copy_default_tasks_after_login(
         int(passkey["user_id"]),

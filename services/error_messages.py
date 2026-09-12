@@ -8,6 +8,9 @@ from __future__ import annotations
 ERROR_LOGIN_REQUIRED = "ログインが必要です"
 ERROR_INVALID_JSON = "JSON形式が不正です。"
 ERROR_TOKEN_REQUIRED = "token is required"
+ERROR_PASSKEY_USAGE_UPDATE_FAILED = (
+    "Passkeyの利用状況を保存できなかったため、ログインを中止しました。しばらくしてからもう一度お試しください。"
+)
 
 # チャットや共有機能関連のエラーメッセージ定義です。
 # Error message definitions related to chat and sharing functionality.
