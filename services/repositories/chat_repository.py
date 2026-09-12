@@ -36,6 +36,7 @@ from services.repositories.chat_room_access import load_owned_room, serialize_ro
 from services.share_common import (
     SHARED_TOKEN_MAX_COLLISION_RETRIES,
     SHARED_TOKEN_RETRY_BACKOFF_SECONDS,
+    TokenShareLifecycle,
     generate_share_token,
     is_unique_violation,
 )
@@ -332,18 +333,71 @@ class ChatRepository:
             raise ForbiddenOperationError(forbidden_message)
         return str(row[1] or "normal")
 
-    async def create_or_get_shared_chat_token(self, room_id: str, user_id: int) -> str:
+    async def _load_share_row(self, room_id: str) -> dict[str, Any] | None:
+        """Read the share-link lifecycle row owned by ``room_id``."""
+
+        result = await self.session.execute(
+            select(
+                SharedChatRoom.share_token,
+                SharedChatRoom.expires_at,
+                SharedChatRoom.revoked_at,
+            ).where(SharedChatRoom.chat_room_id == room_id)
+        )
+        row = result.mappings().first()
+        return dict(row) if row is not None else None
+
+    @staticmethod
+    def _is_active_share(row: dict[str, Any]) -> bool:
+        return TokenShareLifecycle(
+            row.get("share_token"),
+            row.get("expires_at"),
+            row.get("revoked_at"),
+        ).is_active
+
+    async def create_or_get_shared_chat_token(
+        self,
+        room_id: str,
+        user_id: int,
+        *,
+        expires_at: datetime | None = None,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
+        """Return the active share link for a room, minting a new token when needed.
+
+        A revoked or expired row is replaced by a fresh token instead of being
+        resurrected, so revoking a link can never be undone by re-opening the
+        share dialog.
+        """
+
         await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)
+        if not force_refresh:
+            existing = await self._load_share_row(room_id)
+            if existing is not None and self._is_active_share(existing):
+                return {**existing, "is_reused": True}
         for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
             token = generate_share_token(self._token_generator)
             statement = (
                 pg_insert(SharedChatRoom)
-                .values(chat_room_id=room_id, share_token=token)
+                .values(
+                    chat_room_id=room_id,
+                    share_token=token,
+                    expires_at=expires_at,
+                    revoked_at=None,
+                )
                 .on_conflict_do_update(
                     index_elements=[SharedChatRoom.chat_room_id],
-                    set_={"chat_room_id": room_id},
+                    set_={
+                        "share_token": token,
+                        "expires_at": expires_at,
+                        "revoked_at": None,
+                        "created_at": func.current_timestamp(),
+                    },
                 )
-                .returning(SharedChatRoom.share_token)
+                .returning(
+                    SharedChatRoom.share_token,
+                    SharedChatRoom.expires_at,
+                    SharedChatRoom.revoked_at,
+                )
             )
             try:
                 # A collision must roll back only this insert attempt.  The
@@ -351,8 +405,10 @@ class ChatRepository:
                 # transaction, so rolling back the whole AsyncSession here
                 # would silently discard unrelated work.
                 async with self.session.begin_nested():
-                    row = (await self.session.execute(statement)).first()
-                return str(row[0]) if row else token
+                    row = (await self.session.execute(statement)).mappings().first()
+                if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
+                    return {"share_token": token, "expires_at": expires_at, "revoked_at": None, "is_reused": False}
+                return {**dict(row), "is_reused": False}
             except IntegrityError as exc:
                 if not _is_unique_violation(exc):
                     raise
@@ -360,12 +416,45 @@ class ChatRepository:
                 await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)
         raise RuntimeError("Failed to create shared chat token after collision retries.")
 
+    async def revoke_shared_chat_token(self, room_id: str, user_id: int) -> dict[str, Any] | None:
+        """Revoke the room's share link and return its resulting lifecycle state.
+
+        ``None`` means the room never had a share link.  Re-revoking keeps the
+        first ``revoked_at`` so audit trails stay truthful.
+        """
+
+        await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)
+        result = await self.session.execute(
+            update(SharedChatRoom)
+            .where(
+                SharedChatRoom.chat_room_id == room_id,
+                SharedChatRoom.revoked_at.is_(None),
+            )
+            .values(revoked_at=func.current_timestamp())
+            .returning(
+                SharedChatRoom.share_token,
+                SharedChatRoom.expires_at,
+                SharedChatRoom.revoked_at,
+            )
+        )
+        row = result.mappings().first()
+        if row is not None:
+            return dict(row)
+        return await self._load_share_row(room_id)
+
     async def get_shared_chat_room_payload(self, token: str) -> dict[str, Any]:
         row = (
             await self.session.execute(
                 select(ChatRoom.id, ChatRoom.title, ChatRoom.created_at)
                 .join(SharedChatRoom, SharedChatRoom.chat_room_id == ChatRoom.id)
-                .where(SharedChatRoom.share_token == token)
+                .where(
+                    SharedChatRoom.share_token == token,
+                    SharedChatRoom.revoked_at.is_(None),
+                    (
+                        SharedChatRoom.expires_at.is_(None)
+                        | (SharedChatRoom.expires_at > func.current_timestamp())
+                    ),
+                )
                 .limit(1)
             )
         ).one_or_none()

@@ -24,12 +24,18 @@ from services.chat_service import (
     get_shared_chat_room_payload,
     list_chat_rooms,
     rename_chat_room_in_db,
+    revoke_shared_chat_token,
     validate_room_owner,
 )
 from services.error_messages import (
+    ERROR_CHAT_ROOM_ID_REQUIRED,
     ERROR_CHAT_ROOM_NOT_FOUND,
+    ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
+    ERROR_CHAT_ROOM_TEMPORARY_NOT_SHAREABLE,
     ERROR_LOGIN_REQUIRED,
+    ERROR_SHARED_LINK_NOT_FOUND,
     ERROR_TOKEN_REQUIRED,
+    MESSAGE_CHAT_SHARE_REVOKED,
 )
 from services.project_service import assign_room_to_project
 from services.request_models import (
@@ -690,6 +696,33 @@ async def rename_chat_room(request: Request):
         return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
 
 
+# 共有状態のレスポンスペイロードを組み立てる関数
+# Build the response payload describing a chat room's share-link state.
+def _chat_share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
+    share_token = str(share_state.get("share_token") or "")
+    share_url = ""
+    # 有効なトークンのときだけ共有URLを返し、失効・期限切れでは空にする
+    # Only an active token gets a URL; revoked or expired links report an empty one.
+    if share_token and bool(share_state.get("is_active")):
+        share_url = build_public_share_url("chat", share_token)
+    return {**share_state, "share_url": share_url}
+
+
+# 共有操作が許されないルームを弾く関数（未所有・一時チャット）
+# Reject rooms that cannot be shared: other users' rooms and temporary chats.
+async def _reject_unshareable_room(user_id: int, room_id: str) -> Any:
+    room_mode, legacy_response = await _resolve_authenticated_room_mode(
+        user_id,
+        room_id,
+        ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
+    )
+    if legacy_response is not None:
+        return legacy_response
+    if room_mode == "temporary":
+        return jsonify({"error": ERROR_CHAT_ROOM_TEMPORARY_NOT_SHAREABLE}, status_code=400)
+    return None
+
+
 # チャットルーム共有用トークンおよびURLを生成するAPIエンドポイント
 # API endpoint to generate a share token and link for a room.
 @chat_bp.post("/api/share_chat_room", name="chat.share_chat_room")
@@ -711,7 +744,7 @@ async def share_chat_room(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         ShareChatRoomRequest,
-        error_message="room_id is required",
+        error_message=ERROR_CHAT_ROOM_ID_REQUIRED,
     )
     if validation_error is not None:
         return validation_error
@@ -726,41 +759,80 @@ async def share_chat_room(request: Request):
     try:
         # ルームが所有者のものか、および一時ルームではないか検証
         # Verify ownership of room and ensure it is not temporary
-        room_mode, legacy_response = await _resolve_authenticated_room_mode(
-            user_id,
+        share_error = await _reject_unshareable_room(user_id, room_id)
+        if share_error is not None:
+            return share_error
+
+        # 共有トークンの生成または既存トークンの取得（失効・期限切れなら新規発行）
+        # Create a new shared chat token or reuse the active one; revoked/expired links are replaced
+        share_state = await create_or_get_shared_chat_token(
             room_id,
-            "他ユーザーのチャットルームは共有できません",
+            user_id,
+            expires_in_days=payload.expires_in_days,
+            force_refresh=payload.force_refresh,
         )
-        if legacy_response is not None:
-            return legacy_response
-        if room_mode == "temporary":
-            return jsonify({"error": "temporary chat は共有できません"}, status_code=400)
-
-        # 共有トークンの生成または既存トークンの取得
-        # Create a new shared chat token or fetch the existing one from database
-        share_token_result = await create_or_get_shared_chat_token(room_id, user_id)
-        if isinstance(share_token_result, tuple) and len(share_token_result) == 2:
-            share_token, status_code = share_token_result
-            if status_code == 404 or not share_token:
-                return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
-        else:
-            share_token = share_token_result
-
-        # フルURLを生成
-        # Generate the full frontend URL for sharing
-        share_url = build_public_share_url("chat", share_token)
-        return jsonify(
-            {
-                "share_token": share_token,
-                "share_url": share_url,
-            }
-        )
+        return jsonify(_chat_share_payload(share_state))
     except ApiServiceError as exc:
         return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(
             logger,
             "Failed to create share link for chat room.",
+        )
+
+
+# チャットルームの共有リンクを失効させるAPIエンドポイント
+# API endpoint that revokes a chat room's share link.
+@chat_bp.post("/api/revoke_chat_room_share", name="chat.revoke_chat_room_share")
+async def revoke_chat_room_share(request: Request):
+    """
+    共有済みのチャットルームのリンクを失効させ、以後トークンで閲覧できないようにします。
+    Revokes a chat room's share link so the token can no longer be viewed by anyone.
+    """
+    await run_blocking(cleanup_ephemeral_chats)
+
+    # リクエストデータ取得
+    # Extract request payload
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    # スキーマ検証
+    # Validate the revoke payload model
+    payload, validation_error = validate_payload_model(
+        data,
+        ChatRoomIdRequest,
+        error_message=ERROR_CHAT_ROOM_ID_REQUIRED,
+    )
+    if validation_error is not None:
+        return validation_error
+
+    user_id = request.session.get("user_id")
+    # ログインしていない場合は失効不可
+    # Authenticated user session required for revoking
+    if not user_id:
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
+
+    room_id = payload.room_id
+    try:
+        # 所有者本人のDBルームだけが失効操作できる
+        # Only the owner of a persisted room may revoke its link
+        share_error = await _reject_unshareable_room(user_id, room_id)
+        if share_error is not None:
+            return share_error
+
+        # 共有リンクを失効させ、最新の共有状態を返す
+        # Revoke the share link and report the resulting state
+        share_state = await revoke_shared_chat_token(room_id, user_id)
+        if share_state is None:
+            return jsonify({"error": ERROR_SHARED_LINK_NOT_FOUND}, status_code=404)
+        return jsonify({**_chat_share_payload(share_state), "message": MESSAGE_CHAT_SHARE_REVOKED})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to revoke share link for chat room.",
         )
 
 

@@ -202,6 +202,12 @@ class RenameChatRoomRequest(RequestPayloadModel):
 # English: Request payload for sharing a chat room.
 class ShareChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
+    # 既存リンクを破棄して新しいトークンを発行するか。
+    # Whether to discard the current link and mint a new token.
+    force_refresh: bool = False
+    # 有効期限（日数）。省略時は無期限で、既存の共有リンクの挙動を保つ。
+    # Link lifetime in days; omitted means no expiry, matching the existing behaviour.
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
 
 
 # 日本語: 共有チャットを自分のチャットとして複製する際のリクエストペイロード。

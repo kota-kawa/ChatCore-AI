@@ -15,6 +15,7 @@ from services.models import (
     MemoEntry,
     Prompt,
     PromptVersion,
+    SharedChatRoom,
     TaskVersion,
     User,
     UserAuthProvider,
@@ -75,6 +76,12 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertTrue(UserSkill.source_prompt_id.nullable)
         self.assertFalse(User.generative_ui_skill_enabled.nullable)
         self.assertFalse(ChatRoom.last_activity_at.nullable)
+        # 共有チャットの失効・期限は expand のみで追加したため NULL 許容のまま。
+        # Chat share lifecycle columns were added expand-only, so both stay nullable.
+        self.assertTrue(SharedChatRoom.expires_at.nullable)
+        self.assertTrue(SharedChatRoom.revoked_at.nullable)
+        self.assertTrue(SharedChatRoom.expires_at.type.timezone)
+        self.assertTrue(SharedChatRoom.revoked_at.type.timezone)
 
     def test_postgresql_specific_types_and_indexes_compile(self) -> None:
         self.assertIsInstance(User.username.type, Text)

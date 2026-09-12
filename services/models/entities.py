@@ -137,7 +137,15 @@ class SharedChatRoom(Base):
     chat_room_id: Mapped[str] = mapped_column(String(255), ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, unique=True)
     share_token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     created_at: Mapped[datetime | None] = _timestamp()
+    # 失効日時と有効期限。どちらも NULL のときだけリンクが有効。
+    # Revocation and expiry timestamps; a link is active only while both allow it.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # 公開読み取りは share_token、所有者操作は chat_room_id で 1 行に決まり、どちらも
+    # 一意インデックスが既にあるため、失効判定用の追加インデックスは作らない。
+    # Both lookups (share_token for public reads, chat_room_id for owner writes) already
+    # resolve to a single row through unique indexes, so no extra lifecycle index is added.
     __table_args__ = (Index("idx_shared_chat_rooms_token_created_at", "share_token", desc("created_at")),)
 
 

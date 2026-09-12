@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 69d9bb5f6891fee9d832b5b6321edd8b31826b0bbea6f201457579955da41e33
+// Schema fingerprint: 0eea29e96068d84c4c85704bb22343f0d8d2930d26f6bf3da147c02736d8fe09
 
 import { z } from "zod";
 
@@ -26,7 +26,7 @@ export type ChatRoomIdsRequest = z.infer<typeof ChatRoomIdsRequestSchema>;
 export const RenameChatRoomRequestSchema = z.object({ "room_id": z.string().min(1).max(128), "new_title": z.string().min(1) });
 export type RenameChatRoomRequest = z.infer<typeof RenameChatRoomRequestSchema>;
 
-export const ShareChatRoomRequestSchema = z.object({ "room_id": z.string().min(1).max(128) });
+export const ShareChatRoomRequestSchema = z.object({ "room_id": z.string().min(1).max(128), "force_refresh": z.boolean().default(false), "expires_in_days": z.union([z.number().int().gte(1).lte(3650), z.null()]).default(null) });
 export type ShareChatRoomRequest = z.infer<typeof ShareChatRoomRequestSchema>;
 
 export const ForkSharedChatRoomRequestSchema = z.object({ "token": z.string().min(1).max(128), "id": z.string().min(1).max(128) });

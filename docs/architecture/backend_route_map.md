@@ -45,6 +45,12 @@
 `PATCH /api/skills/{skill_id}` で有効状態を切り替え、`DELETE /api/skills/{skill_id}`
 で削除します。すべて所有ユーザーに限定され、状態変更は `chat_bp` のCSRF境界を継承します。
 
+チャットの共有リンクは `POST /api/share_chat_room` で作成または再利用し
+（`force_refresh` で再発行、`expires_in_days` で有効期限を指定）、
+`POST /api/revoke_chat_room_share` で失効させます。どちらも `load_owned_room` の
+所有者確認を通り、一時チャットは対象外です。公開読み取りの
+`GET /api/shared_chat_room` は失効済み・期限切れのトークンを 404 として扱います。
+
 ## 共通のルート境界
 
 - 状態変更ルートは `require_csrf` を router dependency または既存共通境界から適用します。

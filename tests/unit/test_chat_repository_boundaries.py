@@ -54,6 +54,7 @@ class RepositoryOwnershipTestCase(unittest.TestCase):
                 "list_user_rooms",
                 "switch_branch",
                 "create_or_get_shared_chat_token",
+                "revoke_shared_chat_token",
                 "rebuild_room_summary",
             }.issubset(_public_methods(ChatRepository))
         )
