@@ -31,6 +31,8 @@ from services.error_messages import (
     ERROR_INVALID_PROMPT_FEED_FILTER,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
+    ERROR_PROMPT_CREATE_RATE_LIMITED,
+    ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE,
     ERROR_PROMPT_NOT_FOUND,
     MESSAGE_SHARED_SKILL_ADDED,
 )
@@ -168,7 +170,7 @@ def _consume_prompt_create_limits(
         if not allowed:
             return (
                 False,
-                f"画像付きプロンプトの投稿回数が多すぎます。{retry_after}秒ほど待ってから再試行してください。",
+                ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE.format(seconds=retry_after),
                 retry_after,
             )
     return True, None, None
@@ -705,14 +707,16 @@ async def create_prompt(request: Request):
         return jsonify({"error": "このメディアタイプではファイルを添付できません。"}, status_code=400)
     attachments: list[dict[str, str]] = []
     try:
+        # 添付の有無に関わらず投稿レートを消費する。テキストのみの投稿も同じ上限に従わせる。
+        # Consume the posting rate limit regardless of attachments so text-only posts share the same caps.
+        allowed, limit_message, retry_after = await run_blocking(
+            _consume_prompt_create_limits,
+            request,
+            int(user_id),
+        )
+        if not allowed:
+            return jsonify_rate_limited(limit_message or ERROR_PROMPT_CREATE_RATE_LIMITED, retry_after=retry_after)
         if upload_file is not None:
-            allowed, limit_message, retry_after = await run_blocking(
-                _consume_prompt_create_limits,
-                request,
-                int(user_id),
-            )
-            if not allowed:
-                return jsonify_rate_limited(limit_message or "画像付き投稿の回数が多すぎます。", retry_after=retry_after)
             attachments = [
                 await run_blocking(_save_prompt_attachment, upload_file, int(user_id), payload.media_type)
             ]

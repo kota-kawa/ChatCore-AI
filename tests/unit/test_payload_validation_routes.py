@@ -19,6 +19,15 @@ def make_request(path, json_body, session=None):
     )
 
 
+# 日本語: 投稿レート制限は別途検証済みのため、ペイロード検証のテストでは常に許可します。
+# English: Always allow the posting rate limit here; it is covered by its own tests.
+def allow_prompt_create_limits():
+    return patch(
+        "blueprints.prompt_share.prompt_share_api._consume_prompt_create_limits",
+        return_value=(True, None, None),
+    )
+
+
 # 日本語: 各エンドポイントのペイロードバリデーション（入力値の検証）ロジックをテストするクラス。
 # English: Test class for payload validation logic across API endpoints.
 class PayloadValidationRoutesTestCase(unittest.TestCase):
@@ -93,7 +102,7 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
         with patch(
             "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
             new=AsyncMock(return_value=1),
-        ) as mock_create:
+        ) as mock_create, allow_prompt_create_limits():
             response = asyncio.run(create_prompt(request))
 
         # 日本語: 201 Created が返り、DB書き込みが1度呼ばれることを確認
@@ -125,7 +134,7 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
         with patch(
             "blueprints.prompt_share.prompt_share_api.create_shared_prompt",
             new=AsyncMock(return_value=1),
-        ) as mock_create:
+        ) as mock_create, allow_prompt_create_limits():
             response = asyncio.run(create_prompt(request))
 
         self.assertEqual(response.status_code, 201)
