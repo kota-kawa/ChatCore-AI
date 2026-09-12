@@ -633,26 +633,49 @@ class ChatRepository:
         *,
         source_message_id: int | None = None,
     ) -> None:
+        # 同じ発話から同義の fact が複数返ることがあるため、正規化キーで1件に畳む。
+        # The extractor can return the same fact twice, so collapse on the normalized key.
+        wanted: dict[str, str] = {}
         for fact in facts:
-            existing = (
-                await self.session.execute(
-                    select(MemoryFact)
-                    .where(
-                        MemoryFact.chat_room_id == chat_room_id,
-                        MemoryFact.scope == "room",
-                        func.lower(MemoryFact.fact) == func.lower(fact),
-                    )
-                    .limit(1)
-                    .with_for_update()
+            wanted[fact.lower()] = fact
+        if not wanted:
+            return
+
+        # 1 fact ごとに SELECT ... FOR UPDATE を撃つと、fact 数だけ往復が増える。
+        # idx_memory_facts_room_scope_lower_fact が効く 1 本のクエリへまとめる。
+        # Querying per fact cost one round trip each; this is a single lookup served by
+        # idx_memory_facts_room_scope_lower_fact.
+        rows = (
+            await self.session.execute(
+                select(MemoryFact, func.lower(MemoryFact.fact).label("normalized_fact"))
+                .where(
+                    MemoryFact.chat_room_id == chat_room_id,
+                    MemoryFact.scope == "room",
+                    func.lower(MemoryFact.fact).in_(list(wanted)),
                 )
-            ).scalar_one_or_none()
+                .order_by(MemoryFact.id)
+                .with_for_update(of=MemoryFact)
+            )
+        ).all()
+        existing_by_key: dict[str, MemoryFact] = {}
+        for row, normalized_fact in rows:
+            # PostgreSQL の lower() と Python の str.lower() が割れる文字でも取り違えないよう、
+            # DB 側の正規化結果と Python 側の正規化結果の両方を鍵にする。
+            # Key on both normalizations so a character where PostgreSQL's lower() and Python's
+            # str.lower() disagree still resolves to the row it came from.
+            for key in (str(normalized_fact), str(row.fact).lower()):
+                existing_by_key.setdefault(key, row)
+
+        now = datetime.utcnow()
+        for key, fact in wanted.items():
+            existing = existing_by_key.get(key)
             if existing is not None:
                 existing.fact = fact
                 existing.user_id = user_id
                 if source_message_id is not None:
                     existing.source_message_id = source_message_id
                 existing.is_active = True
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = now
             else:
                 self.session.add(
                     MemoryFact(
