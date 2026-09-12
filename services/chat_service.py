@@ -14,6 +14,7 @@ import asyncio
 import secrets
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,7 @@ from .repositories.project_repository import ProjectRepository
 from .repositories.task_repository import TaskRepository
 from .repositories.user_repository import UserRepository
 from .repositories.user_skill_repository import UserSkillRepository
+from .share_common import serialize_token_share_lifecycle
 from .user_skills import (
     build_generative_ui_system_skill,
     is_generative_ui_skill_id,
@@ -231,18 +233,67 @@ async def validate_room_owner(
     return await _read(lambda repo: repo.validate_room_owner(room_id, user_id, forbidden_message), session)
 
 
+def _resolve_share_expires_at(expires_in_days: int | None) -> datetime | None:
+    """Turn a share lifetime in days into an absolute UTC instant.
+
+    ``shared_chat_rooms.expires_at`` is ``timestamptz``, so the value must be
+    timezone-aware (memo share links use a naive ``timestamp`` column and keep
+    their own helper).
+    """
+
+    if expires_in_days is None:
+        return None
+    return datetime.now(UTC) + timedelta(days=max(int(expires_in_days), 1))
+
+
+def _serialize_chat_share_state(row: dict[str, Any] | None) -> dict[str, Any]:
+    if row is None:
+        return serialize_token_share_lifecycle(None, None, None)
+    return serialize_token_share_lifecycle(
+        row.get("share_token"),
+        row.get("expires_at"),
+        row.get("revoked_at"),
+        is_reused=bool(row.get("is_reused")),
+    )
+
+
 async def create_or_get_shared_chat_token(
     room_id: str,
     user_id: int,
     *,
+    expires_in_days: int | None = None,
+    force_refresh: bool = False,
     session: AsyncSession | None = None,
     token_generator: Callable[[int], str] = secrets.token_urlsafe,
-) -> str:
-    return await _write(
-        lambda repo: repo.create_or_get_shared_chat_token(room_id, user_id),
+) -> dict[str, Any]:
+    """Create or reuse a room's share link and return its lifecycle state."""
+
+    expires_at = _resolve_share_expires_at(expires_in_days)
+    row = await _write(
+        lambda repo: repo.create_or_get_shared_chat_token(
+            room_id,
+            user_id,
+            expires_at=expires_at,
+            force_refresh=force_refresh,
+        ),
         session,
         repository=_chat_with_token_generator(token_generator),
     )
+    return _serialize_chat_share_state(row)
+
+
+async def revoke_shared_chat_token(
+    room_id: str,
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    """Revoke a room's share link, or return ``None`` when it never had one."""
+
+    row = await _write(lambda repo: repo.revoke_shared_chat_token(room_id, user_id), session)
+    if row is None:
+        return None
+    return _serialize_chat_share_state(row)
 
 
 async def get_shared_chat_room_payload(
