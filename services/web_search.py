@@ -453,6 +453,10 @@ class WebSearchQuotaExceededError(RuntimeError):
 
 
 _search_cache: dict[str, tuple[float, WebSearchResult]] = {}
+# 検索キャッシュは生成ワーカースレッドから並行に読み書きされるため、反復と更新をロックで守る。
+# The search cache is read and written concurrently by generation worker threads, so guard iteration and updates.
+_search_cache_lock = threading.Lock()
+WEB_SEARCH_CACHE_MAX_ENTRIES = 128
 
 
 def _web_search_enabled() -> bool:
@@ -888,28 +892,30 @@ def _cache_key(query: str, freshness: str, language: str, country: str) -> str:
 def _get_cached_search(key: str) -> WebSearchResult | None:
     # キャッシュから有効期限内の検索結果を取得する
     # Retrieve valid search results from cache if not expired.
-    cached = _search_cache.get(key)
-    if cached is None:
-        return None
-    expires_at, result = cached
-    if expires_at <= time.monotonic():
-        _search_cache.pop(key, None)
-        return None
-    return result
+    with _search_cache_lock:
+        cached = _search_cache.get(key)
+        if cached is None:
+            return None
+        expires_at, result = cached
+        if expires_at <= time.monotonic():
+            _search_cache.pop(key, None)
+            return None
+        return result
 
 
 def _set_cached_search(key: str, result: WebSearchResult) -> None:
     # キャッシュに検索結果を保存し、上限を超えた場合は古いキャッシュを整理する
     # Save search results to cache and evict old entries if capacity limit is reached.
-    if len(_search_cache) > 128:
-        now = time.monotonic()
-        expired_keys = [cache_key for cache_key, (expires_at, _) in _search_cache.items() if expires_at <= now]
-        for expired_key in expired_keys:
-            _search_cache.pop(expired_key, None)
-        if len(_search_cache) > 128:
-            # 厳密な LRU ではなく、短寿命キャッシュの肥大化防止だけを目的に最古挿入要素を落とす。
-            _search_cache.pop(next(iter(_search_cache)), None)
-    _search_cache[key] = (time.monotonic() + WEB_SEARCH_CACHE_TTL_SECONDS, result)
+    with _search_cache_lock:
+        if len(_search_cache) > WEB_SEARCH_CACHE_MAX_ENTRIES:
+            now = time.monotonic()
+            expired_keys = [cache_key for cache_key, (expires_at, _) in _search_cache.items() if expires_at <= now]
+            for expired_key in expired_keys:
+                _search_cache.pop(expired_key, None)
+            if len(_search_cache) > WEB_SEARCH_CACHE_MAX_ENTRIES:
+                # 厳密な LRU ではなく、短寿命キャッシュの肥大化防止だけを目的に最古挿入要素を落とす。
+                _search_cache.pop(next(iter(_search_cache)), None)
+        _search_cache[key] = (time.monotonic() + WEB_SEARCH_CACHE_TTL_SECONDS, result)
 
 
 def _infer_search_language(query: str) -> str:

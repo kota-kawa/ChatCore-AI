@@ -423,7 +423,8 @@ async def _send_email_change_code(
     """
     # IP/メール送信数に応じた送信制限（短時間あたりの試行制限）の確認
     # Check short-term rate limits on email sending per IP/email
-    allowed, limit_error = consume_auth_email_send_limits(
+    allowed, limit_error = await run_blocking(
+        consume_auth_email_send_limits,
         request,
         to_email,
         service=auth_limit_service,
