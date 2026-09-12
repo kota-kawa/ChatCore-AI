@@ -367,7 +367,8 @@ jobs:
 
   coverage:
     name: Coverage Report (Python 3.14)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Runs on every trigger, including pull requests, so the --fail-under
+    # threshold is enforced before a change can reach main.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -507,7 +508,7 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+    needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, coverage, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # The first PostgreSQL 15 -> 18 logical dump/restore can legitimately take
     # longer than an ordinary blue/green application deployment.

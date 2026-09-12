@@ -1,9 +1,20 @@
 name: chatcore-ai
 
+# [JP] 既定の json-file ドライバは無制限に肥大化する。Blue/Green は常時2色分の
+#      コンテナがログを出すため、全サービスでローテーションを固定する。
+# [EN] The default json-file driver grows without bound. Blue/green keeps two
+#      colors' worth of containers logging, so cap rotation for every service.
+x-default-logging: &default_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: pgvector/pgvector:0.8.5-pg18
     container_name: ${POSTGRES_CONTAINER_NAME:-postgres_db}
+    logging: *default_logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -42,6 +53,7 @@ services:
   redis:
     image: redis:7.4.7
     container_name: redis_cache
+    logging: *default_logging
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     # volatile-lru: TTL付きキーのみ退避対象とし、セッション等が消えるのを防ぐ。
@@ -68,6 +80,7 @@ services:
 
   nginx_bootstrap:
     image: alpine:3.24.1
+    logging: *default_logging
     environment:
       NGINX_UPSTREAM_DIR: ${NGINX_UPSTREAM_DIR:-/etc/nginx/chatcore-ai/upstreams}
       NGINX_BOOTSTRAP_COLOR: ${NGINX_BOOTSTRAP_COLOR:-blue}
@@ -102,6 +115,12 @@ services:
       dockerfile: Dockerfile
     image: chat-core-app:latest
     container_name: chatcore_app_blue
+    logging: *default_logging
+    # [JP] LLM ストリーミングや画像処理のスパイクが db/redis を巻き込まないよう上限を設ける。
+    #      compose の deploy.resources は Swarm 専用で `docker compose up` では無視されるため mem_limit を使う。
+    # [EN] Cap the app so an LLM-streaming or image-processing spike cannot starve db/redis.
+    #      deploy.resources is Swarm-only and ignored by `docker compose up`, so use mem_limit.
+    mem_limit: 2g
     environment:
       - PYTHONUNBUFFERED=1
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -203,6 +222,10 @@ services:
         BACKEND_URL: ${FRONTEND_URL:-https://chatcore-ai.com}
     image: chat-core-frontend:latest
     container_name: chatcore_frontend_blue
+    logging: *default_logging
+    # [JP] Next.js の SSR と画像最適化のスパイク用。app より小さくてよい。
+    # [EN] Headroom for Next.js SSR and image optimization; smaller than the app.
+    mem_limit: 1g
     environment:
       - BACKEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
     ports:
