@@ -18,7 +18,7 @@
 | --- | --- | --- | --- |
 | `auth_bp` | `/login`, `/register`, `/logout`, `/api/current_user`, `/api/auth/*`, `/api/passkeys/*`, `/google-*` | `blueprints/auth.py`, `auth_account.py`, `auth_email.py`, `auth_google.py`, `auth_passkeys.py` | メール、Google、Passkey 認証とアカウント操作 |
 | `verification_bp` | `/api/send_verification_email`, `/api/verify_registration_code` | `blueprints/verification.py` | 登録メール確認コード |
-| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定 |
+| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences,avatar_media}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定、アバター画像配信 |
 | `prompt_share_bp` | `/prompt_share/*` | `blueprints/prompt_share/__init__.py` | Next.js のプロンプト共有画面へのリダイレクト |
 | `prompt_share_api_bp` | `/prompt_share/api/*` | `blueprints/prompt_share/prompt_share_api.py` | 公開プロンプト、詳細、投稿、コメント、いいね、メディア、チャット用タスク／Skillへの取り込み |
 | `search_bp` | `/search/prompts` | `blueprints/prompt_share/prompt_search.py` | 公開プロンプト検索 |

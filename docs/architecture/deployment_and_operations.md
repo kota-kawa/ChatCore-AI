@@ -9,7 +9,7 @@ flowchart LR
     APP[app\nFastAPI :5004]
     DB[(db\npgvector / PostgreSQL 18)]
     RD[(redis\nRedis 7)]
-    VOL[(Docker volumes\nDB / Redis / prompt uploads)]
+    VOL[(Docker volumes\nDB / Redis / prompt uploads / avatar uploads)]
 
     N --> FE
     N --> APP
@@ -23,7 +23,7 @@ flowchart LR
 
 | Service | 役割 | 開発 Compose の接続 | 永続化 |
 | --- | --- | --- | --- |
-| `app` | FastAPI、背景ジョブ、migration entrypoint | ホスト `127.0.0.1:5004`、Compose 内 `app:5004` | prompt upload volume |
+| `app` | FastAPI、背景ジョブ、migration entrypoint | ホスト `127.0.0.1:5004`、Compose 内 `app:5004` | prompt upload volume、avatar upload volume |
 | `frontend` | Next.js Pages Router | ホスト `127.0.0.1:3000`、Backend URL は `http://app:5004` | なし |
 | `db` | `pgvector/pgvector:0.8.5-pg18` | Compose 内 `db:5432` | `db_data_pg18` |
 | `redis` | セッション、cache、worker 協調 | Compose 内 `redis:6379`、ホスト debug は loopback `6380` | `redis_data` |
@@ -85,7 +85,8 @@ backfill を実行し、`--fail-on-pending` が成功することを運用完了
 
 - Uvicorn worker ごとに DB pool が作られます。`WEB_CONCURRENCY * DB_POOL_MAX_CONN`（Blue/Green の同時稼働中は両色分）が PostgreSQL の `max_connections` を超えないようにします。
 - セッション、生成ジョブのロック・イベント、クォータを Redis に外出しすることで複数 worker／複数色を協調させます。
-- prompt upload volume は同一ホストの blue／green が共有します。マルチホスト化には object storage/CDN の実装が必要です。
+- prompt upload volume と avatar upload volume は同一ホストの blue／green が共有します。どちらもアプリが配信するため、frontend コンテナからは参照できません。マルチホスト化には object storage/CDN の実装が必要です。
+- アップロード系 volume は `deploy/blue_green_deploy.sh` の `ensure_upload_volume_ownership` が毎デプロイで `appuser`(10001:10001) 所有へ揃えます。volume を追加したら同じ関数へ追加してください。
 - `app` の `/healthz` はプロセス生存、`/readyz` は依存先を含む準備状態、frontend の `/api/healthz` は Next.js 側の healthcheck です。
 
 ## 長時間チャットストリーム
