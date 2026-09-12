@@ -1,9 +1,12 @@
 import asyncio
 import json
 import unittest
+from datetime import UTC, datetime
 from unittest.mock import patch
 
-from blueprints.chat.rooms import share_chat_room, shared_chat_room
+from blueprints.chat.rooms import revoke_chat_room_share, share_chat_room, shared_chat_room
+from services.api_errors import ResourceNotFoundError
+from services.error_messages import ERROR_SHARED_LINK_NOT_FOUND
 from tests.helpers.request_helpers import build_request
 
 
@@ -16,6 +19,31 @@ def make_share_request(json_body, session=None):
         json_body=json_body,
         session=session,
     )
+
+
+# 日本語: 共有リンクの失効リクエストを作成するヘルパー関数
+# English: Helper function to create a chat room share revocation request
+def make_revoke_request(json_body, session=None):
+    return build_request(
+        method="POST",
+        path="/api/revoke_chat_room_share",
+        json_body=json_body,
+        session=session,
+    )
+
+
+# 日本語: 共有状態のシリアライズ済みペイロードを作成するヘルパー関数
+# English: Helper that builds a serialized share-state payload
+def share_state(*, share_token="abc123token", expires_at=None, revoked_at=None, is_reused=False):
+    return {
+        "share_token": share_token,
+        "expires_at": expires_at,
+        "revoked_at": revoked_at,
+        "is_expired": False,
+        "is_revoked": revoked_at is not None,
+        "is_active": revoked_at is None,
+        "is_reused": is_reused,
+    }
 
 
 # 日本語: 共有されたチャットルームの読み取りリクエストを作成するヘルパー関数
@@ -85,7 +113,7 @@ class ChatRoomSharingTestCase(unittest.TestCase):
             with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
                 with patch(
                     "blueprints.chat.rooms.create_or_get_shared_chat_token",
-                    return_value=("abc123token", None),
+                    return_value=share_state(),
                 ):
                     with patch(
                         "services.web_constants.FRONTEND_URL",
@@ -99,6 +127,27 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["share_token"], "abc123token")
         self.assertEqual(payload["share_url"], "https://chatcore-ai.com/shared/abc123token")
+        self.assertTrue(payload["is_active"])
+        self.assertFalse(payload["is_revoked"])
+
+    # 日本語: 共有リンクの有効期限と再発行の指定がサービス層へそのまま渡ることを検証します。
+    # English: Verify that expiry and force-refresh options reach the service layer unchanged.
+    def test_share_chat_room_forwards_expiry_and_force_refresh(self):
+        request = make_share_request(
+            {"room_id": "room-42", "expires_in_days": 7, "force_refresh": True},
+            session={"user_id": 3},
+        )
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
+                with patch(
+                    "blueprints.chat.rooms.create_or_get_shared_chat_token",
+                    return_value=share_state(),
+                ) as create_token:
+                    response = asyncio.run(share_chat_room(request))
+
+        self.assertEqual(response.status_code, 200)
+        create_token.assert_awaited_once_with("room-42", 3, expires_in_days=7, force_refresh=True)
 
     # 日本語: 共有チャットルーム取得時にトークンが指定されていない場合に400エラーとなることを検証します。
     # English: Verify that accessing a shared chat room without a token returns 400.
@@ -183,6 +232,106 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "共有リンクが見つかりません")
+
+
+# 日本語: チャット共有リンクの失効APIのユニットテスト
+# English: Unit tests for the chat share-link revocation API
+class ChatShareRevocationTestCase(unittest.TestCase):
+    # 日本語: 未ログインのユーザーが共有リンクを失効できないことを検証します。
+    # English: Verify that revoking a share link requires an authenticated session.
+    def test_revoke_requires_login(self):
+        request = make_revoke_request({"room_id": "room-1"}, session={})
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            response = asyncio.run(revoke_chat_room_share(request))
+
+        self.assertEqual(response.status_code, 403)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "ログインが必要です")
+
+    # 日本語: 他ユーザーのチャットルームの共有リンクは失効できないことを検証します。
+    # English: Verify that a non-owner cannot revoke someone else's share link.
+    def test_revoke_returns_403_when_not_owner(self):
+        request = make_revoke_request({"room_id": "room-1"}, session={"user_id": 10})
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch(
+                "blueprints.chat.rooms.validate_room_owner",
+                return_value=({"error": "他ユーザーのチャットルームは共有できません"}, 403),
+            ):
+                with patch("blueprints.chat.rooms.revoke_shared_chat_token") as revoke:
+                    response = asyncio.run(revoke_chat_room_share(request))
+
+        self.assertEqual(response.status_code, 403)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "他ユーザーのチャットルームは共有できません")
+        revoke.assert_not_awaited()
+
+    # 日本語: 所有者が共有リンクを失効させると、共有URLが空になることを検証します。
+    # English: Verify that a successful revocation clears the public share URL.
+    def test_revoke_clears_share_url_on_success(self):
+        request = make_revoke_request({"room_id": "room-42"}, session={"user_id": 3})
+        revoked = share_state(revoked_at=datetime(2026, 9, 13, tzinfo=UTC).isoformat())
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
+                with patch("blueprints.chat.rooms.revoke_shared_chat_token", return_value=revoked) as revoke:
+                    response = asyncio.run(revoke_chat_room_share(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertTrue(payload["is_revoked"])
+        self.assertFalse(payload["is_active"])
+        self.assertEqual(payload["share_url"], "")
+        self.assertEqual(payload["message"], "共有リンクを無効にしました")
+        revoke.assert_awaited_once_with("room-42", 3)
+
+    # 日本語: 一度も共有していないルームの失効要求が404になることを検証します。
+    # English: Verify that revoking a never-shared room reports 404.
+    def test_revoke_returns_404_when_never_shared(self):
+        request = make_revoke_request({"room_id": "room-42"}, session={"user_id": 3})
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
+                with patch("blueprints.chat.rooms.revoke_shared_chat_token", return_value=None):
+                    response = asyncio.run(revoke_chat_room_share(request))
+
+        self.assertEqual(response.status_code, 404)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], ERROR_SHARED_LINK_NOT_FOUND)
+
+    # 日本語: 一時チャットの共有リンクは失効操作の対象外であることを検証します。
+    # English: Verify that temporary chats are rejected before any revocation write.
+    def test_revoke_rejects_temporary_chat(self):
+        request = make_revoke_request({"room_id": "room-42"}, session={"user_id": 3})
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms.ephemeral_store") as store:
+                store.room_exists.return_value = True
+                with patch("blueprints.chat.rooms.revoke_shared_chat_token") as revoke:
+                    response = asyncio.run(revoke_chat_room_share(request))
+
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "temporary chat は共有できません")
+        revoke.assert_not_awaited()
+
+    # 日本語: 失効済み・期限切れのトークンでは共有チャットを閲覧できないことを検証します。
+    # English: Verify that revoked or expired tokens cannot load a shared chat.
+    def test_revoked_or_expired_token_is_not_viewable(self):
+        for label in ("revoked", "expired"):
+            with self.subTest(link=label):
+                request = make_shared_read_request("dead-token")
+                with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+                    with patch(
+                        "blueprints.chat.rooms.get_shared_chat_room_payload",
+                        side_effect=ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND),
+                    ):
+                        response = asyncio.run(shared_chat_room(request))
+
+                self.assertEqual(response.status_code, 404)
+                payload = json.loads(response.body.decode("utf-8"))
+                self.assertEqual(payload["error"], ERROR_SHARED_LINK_NOT_FOUND)
 
 
 if __name__ == "__main__":
