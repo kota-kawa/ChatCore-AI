@@ -8,6 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.avatar_storage import normalize_avatar_url
 from services.models import User, UserAuthProvider
 
 _AUTH_USER_FIELDS = (
@@ -32,6 +33,9 @@ def _serialize_auth_user(
     """Return the stable payload consumed by authentication handlers."""
 
     payload = {field: getattr(user, field) for field in _AUTH_USER_FIELDS}
+    # 旧 `/static/uploads/...` を現行の配信URLへ読み替えて返す。
+    # Rewrite the legacy `/static/uploads/...` value to the served URL.
+    payload["avatar_url"] = normalize_avatar_url(payload.get("avatar_url"))
     if provider is not None:
         payload.update(
             auth_provider=provider.provider,

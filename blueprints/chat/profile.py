@@ -14,7 +14,7 @@ from services.auth_limits import (
     consume_auth_email_send_limits,
     get_auth_limit_service,
 )
-from services.avatar_storage import AVATAR_UPLOAD_DIR, build_avatar_public_url
+from services.avatar_storage import build_avatar_public_url, get_avatar_upload_root
 from services.chat_service import (
     commit_email_change,
     get_user_by_email,
@@ -22,6 +22,20 @@ from services.chat_service import (
     update_user_profile,
 )
 from services.email_service import resolve_request_email_locale, send_email
+from services.error_messages import (
+    ERROR_AVATAR_CONTENT_TYPE_MISMATCH,
+    ERROR_AVATAR_EXTENSION_UNSUPPORTED,
+    ERROR_AVATAR_FILENAME_INVALID,
+    ERROR_AVATAR_FORMAT_MISMATCH,
+    ERROR_AVATAR_FORMAT_UNDETECTED,
+    ERROR_AVATAR_MIME_UNSUPPORTED,
+    ERROR_AVATAR_TOO_LARGE,
+    ERROR_LOGIN_REQUIRED,
+    ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION,
+    ERROR_USER_NOT_FOUND,
+    ERROR_USERNAME_REQUIRED,
+    MESSAGE_PROFILE_UPDATED,
+)
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -167,19 +181,19 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     # Sanitize the filename
     safe_filename = secure_filename(str(original_filename or ""))
     if not safe_filename:
-        raise ValueError("画像ファイル名が不正です。")
+        raise ValueError(ERROR_AVATAR_FILENAME_INVALID)
 
     # 拡張子を検証
     # Validate file extension
     extension = os.path.splitext(safe_filename)[1].lower()
     if extension not in _ALLOWED_AVATAR_EXTENSIONS:
-        raise ValueError("画像は JPG / PNG / GIF / WebP のいずれかを指定してください。")
+        raise ValueError(ERROR_AVATAR_EXTENSION_UNSUPPORTED)
 
     # Content-Typeを検証
     # Validate content-type
     normalized_content_type = _normalize_content_type(content_type)
     if normalized_content_type and normalized_content_type not in _ALLOWED_AVATAR_CONTENT_TYPES:
-        raise ValueError("画像ファイルのみアップロードできます。")
+        raise ValueError(ERROR_AVATAR_MIME_UNSUPPORTED)
 
     # ファイルポインタを先頭に戻す（可能な場合）
     # Rewind the file pointer if possible
@@ -191,12 +205,12 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     header = avatar_file_obj.read(16)
     detected_format = _detect_avatar_format(header)
     if detected_format is None:
-        raise ValueError("画像形式を判別できませんでした。")
+        raise ValueError(ERROR_AVATAR_FORMAT_UNDETECTED)
 
     # 拡張子と画像形式が合致しているか検証
     # Ensure extension matches the detected image format
     if extension not in _AVATAR_FORMAT_TO_EXTENSIONS[detected_format]:
-        raise ValueError("ファイル拡張子と画像形式が一致しません。")
+        raise ValueError(ERROR_AVATAR_FORMAT_MISMATCH)
 
     # Content-Typeと画像形式が合致しているか検証
     # Ensure Content-Type matches the detected image format
@@ -204,7 +218,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
         normalized_content_type
         and normalized_content_type not in _AVATAR_FORMAT_TO_CONTENT_TYPES[detected_format]
     ):
-        raise ValueError("Content-Typeと画像形式が一致しません。")
+        raise ValueError(ERROR_AVATAR_CONTENT_TYPE_MISMATCH)
 
     # 読み取り用にポインタを再度先頭に戻す
     # Rewind the pointer again to start saving the file from the beginning
@@ -234,7 +248,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
                     break
                 total_size += len(chunk)
                 if total_size > AVATAR_MAX_BYTES:
-                    raise ValueError("画像サイズは5MB以下にしてください。")
+                    raise ValueError(ERROR_AVATAR_TOO_LARGE)
                 out_f.write(chunk)
     except Exception:
         # 書き込み中に例外が発生した場合は、中途半端なファイルを削除
@@ -295,7 +309,7 @@ async def user_profile(request: Request):
     # ユーザーがログインしているかセッションをチェック
     # Validate user is authenticated by checking the session
     if 'user_id' not in request.session:
-        return jsonify({'error': 'ログインが必要です'}, status_code=401)
+        return jsonify({'error': ERROR_LOGIN_REQUIRED}, status_code=401)
     user_id = request.session['user_id']
 
     # ---------- GET ----------
@@ -305,7 +319,7 @@ async def user_profile(request: Request):
         # Retrieve user details from the database
         user = await get_user_by_id(user_id)
         if not user:
-            return jsonify({'error': 'ユーザーが存在しません'}, status_code=404)
+            return jsonify({'error': ERROR_USER_NOT_FOUND}, status_code=404)
         return jsonify({
             'username'  : user.get('username', ''),
             'email'     : user.get('email', ''),
@@ -328,7 +342,7 @@ async def user_profile(request: Request):
     # ユーザー名の必須チェック
     # Ensure username is provided
     if not username:
-        return jsonify({'error': 'ユーザー名は必須です'}, status_code=400)
+        return jsonify({'error': ERROR_USERNAME_REQUIRED}, status_code=400)
 
     # 一般のプロフィール更新ルート経由でのメールアドレス変更試行を拒否
     # Reject attempts to change the email through the generic profile-update
@@ -339,13 +353,7 @@ async def user_profile(request: Request):
     current_email = (current_user or {}).get('email', '') if current_user else ''
     if submitted_email and submitted_email.lower() != (current_email or '').lower():
         return jsonify(
-            {
-                'error': (
-                    'メールアドレスを変更するには、新しいアドレス宛に送信される'
-                    '認証コードによる確認が必要です。設定画面の「メールアドレス変更」'
-                    'からお手続きください。'
-                ),
-            },
+            {'error': ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION},
             status_code=400,
         )
     email = current_email
@@ -357,7 +365,7 @@ async def user_profile(request: Request):
         try:
             avatar_url = await run_blocking(
                 _save_avatar_file,
-                AVATAR_UPLOAD_DIR,
+                get_avatar_upload_root(),
                 avatar_f.file,
                 avatar_f.filename,
                 getattr(avatar_f, "content_type", ""),
@@ -382,7 +390,7 @@ async def user_profile(request: Request):
             llm_profile_context,
         )
         return jsonify({
-            'message': 'プロフィールを更新しました',
+            'message': MESSAGE_PROFILE_UPDATED,
             'avatar_url': avatar_url,        # 新しい画像 URL（ない場合は null）
             'llm_profile_context': llm_profile_context,
             # Newly uploaded avatar URL (null when unchanged).
@@ -486,7 +494,7 @@ async def request_email_change(
     # ユーザーの認証チェック
     # Validate session authentication
     if 'user_id' not in request.session:
-        return jsonify({'error': 'ログインが必要です'}, status_code=401)
+        return jsonify({'error': ERROR_LOGIN_REQUIRED}, status_code=401)
     user_id = request.session['user_id']
 
     # リクエストデータがJSON形式であることを保証
@@ -511,7 +519,7 @@ async def request_email_change(
     # Check if the user exists
     user = await get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'ユーザーが存在しません'}, status_code=404)
+        return jsonify({'error': ERROR_USER_NOT_FOUND}, status_code=404)
 
     # 現在のメールアドレスと同じ場合はエラー
     # Error if the new email matches the current email
@@ -606,7 +614,7 @@ async def confirm_email_change(
     # ユーザーの認証チェック
     # Validate session authentication
     if 'user_id' not in request.session:
-        return jsonify({'error': 'ログインが必要です'}, status_code=401)
+        return jsonify({'error': ERROR_LOGIN_REQUIRED}, status_code=401)
     user_id = request.session['user_id']
 
     # JSONリクエストボディのチェック
