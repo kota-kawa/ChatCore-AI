@@ -106,6 +106,24 @@ class ResolveAuthenticatedRoomTarget(Protocol):
 # ---------------------------------------------------------------------------
 # 永続化の境界 / Persistence boundaries
 # ---------------------------------------------------------------------------
+class StoreUserMessageAndLoadTurnContext(Protocol):
+    # 日本語: 1投稿ぶんの保存と文脈読み出しを1トランザクションへまとめた境界。
+    #         返り値は message_id / parent_message_id / is_first_turn / messages /
+    #         web_search_contexts を持つ辞書。
+    # English: One boundary that persists the turn and reads its context in a single
+    #          transaction, returning message_id, parent_message_id, is_first_turn,
+    #          messages and web_search_contexts.
+    def __call__(
+        self,
+        chat_room_id: str,
+        message: str,
+        sender: str = "user",
+        attached_file_names: list[str] | None = None,
+        message_parts: list[dict[str, Any]] | None = None,
+        attached_file_contents: list[Any] | None = None,
+    ) -> MaybeAwaitable[dict[str, Any]]: ...
+
+
 class RememberFactsFromMessage(Protocol):
     def __call__(
         self,
@@ -273,9 +291,14 @@ class ChatPostPersistenceDependencies:
     """メッセージ・要約・記憶のDB境界 / DB boundaries for messages, summaries and memory."""
 
     save_message_to_db: SaveMessageToDb
-    get_active_leaf_id: Callable[[str], MaybeAwaitable[int | None]]
-    get_chat_room_messages: Callable[[str], MaybeAwaitable[list[dict[str, Any]]]]
-    get_room_web_search_contexts: Callable[[str], MaybeAwaitable[list[dict[str, Any]]]]
+    # 日本語: 発話の保存と、そのターンに要る文脈（履歴・過去の検索結果）の読み出しは
+    #         1回のルームツリー読み出しで賄う。個別の get_active_leaf_id /
+    #         get_chat_room_messages / get_room_web_search_contexts は同じ木を
+    #         3回読んでいたため、この境界へ統合した。
+    # English: Persisting the turn and loading the context it needs share one room-tree read.
+    #          The separate get_active_leaf_id / get_chat_room_messages /
+    #          get_room_web_search_contexts boundaries each re-read the same tree.
+    store_user_message_and_load_turn_context: StoreUserMessageAndLoadTurnContext
     get_room_summary: Callable[[str], MaybeAwaitable[dict[str, Any] | None]]
     list_room_memory_facts: Callable[[str], MaybeAwaitable[list[str]]]
     remember_facts_from_message: RememberFactsFromMessage

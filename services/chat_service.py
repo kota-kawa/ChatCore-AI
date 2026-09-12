@@ -128,6 +128,36 @@ async def save_message_to_db(
     )
 
 
+async def store_user_message_and_load_turn_context(
+    chat_room_id: str,
+    message: str,
+    sender: str = "user",
+    attached_file_names: list[str] | None = None,
+    message_parts: list[dict[str, Any]] | None = None,
+    attached_file_contents: list[Any] | None = None,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    """Append one chat turn and return the context it needs, using a single room-tree read.
+
+    The branch tip, the LLM history and the prior web-search evidence all come
+    from the same snapshot, so one chat post no longer takes three connections
+    out of a pool configured without overflow.
+    """
+
+    return await _write(
+        lambda repo: repo.store_user_message_and_load_turn_context(
+            chat_room_id,
+            message,
+            sender,
+            attached_file_names,
+            message_parts,
+            attached_file_contents,
+        ),
+        session,
+    )
+
+
 async def copy_messages_into_chat_room(
     chat_room_id: str,
     messages: list[dict[str, Any]],

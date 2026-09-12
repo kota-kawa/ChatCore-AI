@@ -63,9 +63,9 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             get_temporary_user_store_key=Mock(return_value="tmp:guest"),
             ephemeral_store=ephemeral_store,
             save_message_to_db=Mock(),
-            get_active_leaf_id=Mock(return_value=None),
-            get_chat_room_messages=Mock(return_value=[]),
-            get_room_web_search_contexts=Mock(return_value=[]),
+            # ゲストルームのため DB 境界は呼ばれない。
+            # The room is a guest room, so the DB boundary is never called.
+            store_user_message_and_load_turn_context=Mock(),
             normalize_messages_for_llm=lambda messages: [
                 {"role": item["role"], "content": str(item["content"]).replace("<br>", "\n")}
                 for item in messages

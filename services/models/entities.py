@@ -175,6 +175,16 @@ class MemoryFact(Base):
         CheckConstraint("scope IN ('room', 'user')", name="chk_memory_facts_scope"),
         Index("idx_memory_facts_room_updated_at", "chat_room_id", desc("updated_at"), postgresql_where=text("is_active = TRUE")),
         Index("idx_memory_facts_user_updated_at", "user_id", desc("updated_at"), postgresql_where=text("is_active = TRUE")),
+        # 上の2本は is_active = TRUE の部分索引。fact の重複判定は is_active を条件に入れない
+        # ため使えず、専用の索引が要る。
+        # The two indexes above are partial on is_active = TRUE; the duplicate-fact lookup does not
+        # constrain is_active, so it needs an index of its own.
+        Index("idx_memory_facts_room_scope_fact", "chat_room_id", "scope", text("lower(fact)")),
+        Index(
+            "idx_memory_facts_source_message_id",
+            "source_message_id",
+            postgresql_where=text("source_message_id IS NOT NULL"),
+        ),
     )
 
 
@@ -199,6 +209,13 @@ class UserSkill(Base):
         Index("idx_user_skills_user_created_at", "user_id", "created_at", "id"),
         Index("idx_user_skills_user_enabled", "user_id", "is_enabled", "id"),
         Index("idx_user_skills_user_source_prompt", "user_id", "source_prompt_id"),
+        # 先頭が user_id の索引は prompts 1行の削除（ON DELETE SET NULL）には使えない。
+        # An index leading with user_id cannot serve the ON DELETE SET NULL of one prompt row.
+        Index(
+            "idx_user_skills_source_prompt_id",
+            "source_prompt_id",
+            postgresql_where=text("source_prompt_id IS NOT NULL"),
+        ),
         Index(
             "uq_user_skills_user_normalized_name",
             "user_id",
@@ -233,6 +250,11 @@ class Task(Base):
         Index("idx_task_with_examples_user_order", "user_id", "display_order", "id"),
         Index("idx_task_with_examples_user_created_at", "user_id", desc("created_at"), desc("id")),
         Index("idx_task_with_examples_system_task_key", "system_task_key"),
+        Index(
+            "idx_task_with_examples_source_prompt_id",
+            "source_prompt_id",
+            postgresql_where=text("source_prompt_id IS NOT NULL"),
+        ),
         Index("idx_task_with_examples_active_user_order", "user_id", "display_order", "id", postgresql_where=text("deleted_at IS NULL")),
         Index("idx_task_with_examples_active_user_name", "user_id", "name", postgresql_where=text("deleted_at IS NULL")),
         Index("idx_task_with_examples_active_user_source_prompt", "user_id", "source_prompt_id",
@@ -665,6 +687,11 @@ class GuestPromptSubmission(Base):
         CheckConstraint("claimed_at IS NULL OR claimed_by_user_id IS NOT NULL", name="ck_guest_prompt_submissions_claimed_at"),
         Index("idx_guest_prompt_submissions_cookie_created_at", "guest_cookie_hash", desc("created_at")),
         Index("idx_guest_prompt_submissions_ip_created_at", "client_ip_hash", desc("created_at")),
+        Index(
+            "idx_guest_prompt_submissions_claimed_by_user",
+            "claimed_by_user_id",
+            postgresql_where=text("claimed_by_user_id IS NOT NULL"),
+        ),
     )
 
 
@@ -700,7 +727,11 @@ class McpOAuthGrant(Base):
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    client_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("mcp_oauth_clients.client_id", ondelete="CASCADE", name="fk_mcp_oauth_grants_client_id"),
+        nullable=False,
+    )
     client_name: Mapped[str] = mapped_column(String(255), nullable=False)
     client_host: Mapped[str] = mapped_column(String(255), nullable=False)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
@@ -712,6 +743,7 @@ class McpOAuthGrant(Base):
 
     __table_args__ = (
         Index("idx_mcp_oauth_grants_active_user", "user_id", desc("created_at"), postgresql_where=text("revoked_at IS NULL")),
+        Index("idx_mcp_oauth_grants_client_id", "client_id"),
     )
 
 
@@ -733,7 +765,15 @@ class McpOAuthAuthorizationCode(Base):
 
     code_digest: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     grant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("mcp_oauth_grants.id", ondelete="CASCADE"), nullable=False)
-    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    client_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey(
+            "mcp_oauth_clients.client_id",
+            ondelete="CASCADE",
+            name="fk_mcp_oauth_authorization_codes_client_id",
+        ),
+        nullable=False,
+    )
     redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
     code_challenge: Mapped[str] = mapped_column(Text, nullable=False)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
@@ -742,7 +782,11 @@ class McpOAuthAuthorizationCode(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
-    __table_args__ = (Index("idx_mcp_oauth_codes_expiry", "expires_at"),)
+    __table_args__ = (
+        Index("idx_mcp_oauth_codes_expiry", "expires_at"),
+        Index("idx_mcp_oauth_codes_grant_id", "grant_id"),
+        Index("idx_mcp_oauth_codes_client_id", "client_id"),
+    )
 
 
 class McpOAuthToken(Base):
@@ -750,7 +794,11 @@ class McpOAuthToken(Base):
 
     token_digest: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     grant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("mcp_oauth_grants.id", ondelete="CASCADE"), nullable=False)
-    client_id: Mapped[str] = mapped_column(Text, nullable=False)
+    client_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("mcp_oauth_clients.client_id", ondelete="CASCADE", name="fk_mcp_oauth_tokens_client_id"),
+        nullable=False,
+    )
     token_type: Mapped[str] = mapped_column(String(16), nullable=False)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     resource: Mapped[str] = mapped_column(Text, nullable=False)
@@ -763,4 +811,5 @@ class McpOAuthToken(Base):
     __table_args__ = (
         CheckConstraint("token_type IN ('access', 'refresh')", name="mcp_oauth_tokens_token_type_check"),
         Index("idx_mcp_oauth_tokens_active_grant", "grant_id", "token_type", "expires_at", postgresql_where=text("revoked_at IS NULL")),
+        Index("idx_mcp_oauth_tokens_client_id", "client_id"),
     )

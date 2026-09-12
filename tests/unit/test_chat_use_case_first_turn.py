@@ -21,7 +21,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
     def test_authenticated_first_turn_skips_empty_room_context_queries(self):
         user_message = "【タスク】レビュー\n【状況・作業環境】A&B"
         saved_messages = []
-        history_query_message_counts = []
+        room_tree_reads = []
         captured_context = {}
 
         # リクエスト内のJSON辞書取得をシミュレート
@@ -53,18 +53,31 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             )
             return len(saved_messages)
 
-        # チャット履歴取得を疑似的に行う（メッセージ数計測付き）
-        # Mock fetching chat history and log the message count
-        def get_chat_room_messages(room_id):
-            history_query_message_counts.append(len(saved_messages))
-            return [
-                {
-                    "role": entry["sender"],
-                    "content": entry["message"],
-                }
+        # 発話保存と文脈読み出しをまとめた境界を疑似的に行う（ツリー読み出し回数の計測付き）
+        # Mock the combined persist-and-load boundary and count how often the room tree is read
+        def store_user_message_and_load_turn_context(
+            room_id,
+            message,
+            sender="user",
+            attached_file_names=None,
+            message_parts=None,
+            attached_file_contents=None,
+        ):
+            room_tree_reads.append(len(saved_messages))
+            messages_before = [
+                {"role": entry["sender"], "content": entry["message"]}
                 for entry in saved_messages
                 if entry["room_id"] == room_id
             ]
+            parent_id = len(saved_messages) or None
+            message_id = save_message_to_db(room_id, message, sender, attached_file_names, parent_id)
+            return {
+                "message_id": message_id,
+                "parent_message_id": parent_id,
+                "is_first_turn": parent_id is None,
+                "messages": [*messages_before, {"role": sender, "content": message}],
+                "web_search_contexts": [],
+            }
 
         # プロンプト用コンテキストメッセージ構築をフック
         # Hook the prompt building to capture context variables
@@ -101,9 +114,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 get_messages=Mock(return_value=[]),
             ),
             save_message_to_db=save_message_to_db,
-            get_active_leaf_id=Mock(return_value=None),
-            get_chat_room_messages=get_chat_room_messages,
-            get_room_web_search_contexts=Mock(return_value=[]),
+            store_user_message_and_load_turn_context=store_user_message_and_load_turn_context,
             normalize_messages_for_llm=lambda messages: [
                 {
                     "role": item["role"],
@@ -172,7 +183,11 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
 
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload, {"response": "assistant reply"})
-        self.assertEqual(history_query_message_counts, [2])
+        # ルームツリーを読むのは1リクエストにつき1回だけ。応答保存後の要約は、このターンの
+        # 履歴に保存済みの応答を足して組み立てるため、読み直しを伴わない。
+        # The room tree is read exactly once per request; the post-reply summary is built from this
+        # turn's history plus the persisted reply instead of another read.
+        self.assertEqual(room_tree_reads, [0])
         deps.get_room_summary.assert_not_called()
         deps.list_room_memory_facts.assert_not_called()
         deps.remember_facts_from_message.assert_called_once_with(
