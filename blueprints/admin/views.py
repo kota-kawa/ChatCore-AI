@@ -793,56 +793,6 @@ async def api_dashboard(request: Request):
     )
 
 
-# POSTフォームデータからテーブルを新規作成するエンドポイント（ダッシュボードへリダイレクト）
-# Route endpoint to handle form posts for table creation, redirecting back to the dashboard.
-@admin_bp.post("/create-table", name="admin.create_table")
-@admin_required
-async def create_table(request: Request):
-    """
-    HTMLフォームによる新規テーブル作成POSTリクエストを処理し、終了後はダッシュボードURLへ302リダイレクトする。
-    Process table creation via URLencoded form submission, displaying flash notifications on redirect.
-    """
-    form = await request.form()
-    table_name = form.get("table_name", "").strip()
-    column_definitions = form.get("columns", "").strip()
-    table_options = form.get("table_options", "").strip()
-
-    # 必須パラメータチェック
-    # Verify presence.
-    if not table_name or not column_definitions:
-        flash(request, "Table name and column definition are required.", "error")
-        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-    # 複数SQLステートメントの注入防止
-    # Block compound query attempts.
-    if _has_multiple_statements(column_definitions):
-        flash(request, "カラム定義に複数の文を含めることはできません。", "error")
-        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-    try:
-        # パラメータ構造の構文・命名規則バリデーション
-        # Parse inputs prior to database interaction.
-        table_name = _validate_sql_identifier(table_name, "table name")
-        _parse_column_definitions(column_definitions)
-        table_options = _validate_table_options(table_options)
-    except ValueError as exc:
-        flash(request, str(exc), "error")
-        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-    try:
-        # 実際にDBにテーブルを作成
-        # Apply changes in the database.
-        await _create_table_in_db(table_name, column_definitions, table_options)
-        flash(request, f"Table '{table_name}' created successfully.", "success")
-    except ValueError as exc:
-        flash(request, str(exc), "error")
-    except SQLAlchemyError:
-        logger.exception("Failed to create table.")
-        flash(request, "Failed to create table due to an internal error.", "error")
-
-    return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-
 # JSONデータからテーブルを新規作成するAPIエンドポイント
 # API endpoint to handle JSON payloads for table creation.
 @admin_bp.post("/api/create-table", name="admin.api_create_table")
@@ -907,47 +857,6 @@ async def api_create_table(request: Request):
         )
 
 
-# POSTフォームデータから指定テーブルを削除するエンドポイント（ダッシュボードへリダイレクト）
-# Route endpoint to handle form posts for deleting a table, redirecting back to the dashboard.
-@admin_bp.post("/delete-table", name="admin.delete_table")
-@admin_required
-async def delete_table(request: Request):
-    """
-    HTMLフォームによる指定テーブル物理削除POSTリクエストを処理し、終了後はダッシュボードへリダイレクトする。
-    Process table drop via form parameters, setting flash alerts.
-    """
-    form = await request.form()
-    table_name = form.get("table_name", "").strip()
-
-    # 必須パラメータチェック
-    # Confirm name.
-    if not table_name:
-        flash(request, "Table name is required for deletion.", "error")
-        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-    try:
-        # 識別子バリデーション
-        # Validate syntax.
-        table_name = _validate_sql_identifier(table_name, "table name")
-    except ValueError as exc:
-        flash(request, str(exc), "error")
-        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-    try:
-        # 実際に削除を実行
-        # Drop table from schema database.
-        deleted = await _drop_table_if_exists(table_name)
-        if not deleted:
-            flash(request, f"Table '{table_name}' does not exist.", "error")
-            return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-        flash(request, f"Table '{table_name}' deleted successfully.", "success")
-    except SQLAlchemyError:
-        logger.exception("Failed to delete table.")
-        flash(request, "Failed to delete table due to an internal error.", "error")
-
-    return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-
-
 # 指定テーブルを削除するAPIエンドポイント
 # API endpoint to handle JSON payloads for deleting a table.
 @admin_bp.post("/api/delete-table", name="admin.api_delete_table")
@@ -999,68 +908,6 @@ async def api_delete_table(request: Request):
             "Admin API delete-table failed.",
             status="fail",
         )
-
-
-# POSTフォームデータからカラムを追加するエンドポイント（ダッシュボードへリダイレクト）
-# Route endpoint to handle form posts for adding a column, redirecting back to the dashboard.
-@admin_bp.post("/add-column", name="admin.add_column")
-@admin_required
-async def add_column(request: Request):
-    """
-    HTMLフォーム経由での指定テーブルへの列追加POSTリクエストを処理し、終了後はダッシュボードへリダイレクトする。
-    Alter schema to append a new column definition based on URLencoded form parameters.
-    """
-    form = await request.form()
-    table_name = form.get("table_name", "").strip()
-    column_name = form.get("column_name", "").strip()
-    column_type = form.get("column_type", "").strip()
-
-    # パラメータ入力検証
-    # Check parameters presence.
-    if not table_name or not column_name or not column_type:
-        flash(request, "テーブル名、カラム名、カラム定義は必須です。", "error")
-        return RedirectResponse(
-            frontend_admin_dashboard_url(request, table=table_name), status_code=302
-        )
-
-    # 複数文注入の防止
-    # Block compound SQL injections.
-    if _has_multiple_statements(column_type):
-        flash(request, "カラム定義に複数の文を含めることはできません。", "error")
-        return RedirectResponse(
-            frontend_admin_dashboard_url(request, table=table_name), status_code=302
-        )
-
-    try:
-        # 定義と識別子のバリデーション
-        # Parse targets.
-        table_name = _validate_sql_identifier(table_name, "table name")
-        column_name = _validate_sql_identifier(column_name, "column name")
-        _parse_column_definition(f"{column_name} {column_type}")
-    except ValueError as exc:
-        flash(request, str(exc), "error")
-        return RedirectResponse(
-            frontend_admin_dashboard_url(request, table=table_name), status_code=302
-        )
-
-    try:
-        status = await _add_column_if_valid(table_name, column_name, column_type)
-        if status == "missing_table":
-            flash(request, f"テーブル '{table_name}' は存在しません。", "error")
-            return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-        if status == "duplicate_column":
-            flash(request, f"カラム '{column_name}' は既に存在します。", "error")
-            return RedirectResponse(
-                frontend_admin_dashboard_url(request, table=table_name), status_code=302
-            )
-        flash(request, f"カラム '{column_name}' をテーブル '{table_name}' に追加しました。", "success")
-    except SQLAlchemyError:
-        logger.exception("Failed to add column.")
-        flash(request, "カラムの追加に失敗しました。内部エラーが発生しました。", "error")
-
-    return RedirectResponse(
-        frontend_admin_dashboard_url(request, table=table_name), status_code=302
-    )
 
 
 # カラムをテーブルに追加するAPIエンドポイント
@@ -1134,68 +981,6 @@ async def api_add_column(request: Request):
             "Admin API add-column failed.",
             status="fail",
         )
-
-
-# POSTフォームデータからカラムを削除するエンドポイント（ダッシュボードへリダイレクト）
-# Route endpoint to handle form posts for dropping a column, redirecting back to the dashboard.
-@admin_bp.post("/delete-column", name="admin.delete_column")
-@admin_required
-async def delete_column(request: Request):
-    """
-    HTMLフォーム経由での列物理削除POSTリクエストを処理し、終了後はダッシュボードへリダイレクトする。
-    Execute ALTER TABLE DROP COLUMN from form parameters, displaying flash status on redirect.
-    """
-    form = await request.form()
-    table_name = form.get("table_name", "").strip()
-    column_name = form.get("column_name", "").strip()
-
-    # 入力検証
-    # Check targets presence.
-    if not table_name or not column_name:
-        flash(request, "テーブル名とカラム名は必須です。", "error")
-        return RedirectResponse(
-            frontend_admin_dashboard_url(request, table=table_name), status_code=302
-        )
-
-    try:
-        # 識別子のバリデーション
-        # Validate syntax.
-        table_name = _validate_sql_identifier(table_name, "table name")
-        column_name = _validate_sql_identifier(column_name, "column name")
-    except ValueError as exc:
-        flash(request, str(exc), "error")
-        return RedirectResponse(
-            frontend_admin_dashboard_url(request, table=table_name), status_code=302
-        )
-
-    try:
-        status, target_column = await _drop_column_if_valid(table_name, column_name)
-        if status == "missing_table":
-            flash(request, f"テーブル '{table_name}' は存在しません。", "error")
-            return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-        if status == "missing_column":
-            flash(request, f"カラム '{column_name}' は存在しません。", "error")
-            return RedirectResponse(
-                frontend_admin_dashboard_url(request, table=table_name), status_code=302
-            )
-        if status == "last_column":
-            flash(request, "テーブルには少なくとも1つのカラムが必要です。", "error")
-            return RedirectResponse(
-                frontend_admin_dashboard_url(request, table=table_name), status_code=302
-            )
-        if status != "ok" or target_column is None:
-            flash(request, "カラムの削除に失敗しました。", "error")
-            return RedirectResponse(
-                frontend_admin_dashboard_url(request, table=table_name), status_code=302
-            )
-        flash(request, f"カラム '{target_column}' をテーブル '{table_name}' から削除しました。", "success")
-    except SQLAlchemyError:
-        logger.exception("Failed to delete column.")
-        flash(request, "カラムの削除に失敗しました。内部エラーが発生しました。", "error")
-
-    return RedirectResponse(
-        frontend_admin_dashboard_url(request, table=table_name), status_code=302
-    )
 
 
 # カラムをテーブルから削除するAPIエンドポイント
