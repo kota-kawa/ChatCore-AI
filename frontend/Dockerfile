@@ -39,6 +39,14 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 
+# [JP] node:alpine 同梱の非rootユーザーで実行する。next start は画像最適化の
+#      キャッシュを .next/cache へ書くため、そこだけ所有権を移す。
+# [EN] Run as the non-root user shipped with node:alpine. next start writes the
+#      image-optimization cache under .next/cache, so hand that tree to it.
+RUN mkdir -p /app/.next/cache && chown -R node:node /app/.next
+
+USER node
+
 EXPOSE 3000
 
 CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

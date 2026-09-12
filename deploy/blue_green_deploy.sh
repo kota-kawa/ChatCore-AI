@@ -17,6 +17,10 @@ PROMPT_SHARE_UPLOAD_MIGRATION_MARKER=".legacy_container_migration_complete"
 UPLOAD_MIGRATION_IMAGE="alpine:3.24.1"
 MIGRATION_SAFETY_BASELINE="${MIGRATION_SAFETY_BASELINE:-20260824_03}"
 POST_DEPLOY_CLEANUP_COMMAND="${POST_DEPLOY_CLEANUP_COMMAND:-}"
+# [JP] アプリコンテナを非rootで起動するため、Dockerfile の appuser と同じ uid/gid。
+# [EN] Must match the appuser uid/gid baked into the Dockerfile.
+APP_RUNTIME_UID="${APP_RUNTIME_UID:-10001}"
+APP_RUNTIME_GID="${APP_RUNTIME_GID:-10001}"
 
 is_empty_or_unresolved() {
   local value="${1:-}"
@@ -705,6 +709,26 @@ migrate_legacy_prompt_share_uploads() {
   echo "Prompt-share legacy uploads were migrated without overwriting persistent files."
 }
 
+# [JP] アップロードボリュームは root 所有のまま作られた既存資産なので、
+#      非root実行へ切り替えた後も書き込めるよう毎回所有権を揃える。
+# [EN] The upload volume predates the non-root switch and was created root-owned,
+#      so realign its ownership on every deploy or uploads would start failing.
+ensure_upload_volume_ownership() {
+  local volume_name="${PROMPT_SHARE_UPLOAD_VOLUME}"
+
+  if [[ ! "${volume_name}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+    echo "Invalid prompt-share upload volume name: ${volume_name}" >&2
+    return 1
+  fi
+
+  docker volume create "${volume_name}" >/dev/null
+  docker run --rm \
+    --mount "type=volume,src=${volume_name},dst=/uploads" \
+    "${UPLOAD_MIGRATION_IMAGE}" \
+    chown -R "${APP_RUNTIME_UID}:${APP_RUNTIME_GID}" /uploads
+  echo "Prompt-share upload volume is owned by ${APP_RUNTIME_UID}:${APP_RUNTIME_GID}."
+}
+
 CURRENT_COLOR="$(detect_active_color)"
 TARGET_COLOR="${DEPLOY_TARGET_COLOR}"
 
@@ -752,6 +776,7 @@ start_core_services
 resume_current_color_after_database_upgrade
 build_runtime_images "${TARGET_COLOR}"
 run_migrations "${TARGET_COLOR}"
+ensure_upload_volume_ownership
 deploy_color "${TARGET_COLOR}"
 write_active_upstreams "${TARGET_COLOR}"
 printf "%s\n" "${TARGET_COLOR}" > "${STATE_FILE}"
