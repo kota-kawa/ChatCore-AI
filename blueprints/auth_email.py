@@ -220,7 +220,8 @@ async def api_send_login_code(
         return validation_error
 
     email = payload.email
-    allowed, limit_error = dep("consume_auth_email_send_limits")(
+    allowed, limit_error = await dep("run_blocking")(
+        dep("consume_auth_email_send_limits"),
         request,
         email,
         service=resolved_auth_limit_service,

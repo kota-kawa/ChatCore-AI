@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -117,6 +118,57 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertIn("上限", payload["error"])
         mock_send_email.assert_not_called()
+
+
+# 日本語: 同期のレート制限判定がイベントループ外へ退避されることを検証するテストクラス。
+# English: Test class verifying the blocking rate-limit check is offloaded off the event loop.
+class AuthEmailLimitOffloadTestCase(unittest.TestCase):
+    # 日本語: 制限判定を実行したスレッドを記録するスタブを返します。
+    # English: Return a stub recording the thread that ran the limit check.
+    def _thread_recording_limit(self, recorded):
+        def record(*_args, **_kwargs):
+            recorded.append(threading.current_thread())
+            return (False, "too many attempts")
+
+        return record
+
+    # 日本語: ログインコード送信APIの制限判定が別スレッドで実行されることを検証します。
+    # English: Verify the login code API runs its limit check on a worker thread.
+    def test_send_login_code_offloads_the_per_email_limit_check(self):
+        request = make_request("/api/send_login_code", {"email": "user@example.com"})
+        recorded = []
+
+        with patch(
+            "blueprints.auth.consume_auth_email_send_limits",
+            side_effect=self._thread_recording_limit(recorded),
+        ):
+            with patch("blueprints.auth.send_email"):
+                response = asyncio.run(api_send_login_code(request))
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(len(recorded), 1)
+        # 日本語: イベントループを動かすメインスレッド上で Redis を待ってはいけません。
+        # English: The Redis round trip must not block the main thread running the event loop.
+        self.assertIsNot(recorded[0], threading.main_thread())
+
+    # 日本語: 確認メール送信APIの制限判定が別スレッドで実行されることを検証します。
+    # English: Verify the verification email API runs its limit check on a worker thread.
+    def test_send_verification_email_offloads_the_per_email_limit_check(self):
+        request = make_request("/api/send_verification_email", {"email": "new-user@example.com"})
+        recorded = []
+
+        with patch(
+            "blueprints.verification.consume_auth_email_send_limits",
+            side_effect=self._thread_recording_limit(recorded),
+        ):
+            with patch("blueprints.verification.send_email"):
+                response = asyncio.run(api_send_verification_email(request))
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(len(recorded), 1)
+        # 日本語: イベントループを動かすメインスレッド上で Redis を待ってはいけません。
+        # English: The Redis round trip must not block the main thread running the event loop.
+        self.assertIsNot(recorded[0], threading.main_thread())
 
 
 if __name__ == "__main__":

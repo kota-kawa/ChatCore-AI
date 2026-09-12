@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -155,6 +156,48 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         mock_send.assert_called_once()
         kwargs = mock_send.call_args.kwargs
         self.assertEqual(kwargs["to_address"], "alice@example.com")
+
+
+    # 日本語: 同期のレート制限判定がイベントループ外へ退避されることを検証します。
+    # English: Verify the blocking rate-limit check runs off the event loop.
+    def test_offloads_the_per_email_limit_check(self):
+        session = {"user_id": 1}
+        request = make_request(
+            "/api/user/email/request_change",
+            {"new_email": "new@example.com"},
+            session=session,
+        )
+        recorded = []
+
+        # 日本語: 制限判定を実行したスレッドを記録します。
+        # English: Record the thread that ran the limit check.
+        def record(*_args, **_kwargs):
+            recorded.append(threading.current_thread())
+            return (False, "too many attempts")
+
+        with (
+            patch(
+                "blueprints.chat.profile.get_user_by_id",
+                return_value={"id": 1, "email": "alice@example.com"},
+            ),
+            patch(
+                "blueprints.chat.profile.get_user_by_email",
+                return_value=None,
+            ),
+            patch(
+                "blueprints.chat.profile.consume_auth_email_send_limits",
+                side_effect=record,
+            ),
+            patch("blueprints.chat.profile.send_email") as mock_send,
+        ):
+            response = asyncio.run(request_email_change(request))
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(len(recorded), 1)
+        # 日本語: イベントループを動かすメインスレッド上で Redis を待ってはいけません。
+        # English: The Redis round trip must not block the main thread running the event loop.
+        self.assertIsNot(recorded[0], threading.main_thread())
+        mock_send.assert_not_called()
 
 
 # 日本語: Confirm Email Changeの機能や仕様を検証するテストクラスです。

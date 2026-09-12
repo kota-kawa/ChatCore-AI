@@ -266,7 +266,8 @@ async def api_send_verification_email(
     email = payload.email
     # メール送信制限（短時間での連続送信防止）を確認・消費
     # Check and consume the rate limit for sending authentication emails.
-    allowed, limit_error = consume_auth_email_send_limits(
+    allowed, limit_error = await run_blocking(
+        consume_auth_email_send_limits,
         request,
         email,
         service=resolved_auth_limit_service,
