@@ -20,6 +20,7 @@ from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError  # noqa: E402
 
 from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
 from services.auth_limits import AuthLimitService  # noqa: E402
+from services.avatar_cleanup import cleanup_orphaned_avatars  # noqa: E402
 from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
 )
@@ -115,6 +116,13 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
             )
             if attachment_lock:
                 await cleanup_orphaned_prompt_attachments()
+            avatar_lock = await asyncio.to_thread(
+                try_acquire_single_flight,
+                "avatar_cleanup",
+                CLEANUP_LOCK_TTL_SECONDS,
+            )
+            if avatar_lock:
+                await cleanup_orphaned_avatars()
         except Exception:
             logger.exception("Failed to run periodic cleanup.")
         # 設定間隔だけ待機するか、停止イベントの発生を待つ
