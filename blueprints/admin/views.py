@@ -19,13 +19,6 @@ from services.repositories.admin_repository import (
     add_column_if_valid as repository_add_column_if_valid,
 )
 from services.repositories.admin_repository import (
-    build_add_column_sql,
-    build_create_table_sql,
-    build_drop_column_sql,
-    build_drop_table_sql,
-    quote_identifier,
-)
-from services.repositories.admin_repository import (
     create_table as repository_create_table,
 )
 from services.repositories.admin_repository import (
@@ -35,16 +28,10 @@ from services.repositories.admin_repository import (
     drop_table_if_exists as repository_drop_table_if_exists,
 )
 from services.repositories.admin_repository import (
-    fetch_table_columns as repository_fetch_table_columns,
-)
-from services.repositories.admin_repository import (
-    fetch_table_preview as repository_fetch_table_preview,
-)
-from services.repositories.admin_repository import (
-    fetch_tables as repository_fetch_tables,
-)
-from services.repositories.admin_repository import (
     load_dashboard_data as repository_load_dashboard_data,
+)
+from services.repositories.admin_repository import (
+    quote_identifier,
 )
 from services.security import verify_password
 from services.session_middleware import rotate_session_identifier
@@ -580,86 +567,6 @@ async def logout(request: Request):
     request.session.pop("is_admin", None)
     flash(request, "Logged out of administrator session.", "success")
     return RedirectResponse(frontend_url("/admin/login"), status_code=302)
-
-
-# データベースに存在するユーザーテーブルの一覧を取得する関数
-# Fetch the list of user base tables defined in the current database schema.
-async def _fetch_tables(session) -> list[str]:
-    """
-    情報スキーマテーブル(information_schema.tables)から、カレントスキーマに存在する物理テーブル一覧を取得する。
-    Retrieve sorted list of all active tables located inside the default schema.
-    """
-    return await repository_fetch_tables(session)
-
-
-# テーブルのカラム詳細属性（型、ヌル許容、主キー/ユニーク等）を取得する関数
-# Retrieve database column attributes (data type, nullability, indexing keys, default values).
-async def _fetch_table_columns(session, table_name: str) -> list[dict[str, object]]:
-    """
-    対象テーブルの全列情報（カラム名、データ型、制約、ヌル許容フラグ、デフォルト値等）をカタログ検索してリスト化する。
-    Perform system catalog queries to load exhaustive metadata for columns on a target table.
-    """
-    return await repository_fetch_table_columns(session, table_name)
-
-
-# テーブルデータのプレビュー（最大100件）を取得する関数
-# Query the table to retrieve up to 100 rows of preview data.
-async def _fetch_table_preview(session, table_name: str) -> tuple[list[str], list[tuple]]:
-    """
-    指定テーブル内の登録データレコード（最大100行）と、構成列名のリストを取得する。
-    Execute select preview query for the given table, returning column list and result records.
-    """
-    return await repository_fetch_table_preview(session, table_name)
-
-
-# 安全にエスケープされたテーブル作成（CREATE TABLE）SQLクエリを組み立てる関数
-# Construct a safely-escaped CREATE TABLE query using SQLAlchemy quoting.
-def _build_create_table_sql(
-    table_name: str, column_definitions: str, table_options: str = ""
-):
-    """
-    テーブル作成のための安全にquoteされたSQL文を生成する。
-    Generate sql schema builder expression representing table creation query structure.
-    """
-    parsed_columns = _parse_column_definitions(column_definitions)
-    validated_options = _validate_table_options(table_options)
-    return build_create_table_sql(table_name, parsed_columns, validated_options)
-
-
-# 安全にエスケープされたテーブル削除（DROP TABLE）SQLクエリを組み立てる関数
-# Construct a safely-escaped DROP TABLE query.
-def _build_drop_table_sql(table_name: str):
-    """
-    安全なテーブル識別子を指定した「DROP TABLE」文を組み立てる。
-    Generate sql statement to drop specified table.
-    """
-    return build_drop_table_sql(table_name)
-
-
-# 安全にエスケープされたカラム追加（ALTER TABLE ADD COLUMN）SQLクエリを組み立てる関数
-# Construct a safely-escaped ALTER TABLE ADD COLUMN query.
-def _build_add_column_sql(table_name: str, column_name: str, column_type: str):
-    """
-    指定テーブルに新規カラムを追加するための安全な「ALTER TABLE ADD COLUMN」文を生成する。
-    Generate safe alter table expression adding a single parsed column definition.
-    """
-    parsed_definition = _parse_column_definition(f"{column_name} {column_type}")
-    return build_add_column_sql(
-        table_name,
-        str(parsed_definition["name"]),
-        str(parsed_definition["type"]),
-        [str(item) for item in parsed_definition["modifiers"]],
-    )
-
-
-# 安全にエスケープされたカラム削除（ALTER TABLE DROP COLUMN）SQLクエリを組み立てる関数
-# Construct a safely-escaped ALTER TABLE DROP COLUMN query.
-def _build_drop_column_sql(table_name: str, column_name: str):
-    """
-    指定テーブルからカラムを削除するための安全な「ALTER TABLE DROP COLUMN」文を生成する。
-    Generate safe SQL statement dropping a column from specified table.
-    """
-    return build_drop_column_sql(table_name, column_name)
 
 
 # 管理用ダッシュボードに必要なテーブル一覧と選択テーブルの詳細データをDBからロードする関数
