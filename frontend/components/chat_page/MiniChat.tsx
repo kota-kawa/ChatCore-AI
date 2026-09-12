@@ -1,10 +1,11 @@
 import { useRouter } from "next/router";
-import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent, type KeyboardEvent } from "react";
 
 import {
   buildAiAgentHttpError,
   collectVisiblePageDom,
   createAiAgentMessageId,
+  formatAiAgentModelLabel,
   isAllowedNavigationPath,
   isSafeInternalPath,
   readSseStream,
@@ -13,8 +14,6 @@ import {
   type Message,
 } from "../../lib/chat_page/ai_agent";
 import {
-  ACTION_LABELS,
-  INITIAL_PROGRESS_MESSAGE,
   MAX_DOM_LENGTH,
   MAX_INPUT_LENGTH,
   MAX_SEND_MESSAGES,
@@ -22,6 +21,7 @@ import {
   clearStoredConversation,
   describeActionStep,
   executeActionSteps,
+  getActionLabel,
   getInternalPathname,
   getMessageStorageKeys,
   isClientNavigableRoute,
@@ -38,6 +38,7 @@ import {
 } from "../../lib/chat_page/mini_chat_runtime";
 import { writeSessionJson } from "../../lib/utils";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { CopyButton } from "../ui/copy_button";
 import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
@@ -56,7 +57,6 @@ export function MiniChat({
   onMemoEdit,
 }: MiniChatProps = {}) {
   const { locale, t } = useTranslation();
-  const english = locale === "en";
   // 呼び出し側が文言を渡さないとき（左下のサポートエージェント）は、日本語を既定値に
   // 埋め込まずカタログから引く。既定の日本語と一致するかで英訳を差し替える方式は、
   // 文言を少し直すだけで英語版が日本語に戻ってしまい壊れやすい。
@@ -136,13 +136,13 @@ export function MiniChat({
   // Prefers client-side navigation for smooth UX and falls back to hard navigation when needed
   const navigateInternal = useCallback<NavigateInternal>(async (path) => {
     if (!isSafeInternalPath(path) || !isAllowedNavigationPath(path)) {
-      return { ok: false, message: english ? "This navigation is not allowed." : "この遷移は許可されていません。", clientSide: false, needsReplan: false };
+      return { ok: false, message: t("agent.navigationNotAllowed"), clientSide: false, needsReplan: false };
     }
     const targetPathname = getInternalPathname(path);
     if (targetPathname && isClientNavigableRoute(targetPathname)) {
       try {
         await routerRef.current.push(path);
-        const settled = await waitForRouteSettled(path);
+        const settled = await waitForRouteSettled(path, locale);
         return { ok: settled.ok, message: settled.message, clientSide: true, needsReplan: settled.needsReplan };
       } catch {
         // Client navigation failed; fall back to a full document load below.
@@ -150,7 +150,7 @@ export function MiniChat({
     }
     window.location.href = path;
     return { ok: true, clientSide: false };
-  }, []);
+  }, [locale, t]);
 
   const setUnloadContext = useCallback((context: UnloadContext) => {
     unloadContextRef.current = context;
@@ -196,12 +196,13 @@ export function MiniChat({
     );
 
     if (!response.ok) {
-      throw await buildAiAgentHttpError(response);
+      throw await buildAiAgentHttpError(response, locale);
     }
 
-    let assistantText = english ? "No response was received. Please try again." : "応答を取得できませんでした。もう一度試してください。";
+    let assistantText = t("agent.noResponse");
     let actionPlan: ActionPlan | undefined;
     let isError = false;
+    let model: string | undefined;
 
     // SSE イベントを逐次処理してプログレスと最終応答を分離する
     // Processes SSE events incrementally, separating progress updates from the final response
@@ -210,10 +211,12 @@ export function MiniChat({
         appendProgressStep(event.message);
       } else if (event.type === "done") {
         assistantText = event.response.trim() || assistantText;
+        model = event.model;
         break;
       } else if (event.type === "action_plan") {
         assistantText = event.description;
         actionPlan = actionsEnabled ? { description: event.description, steps: event.steps } : undefined;
+        model = event.model;
         break;
       } else if (event.type === "error") {
         assistantText = event.message;
@@ -222,25 +225,25 @@ export function MiniChat({
       }
     }
 
-    return { id: createAiAgentMessageId(), sender: "assistant", text: assistantText, actionPlan, isError };
+    return { id: createAiAgentMessageId(), sender: "assistant", text: assistantText, actionPlan, isError, model };
   };
 
   // ユーザーのメッセージを送信し、AI 応答を受け取ってチャットに追加する
   // Sends the user's input to the AI agent and appends the response to the conversation
-  const handleSend = async (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
-    if (!trimmedInput || isGenerating) return;
+  const sendMessage = async (rawInput: string) => {
+    const messageText = rawInput.trim();
+    if (!messageText || isGenerating) return;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const userMessage: Message = { id: createAiAgentMessageId(), sender: "user", text: trimmedInput };
+    const userMessage: Message = { id: createAiAgentMessageId(), sender: "user", text: messageText };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setInput("");
     setIsGenerating(true);
-    setStatusText(INITIAL_PROGRESS_MESSAGE);
-    setProgressSteps([INITIAL_PROGRESS_MESSAGE]);
+    setStatusText(t("agent.initialProgress"));
+    setProgressSteps([t("agent.initialProgress")]);
 
     try {
       const assistantMessage = await requestAiAgentMessage(nextMessages, controller.signal);
@@ -254,7 +257,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : (english ? "The AI assistant could not generate a response." : "AIエージェントの応答生成に失敗しました。"),
+          text: error instanceof Error ? error.message : t("agent.responseFailed"),
           isError: true,
         },
       ]);
@@ -264,6 +267,11 @@ export function MiniChat({
       setStatusText(null);
       setProgressSteps([]);
     }
+  };
+
+  const handleSend = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await sendMessage(input);
   };
 
   // 進行中の AI 応答を中断する
@@ -282,8 +290,8 @@ export function MiniChat({
     abortControllerRef.current = controller;
 
     setIsGenerating(true);
-    setStatusText(INITIAL_PROGRESS_MESSAGE);
-    setProgressSteps([INITIAL_PROGRESS_MESSAGE]);
+    setStatusText(t("agent.initialProgress"));
+    setProgressSteps([t("agent.initialProgress")]);
 
     try {
       const assistantMessage = await requestAiAgentMessage(messagesBeforeError, controller.signal);
@@ -295,7 +303,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : (english ? "The AI assistant could not generate a response." : "AIエージェントの応答生成に失敗しました。"),
+          text: error instanceof Error ? error.message : t("agent.responseFailed"),
           isError: true,
         },
       ]);
@@ -337,8 +345,8 @@ export function MiniChat({
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsGenerating(true);
-    setStatusText(english ? "Checking the page again…" : "画面を再確認しています...");
-    setProgressSteps([english ? "Checking the page again…" : "画面を再確認しています..."]);
+    setStatusText(t("agent.recheckingPage"));
+    setProgressSteps([t("agent.recheckingPage")]);
 
     try {
       const replanMessage = await requestAiAgentMessage(
@@ -364,7 +372,7 @@ export function MiniChat({
           {
             id: createAiAgentMessageId(),
             sender: "assistant",
-            text: replanError instanceof Error ? replanError.message : (english ? "Could not create a new action plan." : "操作の再計画に失敗しました。"),
+            text: replanError instanceof Error ? replanError.message : t("agent.replanFailed"),
             isError: true,
           },
         ]);
@@ -391,6 +399,7 @@ export function MiniChat({
         navigateInternal,
         setUnloadContext,
         applyMemoEdit: onMemoEdit,
+        locale,
         // ステップの current/complete 遷移ごとに UI の進捗表示を更新する
         // Updates the step-level progress indicator as each step transitions to current or complete
         onStepProgress: (stepIndex, status) => {
@@ -431,12 +440,12 @@ export function MiniChat({
           {
             id: createAiAgentMessageId(),
             sender: "assistant",
-            text: result.message || (english ? "The action could not be completed." : "操作を完了できませんでした。"),
+            text: result.message || t("agent.actionIncomplete"),
             isError: true,
           },
         ]);
       } else {
-        await replanAfterFailure(result.message || (english ? "The page state could not be verified." : "画面状態を確認できませんでした。"), result.failedStepIndex);
+        await replanAfterFailure(result.message || t("agent.pageStateUnavailable"), result.failedStepIndex);
       }
     } catch (error) {
       setMessages((prev) => [
@@ -444,7 +453,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : (english ? "The action could not be run." : "操作の実行に失敗しました。"),
+          text: error instanceof Error ? error.message : t("agent.actionRunFailed"),
           isError: true,
         },
       ]);
@@ -484,19 +493,19 @@ export function MiniChat({
       // ページ準備完了を確認してから再開実行を開始する
       // Defers execution until waitForPendingResumeReady confirms the page is ready
       timer = window.setTimeout(async () => {
-        const ready = await waitForPendingResumeReady(pendingActionState);
+        const ready = await waitForPendingResumeReady(pendingActionState, locale);
         if (!ready.ok) {
           clearPendingActionSteps();
           if (ready.needsReplan) {
             // The destination loaded but the blind-planned targets aren't there: re-observe.
-            void replanAfterFailure(ready.message || (english ? "The destination page did not become ready." : "移動後のページ準備を確認できませんでした。"));
+            void replanAfterFailure(ready.message || t("agent.destinationNotReady"));
           } else {
             setMessages((current) => [
               ...current,
               {
                 id: createAiAgentMessageId(),
                 sender: "assistant",
-                text: ready.message || (english ? "The destination page did not become ready." : "移動後のページ準備を確認できませんでした。"),
+                text: ready.message || t("agent.destinationNotReady"),
                 isError: true,
               },
             ]);
@@ -510,9 +519,9 @@ export function MiniChat({
         {
           id: pendingMessageId,
           sender: "assistant",
-          text: english ? "Continuing the remaining actions on the new page." : "移動後の残り操作を続けます。",
+          text: t("agent.continuingActions"),
           actionPlan: {
-            description: english ? "Continue the remaining actions on the new page." : "移動後の残り操作を続けます。",
+            description: t("agent.continuingActions"),
             steps: pendingSteps,
           },
         },
@@ -522,6 +531,9 @@ export function MiniChat({
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
+  // This effect restores one persisted execution snapshot. Re-running it for callback identity
+  // changes could execute the same action twice; route/language changes remount the global shell.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enableActions, persistConversation, storageKeys]);
 
   // メッセージが変わるたびにセッションストレージを更新して会話を永続化する
@@ -530,7 +542,7 @@ export function MiniChat({
     if (!hydrated || !persistConversation) return;
     writeSessionJson(
       storageKeys.messages,
-      messages.map(({ id, sender, text, actionPlan, isError }) => ({ id, sender, text, actionPlan, isError })),
+      messages.map(({ id, sender, text, actionPlan, isError, model }) => ({ id, sender, text, actionPlan, isError, model })),
     );
     writeSessionJson(storageKeys.timestamp, messages.length > 0 ? Date.now() : 0);
   }, [hydrated, messages, persistConversation, storageKeys]);
@@ -550,6 +562,20 @@ export function MiniChat({
     }
   }, [messages, isGenerating, statusText, progressSteps.length]);
 
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  };
+
+  const handleClearConversation = async () => {
+    if (!await showConfirmModal(t("agent.clearConfirm"))) return;
+    setMessages([]);
+    setExecutedSet(new Set());
+  };
+
+  const contextWindowReached = messages.length >= MAX_SEND_MESSAGES;
+
   return (
     <div className="mini-chat-container">
       <div className="mini-chat-messages" ref={scrollRef}>
@@ -562,13 +588,13 @@ export function MiniChat({
             </span>
             <strong>{resolvedTitle}</strong>
             <p>{resolvedDescription}</p>
-            <div className="mini-chat-suggestions" aria-label={english ? "Suggested messages" : "入力候補"}>
+            <div className="mini-chat-suggestions" aria-label={t("agent.suggestions")}>
               {resolvedQuickPrompts.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"
                   className="mini-chat-suggestion"
-                  onClick={() => setInput(prompt)}
+                  onClick={() => void sendMessage(prompt)}
                 >
                   {prompt}
                 </button>
@@ -585,7 +611,14 @@ export function MiniChat({
             </span>
             <div className={`mini-chat-text-wrapper${msg.isError ? " mini-chat-text-wrapper--error" : ""}`}>
               {msg.sender === "assistant" ? (
-                <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
+                <>
+                  <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
+                  {msg.model ? (
+                    <div className="mini-chat-model-label">
+                      {t("agent.modelUsed", { model: formatAiAgentModelLabel(msg.model) })}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="mini-chat-text">{msg.text}</div>
               )}
@@ -626,7 +659,7 @@ export function MiniChat({
                             aria-controls={detailsId}
                           >
                             <span className={`mini-chat-action-badge mini-chat-action-badge--${step.action}`}>
-                              {ACTION_LABELS[step.action]}
+                              {getActionLabel(step.action, locale)}
                             </span>
                             <span className="mini-chat-action-index">{si + 1}</span>
                             <span className="mini-chat-action-step-text">{step.description}</span>
@@ -637,7 +670,7 @@ export function MiniChat({
                           </button>
                           {isExpanded && (
                             <dl className="mini-chat-action-step-details" id={detailsId}>
-                              {describeActionStep(step).map((detail) => (
+                              {describeActionStep(step, locale).map((detail) => (
                                 <div key={detail.label} className="mini-chat-action-step-detail">
                                   <dt>{detail.label}</dt>
                                   <dd className={detail.multiline ? "is-multiline" : undefined}>{detail.value}</dd>
@@ -654,14 +687,14 @@ export function MiniChat({
                     className="mini-chat-execute-btn"
                     onClick={() => handleExecuteActions(msg.actionPlan!.steps, msg.id)}
                     disabled={executingMessageId === msg.id || executedSet.has(msg.id)}
-                    aria-label={english ? "Run actions" : "操作を実行"}
+                    aria-label={t("agent.runActions")}
                   >
                     {executingMessageId === msg.id ? (
-                      <><i className="bi bi-three-dots"></i> {english ? "Running…" : "実行中..."}</>
+                      <><i className="bi bi-three-dots"></i> {t("agent.running")}</>
                     ) : executedSet.has(msg.id) ? (
-                      <><i className="bi bi-check2"></i> {english ? "Completed" : "実行済み"}</>
+                      <><i className="bi bi-check2"></i> {t("agent.completed")}</>
                     ) : (
-                      <><i className="bi bi-play-fill"></i> {english ? "Run" : "実行"}</>
+                      <><i className="bi bi-play-fill"></i> {t("agent.run")}</>
                     )}
                   </button>
                 </div>
@@ -694,6 +727,12 @@ export function MiniChat({
             </div>
           </div>
         ))}
+        {contextWindowReached ? (
+          <div className="mini-chat-context-notice" role="status">
+            <i className="bi bi-info-circle" aria-hidden="true"></i>
+            <span>{t("agent.contextLimited")}</span>
+          </div>
+        ) : null}
         {/* 生成中はタイピングインジケーターまたは SSE 進捗ステップを表示する */}
         {/* Shows a typing indicator or SSE progress list while the AI response is streaming */}
         {isGenerating ? (
@@ -706,7 +745,7 @@ export function MiniChat({
                 <div className="mini-chat-progress" role="status">
                   <span className="mini-chat-status-text">{currentProgressText}</span>
                   {progressSteps.length > 0 ? (
-                    <ol className="mini-chat-progress-list" aria-label={english ? "AI assistant progress" : "AIエージェントの進捗"}>
+                    <ol className="mini-chat-progress-list" aria-label={t("agent.progress")}>
                       {progressSteps.map((step, stepIndex) => (
                         <li
                           key={`${step}-${stepIndex}`}
@@ -733,15 +772,16 @@ export function MiniChat({
       </div>
       <form className="mini-chat-input-area" onSubmit={handleSend}>
         <div className="mini-chat-input-wrapper">
-          <input
-            type="text"
+          <textarea
             className="mini-chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleInputKeyDown}
             placeholder={resolvedInputPlaceholder}
-            aria-label={english ? "Message to AI support" : "AIサポートへのメッセージ"}
+            aria-label={t("agent.inputLabel")}
             maxLength={MAX_INPUT_LENGTH}
             disabled={isGenerating}
+            rows={2}
           />
           {/* 生成中は停止ボタン、それ以外は送信ボタンを表示する */}
           {/* Toggles between stop and send buttons based on whether generation is in progress */}
@@ -769,15 +809,14 @@ export function MiniChat({
         {/* Clears the conversation history; disabled while generating or when there's nothing to clear */}
         <button
           type="button"
-          className="mini-chat-action-btn"
-          onClick={() => {
-            setMessages([]);
-            setExecutedSet(new Set());
-          }}
+          className="mini-chat-action-btn mini-chat-clear-btn"
+          onClick={() => void handleClearConversation()}
           disabled={!messages.length || isGenerating}
-          aria-label={english ? "Clear conversation" : "会話をクリア"}
+          aria-label={t("agent.clear")}
+          title={t("agent.clear")}
         >
           <i className="bi bi-arrow-counterclockwise"></i>
+          <span>{t("agent.clear")}</span>
         </button>
       </form>
     </div>

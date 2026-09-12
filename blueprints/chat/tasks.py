@@ -37,7 +37,7 @@ from services.chat_service import (
 )
 from services.code_search import search_codebase
 from services.default_tasks import default_task_payloads
-from services.i18n import build_response_language_policy, get_request_locale
+from services.i18n import build_response_language_policy, get_request_locale, translate
 from services.intent_classifier import classify_intent
 from services.llm import (
     GPT_OSS_120B_MODEL,
@@ -115,6 +115,7 @@ AI_AGENT_PER_ACTOR_LIMIT = 40
 # AIエージェントに渡すメモコンテキストの最大文字長
 # Maximum character length for memo context sent to the AI Agent.
 AI_AGENT_MEMO_CONTEXT_MAX_LENGTH = 20000
+AI_AGENT_HISTORY_MAX_MESSAGES = 20
 
 # メモ本文が長すぎて切り詰められたことを示す注記。編集計画（全文置換）の生成可否の判定にも使う。
 # Notice appended when the memo body was truncated for context; also used to decide whether
@@ -242,6 +243,7 @@ def _consume_ai_agent_limits(
     actor_key: str,
     *,
     auth_limit_service: AuthLimitService | None = None,
+    locale: str = "ja",
 ) -> tuple[bool, str | None]:
     """
     IPアドレスおよびアクター（ログインユーザーIDまたはゲストセッションID）ごとに、AIエージェントAPIのレート制限の確認と消費を行います。
@@ -261,10 +263,7 @@ def _consume_ai_agent_limits(
     if not allowed:
         return (
             False,
-            (
-                "AIエージェントの試行回数が多すぎます。"
-                f"{retry_after}秒ほど待ってから再試行してください。"
-            ),
+            translate("ai_agent.rate_limited", locale, seconds=retry_after),
         )
 
     # アクターレベルでのレート制限チェック
@@ -279,10 +278,7 @@ def _consume_ai_agent_limits(
     if not allowed:
         return (
             False,
-            (
-                "AIエージェントの試行回数が多すぎます。"
-                f"{retry_after}秒ほど待ってから再試行してください。"
-            ),
+            translate("ai_agent.rate_limited", locale, seconds=retry_after),
         )
     return True, None
 
@@ -306,12 +302,12 @@ def _build_ai_agent_messages(
     locale: str = "ja",
 ) -> list[dict[str, str]]:
     """
-    システムプロンプト、RAGによる参照資料、および直近の会話履歴（最大12件）をマージして、LLMへ送るメッセージリストを組み立てます。
+    システムプロンプト、RAGによる参照資料、および直近の会話履歴（最大20件）をマージして、LLMへ送るメッセージリストを組み立てます。
     Combines system prompt, RAG references, and recent message history for LLM ingestion.
     """
-    # 履歴を直近12件に制限
-    # Limit recent context to last 12 messages
-    recent_messages = payload.messages[-12:]
+    # 全経路で履歴を直近20件に統一する
+    # Keep the same 20-message context window across every agent path
+    recent_messages = payload.messages[-AI_AGENT_HISTORY_MAX_MESSAGES:]
 
     # ページ情報に応じた能力・権限のコンテキストを付与
     # Append capability context based on current page path
@@ -861,6 +857,7 @@ async def ai_agent(
         request,
         llm_daily_limit_service,
     )
+    locale = get_request_locale(request)
 
     # リクエストデータ取得
     # Extract request payload
@@ -873,13 +870,12 @@ async def ai_agent(
     payload, validation_error = validate_payload_model(
         data,
         AiAgentRequest,
-        error_message="AIエージェントリクエストが不正です。",
+        error_message=translate("ai_agent.invalid_request", locale),
     )
     if validation_error is not None:
         return validation_error
 
     user_id = request.session.get("user_id")
-    locale = get_request_locale(request)
     actor_key = f"user:{user_id}" if user_id else f"guest:{get_session_id(request.session)}"
 
     # 呼び出し頻度（レート制限）のチェック
@@ -889,10 +885,11 @@ async def ai_agent(
         request,
         actor_key,
         auth_limit_service=resolved_auth_limit_service,
+        locale=locale,
     )
     if not can_access:
         return jsonify_rate_limited(
-            limit_message or "試行回数が多すぎます。時間をおいて再試行してください。",
+            limit_message or translate("ai_agent.error.busy", locale),
             retry_after=parse_retry_after_seconds(
                 limit_message,
                 default=DEFAULT_RETRY_AFTER_SECONDS,
@@ -907,10 +904,7 @@ async def ai_agent(
     )
     if not can_access_llm:
         return jsonify_rate_limited(
-            (
-                f"今月のAIエージェント利用上限（全ユーザー合計 {monthly_limit} 回）に達しました。"
-                "翌月になってから再度お試しください。"
-            ),
+            translate("ai_agent.monthly_limit", locale, limit=monthly_limit),
             retry_after=get_seconds_until_monthly_reset(),
         )
 
@@ -931,7 +925,7 @@ async def ai_agent(
             # メモIDが指定されている場合、メモの内容を背景コンテキストとして編集提案または直接回答を生成する
             # Handle memo-focused requests: propose an edit plan or answer questions using the memo as context
             if payload.memo_id is not None:
-                yield _ai_agent_sse("progress", {"message": "メモを読み込んでいます..."})
+                yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.memo_loading", locale)})
                 rag_context = await _build_ai_agent_memo_context(user_id, payload.memo_id)
 
                 # 編集依頼なら、実行ボタン付きの編集計画（アクションプラン）を提案する。
@@ -941,10 +935,13 @@ async def ai_agent(
                 # plan built from a partial body would silently delete the tail of the memo.
                 memo_intent = await run_blocking(classify_memo_intent, last_user_message)
                 if memo_intent == "edit" and not rag_context.endswith(MEMO_CONTEXT_TRUNCATED_NOTICE):
-                    yield _ai_agent_sse("progress", {"message": "編集案を作成中..."})
+                    yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.memo_edit", locale)})
                     edit_messages = build_memo_edit_messages(
                         rag_context,
-                        [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                        [
+                            {"role": m.role, "content": m.content}
+                            for m in payload.messages[-AI_AGENT_HISTORY_MAX_MESSAGES:]
+                        ],
                         locale=locale,
                     )
                     response_text = await run_blocking(
@@ -952,12 +949,12 @@ async def ai_agent(
                     )
                     edit_plan = parse_memo_edit_response(response_text or "")
                     if edit_plan:
-                        yield _ai_agent_sse("action_plan", edit_plan)
+                        yield _ai_agent_sse("action_plan", {**edit_plan, "model": GPT_OSS_120B_MODEL})
                         return
                     # 編集計画を生成できない場合は通常のQA回答にフォールバックする
                     # Fall back to the standard QA answer when no valid edit plan was produced
 
-                yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
+                yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.response", locale)})
                 response_text = await run_blocking(
                     get_llm_response,
                     _build_ai_agent_messages(payload, rag_context, locale),
@@ -966,7 +963,7 @@ async def ai_agent(
                 yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})
                 return
 
-            yield _ai_agent_sse("progress", {"message": "依頼内容を確認中..."})
+            yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.request", locale)})
 
             # 意図分類器を用いて「アクション実行」「ページ説明」「マニュアル検索」などを判別
             # Classify intention (action execution, help, manual search, etc.)
@@ -975,16 +972,19 @@ async def ai_agent(
             # アクション提案(action)の処理：DOM解析から操作プランを生成
             # Handle user action intention
             if intent == "action":
-                yield _ai_agent_sse("progress", {"message": "ページを解析中..."})
+                yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.page_analysis", locale)})
                 page_ctx = await run_blocking(get_page_context, current_page)
                 action_context = "\n\n".join(
                     part for part in (dom_context, page_ctx, build_capability_context(current_page)) if part
                 )
                 if action_context:
-                    yield _ai_agent_sse("progress", {"message": "操作手順を生成中..."})
+                    yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.action_plan", locale)})
                     action_messages = build_action_messages(
                         action_context,
-                        [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                        [
+                            {"role": m.role, "content": m.content}
+                            for m in payload.messages[-AI_AGENT_HISTORY_MAX_MESSAGES:]
+                        ],
                         locale=locale,
                     )
                     response_text = await run_blocking(
@@ -994,7 +994,7 @@ async def ai_agent(
                     # Parse proposed UI action selectors
                     action_plan = parse_action_response(response_text or "")
                     if action_plan:
-                        yield _ai_agent_sse("action_plan", action_plan)
+                        yield _ai_agent_sse("action_plan", {**action_plan, "model": GPT_OSS_120B_MODEL})
                         return
                     # セレクタ特定できず → ページコードをRAGとして通常応答にフォールスルー
                     # Fallback to standard chat response if selectors cannot be resolved
@@ -1003,13 +1003,13 @@ async def ai_agent(
             # ページ説明(page_info)の処理：画面のコンテキストまたはマニュアルからRAGコンテキスト構築
             # Handle help request relating to current page
             elif intent == "page_info":
-                yield _ai_agent_sse("progress", {"message": "現在のページを確認中..."})
+                yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.current_page", locale)})
                 page_context = await run_blocking(get_page_context, current_page)
                 rag_context = "\n\n".join(part for part in (dom_context, page_context) if part)
                 if not rag_context:
                     # 画面コンテキストが無ければマニュアルを検索
                     # Fallback to manual RAG if page details are not available
-                    yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
+                    yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.manual", locale)})
                     rag_context = await run_blocking(
                         search_manual,
                         last_user_message,
@@ -1019,7 +1019,7 @@ async def ai_agent(
             # 一般検索(search)の処理：マニュアルやコードベースを検索
             # Handle search intention
             elif intent == "search":
-                yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
+                yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.manual", locale)})
                 rag_context = await run_blocking(
                     search_manual,
                     last_user_message,
@@ -1028,12 +1028,12 @@ async def ai_agent(
                 if not rag_context:
                     # マニュアルになければコードベースも探索
                     # Fallback to codebase search if manual yields nothing
-                    yield _ai_agent_sse("progress", {"message": "コードを探索中..."})
+                    yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.code", locale)})
                     rag_context = await run_blocking(search_codebase, last_user_message)
 
             # RAG情報をシステムプロンプトに統合して、最終回答を生成
             # Generate final agent response text incorporating the retrieved RAG context
-            yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
+            yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.response", locale)})
             response_text = await run_blocking(
                 get_llm_response,
                 _build_ai_agent_messages(payload, rag_context, locale),
@@ -1044,23 +1044,23 @@ async def ai_agent(
         except LlmRateLimitError as exc:
             retry = exc.retry_after_seconds if exc.retry_after_seconds is not None else DEFAULT_RETRY_AFTER_SECONDS
             yield _ai_agent_sse("error", {
-                "message": "AIエージェントの呼び出しが混み合っています。時間をおいて再試行してください。",
+                "message": translate("ai_agent.error.busy", locale),
                 "retry_after": retry,
             })
         except (LlmAuthenticationError, LlmConfigurationError):
             logger.exception("AI agent failed due to LLM authentication/configuration issue.")
-            yield _ai_agent_sse("error", {"message": "AIエージェントの設定エラーが発生しました。管理者に連絡してください。"})
+            yield _ai_agent_sse("error", {"message": translate("ai_agent.error.configuration", locale)})
         except ResourceNotFoundError:
-            yield _ai_agent_sse("error", {"message": "メモが見つからないか、アクセスできません。"})
+            yield _ai_agent_sse("error", {"message": translate("ai_agent.error.memo_missing", locale)})
         except LlmServiceError as exc:
             logger.exception("Failed to generate AI agent response.")
             yield _ai_agent_sse("error", {
-                "message": "AIエージェントの応答生成に失敗しました。時間をおいて再試行してください。",
+                "message": translate("ai_agent.error.generation", locale),
                 "retryable": is_retryable_llm_error(exc),
             })
         except Exception:
             logger.exception("Failed to handle AI agent request.")
-            yield _ai_agent_sse("error", {"message": "予期しないエラーが発生しました。"})
+            yield _ai_agent_sse("error", {"message": translate("ai_agent.error.unexpected", locale)})
 
     # StreamingResponseとしてクライアントへ返却
     # Return StreamingResponse with text/event-stream media type

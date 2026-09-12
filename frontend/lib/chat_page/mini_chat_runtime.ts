@@ -13,6 +13,8 @@ import {
 } from "./ai_agent";
 import { readSessionJson, writeSessionJson } from "../utils";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
+import type { Locale } from "../i18n/config";
+import { miniChatCopy } from "./mini_chat_copy";
 
 // アクション実行中の進捗状態を追跡する型定義
 // Tracks which step is currently running and which steps have already completed
@@ -78,6 +80,7 @@ export type ExecuteOptions = {
   setUnloadContext: (context: UnloadContext) => void;
   onStepProgress?: (stepIndex: number, status: "current" | "complete") => void;
   applyMemoEdit?: MemoEditApplyHandler;
+  locale?: Locale;
 };
 
 // デフォルトの候補プロンプトは MiniChat が agent.prompt* のカタログから組み立てる
@@ -121,11 +124,6 @@ export const CLIENT_NAVIGABLE_ROUTES = new Set([
   "/memo",
   "/settings",
 ]);
-
-// ログインリダイレクト検出時とナビゲーション未完了時のユーザー向けメッセージ
-// User-facing messages for auth redirect detection and navigation timeout
-const AUTH_REDIRECT_MESSAGE = "ログインが必要なため、ログイン画面を開きました。ログイン後にもう一度お試しください。";
-const NAVIGATION_NOT_READY_MESSAGE = "移動先ページの表示を確認できませんでした。";
 
 // sessionStorage に保存されたメッセージが有効な Message 型かを検証する
 // Type guard to safely deserialize messages from sessionStorage without trusting raw JSON
@@ -177,6 +175,7 @@ export function readStoredMessages(storageKeys: MessageStorageKeys): Message[] {
     text: message.text,
     actionPlan: message.actionPlan,
     isError: message.isError,
+    model: typeof message.model === "string" ? message.model : undefined,
   }));
 }
 
@@ -238,7 +237,7 @@ export function isClientNavigableRoute(pathname: string): boolean {
 
 // 指定セレクタの要素が可視になるまでポーリングし、タイムアウト後に失敗を返す
 // Polls until the element matching the selector becomes visible or the timeout elapses
-async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepExecutionResult> {
+async function waitForElement(selector: string, timeoutMs = 1200, locale: Locale = "ja"): Promise<StepExecutionResult> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
     if (isVisibleElement(getElement(selector))) {
@@ -246,7 +245,7 @@ async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepE
     }
     await wait(80);
   }
-  return { ok: false, message: `${selector} の表示を確認できませんでした。` };
+  return { ok: false, message: miniChatCopy(locale, "elementNotVisible", { target: selector }) };
 }
 
 // sessionStorage からページリロードをまたいで保存された未完了ステップを読み込む
@@ -364,7 +363,11 @@ function getStepReadySelectors(step: ActionStep) {
 
 // 複数セレクタのいずれかが可視になるまで待つ — ページの準備確認に使用
 // Waits until at least one of the given selectors becomes visible on the page
-async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_TIMEOUT_MS): Promise<StepExecutionResult> {
+async function waitForAnyElement(
+  selectors: string[],
+  timeoutMs = RESUME_READY_TIMEOUT_MS,
+  locale: Locale = "ja",
+): Promise<StepExecutionResult> {
   if (!selectors.length) return { ok: true };
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
@@ -373,7 +376,7 @@ async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_T
     }
     await wait(100);
   }
-  return { ok: false, message: `${selectors[0]} の表示を確認できませんでした。` };
+  return { ok: false, message: miniChatCopy(locale, "elementNotVisible", { target: selectors[0] }) };
 }
 
 // URL のパス名が期待値と一致するまでポーリングし、認証リダイレクトも検出する
@@ -381,30 +384,31 @@ async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_T
 async function waitForPagePath(
   expectedPath: string | undefined,
   timeoutMs = RESUME_READY_TIMEOUT_MS,
+  locale: Locale = "ja",
 ): Promise<StepExecutionResult> {
   if (!expectedPath || typeof window === "undefined") return { ok: true };
   const expectedPathname = getInternalPathname(expectedPath);
-  if (!expectedPathname) return { ok: false, message: NAVIGATION_NOT_READY_MESSAGE, needsReplan: false };
+  if (!expectedPathname) return { ok: false, message: miniChatCopy(locale, "navigationNotReady"), needsReplan: false };
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
     if (isUnexpectedAuthRedirect(expectedPath, window.location.pathname)) {
-      return { ok: false, message: AUTH_REDIRECT_MESSAGE, needsReplan: false };
+      return { ok: false, message: miniChatCopy(locale, "authRedirect"), needsReplan: false };
     }
     if (pathnamesMatch(expectedPathname, window.location.pathname)) return { ok: true };
     await wait(100);
   }
   if (isUnexpectedAuthRedirect(expectedPath, window.location.pathname)) {
-    return { ok: false, message: AUTH_REDIRECT_MESSAGE, needsReplan: false };
+    return { ok: false, message: miniChatCopy(locale, "authRedirect"), needsReplan: false };
   }
   return pathnamesMatch(expectedPathname, window.location.pathname)
     ? { ok: true }
-    : { ok: false, message: NAVIGATION_NOT_READY_MESSAGE, needsReplan: false };
+    : { ok: false, message: miniChatCopy(locale, "navigationNotReady"), needsReplan: false };
 }
 
 // After a client-side router push, confirm the URL settled on the destination (or an
 // auth gate) before letting follow-up steps run against the new page.
-export async function waitForRouteSettled(expectedPath: string): Promise<StepExecutionResult> {
-  const outcome = await waitForPagePath(expectedPath);
+export async function waitForRouteSettled(expectedPath: string, locale: Locale = "ja"): Promise<StepExecutionResult> {
+  const outcome = await waitForPagePath(expectedPath, RESUME_READY_TIMEOUT_MS, locale);
   if (!outcome.ok) return outcome;
   // React のコミットが完了するまで 2 フレーム待機する
   // Wait two frames to ensure React has committed the new page's effects before proceeding
@@ -415,8 +419,8 @@ export async function waitForRouteSettled(expectedPath: string): Promise<StepExe
 
 // リロード後の再開前にページとターゲット要素の準備完了を確認する
 // Waits for both the correct URL and the first step's target element before resuming after reload
-export async function waitForPendingResumeReady(state: PendingActionState): Promise<StepExecutionResult> {
-  const pathReady = await waitForPagePath(state.expectedPath);
+export async function waitForPendingResumeReady(state: PendingActionState, locale: Locale = "ja"): Promise<StepExecutionResult> {
+  const pathReady = await waitForPagePath(state.expectedPath, RESUME_READY_TIMEOUT_MS, locale);
   if (!pathReady.ok) return pathReady;
   if (document.readyState === "loading") {
     await new Promise<void>((resolve) => {
@@ -425,7 +429,7 @@ export async function waitForPendingResumeReady(state: PendingActionState): Prom
   }
   // Let React commit and run effects on the freshly loaded page before probing the DOM.
   await nextFrame();
-  const ready = await waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS);
+  const ready = await waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS, locale);
   // The page loaded but the planned target is absent: the plan was built blind against
   // this destination, so re-observe and re-plan rather than failing outright.
   return ready.ok ? ready : { ...ready, needsReplan: true };
@@ -467,105 +471,116 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
 
 // セレクタで指定した input/textarea に値を設定し、結果を返す
 // Sets a value on the matched input or textarea and returns whether it was applied
-function setInputValue(selector: string, value: string): StepExecutionResult {
+function setInputValue(selector: string, value: string, locale: Locale): StepExecutionResult {
   const el = getElement<HTMLInputElement | HTMLTextAreaElement>(selector);
   if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) {
-    return { ok: false, message: `${selector} の入力欄が見つかりませんでした。` };
+    return { ok: false, message: miniChatCopy(locale, "inputMissing", { target: selector }) };
   }
   setNativeValue(el, value);
-  return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に入力値を反映できませんでした。` };
+  return {
+    ok: el.value === value,
+    message: el.value === value ? undefined : miniChatCopy(locale, "inputApplyFailed", { target: selector }),
+  };
 }
 
 // セレクタで指定した select 要素の値を変更し、input/change イベントを発火する
 // Sets a select element's value and dispatches events so React state updates
-function setSelectValue(selector: string, value: string): StepExecutionResult {
+function setSelectValue(selector: string, value: string, locale: Locale): StepExecutionResult {
   const el = getElement<HTMLSelectElement>(selector);
   if (!(el instanceof HTMLSelectElement)) {
-    return { ok: false, message: `${selector} の選択欄が見つかりませんでした。` };
+    return { ok: false, message: miniChatCopy(locale, "selectMissing", { target: selector }) };
   }
   el.value = value;
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
-  return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に選択値を反映できませんでした。` };
+  return {
+    ok: el.value === value,
+    message: el.value === value ? undefined : miniChatCopy(locale, "selectApplyFailed", { target: selector }),
+  };
 }
 
 // チェックボックス・ラジオボタンのチェック状態を設定し、イベントを発火する
 // Updates a checkbox or radio button's checked state and fires events for React
-function setCheckedValue(selector: string, checked: boolean): StepExecutionResult {
+function setCheckedValue(selector: string, checked: boolean, locale: Locale): StepExecutionResult {
   const el = getElement<HTMLInputElement>(selector);
   if (!(el instanceof HTMLInputElement) || !/^(checkbox|radio)$/.test(el.type)) {
-    return { ok: false, message: `${selector} のチェック項目が見つかりませんでした。` };
+    return { ok: false, message: miniChatCopy(locale, "checkMissing", { target: selector }) };
   }
   el.checked = checked;
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
-  return { ok: el.checked === checked, message: el.checked === checked ? undefined : `${selector} のチェック状態を反映できませんでした。` };
+  return {
+    ok: el.checked === checked,
+    message: el.checked === checked ? undefined : miniChatCopy(locale, "checkApplyFailed", { target: selector }),
+  };
 }
 
 // 要素を取得してクリックし、無効化されている場合は失敗を返す
 // Finds the element and clicks it, returning a failure if it's disabled or missing
-function clickElement(selector: string): StepExecutionResult {
+function clickElement(selector: string, locale: Locale): StepExecutionResult {
   const el = getElement(selector);
-  if (!el) return { ok: false, message: `${selector} が見つかりませんでした。` };
-  if ((el as HTMLButtonElement).disabled) return { ok: false, message: `${selector} は現在無効です。` };
+  if (!el) return { ok: false, message: miniChatCopy(locale, "elementMissing", { target: selector }) };
+  if ((el as HTMLButtonElement).disabled) {
+    return { ok: false, message: miniChatCopy(locale, "elementDisabled", { target: selector }) };
+  }
   el.click();
   return { ok: true };
 }
 
 // 要素をスムーズスクロールで画面中央に表示する
 // Scrolls the matched element into view so the user can see the context of the action
-function scrollElement(selector: string): StepExecutionResult {
+function scrollElement(selector: string, locale: Locale): StepExecutionResult {
   const el = getElement(selector);
-  if (!el) return { ok: false, message: `${selector} が見つかりませんでした。` };
+  if (!el) return { ok: false, message: miniChatCopy(locale, "elementMissing", { target: selector }) };
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   return { ok: true };
 }
 
 // app_action コマンドを解釈してページ内操作を実行する
 // Dispatches each app_action command to the corresponding page-level DOM operation
-function executeAppAction(step: ActionStep): StepExecutionResult {
+function executeAppAction(step: ActionStep, locale: Locale): StepExecutionResult {
   const command = step.command || "";
   const args = step.args || {};
 
   // navigation.openPage is handled by the unified navigation branch in executeActionStep.
 
   if (command === "chat.fillSetupMessage") {
-    return setInputValue("[data-agent-id='chat.setup-message']", getArg(args, "text"));
+    return setInputValue("[data-agent-id='chat.setup-message']", getArg(args, "text"), locale);
   }
   if (command === "chat.sendSetupMessage") {
-    return clickElement("[data-agent-id='chat.send-setup-message']");
+    return clickElement("[data-agent-id='chat.send-setup-message']", locale);
   }
   if (command === "chat.openPromptComposer") {
-    return clickElement("#openNewPromptModal");
+    return clickElement("#openNewPromptModal", locale);
   }
   if (command === "chat.toggleTaskOrder") {
-    return clickElement("#edit-task-order-btn");
+    return clickElement("#edit-task-order-btn", locale);
   }
   if (command === "chat.showChatHistory") {
-    return clickElement("#access-chat-btn");
+    return clickElement("#access-chat-btn", locale);
   }
 
   if (command === "prompt.search") {
-    const inputResult = setInputValue("#searchInput", getArg(args, "query"));
+    const inputResult = setInputValue("#searchInput", getArg(args, "query"), locale);
     if (!inputResult.ok) return inputResult;
-    return clickElement("#searchButton");
+    return clickElement("#searchButton", locale);
   }
   if (command === "prompt.openComposer") {
-    return clickElement("#heroOpenPostModal");
+    return clickElement("#heroOpenPostModal", locale);
   }
   if (command === "prompt.openLogin") {
-    return clickElement("#login-btn");
+    return clickElement("#login-btn", locale);
   }
   if (command === "prompt.scrollResults") {
-    return scrollElement("#prompt-feed-section");
+    return scrollElement("#prompt-feed-section", locale);
   }
 
   if (command === "settings.openSection") {
     const section = getArg(args, "section");
     if (!/^(profile|appearance|prompts|prompt-list|notifications|security)$/.test(section)) {
-      return { ok: false, message: "設定セクションの指定が不正です。" };
+      return { ok: false, message: miniChatCopy(locale, "invalidSettingsSection") };
     }
-    return clickElement(`[data-section="${cssEscape(section)}"]`);
+    return clickElement(`[data-section="${cssEscape(section)}"]`, locale);
   }
 
   if (command === "memo.fillForm") {
@@ -579,39 +594,39 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
     for (const [key, selector] of Object.entries(fieldMap)) {
       const value = getArg(args, key);
       if (!value) continue;
-      const result = setInputValue(selector, value);
+      const result = setInputValue(selector, value, locale);
       if (!result.ok) return result;
     }
     return { ok: true };
   }
   if (command === "memo.save") {
-    return clickElement("[data-agent-id='memo.save']");
+    return clickElement("[data-agent-id='memo.save']", locale);
   }
 
-  return { ok: false, message: `未対応の操作コマンドです: ${command}` };
+  return { ok: false, message: miniChatCopy(locale, "unsupportedCommand", { command }) };
 }
 
 // ステップ実行後に期待する状態が実現されているか DOM を検査する
 // Inspects the DOM after execution to confirm the action took visible effect
-async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
+async function verifyStep(step: ActionStep, locale: Locale): Promise<StepExecutionResult> {
   await wait();
 
   if (step.action === "app_action") {
     if (step.command === "chat.openPromptComposer") {
-      return { ok: isVisibleElement(document.querySelector("#newPromptModal")), message: "新規プロンプト作成画面を確認できませんでした。" };
+      return { ok: isVisibleElement(document.querySelector("#newPromptModal")), message: miniChatCopy(locale, "promptComposerNotVerified") };
     }
     if (step.command === "prompt.openComposer") {
-      return { ok: isVisibleElement(document.querySelector("#postModal")), message: "プロンプト投稿画面を確認できませんでした。" };
+      return { ok: isVisibleElement(document.querySelector("#postModal")), message: miniChatCopy(locale, "promptPostNotVerified") };
     }
     if (step.command === "settings.openSection") {
       const section = getArg(step.args, "section");
       const active = document.querySelector(`[data-section="${cssEscape(section)}"].active, [data-section="${cssEscape(section)}"][aria-current='page']`);
-      return { ok: Boolean(active), message: "設定セクションの切り替えを確認できませんでした。" };
+      return { ok: Boolean(active), message: miniChatCopy(locale, "settingsSectionNotVerified") };
     }
     if (step.command === "prompt.search") {
       const input = getElement<HTMLInputElement>("#searchInput");
       const query = getArg(step.args, "query");
-      return { ok: !query || input?.value === query, message: "検索語の入力を確認できませんでした。" };
+      return { ok: !query || input?.value === query, message: miniChatCopy(locale, "searchInputNotVerified") };
     }
     return { ok: true };
   }
@@ -619,24 +634,24 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
   if (step.action === "input" && step.selector) {
     const el = getElement<HTMLInputElement | HTMLTextAreaElement>(step.selector);
     const expected = step.value ?? "";
-    return { ok: Boolean(el && "value" in el && el.value === expected), message: `${step.selector} の入力結果を確認できませんでした。` };
+    return { ok: Boolean(el && "value" in el && el.value === expected), message: miniChatCopy(locale, "inputNotVerified", { target: step.selector }) };
   }
   if (step.action === "select" && step.selector) {
     const el = getElement<HTMLSelectElement>(step.selector);
     const expected = step.value ?? "";
-    return { ok: Boolean(el && el.value === expected), message: `${step.selector} の選択結果を確認できませんでした。` };
+    return { ok: Boolean(el && el.value === expected), message: miniChatCopy(locale, "selectNotVerified", { target: step.selector }) };
   }
   if (step.action === "check" && step.selector) {
     const el = getElement<HTMLInputElement>(step.selector);
     const expected = step.checked ?? true;
-    return { ok: Boolean(el && el.checked === expected), message: `${step.selector} のチェック状態を確認できませんでした。` };
+    return { ok: Boolean(el && el.checked === expected), message: miniChatCopy(locale, "checkNotVerified", { target: step.selector }) };
   }
   if (step.action === "wait") {
     if (!step.selector) return { ok: true };
-    return { ok: isVisibleElement(getElement(step.selector)), message: `${step.selector} の表示を確認できませんでした。` };
+    return { ok: isVisibleElement(getElement(step.selector)), message: miniChatCopy(locale, "elementNotVisible", { target: step.selector }) };
   }
   if (step.action === "focus" && step.selector) {
-    return { ok: document.activeElement === getElement(step.selector), message: `${step.selector} のフォーカスを確認できませんでした。` };
+    return { ok: document.activeElement === getElement(step.selector), message: miniChatCopy(locale, "focusNotVerified", { target: step.selector }) };
   }
   // A click's effect (navigation, removal, async UI) isn't generically observable, and the
   // target legitimately disappears when it triggers a navigation. The element's presence and
@@ -649,11 +664,14 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
 async function executeNavigation(
   step: ActionStep,
   navigateInternal: NavigateInternal,
+  locale: Locale,
 ): Promise<StepExecutionResult> {
   const path = getStepNavigationPath(step);
-  if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。", needsReplan: false };
+  if (!isSafeInternalPath(path)) {
+    return { ok: false, message: miniChatCopy(locale, "invalidNavigationPath"), needsReplan: false };
+  }
   if (!isAllowedNavigationPath(path)) {
-    return { ok: false, message: "この遷移は許可されていません。", needsReplan: false };
+    return { ok: false, message: miniChatCopy(locale, "navigationNotAllowed"), needsReplan: false };
   }
   // Already on the destination: nothing to navigate, let following steps run in place.
   if (pathnamesMatch(getInternalPathname(path), window.location.pathname)) return { ok: true };
@@ -668,52 +686,52 @@ async function executeNavigation(
 
 // ステップ種別を判別して対応する操作関数にディスパッチする
 // Dispatches a single step to the appropriate DOM operation based on its action type
-function performActionStep(step: ActionStep): StepExecutionResult | Promise<StepExecutionResult> {
+function performActionStep(step: ActionStep, locale: Locale): StepExecutionResult | Promise<StepExecutionResult> {
   if (step.action === "app_action") {
-    return executeAppAction(step);
+    return executeAppAction(step, locale);
   }
   if (step.action === "input") {
-    if (!step.selector) return { ok: false, message: "入力先が指定されていません。" };
-    return setInputValue(step.selector, step.value ?? "");
+    if (!step.selector) return { ok: false, message: miniChatCopy(locale, "inputTargetMissing") };
+    return setInputValue(step.selector, step.value ?? "", locale);
   }
   if (step.action === "select") {
-    if (!step.selector) return { ok: false, message: "選択先が指定されていません。" };
-    return setSelectValue(step.selector, step.value ?? "");
+    if (!step.selector) return { ok: false, message: miniChatCopy(locale, "selectTargetMissing") };
+    return setSelectValue(step.selector, step.value ?? "", locale);
   }
   if (step.action === "check") {
-    if (!step.selector) return { ok: false, message: "チェック対象が指定されていません。" };
-    return setCheckedValue(step.selector, step.checked ?? true);
+    if (!step.selector) return { ok: false, message: miniChatCopy(locale, "checkTargetMissing") };
+    return setCheckedValue(step.selector, step.checked ?? true, locale);
   }
   if (step.action === "wait") {
     const timeoutMs = Math.max(0, Math.min(step.timeout_ms ?? 1200, 5000));
-    if (step.selector) return waitForElement(step.selector, timeoutMs);
+    if (step.selector) return waitForElement(step.selector, timeoutMs, locale);
     return (async () => {
       if (timeoutMs > 0) await wait(timeoutMs);
       return { ok: true } as StepExecutionResult;
     })();
   }
   if (step.action === "click") {
-    if (!step.selector) return { ok: false, message: "クリック先が指定されていません。" };
-    return clickElement(step.selector);
+    if (!step.selector) return { ok: false, message: miniChatCopy(locale, "clickTargetMissing") };
+    return clickElement(step.selector, locale);
   }
   if (step.action === "focus") {
-    if (!step.selector) return { ok: false, message: "フォーカス先が指定されていません。" };
+    if (!step.selector) return { ok: false, message: miniChatCopy(locale, "focusTargetMissing") };
     const el = getElement(step.selector);
-    if (!el) return { ok: false, message: `${step.selector} が見つかりませんでした。` };
+    if (!el) return { ok: false, message: miniChatCopy(locale, "elementMissing", { target: step.selector }) };
     el.focus();
     return { ok: true };
   }
-  if (!step.selector) return { ok: false, message: "スクロール先が指定されていません。" };
-  return scrollElement(step.selector);
+  if (!step.selector) return { ok: false, message: miniChatCopy(locale, "scrollTargetMissing") };
+  return scrollElement(step.selector, locale);
 }
 
 // Wait for the step's target to be present before acting. Navigation/wait manage their own timing.
-async function waitForStepTarget(step: ActionStep): Promise<StepExecutionResult> {
+async function waitForStepTarget(step: ActionStep, locale: Locale): Promise<StepExecutionResult> {
   if (step.action === "app_action") {
-    return waitForAnyElement(getAppActionReadySelectors(step), RESUME_READY_TIMEOUT_MS);
+    return waitForAnyElement(getAppActionReadySelectors(step), RESUME_READY_TIMEOUT_MS, locale);
   }
   if (step.selector && step.action !== "wait" && step.action !== "scroll" && step.action !== "focus") {
-    await waitForElement(step.selector, 5000);
+    await waitForElement(step.selector, 5000, locale);
   }
   return { ok: true };
 }
@@ -759,13 +777,14 @@ export function requiresActionConfirmation(step: ActionStep): boolean {
 async function executeMemoEdit(
   step: ActionStep,
   applyMemoEdit: MemoEditApplyHandler | undefined,
+  locale: Locale,
 ): Promise<StepExecutionResult> {
   if (!applyMemoEdit) {
-    return { ok: false, message: "この画面ではメモ編集を実行できません。", needsReplan: false };
+    return { ok: false, message: miniChatCopy(locale, "memoEditUnavailable"), needsReplan: false };
   }
   const content = typeof step.content === "string" ? step.content : "";
   if (!content.trim()) {
-    return { ok: false, message: "編集後の本文が空のため適用できませんでした。", needsReplan: false };
+    return { ok: false, message: miniChatCopy(locale, "memoEditEmpty"), needsReplan: false };
   }
   const title = typeof step.title === "string" && step.title.trim() ? step.title : undefined;
   return applyMemoEdit({ content, title });
@@ -777,40 +796,40 @@ async function executeActionStep(
   step: ActionStep,
   options: ExecuteOptions,
 ): Promise<StepExecutionResult> {
-  const { navigateInternal } = options;
+  const { navigateInternal, locale = "ja" } = options;
   if (step.action === "memo_edit") {
-    if (requiresActionConfirmation(step) && !await showConfirmModal("この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？")) {
-      return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
+    if (requiresActionConfirmation(step) && !await showConfirmModal(miniChatCopy(locale, "confirmation"))) {
+      return { ok: false, message: miniChatCopy(locale, "cancelled"), needsReplan: false };
     }
-    return executeMemoEdit(step, options.applyMemoEdit);
+    return executeMemoEdit(step, options.applyMemoEdit, locale);
   }
   if (step.action === "navigate" || (step.action === "app_action" && step.command === "navigation.openPage")) {
-    return executeNavigation(step, navigateInternal);
+    return executeNavigation(step, navigateInternal, locale);
   }
 
   // Wait once for the target to exist; if it never appears, retrying won't help.
-  const ready = await waitForStepTarget(step);
+  const ready = await waitForStepTarget(step, locale);
   if (!ready.ok) return ready;
 
   // Confirm before any state-changing action. Unknown DOM clicks and unregistered
   // app_action commands are confirmation-gated without inspecting their labels.
   const needsConfirmation = requiresActionConfirmation(step);
-  if (needsConfirmation && !await showConfirmModal("この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？")) {
-    return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
+  if (needsConfirmation && !await showConfirmModal(miniChatCopy(locale, "confirmation"))) {
+    return { ok: false, message: miniChatCopy(locale, "cancelled"), needsReplan: false };
   }
 
   // Clicks and typed actions can briefly land before the target's React handlers are
   // bound (notably right after a navigation), so retry the perform+verify cycle once.
   const maxAttempts = step.action === "wait" ? 1 : 2;
-  let lastResult: StepExecutionResult = { ok: false, message: "操作を実行できませんでした。" };
+  let lastResult: StepExecutionResult = { ok: false, message: miniChatCopy(locale, "actionFailed") };
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (attempt > 0) await wait(280);
-    const result = await performActionStep(step);
+    const result = await performActionStep(step, locale);
     if (!result.ok) {
       lastResult = result;
       continue;
     }
-    const verified = await verifyStep(step);
+    const verified = await verifyStep(step, locale);
     if (verified.ok) return { ok: true };
     lastResult = verified;
   }
@@ -866,30 +885,33 @@ export async function executeActionSteps(
 
 // アクション種別を日本語ラベルに変換するマッピング — UI のステップ一覧に使用
 // Maps action type identifiers to Japanese display labels shown in the step list
-export const ACTION_LABELS: Record<ActionStep["action"], string> = {
-  app_action: "操作",
-  click: "クリック",
-  input: "入力",
-  focus: "フォーカス",
-  scroll: "スクロール",
-  navigate: "移動",
-  select: "選択",
-  check: "チェック",
-  wait: "待機",
-  memo_edit: "メモ編集",
+const ACTION_LABELS: Record<Locale, Record<ActionStep["action"], string>> = {
+  ja: {
+    app_action: "操作", click: "クリック", input: "入力", focus: "フォーカス", scroll: "スクロール",
+    navigate: "移動", select: "選択", check: "チェック", wait: "待機", memo_edit: "メモ編集",
+  },
+  en: {
+    app_action: "Action", click: "Click", input: "Input", focus: "Focus", scroll: "Scroll",
+    navigate: "Navigate", select: "Select", check: "Check", wait: "Wait", memo_edit: "Memo edit",
+  },
 };
 
-// 送信直後に表示する初期ステータステキスト
-// Initial status shown while the request is in flight before the first SSE progress event
-export const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
-
-// リスク値をユーザー向けの日本語ラベルに変換するマッピング
-// Maps risk levels to the Japanese wording shown in the step detail panel
-export const RISK_LABELS: Record<NonNullable<ActionStep["risk"]>, string> = {
-  low: "低（元に戻しやすい操作）",
-  medium: "中（実行前に確認します）",
-  high: "高（実行前に確認します）",
+const RISK_LABELS: Record<Locale, Record<NonNullable<ActionStep["risk"]>, string>> = {
+  ja: {
+    low: "低（元に戻しやすい操作）",
+    medium: "中（実行前に確認します）",
+    high: "高（実行前に確認します）",
+  },
+  en: {
+    low: "Low (easy to undo)",
+    medium: "Medium (confirmation required)",
+    high: "High (confirmation required)",
+  },
 };
+
+export function getActionLabel(action: ActionStep["action"], locale: Locale = "ja"): string {
+  return ACTION_LABELS[locale][action];
+}
 
 // ステップ詳細パネルに表示する 1 行分の項目
 // A single labelled row rendered in the step detail disclosure panel
@@ -913,32 +935,48 @@ function formatStepArgs(args: Record<string, unknown> | undefined): string {
 
 // 実行前にユーザーが確認できるよう、ステップの内部フィールドを表示用の項目一覧へ変換する
 // Expands a step's internal fields into display rows so users can inspect what will run
-export function describeActionStep(step: ActionStep): ActionStepDetail[] {
-  const details: ActionStepDetail[] = [{ label: "種類", value: ACTION_LABELS[step.action] }];
+export function describeActionStep(step: ActionStep, locale: Locale = "ja"): ActionStepDetail[] {
+  const english = locale === "en";
+  const details: ActionStepDetail[] = [{
+    label: english ? "Type" : "種類",
+    value: getActionLabel(step.action, locale),
+  }];
 
-  if (step.command) details.push({ label: "コマンド", value: step.command });
+  if (step.command) details.push({ label: english ? "Command" : "コマンド", value: step.command });
 
   const args = formatStepArgs(step.args);
-  if (args) details.push({ label: "パラメータ", value: args, multiline: true });
+  if (args) details.push({ label: english ? "Parameters" : "パラメータ", value: args, multiline: true });
 
-  if (step.path) details.push({ label: "移動先", value: step.path });
-  if (step.selector) details.push({ label: "対象要素", value: step.selector });
+  if (step.path) details.push({ label: english ? "Destination" : "移動先", value: step.path });
+  if (step.selector) details.push({ label: english ? "Target element" : "対象要素", value: step.selector });
 
-  if (step.action === "input") details.push({ label: "入力する値", value: step.value ?? "", multiline: true });
-  if (step.action === "select") details.push({ label: "選択する値", value: step.value ?? "" });
+  if (step.action === "input") {
+    details.push({ label: english ? "Value to enter" : "入力する値", value: step.value ?? "", multiline: true });
+  }
+  if (step.action === "select") {
+    details.push({ label: english ? "Value to select" : "選択する値", value: step.value ?? "" });
+  }
   if (step.action === "check") {
-    details.push({ label: "チェック", value: step.checked ?? true ? "オンにする" : "オフにする" });
+    details.push({
+      label: english ? "Checked state" : "チェック",
+      value: step.checked ?? true ? (english ? "Turn on" : "オンにする") : (english ? "Turn off" : "オフにする"),
+    });
   }
   if (step.action === "wait" && typeof step.timeout_ms === "number") {
-    details.push({ label: "待機時間", value: `${step.timeout_ms} ミリ秒` });
+    details.push({
+      label: english ? "Wait time" : "待機時間",
+      value: `${step.timeout_ms} ${english ? "ms" : "ミリ秒"}`,
+    });
   }
 
-  if (step.title) details.push({ label: "新しいタイトル", value: step.title, multiline: true });
+  if (step.title) {
+    details.push({ label: english ? "New title" : "新しいタイトル", value: step.title, multiline: true });
+  }
   if (step.action === "memo_edit" && step.content) {
-    details.push({ label: "編集後の本文", value: step.content, multiline: true });
+    details.push({ label: english ? "Edited memo" : "編集後の本文", value: step.content, multiline: true });
   }
 
-  if (step.risk) details.push({ label: "リスク", value: RISK_LABELS[step.risk] });
+  if (step.risk) details.push({ label: english ? "Risk" : "リスク", value: RISK_LABELS[locale][step.risk] });
 
   return details;
 }

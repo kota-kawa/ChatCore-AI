@@ -26,12 +26,13 @@ export type Message = {
   text: string;
   actionPlan?: ActionPlan;
   isError?: boolean;
+  model?: string;
 };
 
 export type AiAgentSseEvent =
   | { type: "progress"; message: string }
   | { type: "done"; response: string; model: string }
-  | { type: "action_plan"; description: string; steps: ActionStep[] }
+  | { type: "action_plan"; description: string; steps: ActionStep[]; model?: string }
   | { type: "error"; message: string; retryable?: boolean; retry_after?: number };
 
 export type VisibleElementSummary = {
@@ -376,7 +377,7 @@ export async function* readSseStream(response: Response): AsyncGenerator<AiAgent
  * AIエージェントのHTTPエラーからエラーオブジェクトを生成する
  * Build an error object from an AI agent HTTP error response
  */
-export async function buildAiAgentHttpError(response: Response): Promise<Error> {
+export async function buildAiAgentHttpError(response: Response, locale: "ja" | "en" = "ja"): Promise<Error> {
   let payload: ErrorPayload | null;
   try {
     payload = await response.clone().json() as ErrorPayload;
@@ -388,10 +389,22 @@ export async function buildAiAgentHttpError(response: Response): Promise<Error> 
     ? payload.error
     : typeof payload?.message === "string"
       ? payload.message
-      : `サーバーエラー (${response.status})`;
+      : locale === "en" ? `Server error (${response.status})` : `サーバーエラー (${response.status})`;
   const retryAfter = typeof payload?.retry_after === "number" && Number.isFinite(payload.retry_after)
     ? Math.ceil(payload.retry_after)
     : null;
-  const suffix = retryAfter && retryAfter > 0 ? ` ${retryAfter}秒ほど待ってから再試行してください。` : "";
+  const suffix = retryAfter && retryAfter > 0
+    ? locale === "en"
+      ? ` Try again in about ${retryAfter} seconds.`
+      : ` ${retryAfter}秒ほど待ってから再試行してください。`
+    : "";
   return new Error(`${baseMessage}${suffix}`);
+}
+
+export function formatAiAgentModelLabel(model: string | undefined): string {
+  if (!model) return "";
+  if (model.startsWith("openai/gpt-oss-")) {
+    return `${model.slice("openai/".length)} · Groq`;
+  }
+  return model;
 }

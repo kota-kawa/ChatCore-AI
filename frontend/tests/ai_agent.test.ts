@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildAiAgentHttpError,
+  formatAiAgentModelLabel,
   isActionStep,
   isAllowedNavigationPath,
   isSafeInternalPath,
@@ -82,4 +83,20 @@ test("buildAiAgentHttpError prefers server error message and retry_after", async
   const error = await buildAiAgentHttpError(response);
 
   assert.equal(error.message, "上限に達しました。 30秒ほど待ってから再試行してください。");
+});
+
+test("buildAiAgentHttpError localizes fallback retry guidance", async () => {
+  const response = new Response(
+    JSON.stringify({ error: "Too many requests.", retry_after: 30 }),
+    { status: 429, headers: { "Content-Type": "application/json" } },
+  );
+
+  const error = await buildAiAgentHttpError(response, "en");
+
+  assert.equal(error.message, "Too many requests. Try again in about 30 seconds.");
+});
+
+test("formatAiAgentModelLabel identifies gpt-oss models served by Groq", () => {
+  assert.equal(formatAiAgentModelLabel("openai/gpt-oss-120b"), "gpt-oss-120b · Groq");
+  assert.equal(formatAiAgentModelLabel("custom-model"), "custom-model");
 });

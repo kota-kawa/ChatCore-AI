@@ -3,8 +3,15 @@ import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from blueprints.chat.tasks import AI_AGENT_SYSTEM_PROMPT, ai_agent, prompt_assist
+from blueprints.chat.tasks import (
+    AI_AGENT_HISTORY_MAX_MESSAGES,
+    AI_AGENT_SYSTEM_PROMPT,
+    _build_ai_agent_messages,
+    ai_agent,
+    prompt_assist,
+)
 from services.llm import LlmProviderError
+from services.request_models import AiAgentRequest
 from tests.helpers.request_helpers import build_request
 
 
@@ -185,6 +192,21 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
         self.assertTrue(mock_limits.call_args.args[1].startswith("guest:"))
 
+    def test_ai_agent_uses_the_same_20_message_history_window(self):
+        payload = AiAgentRequest(
+            messages=[
+                {"role": "user" if index % 2 == 0 else "assistant", "content": f"message-{index}"}
+                for index in range(AI_AGENT_HISTORY_MAX_MESSAGES)
+            ]
+        )
+
+        messages = _build_ai_agent_messages(payload)
+
+        self.assertEqual(AI_AGENT_HISTORY_MAX_MESSAGES, 20)
+        self.assertEqual(len(messages), 21)
+        self.assertEqual(messages[1]["content"], "message-0")
+        self.assertEqual(messages[-1]["content"], "message-19")
+
     # 日本語: doneの前、aiagentstreamsprogressことを検証します。
     # English: Verify that ai agent streams progress before done.
     def test_ai_agent_streams_progress_before_done(self):
@@ -217,6 +239,26 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(events[0], ("progress", {"message": "依頼内容を確認中..."}))
         self.assertIn(("progress", {"message": "回答を生成中..."}), events)
         self.assertEqual(events[-1][0], "done")
+
+    def test_ai_agent_localizes_progress_for_english_ui(self):
+        request = make_ai_agent_request(
+            {"messages": [{"role": "user", "content": "How do I use this page?"}]},
+            session={"preferred_locale": "en"},
+        )
+
+        async def _run():
+            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
+                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
+                    with patch("blueprints.chat.tasks.classify_intent", return_value="direct"):
+                        with patch("blueprints.chat.tasks.get_llm_response", return_value="Here is how."):
+                            response = await ai_agent(request)
+                            return await _collect_sse_events(response)
+
+        events = asyncio.run(_run())
+
+        self.assertEqual(events[0], ("progress", {"message": "Checking your request..."}))
+        self.assertIn(("progress", {"message": "Generating a response..."}), events)
+        self.assertEqual(events[-1][1]["response"], "Here is how.")
 
     # 日本語: aiagentactionplanuses現在domコンテキストことを検証します。
     # English: Verify that ai agent action plan uses current dom context.
@@ -258,6 +300,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["description"], "プロンプト検索を実行します")
         self.assertEqual(payload["steps"][0]["selector"], "#searchButton")
+        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
         self.assertIn("#searchInput", mock_llm.call_args.args[0][0]["content"])
         self.assertIn("ChatCore 機能カタログ", mock_llm.call_args.args[0][0]["content"])
 

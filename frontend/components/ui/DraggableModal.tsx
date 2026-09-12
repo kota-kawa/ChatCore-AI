@@ -13,6 +13,7 @@ type DraggableModalProps = {
   initialX?: number;
   initialY?: number;
   positionStorageKey?: string;
+  initialFocusSelector?: string;
 };
 
 // モーダルのx/y座標を表す型
@@ -38,9 +39,10 @@ export function DraggableModal({
   initialX = 100,
   initialY = 100,
   positionStorageKey,
+  initialFocusSelector,
 }: DraggableModalProps) {
-  const { locale } = useTranslation();
-  const fallbackTitle = locale === "en" ? "AI agent" : "AI エージェント";
+  const { t } = useTranslation();
+  const fallbackTitle = t("agent.header");
   // モーダルの現在位置（px）
   // Current position of the modal (px)
   const [position, setPosition] = useState<Position>({ x: initialX, y: initialY });
@@ -222,7 +224,10 @@ export function DraggableModal({
       ? document.activeElement
       : null;
     const timer = window.setTimeout(() => {
-      const focusTarget = modalRef.current?.querySelector<HTMLElement>(
+      const requestedTarget = initialFocusSelector
+        ? modalRef.current?.querySelector<HTMLElement>(initialFocusSelector)
+        : null;
+      const focusTarget = requestedTarget ?? modalRef.current?.querySelector<HTMLElement>(
         "input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])"
       );
       focusTarget?.focus();
@@ -231,7 +236,7 @@ export function DraggableModal({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isOpen]);
+  }, [initialFocusSelector, isOpen]);
 
   // モーダルが閉じたとき、フォーカスを元の要素に戻す
   // Return focus to the previously focused element when the modal closes
@@ -294,7 +299,7 @@ export function DraggableModal({
           type="button"
           className="modal-close-btn"
           onClick={onClose}
-          aria-label={locale === "en" ? "Close AI agent" : "AIエージェントを閉じる"}
+          aria-label={t("agent.close")}
         >
           <i className="bi bi-x-lg"></i>
         </button>
