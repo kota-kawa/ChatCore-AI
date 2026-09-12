@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import time
 import unittest
 from dataclasses import replace
 from unittest.mock import MagicMock, patch
@@ -1943,6 +1945,114 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         results = web_search.extract_prior_web_search_results(entries)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].sources[0].url, "https://example.com/python")
+
+
+# 日本語: items() の反復を途中で止められる辞書。別スレッドの割り込みを再現します。
+# English: Dict whose items() iteration can be paused, reproducing an interleaved writer.
+class _PausingItemsDict(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.iteration_started = threading.Event()
+        self.resume_iteration = threading.Event()
+
+    def items(self):
+        view_iterator = iter(super().items())
+
+        # 日本語: 最初の要素を返した直後に停止し、割り込み書き込みの機会を作ります。
+        # English: Pause right after the first item so an interleaved write can land.
+        def paused_items():
+            paused = False
+            for item in view_iterator:
+                if not paused:
+                    paused = True
+                    self.iteration_started.set()
+                    self.resume_iteration.wait(timeout=0.25)
+                yield item
+
+        return paused_items()
+
+
+# 日本語: 検索キャッシュのスレッド安全性を検証するテストクラスです。
+# English: Test case class verifying the thread safety of the search result cache.
+class WebSearchCacheConcurrencyTestCase(unittest.TestCase):
+    def setUp(self):
+        web_search._search_cache.clear()
+        self.addCleanup(web_search._search_cache.clear)
+
+    # 日本語: 退避処理の反復中に別スレッドが挿入してもエラーにならないことを検証します。
+    # English: Verify inserting from another thread during eviction does not raise.
+    def test_concurrent_cache_writes_do_not_raise(self):
+        worker_count = 8
+        writes_per_worker = 60
+        start = threading.Barrier(worker_count)
+        failures = []
+
+        # 日本語: 全スレッドを同時に走らせてキャッシュ更新を競合させます。
+        # English: Release every thread at once so the cache updates race.
+        def writer(worker_index):
+            start.wait(timeout=10)
+            try:
+                for write_index in range(writes_per_worker):
+                    key = f"worker-{worker_index}-entry-{write_index}"
+                    result = web_search.WebSearchResult(query=key, searched_at="", sources=())
+                    web_search._set_cached_search(key, result)
+                    web_search._get_cached_search(key)
+            except Exception as error:  # 失敗内容をそのまま報告する / report the failure verbatim
+                failures.append(error)
+
+        threads = [threading.Thread(target=writer, args=(index,)) for index in range(worker_count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertEqual(failures, [])
+        self.assertLessEqual(len(web_search._search_cache), web_search.WEB_SEARCH_CACHE_MAX_ENTRIES + 1)
+
+    # 日本語: 退避処理の反復中に別スレッドが挿入しても反復が壊れないことを検証します。
+    # English: Verify the eviction scan is not broken by another thread inserting mid-iteration.
+    def test_eviction_scan_survives_concurrent_insert(self):
+        result = web_search.WebSearchResult(query="q", searched_at="", sources=())
+        cache = _PausingItemsDict()
+        expires_at = time.monotonic() + 300
+        for index in range(200):
+            cache[f"seed-{index}"] = (expires_at, result)
+
+        failures = []
+
+        # 日本語: 反復が始まったら別スレッドとしてキャッシュへ書き込みます。
+        # English: Write into the cache from another thread once the scan has started.
+        def interleaved_writer():
+            cache.iteration_started.wait(timeout=5)
+            try:
+                web_search._set_cached_search("from-other-thread", result)
+            except Exception as error:  # 失敗内容をそのまま報告する / report the failure verbatim
+                failures.append(error)
+            finally:
+                cache.resume_iteration.set()
+
+        with patch.object(web_search, "_search_cache", cache):
+            thread = threading.Thread(target=interleaved_writer)
+            thread.start()
+            try:
+                web_search._set_cached_search("from-this-thread", result)
+            except Exception as error:  # 失敗内容をそのまま報告する / report the failure verbatim
+                failures.append(error)
+            finally:
+                cache.resume_iteration.set()
+                thread.join(timeout=5)
+
+        self.assertEqual(failures, [])
+        self.assertIn("from-this-thread", cache)
+        self.assertIn("from-other-thread", cache)
+
+    # 日本語: 保存した結果がそのまま読み戻せることを検証します。
+    # English: Verify a stored result is read back unchanged.
+    def test_cached_result_round_trips(self):
+        result = web_search.WebSearchResult(query="q", searched_at="", sources=())
+        web_search._set_cached_search("key", result)
+
+        self.assertIs(web_search._get_cached_search("key"), result)
 
 
 if __name__ == "__main__":
