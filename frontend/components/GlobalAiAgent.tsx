@@ -13,9 +13,9 @@ const POSITION_STORAGE_KEY = "globalAiAgent.position";
 // グローバルAIエージェントのフローティングボタンとモーダルを管理するコンポーネント
 // Component that manages the global AI agent floating button and modal
 export function GlobalAiAgent() {
-  const { locale } = useTranslation();
-  const agentLabel = locale === "en" ? "AI agent" : "AI エージェント";
-  const launchLabel = locale === "en" ? "Open AI agent" : "AI エージェントを起動";
+  const { t } = useTranslation();
+  const agentLabel = t("agent.header");
+  const launchLabel = t("agent.launch");
   // モーダルの開閉状態
   // Open/close state of the modal
   const [isOpen, setIsOpen] = useState(false);
@@ -60,6 +60,7 @@ export function GlobalAiAgent() {
         initialX={20}
         initialY={100}
         positionStorageKey={POSITION_STORAGE_KEY}
+        initialFocusSelector=".mini-chat-input"
       >
         <MiniChat />
       </DraggableModal>

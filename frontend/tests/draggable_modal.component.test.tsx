@@ -82,4 +82,21 @@ describe("DraggableModal", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(screen.getByRole("dialog")).toHaveStyle({ cursor: "auto" });
   });
+
+  it("focuses an explicitly requested input when the dialog opens", () => {
+    render(
+      <DraggableModal
+        isOpen
+        onClose={vi.fn()}
+        title="入力フォーカス"
+        initialFocusSelector=".agent-input"
+      >
+        <textarea className="agent-input" aria-label="依頼内容" />
+      </DraggableModal>
+    );
+
+    act(() => vi.advanceTimersByTime(0));
+
+    expect(screen.getByRole("textbox", { name: "依頼内容" })).toHaveFocus();
+  });
 });

@@ -111,3 +111,20 @@ test("describeActionStep spells out risk levels that force a confirmation", () =
 
   assert.equal(rows.get("リスク"), "中（実行前に確認します）");
 });
+
+test("describeActionStep localizes action details for English", () => {
+  const details = describeActionStep({
+    action: "check",
+    selector: "#newsletter",
+    checked: true,
+    risk: "medium",
+    description: "Enable notifications",
+  }, "en");
+  const rows = new Map(details.map((detail) => [detail.label, detail.value]));
+
+  assert.equal(rows.get("Type"), "Check");
+  assert.equal(rows.get("Target element"), "#newsletter");
+  assert.equal(rows.get("Checked state"), "Turn on");
+  assert.equal(rows.get("Risk"), "Medium (confirmation required)");
+  assert.equal(JSON.stringify(details).match(/[぀-ヿ一-龯]/), null);
+});

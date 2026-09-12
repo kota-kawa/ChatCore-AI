@@ -1,0 +1,86 @@
+import type { Locale } from "../i18n/config";
+
+// Runtime messages live outside React because page actions can continue across navigation.
+// Keep both locales together so every low-level failure remains understandable in the active UI.
+const COPY = {
+  ja: {
+    authRedirect: "ログインが必要なため、ログイン画面を開きました。ログイン後にもう一度お試しください。",
+    navigationNotReady: "移動先ページの表示を確認できませんでした。",
+    elementNotVisible: "{target} の表示を確認できませんでした。",
+    inputMissing: "{target} の入力欄が見つかりませんでした。",
+    inputApplyFailed: "{target} に入力値を反映できませんでした。",
+    selectMissing: "{target} の選択欄が見つかりませんでした。",
+    selectApplyFailed: "{target} に選択値を反映できませんでした。",
+    checkMissing: "{target} のチェック項目が見つかりませんでした。",
+    checkApplyFailed: "{target} のチェック状態を反映できませんでした。",
+    elementMissing: "{target} が見つかりませんでした。",
+    elementDisabled: "{target} は現在無効です。",
+    invalidSettingsSection: "設定セクションの指定が不正です。",
+    unsupportedCommand: "未対応の操作コマンドです: {command}",
+    promptComposerNotVerified: "新規プロンプト作成画面を確認できませんでした。",
+    promptPostNotVerified: "プロンプト投稿画面を確認できませんでした。",
+    settingsSectionNotVerified: "設定セクションの切り替えを確認できませんでした。",
+    searchInputNotVerified: "検索語の入力を確認できませんでした。",
+    inputNotVerified: "{target} の入力結果を確認できませんでした。",
+    selectNotVerified: "{target} の選択結果を確認できませんでした。",
+    checkNotVerified: "{target} のチェック状態を確認できませんでした。",
+    focusNotVerified: "{target} のフォーカスを確認できませんでした。",
+    invalidNavigationPath: "移動先パスが不正です。",
+    navigationNotAllowed: "この遷移は許可されていません。",
+    inputTargetMissing: "入力先が指定されていません。",
+    selectTargetMissing: "選択先が指定されていません。",
+    checkTargetMissing: "チェック対象が指定されていません。",
+    clickTargetMissing: "クリック先が指定されていません。",
+    focusTargetMissing: "フォーカス先が指定されていません。",
+    scrollTargetMissing: "スクロール先が指定されていません。",
+    memoEditUnavailable: "この画面ではメモ編集を実行できません。",
+    memoEditEmpty: "編集後の本文が空のため適用できませんでした。",
+    confirmation: "この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？",
+    cancelled: "ユーザー確認で操作を中止しました。",
+    actionFailed: "操作を実行できませんでした。",
+  },
+  en: {
+    authRedirect: "Login is required, so the login page was opened. Try again after signing in.",
+    navigationNotReady: "The destination page did not become ready.",
+    elementNotVisible: "Could not confirm that {target} is visible.",
+    inputMissing: "Could not find the input field {target}.",
+    inputApplyFailed: "Could not enter the value in {target}.",
+    selectMissing: "Could not find the selection field {target}.",
+    selectApplyFailed: "Could not apply the selection to {target}.",
+    checkMissing: "Could not find the checkbox or radio button {target}.",
+    checkApplyFailed: "Could not update the checked state of {target}.",
+    elementMissing: "Could not find {target}.",
+    elementDisabled: "{target} is currently disabled.",
+    invalidSettingsSection: "The requested settings section is invalid.",
+    unsupportedCommand: "This action command is not supported: {command}",
+    promptComposerNotVerified: "Could not confirm that the new prompt window opened.",
+    promptPostNotVerified: "Could not confirm that the prompt post window opened.",
+    settingsSectionNotVerified: "Could not confirm that the settings section changed.",
+    searchInputNotVerified: "Could not confirm the search text.",
+    inputNotVerified: "Could not confirm the value entered in {target}.",
+    selectNotVerified: "Could not confirm the selection in {target}.",
+    checkNotVerified: "Could not confirm the checked state of {target}.",
+    focusNotVerified: "Could not confirm focus on {target}.",
+    invalidNavigationPath: "The destination path is invalid.",
+    navigationNotAllowed: "This navigation is not allowed.",
+    inputTargetMissing: "No input target was specified.",
+    selectTargetMissing: "No selection target was specified.",
+    checkTargetMissing: "No checkbox or radio button was specified.",
+    clickTargetMissing: "No click target was specified.",
+    focusTargetMissing: "No focus target was specified.",
+    scrollTargetMissing: "No scroll target was specified.",
+    memoEditUnavailable: "Memo editing is not available on this screen.",
+    memoEditEmpty: "The edit could not be applied because the resulting memo would be empty.",
+    confirmation: "This action may send, save, delete, or otherwise make a change that cannot be undone. Continue?",
+    cancelled: "The action was cancelled during confirmation.",
+    actionFailed: "The action could not be completed.",
+  },
+} as const;
+
+export type MiniChatCopyKey = keyof typeof COPY.ja;
+
+export function miniChatCopy(locale: Locale, key: MiniChatCopyKey, values?: Record<string, string | number>): string {
+  const template: string = COPY[locale][key];
+  if (!values) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+}

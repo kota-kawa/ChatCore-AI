@@ -1,5 +1,12 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const resilientFetchMock = vi.hoisted(() => vi.fn());
+const showConfirmModalMock = vi.hoisted(() => vi.fn(async () => true));
+
+vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: resilientFetchMock }));
+vi.mock("../scripts/core/alert_modal", () => ({ showConfirmModal: showConfirmModalMock }));
 
 vi.mock("next/router", () => ({
   useRouter: () => ({ asPath: "/", pathname: "/", isReady: true, query: {}, push: vi.fn(), prefetch: vi.fn() })
@@ -20,12 +27,20 @@ function renderSupportAgent(locale: Locale) {
 }
 
 describe("support agent localization", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    resilientFetchMock.mockResolvedValue(new Response(
+      'event: done\ndata: {"response":"Concise answer","model":"openai/gpt-oss-120b"}\n\n',
+      { status: 200, headers: { "Content-Type": "text/event-stream" } },
+    ));
+  });
+
   it("shows its placeholder copy and quick prompts in English", () => {
     renderSupportAgent("en");
 
     expect(screen.getByText("Navigation assistant")).toBeInTheDocument();
     expect(screen.getByText("Ask for help using this page, choosing your next action, or organizing what to enter.")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Ask for help with this page")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Ask for help with this page").tagName).toBe("TEXTAREA");
     expect(screen.getByRole("button", { name: "What can this service do?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "How do I use this page?" })).toBeInTheDocument();
   });
@@ -49,6 +64,52 @@ describe("support agent localization", () => {
       .filter((text) => JAPANESE.test(text));
 
     expect(leaked).toEqual([]);
+  });
+
+  it("sends a suggested message immediately and shows the response model", async () => {
+    const user = userEvent.setup();
+    renderSupportAgent("en");
+
+    await user.click(screen.getByRole("button", { name: "What can this service do?" }));
+
+    await screen.findByText("Concise answer");
+    expect(screen.getByText("Model: gpt-oss-120b · Groq")).toBeInTheDocument();
+    expect(resilientFetchMock).toHaveBeenCalledOnce();
+    const requestBody = JSON.parse(String(resilientFetchMock.mock.calls[0][1].body));
+    expect(requestBody.messages.at(-1)).toEqual({ role: "user", content: "What can this service do?" });
+  });
+
+  it("explains when older messages fall outside the 20-message context window", async () => {
+    window.sessionStorage.setItem(
+      "globalAiAgent.messages",
+      JSON.stringify(Array.from({ length: 20 }, (_, index) => ({
+        id: `stored-${index}`,
+        sender: index % 2 === 0 ? "user" : "assistant",
+        text: `Stored message ${index + 1}`,
+      }))),
+    );
+    window.sessionStorage.setItem("globalAiAgent.messagesTimestamp", String(Date.now()));
+
+    renderSupportAgent("en");
+
+    expect(await screen.findByText(
+      "Only the latest 20 messages are sent as context. Older messages remain visible but are no longer included.",
+    )).toBeInTheDocument();
+  });
+
+  it("uses Enter to send, keeps Shift+Enter for a new line, and confirms clearing", async () => {
+    const user = userEvent.setup();
+    renderSupportAgent("en");
+    const input = screen.getByLabelText("Message to AI support");
+
+    await user.type(input, "First line{shift>}{enter}{/shift}Second line");
+    expect(input).toHaveValue("First line\nSecond line");
+    await user.type(input, "{enter}");
+    await screen.findByText("Concise answer");
+
+    await user.click(screen.getByRole("button", { name: "Clear conversation" }));
+    await waitFor(() => expect(showConfirmModalMock).toHaveBeenCalledWith("Clear this conversation? This cannot be undone."));
+    expect(screen.getByText("Navigation assistant")).toBeInTheDocument();
   });
 });
 
