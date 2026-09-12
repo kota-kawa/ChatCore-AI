@@ -73,6 +73,44 @@ def _is_unique_violation(exc: BaseException) -> bool:
     return is_unique_violation(exc)
 
 
+# 日本語: ルームツリーの SELECT で取る列。attached_file_contents / message_parts /
+#         web_search_context は JSONB に添付ファイル本文がそのまま入るため、本文が要らない
+#         経路（リーフ判定・枝の走査）では読み出さない。
+# English: Column projections for the room-tree SELECT. attached_file_contents, message_parts and
+#          web_search_context are JSONB blobs that carry whole uploaded files, so paths that only
+#          need to walk the branch (leaf lookup, deletion scan) never transfer them.
+_TREE_NAVIGATION_COLUMNS: tuple[Any, ...] = (
+    ChatHistory.id,
+    ChatHistory.parent_id,
+    ChatHistory.active_child_id,
+)
+_TREE_SENDER_COLUMNS: tuple[Any, ...] = (ChatHistory.sender,)
+_TREE_WEB_SEARCH_COLUMNS: tuple[Any, ...] = (ChatHistory.web_search_context,)
+_TREE_LLM_HISTORY_COLUMNS: tuple[Any, ...] = (
+    ChatHistory.message,
+    ChatHistory.sender,
+    ChatHistory.message_parts,
+    ChatHistory.attached_file_contents,
+)
+_TREE_DISPLAY_COLUMNS: tuple[Any, ...] = (
+    ChatHistory.message,
+    ChatHistory.sender,
+    ChatHistory.timestamp,
+    ChatHistory.attached_file_names,
+    ChatHistory.message_parts,
+)
+_TREE_DISPLAY_WITH_ATTACHMENTS_COLUMNS: tuple[Any, ...] = (
+    *_TREE_DISPLAY_COLUMNS,
+    ChatHistory.attached_file_contents,
+)
+_TREE_SHARED_PAYLOAD_COLUMNS: tuple[Any, ...] = (
+    ChatHistory.message,
+    ChatHistory.sender,
+    ChatHistory.timestamp,
+    ChatHistory.message_parts,
+)
+
+
 class ChatRepository:
     """Repository for chat rooms, message history, branches, sharing and room memory.
 
@@ -224,7 +262,7 @@ class ChatRepository:
         room = await load_owned_room(self.session, room_id, user_id, "", lock=True, forbidden_returns_false=True)
         if room is None:
             return False
-        nodes, active_root_id = await self._load_room_tree(room_id)
+        nodes, active_root_id = await self._load_room_tree(room_id, columns=_TREE_SENDER_COLUMNS)
         children = self._children_by_parent(nodes)
         path = self._walk_active_path(nodes, active_root_id, children)
         removable_ids = self._trailing_unanswered_user_ids(path, children)
@@ -259,7 +297,8 @@ class ChatRepository:
         return bool(result.rowcount)
 
     async def get_active_path(self, chat_room_id: str, *, include_attachment_contents: bool = False) -> list[dict[str, Any]]:
-        nodes, active_root_id = await self._load_room_tree(chat_room_id)
+        columns = _TREE_DISPLAY_WITH_ATTACHMENTS_COLUMNS if include_attachment_contents else _TREE_DISPLAY_COLUMNS
+        nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=columns)
         children = self._children_by_parent(nodes)
         path = self._walk_active_path(nodes, active_root_id, children)
         return [
@@ -268,6 +307,8 @@ class ChatRepository:
         ]
 
     async def get_active_leaf_id(self, chat_room_id: str) -> int | None:
+        # 枝の末尾を知るだけなので、本文や添付 JSONB は一切読まない。
+        # Only the branch tip is needed here, so no message body or JSONB blob is transferred.
         nodes, active_root_id = await self._load_room_tree(chat_room_id)
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
         return path[-1]["id"] if path else None
@@ -294,32 +335,14 @@ class ChatRepository:
         return await self.get_active_path(chat_room_id)
 
     async def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, Any]]:
-        nodes, active_root_id = await self._load_room_tree(chat_room_id)
+        nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=_TREE_LLM_HISTORY_COLUMNS)
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
-        messages: list[dict[str, Any]] = []
-        for node in path:
-            message: dict[str, Any] = {
-                "role": "user" if node["sender"] == "user" else "assistant",
-                "content": node["message"],
-            }
-            parts = decode_message_parts(node.get("message_parts"))
-            if parts:
-                message["message_parts"] = parts
-            attached = decode_attached_files_from_storage(node.get("attached_file_contents"))
-            if attached:
-                message["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
-            messages.append(message)
-        return messages
+        return self._path_to_llm_messages(path)
 
     async def get_active_path_web_search_contexts(self, chat_room_id: str) -> list[dict[str, Any]]:
-        nodes, active_root_id = await self._load_room_tree(chat_room_id)
+        nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=_TREE_WEB_SEARCH_COLUMNS)
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
-        contexts: list[dict[str, Any]] = []
-        for node in path:
-            decoded = _decode_web_search_context(node.get("web_search_context"))
-            if decoded:
-                contexts.extend(decoded)
-        return contexts
+        return self._path_to_web_search_contexts(path)
 
     async def validate_room_owner(self, room_id: str, user_id: int, forbidden_message: str) -> str | None:
         row = (
@@ -461,7 +484,7 @@ class ChatRepository:
         if row is None:
             raise ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND)
         room_id, title, created_at = row
-        nodes, active_root_id = await self._load_room_tree(room_id)
+        nodes, active_root_id = await self._load_room_tree(room_id, columns=_TREE_SHARED_PAYLOAD_COLUMNS)
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
         messages: list[dict[str, Any]] = []
         for node in path:
@@ -482,7 +505,7 @@ class ChatRepository:
     async def fetch_chat_history_page(
         self, chat_room_id: str, limit: int, before_message_id: int | None = None
     ) -> dict[str, Any]:
-        nodes, active_root_id = await self._load_room_tree(chat_room_id)
+        nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=_TREE_DISPLAY_COLUMNS)
         children = self._children_by_parent(nodes)
         path = self._walk_active_path(nodes, active_root_id, children)
         if before_message_id is not None:
@@ -590,28 +613,59 @@ class ChatRepository:
 
     # Internal helpers -------------------------------------------------------
 
-    async def _load_room_tree(self, chat_room_id: str) -> tuple[dict[int, dict[str, Any]], int | None]:
+    async def _load_room_tree(
+        self,
+        chat_room_id: str,
+        *,
+        columns: tuple[Any, ...] = (),
+    ) -> tuple[dict[int, dict[str, Any]], int | None]:
+        """Load one room's message tree, transferring only the columns the caller reads.
+
+        ``columns`` extends the navigation projection (``id`` / ``parent_id`` /
+        ``active_child_id``).  Leaving it empty keeps whole uploaded files out of
+        the result set for callers that only need to walk the branch.
+        """
+
         rows = (
             await self.session.execute(
-                select(ChatHistory).where(ChatHistory.chat_room_id == chat_room_id).order_by(ChatHistory.id)
+                select(*_TREE_NAVIGATION_COLUMNS, *columns)
+                .where(ChatHistory.chat_room_id == chat_room_id)
+                .order_by(ChatHistory.id)
             )
-        ).scalars().all()
-        nodes: dict[int, dict[str, Any]] = {}
-        for row in rows:
-            nodes[int(row.id)] = {
-                "id": row.id,
-                "message": row.message,
-                "sender": row.sender,
-                "parent_id": row.parent_id,
-                "active_child_id": row.active_child_id,
-                "timestamp": row.timestamp,
-                "attached_file_names": row.attached_file_names,
-                "message_parts": row.message_parts,
-                "attached_file_contents": row.attached_file_contents,
-                "web_search_context": row.web_search_context,
-            }
+        ).mappings().all()
+        nodes: dict[int, dict[str, Any]] = {int(row["id"]): dict(row) for row in rows}
         active_root_id = await self.session.scalar(select(ChatRoom.active_root_id).where(ChatRoom.id == chat_room_id))
         return nodes, active_root_id
+
+    @staticmethod
+    def _path_to_llm_messages(path: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Turn an active-branch path into the message list handed to the LLM."""
+
+        messages: list[dict[str, Any]] = []
+        for node in path:
+            message: dict[str, Any] = {
+                "role": "user" if node["sender"] == "user" else "assistant",
+                "content": node["message"],
+            }
+            parts = decode_message_parts(node.get("message_parts"))
+            if parts:
+                message["message_parts"] = parts
+            attached = decode_attached_files_from_storage(node.get("attached_file_contents"))
+            if attached:
+                message["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
+            messages.append(message)
+        return messages
+
+    @staticmethod
+    def _path_to_web_search_contexts(path: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Collect the web-search evidence stored along an active-branch path."""
+
+        contexts: list[dict[str, Any]] = []
+        for node in path:
+            decoded = _decode_web_search_context(node.get("web_search_context"))
+            if decoded:
+                contexts.extend(decoded)
+        return contexts
 
     @staticmethod
     def _trailing_unanswered_user_ids(path: list[dict[str, Any]], children: dict[int | None, list[int]]) -> list[int]:
