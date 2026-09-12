@@ -872,7 +872,6 @@ class ChatPostUseCase:
             message_parts: list[dict[str, Any]] | None = None,
             web_search_context: list[dict[str, Any]] | None = None,
         ) -> dict[str, Any] | None:
-            persisted_reply.append(response)
             assistant_message_id = _run_async_callback(
                 lambda: _maybe_await(
                     deps.persistence.save_message_to_db(
@@ -887,6 +886,11 @@ class ChatPostUseCase:
                     )
                 )
             )
+            if assistant_message_id is None:
+                # A missing id means the persistence boundary did not commit the reply. Do not
+                # let on_finished summarize a turn that is absent from the room history.
+                return None
+            persisted_reply.append(response)
             self._defer_context_extraction(
                 user_id=user_id,
                 room_mode=room_mode,
