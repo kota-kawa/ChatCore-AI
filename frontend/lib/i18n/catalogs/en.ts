@@ -175,6 +175,7 @@ export const enMessages = {
   "memo.preview": "Preview", "memo.noPreviewText": "There is no text to preview.", "memo.writePlaceholder": "Write a memo…",
   "memo.agentTitle": "Memo agent", "memo.agentDescription": "Ask for a summary, questions, or edits based on this memo. Edits are applied only when you run them.",
   "memo.agentPlaceholder": "Ask about or request an edit to this memo…", "memo.list": "Memo list", "memo.noMatchingMemos": "No memos match these filters.",
+  "memo.loadMoreMemos": "Load more memos", "memo.loadingMore": "Loading…", "memo.remainingCount": "{count} more",
   "memo.selectNamed": "Select {title}", "memo.archived": "Archived", "memo.moreActions": "More actions", "memo.shareSettings": "Sharing settings",
   "memo.pinned": "Pinned", "memo.other": "Other",
   "memo.importFileTypeError": "Choose a JSON (.json) or Markdown (.md / .markdown) file.", "memo.importEmptyFileError": "An empty file cannot be imported.",
