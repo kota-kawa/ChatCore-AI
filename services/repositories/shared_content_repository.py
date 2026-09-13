@@ -808,34 +808,6 @@ class SharedContentRepository:
         )
         return _rows(result)
 
-    async def list_saved_prompts(
-        self,
-        session: AsyncSession,
-        *,
-        user_id: int,
-    ) -> list[dict[str, Any]]:
-        """List active task templates saved by a user."""
-        result = await session.execute(
-            select(Task)
-            .where(Task.user_id == int(user_id), Task.deleted_at.is_(None))
-            .order_by(Task.created_at.desc(), Task.id.desc())
-        )
-        return [
-            {
-                "id": task.id,
-                "name": task.name,
-                "prompt_template": task.prompt_template,
-                "response_rules": task.response_rules,
-                "output_skeleton": task.output_skeleton,
-                "input_examples": task.input_examples,
-                "output_examples": task.output_examples,
-                "display_order": task.display_order,
-                "created_at": task.created_at,
-                "source_prompt_id": task.source_prompt_id,
-            }
-            for task in result.scalars().all()
-        ]
-
     async def list_liked_prompts(
         self,
         session: AsyncSession,
@@ -882,24 +854,6 @@ class SharedContentRepository:
             {"user_id": int(user_id)},
         )
         return _rows(result)
-
-    async def delete_saved_prompt(
-        self,
-        session: AsyncSession,
-        *,
-        user_id: int,
-        task_id: int,
-    ) -> int:
-        result = await session.execute(
-            update(Task)
-            .where(
-                Task.id == int(task_id),
-                Task.user_id == int(user_id),
-                Task.deleted_at.is_(None),
-            )
-            .values(deleted_at=func.now())
-        )
-        return _rowcount(result)
 
     async def get_prompt_for_import(
         self,

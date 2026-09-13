@@ -3,10 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.chat.tasks import _delete_task_for_user
-from blueprints.prompt_share.prompt_manage_api import (
-    _delete_prompt_for_user,
-    _delete_saved_prompt_for_user,
-)
+from blueprints.prompt_share.prompt_manage_api import _delete_prompt_for_user
 
 
 class SoftDeleteQueryTestCase(unittest.TestCase):
@@ -15,16 +12,6 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
             asyncio.run(_delete_task_for_user(5, 41))
 
         delete_task.assert_awaited_once_with(5, 41)
-
-    def test_delete_saved_prompt_marks_task_row_deleted_through_service(self):
-        service = MagicMock()
-        service.delete_saved_prompt = AsyncMock(return_value=1)
-
-        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
-            deleted = asyncio.run(_delete_saved_prompt_for_user(8, 99))
-
-        self.assertEqual(deleted, 1)
-        service.delete_saved_prompt.assert_awaited_once_with(user_id=8, task_id=99)
 
     def test_delete_prompt_marks_prompt_row_deleted_through_service(self):
         service = MagicMock()

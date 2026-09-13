@@ -85,16 +85,8 @@ async def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
     return prompts
 
 
-async def _fetch_saved_prompts(user_id: int) -> list[dict[str, Any]]:
-    return await _service().list_saved_prompts(user_id=user_id)
-
-
 async def _fetch_liked_prompts(user_id: int) -> list[dict[str, Any]]:
     return [_serialize_liked_prompt(row) for row in await _service().list_liked_prompts(user_id=user_id)]
-
-
-async def _delete_saved_prompt_for_user(user_id: int, prompt_id: int) -> int:
-    return await _service().delete_saved_prompt(user_id=user_id, task_id=prompt_id)
 
 
 async def _update_prompt_for_user(
@@ -148,16 +140,6 @@ async def get_my_prompts(request: Request):
         return log_and_internal_server_error(logger, "Failed to load my prompts.")
 
 
-@prompt_manage_api_bp.get("/saved_prompts", name="prompt_manage_api.get_saved_prompts")
-async def get_saved_prompts(request: Request):
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    try:
-        return jsonify({"prompts": await _fetch_saved_prompts(int(request.session["user_id"]))})
-    except Exception:
-        return log_and_internal_server_error(logger, "Failed to load saved prompts.")
-
-
 @prompt_manage_api_bp.get("/liked_prompts", name="prompt_manage_api.get_liked_prompts")
 async def get_liked_prompts(request: Request):
     if "user_id" not in request.session:
@@ -166,19 +148,6 @@ async def get_liked_prompts(request: Request):
         return jsonify({"prompts": await _fetch_liked_prompts(int(request.session["user_id"]))})
     except Exception:
         return log_and_internal_server_error(logger, "Failed to load liked prompts.")
-
-
-@prompt_manage_api_bp.delete("/saved_prompts/{prompt_id}", name="prompt_manage_api.delete_saved_prompt")
-async def delete_saved_prompt(prompt_id: int, request: Request):
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    try:
-        deleted = await _delete_saved_prompt_for_user(int(request.session["user_id"]), prompt_id)
-        if deleted == 0:
-            return jsonify({"error": "対象の保存済みプロンプトが見つかりませんでした。"}, status_code=404)
-        return jsonify({"message": "保存したプロンプトを削除しました。"})
-    except Exception:
-        return log_and_internal_server_error(logger, "Failed to delete saved prompt.")
 
 
 @prompt_manage_api_bp.put("/prompts/{prompt_id}", name="prompt_manage_api.update_prompt")

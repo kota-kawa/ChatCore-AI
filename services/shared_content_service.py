@@ -537,17 +537,6 @@ class SharedContentService:
             lambda active: self._repository.list_my_prompts(active, user_id=user_id),
         )
 
-    async def list_saved_prompts(
-        self,
-        *,
-        user_id: int,
-        session: AsyncSession | None = None,
-    ) -> list[dict[str, Any]]:
-        return await self._read(
-            session,
-            lambda active: self._repository.list_saved_prompts(active, user_id=user_id),
-        )
-
     async def list_liked_prompts(
         self,
         *,
@@ -557,22 +546,6 @@ class SharedContentService:
         return await self._read(
             session,
             lambda active: self._repository.list_liked_prompts(active, user_id=user_id),
-        )
-
-    async def delete_saved_prompt(
-        self,
-        *,
-        user_id: int,
-        task_id: int,
-        session: AsyncSession | None = None,
-    ) -> int:
-        return await self._write(
-            session,
-            lambda active: self._repository.delete_saved_prompt(
-                active,
-                user_id=user_id,
-                task_id=task_id,
-            ),
         )
 
     async def import_prompt_as_task(
