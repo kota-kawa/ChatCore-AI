@@ -12,6 +12,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.user_skills import (
+    GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT,
+    GENERATIVE_UI_ARTIFACT_JSON_CONTRACT,
+    GENERATIVE_UI_ARTIFACT_PRESENTATION_FIELDS,
+    GENERATIVE_UI_THREE_LIBRARY_CONTRACT,
+)
+
 # 「UI・図を作らない」と読める表現だけを拾う。UIについて説明を求める文とは区別する。
 # Match only phrasings that refuse a visual, never a request to explain one.
 _UI_NOUN = r"(?:生成\s*UI|UI|ユーザーインターフェース|図|図解|グラフ|チャート|ビジュアル|可視化|アニメーション|3\s*D)"
@@ -40,12 +47,16 @@ _EXPLICIT_OPT_OUT_PATTERNS: tuple[re.Pattern[str], ...] = (
 # The decided mode is injected into the generation prompt. Letting the classifier and the
 # answering pass guess independently produces "classified 2D, answered in prose", which the
 # later stages can only resolve by discarding output.
+# 出力契約そのものは Skill（services/user_skills.py）が正本。ここは「どのモードに確定したか」と
+# その必須性だけを足す。
+# The output contract itself belongs to the Skill (services/user_skills.py); this adds only the
+# decided mode and the fact that it is now required.
 _MODE_INSTRUCTION = (
     "Generated UI mode for this turn is already decided: {mode}. The decision is final; do not "
-    "re-evaluate it. Producing exactly one ```chatcore-artifact fenced JSON block is required in "
-    "this answer, in addition to a short prose introduction. The JSON must contain version, title, "
-    "description, height, html, css, and js, and the html must contain id=\"app\". "
-    "{mode_requirement}"
+    "re-evaluate it. " + GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT
+    + " It is required in this answer, after a short prose introduction. "
+    + GENERATIVE_UI_ARTIFACT_JSON_CONTRACT + " "
+    + GENERATIVE_UI_ARTIFACT_PRESENTATION_FIELDS + " {mode_requirement}"
 )
 _MODE_REQUIREMENTS = {
     "2D": (
@@ -53,8 +64,8 @@ _MODE_REQUIREMENTS = {
         "Three.js or WebGL."
     ),
     "3D": (
-        "Declare libraries:[\"three\"] and build a complete Three.js scene with a renderer, camera, "
-        "lighting, and visible geometry using the existing global THREE."
+        GENERATIVE_UI_THREE_LIBRARY_CONTRACT
+        + " Build a complete scene with a renderer, camera, lighting, and visible geometry."
     ),
 }
 _INJECTABLE_MODES = frozenset(_MODE_REQUIREMENTS)

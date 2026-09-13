@@ -18,14 +18,39 @@ USER_SKILLS_TOKEN_BUDGET = 3_400
 GENERATIVE_UI_SYSTEM_SKILL_ID = 0
 GENERATIVE_UI_SYSTEM_SKILL_KEY = "generative_ui"
 
+# 生成UIの出力契約のうち、このSkill本文・確定モードの注入（services/generative_ui_intent.py）・
+# 修復プロンプト（services/generative_ui_repair.py）が共有する事実。3か所に書き写すと、
+# 契約を変えたときに一部のプロンプトだけ古い文言のまま残る。文言はここだけに置く。
+# The facts of the generated-UI output contract shared by this Skill, the decided-mode
+# injection (services/generative_ui_intent.py) and the repair prompt
+# (services/generative_ui_repair.py). Copying them into three prompts let a contract change
+# reach only some of them, so the wording lives here alone.
+# 導入文を求めるかどうかは用途ごとに違う（修復はArtifactだけを返させる）ため、
+# 共有するのはブロックの個数と形式だけにする。
+# Whether a short introduction is wanted differs per use (repair asks for the artifact alone),
+# so only the block's count and shape are shared.
+GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT = (
+    "Output exactly one complete ```chatcore-artifact fenced block."
+)
+GENERATIVE_UI_ARTIFACT_JSON_CONTRACT = (
+    "The JSON must be one valid object containing version, title, html, css, and js, and the "
+    'html must contain an element with id="app".'
+)
+GENERATIVE_UI_ARTIFACT_PRESENTATION_FIELDS = (
+    "Include description and height so the result renders at a deliberate size."
+)
+GENERATIVE_UI_THREE_LIBRARY_CONTRACT = (
+    'For 3D, always include "libraries":["three"] and use the available global THREE without imports.'
+)
+
 # This user-facing behavior used to live in BASE_SYSTEM_PROMPT. It and the final
 # output contract now belong to this Skill; the sandbox validator remains a
 # separate, unchanged runtime rule.
-GENERATIVE_UI_SKILL_INSTRUCTIONS = """
+GENERATIVE_UI_SKILL_INSTRUCTIONS = f"""
 - Use `UI_MODE = NONE` by default. Select 2D when the latest user request explicitly asks to create a visual, diagram, chart, flow, timeline, generative UI, simulation, or interactive demo. Treat those requests as explicit even when the user writes them in Japanese or another language. Do not substitute a Markdown explanation for that requested result.
 - Select 3D when the request explicitly asks for 3D / ３D, Three.js, a solid shape, spatial model, orbit, rotation, or a 3D graph. A 3D request is a request for a working Three.js Artifact, not for an explanation or a code sample.
 - A request for text only, no UI, no diagram, or ordinary code/JSON means UI_MODE is NONE. Do not turn comparisons, procedures, calculations, classifications, explanations, code examples, or JSON examples into an Artifact unless the user explicitly requested visual or interactive output.
-- When UI_MODE is 2D or 3D, output exactly one complete ```chatcore-artifact fenced block after a short introduction. Its JSON must contain version, title, html, css, and js; html must include an element with id="app". Put no alternative HTML, CSS, JavaScript, or JSON code blocks beside it.
+- When UI_MODE is 2D or 3D: {GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT} Place it after a short introduction. {GENERATIVE_UI_ARTIFACT_JSON_CONTRACT} Put no alternative HTML, CSS, JavaScript, or JSON code blocks beside it.
 - Before coding, privately choose the visual relationship and composition that best communicate the subject. Make the first render purpose-built and useful through clear hierarchy, deliberate spacing, responsive layout, readable typography, accessible contrast, and meaningful content. Avoid empty shells, prose cards, barely styled tables, placeholder controls, unrelated decoration, and repeated generic dashboards. Do not output planning notes.
 - Before sending a requested Artifact, check that its JSON has one opening and closing object, all embedded newlines and quotes are JSON-escaped, the closing ``` fence is present, and the initial render is visibly non-empty. Prefer a compact complete result over a detailed result that might be cut off.
 
@@ -53,7 +78,7 @@ GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 # This final contract is injected after variable context only while the built-in
 # Skill is enabled. Keeping it with the Skill definition makes every prompt-side
 # Generative UI instruction part of the same immutable default capability.
-GENERATIVE_UI_EXECUTION_CONTRACT = """
+GENERATIVE_UI_EXECUTION_CONTRACT = f"""
 <generative_ui_execution_contract>
 This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
 
@@ -69,11 +94,11 @@ Visual exclusivity:
 - Never substitute links for a requested visual. Replying to "show me photos of X" with gallery, image-search, or photo-library URLs, or with one link per item, is prohibited; describe the appearance in prose as well and let the application attach suitable images.
 
 When UI_MODE is 2D or 3D:
-- Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
-- The JSON must be one valid object containing version, title, html, css, and js, and the html must contain an element with id="app".
+- {GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT} Place it right after a short introduction. An answer that ends with explanation alone is incomplete.
+- {GENERATIVE_UI_ARTIFACT_JSON_CONTRACT}
 - Do not output separate HTML, CSS, JavaScript, or JSON code blocks. The fenced Artifact is the requested deliverable.
 - Make the first render complete and purpose-built: clear visual hierarchy, deliberate spacing and typography, responsive layout, accessible contrast, and meaningful content. Reject your own draft and simplify or revise it before output if it is an empty shell, a prose card, a barely styled table, placeholder controls, or decoration unrelated to the user's subject.
-- For 3D, always include "libraries":["three"]. Use the available global THREE without imports, OrbitControls, loaders, URL textures, or URL models. Create a renderer sized from `app.clientWidth || 560` with a fixed visible height, append its canvas to `document.getElementById("app")`, and create a scene, camera, light, and visible geometry with core features only.
+- {GENERATIVE_UI_THREE_LIBRARY_CONTRACT} Do not use OrbitControls, loaders, URL textures, or URL models. Create a renderer sized from `app.clientWidth || 560` with a fixed visible height, append its canvas to `document.getElementById("app")`, and create a scene, camera, light, and visible geometry with core features only.
 - Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, that newlines and quotes inside JSON strings are escaped correctly, and that the Artifact is compact enough to finish.
 
 The Artifact runs in an isolated sandbox; violating these hard requirements rejects the entire UI:
