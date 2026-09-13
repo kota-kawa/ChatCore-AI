@@ -138,7 +138,6 @@ alembic upgrade head
 - `blueprints/`: feature modules (auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth)
 - `services/`: shared integrations (DB, LLM, email, user helpers)
 - `frontend/public/`: public frontend assets and modular CSS
-- `static/`: legacy/runtime static assets
 - `alembic/versions/`: PostgreSQL schema migration history
 - `frontend/`: Next.js frontend (pages, components, hooks, contexts, and shared libraries)
 
@@ -329,7 +328,6 @@ alembic upgrade head
 - `blueprints/`: 機能別モジュール（auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth）
 - `services/`: DB/LLM/メールなど共通処理
 - `frontend/public/`: フロントエンドの公開アセットとモジュール単位のCSS
-- `static/`: レガシー／ランタイム用の静的アセット
 - `alembic/versions/`: PostgreSQL スキーマ変更履歴
 - `frontend/`: Next.js フロントエンド（pages、components、hooks、contexts、共通ライブラリ）
 
