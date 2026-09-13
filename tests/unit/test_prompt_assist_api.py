@@ -99,6 +99,15 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertIn("full URL verbatim in inline code", AI_AGENT_SYSTEM_PROMPT)
         self.assertIn("```chatcore-copy fenced block", AI_AGENT_SYSTEM_PROMPT)
 
+    # 日本語: Chacoの自己認識とキャラクターに合う口調がシステムプロンプトに含まれることを検証します。
+    # English: Verify that the system prompt defines Chaco's identity and character-appropriate voice.
+    def test_ai_agent_system_prompt_defines_chaco_identity_and_voice(self):
+        self.assertIn("Your name is Chaco", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("write and say your name as チャコ", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("friendly support-agent mascot", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("warm, gentle, cheerful, and encouraging tone", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("do not use baby talk, excessive emojis, forced catchphrases", AI_AGENT_SYSTEM_PROMPT)
+
     # 日本語: プロンプトアシスト要求するログインことを検証します。
     # English: Verify that prompt assist requires login.
     def test_prompt_assist_requires_login(self):
