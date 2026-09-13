@@ -440,17 +440,6 @@ def choose_web_search_images(
     return selections
 
 
-def choose_web_search_image(
-    user_question: str,
-    result: Any,
-    *,
-    model: str,
-) -> dict[str, str] | None:
-    """Return the first selected image for callers that still use the old API."""
-    selections = choose_web_search_images(user_question, result, model=model)
-    return selections[0] if selections else None
-
-
 def build_web_search_image_part(selection: dict[str, str] | None) -> dict[str, Any] | None:
     if not selection:
         return None
@@ -743,19 +732,6 @@ def place_web_search_image_parts(
         keep_empty_tail=keep_empty_tail,
     )
     return inline_parts or (parts if parts is not None else None)
-
-
-def append_web_search_image_part(
-    parts: list[dict[str, Any]] | None,
-    selection: dict[str, str] | None,
-    *,
-    fallback_text: str = "",
-) -> list[dict[str, Any]] | None:
-    return append_web_search_image_parts(
-        parts,
-        [selection] if selection else None,
-        fallback_text=fallback_text,
-    )
 
 
 def append_web_search_image_parts(

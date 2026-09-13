@@ -1,10 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from services.chat_title import (
     build_initial_title_candidates,
     generate_chat_room_title,
-    maybe_auto_title_chat_room,
 )
 from services.llm import LIGHTWEIGHT_TASK_MODEL
 
@@ -60,49 +59,6 @@ class ChatTitleTestCase(unittest.TestCase):
         self.assertIn("新規チャット", candidates)
         self.assertIn("採用面接の日程調整", candidates)
         self.assertIn("メール返信", candidates)
-
-    # 日本語: ルームのリネームが成功した場合に、生成されたタイトルが返却されることを検証します。
-    # English: Verify that the generated title is returned when the conditional room rename succeeds.
-    def test_maybe_auto_title_returns_title_only_when_rename_succeeds(self):
-        calls = []
-
-        # 日本語: リネームの成功状況を記録するモック関数
-        # English: Mock rename function that records calls and returns True (success)
-        def conditional_rename(room_id, title, allowed_current_titles):
-            calls.append((room_id, title, allowed_current_titles))
-            return True
-
-        # 日本語: タイトル生成LLM呼び出しをモックして期待されるタイトルを返す
-        # English: Mock the title generation LLM call to return the expected title
-        with patch("services.chat_title.generate_chat_room_title", return_value="相談の整理"):
-            title = maybe_auto_title_chat_room(
-                chat_room_id="room-1",
-                user_message="相談したい",
-                assistant_response="回答です",
-                allowed_current_titles=["新規チャット", "相談したい"],
-                conditional_rename=conditional_rename,
-            )
-
-        # 日本語: 返却されたタイトルが正しく、リネームが正しい引数で呼ばれていることを確認
-        # English: Confirm the returned title is correct and rename was called with expected arguments
-        self.assertEqual(title, "相談の整理")
-        self.assertEqual(calls, [("room-1", "相談の整理", ["新規チャット", "相談したい"])])
-
-    # 日本語: 自動タイトル生成がUIロケールをタイトル用LLMプロンプトへ転送することを検証します。
-    # English: Verify automatic title generation forwards the UI locale to the title LLM prompt.
-    def test_maybe_auto_title_forwards_locale(self):
-        with patch("services.chat_title.generate_chat_room_title", return_value="Project plan") as mock_generate:
-            maybe_auto_title_chat_room(
-                chat_room_id="room-1",
-                user_message="Review this",
-                assistant_response="Sure",
-                allowed_current_titles=["New chat"],
-                conditional_rename=lambda *_args: True,
-                locale="en",
-            )
-
-        mock_generate.assert_called_once_with("Review this", "Sure", locale="en")
-
 
 if __name__ == "__main__":
     unittest.main()

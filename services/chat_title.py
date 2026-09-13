@@ -122,27 +122,3 @@ def generate_chat_room_title(
 
     return _sanitize_title(raw_title)
 
-
-# 条件を満たす場合にチャットルームのタイトルを自動生成し、データベースのルーム名を更新する
-# Automatically generate and update the chat room title in the DB if condition is met
-def maybe_auto_title_chat_room(
-    *,
-    chat_room_id: str,
-    user_message: str,
-    assistant_response: str,
-    allowed_current_titles: list[str],
-    conditional_rename: Callable[[str, str, list[str]], bool],
-    locale: str = "ja",
-) -> str | None:
-    title = generate_chat_room_title(user_message, assistant_response, locale=locale)
-    if not title:
-        return None
-    if title in allowed_current_titles:
-        return None
-
-    try:
-        updated = conditional_rename(chat_room_id, title, allowed_current_titles)
-    except Exception:
-        logger.exception("Failed to update generated chat room title.")
-        return None
-    return title if updated else None

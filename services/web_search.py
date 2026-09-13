@@ -2393,32 +2393,6 @@ def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
     return sources_lines
 
 
-def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
-    # 参照したソース一覧を表示するためのMarkdown/HTML要素を構築する
-    # Build markdown/HTML element to display the list of referenced sources.
-    sources_lines = build_web_search_source_items(result)
-    if not sources_lines:
-        return ""
-
-    return "\n".join(
-        [
-            '<details class="web-search-sources">',
-            '<summary class="web-search-sources__summary">',
-            '<span class="web-search-sources__summary-main">',
-            '<span class="web-search-sources__summary-icon"></span>',
-            '<span class="web-search-sources__label">参照したWebサイト</span>',
-            "</span>",
-            f'<span class="web-search-sources__count">{len(sources_lines)}件</span>',
-            '<span class="web-search-sources__chevron"><i class="bi bi-chevron-down"></i></span>',
-            "</summary>",
-            '<ul class="web-search-sources__list">',
-            *sources_lines,
-            "</ul>",
-            "</details>",
-        ]
-    )
-
-
 def get_web_search_tool_definition() -> dict[str, Any]:
     # LLMに提供するWeb検索ツールの定義スキーマを取得する
     # Retrieve the tool definition schema for web search provided to the LLM.
