@@ -248,10 +248,6 @@
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-.cc-modal__body--flush {
-  padding: 0;
-}
-
 .cc-modal__body::-webkit-scrollbar {
   width: var(--scrollbar-size-thin, 8px);
 }

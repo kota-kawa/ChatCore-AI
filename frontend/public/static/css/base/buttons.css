@@ -2,7 +2,6 @@
    丸ボタン、新規チャットボタン、アイコンボタン、プライマリーボタンなどボタン全般のスタイル
 */
 
-
 /* hidden 属性を使う UI の表示制御を優先 */
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons[hidden],
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) user-icon[hidden] {
@@ -43,8 +42,6 @@
   top: 10px;
   right: 10px;
 }
-
-
 
 /* 新規チャットボタン */
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .new-chat-btn {
@@ -135,7 +132,6 @@
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:active {
   transform: scale(0.97);
 }
-
 
 /* ── 未ログイン時のログインボタン ── */
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn {
@@ -231,11 +227,9 @@
     }
   }
 
-
   :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle{
     display:none;                         /* PC では非表示 */
   }
-
 
   @media (max-width:576px){
     :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle{
@@ -260,12 +254,6 @@
       background-color: rgba(255, 255, 255, 0.15);
     }
   }
-
-/* ─── ダークモード: モバイルユーザーメニュー ─── */
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu.mobile-user-menu > div {
-  background: rgba(17, 24, 39, 0.98);
-  color: var(--text-dark, #e5e7eb);
-}
 
 /* ボタンの影を全体で無効化 */
 :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button,

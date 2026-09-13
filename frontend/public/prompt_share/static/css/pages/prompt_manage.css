@@ -212,17 +212,6 @@ body.prompt-manage-page,
   font-weight: 500;
   color: var(--ps-primary-color);
 }
-:where(body.prompt-manage-page, .prompt-manage-page) .input-field {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--ps-border-color);
-  border-radius: 6px;
-  transition: border-color 0.2s ease;
-}
-:where(body.prompt-manage-page, .prompt-manage-page) .input-field:focus {
-  border-color: var(--ps-accent-color);
-  outline: none;
-}
 
 :where(body.prompt-manage-page, .prompt-manage-page) .prompt-grid {
   /* グリッド項目の高さを揃える */
@@ -261,7 +250,6 @@ body.prompt-manage-page,
   /* ボタン群を常にカードの下端に押し出す */
   margin-top: 0;
 }
-
 
 /* ─────────────────────────── */
 /* 9. レスポンシブ対応            */

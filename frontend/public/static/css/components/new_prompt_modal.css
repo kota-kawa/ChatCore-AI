@@ -55,10 +55,6 @@
   transition: transform var(--transition-slow, 0.3s ease);
 }
 
-:where(body.chat-page, .chat-page-shell) #openNewPromptModal .bi-plus-lg.no-transition {
-  transition: none;
-}
-
 :where(body.chat-page, .chat-page-shell) #openNewPromptModal.is-rotated .bi-plus-lg {
   transform: rotate(90deg);
 }
