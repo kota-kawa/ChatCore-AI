@@ -41,9 +41,6 @@ body::-webkit-scrollbar,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -51,12 +48,8 @@ body::-webkit-scrollbar,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar {
+  .bot-message table)::-webkit-scrollbar {
   width: var(--scrollbar-size-current);
   height: var(--scrollbar-size-current);
 }
@@ -69,9 +62,6 @@ body::-webkit-scrollbar-track,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -79,12 +69,8 @@ body::-webkit-scrollbar-track,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar-track {
+  .bot-message table)::-webkit-scrollbar-track {
   background:
     linear-gradient(
       180deg,
@@ -104,9 +90,6 @@ body::-webkit-scrollbar-thumb,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -114,12 +97,8 @@ body::-webkit-scrollbar-thumb,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar-thumb {
+  .bot-message table)::-webkit-scrollbar-thumb {
   background:
     linear-gradient(180deg, var(--scrollbar-thumb-current) 0%, var(--scrollbar-thumb-hover-current) 100%);
   background-clip: padding-box;
@@ -137,9 +116,6 @@ body::-webkit-scrollbar-thumb:hover,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -147,12 +123,8 @@ body::-webkit-scrollbar-thumb:hover,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar-thumb:hover {
+  .bot-message table)::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover-current);
 }
 
@@ -164,9 +136,6 @@ body::-webkit-scrollbar-thumb:active,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -174,12 +143,8 @@ body::-webkit-scrollbar-thumb:active,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar-thumb:active {
+  .bot-message table)::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active-current);
 }
 
@@ -191,9 +156,6 @@ body::-webkit-scrollbar-corner,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -201,12 +163,8 @@ body::-webkit-scrollbar-corner,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-)::-webkit-scrollbar-corner {
+  .bot-message table)::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -216,9 +174,6 @@ body::-webkit-scrollbar-corner,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu,
@@ -226,12 +181,8 @@ body::-webkit-scrollbar-corner,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre,
-  .bot-message table,
-  .memo-modal__markdown table
-) {
+  .bot-message table) {
   --scrollbar-size-current: var(--scrollbar-size-thin, var(--scrollbar-size));
   --scrollbar-track-current: var(--page-scrollbar-track, var(--scrollbar-track));
   --scrollbar-thumb-current: var(--page-scrollbar-thumb, var(--scrollbar-thumb));
@@ -248,9 +199,6 @@ body::-webkit-scrollbar-corner,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .new-prompt-modal-content,
-  .custom-modal-body,
-  .post-modal-scroll,
   .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu
@@ -262,8 +210,6 @@ body::-webkit-scrollbar-corner,
   .user-message pre,
   .bot-message pre,
   .code-block-container pre,
-  .memo-modal__markdown pre,
-  .memo-modal__markdown .code-block-container pre,
   .md-content pre
 ) {
   --scrollbar-track-current: rgba(255, 255, 255, 0.08);

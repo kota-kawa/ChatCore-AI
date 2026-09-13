@@ -744,25 +744,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 }
 
-/* 入出力例コンテナ：カード内で絶対配置 */
-:where(body.chat-page, .chat-page-shell) .io-container {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: -32px;
-  padding: 0.6rem 0.75rem;
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(15, 118, 110, 0.3);
-  border-radius: 10px;
-  font-size: var(--text-sm, 0.875rem);
-  line-height: var(--leading-tight, 1.4);
-  z-index: var(--z-dropdown, 30);
-  width: calc(100% - 1rem);
-  text-align: center;
-  will-change: transform;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-}
-
 /* トグルボタンを右寄せするために使うカードヘッダー */
 :where(body.chat-page, .chat-page-shell) .header-container {
   display: flex;
@@ -1269,11 +1250,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     touch-action: none;
   }
 
-  :where(body.chat-page, .chat-page-shell) .io-container {
-    font-size: var(--text-xs, 0.8125rem);
-    width: calc(100% - 0.5rem);
-  }
-
 }
 
 /* ===== Dark Mode ===== */
@@ -1468,14 +1444,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --chat-button-base: #34d399;
   --chat-button-accent: #10b981;
   --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
-}
-
-/* IO container (task card tooltip) */
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .io-container {
-  background: rgba(17, 24, 39, 0.97);
-  border-color: rgba(15, 118, 110, 0.28);
-  color: var(--text-dark, #e5e7eb);
-  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.4);
 }
 
 @media (max-width: 576px) {

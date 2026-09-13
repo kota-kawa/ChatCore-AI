@@ -1018,12 +1018,6 @@
   font-weight: 600;
 }
 
-.prompt-share-modal .form-group__hint {
-  color: var(--modal-text-muted);
-  font-size: 0.8rem;
-  line-height: 1.55;
-}
-
 .prompt-share-modal .form-group input[type="text"],
 .prompt-share-modal .form-group textarea,
 .prompt-share-modal .form-group select {

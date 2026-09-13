@@ -2094,8 +2094,7 @@ body.settings-page,
   min-height: 190px;
 }
 
-.edit-prompt-modal__required,
-.edit-prompt-modal__optional {
+.edit-prompt-modal__required{
   flex: 0 0 auto;
   color: var(--modal-text-muted);
   font-size: 0.78rem;

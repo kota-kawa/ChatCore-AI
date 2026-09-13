@@ -2129,18 +2129,6 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   transform: scale(0.97);
 }
 
-/* --- ホバー時のわずかな浮き上がり / Subtle hover lift --- */
-.cc-hover-raise {
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-@media (hover: hover) {
-  .cc-hover-raise:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--chat-shadow-soft, 0 6px 18px rgba(15, 23, 42, 0.08));
-  }
-}
-
 /* --- コンテンツの穏やかな出現 / Gentle content reveal --- */
 .cc-fade-in {
   animation: ccFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -2155,13 +2143,6 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* --- 統一フォーカスリング（オプトインのユーティリティ）/ Unified focus ring (opt-in) --- */
-.cc-focus-ring:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--focus-ring, rgba(59, 130, 246, 0.45));
-  border-radius: inherit;
 }
 
 /* --- ネットワーク状態バナー / Network status banner --- */
@@ -2232,12 +2213,10 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   .cc-skeleton::after {
     animation: none;
   }
-  .cc-press,
-  .cc-hover-raise {
+  .cc-press{
     transition: none;
   }
-  .cc-press:active:not(:disabled):not([aria-disabled="true"]),
-  .cc-hover-raise:hover {
+  .cc-press:active:not(:disabled):not([aria-disabled="true"]){
     transform: none;
   }
   .cc-fade-in {

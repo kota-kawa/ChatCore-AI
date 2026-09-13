@@ -762,41 +762,11 @@
   line-height: 1;
 }
 
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__section-title {
-  padding-top: 0.1rem;
-  color: var(--ws-text-muted);
-  font-size: var(--text-xs, 0.8125rem);
-  font-weight: var(--chat-font-label-weight, 500);
-}
-
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-details {
   min-width: 0;
   border: 1px solid var(--ws-border);
   border-radius: var(--radius-sm, 10px);
   background: var(--ws-surface-sunken);
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.65rem;
-  cursor: pointer;
-  color: var(--ws-text);
-  list-style: none;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary::-webkit-details-marker {
-  display: none;
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary::marker {
-  content: "";
-}
-
-:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-summary:hover {
-  background: var(--ws-surface-hover);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__source-details[open] {
