@@ -128,7 +128,13 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             patch(
                 "services.chat_use_case.normalize_response_with_artifact_retry",
                 side_effect=lambda response, **_kwargs: SimpleNamespace(
-                    text=response, parts=None, validation_errors=[]
+                    text=response,
+                    parts=None,
+                    validation_errors=[],
+                    artifact_status="not_requested",
+                    artifact_reason_codes=[],
+                    repair_attempted=False,
+                    status_payload=lambda: None,
                 ),
             ) as mock_normalize,
         ):

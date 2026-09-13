@@ -45,7 +45,15 @@ from services.chat_post_dependencies import (
 )
 from services.chat_title import build_initial_title_candidates, generate_chat_room_title
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
-from services.generative_ui import GenerativeUiMode, normalize_response_with_artifact_retry
+from services.generative_ui import (
+    GenerativeUiMode,
+    artifact_status_part,
+    inject_generative_ui_mode_instruction,
+    is_explicit_generative_ui_opt_out,
+    normalize_response_with_artifact_retry,
+)
+from services.generative_ui_repair import with_answer_output_budget
+from services.generative_ui_status import ARTIFACT_STATUS_PART_TYPE
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
@@ -166,6 +174,12 @@ class _ChatPostTurn:
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
     selected_reference_trace: list[SelectedReferenceLookupTrace] = field(default_factory=list)
     ui_mode: GenerativeUiMode | None = None
+    # 判定モデルの NONE と、ユーザー自身の「UIは不要」を別の状態として持つ。
+    # 前者で検証済みArtifactを捨てると、判定の偽陰性がそのまま失敗になる。
+    # A classifier NONE and a refusal written by the user are tracked separately; discarding a
+    # validated artifact for the former turns each false negative into a failure.
+    explicit_ui_opt_out: bool = False
+    artifact_status: dict[str, str] | None = None
     bot_reply: str = ""
     message_parts: list[dict[str, Any]] | None = None
     saved_assistant_message_id: int | None = None
@@ -774,6 +788,12 @@ class ChatPostUseCase:
         """生成UIのモードをモデルへ問い合わせます / Ask the model for the generative UI mode."""
         deps = self.deps
 
+        # 生成UI設定を切った利用者と、UI不要と書いた利用者だけが明示的な拒否。
+        # Only a user who turned the feature off, or wrote that no UI is wanted, opts out.
+        turn.explicit_ui_opt_out = not turn.generative_ui_enabled or is_explicit_generative_ui_opt_out(
+            turn.user_message
+        )
+
         # UI_MODE is a structured semantic decision made by the selected
         # conversation model. Do not infer it from the user's text here.
         if turn.generative_ui_enabled:
@@ -791,6 +811,17 @@ class ChatPostUseCase:
                 turn.ui_mode = None
         else:
             turn.ui_mode = "NONE"
+
+        # 確定したモードは本体生成のプロンプトへ渡す。判定と本体で二重に推測させると
+        # 「判定は2D・本文は散文」という食い違いが起き、後段が本文ごと捨てることになる。
+        # The decided mode is handed to the answering prompt: letting the classifier and the
+        # answer guess independently produces "classified 2D, answered in prose", which the
+        # later stages can only resolve by discarding the answer.
+        if not turn.explicit_ui_opt_out:
+            turn.conversation_messages = inject_generative_ui_mode_instruction(
+                turn.conversation_messages,
+                turn.ui_mode,
+            )
 
     # ------------------------------------------------------------------
     # フェーズ9a: ストリーミング生成 / Phase 9a: streaming generation
@@ -834,6 +865,7 @@ class ChatPostUseCase:
                 shared_prompt_search=turn.shared_prompt_search,
                 selected_reference_trace=turn.selected_reference_trace,
                 ui_mode=turn.ui_mode,
+                explicit_ui_opt_out=turn.explicit_ui_opt_out,
             )
         except ChatGenerationAlreadyRunningError:
             return deps.web.jsonify(
@@ -974,6 +1006,8 @@ class ChatPostUseCase:
         response_payload: dict[str, Any] = {"response": turn.bot_reply}
         if turn.message_parts:
             response_payload["parts"] = turn.message_parts
+        if turn.artifact_status:
+            response_payload["artifact_status"] = turn.artifact_status
         if generated_room_title:
             response_payload["room_title"] = generated_room_title
         return deps.web.jsonify(response_payload)
@@ -1067,19 +1101,31 @@ class ChatPostUseCase:
                 normalize_response_with_artifact_retry,
                 conversation_messages=turn.conversation_messages,
                 model=turn.model,
-                generate_response=deps.generation.get_llm_response,
+                generate_response=with_answer_output_budget(deps.generation.get_llm_response),
                 user_request=turn.user_message,
                 ui_mode=turn.ui_mode,
+                explicit_ui_opt_out=turn.explicit_ui_opt_out,
             ),
             turn.bot_reply,
         )
         if normalized_response.validation_errors:
             deps.logger.warning(
                 "One or more generated UI artifacts failed validation and were omitted.",
-                extra={"validation_errors": normalized_response.validation_errors},
+                extra={
+                    "validation_errors": normalized_response.validation_errors,
+                    "artifact_status": normalized_response.artifact_status,
+                    "artifact_reason_codes": normalized_response.artifact_reason_codes,
+                },
             )
         turn.bot_reply = normalized_response.text
         turn.message_parts = normalized_response.parts
+        turn.artifact_status = normalized_response.status_payload()
+        status_part = artifact_status_part(turn.artifact_status)
+        if status_part:
+            turn.message_parts = [
+                *(turn.message_parts or [{"type": "text", "text": turn.bot_reply}]),
+                status_part,
+            ]
 
     def _resolve_reply_citations(self, turn: _ChatPostTurn) -> None:
         """出典marker を検証済みの検索結果へ解決します / Resolve citation markers against the validated search evidence."""
@@ -1124,7 +1170,14 @@ class ChatPostUseCase:
         # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。
         # An empty body with no UI parts is the same as no answer at all. Persisting
         # it would leave a blank bubble and let unanswered user messages pile up.
-        if turn.bot_reply.strip() or turn.message_parts:
+        # 生成UIの失敗通知だけが残った応答は回答ではない。通知は本文の代わりにならない。
+        # A reply carrying only the generated-UI failure notice is not an answer.
+        renderable_parts = [
+            part
+            for part in (turn.message_parts or [])
+            if part.get("type") not in {"text", ARTIFACT_STATUS_PART_TYPE}
+        ]
+        if turn.bot_reply.strip() or renderable_parts:
             return None
 
         deps.logger.warning(

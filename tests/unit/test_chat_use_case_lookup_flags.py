@@ -315,7 +315,10 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         personal_search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
         shared_search.assert_called_once_with("去年の沖縄旅行の予算は？")
-        response_messages = deps.get_llm_response.call_args.args[0]
+        # 生成UIの修復は専用プロンプトで行うため、会話文脈が載るのは最初の回答呼び出しだけ。
+        # Artifact repair uses a dedicated prompt, so only the first answering call carries the
+        # conversation context.
+        response_messages = deps.get_llm_response.call_args_list[0].args[0]
         selected_context = next(
             message["content"]
             for message in response_messages

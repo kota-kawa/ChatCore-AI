@@ -41,9 +41,13 @@ from services.chat_prompt import (
 )
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
+    artifact_status_part,
     decide_generative_ui_mode,
+    inject_generative_ui_mode_instruction,
+    is_explicit_generative_ui_opt_out,
     normalize_response_with_artifact_retry,
 )
+from services.generative_ui_repair import with_answer_output_budget
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
@@ -422,6 +426,13 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         unavailable_sources=selected_references.unavailable_sources,
         trace_results=selected_reference_trace,
     )
+    # 生成UI設定を切った利用者と、UI不要と書いた利用者だけが明示的な拒否。判定モデルの
+    # NONE では、検証を通ったArtifactを捨てない。
+    # Only a disabled feature or a refusal the user wrote counts as an opt-out; a classifier
+    # NONE never discards a validated artifact.
+    explicit_ui_opt_out = not generative_ui_enabled or is_explicit_generative_ui_opt_out(
+        _latest_user_content(conversation_messages)
+    )
     if generative_ui_enabled:
         try:
             ui_mode = await run_blocking(
@@ -434,6 +445,11 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             ui_mode = None
     else:
         ui_mode = "NONE"
+
+    # 確定したモードは本体生成のプロンプトへ渡し、同じモデルに再判断させない。
+    # Hand the decided mode to the answering prompt instead of letting it decide again.
+    if not explicit_ui_opt_out:
+        conversation_messages = inject_generative_ui_mode_instruction(conversation_messages, ui_mode)
 
     if deps.is_streaming_model(model):
         on_finished = None
@@ -506,6 +522,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
+                explicit_ui_opt_out=explicit_ui_opt_out,
             )
         except ChatGenerationAlreadyRunningError:
             return ChatRegenerationRejected(
@@ -547,19 +564,28 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             normalize_response_with_artifact_retry,
             conversation_messages=conversation_messages,
             model=model,
-            generate_response=deps.get_llm_response,
+            generate_response=with_answer_output_budget(deps.get_llm_response),
             user_request=latest_user_message,
             ui_mode=ui_mode,
+            explicit_ui_opt_out=explicit_ui_opt_out,
         ),
         bot_reply,
     )
     if normalized_response.validation_errors:
         logger.warning(
             "One or more generated UI artifacts failed validation and were omitted.",
-            extra={"validation_errors": normalized_response.validation_errors},
+            extra={
+                "validation_errors": normalized_response.validation_errors,
+                "artifact_status": normalized_response.artifact_status,
+                "artifact_reason_codes": normalized_response.artifact_reason_codes,
+            },
         )
     bot_reply = normalized_response.text
     message_parts = normalized_response.parts
+    artifact_status = normalized_response.status_payload()
+    status_part = artifact_status_part(artifact_status)
+    if status_part:
+        message_parts = [*(message_parts or [{"type": "text", "text": bot_reply}]), status_part]
 
     if user_id is not None and room_mode == "normal":
         save_args: list[Any] = [
@@ -584,4 +610,6 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     response_payload: dict[str, Any] = {"response": bot_reply}
     if message_parts:
         response_payload["parts"] = message_parts
+    if artifact_status:
+        response_payload["artifact_status"] = artifact_status
     return ChatRegenerationCompleted(payload=response_payload)
