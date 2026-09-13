@@ -5,7 +5,7 @@
 - `blueprints/` には機能モジュール（auth、chat、memo、prompt_share、context_vault、admin、MCP OAuth）と、それぞれのルーティング・ハンドラが含まれています。
 - `services/` には、共通のインテグレーション（DB、LLM、メール、ユーザーヘルパー）が格納されています。DB アクセスは可能な限り `services/repositories/`（`chat_repository.py` など）のリポジトリ経由に寄せてください。
 - `frontend/` は独立した Next.js アプリ（`strike-frontend`）です。`components/`、`hooks/`、`contexts/`、`lib/` などで構成され、スタイル方針は `frontend/STYLING_STRATEGY.md` を参照してください。バックエンドの API とやり取りする UI はここに実装します。
-- `frontend/public/` には Next.js が配信する公開アセットと CSS があり、ルートの `static/` はレガシー／ランタイム用の静的アセットです。
+- `frontend/public/` には Next.js が配信する公開アセットと CSS があります（リポジトリ直下に `static/` はありません）。
 - `alembic/versions/` には PostgreSQL のスキーマ移行履歴が保存されています。
 - `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
 
@@ -49,7 +49,7 @@
 
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
-- JavaScript: `static/js/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
+- JavaScript / TypeScript: `frontend/scripts/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
 - CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します（リポジトリ直下に `static/css/` は存在しません）。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。BEM スタイルの `kebab-case` クラス名を推奨します。
 - フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
 - 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
@@ -58,7 +58,7 @@
 - 1つのファイル・関数・クラスに責務を詰め込みすぎないでください。単一責任の原則（SRP）を守り、役割が増えてきたら早めにモジュールへ分割します。
 - 既存ファイルに機能を追加する際は、そのファイルの責務が肥大化しないか確認してください。関心事が異なる処理は、`services/`（共通ロジック）やブループリント配下の適切なモジュールへ切り出します。
 - 関数が長くなりすぎた場合（目安として1画面に収まらない、複数の責務を持つ）は、意味のある単位に分割します。深いネストは早期リターンやヘルパー関数で平坦化してください。
-- JavaScript は `static/js/` の既存モジュールパターンに従い、ファイルを単一責任に保ちます。CSS はベース／コンポーネント／ページの区分（`frontend/public/static/css/{base,components,pages}/`）を維持し、1ファイルに無関係なスタイルを混在させないでください。
+- JavaScript / TypeScript は `frontend/scripts/` の既存モジュールパターンに従い、ファイルを単一責任に保ちます。CSS はベース／コンポーネント／ページの区分（`frontend/public/static/css/{base,components,pages}/`）を維持し、1ファイルに無関係なスタイルを混在させないでください。
 - テンプレートやルーティングに複雑なロジックを埋め込まず、ビジネスロジックは `services/` へ寄せ、各レイヤーの責務を明確に保ちます。
 - 既存の重複や肥大化に気づいた場合でも、依頼された変更の範囲を大きく超えるリファクタリングは避け、必要に応じて PR やコメントで分割を提案してください。
 
@@ -95,5 +95,4 @@
 ## セキュリティと設定のヒント
 - 必要な環境変数には、LLM プロバイダーの API キー（`GROQ_API_KEY`、`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`）、`FASTAPI_SECRET_KEY`、Resend メールの設定（`RESEND_API_KEY` および `RESEND_FROM_ADDRESS`）、PostgreSQL の設定、および Redis の設定（Redis 認証を使用する場合）が含まれます。シークレット情報は環境変数または `.env` に保持し、git には含めないでください。
 - 実行時に読まれる環境変数の一覧は `.env.example` が正本です。`python3 scripts/check_env_documentation.py` が、コードの読み取りと `.env.example` の記載の同期を検証します（環境変数を追加・削除したら同じ変更で `.env.example` も更新してください）。
-- 本番環境では `FASTAPI_DEBUG` を無効にし、デプロイ前に Docker のデフォルト設定を確認してください。
 - .envファイルの内容は絶対に読んではいけない
