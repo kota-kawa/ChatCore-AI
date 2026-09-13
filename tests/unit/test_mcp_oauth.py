@@ -12,6 +12,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
 from services import mcp_oauth
+from services.repositories.mcp_oauth_repository import McpOAuthRepository
 
 SERVER_URL = "https://chat.example.test/mcp"
 
@@ -103,6 +104,151 @@ class McpOAuthTestCase(unittest.TestCase):
             details["scope_labels"][mcp_oauth.MCP_MEMOS_READ_SCOPE],
             "保存したメモを検索・閲覧する",
         )
+
+    def test_get_client_persists_a_cimd_client_for_the_grant_foreign_key(self):
+        """CIMD クライアントは mcp_oauth_clients に行が無いと付与・トークンが作れない。"""
+        client = OAuthClientInformationFull(
+            client_id="https://client.example.test/metadata.json",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=mcp_oauth.MCP_PROMPTS_READ_SCOPE,
+        )
+        repository = MagicMock()
+        repository.store_client = AsyncMock()
+        with (
+            patch("services.mcp_oauth.session_scope", new=_session_scope),
+            patch("services.mcp_oauth._oauth_repository", repository),
+            patch(
+                "services.mcp_oauth._load_registered_client",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "services.mcp_oauth._load_cimd_client",
+                new=AsyncMock(return_value=client),
+            ),
+        ):
+            resolved = asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().get_client(str(client.client_id))
+            )
+
+        self.assertIs(resolved, client)
+        repository.store_client.assert_awaited_once()
+        stored = repository.store_client.await_args.kwargs
+        self.assertEqual(stored["client_id"], str(client.client_id))
+        self.assertEqual(stored["registration_method"], "cimd")
+        self.assertIsNone(stored["encrypted_secret"])
+        self.assertNotIn("client_secret", stored["metadata"])
+
+    def test_get_client_leaves_an_already_registered_client_untouched(self):
+        client = OAuthClientInformationFull(
+            client_id="dcr-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+        )
+        repository = MagicMock()
+        repository.store_client = AsyncMock()
+        load_cimd_client = AsyncMock()
+        with (
+            patch("services.mcp_oauth.session_scope", new=_session_scope),
+            patch("services.mcp_oauth._oauth_repository", repository),
+            patch(
+                "services.mcp_oauth._load_registered_client",
+                new=AsyncMock(return_value=client),
+            ),
+            patch("services.mcp_oauth._load_cimd_client", new=load_cimd_client),
+        ):
+            resolved = asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().get_client("dcr-client")
+            )
+
+        self.assertIs(resolved, client)
+        load_cimd_client.assert_not_awaited()
+        repository.store_client.assert_not_awaited()
+
+    def test_get_client_stores_nothing_when_the_metadata_document_is_rejected(self):
+        repository = MagicMock()
+        repository.store_client = AsyncMock()
+        with (
+            patch("services.mcp_oauth.session_scope", new=_session_scope),
+            patch("services.mcp_oauth._oauth_repository", repository),
+            patch(
+                "services.mcp_oauth._load_registered_client",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "services.mcp_oauth._load_cimd_client",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            resolved = asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().get_client("https://unknown.test/x.json")
+            )
+
+        self.assertIsNone(resolved)
+        repository.store_client.assert_not_awaited()
+
+    def test_grant_row_is_flushed_before_its_authorization_code(self):
+        """relationship が無い2表は、明示的に flush しないとクラス名順で INSERT される。"""
+
+        class _OrderedSession:
+            def __init__(self):
+                self.events = []
+
+            def add(self, instance):
+                self.events.append(("add", type(instance).__name__))
+
+            async def flush(self):
+                self.events.append(("flush", None))
+
+        session = _OrderedSession()
+        asyncio.run(
+            McpOAuthRepository().create_grant_and_code(
+                session,
+                grant_id=uuid4(),
+                user_id=7,
+                client_id="https://client.example.test/metadata.json",
+                client_name="Client",
+                client_host="client.example.test",
+                scopes=[mcp_oauth.MCP_PROMPTS_READ_SCOPE],
+                scope_version=mcp_oauth.MCP_OAUTH_SCOPE_VERSION,
+                code_digest="digest",
+                redirect_uri="https://client.example.test/callback",
+                code_challenge="challenge",
+                resource=SERVER_URL,
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            )
+        )
+
+        self.assertEqual(
+            session.events,
+            [
+                ("add", "McpOAuthGrant"),
+                ("flush", None),
+                ("add", "McpOAuthAuthorizationCode"),
+                ("flush", None),
+            ],
+        )
+
+    def test_registered_client_lookup_ignores_stored_cimd_rows(self):
+        """保存済みのCIMD行は外部キーの親専用で、正本はメタデータ文書側に残す。"""
+
+        class _CapturingSession:
+            def __init__(self):
+                self.statement = None
+
+            async def scalar(self, statement):
+                self.statement = statement
+
+        session = _CapturingSession()
+        asyncio.run(
+            McpOAuthRepository().load_registered_client(
+                session, "https://client.example.test/metadata.json"
+            )
+        )
+        compiled = str(
+            session.statement.compile(compile_kwargs={"literal_binds": True})
+        )
+        self.assertIn("registration_method != 'cimd'", compiled)
 
     def test_registered_client_reads_the_client_metadata_orm_attribute(self):
         metadata = {
