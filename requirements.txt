@@ -15,6 +15,11 @@ google-auth-oauthlib==1.4.0
 requests==2.34.2
 python-dotenv==1.2.2
 openai==2.45.0
+# openai / anthropic の推移的依存だが、ストリーム途中の転送例外を services/llm.py で
+# 直接分類するため直接依存として固定する。
+# A transitive dependency of openai / anthropic, pinned as a direct one because
+# services/llm.py classifies mid-stream transport exceptions by their httpx types.
+httpx==0.28.1
 anthropic==0.120.2
 redis==8.0.1
 webauthn==3.0.0

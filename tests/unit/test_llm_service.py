@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
+import httpx
+
 from services import llm
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 
@@ -298,6 +300,61 @@ class LlmServiceTestCase(unittest.TestCase):
             )
 
         self.assertIsInstance(mapped, llm.LlmToolSchemaError)
+
+    # 日本語: ストリーム反復中に素通りしてくる httpx の転送エラーを、再試行可能へ分類することを検証します。
+    # English: Verify a raw httpx transport error raised mid-stream maps to a retryable failure.
+    def test_provider_error_mapping_classifies_mid_stream_transport_errors(self):
+        for exc in (
+            httpx.RemoteProtocolError("peer closed connection"),
+            httpx.ReadError("connection reset"),
+        ):
+            with self.subTest(exc=exc.__class__.__name__):
+                mapped = llm._map_provider_exception(
+                    exc,
+                    provider_name="Groq",
+                    fallback_message="Groq streaming API call failed.",
+                )
+                self.assertIsInstance(mapped, llm.LlmNetworkError)
+                self.assertTrue(mapped.retryable)
+
+    # 日本語: httpx のタイムアウトが、汎用の障害ではなくタイムアウトへ分類されることを検証します。
+    # English: Verify an httpx timeout maps to the timeout type rather than a generic failure.
+    def test_provider_error_mapping_classifies_httpx_timeouts(self):
+        mapped = llm._map_provider_exception(
+            httpx.ReadTimeout("timed out"),
+            provider_name="Groq",
+            fallback_message="Groq streaming API call failed.",
+        )
+
+        self.assertIsInstance(mapped, llm.LlmTimeoutError)
+        self.assertTrue(mapped.retryable)
+
+    # 日本語: ストリーム途中で届くステータスコード無しのAPIErrorを、再試行可能へ分類することを検証します。
+    # English: Verify a mid-stream APIError without a status code maps to a retryable failure.
+    def test_provider_error_mapping_classifies_status_less_api_errors(self):
+        class _FakeApiError(Exception):
+            pass
+
+        with patch.object(llm, "APIError", _FakeApiError):
+            mapped = llm._map_provider_exception(
+                _FakeApiError("An error occurred during streaming"),
+                provider_name="Groq",
+                fallback_message="Groq streaming API call failed.",
+            )
+
+        # ステータスコードを持たないまま届くため、HTTP ステータスの分岐では拾えない。
+        # 再試行不可の汎用エラーへ落ちると、そのままユーザーへ内部エラーが出てしまう。
+        # It arrives with no status code, so none of the HTTP status branches can see it.
+        # Falling through to the non-retryable generic error surfaces it to the user as-is.
+        self.assertIsInstance(mapped, llm.LlmUpstreamServiceError)
+        self.assertTrue(mapped.retryable)
+
+    # 日本語: ストリーミングの read タイムアウトが接続タイムアウトと別枠であることを検証します。
+    # English: Verify the streaming read timeout is budgeted apart from the connect timeout.
+    def test_request_timeout_gives_streaming_reads_more_room_than_connects(self):
+        self.assertGreater(llm.LLM_READ_TIMEOUT_SECONDS, llm.LLM_CONNECT_TIMEOUT_SECONDS)
+        self.assertEqual(llm.LLM_REQUEST_TIMEOUT.connect, llm.LLM_CONNECT_TIMEOUT_SECONDS)
+        self.assertEqual(llm.LLM_REQUEST_TIMEOUT.read, llm.LLM_READ_TIMEOUT_SECONDS)
 
     # 日本語: Groqの tool_choice=none 違反メッセージも回復可能な専用例外へ分類することを検証します。
     # English: Verify that Groq's tool_choice=none violation maps to the recoverable tool error.
