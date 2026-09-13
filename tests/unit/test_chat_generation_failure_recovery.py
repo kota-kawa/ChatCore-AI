@@ -95,7 +95,6 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
     def test_failure_without_any_body_still_reports_an_error(self):
         def stream(_messages, _model, **_kwargs):
             raise LlmUpstreamServiceError("Groq API reported a mid-stream failure.")
-            yield  # pragma: no cover - keeps the callable a generator
 
         job, saved, on_error = self.make_job()
         self.run_job(job, stream)
@@ -134,7 +133,6 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
             nonlocal calls
             calls += 1
             raise LlmAuthenticationError("Groq API authentication failed.")
-            yield  # pragma: no cover - keeps the callable a generator
 
         job, _saved, _on_error = self.make_job()
         self.run_job(job, stream, web_search=True)
@@ -171,7 +169,6 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
             nonlocal attempts
             attempts += 1
             raise LlmRateLimitError("Groq API rate limit exceeded.", retry_after_seconds=120)
-            yield  # pragma: no cover - keeps the callable a generator
 
         job, _saved, _on_error = self.make_job()
         self.run_job(job, stream, max_retries="2")
