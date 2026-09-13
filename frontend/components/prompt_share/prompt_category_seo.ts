@@ -1,9 +1,6 @@
 import type { Locale } from "../../lib/i18n/config";
-import { localizePublicPath, localizedAbsoluteUrl } from "../../lib/seo";
-import {
-  getCategoryLabel,
-  PROMPT_CATEGORY_KEYS
-} from "../../scripts/prompt_share/prompt_category_registry";
+import { localizePublicPath } from "../../lib/seo";
+import { PROMPT_CATEGORY_KEYS } from "../../scripts/prompt_share/prompt_category_registry";
 
 // カテゴリ別の公開ページに掲載する、検索意図に対応した説明文。
 // Search-intent focused copy used by each public category page.
@@ -277,12 +274,4 @@ export function getPromptCategorySeoCopy(category: string, locale: Locale): Prom
 
 export function getPromptCategoryPath(category: string, locale: Locale): string {
   return localizePublicPath(`/prompt_share/category/${encodeURIComponent(category)}`, locale);
-}
-
-export function getPromptCategoryUrl(category: string, locale: Locale): string {
-  return localizedAbsoluteUrl(getPromptCategoryPath(category, locale), locale);
-}
-
-export function getPromptCategoryLabel(category: string, locale: Locale): string {
-  return getCategoryLabel(category, locale);
 }

@@ -117,6 +117,3 @@ export const MCP_OAUTH_SCOPE_DEFINITIONS_EN: typeof MCP_OAUTH_SCOPE_DEFINITIONS 
   "context:read": { label: "Read personal context", description: "Read context such as your preferences, background, projects, and previous decisions.", iconClass: "bi bi-safe" },
   "context:write": { label: "Save and edit personal context", description: "Add, update, and disable your personal context.", iconClass: "bi bi-safe2" }
 };
-
-// Existing imports keep working while the consent page moves to the complete map.
-export const MCP_PROMPTS_WRITE_SCOPE_LABEL = MCP_OAUTH_SCOPE_DEFINITIONS["prompts:write"].label;

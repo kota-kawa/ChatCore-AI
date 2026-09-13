@@ -42,10 +42,6 @@ export function isNativeShareSupported(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.share === "function";
 }
 
-// Keep descriptive aliases for callers whose state naming follows the UI copy.
-export const getNativeShareSupport = isNativeShareSupported;
-export const supportsNativeShare = isNativeShareSupported;
-
 /**
  * Open the native share sheet and normalize browser outcomes.
  * User cancellation is a normal outcome and is intentionally not an error.

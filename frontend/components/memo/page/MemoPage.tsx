@@ -19,12 +19,6 @@ import { MemoPageContextProvider } from "../../../contexts/memo_page/memo_page_c
 import { useMemoPageController } from "../../../hooks/memo_page/use_memo_page_controller";
 import { memoPageDescription, memoStructuredData } from "../../../lib/memo/constants";
 
-// MemoCrawlSummary はメモ画面の公開コンテンツとして別モジュールへ切り出した。
-// 既存のテストとの互換性のためにこのモジュールから再エクスポートする。
-// MemoCrawlSummary was extracted into its own module; re-export it here so that
-// existing imports (and tests) referencing this page keep working.
-export { MemoCrawlSummary };
-
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
