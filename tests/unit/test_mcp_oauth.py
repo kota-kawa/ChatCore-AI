@@ -12,6 +12,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
 from services import mcp_oauth
+from services.repositories.mcp_oauth_repository import McpOAuthRepository
 
 SERVER_URL = "https://chat.example.test/mcp"
 
@@ -102,6 +103,48 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(
             details["scope_labels"][mcp_oauth.MCP_MEMOS_READ_SCOPE],
             "保存したメモを検索・閲覧する",
+        )
+
+    def test_grant_row_is_flushed_before_its_authorization_code(self):
+        """relationship が無い2表は、明示的に flush しないとクラス名順で INSERT される。"""
+
+        class _OrderedSession:
+            def __init__(self):
+                self.events = []
+
+            def add(self, instance):
+                self.events.append(("add", type(instance).__name__))
+
+            async def flush(self):
+                self.events.append(("flush", None))
+
+        session = _OrderedSession()
+        asyncio.run(
+            McpOAuthRepository().create_grant_and_code(
+                session,
+                grant_id=uuid4(),
+                user_id=7,
+                client_id="https://client.example.test/metadata.json",
+                client_name="Client",
+                client_host="client.example.test",
+                scopes=[mcp_oauth.MCP_PROMPTS_READ_SCOPE],
+                scope_version=mcp_oauth.MCP_OAUTH_SCOPE_VERSION,
+                code_digest="digest",
+                redirect_uri="https://client.example.test/callback",
+                code_challenge="challenge",
+                resource=SERVER_URL,
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            )
+        )
+
+        self.assertEqual(
+            session.events,
+            [
+                ("add", "McpOAuthGrant"),
+                ("flush", None),
+                ("add", "McpOAuthAuthorizationCode"),
+                ("flush", None),
+            ],
         )
 
     def test_registered_client_reads_the_client_metadata_orm_attribute(self):

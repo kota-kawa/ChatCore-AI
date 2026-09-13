@@ -245,6 +245,14 @@ class McpOAuthRepository:
                 scope_version=scope_version,
             )
         )
+        # 認可コードは付与(grant)を参照するが、両者に ORM の relationship が無いため、
+        # まとめて flush すると SQLAlchemy はクラス名順（codes → grants）に INSERT し、
+        # ``mcp_oauth_authorization_codes.grant_id`` の外部キーに違反する。
+        # 先に付与だけを flush して親行を確定させる。
+        # The code row points at the grant, but the two mappers have no ORM relationship, so a
+        # single flush emits them in class-name order (codes before grants) and violates the
+        # ``mcp_oauth_authorization_codes.grant_id`` foreign key. Flush the parent row first.
+        await session.flush()
         session.add(
             McpOAuthAuthorizationCode(
                 code_digest=code_digest,
