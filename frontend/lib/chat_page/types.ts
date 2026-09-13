@@ -66,6 +66,29 @@ export type GenerativeUiArtifactV1 = {
   js: string;
 };
 
+// 生成UIの抽出・検証・修復の結果。services/generative_ui_status.py と同じ語彙を使い、
+// 失敗（rejected / failed）だけを利用者に見せるパーツとして持つ。
+// Outcome of generated-UI extraction, validation, and repair. The vocabulary mirrors
+// services/generative_ui_status.py; only failures (rejected / failed) become a part the
+// user sees.
+export type GenerativeUiArtifactStatusState = "accepted" | "repaired" | "rejected" | "failed";
+
+export type GenerativeUiArtifactStatusV1 = {
+  state: GenerativeUiArtifactStatusState;
+  reasonCode: string;
+};
+
+// サンドボックス内の実行結果。サーバー検証を通っても、ブラウザでは空表示・例外・
+// CSP遮断・タイムアウトが起きうるため、iframe から受け取って区別する。
+// Runtime outcome inside the sandbox. Server-side validation cannot see a blank render,
+// a thrown error, a CSP block, or a timeout, so the iframe reports which one happened.
+export type SandboxArtifactRuntimeState =
+  | "ready"
+  | "blank"
+  | "runtime_error"
+  | "csp_blocked"
+  | "timeout";
+
 export type InteractiveButtonsV1 = {
   type: "yes_no" | "multiple_choice";
   question: string;
@@ -82,6 +105,7 @@ export type WebSearchImageV1 = {
 export type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
+  | { type: "artifact_status"; status: GenerativeUiArtifactStatusV1 }
   | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 }
   | { type: "web_search_image"; image: WebSearchImageV1 };
 
@@ -103,6 +127,8 @@ export type UiChatMessage = {
   streaming?: boolean;
   /** True while a generative UI fence is streaming and no renderable part has arrived yet. */
   generativeUiPending?: boolean;
+  /** Exact fences can execute after validation; probable fences are status-only. */
+  generativeUiFenceKind?: "exact" | "probable";
   error?: boolean;
   /** True when the server saved this answer as a partial one (SSE `incomplete`). */
   partial?: boolean;

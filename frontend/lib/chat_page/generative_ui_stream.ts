@@ -24,6 +24,10 @@ const ARTIFACT_FENCE_START_RE = new RegExp(
   "```[ \\t]*" + ARTIFACT_FENCE_NAME + "(?:\\s+json)?[ \\t]*(?:\\n|$)",
   "i",
 );
+const PROBABLE_FENCE_START_RE = new RegExp(
+  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+  "i",
+);
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
   let stripped = normalized.replace(COMPLETE_GENERATIVE_UI_FENCE_RE, "\n\n");
@@ -57,11 +61,23 @@ export function hasGenerativeUiFenceStart(text: string) {
   return ARTIFACT_FENCE_START_RE.test(normalized);
 }
 
+// 近似フェンス（```generative-ui など）は実行できないが、本文からは隠している。
+// 何も出さないと本文だけが消えたように見えるため、ローダーの対象としては同じに扱い、
+// 最終的な成否は artifact_status で伝える。
+// A probable fence (```generative-ui and friends) cannot execute, yet it is hidden from the
+// prose. Showing nothing made the body look like it vanished, so it drives the loader too and
+// the final outcome is delivered by artifact_status.
+export function generativeUiFenceKind(text: string): "exact" | "probable" | null {
+  const normalized = String(text || "").replace(/\r\n?/g, "\n");
+  if (ARTIFACT_FENCE_START_RE.test(normalized)) return "exact";
+  return PROBABLE_FENCE_START_RE.test(normalized) ? "probable" : null;
+}
+
 // 生成UIの作成中（フェンスは始まったが、描画可能なパーツがまだ届いていない）かを判定する
 // Whether a generative UI is still being produced: a fence has started but no
 // renderable non-text part has arrived yet.
 export function isGenerativeUiPending(text: string, parts?: ChatMessagePart[]) {
-  if (!hasGenerativeUiFenceStart(text)) return false;
+  if (generativeUiFenceKind(text) === null) return false;
   return !parts?.some((part) => part.type !== "text");
 }
 

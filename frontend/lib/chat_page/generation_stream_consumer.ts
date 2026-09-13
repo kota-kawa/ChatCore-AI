@@ -8,7 +8,12 @@
 // the final fade) and the reconnect backoff are user-visible, so the logic
 // moved out of the hook keeps its original order.
 
-import { getStreamingGenerativeUiDisplayText, isGenerativeUiPending, updateStreamingTextPart } from "./generative_ui_stream";
+import {
+  generativeUiFenceKind,
+  getStreamingGenerativeUiDisplayText,
+  isGenerativeUiPending,
+  updateStreamingTextPart,
+} from "./generative_ui_stream";
 import {
   interpretGenerationStreamEvent,
   type GenerationStreamAction,
@@ -223,6 +228,7 @@ function createStreamRenderer(
     const displayText = getStreamingGenerativeUiDisplayText(state.streamedText);
     const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
     const generativeUiPending = isGenerativeUiPending(state.streamedText, state.streamingParts);
+    const fenceKind = generativeUiFenceKind(state.streamedText);
 
     messages.updateActiveMessages((previous) => [
       ...removeThinkingMessages(previous),
@@ -232,6 +238,7 @@ function createStreamRenderer(
         text: displayText,
         streaming: true,
         generativeUiPending,
+        ...(fenceKind ? { generativeUiFenceKind: fenceKind } : {}),
         ...(displayParts ? { parts: displayParts } : {}),
       },
     ]);
@@ -374,6 +381,7 @@ function createStreamRenderer(
   const renderStreamingText = (streamId: string, displayText: string) => {
     const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
     const generativeUiPending = isGenerativeUiPending(state.streamedText, state.streamingParts);
+    const fenceKind = generativeUiFenceKind(state.streamedText);
 
     messages.updateActiveMessages((previous) =>
       previous.map((message) =>
@@ -383,6 +391,7 @@ function createStreamRenderer(
               text: displayText,
               streaming: true,
               generativeUiPending,
+              ...(fenceKind ? { generativeUiFenceKind: fenceKind } : {}),
               ...(displayParts ? { parts: displayParts } : {}),
             }
           : message,

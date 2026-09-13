@@ -14,6 +14,7 @@ from typing import Any
 # Continuation reasons are recorded from a fixed vocabulary so provider message bodies
 # never reach the logs.
 CONTINUATION_REASON_MAX_ITEMS = 8
+ARTIFACT_REASON_CODE_MAX_ITEMS = 8
 
 
 @dataclass
@@ -56,6 +57,21 @@ class ChatGenerationTelemetry:
     # 最後の判断が本文を返さず、回答のみ要求で1度やり直した回数。
     # How often the final decision produced no user-facing answer and was retried answer-only.
     empty_answer_recoveries: int = 0
+    # 生成UIの5段階（判定・注入・抽出／検証・修復・実行）を、モデル別の成功率として
+    # 集計できるようにする。理由コードは services/generative_ui_status.py の固定語彙のみ。
+    # Makes the five generated-UI stages (decision, injection, extraction/validation, repair,
+    # execution) countable per model. Reason codes come only from the fixed vocabulary in
+    # services/generative_ui_status.py.
+    ui_mode: str = ""
+    # decided / failed / disabled のいずれか。判定失敗を NONE と混同しないために分ける。
+    # One of decided / failed / disabled, kept apart so a failed decision is never read as NONE.
+    ui_mode_decision_status: str = ""
+    explicit_ui_opt_out: bool = False
+    artifact_status: str = "not_requested"
+    artifact_reason_codes: list[str] = field(default_factory=list)
+    artifact_repair_attempted: bool = False
+    artifact_repair_succeeded: bool = False
+    artifact_repair_output_limited: bool = False
 
     @property
     def agent_steps(self) -> int:
@@ -75,6 +91,22 @@ class ChatGenerationTelemetry:
             self.empty_evidence_payloads += 1
         elif truncated:
             self.truncated_evidence_payloads += 1
+
+    def record_generated_ui_outcome(
+        self,
+        *,
+        status: str,
+        reason_codes: list[str],
+        repair_attempted: bool,
+    ) -> None:
+        """Record the outcome of one generated-UI turn from its normalized response."""
+        self.artifact_status = status
+        self.artifact_reason_codes = list(reason_codes)[:ARTIFACT_REASON_CODE_MAX_ITEMS]
+        self.artifact_repair_attempted = repair_attempted
+        self.artifact_repair_succeeded = repair_attempted and status == "valid"
+        self.artifact_repair_output_limited = (
+            "artifact_repair_output_limited" in self.artifact_reason_codes
+        )
 
     def as_log_extra(self) -> dict[str, Any]:
         """Render the counters as one flat structured-log payload."""
@@ -109,4 +141,12 @@ class ChatGenerationTelemetry:
             "context_recovery_count": self.context_recovery_count,
             "tool_schema_recoveries": self.tool_schema_recoveries,
             "empty_answer_recoveries": self.empty_answer_recoveries,
+            "ui_mode": self.ui_mode,
+            "ui_mode_decision_status": self.ui_mode_decision_status,
+            "explicit_ui_opt_out": self.explicit_ui_opt_out,
+            "artifact_status": self.artifact_status,
+            "artifact_reason_codes": list(self.artifact_reason_codes),
+            "artifact_repair_attempted": self.artifact_repair_attempted,
+            "artifact_repair_succeeded": self.artifact_repair_succeeded,
+            "artifact_repair_output_limited": self.artifact_repair_output_limited,
         }

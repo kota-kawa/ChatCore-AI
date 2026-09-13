@@ -640,6 +640,56 @@
   line-height: 1.45;
 }
 
+/* 生成UIを表示できなかったことを伝える通知。本文と同じ幅で、警告としてだけ目立たせる。 */
+/* Notice shown when a generated UI could not be displayed: body width, warning weight only. */
+:where(body.chat-page, .chat-page-shell) .generative-ui-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(217, 119, 6, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 251, 235, 0.9);
+  color: #92400e;
+}
+
+:where(body.chat-page, .chat-page-shell) .generative-ui-status__title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+:where(body.chat-page, .chat-page-shell) .generative-ui-status__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #a16207;
+}
+
+:where(body.chat-page, .chat-page-shell) .generative-ui-status__reason {
+  align-self: flex-start;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  background: rgba(217, 119, 6, 0.12);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .generative-ui-status {
+  border-color: rgba(251, 191, 36, 0.26);
+  background: rgba(69, 39, 19, 0.55);
+  color: #fde68a;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .generative-ui-status__hint {
+  color: #fcd34d;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .generative-ui-status__reason {
+  background: rgba(251, 191, 36, 0.16);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :where(body.chat-page, .chat-page-shell) .sandbox-artifact {
     transition: none;

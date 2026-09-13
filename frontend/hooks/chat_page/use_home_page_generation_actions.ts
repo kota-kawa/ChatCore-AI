@@ -1082,7 +1082,11 @@ export function useHomePageGenerationActions({
       appendJsonAssistantMessage(generation, data);
 
       if (data.response && isGenerationActive(generation)) {
-        notifyStoredHistoryWriteIssue(appendStoredHistory(generation.roomId, { text: data.response, sender: "bot" }));
+        notifyStoredHistoryWriteIssue(appendStoredHistory(generation.roomId, {
+          text: data.response,
+          sender: "bot",
+          ...(data.parts?.length ? { parts: data.parts } : {}),
+        }));
         applyRoomTitleUpdate(generation.roomId, data.roomTitle);
       }
       clearStoredGenerationState(generation.roomId);
@@ -1308,7 +1312,11 @@ export function useHomePageGenerationActions({
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
           if (data.response) {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
+              text: data.response,
+              sender: "bot",
+              ...(data.parts?.length ? { parts: data.parts } : {}),
+            }));
           }
           clearStoredGenerationState(roomId);
           void refreshActivePath(roomId);
@@ -1456,7 +1464,11 @@ export function useHomePageGenerationActions({
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
           if (data.response) {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
+              text: data.response,
+              sender: "bot",
+              ...(data.parts?.length ? { parts: data.parts } : {}),
+            }));
           }
           clearStoredGenerationState(roomId);
           void refreshActivePath(roomId);

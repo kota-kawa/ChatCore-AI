@@ -221,6 +221,7 @@ class StartGenerationJob(Protocol):
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
+        explicit_ui_opt_out: bool = False,
     ) -> ChatGenerationJob: ...
 
 

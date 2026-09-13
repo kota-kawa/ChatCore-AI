@@ -17,9 +17,12 @@ from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     GenerativeUiMode,
     NormalizedGenerativeResponse,
+    artifact_status_part,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
 )
+from services.generative_ui_repair import with_answer_output_budget
+from services.generative_ui_status import ARTIFACT_STATUS_PART_TYPE
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
@@ -202,7 +205,8 @@ def _has_user_facing_answer(
     if response_text.strip():
         return True
     return any(
-        part.get("type") not in (WEB_SEARCH_IMAGE_PART_TYPE, "text") for part in parts
+        part.get("type") not in (WEB_SEARCH_IMAGE_PART_TYPE, ARTIFACT_STATUS_PART_TYPE, "text")
+        for part in parts
     )
 
 
@@ -510,10 +514,20 @@ class ChatGenerationJob:
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
+        explicit_ui_opt_out: bool = False,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
         self._ui_mode = ui_mode
+        # 判定モデルの NONE ではなく、ユーザー自身がUI不要と書いた場合だけ検証済み
+        # Artifact を破棄してよい。
+        # Only a refusal the user wrote may discard a validated artifact; a classifier's
+        # NONE may not.
+        self._explicit_ui_opt_out = explicit_ui_opt_out
+        # 生成UIの結果は SSE と履歴の両方へ同じ語彙で返す。失敗が無言で消える経路を残さない。
+        # The generated-UI outcome is returned to SSE and history in one vocabulary so no
+        # failure disappears silently.
+        self._artifact_status_payload: dict[str, str] | None = None
         self._prior_web_search_results = list(prior_web_search_results or [])
         # メモ/マイコンテキスト検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
         # ジョブ自身はセッションもDBも知らないままでいられる。None のときは機能そのものが無効。
@@ -675,6 +689,7 @@ class ChatGenerationJob:
             partial_text,
             recover_truncated=True,
             ui_mode=self._ui_mode,
+            explicit_ui_opt_out=self._explicit_ui_opt_out,
         )
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
@@ -2473,14 +2488,16 @@ class ChatGenerationJob:
                 bot_reply,
                 recover_truncated=True,
                 ui_mode=self._ui_mode,
+                explicit_ui_opt_out=self._explicit_ui_opt_out,
             )
         return normalize_response_with_artifact_retry(
             bot_reply,
             conversation_messages=state.answer_context_messages or state.current_messages,
             model=self._model,
-            generate_response=get_llm_response,
+            generate_response=with_answer_output_budget(get_llm_response),
             user_request=latest_user_message,
             ui_mode=self._ui_mode,
+            explicit_ui_opt_out=self._explicit_ui_opt_out,
         )
 
     # 引用markerを検証済みソースへのリンクへ解決するフェーズ。
@@ -2603,6 +2620,8 @@ class ChatGenerationJob:
         done_payload: dict[str, Any] = {"response": bot_reply}
         if message_parts:
             done_payload["parts"] = message_parts
+        if self._artifact_status_payload:
+            done_payload["artifact_status"] = self._artifact_status_payload
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
         self._telemetry.final_answer_output_chars = len(bot_reply)
@@ -2640,6 +2659,34 @@ class ChatGenerationJob:
         )
         self._publish("done", done_payload, done=True)
 
+    # 生成UIの判定・検証・修復の結果をテレメトリと配信用の状態へ確定するフェーズ。
+    # The phase that settles the generated-UI decision, validation and repair outcome into
+    # telemetry and the status delivered to the client.
+    def _record_generated_ui_outcome(
+        self,
+        normalized_response: NormalizedGenerativeResponse,
+    ) -> None:
+        self._telemetry.ui_mode = str(self._ui_mode or "")
+        self._telemetry.ui_mode_decision_status = (
+            "disabled" if self._explicit_ui_opt_out else "decided" if self._ui_mode else "failed"
+        )
+        self._telemetry.explicit_ui_opt_out = self._explicit_ui_opt_out
+        self._telemetry.record_generated_ui_outcome(
+            status=normalized_response.artifact_status,
+            reason_codes=normalized_response.artifact_reason_codes,
+            repair_attempted=normalized_response.repair_attempted,
+        )
+        self._artifact_status_payload = normalized_response.status_payload()
+        if normalized_response.validation_errors:
+            logger.warning(
+                "One or more generated UI artifacts failed validation and were omitted.",
+                extra={
+                    "validation_errors": normalized_response.validation_errors,
+                    "artifact_status": normalized_response.artifact_status,
+                    "artifact_reason_codes": normalized_response.artifact_reason_codes,
+                },
+            )
+
     # 生成結果を正規化・引用解決・画像配置してから保存と終端通知へ渡すフェーズ。
     # The phase that normalizes, resolves citations and places images before persisting.
     def _finalize_generation(self, state: ChatTurnRunState) -> None:
@@ -2654,13 +2701,12 @@ class ChatGenerationJob:
             model_text,
             latest_user_message,
         )
-        if normalized_response.validation_errors:
-            logger.warning(
-                "One or more generated UI artifacts failed validation and were omitted.",
-                extra={"validation_errors": normalized_response.validation_errors},
-            )
+        self._record_generated_ui_outcome(normalized_response)
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
+        status_part = artifact_status_part(self._artifact_status_payload)
+        if status_part:
+            message_parts = [*(message_parts or [{"type": "text", "text": bot_reply}]), status_part]
 
         bot_reply, message_parts, resolved_citations = self._resolve_final_citations(
             state,
@@ -3073,6 +3119,7 @@ class ChatGenerationService:
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
+        explicit_ui_opt_out: bool = False,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -3108,6 +3155,7 @@ class ChatGenerationService:
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
+                explicit_ui_opt_out=explicit_ui_opt_out,
             )
             self._jobs[job_key] = job
 
@@ -3259,6 +3307,7 @@ def start_generation_job(
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
     ui_mode: GenerativeUiMode | str | None = None,
+    explicit_ui_opt_out: bool = False,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -3277,4 +3326,5 @@ def start_generation_job(
         shared_prompt_search=shared_prompt_search,
         selected_reference_trace=selected_reference_trace,
         ui_mode=ui_mode,
+        explicit_ui_opt_out=explicit_ui_opt_out,
     )

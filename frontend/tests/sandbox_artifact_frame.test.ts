@@ -153,3 +153,53 @@ test("SandboxArtifactFrame clamps oversized requested height", () => {
 
   assert.match(markup, /height:900px/);
 });
+
+// 実行時の成否は、サーバー検証では観測できない。iframe から必ず結果が返ることを固定する。
+// The runtime outcome is invisible to server-side validation, so the iframe must always report it.
+async function collectArtifactStatus(srcDoc: string, waitMs: number) {
+  const dom = new JSDOM(srcDoc, { pretendToBeVisual: true, runScripts: "dangerously" });
+  const states: string[] = [];
+  const listener = (event: MessageEvent) => {
+    const data = event.data as { type?: string; state?: string } | null;
+    if (data && data.type === "chatcore-artifact-status" && typeof data.state === "string") {
+      states.push(data.state);
+    }
+  };
+  (dom.window as unknown as Window).addEventListener("message", listener as EventListener);
+
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  dom.window.close();
+  return states;
+}
+
+test("sandbox reports a blank render instead of looking successful", async () => {
+  const states = await collectArtifactStatus(
+    buildSandboxArtifactSrcDoc({ ...artifact, html: "", js: "" }),
+    650,
+  );
+
+  assert.deepEqual(states, ["blank"]);
+});
+
+test("sandbox reports a thrown runtime error", async () => {
+  const states = await collectArtifactStatus(
+    buildSandboxArtifactSrcDoc({ ...artifact, js: 'throw new Error("render failed");' }),
+    650,
+  );
+
+  assert.deepEqual(states, ["runtime_error"]);
+});
+
+test("sandbox reports a successful render exactly once", async () => {
+  const states = await collectArtifactStatus(buildSandboxArtifactSrcDoc(artifact), 650);
+
+  assert.deepEqual(states, ["ready"]);
+});
+
+test("sandbox listens for rejected promises and CSP violations, not only sync errors", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc(artifact);
+
+  assert.match(srcDoc, /addEventListener\("unhandledrejection"/);
+  assert.match(srcDoc, /addEventListener\("securitypolicyviolation"/);
+  assert.match(srcDoc, /csp_blocked/);
+});

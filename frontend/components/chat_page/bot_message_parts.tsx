@@ -5,6 +5,7 @@ import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
 import { WebSearchImagePart } from "./web_search_image_part";
+import { GenerativeUiStatusNotice } from "./generative_ui_status_notice";
 
 // ボットメッセージのパーツ表示コンポーネントのprops型定義
 // Props type definition for the bot message parts display component
@@ -50,6 +51,13 @@ function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: Bo
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
               <InteractiveButtons buttons={part.buttons} />
+            </div>
+          );
+        }
+        if (part.type === "artifact_status") {
+          return (
+            <div key={`artifact-status-${index}`} className="bot-message-part bot-message-part--artifact-status">
+              <GenerativeUiStatusNotice status={part.status} />
             </div>
           );
         }

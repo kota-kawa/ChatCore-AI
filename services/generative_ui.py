@@ -4,7 +4,8 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from html import escape as escape_html
 from html import unescape as unescape_html
 from typing import Any, Literal
@@ -12,8 +13,59 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from services.llm import get_llm_json_response
+from services.generative_ui_intent import (
+    inject_generative_ui_mode_instruction,
+    is_explicit_generative_ui_opt_out,
+)
+from services.generative_ui_javascript import (
+    javascript_structure_error,
+    unsupported_library_references,
+)
+from services.generative_ui_repair import (
+    build_artifact_repair_messages,
+    has_blocking_quality_issue,
+)
+from services.generative_ui_status import (
+    ARTIFACT_STATUS_INVALID,
+    ARTIFACT_STATUS_MISSING,
+    ARTIFACT_STATUS_NOT_REQUESTED,
+    ARTIFACT_STATUS_PART_TYPE,
+    ARTIFACT_STATUS_REPAIR_FAILED,
+    ARTIFACT_STATUS_SUPPRESSED,
+    ARTIFACT_STATUS_VALID,
+    REASON_ARTIFACT_MALFORMED,
+    REASON_ARTIFACT_QUALITY_INSUFFICIENT,
+    REASON_ARTIFACT_VALIDATION_FAILED,
+    REASON_EXPLICIT_OPT_OUT,
+    REASON_REPAIR_FAILED,
+    REASON_REPAIR_INVALID,
+    REASON_REPAIR_OUTPUT_LIMITED,
+    REASON_REQUIRED_ARTIFACT_MISSING,
+    artifact_status_part,
+    artifact_status_payload,
+    normalize_artifact_status_part,
+)
+from services.llm import LlmOutputLimitError, get_llm_json_response
 from services.message_parts_display import normalize_message_parts_for_display
+
+# 意図判定とモード注入は services/generative_ui_intent.py が担当する。呼び出し側が
+# 生成UIの入口をここだけに保てるよう、名前はこのモジュールからも公開する。
+# Intent detection and mode injection live in services/generative_ui_intent.py; the names
+# stay exported here so callers keep a single entry point for generated UI.
+__all__ = [
+    "GenerativeUiValidationError",
+    "artifact_status_part",
+    "artifact_status_payload",
+    "decide_generative_ui_mode",
+    "decode_message_parts",
+    "encode_message_parts",
+    "inject_generative_ui_mode_instruction",
+    "is_explicit_generative_ui_opt_out",
+    "normalize_response_with_artifact_retry",
+    "normalize_response_with_artifacts",
+    "requested_artifact_quality_issues",
+    "validate_artifact_payload",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +439,26 @@ class NormalizedGenerativeResponse:
     text: str
     parts: list[dict[str, Any]] | None
     validation_errors: list[str]
+    # 抽出・検証・修復のどこで終わったかと、その理由。空表示や無言の破棄を
+    # 「成功」と見分けるために、呼び出し側はこの2つだけを読めばよい。
+    # Where extraction, validation, or repair ended and why. Callers need only these two
+    # fields to tell a blank render or a silent discard apart from a success.
+    artifact_status: str = ARTIFACT_STATUS_NOT_REQUESTED
+    artifact_reason_codes: list[str] = field(default_factory=list)
+    repair_attempted: bool = False
+
+    def status_payload(self) -> dict[str, str] | None:
+        """Render the client-facing ``{state, reason_code}`` pair for this response."""
+        return artifact_status_payload(
+            self.artifact_status,
+            self.artifact_reason_codes,
+            repair_attempted=self.repair_attempted,
+        )
+
+    def has_artifact(self) -> bool:
+        return any(
+            part.get("type") == "sandbox_artifact" for part in (self.parts or [])
+        )
 
 
 # 値を安全に文字列型に変換します。Noneの場合は空文字を返します。
@@ -1083,7 +1155,8 @@ def _sanitize_html(value: str) -> str:
 
 # libraries指定の表記ゆれを正規化し、JS本文からの推定も合わせてライブラリ一覧を組み立てます。
 # Normalize library declarations (folding aliases) and infer dependencies from the JS body.
-def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
+def _declared_library_names(value: Any) -> list[str]:
+    """Return the library names as the model wrote them, before alias folding."""
     if value is None:
         raw_items: list[Any] = []
     elif isinstance(value, str):
@@ -1092,10 +1165,13 @@ def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
         raw_items = list(value)
     else:
         raw_items = [value]
+    return [str(item).strip() for item in raw_items if str(item).strip()]
 
+
+def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
     libraries: list[str] = []
-    for item in raw_items:
-        name = _ARTIFACT_LIBRARY_ALIASES.get(str(item).strip().lower())
+    for item in _declared_library_names(value):
+        name = _ARTIFACT_LIBRARY_ALIASES.get(item.lower())
         if name and name not in libraries:
             libraries.append(name)
     if "three" not in libraries and _THREE_USAGE_RE.search(js):
@@ -1157,11 +1233,11 @@ def _normalize_three_module_imports(js: str) -> str:
 
 # アーティファクト定義の辞書型データを整形し、各コードソース（HTML、CSS、JS）を適切にセットします。
 # Coerce and format raw artifact dictionary fields into a standard structure.
-def _prepare_artifact_payload(payload: Any) -> Any:
+def _prepare_artifact_payload(payload: Any) -> tuple[Any, list[str]]:
     if isinstance(payload, list):
         payload = next((item for item in payload if isinstance(item, dict)), payload)
     if not isinstance(payload, dict):
-        return payload
+        return payload, []
     if isinstance(payload.get("artifact"), dict) and not any(
         key in payload for key in ("html", "markup", "body", "content")
     ):
@@ -1193,9 +1269,13 @@ def _prepare_artifact_payload(payload: Any) -> Any:
 
     title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
     description = _coerce_string(_first_present(payload, "description", "summary", "caption")).strip()
-    libraries = _normalize_artifact_libraries(
-        _first_present(payload, "libraries", "library", "libs", "lib"), js
-    )
+    declared_libraries = _first_present(payload, "libraries", "library", "libs", "lib")
+    libraries = _normalize_artifact_libraries(declared_libraries, js)
+    dropped_libraries = [
+        name
+        for name in _declared_library_names(declared_libraries)
+        if name.lower() not in _ARTIFACT_LIBRARY_ALIASES
+    ]
     prepared = {
         "version": 1,
         "title": title[:120],
@@ -1209,18 +1289,35 @@ def _prepare_artifact_payload(payload: Any) -> Any:
         prepared["libraries"] = libraries
     if prepared["description"] is None:
         prepared.pop("description")
-    return prepared
+    return prepared, dropped_libraries
+
+
+# ブラウザで実行できないJSを、サーバー側の検証段階で止める。
+# サンドボックスの失敗は画面が真っ白になるだけで理由が残らないため、構文が壊れたJSと、
+# 削除された未対応ライブラリを参照したままのJSはここで拒否する。
+# Stop JavaScript that cannot run in the browser while it is still on the server. A sandbox
+# failure leaves only a blank frame, so broken syntax and code that still calls a removed,
+# unsupported library are rejected here instead.
+def _validate_artifact_javascript(js: str, dropped_libraries: list[str]) -> None:
+    if _UNSUPPORTED_MODULE_SYNTAX_RE.search(js):
+        raise ValueError("JavaScript module syntax is unsupported in sandbox artifacts.")
+    referenced = unsupported_library_references(js, dropped_libraries)
+    if referenced:
+        raise ValueError(
+            "Unsupported library is still referenced by the JavaScript: " + ", ".join(referenced)
+        )
+    structure_error = javascript_structure_error(js)
+    if structure_error:
+        raise ValueError(structure_error)
 
 
 # アーティファクトデータの値をパース・検証し、バリデーション済みの辞書型を返します。
 # Validate raw dictionary properties of the sandbox artifact against version 1 schema.
 def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     try:
-        prepared = _prepare_artifact_payload(payload)
-        if isinstance(prepared, dict) and _UNSUPPORTED_MODULE_SYNTAX_RE.search(
-            _coerce_string(prepared.get("js"))
-        ):
-            raise ValueError("JavaScript module syntax is unsupported in sandbox artifacts.")
+        prepared, dropped_libraries = _prepare_artifact_payload(payload)
+        if isinstance(prepared, dict):
+            _validate_artifact_javascript(_coerce_string(prepared.get("js")), dropped_libraries)
         artifact = GenerativeUiArtifactV1.model_validate(prepared)
     except ValidationError as exc:
         raise GenerativeUiValidationError(str(exc)) from exc
@@ -1319,6 +1416,11 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
             except GenerativeUiValidationError:
                 continue
             parts.append({"type": "web_search_image", "image": image})
+            continue
+        if part_type == ARTIFACT_STATUS_PART_TYPE:
+            status_part = normalize_artifact_status_part(part)
+            if status_part:
+                parts.append(status_part)
             continue
     normalized_parts = normalize_message_parts_for_display(parts)
     return normalized_parts or None
@@ -1430,14 +1532,30 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
 
 # 応答テキストから生成UIとボタンの構成要素を抽出・分離し、ユーザーに見せるテキストと構造化パーツリストに分割します。
 # Parse the raw response prose to isolate UI blocks and buttons, returning a normalized text and parts list.
+def _validation_reason_code(error: str) -> str:
+    """Fold one validation error message into the fixed reason vocabulary."""
+    return (
+        REASON_ARTIFACT_MALFORMED
+        if "json" in error.lower() or "expecting" in error.lower()
+        else REASON_ARTIFACT_VALIDATION_FAILED
+    )
+
+
 def normalize_response_with_artifacts(
     raw_text: str,
     *,
     recover_truncated: bool = False,
     allow_fallback: bool = True,
     ui_mode: GenerativeUiMode | str | None = None,
+    explicit_ui_opt_out: bool = False,
 ) -> NormalizedGenerativeResponse:
-    """Extract sandbox artifacts, using only the structured UI-mode decision for recovery."""
+    """Extract sandbox artifacts and report why one is absent.
+
+    判定モデルの NONE では、検証を通ったArtifactを捨てない。判定の偽陰性がそのまま
+    失敗になるためで、破棄してよいのはユーザー自身がUI不要と書いた場合だけ。
+    A classifier's NONE never discards an artifact that passed validation: that would turn
+    every false negative into a failure. Only an explicit user refusal suppresses one.
+    """
     # Kept as a public keyword for older callers. Fallback UI synthesis was
     # intentionally removed, so its value no longer changes behavior.
     _ = allow_fallback
@@ -1460,9 +1578,19 @@ def normalize_response_with_artifacts(
         text,
         [candidate.span for candidate in all_candidates],
     )
-    user_opted_out = normalized_ui_mode == "NONE"
+    user_opted_out = bool(explicit_ui_opt_out)
     if not candidates and not button_candidates and not malformed_fence_spans:
-        return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
+        return NormalizedGenerativeResponse(
+            text=text,
+            parts=None,
+            validation_errors=[],
+            artifact_status=(
+                ARTIFACT_STATUS_MISSING if requested_artifact else ARTIFACT_STATUS_NOT_REQUESTED
+            ),
+            artifact_reason_codes=(
+                [REASON_REQUIRED_ARTIFACT_MISSING] if requested_artifact else []
+            ),
+        )
 
     artifacts: list[dict[str, Any]] = []
     buttons_list: list[dict[str, Any]] = []
@@ -1489,10 +1617,23 @@ def normalize_response_with_artifacts(
     visible_text = _remove_candidate_spans(text, visible_candidates)
 
     if not artifacts and not buttons_list:
+        if user_opted_out:
+            status, reason_codes = ARTIFACT_STATUS_SUPPRESSED, [REASON_EXPLICIT_OPT_OUT]
+        elif validation_errors:
+            status = ARTIFACT_STATUS_INVALID
+            reason_codes = [_validation_reason_code(error) for error in validation_errors]
+        elif malformed_fence_spans:
+            status, reason_codes = ARTIFACT_STATUS_INVALID, [REASON_ARTIFACT_MALFORMED]
+        elif requested_artifact:
+            status, reason_codes = ARTIFACT_STATUS_MISSING, [REASON_REQUIRED_ARTIFACT_MISSING]
+        else:
+            status, reason_codes = ARTIFACT_STATUS_NOT_REQUESTED, []
         return NormalizedGenerativeResponse(
             text=visible_text,
             parts=None,
             validation_errors=validation_errors,
+            artifact_status=status,
+            artifact_reason_codes=reason_codes,
         )
 
     if not visible_text:
@@ -1501,10 +1642,18 @@ def normalize_response_with_artifacts(
     parts: list[dict[str, Any]] = [{"type": "text", "text": visible_text}]
     parts.extend({"type": "sandbox_artifact", "artifact": artifact} for artifact in artifacts)
     parts.extend({"type": "interactive_buttons", "buttons": button} for button in buttons_list)
+    if artifacts:
+        status, reason_codes = ARTIFACT_STATUS_VALID, []
+    elif requested_artifact:
+        status, reason_codes = ARTIFACT_STATUS_MISSING, [REASON_REQUIRED_ARTIFACT_MISSING]
+    else:
+        status, reason_codes = ARTIFACT_STATUS_NOT_REQUESTED, []
     return NormalizedGenerativeResponse(
         text=visible_text,
         parts=parts,
         validation_errors=validation_errors,
+        artifact_status=status,
+        artifact_reason_codes=reason_codes,
     )
 
 
@@ -1561,44 +1710,34 @@ def requested_artifact_quality_issues(
     return issues
 
 
-def _build_artifact_repair_messages(
-    conversation_messages: list[dict[str, Any]],
-    raw_text: str,
-    intent_text: str,
-    mode: Literal["2D", "3D"],
+def _repair_reason_codes(
+    normalized: NormalizedGenerativeResponse,
     issues: list[str],
-) -> list[dict[str, Any]]:
-    issue_lines = "\n".join(f"- {issue}" for issue in issues[:8])
-    mode_requirements = (
-        "Include libraries:[\"three\"] and use the existing global THREE. Build a complete "
-        "scene with renderer, camera, lighting, visible geometry, polished materials, a fitted "
-        "composition, capped pixel ratio, resize handling, and useful pointer interaction."
-        if mode == "3D"
-        else "Build a complete responsive product-style UI with meaningful initial content, clear "
-        "visual hierarchy, deliberate spacing and typography, strong contrast, and interaction "
-        "when it helps the requested task. Do not return a prose card or a lightly styled table."
+) -> list[str]:
+    """Fold the detected problems into the fixed reason vocabulary for the repair prompt."""
+    codes = list(normalized.artifact_reason_codes)
+    if not codes:
+        codes = [
+            _validation_reason_code(error) for error in normalized.validation_errors
+        ] or [REASON_ARTIFACT_QUALITY_INSUFFICIENT if issues else REASON_ARTIFACT_MALFORMED]
+    return list(dict.fromkeys(codes))
+
+
+def _repair_failure(
+    normalized: NormalizedGenerativeResponse,
+    reason_codes: list[str],
+    failure_code: str,
+) -> NormalizedGenerativeResponse:
+    """Report a repair that did not produce a usable artifact, without inventing success."""
+    keeps_artifact = normalized.has_artifact()
+    return dataclass_replace(
+        normalized,
+        artifact_status=(
+            ARTIFACT_STATUS_VALID if keeps_artifact else ARTIFACT_STATUS_REPAIR_FAILED
+        ),
+        artifact_reason_codes=list(dict.fromkeys([*reason_codes, failure_code])),
+        repair_attempted=True,
     )
-    repair_prompt = (
-        "Your previous generated-UI answer failed the application's completion or quality gate. "
-        "Regenerate the user's requested result now. Preserve the user's subject, data, language, "
-        "and intent; improve only the implementation.\n\n"
-        f"Required mode: {mode}\n"
-        f"Detected problems:\n{issue_lines}\n\n"
-        f"{mode_requirements}\n"
-        "Return exactly one complete ```chatcore-artifact fenced block and no separate HTML, CSS, "
-        "JavaScript, JSON, explanation, or UI_MODE text. The JSON must contain version, title, "
-        "description, height, html, css, and js. The html must contain id=\"app\". Use no network, "
-        "external resources, imports, storage, or parent-page access. Keep the result compact enough "
-        "to finish, validate JSON escaping, and include the closing brace and closing fence."
-    )
-    messages = [dict(message) for message in conversation_messages]
-    if raw_text.strip():
-        messages.append({"role": "assistant", "content": raw_text[-16000:]})
-    messages.append({"role": "system", "content": repair_prompt})
-    # Repeat the original request last so provider language selection and subject
-    # grounding are based on the user, not on the English repair instruction.
-    messages.append({"role": "user", "content": intent_text[-8000:]})
-    return messages
 
 
 def normalize_response_with_artifact_retry(
@@ -1609,41 +1748,57 @@ def normalize_response_with_artifact_retry(
     generate_response: Callable[[list[dict[str, Any]], str], str | None],
     user_request: str | None = None,
     ui_mode: GenerativeUiMode | str | None = None,
+    explicit_ui_opt_out: bool = False,
 ) -> NormalizedGenerativeResponse:
-    """Normalize a response and repair low-quality UI only for an LLM-selected mode."""
+    """Normalize a response and repair a requested UI with one dedicated model call.
+
+    修復は会話履歴ではなく専用プロンプトで行い、打ち切りと不完全な修復結果を
+    成功と区別して返す。会話メッセージは要求文の補完にだけ使う。
+    Repair runs from a dedicated prompt rather than the conversation, and reports a truncated
+    or incomplete repair as a failure instead of a success. The conversation is only used to
+    fall back to the user's request text.
+    """
     source_text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    intent_text = user_request or ""
+    intent_text = user_request or _latest_user_request(conversation_messages)
     normalized_ui_mode = _coerce_generative_ui_mode(ui_mode)
     normalized = normalize_response_with_artifacts(
         source_text,
         recover_truncated=True,
         ui_mode=normalized_ui_mode,
+        explicit_ui_opt_out=explicit_ui_opt_out,
     )
     mode = normalized_ui_mode if normalized_ui_mode in {"2D", "3D"} else None
-    if mode is None:
+    if mode is None or explicit_ui_opt_out:
         return normalized
 
     issues = requested_artifact_quality_issues(normalized, mode)
     if not issues:
         return normalized
 
-    repair_messages = _build_artifact_repair_messages(
-        conversation_messages,
-        source_text,
-        intent_text,
-        mode,
-        issues,
+    reason_codes = _repair_reason_codes(normalized, issues)
+    repair_messages = build_artifact_repair_messages(
+        raw_text=source_text,
+        intent_text=intent_text,
+        mode=mode,
+        reason_codes=reason_codes,
+        issues=issues,
     )
     try:
         repaired_text = generate_response(repair_messages, model)
+    except LlmOutputLimitError:
+        logger.warning(
+            "Generated UI repair hit the provider output limit.",
+            extra={"artifact_reason_codes": reason_codes},
+        )
+        return _repair_failure(normalized, reason_codes, REASON_REPAIR_OUTPUT_LIMITED)
     except Exception:
         logger.warning(
             "Generated UI repair request failed; keeping the original response.",
             exc_info=True,
         )
-        return normalized
+        return _repair_failure(normalized, reason_codes, REASON_REPAIR_FAILED)
     if not repaired_text:
-        return normalized
+        return _repair_failure(normalized, reason_codes, REASON_REPAIR_INVALID)
 
     repaired = normalize_response_with_artifacts(
         repaired_text,
@@ -1653,20 +1808,30 @@ def normalize_response_with_artifact_retry(
     repaired_issues = requested_artifact_quality_issues(repaired, mode)
     if not repaired_issues:
         logger.info("Repaired a requested %s generative UI response.", mode)
-        return repaired
+        return dataclass_replace(repaired, repair_attempted=True)
 
     logger.warning(
         "Generated UI repair did not pass the quality gate.",
-        extra={"quality_issues": repaired_issues},
+        extra={"quality_issues": repaired_issues, "artifact_reason_codes": reason_codes},
     )
-    # Prefer a valid repaired artifact over an original response with no artifact,
-    # even when it still misses a polish heuristic. This keeps repair monotonic.
-    repaired_has_artifact = any(
-        part.get("type") == "sandbox_artifact" for part in (repaired.parts or [])
-    )
-    original_has_artifact = any(
-        part.get("type") == "sandbox_artifact" for part in (normalized.parts or [])
-    )
-    if repaired_has_artifact and not original_has_artifact:
-        return repaired
-    return normalized
+    # 仕上がりが粗いだけの修復結果は採用する。実行できない結果まで採用すると、
+    # 空のiframeが「成功」として保存される。
+    # A merely rough repair is still accepted; accepting an unrunnable one would persist an
+    # empty iframe as a success.
+    if repaired.has_artifact() and not has_blocking_quality_issue(repaired_issues):
+        return dataclass_replace(
+            repaired,
+            artifact_reason_codes=[REASON_ARTIFACT_QUALITY_INSUFFICIENT],
+            repair_attempted=True,
+        )
+    return _repair_failure(normalized, reason_codes, REASON_REPAIR_INVALID)
+
+
+def _latest_user_request(conversation_messages: list[dict[str, Any]] | None) -> str:
+    """Return the latest user prompt so a repair keeps the original subject."""
+    for message in reversed(conversation_messages or []):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        return content if isinstance(content, str) else str(content or "")
+    return ""

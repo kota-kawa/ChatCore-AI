@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   getStreamingGenerativeUiDisplayText,
+  generativeUiFenceKind,
   hasGenerativeUiFenceStart,
   isGenerativeUiPending,
   stripGenerativeUiFencesForStreaming,
@@ -66,14 +67,21 @@ test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while s
   assert.equal(getStreamingGenerativeUiDisplayText(text), "説明します。");
 });
 
-test("legacy artifact aliases are hidden without activating the UI loader", () => {
+test("legacy artifact aliases are hidden but still show that a UI is being produced", () => {
   const text = [
     "```ui_artifact",
     '{"version":1,"title":"UI"',
   ].join("\n");
 
+  // 本文から隠したうえで何も出さないと、回答が消えたように見える。実行できないことは
+  // 最終的な artifact_status で伝える。
+  // Hiding the fence and showing nothing made the answer look like it vanished; the fact that
+  // it cannot execute is delivered by the final artifact_status.
   assert.equal(getStreamingGenerativeUiDisplayText(text), "");
-  assert.equal(isGenerativeUiPending(text), false);
+  assert.equal(isGenerativeUiPending(text), true);
+  assert.equal(generativeUiFenceKind(text), "probable");
+  assert.equal(generativeUiFenceKind("説明\n```chatcore-artifact\n{"), "exact");
+  assert.equal(generativeUiFenceKind("ただのテキストです。"), null);
 });
 
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
