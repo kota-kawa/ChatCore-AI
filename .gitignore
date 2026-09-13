@@ -91,6 +91,4 @@ docker-compose.local.yml
 *.sqlite3
 instance/
 /data/uploads/
-static/uploads/*
-!static/uploads/.gitkeep
 /chatcore-ai.conf
