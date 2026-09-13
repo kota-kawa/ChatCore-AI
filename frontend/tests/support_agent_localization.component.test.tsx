@@ -39,7 +39,7 @@ describe("support agent localization", () => {
     const { container } = renderSupportAgent("en");
 
     expect(container.querySelector('img[src="/static/Chaco.png"]')).toBeInTheDocument();
-    expect(screen.getByText("Navigation assistant")).toBeInTheDocument();
+    expect(screen.getByText("Chaco")).toBeInTheDocument();
     expect(screen.getByText("Ask for help using this page, choosing your next action, or organizing what to enter.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Ask for help with this page").tagName).toBe("TEXTAREA");
     expect(screen.getByRole("button", { name: "What can this service do?" })).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe("support agent localization", () => {
   it("keeps the Japanese copy when the display language is Japanese", () => {
     renderSupportAgent("ja");
 
-    expect(screen.getByText("操作支援エージェント")).toBeInTheDocument();
+    expect(screen.getByText("チャコ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "このサービスはどんなことができる？" })).toBeInTheDocument();
   });
 
@@ -114,7 +114,7 @@ describe("support agent localization", () => {
 
     await user.click(clearButton);
     await waitFor(() => expect(showConfirmModalMock).toHaveBeenCalledWith("Clear this conversation? This cannot be undone."));
-    expect(screen.getByText("Navigation assistant")).toBeInTheDocument();
+    expect(screen.getByText("Chaco")).toBeInTheDocument();
   });
 });
 

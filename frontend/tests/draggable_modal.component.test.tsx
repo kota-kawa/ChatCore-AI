@@ -26,7 +26,7 @@ describe("DraggableModal", () => {
     act(() => vi.advanceTimersByTime(0));
 
     expect(screen.getByRole("dialog", { name: "テストモーダル" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "AIエージェントを閉じる" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "チャコを閉じる" })).toHaveFocus();
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
@@ -73,11 +73,11 @@ describe("DraggableModal", () => {
       </DraggableModal>
     );
 
-    fireEvent.mouseDown(screen.getByRole("button", { name: "AIエージェントを閉じる" }), {
+    fireEvent.mouseDown(screen.getByRole("button", { name: "チャコを閉じる" }), {
       clientX: 300,
       clientY: 200,
     });
-    fireEvent.click(screen.getByRole("button", { name: "AIエージェントを閉じる" }));
+    fireEvent.click(screen.getByRole("button", { name: "チャコを閉じる" }));
 
     expect(onClose).toHaveBeenCalledOnce();
     expect(screen.getByRole("dialog")).toHaveStyle({ cursor: "auto" });
