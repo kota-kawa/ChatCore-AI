@@ -271,6 +271,7 @@ export function MemoDetailModal() {
                     persistConversation={false}
                     showModelLabel
                     iconOnlyClearButton={false}
+                    showChacoIcon={false}
                     onMemoEdit={applyAgentMemoEdit}
                   />
                 </aside>

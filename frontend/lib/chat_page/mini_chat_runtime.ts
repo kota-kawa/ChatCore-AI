@@ -74,6 +74,9 @@ export type MiniChatProps = {
   // サポートエージェントのクリア操作をアイコンだけで表示する
   // Renders the clear-conversation control as an icon-only button
   iconOnlyClearButton?: boolean;
+  // サポートエージェントに Chaco の画像アイコンを表示する
+  // Uses the Chaco image for support-agent icons
+  showChacoIcon?: boolean;
   // memo_edit アクションを受け付けて開いているメモへ適用するハンドラ（指定時のみメモ編集計画が有効になる）
   // Enables memo edit plans: applies a memo_edit step to the open memo when provided
   onMemoEdit?: MemoEditApplyHandler;
