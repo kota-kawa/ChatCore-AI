@@ -124,75 +124,83 @@ class ExtractUrlsFromTextTest(unittest.TestCase):
 # SSRF（Server-Side Request Forgery）対策としてのURL安全性チェック
 # （ローカルIPやプライベートIP、リンクローカル、DNSエラー等のブロック）をテストするクラス。
 # Test class to verify URL safety checks (blocking local, private, and link-local IPs) to prevent SSRF.
-class IsSafeUrlTest(unittest.TestCase):
+class ResolveSafeIpTest(unittest.TestCase):
     # パブリック（グローバル）IPを持つ安全なURLが許可されることを検証します。
     # Verify that URLs resolving to public IPs are allowed.
     def test_allows_public_ip(self):
         with patch("socket.gethostbyname", return_value="93.184.216.34"):
-            self.assertTrue(url_fetcher._is_safe_url("https://example.com"))
+            self.assertIsNotNone(url_fetcher._resolve_safe_ip("https://example.com"))
 
     # ループバックアドレス（127.0.0.1）に解決されるURLが拒否されることを検証します。
     # Verify that URLs resolving to loopback addresses (127.0.0.1) are blocked.
     def test_blocks_loopback(self):
         with patch("socket.gethostbyname", return_value="127.0.0.1"):
-            self.assertFalse(url_fetcher._is_safe_url("https://somehost.com"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://somehost.com"))
 
     # プライベートネットワーク（10.0.0.0/8）のIPに解決されるURLが拒否されることを検証します。
     # Verify that URLs resolving to private 10.x.x.x addresses are blocked.
     def test_blocks_private_10_network(self):
         with patch("socket.gethostbyname", return_value="10.0.0.1"):
-            self.assertFalse(url_fetcher._is_safe_url("https://internal.corp"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://internal.corp"))
 
     # プライベートネットワーク（172.16.0.0/12）のIPに解決されるURLが拒否されることを検証します。
     # Verify that URLs resolving to private 172.16.x.x - 172.31.x.x addresses are blocked.
     def test_blocks_private_172_network(self):
         with patch("socket.gethostbyname", return_value="172.20.0.1"):
-            self.assertFalse(url_fetcher._is_safe_url("https://internal.corp"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://internal.corp"))
 
     # プライベートネットワーク（192.168.0.0/16）のIPに解決されるURLが拒否されることを検証します。
     # Verify that URLs resolving to private 192.168.x.x addresses are blocked.
     def test_blocks_private_192_168_network(self):
         with patch("socket.gethostbyname", return_value="192.168.1.1"):
-            self.assertFalse(url_fetcher._is_safe_url("https://router.local"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://router.local"))
 
     # クラウドのリンクローカルメタデータアドレス（169.254.169.254）が拒否されることを検証します。
     # Verify that link-local addresses (e.g. cloud metadata services) are blocked.
     def test_blocks_link_local_cloud_metadata(self):
         with patch("socket.gethostbyname", return_value="169.254.169.254"):
-            self.assertFalse(url_fetcher._is_safe_url("https://metadata.example.com"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://metadata.example.com"))
 
     # ホスト名が直接 "localhost" の場合に拒否されることを検証します。
     # Verify that URLs with hostnames directly resolving to localhost are blocked.
     def test_blocks_localhost_hostname(self):
         with patch("socket.gethostbyname", return_value="127.0.0.1"):
-            self.assertFalse(url_fetcher._is_safe_url("http://localhost/admin"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("http://localhost/admin"))
 
     # HTTP/HTTPS以外のスキームが安全性チェックで弾かれることを検証します。
     # Verify that safety checks block non-HTTP/HTTPS URLs.
     def test_blocks_non_http_scheme(self):
-        self.assertFalse(url_fetcher._is_safe_url("ftp://example.com"))
+        self.assertIsNone(url_fetcher._resolve_safe_ip("ftp://example.com"))
 
     # DNSの名前解決エラー（NXDOMAIN等）が発生した場合に、安全でないと判断されることを検証します。
     # Verify that URLs causing DNS errors are treated as unsafe.
     def test_returns_false_on_dns_error(self):
         with patch("socket.gethostbyname", side_effect=OSError("NXDOMAIN")):
-            self.assertFalse(url_fetcher._is_safe_url("https://nonexistent.invalid"))
+            self.assertIsNone(url_fetcher._resolve_safe_ip("https://nonexistent.invalid"))
 
     # ホスト名部分が空のURLは拒否されることを検証します。
     # Verify that URLs with empty hostnames are blocked.
     def test_returns_false_for_empty_hostname(self):
-        self.assertFalse(url_fetcher._is_safe_url("https:///path"))
+        self.assertIsNone(url_fetcher._resolve_safe_ip("https:///path"))
 
+
+
+# 日本語: 実運用の _extract_document_from_html と同じ手順で本文だけを取り出すテスト用ヘルパー。
+# English: Test helper extracting body text the same way _extract_document_from_html does.
+def _extract_text(raw_html: str) -> str:
+    extractor = url_fetcher._TextExtractor()
+    extractor.feed(raw_html)
+    return extractor.get_text()
 
 # HTML文書から本文テキストをクリーンに抽出する処理
 # （スクリプト、スタイル、ナビゲーションタグの除外やHTMLエンティティのデコード等）をテストするクラス。
 # Test class to check HTML text extraction and cleanup logic (excluding scripts, styles, navs, and decoding entities).
-class ExtractTextFromHtmlTest(unittest.TestCase):
+class TextExtractorTest(unittest.TestCase):
     # HTMLボディ内のテキスト本文が適切に抽出されることを検証します。
     # Verify that main body text is successfully extracted from HTML.
     def test_extracts_body_text(self):
         html = "<html><body><h1>Title</h1><p>Some text.</p></body></html>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertIn("Title", result)
         self.assertIn("Some text.", result)
 
@@ -200,7 +208,7 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     # Verify that script tags and their inner javascript content are removed.
     def test_removes_script_content(self):
         html = "<html><body><p>Hello</p><script>alert('xss')</script></body></html>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertIn("Hello", result)
         self.assertNotIn("alert", result)
 
@@ -208,7 +216,7 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     # Verify that style tags and their inner CSS properties are removed.
     def test_removes_style_content(self):
         html = "<html><head><style>body{color:red}</style></head><body><p>Text</p></body></html>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertNotIn("color", result)
         self.assertIn("Text", result)
 
@@ -216,7 +224,7 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     # Verify that nav sections containing menus/links are excluded.
     def test_removes_nav_content(self):
         html = "<html><body><nav>Menu</nav><main><p>Content</p></main></body></html>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertNotIn("Menu", result)
         self.assertIn("Content", result)
 
@@ -224,14 +232,14 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     # Verify that excessive consecutive blank lines are collapsed.
     def test_collapses_excessive_blank_lines(self):
         html = "<html><body>" + "<p>x</p>" * 5 + "</body></html>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertNotRegex(result, r"\n{3,}")
 
     # 入れ子になったスクリプトタグが含まれている場合でも、内部のコンテンツごと無視されることを検証します。
     # Verify that nested script tags and all their contents are correctly ignored.
     def test_handles_nested_skip_tags(self):
         html = "<script><script>inner</script></script><p>After</p>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertNotIn("inner", result)
         self.assertIn("After", result)
 
@@ -239,13 +247,13 @@ class ExtractTextFromHtmlTest(unittest.TestCase):
     # Verify that HTML entities are successfully decoded to plain characters.
     def test_decodes_html_entities(self):
         html = "<p>Hello &amp; World &lt;3&gt;</p>"
-        result = url_fetcher._extract_text_from_html(html)
+        result = _extract_text(html)
         self.assertIn("Hello & World", result)
 
     # 空のHTMLを渡した場合に、空文字列が返ることを検証します。
     # Verify that an empty HTML input returns an empty string.
     def test_empty_html_returns_empty_string(self):
-        self.assertEqual(url_fetcher._extract_text_from_html(""), "")
+        self.assertEqual(_extract_text(""), "")
 
     def test_extract_document_normalizes_relevant_links(self):
         html = """

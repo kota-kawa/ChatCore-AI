@@ -3945,11 +3945,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         job_key = build_generation_key(chat_room_id="room-distributed", user_id=88)
 
         fake_redis.rpush(
-            service._event_stream_key(job_key),
+            service._coordinator.event_stream_key(job_key),
             json.dumps({"id": 1, "event": "chunk", "payload": {"text": "分散"}}),
         )
         fake_redis.rpush(
-            service._event_stream_key(job_key),
+            service._coordinator.event_stream_key(job_key),
             json.dumps({"id": 2, "event": "done", "payload": {"response": "分散完了"}}),
         )
 
@@ -3994,7 +3994,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             distributed_stream_idle_timeout_seconds=0.0,
         )
         job_key = build_generation_key(chat_room_id="room-stalled", user_id=90)
-        fake_redis.set(service._active_lock_key(job_key), "lock-token")
+        fake_redis.set(service._coordinator.active_lock_key(job_key), "lock-token")
 
         stream_request = build_request(
             method="GET",
