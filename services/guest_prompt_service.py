@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 GUEST_PROMPT_SESSION_KEY = "guest_prompt_token"
 GUEST_PROMPT_TOKEN_BYTES = 32
-GUEST_PROMPT_POST_WINDOW_SECONDS = 24 * 60 * 60
 _GUEST_PROMPT_HASH_FALLBACK_SECRET = "chatcore-guest-prompt-hash-v1"
 _fallback_secret_warning_logged = False
 

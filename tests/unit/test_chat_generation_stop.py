@@ -419,7 +419,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     # English: Verify an unresponsive owner does not wedge the room: the lock is freed after the timeout.
     def test_stop_releases_lock_when_owning_worker_never_responds(self):
         stopper = self._build_service(remote_cancel_timeout_seconds=0.2)
-        lock_key = stopper._active_lock_key(self.job_key)
+        lock_key = stopper._coordinator.active_lock_key(self.job_key)
         # 応答しないワーカーが握ったままのロックを再現する。
         # Reproduce a lock still held by a worker that never answers.
         self.redis.set(lock_key, "orphaned-token")
@@ -437,7 +437,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
             side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner)
-            self.redis.set(self.owner._cancel_request_key(self.job_key), "1")
+            self.redis.set(self.owner._coordinator.cancel_request_key(self.job_key), "1")
 
             self.assertTrue(
                 _wait_until(
@@ -451,7 +451,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     # 日本語: 前回の停止要求マーカーが残っていても、新しい生成ジョブが巻き添えで止まらないことを検証します。
     # English: Verify a leftover stop-request marker does not abort the next generation job.
     def test_new_job_clears_a_stale_cancel_request_marker(self):
-        cancel_key = self.owner._cancel_request_key(self.job_key)
+        cancel_key = self.owner._coordinator.cancel_request_key(self.job_key)
         self.redis.set(cancel_key, "1")
 
         with patch(

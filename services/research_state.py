@@ -167,14 +167,6 @@ class TurnState:
         self.unresolved_questions = _normalized_unique_strings(self.unresolved_questions)
         self.facts = [fact for fact in self.facts if isinstance(fact, Fact) and fact.statement]
 
-    @property
-    def has_evidence(self) -> bool:
-        return bool(self.evidence_refs)
-
-    @property
-    def evidence_count(self) -> int:
-        return len(self.evidence_refs)
-
     def _next_search_id(self) -> str:
         used = {search.search_id for search in self.executed_searches}
         index = len(self.executed_searches) + 1
@@ -413,16 +405,6 @@ class TurnState:
             prepared,
             {"role": "system", "content": self.render(max_tokens=max_tokens)},
         )
-
-    def inject(
-        self,
-        base_messages: Sequence[Mapping[str, Any]],
-        *,
-        max_tokens: int | None = None,
-    ) -> list[dict[str, Any]]:
-        """Compatibility-shaped projection that also removes raw tool/reference history."""
-        return self.projected_messages(base_messages, max_tokens=max_tokens)
-
 
 __all__ = [
     "DEFAULT_TURN_STATE_MAX_TOKENS",

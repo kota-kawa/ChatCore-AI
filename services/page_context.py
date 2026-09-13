@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 # 日本語: プロジェクトのルートディレクトリ。
 # English: Root directory of the project.
 PROJECT_ROOT = Path(__file__).parent.parent
-MAX_LINES_PER_FILE = 130
 MAX_FILES_PER_PAGE = 3
 
 # 日本語: 各URLパターンに対応する画面の説明と読み込むソースコードファイルの定義リスト。

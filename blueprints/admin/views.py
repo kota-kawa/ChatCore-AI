@@ -387,22 +387,6 @@ def _validate_table_options(table_options: str) -> str:
     raise ValueError("Table options are not supported.")
 
 
-# カラムデータ辞書から安全なSQLクエリフラグメントを組み立てる関数
-# Construct a safely formatted SQL fragment for a single column definition.
-def _build_column_sql(column_definition: dict[str, object]):
-    """
-    カラム属性データ（名前、型、制約）から、SQL構築用の安全なクエリ文フラグメントを組み立てる。
-    Assemble escaping sql expressions representing single column based on details.
-    """
-    return " ".join(
-        [
-            _sql_identifier(str(column_definition["name"])),
-            str(column_definition["type"]),
-            *[str(modifier) for modifier in column_definition["modifiers"]],
-        ]
-    )
-
-
 # フロントエンドの管理者用ダッシュボードURLを取得するヘルパー関数
 # Helper to construct the absolute frontend URL for the administrator dashboard page.
 def frontend_admin_dashboard_url(request: Request, **params) -> str:

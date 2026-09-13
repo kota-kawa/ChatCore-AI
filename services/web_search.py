@@ -2321,20 +2321,6 @@ def inject_prior_web_search_context(
     return insert_after_leading_system_messages(conversation_messages, context_message)
 
 
-def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]]:
-    # イベントログ送信用にソース一覧をシリアライズする
-    # Serialize source list for event publication.
-    return [
-        {
-            "url": source.url,
-            "title": source.title,
-            "hostname": source.hostname,
-            "evidence_id": source.evidence_id,
-        }
-        for source in result.sources
-    ]
-
-
 def source_hostname_label(url: str) -> str:
     # URLから表示用のホスト名（先頭の www. を除いたもの）を取り出す
     # Extract a display hostname from a URL, dropping a leading "www.".

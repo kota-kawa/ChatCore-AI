@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -155,20 +154,6 @@ DEFAULT_SHARED_PROMPTS = [
 ]
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
-
-
-# DB取得結果の行オブジェクト（辞書またはタプル）からIDフィールドを抽出する
-# Extract the ID field from a database row object (which can be a dict or tuple)
-def _extract_id(
-    row: dict[str, Any] | tuple[Any, ...] | None, key_name: str = "id"
-) -> Any:
-    # DB結果が dict/tuple どちらでもIDを取り出せるようにする
-    # Extract ID from DB rows regardless of dict or tuple shape.
-    if row is None:
-        return None
-    if isinstance(row, dict):
-        return row.get(key_name)
-    return row[0]
 
 
 # サンプルの所有者ユーザー（運営サンプル）が存在することを保証し、そのIDを返す

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -170,18 +170,6 @@ class UserSkillRepository:
                 raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
             raise
         return self._serialize_user_skill(skill), True
-
-    async def delete_user_skill_by_source_prompt(self, user_id: int, source_prompt_id: int) -> bool:
-        """Delete the Skill imported from a shared prompt, if it exists."""
-        await self._lock_user_skills(user_id)
-        result = await self.session.execute(
-            delete(UserSkill).where(
-                UserSkill.user_id == int(user_id),
-                UserSkill.source_prompt_id == int(source_prompt_id),
-            )
-        )
-        await self.session.flush()
-        return bool(result.rowcount or 0)
 
     async def set_user_skill_enabled(
         self,

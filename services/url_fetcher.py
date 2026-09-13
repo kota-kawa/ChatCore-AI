@@ -295,14 +295,6 @@ class _TextExtractor(HTMLParser):
         return list(self._raw_images)
 
 
-def _extract_text_from_html(raw_html: str) -> str:
-    # HTML文字列からプレーンテキストを抽出する
-    # Extract plain text from an HTML string
-    extractor = _TextExtractor()
-    extractor.feed(raw_html)
-    return extractor.get_text()
-
-
 def canonicalize_url(url: str) -> str | None:
     """Return a fragment-free canonical HTTP(S) URL, or ``None`` if invalid."""
     try:
@@ -433,14 +425,6 @@ def _resolve_safe_ip(url: str) -> str | None:
         return None
     else:
         return ip_str
-
-
-def _is_safe_url(url: str) -> bool:
-    """URLが安全（プライベートネットワークを対象としていない）な場合に True を返す。
-
-    Return True when the URL is safe to fetch (not targeting private networks).
-    """
-    return _resolve_safe_ip(url) is not None
 
 
 def fetch_url_document(url: str) -> FetchedUrlDocument | None:

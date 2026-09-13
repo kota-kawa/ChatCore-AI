@@ -273,12 +273,6 @@ class LlmContextBudget:
 
         return max(self.context_window_tokens - self.reserved_tokens, 0)
 
-    @property
-    def total_reserved_tokens(self) -> int:
-        """Backward-friendly alias for ``reserved_tokens``."""
-
-        return self.reserved_tokens
-
     def fits_message_tokens(self, message_tokens: int) -> bool:
         """Return whether a message-only estimate fits this budget."""
 

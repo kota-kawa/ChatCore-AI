@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError
@@ -159,13 +158,6 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
         await session.close()
 
 
-async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency that provides one isolated AsyncSession per request."""
-
-    async with session_scope() as session:
-        yield session
-
-
 async def dispose_engine() -> None:
     """Dispose the worker engine during FastAPI shutdown."""
 
@@ -199,8 +191,3 @@ def is_retryable_db_error(exc: BaseException) -> bool:
         current = orig if isinstance(orig, BaseException) else None
     return isinstance(exc, (OperationalError, DBAPIError)) and bool(getattr(exc, "connection_invalidated", False))
 
-
-async def execute_health_query(session: AsyncSession) -> Any:
-    """Small shared helper for readiness tests and repository diagnostics."""
-
-    return await session.scalar(text("SELECT 1"))
