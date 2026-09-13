@@ -4,7 +4,7 @@ import {
   UserSkillsApiResponseSchema,
   type UserSkillApi,
 } from "../../types/generated/api_schemas";
-import { fetchJsonOrThrow, isRecord } from "../../scripts/core/runtime_validation";
+import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 type SkillFetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -79,10 +79,6 @@ export async function deleteUserSkill(
     defaultMessage: "Skillの削除に失敗しました。",
     fetchImpl,
   });
-}
-
-export function isSkillApiRecord(value: unknown): value is UserSkillApi {
-  return isRecord(value) && UserSkillApiSchema.safeParse(value).success;
 }
 
 export type UserSkill = UserSkillApi;

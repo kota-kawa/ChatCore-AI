@@ -1,8 +1,4 @@
-import { STORAGE_KEYS } from "./constants";
-
 let loggedInState: boolean | null = null;
-let currentChatRoomIdLoaded = false;
-let currentChatRoomIdState: string | null = null;
 
 function dispatchAuthStateChange(loggedIn: boolean) {
   document.dispatchEvent(
@@ -25,19 +21,4 @@ export function getLoggedInState() {
 
 export function hasLoggedInState() {
   return loggedInState !== null;
-}
-
-function ensureCurrentChatRoomIdLoaded() {
-  if (currentChatRoomIdLoaded) return;
-  currentChatRoomIdLoaded = true;
-  try {
-    currentChatRoomIdState = localStorage.getItem(STORAGE_KEYS.currentChatRoomId);
-  } catch {
-    currentChatRoomIdState = null;
-  }
-}
-
-export function getCurrentChatRoomId() {
-  ensureCurrentChatRoomIdLoaded();
-  return currentChatRoomIdState;
 }

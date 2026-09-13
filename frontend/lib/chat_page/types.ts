@@ -160,13 +160,6 @@ export type ChatHistoryPaginationPayload = {
   next_before_id?: number | null;
 };
 
-export type ChatHistoryPayload = {
-  error?: string;
-  messages?: ChatHistoryMessagePayload[];
-  pagination?: ChatHistoryPaginationPayload;
-  room_mode?: string;
-};
-
 export type ChatHistoryPagination = {
   hasMore: boolean;
   nextBeforeId: number | null;

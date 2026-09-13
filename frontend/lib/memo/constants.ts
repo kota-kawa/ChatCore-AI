@@ -14,8 +14,6 @@ export const MEMO_ACTION_MENU_WIDTH = 168;
 export const MEMO_ACTION_MENU_ESTIMATED_HEIGHT = 172;
 export const MEMO_ACTION_MENU_GAP = 6;
 export const MEMO_ACTION_MENU_VIEWPORT_MARGIN = 8;
-export const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
-export const MEMO_SHARE_TEXT = "このメモを共有しました。";
 export const memoPageDescription =
   "Chat CoreでAIとのやり取りや作業メモを保存し、検索・整理・共有できるノート画面です。";
 export const memoStructuredData = {

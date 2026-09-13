@@ -4,8 +4,6 @@ import { asRecord } from "../../../lib/utils";
 import type { PasskeyRecord, ProfileFormState } from "./page_types";
 import type { Locale } from "../../../lib/i18n/config";
 
-export { escapeHtml } from "../../core/html";
-
 // 生の日付文字列を人間が読みやすい形式に変換する — 空値は空文字を返す
 // Converts a raw date string to a human-readable format; returns empty string for falsy input
 export function toDisplayDate(rawDate?: string): string {
@@ -45,15 +43,6 @@ export function normalizePasskeyRecords(rawPasskeys: unknown[], locale: Locale =
       };
     })
     .filter((passkey): passkey is PasskeyRecord => passkey !== null);
-}
-
-// Passkey の日時を表示用にフォーマットする — 値がなければ「未使用」を返す
-// Formats a passkey datetime for display; returns "未使用" when the value is absent
-export function formatPasskeyDateTime(value: string): string {
-  if (!value) {
-    return "未使用";
-  }
-  return formatDateTime(value) || "未使用";
 }
 
 // プロフィール情報から LLM に渡すデフォルトコンテキスト文字列を組み立てる

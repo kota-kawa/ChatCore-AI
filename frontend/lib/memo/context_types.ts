@@ -16,13 +16,11 @@ import type {
   ContextVaultImportPreviewRequest,
   ContextVaultImportPreviewResponse,
   ContextVaultImportResponse,
-  ContextVaultPortableFact,
 } from "../../types/generated/api_schemas";
 
 export type ContextFact = ContextFactResponse;
 export type ContextFactType = ContextFact["fact_type"];
 export type ContextFactStatus = ContextFact["status"];
-export type ContextFactSourceKind = ContextFact["source_kind"];
 
 export type ContextFactImportancePreset = 25 | 50 | 75;
 
@@ -90,8 +88,6 @@ export type ContextVaultImportPreview = Omit<
   warnings: NonNullable<ContextVaultImportPreviewResponse["warnings"]>;
 };
 export type ContextVaultImportResult = ContextVaultImportResponse;
-export type ContextVaultImportSampleFact = ContextVaultPortableFact;
-
 export const CONTEXT_FACT_TYPE_LABELS: Record<ContextFactType, string> = {
   profile: "経歴・プロフィール",
   preference: "好み・方針",
@@ -108,13 +104,6 @@ export const CONTEXT_FACT_TYPE_OPTIONS: { value: ContextFactType; label: string 
   { value: "reference", label: CONTEXT_FACT_TYPE_LABELS.reference },
 ];
 
-export const CONTEXT_FACT_SOURCE_LABELS: Record<ContextFactSourceKind, string> = {
-  manual: "手動",
-  mcp: "MCP",
-  chat: "チャット",
-  import: "インポート",
-};
-
 export const CONTEXT_FACT_IMPORTANCE_OPTIONS: {
   value: `${ContextFactImportancePreset}`;
   label: string;
@@ -123,12 +112,6 @@ export const CONTEXT_FACT_IMPORTANCE_OPTIONS: {
   { value: "50", label: "標準" },
   { value: "75", label: "高" },
 ];
-
-export function getContextFactImportanceLabel(importance: number): string {
-  if (importance <= 33) return "低";
-  if (importance >= 67) return "高";
-  return "標準";
-}
 
 export function toContextFactImportancePreset(importance: number): ContextFactImportancePreset {
   if (importance <= 33) return 25;

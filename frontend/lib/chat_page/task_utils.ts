@@ -40,8 +40,6 @@ export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask
   };
 }
 
-export const FALLBACK_TASKS: NormalizedTask[] = (defaultTasks as TaskItem[]).map((task) => normalizeTask(task));
-
 export function getFallbackTasks(locale: Locale = "ja"): NormalizedTask[] {
   const catalog = locale === "en" ? englishDefaultTasks : defaultTasks;
   return (catalog as TaskItem[]).map((task) => normalizeTask(task));

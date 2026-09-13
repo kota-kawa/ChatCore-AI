@@ -1,6 +1,5 @@
 import type { ContentFormat, MediaType, PromptData, PromptType } from "./types";
 import { CONTENT_CHAR_LIMIT } from "./constants";
-import { escapeHtml } from "../core/html";
 import { formatDate } from "../../lib/datetime";
 import {
   getContentFormat,
@@ -42,25 +41,11 @@ export function formatPromptDate(createdAt?: string) {
   return formatDate(createdAt);
 }
 
-export { escapeHtml };
-
 export function normalizePromptType(value?: string): PromptType {
   if (value === "image" || value === "skill") {
     return value;
   }
   return "text";
-}
-
-export function getPromptTypeLabel(promptType: PromptType, locale?: Locale) {
-  if (promptType === "image") return promptShareText("promptShare.mediaImage", undefined, locale);
-  if (promptType === "skill") return "SKILL";
-  return promptShareText("promptShare.formatPrompt", undefined, locale);
-}
-
-export function getPromptTypeIconClass(promptType: PromptType) {
-  if (promptType === "image") return "bi-image";
-  if (promptType === "skill") return "bi-code-slash";
-  return "bi-chat-square-text";
 }
 
 export function normalizePromptContentFormat(value?: string): ContentFormat {

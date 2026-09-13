@@ -1,12 +1,5 @@
 export type PromptAssistTarget = "task_modal" | "shared_prompt_modal";
 
-export type PromptAssistAction =
-  | "generate_draft"
-  | "improve"
-  | "shorten"
-  | "expand"
-  | "generate_examples";
-
 export type PromptAssistFieldName =
   | "title"
   | "content"
