@@ -189,28 +189,6 @@ def default_task_rows(locale: str = "ja", *, include_key: bool = False) -> list[
     return rows
 
 
-# データベース行オブジェクト（辞書またはタプル）から名前フィールドを抽出する
-# Extract the name field from a database row object (which can be a dict or tuple).
-def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
-    # dict/tuple どちらの fetch 結果でも name を取り出せるようにする
-    # Extract "name" from either dict-based or tuple-based DB rows.
-    if row is None:
-        return None
-    if isinstance(row, dict):
-        return row.get("name")
-    return row[0]
-
-
-def _extract_system_key_and_name(
-    row: dict[str, Any] | tuple[Any, ...] | None,
-) -> tuple[str | None, str | None]:
-    if row is None:
-        return None, None
-    if isinstance(row, dict):
-        return row.get("system_task_key"), row.get("name")
-    return row[0], row[1]
-
-
 # データベースに不足しているデフォルトタスクをインサートし、追加された件数を返す
 # Seed default tasks into the database if they do not already exist, returning the insert count.
 async def ensure_default_tasks_seeded() -> int:

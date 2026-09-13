@@ -158,15 +158,6 @@ async def store_user_message_and_load_turn_context(
     )
 
 
-async def copy_messages_into_chat_room(
-    chat_room_id: str,
-    messages: list[dict[str, Any]],
-    *,
-    session: AsyncSession | None = None,
-) -> int:
-    return await _write(lambda repo: repo.copy_messages_into_room(chat_room_id, messages), session)
-
-
 async def get_active_path(
     chat_room_id: str,
     *,

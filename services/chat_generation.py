@@ -32,10 +32,6 @@ from services.message_parts_display import (
 
 from .background_executor import submit_background_task
 from .chat_agent_budget import (
-    DEFAULT_MAX_LLM_TURNS,
-    DEFAULT_MAX_TOOL_CALLS,
-    MAX_LLM_TURNS_LIMIT,
-    MAX_TOOL_CALLS_LIMIT,
     AgentStepBudget,
 )
 from .chat_answer_continuation import (
@@ -162,8 +158,6 @@ JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
-DEFAULT_CHAT_AGENT_MAX_STEPS = DEFAULT_MAX_LLM_TURNS + DEFAULT_MAX_TOOL_CALLS
-CHAT_AGENT_MAX_STEPS_LIMIT = MAX_LLM_TURNS_LIMIT + MAX_TOOL_CALLS_LIMIT
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
 # Retry budget and backoff for transient provider failures before any output is emitted.
 DEFAULT_LLM_STREAM_MAX_RETRIES = 3
@@ -233,12 +227,6 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
         "response": normalized_response.text,
         "parts": normalized_response.parts,
     }
-
-
-# 表示用の合計ステップ上限を取得する
-# Retrieve the displayed total step budget.
-def _get_chat_agent_max_steps() -> int:
-    return AgentStepBudget.from_environment().max_steps
 
 
 # 環境変数からLLMストリーミング接続の最大再試行回数を取得する
@@ -3085,53 +3073,10 @@ class ChatGenerationService:
     def _get_redis_client(self) -> Any | None:
         return self._coordinator.get_redis_client()
 
-    # アクティブジョブの Redis ロックキーを生成する
-    # Generate the Redis lock key for the active job
-    def _active_lock_key(self, job_key: str) -> str:
-        return self._coordinator.active_lock_key(job_key)
-
-    # 停止要求マーカーの Redis キーを生成する
-    # Generate the Redis key for the stop-request marker
-    def _cancel_request_key(self, job_key: str) -> str:
-        return self._coordinator.cancel_request_key(job_key)
-
-    # Redis に保存するイベントストリームのキーを生成する
-    # Generate the Redis event stream key
-    def _event_stream_key(self, job_key: str) -> str:
-        return self._coordinator.event_stream_key(job_key)
-
-    # Redis Pub/Sub のイベントチャネル名を生成する
-    # Generate the Redis Pub/Sub event channel name
-    def _event_channel_name(self, job_key: str) -> str:
-        return self._coordinator.event_channel_name(job_key)
-
-    # イベントオブジェクトを JSON 文字列にシリアライズする
-    # Serialize the event object to a JSON string
-    def _serialize_event(self, event: ChatGenerationEvent) -> str:
-        return self._coordinator.serialize_event(event)
-
-    # JSON 文字列をイベントオブジェクトにデシリアライズする
-    # Deserialize a JSON string to an event object
-    def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
-        return self._coordinator.deserialize_event(raw)
-
     # Redis 経由で分散イベントを配信する（リストへの追記および Pub/Sub 発行）
     # Publish a distributed event via Redis (append to list and publish via Pub/Sub)
     def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
         self._coordinator.publish_event(job_key, event)
-
-    # Redis のイベントストリームから指定されたシーケンスIDより後のイベントを読み出す
-    # Read events from the Redis event stream after the specified sequence ID
-    def _read_distributed_events(
-        self,
-        job_key: str,
-        *,
-        after_sequence_id: int = 0,
-    ) -> list[ChatGenerationEvent]:
-        return self._coordinator.read_events(
-            job_key,
-            after_sequence_id=after_sequence_id,
-        )
 
     # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
     # Attempt to acquire the Redis active job lock for the specified job key
@@ -3147,11 +3092,6 @@ class ChatGenerationService:
     # Check if a Redis active job lock exists for the specified job key
     def _has_distributed_active_lock(self, job_key: str) -> bool:
         return self._coordinator.has_active_lock(job_key)
-
-    # 所有プロセス以外が取得したロックを強制的に削除する（応答不能なワーカー対策）
-    # Force-delete an active lock held by an unresponsive worker
-    def _force_release_active_job_lock(self, job_key: str) -> None:
-        self._coordinator.force_release_active_job_lock(job_key)
 
     # 指定ジョブに対する停止要求マーカーが立っているかを確認する
     # Check whether a stop-request marker is set for the specified job
@@ -3183,21 +3123,6 @@ class ChatGenerationService:
     # Broadcast the stop request and wait for the owning worker to release the lock
     def _request_remote_cancel(self, job_key: str) -> bool:
         return self._coordinator.request_remote_cancel(job_key)
-
-    # 他ワーカーからの停止要求を購読し、自プロセスのジョブをキャンセルするループ
-    # Subscribe to stop requests from other workers and cancel this process's jobs
-    def _run_cancel_listener(self) -> None:
-        self._coordinator.run_cancel_listener()
-
-    # 購読スレッドの登録を解除する
-    # Deregister the listener thread slot
-    def _release_cancel_listener_slot(self) -> None:
-        self._coordinator.release_cancel_listener_slot()
-
-    # 実行中ジョブが無い場合にだけ購読スレッドの登録を解除する
-    # Deregister the listener thread slot only while no job is running
-    def _release_cancel_listener_slot_if_idle(self) -> bool:
-        return self._coordinator.release_cancel_listener_slot_if_idle()
 
     # 停止要求を購読するスレッドが起動していることを保証する
     # Ensure the thread subscribing to stop requests is running

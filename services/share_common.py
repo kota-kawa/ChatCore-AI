@@ -193,11 +193,6 @@ class TokenShareLifecycle:
             "is_reused": is_reused,
         }
 
-    def serialize(self, *, is_reused: bool = False) -> dict[str, Any]:
-        """Alias for :meth:`to_dict` for serializer-oriented call sites."""
-
-        return self.to_dict(is_reused=is_reused)
-
     @classmethod
     def from_values(
         cls,

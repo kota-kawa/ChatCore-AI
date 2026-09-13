@@ -279,26 +279,6 @@ async def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
     return await delete_chat_room_for_user(room_id, user_id)
 
 
-# ルームIDリストから重複したIDを取り除く関数
-# Deduplicate a list of room ID strings.
-def _unique_room_ids(room_ids: list[str]) -> list[str]:
-    """
-    リスト内の重複したチャットルームIDを取り除いたユニークなリストを返します。
-    Returns a deduplicated list of chat room IDs.
-    """
-    return list(dict.fromkeys(room_ids))
-
-
-# SQLクエリの IN 句用のプレースホルダ（%s）を組み立てる関数
-# Generate SQL placeholder parameter markers (e.g., "%s, %s") for an IN clause.
-def _placeholders(count: int) -> str:
-    """
-    SQLのIN句用のパラメータプレースホルダ文字列をカンマ区切りで生成します。
-    Generates comma-separated "%s" placeholders for SQL IN clauses.
-    """
-    return ", ".join(["%s"] * count)
-
-
 # 複数のチャットルームとそのメッセージ履歴を一括削除する関数
 # Bulk delete multiple chat rooms and their history from the database after verifying ownership.
 async def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:

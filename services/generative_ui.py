@@ -109,9 +109,6 @@ MAX_ARTIFACTS_PER_MESSAGE = 3
 MAX_WEB_SEARCH_IMAGE_URL_CHARS = 2000
 MAX_WEB_SEARCH_IMAGE_ALT_CHARS = 180
 MAX_WEB_SEARCH_IMAGE_SOURCE_TITLE_CHARS = 160
-# サンドボックスで利用できるローカル配信ライブラリの正規名。
-# Canonical names of locally served libraries available inside the sandbox.
-SUPPORTED_ARTIFACT_LIBRARIES = ("three",)
 GENERATIVE_UI_MODES = ("NONE", "2D", "3D")
 GenerativeUiMode = Literal["NONE", "2D", "3D"]
 # モデル出力の表記ゆれ（three.js / threejs 等）を正規名へ寄せるためのエイリアス表。

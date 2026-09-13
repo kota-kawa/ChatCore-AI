@@ -149,38 +149,3 @@ def date_end(raw: str) -> datetime | None:
     # Combine the parsed date with the maximum time of the day.
     return datetime.combine(parsed, time.max)
 
-
-def resolve_sort_order(sort: str) -> str:
-    """
-    指定されたソート条件に応じたSQLのORDER BY句を解決する関数
-    Resolve the SQL ORDER BY fragment based on the specified sort option.
-
-    Args:
-        sort (str): ソートキー ("manual", "oldest", "updated", "title" など) / The sort key.
-
-    Returns:
-        str: SQL用の ORDER BY 部分文字列 / The SQL ORDER BY fragment.
-    """
-    # 手動並び替えの場合は sort_order カラムを優先（NULLの場合は作成日のエポック値を代替）
-    # For manual sorting, prioritize sort_order column (fallback to created_at epoch if NULL).
-    if sort == "manual":
-        return "COALESCE(me.sort_order, EXTRACT(EPOCH FROM me.created_at)::numeric) DESC, me.created_at DESC"
-
-    # 古い順
-    # Oldest first.
-    if sort == "oldest":
-        return "me.created_at ASC"
-
-    # 更新日時が新しい順
-    # Recently updated first.
-    if sort == "updated":
-        return "me.updated_at DESC"
-
-    # タイトルのアルファベット/五十音順
-    # Alphabetical order of title.
-    if sort == "title":
-        return "LOWER(me.title) ASC, me.created_at DESC"
-
-    # デフォルトは作成日の新しい順
-    # Default: newest created first.
-    return "me.created_at DESC"

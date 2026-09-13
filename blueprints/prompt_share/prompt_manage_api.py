@@ -127,13 +127,6 @@ async def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
     return deleted
 
 
-async def _get_active_prompt_attachments_for_user(user_id: int, prompt_id: int) -> list[dict[str, Any]]:
-    return await _service().get_active_prompt_attachments(
-        user_id=user_id,
-        prompt_id=prompt_id,
-    )
-
-
 def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
     return sum(delete_prompt_attachment(attachment) for attachment in attachments)
 

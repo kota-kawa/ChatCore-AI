@@ -105,10 +105,6 @@ class AgentStepBudget:
         return self.llm_turns + self.tool_calls
 
     @property
-    def total_tool_calls(self) -> int:
-        return self.tool_calls + self.read_calls
-
-    @property
     def read_message_limit(self) -> int:
         return min(READ_MESSAGE_MAX_CHARS, max(0, self.max_read_chars - self.read_chars))
 

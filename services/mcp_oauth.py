@@ -691,30 +691,6 @@ async def _user_is_verified(user_id: int) -> bool:
         return await _oauth_repository.is_user_verified(session, user_id)
 
 
-async def _issue_tokens(grant_id: UUID, client_id: str, scopes: list[str], resource: str) -> OAuthToken:
-    access_token = secrets.token_urlsafe(32)
-    refresh_token = secrets.token_urlsafe(32)
-    now = _utc_now()
-    async with session_scope() as session, session.begin():
-        await _oauth_repository.insert_tokens(
-            session,
-            grant_id=grant_id,
-            client_id=client_id,
-            scopes=scopes,
-            resource=resource,
-            access_token_digest=_digest(access_token),
-            access_expires_at=now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
-            refresh_token_digest=_digest(refresh_token),
-            refresh_expires_at=now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-        )
-    return OAuthToken(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=ACCESS_TOKEN_TTL_SECONDS,
-        scope=" ".join(scopes),
-    )
-
-
 async def _revoke_grant_family(session: Any, grant_id: UUID) -> None:
     """Revoke a grant and every token issued under it."""
     await _oauth_repository.revoke_grant_family(session, grant_id)
