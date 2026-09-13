@@ -43,6 +43,8 @@ import { CopyButton } from "../ui/copy_button";
 import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
 
+const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.png";
+
 // MiniChat — AI エージェントとの会話 UI コンポーネント
 // MiniChat — embeddable chat panel that lets users interact with the AI agent
 export function MiniChat({
@@ -56,6 +58,7 @@ export function MiniChat({
   persistConversation = true,
   showModelLabel = false,
   iconOnlyClearButton = true,
+  showChacoIcon = true,
   onMemoEdit,
 }: MiniChatProps = {}) {
   const { locale, t } = useTranslation();
@@ -586,7 +589,11 @@ export function MiniChat({
         {messages.length === 0 && (
           <div className="mini-chat-placeholder">
             <span className="mini-chat-robot-icon" aria-hidden="true">
-              <i className="bi bi-stars"></i>
+              {showChacoIcon ? (
+                <img className="mini-chat-agent-icon" src={SUPPORT_AGENT_ICON_PATH} alt="" />
+              ) : (
+                <i className="bi bi-stars"></i>
+              )}
             </span>
             <strong>{resolvedTitle}</strong>
             <p>{resolvedDescription}</p>
@@ -609,7 +616,11 @@ export function MiniChat({
         {messages.map((msg, i) => (
           <div key={msg.id} className={`mini-chat-message mini-chat-message--${msg.sender}`}>
             <span className="mini-chat-avatar" aria-hidden="true">
-              <i className={`bi ${msg.sender === "user" ? "bi-person" : "bi-stars"}`}></i>
+              {showChacoIcon && msg.sender === "assistant" ? (
+                <img className="mini-chat-agent-icon" src={SUPPORT_AGENT_ICON_PATH} alt="" />
+              ) : (
+                <i className={`bi ${msg.sender === "user" ? "bi-person" : "bi-stars"}`}></i>
+              )}
             </span>
             <div className={`mini-chat-text-wrapper${msg.isError ? " mini-chat-text-wrapper--error" : ""}`}>
               {msg.sender === "assistant" ? (
@@ -740,7 +751,11 @@ export function MiniChat({
         {isGenerating ? (
           <div className="mini-chat-message mini-chat-message--assistant mini-chat-message--typing" aria-live="polite">
             <span className="mini-chat-avatar" aria-hidden="true">
-              <i className="bi bi-stars"></i>
+              {showChacoIcon ? (
+                <img className="mini-chat-agent-icon" src={SUPPORT_AGENT_ICON_PATH} alt="" />
+              ) : (
+                <i className="bi bi-stars"></i>
+              )}
             </span>
             <div className="mini-chat-text-wrapper">
               {currentProgressText ? (
