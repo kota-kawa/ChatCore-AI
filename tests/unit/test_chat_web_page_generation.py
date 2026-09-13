@@ -139,7 +139,10 @@ class WebPageGenerationTestCase(unittest.TestCase):
                 yield f"詳しい回答です。[[source:{source.evidence_id}]]"
 
         job, saved = self.make_job()
-        budget = AgentStepBudget(3, 1, max_read_calls=2)
+        # 最後のモデル判断はツールなしの回答へ予約されるため、調査に3回使うには4回必要。
+        # The last model decision is reserved for a tool-free answer, so three research
+        # decisions need a budget of four.
+        budget = AgentStepBudget(4, 1, max_read_calls=2)
         with (
             patch("services.chat_generation.AgentStepBudget.from_environment", return_value=budget),
             patch("services.chat_generation.is_web_search_enabled", return_value=True),

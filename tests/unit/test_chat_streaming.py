@@ -2506,13 +2506,18 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         # 旧来の CHAT_AGENT_MAX_STEPS=10 は推論5ターン／ツール5回へ割り当てられる。
-        # ツールを引き上げるために3ステップ分を確保していた旧実装より検索回数が増える。
-        # The superseded CHAT_AGENT_MAX_STEPS=10 maps to 5 reasoning turns and 5 tool calls,
-        # which searches more than the old loop that had to reserve 3 steps to withdraw tools.
-        self.assertEqual(mock_search.call_count, 5)
-        # 検索枠を使い切っても読み取りは残る。不正な再検索要求も有限回で終える。
-        # Reading remains available; repeated requests for a withdrawn search still terminate.
-        self.assertEqual(stream_tools, [True] * (5 + AgentStepBudget(5, 5).max_read_calls) + [False])
+        # モデル判断の上限はループ側で実際に強制され、最後の1回は必ずツールなしの
+        # 回答へ予約されるため、調査に使えるのは 5 - 1 = 4 回になる。
+        # The superseded CHAT_AGENT_MAX_STEPS=10 maps to 5 reasoning turns and 5 tool calls.
+        # The loop now enforces the reasoning-turn budget and always reserves the last decision
+        # for a tool-free answer, so research gets 5 - 1 = 4 of them.
+        self.assertEqual(mock_search.call_count, 4)
+        # ツールを提示するのは予約分を除いた判断だけ。最後の1回だけがツールなしで回答する。
+        # Tools are offered to every decision except the reserved one, which answers without them.
+        self.assertEqual(stream_tools, [True] * 4 + [False])
+        # LLM 呼び出しの総数は上限そのもので打ち止めになる。
+        # The total number of LLM calls stops exactly at the budget.
+        self.assertEqual(len(stream_tools), AgentStepBudget(5, 5).max_llm_turns)
         self.assertIn("上限内で回答", body)
 
     # 日本語: バックグラウンド生成ジョブが、応答生成の開始状態などを正しくステータスとして報告することを検証します。

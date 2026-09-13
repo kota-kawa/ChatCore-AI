@@ -10,9 +10,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-DEFAULT_MAX_LLM_TURNS = 6
+# 1ターンで許すモデル判断（LLM呼び出し）の上限。最後の1回は必ずツールなしの回答へ
+# 予約するため、実際に調査へ使えるのは max_llm_turns - 1 回になる。
+# Upper bound on model decisions (LLM calls) per turn. The last one is always reserved for a
+# tool-free answer, so research can use at most max_llm_turns - 1 of them.
+DEFAULT_MAX_LLM_TURNS = 8
 DEFAULT_MAX_TOOL_CALLS = 6
-MAX_LLM_TURNS_LIMIT = 10
+MAX_LLM_TURNS_LIMIT = 8
 MAX_TOOL_CALLS_LIMIT = 10
 DEFAULT_MAX_READ_CALLS = 12
 DEFAULT_MAX_READ_CHARS = 48_000

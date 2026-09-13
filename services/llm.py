@@ -8,9 +8,13 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
+import httpx
 from anthropic import Anthropic
 from anthropic import (
     APIConnectionError as AnthropicAPIConnectionError,
+)
+from anthropic import (
+    APIError as AnthropicAPIError,
 )
 from anthropic import (
     APIStatusError as AnthropicAPIStatusError,
@@ -29,6 +33,7 @@ from openai import OpenAI
 try:
     from openai import (
         APIConnectionError,
+        APIError,
         APIStatusError,
         APITimeoutError,
         AuthenticationError,
@@ -41,6 +46,7 @@ except ImportError:  # pragma: no cover - depends on SDK version
         pass
 
     APIConnectionError = _UnavailableOpenAIError  # type: ignore[assignment]
+    APIError = _UnavailableOpenAIError  # type: ignore[assignment]
     APIStatusError = _UnavailableOpenAIError  # type: ignore[assignment]
     APITimeoutError = _UnavailableOpenAIError  # type: ignore[assignment]
     AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
@@ -108,7 +114,24 @@ def max_output_tokens_for_model(
     configured = max_output_tokens_for_phase(generation_phase)
     provider_limit = get_model_max_output_tokens(model_name)
     return min(configured, provider_limit) if provider_limit is not None else configured
-LLM_REQUEST_TIMEOUT_SECONDS = 30.0
+# タイムアウトは接続・読み取り・書き込みで分ける。単一の値を渡すと httpx はそれを
+# read timeout にも使うため、ストリーミングでは「次の1チャンクを待てる時間」が同じ値に
+# なる。推論モデルは最初のトークンまで無音の時間が長く、30秒では正常な生成が
+# APITimeoutError で落ちていた。接続だけを短く保ち、読み取りには余裕を持たせる。
+# Split the timeout by phase. A single float is also used by httpx as the read timeout, which
+# during streaming is the time allowed between two chunks. Reasoning models stay silent for a
+# long time before their first token, so a flat 30s turned healthy generations into
+# APITimeoutError. Keep connect short and give reads room.
+LLM_CONNECT_TIMEOUT_SECONDS = 10.0
+LLM_READ_TIMEOUT_SECONDS = 120.0
+LLM_WRITE_TIMEOUT_SECONDS = 30.0
+LLM_POOL_TIMEOUT_SECONDS = 10.0
+LLM_REQUEST_TIMEOUT = httpx.Timeout(
+    connect=LLM_CONNECT_TIMEOUT_SECONDS,
+    read=LLM_READ_TIMEOUT_SECONDS,
+    write=LLM_WRITE_TIMEOUT_SECONDS,
+    pool=LLM_POOL_TIMEOUT_SECONDS,
+)
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
 # Retry transient connection failures by default; configurable via env var.
 LLM_MAX_RETRIES = env_int("LLM_MAX_RETRIES", 2, minimum=0)
@@ -160,7 +183,7 @@ groq_client = (
     OpenAI(
         api_key=groq_api_key,
         base_url=GROQ_BASE_URL,
-        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        timeout=LLM_REQUEST_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
     )
     if groq_api_key
@@ -169,7 +192,7 @@ groq_client = (
 claude_client = (
     Anthropic(
         api_key=anthropic_api_key,
-        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        timeout=LLM_REQUEST_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
     )
     if anthropic_api_key
@@ -178,7 +201,7 @@ claude_client = (
 openai_client = (
     OpenAI(
         api_key=openai_api_key,
-        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        timeout=LLM_REQUEST_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
     )
     if openai_api_key
@@ -433,10 +456,19 @@ def _map_provider_exception(
             f"{provider_name} API rate limit exceeded.",
             retry_after_seconds=_extract_retry_after_seconds(exc),
         )
-    if isinstance(exc, (APITimeoutError, AnthropicAPITimeoutError)):
+    if isinstance(exc, (APITimeoutError, AnthropicAPITimeoutError, httpx.TimeoutException)):
         return LlmTimeoutError(f"{provider_name} API request timed out.")
     if isinstance(exc, (APIConnectionError, AnthropicAPIConnectionError)):
         return LlmNetworkError(f"{provider_name} API connection failed.")
+    # ストリーム反復中の転送エラーは SDK を素通りして届く。SDK が例外をラップするのは
+    # リクエスト送信時だけで、`iter_lines()` の途中で切れた接続は httpx の例外のまま
+    # 上がってくる。ここで拾わないと汎用の LlmProviderError（再試行不可）へ落ちる。
+    # A transport error raised while iterating a stream reaches us unwrapped: the SDK only
+    # wraps exceptions while sending the request, so a connection dropped inside
+    # `iter_lines()` surfaces as a raw httpx error. Without this branch it degrades into the
+    # generic, non-retryable LlmProviderError.
+    if isinstance(exc, (httpx.TransportError, httpx.StreamError)):
+        return LlmNetworkError(f"{provider_name} API stream was interrupted.")
     if isinstance(exc, (AuthenticationError, AnthropicAuthenticationError)):
         return LlmAuthenticationError(f"{provider_name} API authentication failed.")
     # ツール呼び出しの拒否は、ストリーム途中の APIError（ステータスなし）でも 400 でも届く。
@@ -481,6 +513,18 @@ def _map_provider_exception(
     if _looks_like_input_limit_error(exc):
         return LlmInputLimitError(
             f"{provider_name} API rejected the request: input exceeds the context window."
+        )
+    # ストリーム途中でプロバイダが流す `data: {"error": ...}` は、SDK ではステータス
+    # コードを持たない APIError として送出される（openai/_streaming.py）。HTTP 応答と
+    # しては 200 で始まっているためステータス分岐に一切当たらず、ここまで来る。
+    # 同じ要求をやり直せば通ることが多い一過性の障害なので、再試行可能として扱う。
+    # A provider that emits `data: {"error": ...}` mid-stream makes the SDK raise a plain
+    # APIError with no status code (openai/_streaming.py): the HTTP response itself started
+    # as a 200, so none of the status branches above can see it. These are transient far more
+    # often than not, so classify them as retryable instead of a dead end.
+    if isinstance(exc, (APIError, AnthropicAPIError)) and status_code is None:
+        return LlmUpstreamServiceError(
+            f"{provider_name} API reported a mid-stream failure."
         )
     return LlmProviderError(fallback_message)
 
