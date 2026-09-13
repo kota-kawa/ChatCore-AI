@@ -118,6 +118,14 @@ class ChatTurnRunState:
     # 本文ゼロの判断に対する回答のみ再試行を1度だけに限るフラグ。
     # Limits the answer-only retry after an empty decision to a single replay.
     empty_answer_recovery_attempted: bool = False
+    # 調査ステップがプロバイダ障害で落ちたあと、ツールを外して回答へ縮退したことを示す。
+    # 立つとツールは以後1つも提示されず、次の判断は手持ちの情報だけで回答する。
+    # Set once a provider failure during a research step degraded the turn to an answer.
+    # While it is set no tool is offered, so the next decision answers from what is known.
+    tools_disabled_after_failure: bool = False
+    # 上のツール取り下げを1度だけに限るフラグ（縮退した回答がまた落ちたら諦める）。
+    # Limits that degradation to a single attempt: a degraded answer that fails again gives up.
+    research_failure_recovery_attempted: bool = False
 
 
 # 1回のモデル判断ストリームの結末。停止・再試行・判断確定の3つだけを表す。

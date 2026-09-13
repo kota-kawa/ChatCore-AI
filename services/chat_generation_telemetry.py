@@ -57,6 +57,15 @@ class ChatGenerationTelemetry:
     # 最後の判断が本文を返さず、回答のみ要求で1度やり直した回数。
     # How often the final decision produced no user-facing answer and was retried answer-only.
     empty_answer_recoveries: int = 0
+    # 調査ステップがプロバイダ障害で落ち、ツールを外した回答へ縮退した回数。
+    # How often a provider failure during research degraded the turn to a tool-free answer.
+    research_failure_recoveries: int = 0
+    # 失敗したターンから、配信前のバッファに残っていた本文を救出した回数。
+    # How often a failed turn salvaged body text still sitting in the pre-publish buffer.
+    salvaged_partial_answers: int = 0
+    # モデル判断の上限に達してループを打ち切ったか。
+    # Whether the loop stopped because the model-decision budget ran out.
+    llm_turn_budget_exhausted: bool = False
     # 生成UIの5段階（判定・注入・抽出／検証・修復・実行）を、モデル別の成功率として
     # 集計できるようにする。理由コードは services/generative_ui_status.py の固定語彙のみ。
     # Makes the five generated-UI stages (decision, injection, extraction/validation, repair,
@@ -141,6 +150,9 @@ class ChatGenerationTelemetry:
             "context_recovery_count": self.context_recovery_count,
             "tool_schema_recoveries": self.tool_schema_recoveries,
             "empty_answer_recoveries": self.empty_answer_recoveries,
+            "research_failure_recoveries": self.research_failure_recoveries,
+            "salvaged_partial_answers": self.salvaged_partial_answers,
+            "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
             "ui_mode": self.ui_mode,
             "ui_mode_decision_status": self.ui_mode_decision_status,
             "explicit_ui_opt_out": self.explicit_ui_opt_out,

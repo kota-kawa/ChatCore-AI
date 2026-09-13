@@ -81,6 +81,7 @@ from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
     LlmInputLimitError,
+    LlmInvalidModelError,
     LlmOutputLimitError,
     LlmRateLimitError,
     LlmRetryableProviderError,
@@ -165,9 +166,14 @@ DEFAULT_CHAT_AGENT_MAX_STEPS = DEFAULT_MAX_LLM_TURNS + DEFAULT_MAX_TOOL_CALLS
 CHAT_AGENT_MAX_STEPS_LIMIT = MAX_LLM_TURNS_LIMIT + MAX_TOOL_CALLS_LIMIT
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
 # Retry budget and backoff for transient provider failures before any output is emitted.
-DEFAULT_LLM_STREAM_MAX_RETRIES = 2
-LLM_STREAM_RETRY_BASE_DELAY_SECONDS = 0.5
+DEFAULT_LLM_STREAM_MAX_RETRIES = 3
+LLM_STREAM_RETRY_BASE_DELAY_SECONDS = 1.0
 LLM_STREAM_RETRY_MAX_DELAY_SECONDS = 8.0
+# プロバイダが Retry-After でこれより長い待機を指示した場合は、その場での再試行を
+# あきらめる。生成ターンを何十秒も止めるより、ここまでの結果を返すほうが速い。
+# Give up retrying in place when the provider asks for a longer wait than this: returning what
+# the turn already has beats holding the generation open for tens of seconds.
+LLM_STREAM_RETRY_MAX_WAIT_SECONDS = 8.0
 # 停止要求が別ワーカーへ届いた場合に、所有ワーカーの応答を待つ上限。
 # Upper bound for waiting on the owning worker after a stop request lands on another worker.
 DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS = 5.0
@@ -258,6 +264,15 @@ def _llm_stream_retry_delay(exc: BaseException, attempt: int) -> float:
         return min(float(retry_after), LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
     delay = LLM_STREAM_RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
     return min(delay, LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
+
+
+# プロバイダが指示した待機秒数が、このターンの中で待てる長さかを判定する。
+# Report whether the wait the provider asked for is short enough to sit through.
+def _is_retry_delay_affordable(exc: BaseException) -> bool:
+    retry_after = getattr(exc, "retry_after_seconds", None)
+    if not isinstance(retry_after, int) or retry_after <= 0:
+        return True
+    return retry_after <= LLM_STREAM_RETRY_MAX_WAIT_SECONDS
 
 
 # ストリームのチャンク文字列からツール呼び出し（JSON形式）を解析する
@@ -653,31 +668,10 @@ class ChatGenerationJob:
             return
         self._cancelled = True
 
-        if self._pending_stream_chunks and not self._pending_stream_is_internal:
-            # 調査ステップの途中で停止した場合、内部メモが本文として残らないよう取り除く。
-            # A stop during a research step must not leave internal notes in the saved body.
-            pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
-            existing_text = "".join(self._chunks)
-            # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
-            # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
-            # Use the existing tail as an anchor even if cancellation races the rewrite-mode
-            # flag. The same splice handles normal boundary overlap; the window covers short text.
-            should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
-                existing_text,
-                pending_text,
-            )
-            if should_splice:
-                spliced_pending = splice_restarted_answer(existing_text, pending_text)
-                # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
-                # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
-                pending_text = spliced_pending if spliced_pending is not None else ""
-            else:
-                pending_text = strip_continuation_overlap(existing_text, pending_text)
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
-            if pending_text:
-                self._chunks.append(pending_text)
-                self._publish("chunk", {"text": pending_text})
+        pending_text = self._take_pending_answer_text()
+        if pending_text:
+            self._chunks.append(pending_text)
+            self._publish("chunk", {"text": pending_text})
         partial_text = "".join(self._chunks)
         if not partial_text.strip():
             # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
@@ -715,6 +709,38 @@ class ChatGenerationJob:
         if isinstance(persist_metadata, dict):
             aborted_payload.update(persist_metadata)
         self._publish("aborted", aborted_payload, done=True)
+
+    # 未配信バッファを本文として取り出し、バッファを空にする。
+    # 停止も失敗も「モデルが書いたのに配信していない本文」を抱えたまま終わるため、
+    # 取り出し方（内部メモの除去・書き直しの接合・境界重複の除去）は1か所に置く。
+    # Take the undelivered buffer as body text and empty it. A stop and a failure both end
+    # while holding text the model wrote but the turn never published, so how it is taken —
+    # stripping internal notes, splicing a rewrite, removing boundary overlap — lives here.
+    def _take_pending_answer_text(self) -> str:
+        if not self._pending_stream_chunks or self._pending_stream_is_internal:
+            return ""
+        # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
+        # An end during a research step must not leave internal notes in the saved body.
+        pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
+        existing_text = "".join(self._chunks)
+        # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
+        # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
+        # Use the existing tail as an anchor even if cancellation races the rewrite-mode
+        # flag. The same splice handles normal boundary overlap; the window covers short text.
+        should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
+            existing_text,
+            pending_text,
+        )
+        if should_splice:
+            spliced_pending = splice_restarted_answer(existing_text, pending_text)
+            # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+            # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+            pending_text = spliced_pending if spliced_pending is not None else ""
+        else:
+            pending_text = strip_continuation_overlap(existing_text, pending_text)
+        self._pending_stream_chunks = []
+        self._pending_stream_is_rewrite = False
+        return pending_text
 
     # 自プロセス・他プロセスのいずれかから停止が要求されたかを判定する
     # Report whether a stop was requested from this process or from another one
@@ -996,11 +1022,17 @@ class ChatGenerationJob:
                     self._pending_stream_chunks.clear()
                 continue
             except LlmRetryableProviderError as exc:
+                # レート制限もここで再試行する。1ターンに複数回のモデル判断を回す以上、
+                # 429 は日常的に当たる。プロバイダが待機秒数を指示している場合はそれに
+                # 従い、待ちきれない長さのときだけ即座に諦める。
+                # Rate limits are retried here too: a turn that runs several model decisions
+                # hits 429 routinely. Honour the provider's Retry-After and bail out only
+                # when the wait it asks for is longer than this turn can hold.
                 if (
                     (emitted and not discard_partial_on_retry)
-                    or isinstance(exc, LlmRateLimitError)
                     or attempt >= max_retries
                     or self._cancelled
+                    or not _is_retry_delay_affordable(exc)
                 ):
                     raise
                 if discard_partial_on_retry:
@@ -1666,21 +1698,41 @@ class ChatGenerationJob:
             if self._should_stop():
                 return True
 
-            available_tools = self._available_agent_tools(state)
+            # モデル判断の上限は、回復用の再試行（入力超過・ツールスキーマ・空回答・
+            # 調査失敗）も含めてここで最終的に押さえる。通常は最後の1回が回答へ
+            # 予約されているため到達しないが、再試行が重なった場合の歯止めになる。
+            # This is the final stop on model decisions, covering the recovery replays
+            # (input limit, tool schema, empty answer, research failure) as well. The
+            # reserved final answer turn normally keeps the loop away from it; it exists
+            # so stacked replays cannot run past the budget.
+            if budget.llm_turns >= budget.max_llm_turns:
+                telemetry.llm_turn_budget_exhausted = True
+                logger.warning(
+                    "Stopping the agent loop at the model-decision budget.",
+                    extra=telemetry.as_log_extra(),
+                )
+                self._salvage_pending_answer_text(state)
+                return False
+
+            available_tools = self._offered_agent_tools(state)
             tools_withdrawn = not available_tools
             # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
             # Empty-answer recovery is also a tool-free answer request, but it is
             # accounted separately from budget exhaustion.
             force_answer = tools_withdrawn or state.empty_answer_recovery_attempted
             active_tools = None if force_answer else available_tools
-            if tools_withdrawn:
+            if tools_withdrawn and not state.tools_disabled_after_failure:
                 telemetry.tools_withdrawn_by_budget = True
             turn_messages = self._prepare_turn_messages(
                 state,
                 state.current_messages,
                 active_tools,
                 force_answer=force_answer,
-                minimal=state.minimal_context_required or state.tool_schema_recovery_attempted,
+                minimal=(
+                    state.minimal_context_required
+                    or state.tool_schema_recovery_attempted
+                    or state.tools_disabled_after_failure
+                ),
                 empty_answer_recovery=state.empty_answer_recovery_attempted,
             )
             if turn_messages is None:
@@ -1698,12 +1750,38 @@ class ChatGenerationJob:
                 )
             state.suppress_next_generation_started = False
 
-            decision = self._stream_model_decision(
-                state,
-                turn_messages,
-                active_tools,
-                force_answer=force_answer,
-            )
+            try:
+                decision = self._stream_model_decision(
+                    state,
+                    turn_messages,
+                    active_tools,
+                    force_answer=force_answer,
+                )
+            except LlmServiceError as exc:
+                # 調査ステップがプロバイダ障害で落ちただけでターン全体を失敗させない。
+                # ツールを外せば要求は小さく単純になり、ここまでに集めた根拠で回答へ
+                # 縮退できる。1ターンに複数回のモデル判断がある以上、この縮退が無いと
+                # 失敗機会が呼び出し回数ぶん積み上がる。
+                # A provider failure during a research step must not fail the whole turn.
+                # Dropping the tools makes the request smaller and simpler, so the turn can
+                # degrade to an answer built from the evidence already gathered. Without this
+                # the failure odds compound with every model decision in the turn.
+                if not self._can_degrade_to_answer(state, active_tools, exc):
+                    raise
+                state.research_failure_recovery_attempted = True
+                state.tools_disabled_after_failure = True
+                telemetry.research_failure_recoveries += 1
+                logger.warning(
+                    "Research step failed; answering from the evidence already gathered "
+                    "(error=%s).",
+                    exc.__class__.__name__,
+                    exc_info=exc,
+                    extra=telemetry.as_log_extra(),
+                )
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
+                state.suppress_next_generation_started = True
+                continue
             if decision.outcome == "stopped":
                 return True
             if decision.outcome == "replay":
@@ -1941,6 +2019,48 @@ class ChatGenerationJob:
                 continue
 
             self._run_web_search_tool_call(state, tc)
+
+    # 失敗した調査ステップを、ツールなしの回答へ縮退させてよいかを判定する。
+    # Decide whether a failed research step may degrade into a tool-free answer.
+    def _can_degrade_to_answer(
+        self,
+        state: ChatTurnRunState,
+        active_tools: list[dict[str, Any]] | None,
+        exc: BaseException,
+    ) -> bool:
+        if self._cancelled or state.research_failure_recovery_attempted:
+            return False
+        # ツールを外した要求で落ちたのなら、外すことによる回復は望めない。
+        # A request that already carried no tools cannot be helped by removing them.
+        if active_tools is None:
+            return False
+        # 設定・認証・モデル指定の誤りは、何度やり直しても同じ結果になる。
+        # Configuration, authentication and model errors reproduce on every retry.
+        if isinstance(
+            exc,
+            (LlmConfigurationError, LlmAuthenticationError, LlmInvalidModelError),
+        ):
+            return False
+        return isinstance(exc, LlmServiceError)
+
+    # 次のモデル判断へ実際に提示するツール。実行可否（_available_agent_tools）とは
+    # 別の判断で、こちらは「この判断でまだ調査を続けてよいか」を決める。
+    # The tools actually offered to the next model decision. Kept apart from what may still be
+    # executed (_available_agent_tools): this one decides whether research may continue at all.
+    def _offered_agent_tools(self, state: ChatTurnRunState) -> list[dict[str, Any]]:
+        # 障害からの縮退中はツールを1つも出さない。取り下げの理由は予算ではないため、
+        # 呼び出し側が予算枯渇のテレメトリと取り違えないようにしている。
+        # Offer no tool at all while degrading after a failure. The caller keeps this apart
+        # from the budget-exhaustion telemetry because the reason is not the budget.
+        if state.tools_disabled_after_failure:
+            return []
+        # 最後のモデル判断は必ずツールなしの回答へ予約する。ここを空にすると
+        # force_answer が立ち、次の1回が本文を書くステップになる。
+        # Reserve the last model decision for a tool-free answer: returning nothing here
+        # raises force_answer, so the next call is the step that writes the body.
+        if state.budget.llm_turns >= state.budget.max_llm_turns - 1:
+            return []
+        return self._available_agent_tools(state)
 
     @staticmethod
     def _available_agent_tools(state: ChatTurnRunState) -> list[dict[str, Any]]:
@@ -2374,6 +2494,33 @@ class ChatGenerationJob:
         if buffered_text:
             self._publish_stream_text_with_images(state, buffered_text)
 
+    # 未配信のまま終わりかけた本文を、成功時と同じ配信経路へ載せ直すフェーズ。
+    # The phase that pushes body text left undelivered through the normal publish path.
+    def _salvage_pending_answer_text(self, state: ChatTurnRunState) -> bool:
+        """Publish buffered answer text so a failed turn does not throw it away.
+
+        回答ステップの本文は「ツール呼び出しが無い」と確定するまで配信されない。つまり
+        本文をストリームしている最中に失敗すると、モデルが書き終えた分がバッファにしか
+        存在しない。停止時はこれを保存しているのに失敗時だけ捨てていたため、エラー文
+        だけが残っていた。成功時と同じ `_publish_completed_answer_step` へ載せることで、
+        トレース前置と引用解決も同じ形で適用される。
+        The body of an answer step is not published until the step is known to request no
+        tools, so a failure mid-body leaves everything the model wrote in the buffer only.
+        Cancellation persisted that text while failures dropped it, which is why an error
+        message was all that remained. Routing it through the same
+        `_publish_completed_answer_step` keeps the trace prefix and citation resolution identical
+        to the success path.
+        """
+        pending_text = self._take_pending_answer_text()
+        if not pending_text:
+            return False
+        visible_chunks = strip_turn_state_update_chunks([pending_text])
+        if not visible_chunks:
+            return False
+        self._publish_completed_answer_step(state, visible_chunks)
+        state.telemetry.salvaged_partial_answers += 1
+        return True
+
     # 生成失敗をユーザー向けイベントと運用ログの両方へ落とすフェーズ。
     # The phase that turns a generation failure into both a user event and an operations log.
     def _report_generation_failure(
@@ -2580,6 +2727,12 @@ class ChatGenerationJob:
                 "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
                 "途中までの回答を保存しました。"
             )
+        if isinstance(error, LlmRateLimitError):
+            return "AI提供元が混み合っているため中断しました。途中までの回答を保存しました。"
+        if isinstance(error, LlmRetryableProviderError):
+            return "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+        if isinstance(error, LlmServiceError):
+            return "生成が途中で終了しました。途中までの回答を保存しました。"
         return "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
 
     # 応答を履歴へ保存し、done / incomplete の終端イベントを発行するフェーズ。
@@ -2758,8 +2911,13 @@ class ChatGenerationJob:
     # バックグラウンドスレッドで実行されるチャット応答生成の入口。各フェーズを順に呼ぶだけ。
     # Entry point of chat response generation on the background thread; it only sequences phases.
     def _run(self) -> None:
-        state = self._build_turn_run_state()
+        # ターン状態の構築も含めて守る。ここで落ちると state が無いままになるため、
+        # 終端イベントは finally 側の保険が出す。
+        # The turn-state construction is guarded too. A failure there leaves no state, so the
+        # terminal event comes from the safety net in `finally`.
+        state: ChatTurnRunState | None = None
         try:
+            state = self._build_turn_run_state()
             if self._should_stop():
                 return
 
@@ -2767,6 +2925,16 @@ class ChatGenerationJob:
             if self._run_agent_loop(state):
                 return
             self._flush_streaming_citation_buffer(state)
+
+            if self._should_stop():
+                return
+
+            # 仕上げ（正規化・引用解決・保存）も同じ try の中で守る。ここで例外が
+            # 抜けると終端イベントが出ず、SSE は終わらず生成ロックも解放されない。
+            # Finalization (normalization, citation resolution, persistence) is guarded by the
+            # same try. An exception escaping here would publish no terminal event, leaving the
+            # SSE stream open and the generation lock held.
+            self._finalize_generation(state)
 
         # エラーハンドリング
         # ユーザーへエラーを表示する経路は必ずログにも詳細を残す方針のため、各分岐で
@@ -2779,13 +2947,69 @@ class ChatGenerationJob:
         # was in progress) so failures mid-loop (research → web search → answer) are traceable
         # to the specific turn, not just the provider call.
         except Exception as exc:
-            self._report_generation_failure(exc, state)
-            return
+            if state is None:
+                logger.exception(
+                    "Failed to prepare the chat generation turn.",
+                    extra=self._telemetry.as_log_extra(),
+                )
+            elif not self._finalize_failed_turn(exc, state):
+                self._report_generation_failure(exc, state)
+        finally:
+            # どの経路を通っても終端イベントは必ず1つ出す。出さないまま抜けると
+            # ジョブが done にならず、SSE の待ち受けと生成ロックが残り続ける。
+            # Exactly one terminal event on every path. Leaving without one keeps the job
+            # unfinished, so the SSE reader and the generation lock both hang on.
+            self._ensure_terminal_event()
 
-        if self._should_stop():
-            return
+    # 失敗したターンでも本文が残っていれば、途中までの回答として保存して締めるフェーズ。
+    # The phase that closes a failed turn as a saved partial answer when body text survived.
+    def _finalize_failed_turn(self, exc: Exception, state: ChatTurnRunState) -> bool:
+        """Persist what the turn produced instead of replacing it with an error.
 
-        self._finalize_generation(state)
+        LLM が本文を書けていた以上、それはユーザーにとっての回答である。失敗したのが
+        仕上げ段階でも配信途中でも、保存して `incomplete` で締めれば、履歴にも残り
+        続きの生成もできる。ここで False を返したときだけエラー表示へ落ちる。
+        Once the model has written body text, that text is the user's answer. Whether the
+        failure hit finalization or mid-delivery, persisting it and closing with `incomplete`
+        keeps it in history and leaves the continuation affordance available. Only a False
+        return falls through to the error path.
+        """
+        if self._cancelled or self.is_done:
+            return False
+        try:
+            self._salvage_pending_answer_text(state)
+            if not "".join(state.chunks).strip():
+                return False
+            self._flush_streaming_citation_buffer(state)
+            # 途中終了の印を立てると、仕上げは生成UIの再試行（追加のLLM呼び出し）を
+            # 行わず、打ち切られた本文の復旧だけを行う。
+            # Marking the turn incomplete makes finalization skip the generated-UI retry (an
+            # extra LLM call) and only recover the truncated body.
+            state.final_answer_incomplete = exc
+            self._finalize_generation(state)
+        except Exception:
+            logger.exception(
+                "Failed to save the partial answer of a failed chat generation turn.",
+                extra=self._telemetry.as_log_extra(),
+            )
+            return False
+        return self.is_done
+
+    # 終端イベントを一度も出していないジョブを、必ずエラーで締めるフェーズ。
+    # The phase that closes any job which never published a terminal event.
+    def _ensure_terminal_event(self) -> None:
+        if self.is_done:
+            return
+        logger.error(
+            "Chat generation ended without a terminal event; closing it as an error.",
+            extra=self._telemetry.as_log_extra(),
+        )
+        error_message = "内部エラーが発生しました。"
+        self._handle_error(
+            error_message,
+            {"message": error_message, "retryable": True},
+            invoke_error_callback=not self._chunks,
+        )
 
 
 # ジェネレーションキーをビルドする関数
