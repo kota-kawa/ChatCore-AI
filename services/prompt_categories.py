@@ -97,11 +97,6 @@ def normalize_category(value: object) -> str | None:
     return LEGACY_CATEGORY_ALIASES.get(normalized)
 
 
-def is_valid_category(value: object) -> bool:
-    """カテゴリ値が受理可能（正準キー・エイリアス・空）かを返す。"""
-    return normalize_category(value) is not None
-
-
 def category_label(value: object) -> str:
     """カテゴリキーから表示ラベルを解決する（未設定・未知は空文字列）。"""
     normalized = normalize_category(value)

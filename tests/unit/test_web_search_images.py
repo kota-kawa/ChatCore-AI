@@ -5,15 +5,28 @@ from services import web_search
 from services.web_search_images import (
     WebSearchImageCandidate,
     _is_non_photo_image_url,
-    append_web_search_image_part,
     append_web_search_image_parts,
     build_web_search_image_parts,
-    choose_web_search_image,
     choose_web_search_images,
     find_next_streaming_image_insertion,
 )
 
 SELECTED_MODEL = "claude-haiku-4-5-20251001"
+
+
+# 日本語: 単数形の旧 API は削除したので、テストからは実運用の複数形 API を直接叩く。
+# English: The singular legacy API is gone, so drive the plural production API directly.
+def choose_web_search_image(user_question, result, *, model):
+    selections = choose_web_search_images(user_question, result, model=model)
+    return selections[0] if selections else None
+
+
+def append_web_search_image_part(parts, selection, *, fallback_text=""):
+    return append_web_search_image_parts(
+        parts,
+        [selection] if selection else None,
+        fallback_text=fallback_text,
+    )
 
 
 def _result() -> web_search.WebSearchResult:

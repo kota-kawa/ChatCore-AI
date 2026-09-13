@@ -277,72 +277,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(web_search.normalize_web_search_freshness(value), "")
 
-    # 日本語: maybeaugmentmessagesreportsmonthlyクォータ超過ことを検証します。
-    # English: Verify that maybe augment messages reports monthly quota exceeded.
-    def test_build_web_search_sources_markdown_returns_collapsible_block(self):
-        result = web_search.WebSearchResult(
-            query="Python news",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url="https://example.com/a",
-                    title="Title A",
-                    hostname="example.com",
-                    age="2026-04-30",
-                    snippets=(),
-                ),
-                web_search.WebSearchSource(
-                    url="https://example.com/b",
-                    title="Title B",
-                    hostname="example.com",
-                    age="",
-                    snippets=(),
-                ),
-            ),
-        )
-
-        block = web_search.build_web_search_sources_markdown(result)
-
-        self.assertIn('<details class="web-search-sources">', block)
-        self.assertIn('<summary class="web-search-sources__summary">', block)
-        self.assertIn('<span class="web-search-sources__label">参照したWebサイト</span>', block)
-        self.assertIn('<span class="web-search-sources__count">2件</span>', block)
-        self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
-        self.assertIn('<span class="web-search-sources__title">Title A</span>', block)
-        self.assertIn('<span class="web-search-sources__hostname">example.com</span>', block)
-        self.assertIn('<a class="web-search-sources__link" href="https://example.com/b" target="_blank">', block)
-        self.assertIn('<span class="web-search-sources__title">Title B</span>', block)
-        # 出典行はfaviconアイコン付きで描画する（読み込み失敗時は頭文字へフォールバック）
-        self.assertIn('<span class="web-search-citation__icon">', block)
-        self.assertIn(
-            '<img class="web-search-citation__favicon" src="https://example.com/favicon.ico"',
-            block,
-        )
-        self.assertTrue(block.endswith("</details>"))
-
-    # 日本語: ビルドWeb検索sourcesMarkdownescapessourcehtmlことを検証します。
-    # English: Verify that build web search sources markdown escapes source html.
-    def test_build_web_search_sources_markdown_escapes_source_html(self):
-        result = web_search.WebSearchResult(
-            query="x",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url='https://example.com/?q="x"',
-                    title="<b>Unsafe</b>",
-                    hostname="<host>",
-                    age="",
-                    snippets=(),
-                ),
-            ),
-        )
-
-        block = web_search.build_web_search_sources_markdown(result)
-
-        self.assertIn('href="https://example.com/?q=&quot;x&quot;"', block)
-        self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
-        self.assertIn("&lt;host&gt;", block)
-
     # 日本語: 検索結果ページには深さ表示を出さず、たどったページにだけ出すことを検証します。
     # English: Verify only followed pages carry a depth marker, never result pages.
     def test_source_items_mark_only_followed_pages_with_depth(self):
@@ -408,17 +342,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
             item_for(""),
         )
         self.assertIn("&lt;script&gt;.example から1階層先", item_for("https://<script>.example/a"))
-
-    # 日本語: なしsourcesのとき、ビルドWeb検索sourcesMarkdown返却する空ことを検証します。
-    # English: Verify that build web search sources markdown returns empty when no sources.
-    def test_build_web_search_sources_markdown_returns_empty_when_no_sources(self):
-        self.assertEqual(web_search.build_web_search_sources_markdown(None), "")
-        empty_result = web_search.WebSearchResult(
-            query="x",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(),
-        )
-        self.assertEqual(web_search.build_web_search_sources_markdown(empty_result), "")
 
     # 日本語: URLによって、combineWeb検索resultsdeduplicatessourcesことを検証します。
     # English: Verify that combine web search results deduplicates sources by url.

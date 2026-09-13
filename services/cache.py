@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import queue
@@ -158,37 +157,3 @@ def try_acquire_single_flight(name: str, ttl_seconds: int) -> bool:
         mark_redis_unavailable(exc)
         return True
 
-
-# キャッシュから JSON 値を取得する。未ヒット・障害時は None を返す。
-# Read a JSON-encoded value from the cache. Returns None on miss or any failure.
-def cache_get_json(key: str) -> Any | None:
-    client = get_redis_client()
-    if client is None:
-        return None
-    try:
-        raw = client.get(key)
-    except Exception as exc:
-        mark_redis_unavailable(exc)
-        return None
-    if raw is None:
-        return None
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return None
-
-
-# JSON シリアライズ可能な値を TTL 付きでキャッシュへ書き込む。障害時は黙って諦める。
-# Write a JSON-serializable value with a TTL. Silently gives up on any failure.
-def cache_set_json(key: str, value: Any, ttl_seconds: int) -> None:
-    client = get_redis_client()
-    if client is None:
-        return
-    try:
-        serialized = json.dumps(value, ensure_ascii=False, default=str)
-    except (TypeError, ValueError):
-        return
-    try:
-        client.set(key, serialized, ex=max(int(ttl_seconds), 1))
-    except Exception as exc:
-        mark_redis_unavailable(exc)

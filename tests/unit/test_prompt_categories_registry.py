@@ -9,7 +9,6 @@ from services.prompt_categories import (
     PROMPT_CATEGORIES,
     category_keys_matching,
     category_label,
-    is_valid_category,
     normalize_category,
 )
 from services.request_models import PromptUpdateRequest, SharedPromptCreateRequest
@@ -24,7 +23,6 @@ class PromptCategoriesRegistryTestCase(unittest.TestCase):
         for key, category in PROMPT_CATEGORIES.items():
             self.assertEqual(normalize_category(key), key)
             self.assertEqual(category_label(key), category.label)
-            self.assertTrue(is_valid_category(key))
 
     # 旧日本語カテゴリがすべて正準キー（または未設定）へ解決されることを検証します。
     # Verify every legacy Japanese category resolves to a canonical key (or unset).
@@ -39,9 +37,7 @@ class PromptCategoriesRegistryTestCase(unittest.TestCase):
     def test_empty_is_unset_and_unknown_is_rejected(self):
         for empty in ("", "   ", None):
             self.assertEqual(normalize_category(empty), CATEGORY_UNSET)
-            self.assertTrue(is_valid_category(empty))
         self.assertIsNone(normalize_category("架空のカテゴリ"))
-        self.assertFalse(is_valid_category("架空のカテゴリ"))
         self.assertEqual(category_label("架空のカテゴリ"), "")
 
     # 「その他」はフィルタUI上の慣例どおり末尾に置かれることを検証します。
