@@ -1189,8 +1189,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIsNone(normalized.parts)
 
-    def test_latest_text_only_request_suppresses_explicit_artifact(self):
-        """最新ユーザーがUI不要を指定した場合、明示Artifactも採用しない。"""
+    def test_explicit_opt_out_suppresses_an_explicit_artifact(self):
+        """ユーザー自身がUI不要と書いた場合だけ、明示Artifactも採用しない。"""
         raw = (
             "文章で説明します。\n\n"
             "```chatcore-artifact\n"
@@ -1201,10 +1201,25 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         normalized = normalize_response_with_artifacts(
             raw,
             ui_mode="NONE",
+            explicit_ui_opt_out=True,
         )
 
         self.assertEqual(normalized.text, "文章で説明します。")
         self.assertIsNone(normalized.parts)
+
+    def test_classifier_none_alone_keeps_a_validated_artifact(self):
+        """判定モデルの NONE だけでは、検証を通ったArtifactを捨てない。"""
+        raw = (
+            "作成しました。\n\n"
+            "```chatcore-artifact\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw, ui_mode="NONE")
+
+        self.assertIsNotNone(normalized.parts)
+        self.assertTrue(normalized.has_artifact())
 
 
 if __name__ == "__main__":
