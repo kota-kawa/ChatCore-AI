@@ -1385,6 +1385,13 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   white-space: nowrap;
 }
 
+.global-ai-agent-modal .mini-chat-clear-btn--icon-only {
+  width: 34px;
+  padding: 0;
+  gap: 0;
+  font-size: 1rem;
+}
+
 .global-ai-agent-modal .mini-chat-clear-btn i {
   font-size: 0.92rem;
 }

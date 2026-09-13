@@ -66,14 +66,14 @@ describe("support agent localization", () => {
     expect(leaked).toEqual([]);
   });
 
-  it("sends a suggested message immediately and shows the response model", async () => {
+  it("sends a suggested message immediately without showing the response model", async () => {
     const user = userEvent.setup();
     renderSupportAgent("en");
 
     await user.click(screen.getByRole("button", { name: "What can this service do?" }));
 
     await screen.findByText("Concise answer");
-    expect(screen.getByText("Model: gpt-oss-120b · Groq")).toBeInTheDocument();
+    expect(screen.queryByText("Model: gpt-oss-120b · Groq")).not.toBeInTheDocument();
     expect(resilientFetchMock).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(resilientFetchMock.mock.calls[0][1].body));
     expect(requestBody.messages.at(-1)).toEqual({ role: "user", content: "What can this service do?" });
@@ -107,7 +107,11 @@ describe("support agent localization", () => {
     await user.type(input, "{enter}");
     await screen.findByText("Concise answer");
 
-    await user.click(screen.getByRole("button", { name: "Clear conversation" }));
+    const clearButton = screen.getByRole("button", { name: "Clear conversation" });
+    expect(clearButton).toHaveClass("mini-chat-clear-btn--icon-only");
+    expect(clearButton.querySelector("span")).toBeNull();
+
+    await user.click(clearButton);
     await waitFor(() => expect(showConfirmModalMock).toHaveBeenCalledWith("Clear this conversation? This cannot be undone."));
     expect(screen.getByText("Navigation assistant")).toBeInTheDocument();
   });
