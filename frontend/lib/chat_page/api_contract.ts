@@ -8,6 +8,8 @@ import type {
   ChatRoomsPage,
   ChatRoomsPagination,
   GenerativeUiArtifactV1,
+  GenerativeUiArtifactStatusState,
+  GenerativeUiArtifactStatusV1,
   InteractiveButtonsV1,
   WebSearchImageV1,
   GenerationStatusPayload,
@@ -48,33 +50,100 @@ function asPositiveNumber(value: unknown): number | null {
 //          a backend Pydantic response model (it is an extra key assembled by `services/generative_ui.py`),
 //          so the hand-written normalization stays. Its sandbox delivery rules (the `libraries` allow-list,
 //          the height clamp) are frontend-only constraints with no representation in the contract either.
-function normalizeArtifact(raw: unknown): GenerativeUiArtifactV1 | null {
+// 日本語: 生成UIの状態は services/generative_ui_status.py と同じ語彙。表示するのは失敗だけ。
+// English: Generated-UI states share the vocabulary of services/generative_ui_status.py; only
+//          failures are rendered.
+const ARTIFACT_STATUS_STATES = new Set<GenerativeUiArtifactStatusState>([
+  "accepted",
+  "repaired",
+  "rejected",
+  "failed",
+]);
+const USER_VISIBLE_ARTIFACT_STATUS_STATES = new Set<GenerativeUiArtifactStatusState>([
+  "rejected",
+  "failed",
+]);
+
+function artifactStatus(
+  state: GenerativeUiArtifactStatusState,
+  reasonCode: string,
+): GenerativeUiArtifactStatusV1 {
+  return { state, reasonCode };
+}
+
+function normalizeReasonCode(value: unknown, fallback: string) {
+  if (typeof value !== "string") return fallback;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  return normalized || fallback;
+}
+
+// 失敗として表示できる状態だけを返す。成功や未知の語彙は本文の邪魔をしないよう捨てる。
+// Return only states that can be shown as a failure; successes and unknown vocabulary are
+// dropped so they never interrupt the prose.
+function normalizeArtifactStatus(raw: unknown): GenerativeUiArtifactStatusV1 | null {
   const record = asRecord(raw);
-  if (record.version !== 1) return null;
+  const source = asRecord(record.status ?? record);
+  const state = optionalString(source.state) as GenerativeUiArtifactStatusState | undefined;
+  if (!state || !ARTIFACT_STATUS_STATES.has(state)) return null;
+  if (!USER_VISIBLE_ARTIFACT_STATUS_STATES.has(state)) return null;
+  // サーバーは reason_code、フロントで正規化済みのパーツは reasonCode を持つ。
+  // localStorage からの読み戻しでも同じ関数を通すため、どちらの綴りも受ける。
+  // The server sends reason_code while an already-normalized part carries reasonCode; both
+  // spellings are accepted so the localStorage round trip uses this same function.
+  return artifactStatus(state, normalizeReasonCode(source.reason_code ?? source.reasonCode, state));
+}
+
+type NormalizedArtifact = {
+  artifact: GenerativeUiArtifactV1 | null;
+  status?: GenerativeUiArtifactStatusV1;
+};
+
+function normalizeArtifact(raw: unknown): NormalizedArtifact {
+  const record = asRecord(raw);
+  if (record.version !== 1) {
+    return { artifact: null, status: artifactStatus("rejected", "unsupported_version") };
+  }
   const title = optionalString(record.title);
+  if (!title?.trim()) {
+    return { artifact: null, status: artifactStatus("rejected", "missing_title") };
+  }
   const html = optionalString(record.html);
   const css = optionalString(record.css);
   const js = optionalString(record.js);
-  if (!title || html === undefined || css === undefined || js === undefined) return null;
+  if (html === undefined || css === undefined || js === undefined) {
+    return { artifact: null, status: artifactStatus("rejected", "invalid_source") };
+  }
 
   const description = optionalString(record.description);
   const height =
     typeof record.height === "number" && Number.isFinite(record.height)
       ? Math.min(Math.max(Math.round(record.height), 160), 900)
       : undefined;
-  const libraries = Array.isArray(record.libraries)
-    ? record.libraries.filter((library): library is "three" => library === "three")
+  const rawLibraries = Array.isArray(record.libraries) ? record.libraries : undefined;
+  const libraries = rawLibraries
+    ? rawLibraries.filter((library): library is "three" => library === "three")
     : undefined;
+  // 未対応ライブラリを参照したままのコードはサーバー側（services/generative_ui.py）で
+  // 拒否済み。ここで更に厳しくすると、その検証より前に保存された履歴まで表示できなくなる。
+  // Code that still references an unsupported library is already rejected server-side in
+  // services/generative_ui.py. Being stricter here would hide history saved before that check.
 
   return {
-    version: 1,
-    title,
-    ...(description ? { description } : {}),
-    ...(height ? { height } : {}),
-    ...(libraries && libraries.length > 0 ? { libraries } : {}),
-    html,
-    css,
-    js,
+    artifact: {
+      version: 1,
+      title,
+      ...(description ? { description } : {}),
+      ...(height ? { height } : {}),
+      ...(libraries && libraries.length > 0 ? { libraries } : {}),
+      html,
+      css,
+      js,
+    },
   };
 }
 
@@ -137,7 +206,10 @@ function normalizeWebSearchImage(rawImage: unknown): WebSearchImageV1 | undefine
 // English: `message_parts` / `parts` are extra keys not declared on the backend Pydantic response models
 //          (`ChatHistoryMessage` / `ChatJsonResponse`), so no generated Zod schema describes them. The
 //          display reordering is frontend-only as well.
-function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined {
+export function normalizeChatMessageParts(
+  rawParts: unknown,
+  rawArtifactStatus?: unknown,
+): ChatMessagePart[] | undefined {
   if (!Array.isArray(rawParts)) return undefined;
   const parts: ChatMessagePart[] = [];
   rawParts.forEach((rawPart) => {
@@ -148,8 +220,14 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
       return;
     }
     if (part.type === "sandbox_artifact") {
-      const artifact = normalizeArtifact(part.artifact);
-      if (artifact) parts.push({ type: "sandbox_artifact", artifact });
+      const normalized = normalizeArtifact(part.artifact);
+      if (normalized.artifact) parts.push({ type: "sandbox_artifact", artifact: normalized.artifact });
+      if (normalized.status) parts.push({ type: "artifact_status", status: normalized.status });
+      return;
+    }
+    if (part.type === "artifact_status") {
+      const status = normalizeArtifactStatus(part);
+      if (status) parts.push({ type: "artifact_status", status });
       return;
     }
     if (part.type === "interactive_buttons") {
@@ -163,6 +241,18 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
       return;
     }
   });
+
+  const payloadStatus = normalizeArtifactStatus(rawArtifactStatus);
+  if (
+    payloadStatus
+    && !parts.some(
+      (part) => part.type === "artifact_status"
+        && part.status.state === payloadStatus.state
+        && part.status.reasonCode === payloadStatus.reasonCode,
+    )
+  ) {
+    parts.push({ type: "artifact_status", status: payloadStatus });
+  }
   const orderedParts = normalizeMessagePartsForDisplay(parts);
   return orderedParts.length > 0 ? orderedParts : undefined;
 }
@@ -241,7 +331,7 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
     const sibling_ids = Array.isArray(rawSiblingIds)
       ? (rawSiblingIds.filter((value) => typeof value === "number") as number[])
       : undefined;
-    const message_parts = normalizeMessageParts(record.message_parts);
+    const message_parts = normalizeChatMessageParts(record.message_parts, record.artifact_status);
     return {
       ...readChatHistoryMessageFields(record),
       ...(message_parts ? { message_parts } : {}),
@@ -290,7 +380,7 @@ export function normalizeGenerationStatusPayload(rawPayload: unknown): Generatio
 //          so they do not appear in the generated schema and keep their hand-written normalization.
 export function normalizeChatResponsePayload(rawPayload: unknown): ChatResponsePayload {
   const payload = asRecord(rawPayload);
-  const parts = normalizeMessageParts(payload.parts);
+  const parts = normalizeChatMessageParts(payload.parts, payload.artifact_status);
   const { response, error } = readChatJsonResponseFields(payload);
   return {
     response,

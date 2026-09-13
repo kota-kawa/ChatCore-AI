@@ -433,3 +433,26 @@ test("normalizeShareChatRoomPayload falls back on malformed payloads", () => {
     { shareUrl: "https://example.com/s/abc" },
   );
 });
+
+test("a generated UI failure is normalized into a visible status part", () => {
+  const response = normalizeChatResponsePayload({
+    response: "比較結果はA案が優位です。",
+    artifact_status: { state: "rejected", reason_code: "required_artifact_missing" },
+    parts: [{ type: "text", text: "比較結果はA案が優位です。" }],
+  });
+
+  assert.deepEqual(response.parts?.[1], {
+    type: "artifact_status",
+    status: { state: "rejected", reasonCode: "required_artifact_missing" },
+  });
+});
+
+test("a successful generated UI status never interrupts the answer", () => {
+  const response = normalizeChatResponsePayload({
+    response: "作成しました。",
+    artifact_status: { state: "accepted", reason_code: "valid" },
+    parts: [{ type: "text", text: "作成しました。" }],
+  });
+
+  assert.equal(response.parts?.some((part) => part.type === "artifact_status"), false);
+});

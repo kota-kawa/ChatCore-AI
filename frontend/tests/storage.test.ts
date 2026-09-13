@@ -311,3 +311,56 @@ test("active chat room storage falls back to legacy current room id", () => {
     roomMode: "normal",
   });
 });
+
+test("readStoredHistory restores generated UI parts instead of dropping them", () => {
+  // 保存時には parts を書いているのに読み戻しで捨てていたため、リロードすると
+  // Artifact が本文だけの吹き出しに退化していた。
+  // Parts were written on save but dropped on read, so a reload collapsed an artifact into a
+  // text-only bubble.
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  const artifact = {
+    version: 1 as const,
+    title: "比較マップ",
+    html: '<div id="app"></div>',
+    css: "#app{padding:12px}",
+    js: "document.getElementById('app').textContent='ready';",
+  };
+  writeStoredHistory("room-parts", [
+    {
+      text: "作成しました。",
+      sender: "bot",
+      parts: [
+        { type: "text", text: "作成しました。" },
+        { type: "sandbox_artifact", artifact },
+      ],
+    },
+  ]);
+
+  const [entry] = readStoredHistory("room-parts");
+
+  assert.equal(entry.parts?.length, 2);
+  assert.equal(entry.parts?.[1].type, "sandbox_artifact");
+});
+
+test("readStoredHistory keeps a generated UI failure notice on reload", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  writeStoredHistory("room-status", [
+    {
+      text: "比較結果はA案が優位です。",
+      sender: "bot",
+      parts: [
+        { type: "text", text: "比較結果はA案が優位です。" },
+        { type: "artifact_status", status: { state: "rejected", reasonCode: "required_artifact_missing" } },
+      ],
+    },
+  ]);
+
+  const [entry] = readStoredHistory("room-status");
+
+  assert.deepEqual(entry.parts?.[1], {
+    type: "artifact_status",
+    status: { state: "rejected", reasonCode: "required_artifact_missing" },
+  });
+});

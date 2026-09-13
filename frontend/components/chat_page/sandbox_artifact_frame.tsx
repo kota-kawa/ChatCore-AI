@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 
-import type { GenerativeUiArtifactV1 } from "../../lib/chat_page/types";
+import type { GenerativeUiArtifactV1, SandboxArtifactRuntimeState } from "../../lib/chat_page/types";
 import { useTranslation } from "../../contexts/locale_context";
 
 // サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
@@ -69,6 +69,12 @@ function buildThreeCompatibilityScript(artifact: GenerativeUiArtifactV1) {
 const MIN_FRAME_HEIGHT = 160;
 const MAX_FRAME_HEIGHT = 900;
 const DEFAULT_FRAME_HEIGHT = 420;
+// 実行結果を確定させるまでの待ち時間。サーバー検証を通っても、ブラウザでは空表示や
+// 例外で何も出ないことがあるため、iframe から必ず結果を受け取る。
+// How long to wait before the runtime outcome is settled. Server-side validation cannot see a
+// blank render or a thrown error, so the iframe always reports what actually happened.
+const RUNTIME_STATUS_DELAY_MS = 500;
+const RUNTIME_STATUS_TIMEOUT_MS = 8000;
 
 // サンドボックス内に適用するベースCSSリセット
 // Base CSS reset applied inside the sandbox
@@ -132,6 +138,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   var MAX_HEIGHT = ${MAX_FRAME_HEIGHT};
   var resizePending = false;
   var runtimeFailed = false;
+  var statusReported = false;
   function root(){
     return document.getElementById("chatcore-artifact-root") || document.body;
   }
@@ -216,16 +223,41 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
     }
     requestHeight();
   }
+  function reportStatus(state, message){
+    // 失敗は後から上書きしない。最初に観測した失敗の理由をそのまま親へ渡す。
+    // A failure is never overwritten: the first observed reason is the one reported.
+    if (statusReported) return;
+    statusReported = true;
+    send("chatcore-artifact-status", {
+      state: state,
+      message: String(message || "").slice(0, 180)
+    });
+  }
   function reportError(message){
     runtimeFailed = true;
     send("chatcore-artifact-error", { message: String(message || "Artifact script error") });
+    reportStatus("runtime_error", message);
     setTimeout(ensureVisibleContent, 0);
+  }
+  function reportRuntimeOutcome(){
+    if (runtimeFailed) return;
+    reportStatus(hasRenderableContent() ? "ready" : "blank", "");
   }
   window.__chatcoreEnsureArtifactVisible = ensureVisibleContent;
   window.__chatcoreReportArtifactError = reportError;
   window.addEventListener("load", requestHeight);
   window.addEventListener("error", function(event){
     reportError(event.message);
+  });
+  // 同期例外だけでは Promise 内の失敗と CSP 遮断を取りこぼす。
+  // Synchronous errors alone miss failures inside promises and CSP blocks.
+  window.addEventListener("unhandledrejection", function(event){
+    var reason = event && event.reason;
+    reportError((reason && reason.message) || reason || "Unhandled promise rejection");
+  });
+  document.addEventListener("securitypolicyviolation", function(event){
+    runtimeFailed = true;
+    reportStatus("csp_blocked", (event && event.violatedDirective) || "csp");
   });
   if (typeof ResizeObserver === "function") {
     try { new ResizeObserver(requestHeight).observe(document.documentElement); } catch (_) {}
@@ -234,6 +266,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   setTimeout(requestHeight, 0);
   setTimeout(requestHeight, 250);
   setTimeout(ensureVisibleContent, 400);
+  setTimeout(reportRuntimeOutcome, ${RUNTIME_STATUS_DELAY_MS});
 })();`;
 
   return `<!doctype html>
@@ -282,6 +315,14 @@ type SandboxArtifactFrameProps = {
 
 // フレームの高さを最小・最大の範囲内に収める
 // Clamp the frame height within the minimum and maximum range
+const RUNTIME_STATES = new Set<SandboxArtifactRuntimeState>([
+  "ready",
+  "blank",
+  "runtime_error",
+  "csp_blocked",
+  "timeout",
+]);
+
 function clampHeight(value: number) {
   if (!Number.isFinite(value)) return undefined;
   return Math.min(Math.max(Math.ceil(value), MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT);
@@ -294,6 +335,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
   const [errorMessage, setErrorMessage] = useState("");
+  const [runtimeState, setRuntimeState] = useState<SandboxArtifactRuntimeState | "">("");
   // srcDoc の CSP には自オリジンの絶対URL（window.location.origin）が必要なため、
   // サーバーでは組み立てられない。SSR とハイドレーション初回は srcDoc を付けず、
   // マウント後に流し込むことでハイドレーション不一致と不正なCSPソースを避ける。
@@ -315,7 +357,18 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   useEffect(() => {
     setHeight(clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
     setErrorMessage("");
+    setRuntimeState("");
   }, [artifact]);
+
+  // 結果が何も届かないまま止まった場合もタイムアウトとして扱う。無言のままにしない。
+  // A run that reports nothing at all is a timeout, not a silent success.
+  useEffect(() => {
+    if (!srcDoc) return undefined;
+    const timer = window.setTimeout(() => {
+      setRuntimeState((previous) => (previous ? previous : "timeout"));
+    }, RUNTIME_STATUS_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [srcDoc]);
 
   // iframeからのpostMessageで高さ変更とエラーを受け取る
   // Receive height changes and errors from the iframe via postMessage
@@ -341,6 +394,14 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
         const normalizedMessage = typeof message === "string" ? message.slice(0, 180) : "Artifact error";
         console.warn(`Generated UI runtime error (${artifact.title}): ${normalizedMessage}`);
         setErrorMessage(normalizedMessage);
+        return;
+      }
+
+      if ((data as { type?: unknown }).type === "chatcore-artifact-status") {
+        const state = (data as { state?: unknown }).state;
+        if (typeof state === "string" && RUNTIME_STATES.has(state as SandboxArtifactRuntimeState)) {
+          setRuntimeState(state as SandboxArtifactRuntimeState);
+        }
       }
     };
 
@@ -351,6 +412,12 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   }, [artifact.title]);
 
   const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
+  // 例外・CSP遮断・タイムアウトは同じ「実行できなかった」、空表示だけは別の文言で伝える。
+  // A thrown error, a CSP block, and a timeout share one message; a blank render gets its own.
+  const runtimeFailed = Boolean(errorMessage) || (runtimeState !== "" && runtimeState !== "ready");
+  const runtimeMessage = runtimeState === "blank"
+    ? t("chat.generatedUiBlank")
+    : (runtimeFailed ? t("chat.generatedUiError") : "");
 
   return (
     <section className="sandbox-artifact" aria-label={artifact.title}>
@@ -375,8 +442,10 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
         srcDoc={srcDoc}
         style={{ height }}
       />
-      {errorMessage ? (
-        <p className="sandbox-artifact__error">{t("chat.generatedUiError")}</p>
+      {runtimeMessage ? (
+        <p className="sandbox-artifact__error" data-runtime-state={runtimeState || "runtime_error"}>
+          {runtimeMessage}
+        </p>
       ) : null}
     </section>
   );
