@@ -54,6 +54,8 @@ export function MiniChat({
   inputPlaceholder,
   enableActions = true,
   persistConversation = true,
+  showModelLabel = false,
+  iconOnlyClearButton = true,
   onMemoEdit,
 }: MiniChatProps = {}) {
   const { locale, t } = useTranslation();
@@ -613,7 +615,7 @@ export function MiniChat({
               {msg.sender === "assistant" ? (
                 <>
                   <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
-                  {msg.model ? (
+                  {showModelLabel && msg.model ? (
                     <div className="mini-chat-model-label">
                       {t("agent.modelUsed", { model: formatAiAgentModelLabel(msg.model) })}
                     </div>
@@ -809,14 +811,14 @@ export function MiniChat({
         {/* Clears the conversation history; disabled while generating or when there's nothing to clear */}
         <button
           type="button"
-          className="mini-chat-action-btn mini-chat-clear-btn"
+          className={`mini-chat-action-btn mini-chat-clear-btn${iconOnlyClearButton ? " mini-chat-clear-btn--icon-only" : ""}`}
           onClick={() => void handleClearConversation()}
           disabled={!messages.length || isGenerating}
           aria-label={t("agent.clear")}
           title={t("agent.clear")}
         >
-          <i className="bi bi-arrow-counterclockwise"></i>
-          <span>{t("agent.clear")}</span>
+          <i className="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+          {!iconOnlyClearButton && <span>{t("agent.clear")}</span>}
         </button>
       </form>
     </div>

@@ -269,6 +269,8 @@ export function MemoDetailModal() {
                     inputPlaceholder={t("memo.agentPlaceholder")}
                     enableActions={false}
                     persistConversation={false}
+                    showModelLabel
+                    iconOnlyClearButton={false}
                     onMemoEdit={applyAgentMemoEdit}
                   />
                 </aside>
