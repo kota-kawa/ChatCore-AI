@@ -44,6 +44,19 @@ DB の変更は、適用済み履歴を保つ新しい Alembic revision とし�
 - 一意制約、外部キー、soft delete、ページング用インデックスは、migration の SQL だけでなくルートの所有者確認・競合時のエラー変換まで確認する。
 - 生成スキーマと migration を混同しない。前者は API の型、後者は永続化構造の履歴です。
 
+### 外部キーを足したら ORM の INSERT 順も確認する
+
+SQLAlchemy の unit of work は、`relationship()` が張られていない 2 つのマッパーの
+INSERT 順を外部キーからは決められず、クラス名順で流します。親子を 1 回の `flush()`
+にまとめると、子が先に INSERT されて外部キー違反になります。親を `session.add()`
+した直後に `await session.flush()` を挟み、親行を確定させてから子を追加してください
+（`services/repositories/mcp_oauth_repository.py` の `create_grant_and_code`）。
+
+既存列に後から `REFERENCES` を足すときは、その列に値を書くコードが親行を必ず作るかも
+確認します。`NOT VALID` は既存行を検査しないので既存データでは気づけず、以後の INSERT
+だけが失敗します（MCP OAuth では、メタデータ文書からしか読まない CIMD クライアントが
+`mcp_oauth_clients` に保存されておらず、同意画面が 500 になりました）。
+
 ## Blue/Green と expand/contract
 
 Blue/Green では migration の適用中も旧色が DB を読み書きします。したがって、

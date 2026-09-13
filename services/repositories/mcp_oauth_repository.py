@@ -26,6 +26,12 @@ from services.models import (
     User,
 )
 
+# ``mcp_oauth_clients.registration_method`` の CHECK 制約が許す値。
+# The values allowed by the ``mcp_oauth_clients.registration_method`` check constraint.
+DCR_REGISTRATION_METHOD = "dcr"
+CIMD_REGISTRATION_METHOD = "cimd"
+PRE_REGISTERED_REGISTRATION_METHOD = "pre_registered"
+
 
 @dataclass(frozen=True)
 class AuthorizationCodeRecord:
@@ -69,6 +75,15 @@ class McpOAuthRepository:
         return await session.scalar(
             select(McpOAuthClient).where(
                 McpOAuthClient.client_id == client_id,
+                # CIMD クライアントの正本はクライアント側のメタデータ文書であり、
+                # ここに保存された行は外部キーの親としてだけ存在する。保存済みの
+                # コピーを返すとリダイレクトURIの差し替えに追随できなくなるため、
+                # 読み出し対象からは除外して毎回メタデータ文書を参照させる。
+                # A CIMD client's source of truth is its client-hosted metadata
+                # document; the stored row exists only as the foreign-key parent.
+                # Returning the stored copy would freeze a rotated redirect URI,
+                # so it is excluded and the document is re-read instead.
+                McpOAuthClient.registration_method != CIMD_REGISTRATION_METHOD,
                 ~revoked_personal_client,
             )
         )
@@ -136,7 +151,7 @@ class McpOAuthRepository:
                 client_id=client_id,
                 client_metadata=metadata,
                 client_secret_encrypted=encrypted_secret,
-                registration_method="pre_registered",
+                registration_method=PRE_REGISTERED_REGISTRATION_METHOD,
             )
         )
         await session.execute(

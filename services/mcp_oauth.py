@@ -48,6 +48,8 @@ from services.mcp_config import (
     get_mcp_server_url,
 )
 from services.repositories.mcp_oauth_repository import (
+    CIMD_REGISTRATION_METHOD,
+    DCR_REGISTRATION_METHOD,
     McpOAuthRepository,
 )
 from services.runtime_config import get_session_secret_key
@@ -472,7 +474,37 @@ async def _store_client(client: OAuthClientInformationFull) -> None:
             client_id=str(client.client_id),
             metadata=_serialize_client(client),
             encrypted_secret=encrypted,
-            registration_method="dcr",
+            registration_method=DCR_REGISTRATION_METHOD,
+        )
+
+
+async def _store_cimd_client(client: OAuthClientInformationFull) -> None:
+    """Record a CIMD client so its grants and tokens have a foreign-key parent.
+
+    DCR クライアントは登録時に、個人用クライアントは発行時に ``mcp_oauth_clients`` へ
+    保存されるが、CIMD クライアントはメタデータ文書を読むだけで保存されていなかった。
+    ``mcp_oauth_grants`` / ``mcp_oauth_tokens`` の ``client_id`` が同表を参照するように
+    なったため、行が無いままでは同意の確定もトークン更新も外部キー違反（＝同意画面の
+    「内部エラーが発生しました。」）で失敗する。ここで一度だけ親行を作れば、既存の接続も
+    次回のトークン更新で追いつく。保存済みのクライアントに対しては何もしない INSERT。
+
+    A DCR client is stored when it registers and a personal client when it is issued, but a
+    CIMD client used to be read from its metadata document and never persisted. Now that
+    ``mcp_oauth_grants`` and ``mcp_oauth_tokens`` reference ``mcp_oauth_clients`` by
+    ``client_id``, a missing row makes both consent completion and token refresh fail with a
+    foreign-key violation. Creating the parent row here also lets connections established
+    before the constraint recover on their next token request. The insert does nothing when
+    the client is already stored.
+    """
+    async with session_scope() as session, session.begin():
+        await _oauth_repository.store_client(
+            session,
+            client_id=str(client.client_id),
+            metadata=_serialize_client(client),
+            # CIMD クライアントは常に public で、シークレットを持たない。
+            # A CIMD client is always public and therefore has no secret.
+            encrypted_secret=None,
+            registration_method=CIMD_REGISTRATION_METHOD,
         )
 
 
@@ -880,7 +912,15 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
         client = await _load_registered_client(client_id)
         if client is not None:
             return client
-        return await _load_cimd_client(client_id)
+        cimd_client = await _load_cimd_client(client_id)
+        if cimd_client is None:
+            return None
+        # /authorize も /token も必ずこの経路を通るため、ここで親行を用意しておけば
+        # 認可コードの発行とトークン更新の両方が外部キーを満たせる。
+        # Both /authorize and /token resolve their client here, so filling the parent row
+        # at this point covers authorization-code creation and token refresh alike.
+        await _store_cimd_client(cimd_client)
+        return cimd_client
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         method = client_info.token_endpoint_auth_method or "client_secret_post"
