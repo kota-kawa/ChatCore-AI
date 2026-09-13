@@ -14,6 +14,13 @@ from collections.abc import Callable
 from functools import partial
 from typing import Any, Literal
 
+from services.user_skills import (
+    GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT,
+    GENERATIVE_UI_ARTIFACT_JSON_CONTRACT,
+    GENERATIVE_UI_ARTIFACT_PRESENTATION_FIELDS,
+    GENERATIVE_UI_THREE_LIBRARY_CONTRACT,
+)
+
 # 修復も本文を書くフェーズ。既定の小さい出力枠のままだと修復自体が途中で切れ、
 # 「修復しても直らなかった」という誤った結論になる。
 # Repair writes a body too. Leaving it on the smaller default budget truncates the repair
@@ -32,9 +39,10 @@ MAX_INTENT_CHARS = 8000
 
 _MODE_REQUIREMENTS = {
     "3D": (
-        "Include libraries:[\"three\"] and use the existing global THREE. Build a complete scene "
-        "with renderer, camera, lighting, visible geometry, polished materials, a fitted "
-        "composition, capped pixel ratio, resize handling, and useful pointer interaction."
+        GENERATIVE_UI_THREE_LIBRARY_CONTRACT
+        + " Build a complete scene with renderer, camera, lighting, visible geometry, polished "
+        "materials, a fitted composition, capped pixel ratio, resize handling, and useful "
+        "pointer interaction."
     ),
     "2D": (
         "Build a complete responsive product-style UI with meaningful initial content, clear "
@@ -75,13 +83,16 @@ def build_artifact_repair_messages(
         f"Failure codes: {code_line}\n"
         f"Detected problems:\n{issue_lines}\n\n"
         f"{_MODE_REQUIREMENTS[mode]}\n"
-        "Return exactly one complete ```chatcore-artifact fenced block and no separate HTML, CSS, "
-        "JavaScript, JSON, explanation, turn-state update, tool call, or UI_MODE text. The block "
-        "must hold one valid JSON object containing version, title, description, height, html, css, "
-        "and js, with every embedded quote, newline, and backslash escaped so the block parses as "
-        "valid JSON. The html must contain id=\"app\" and the js must be syntactically complete. "
-        "Use no network, external resources, imports, storage, or parent-page access. Keep the "
-        "result compact enough to finish, and include the closing brace and closing fence."
+        + GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT
+        + " Add no separate HTML, CSS, JavaScript, JSON, explanation, turn-state update, tool "
+        "call, or UI_MODE text beside it. "
+        + GENERATIVE_UI_ARTIFACT_JSON_CONTRACT
+        + " "
+        + GENERATIVE_UI_ARTIFACT_PRESENTATION_FIELDS
+        + " Escape every embedded quote, newline, and backslash so the block parses as valid "
+        "JSON, and keep the js syntactically complete. Use no network, external resources, "
+        "imports, storage, or parent-page access. Keep the result compact enough to finish, and "
+        "include the closing brace and closing fence."
     )
     messages: list[dict[str, Any]] = []
     if raw_text.strip():

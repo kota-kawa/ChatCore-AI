@@ -8,6 +8,7 @@ from unittest import mock
 from services.chat_generation import ChatGenerationJob
 from services.chat_generation_telemetry import ChatGenerationTelemetry
 from services.generative_ui import (
+    GENERATIVE_UI_DECISION_PROMPT,
     GenerativeUiValidationError,
     artifact_status_part,
     decode_message_parts,
@@ -18,7 +19,15 @@ from services.generative_ui import (
     normalize_response_with_artifacts,
     validate_artifact_payload,
 )
+from services.generative_ui_repair import build_artifact_repair_messages
 from services.llm import LlmOutputLimitError
+from services.user_skills import (
+    GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT,
+    GENERATIVE_UI_ARTIFACT_JSON_CONTRACT,
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    GENERATIVE_UI_SKILL_INSTRUCTIONS,
+    GENERATIVE_UI_THREE_LIBRARY_CONTRACT,
+)
 
 VALID_ARTIFACT: dict[str, Any] = {
     "version": 1,
@@ -311,6 +320,56 @@ class GeneratedUiValidationReliabilityTests(unittest.TestCase):
 
         self.assertIn("addEventListener", two_dimensional["js"])
         self.assertEqual(three_dimensional["libraries"], ["three"])
+
+
+class GeneratedUiPromptSingleSourceTests(unittest.TestCase):
+    """本体モデルへ渡す生成UIの契約文が、Skillの1か所だけを出典にしていることを固定する。
+
+    Pin the Skill as the only source of the generated-UI contract sent to the answering model.
+    """
+
+    def _repair_system_prompt(self, mode: str) -> str:
+        return "\n".join(
+            str(message.get("content") or "")
+            for message in build_artifact_repair_messages(
+                raw_text="比較結果を文章で説明します。",
+                intent_text="比較を生成UIで見せて",
+                mode=mode,
+                reason_codes=["artifact_malformed"],
+                issues=["2D initial content is too sparse"],
+            )
+            if message.get("role") == "system"
+        )
+
+    def test_every_answer_side_prompt_quotes_the_same_artifact_contract(self):
+        prompts = {
+            "skill": GENERATIVE_UI_SKILL_INSTRUCTIONS,
+            "execution_contract": GENERATIVE_UI_EXECUTION_CONTRACT,
+            "mode_injection": inject_generative_ui_mode_instruction([], "2D")[-1]["content"],
+            "repair": self._repair_system_prompt("2D"),
+        }
+
+        for name, prompt in prompts.items():
+            with self.subTest(prompt=name):
+                self.assertIn(GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT, prompt)
+                self.assertIn(GENERATIVE_UI_ARTIFACT_JSON_CONTRACT, prompt)
+
+    def test_the_three_library_contract_has_one_wording(self):
+        prompts = {
+            "execution_contract": GENERATIVE_UI_EXECUTION_CONTRACT,
+            "mode_injection": inject_generative_ui_mode_instruction([], "3D")[-1]["content"],
+            "repair": self._repair_system_prompt("3D"),
+        }
+
+        for name, prompt in prompts.items():
+            with self.subTest(prompt=name):
+                self.assertIn(GENERATIVE_UI_THREE_LIBRARY_CONTRACT, prompt)
+
+    def test_the_ui_mode_decision_prompt_stays_out_of_the_output_contract(self):
+        # 判定は本体モデルではなく判定用の別呼び出し向けで、Skillの有効・無効とも独立している。
+        # The decision prompt targets a separate classifier call and is independent of the Skill.
+        self.assertNotIn(GENERATIVE_UI_ARTIFACT_BLOCK_CONTRACT, GENERATIVE_UI_DECISION_PROMPT)
+        self.assertNotIn("chatcore-artifact", GENERATIVE_UI_DECISION_PROMPT)
 
 
 class GeneratedUiStatusDeliveryTests(unittest.TestCase):
