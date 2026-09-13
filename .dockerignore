@@ -4,6 +4,9 @@
 *.env.bak
 .git
 .github
+# PR 本文から参照するスクリーンショット置き場。実行時には不要。
+# Screenshot store referenced from pull-request bodies; never needed at runtime.
+assets
 __pycache__
 .ruff_cache
 .next
