@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -53,7 +54,7 @@ GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 # This final contract is injected after variable context only while the built-in
 # Skill is enabled. Keeping it with the Skill definition makes every prompt-side
 # Generative UI instruction part of the same immutable default capability.
-GENERATIVE_UI_EXECUTION_CONTRACT = """
+_GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE = """
 <generative_ui_execution_contract>
 This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
 
@@ -74,7 +75,12 @@ When UI_MODE is 2D or 3D:
 - Do not output separate HTML, CSS, JavaScript, or JSON code blocks. The fenced Artifact is the requested deliverable.
 - Make the first render complete and purpose-built: clear visual hierarchy, deliberate spacing and typography, responsive layout, accessible contrast, and meaningful content. Reject your own draft and simplify or revise it before output if it is an empty shell, a prose card, a barely styled table, placeholder controls, or decoration unrelated to the user's subject.
 - For 3D, always include "libraries":["three"]. Use the available global THREE without imports, OrbitControls, loaders, URL textures, or URL models. Create a renderer sized from `app.clientWidth || 560` with a fixed visible height, append its canvas to `document.getElementById("app")`, and create a scene, camera, light, and visible geometry with core features only.
-- Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, that newlines and quotes inside JSON strings are escaped correctly, and that the Artifact is compact enough to finish.
+- Escape exactly once inside the JSON strings: a newline is a single backslash followed by n, and an inner quote is a single backslash followed by a double quote. A doubled backslash reaches the browser as a literal backslash and breaks every line it touches, so never write one unless the code genuinely contains a backslash.
+- Keep the markup root minimal and build the content from js: an html of one root element plus a js that fills it is the expected shape, and it removes the need to escape markup twice.
+- Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, that every identifier the js uses is either declared in that same js or is a browser or THREE global, and that the Artifact is compact enough to finish.
+
+Follow the shape of this worked example exactly, and replace its subject with the user's:
+{worked_example}
 
 The Artifact runs in an isolated sandbox; violating these hard requirements rejects the entire UI:
 - No network of any kind: fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, dynamic import(), and importScripts are all unavailable. Build the data you need directly into the code.
@@ -87,6 +93,48 @@ The Artifact runs in an isolated sandbox; violating these hard requirements reje
 - height must be between 160 and 900.
 </generative_ui_execution_contract>
 """.strip()
+
+# 出力形式のばらつきを減らす唯一の完成例。文章で「正しくエスケープせよ」と書くだけでは
+# 二重エスケープや app ルート欠落が繰り返し起きるため、確定した1つの形を見せる。
+# 例そのものは dict から json.dumps で生成する。手書きの例は必ずいつか壊れるうえ、
+# 壊れた例は「壊れた出力を真似してよい」という指示になってしまう。
+# The single finished example that reduces format variance. Prose alone ("escape correctly")
+# does not stop repeated double escaping or a missing app root, so one settled shape is shown.
+# The example is rendered from a dict with json.dumps: a hand-written one eventually breaks, and
+# a broken example reads as permission to emit broken output.
+_WORKED_EXAMPLE_ARTIFACT = {
+    "version": 1,
+    "title": "承認フロー",
+    "description": "申請から支払までの流れ",
+    "height": 360,
+    "html": '<div id="app"></div>',
+    "css": (
+        "#app{padding:24px;font-family:system-ui,sans-serif;color:#0f172a;"
+        "background:#ffffff;max-width:420px;margin:0 auto}\n"
+        "h2{margin:0 0 16px;font-size:17px;letter-spacing:.01em}\n"
+        ".step{padding:12px 16px;border:1px solid #94a3b8;border-radius:10px;"
+        "background:#f8fafc;text-align:center;font-weight:600}\n"
+        ".step.done{border-color:#0f766e;background:#ecfdf5;color:#134e4a}\n"
+        ".arrow{color:#64748b;text-align:center;margin:8px 0;font-size:15px}"
+    ),
+    "js": (
+        'const steps=[{name:"申請",done:true},{name:"上長承認",done:true},'
+        '{name:"経理確認",done:false},{name:"支払",done:false}];\n'
+        'const app=document.getElementById("app");\n'
+        'app.innerHTML=`<h2>承認フロー</h2>`+steps\n'
+        '  .map((step,index)=>`<div class="step${step.done?" done":""}">${step.name}</div>`'
+        '+(index<steps.length-1?`<div class="arrow">↓</div>`:""))\n'
+        '  .join("");'
+    ),
+}
+WORKED_EXAMPLE_BLOCK = (
+    "```chatcore-artifact\n"
+    + json.dumps(_WORKED_EXAMPLE_ARTIFACT, ensure_ascii=False, separators=(",", ":"))
+    + "\n```"
+)
+GENERATIVE_UI_EXECUTION_CONTRACT = _GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE.replace(
+    "{worked_example}", WORKED_EXAMPLE_BLOCK
+)
 
 _SKILL_BOUNDARY_MARKERS = (
     "<enabled_user_skills>",

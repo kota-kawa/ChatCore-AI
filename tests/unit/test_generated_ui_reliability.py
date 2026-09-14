@@ -16,9 +16,12 @@ from services.generative_ui import (
     is_explicit_generative_ui_opt_out,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
+    requested_artifact_quality_issues,
     validate_artifact_payload,
 )
+from services.generative_ui_javascript import javascript_structure_error
 from services.llm import LlmOutputLimitError
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 
 VALID_ARTIFACT: dict[str, Any] = {
     "version": 1,
@@ -311,6 +314,313 @@ class GeneratedUiValidationReliabilityTests(unittest.TestCase):
 
         self.assertIn("addEventListener", two_dimensional["js"])
         self.assertEqual(three_dimensional["libraries"], ["three"])
+
+
+# gpt-oss-120b で実際に観測した失敗形。モデルは JSON 文字列の中で改行と引用符を
+# 二重にエスケープし、`\n` や `\"` をそのままブラウザへ届けてしまう。
+# The failure shape observed from gpt-oss-120b: the model escapes newlines and quotes twice
+# inside the JSON strings, so a literal `\n` or `\"` reaches the browser.
+GOOD_ARTIFACT_SOURCES: dict[str, str] = {
+    "html": '<div id="app"></div>',
+    "css": (
+        "#app{padding:24px;max-width:420px;margin:0 auto;font-family:system-ui,sans-serif;"
+        "color:#0f172a;background:#ffffff}\n"
+        "h2{margin:0 0 16px;font-size:17px}\n"
+        ".step{padding:12px 16px;border:1px solid #94a3b8;border-radius:10px;background:#f8fafc;"
+        "text-align:center;font-weight:600}\n"
+        ".arrow{color:#64748b;text-align:center;margin:8px 0;font-size:15px}"
+    ),
+    "js": (
+        "const steps = ['申請', '上長承認', '経理確認', '支払'];\n"
+        "const app = document.getElementById('app');\n"
+        "app.innerHTML = '<h2>承認フロー</h2>' + steps\n"
+        "  .map(function (step) { return '<div class=\"step\">' + step + '</div>'; })\n"
+        "  .join('<div class=\"arrow\">to</div>');\n"
+        "app.addEventListener('click', function (event) {\n"
+        "  const step = event.target.closest('.step');\n"
+        "  if (step) { step.classList.toggle('done'); }\n"
+        "});"
+    ),
+}
+
+
+def _artifact_response(**overrides: Any) -> str:
+    """Render one artifact response exactly as a model would emit it."""
+    payload = {
+        "version": 1,
+        "title": "承認フロー",
+        "description": "申請から支払まで",
+        "height": 360,
+        **GOOD_ARTIFACT_SOURCES,
+        **overrides,
+    }
+    return (
+        "承認フローを可視化しました。\n\n```chatcore-artifact\n"
+        + json.dumps(payload, ensure_ascii=False)
+        + "\n```"
+    )
+
+
+def _double_escaped_artifact_response() -> str:
+    """Emit the same artifact with every source escaped one level too many."""
+    over_escaped = {
+        key: value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+        for key, value in GOOD_ARTIFACT_SOURCES.items()
+    }
+    return _artifact_response(**over_escaped)
+
+
+class GeneratedUiSourceRecoveryTests(unittest.TestCase):
+    """二重エスケープ・DOM外殻・#app欠落を、モデルに投げ返さず決定的に直せているか。
+
+    Whether double escaping, a document shell, and a missing #app are repaired
+    deterministically instead of being bounced back to the model.
+    """
+
+    def test_a_double_escaped_payload_is_decoded_instead_of_rendering_blank(self):
+        normalized = normalize_response_with_artifacts(
+            _double_escaped_artifact_response(),
+            recover_truncated=True,
+            ui_mode="2D",
+        )
+
+        self.assertEqual(normalized.validation_errors, [])
+        artifact = next(
+            part["artifact"]
+            for part in (normalized.parts or [])
+            if part["type"] == "sandbox_artifact"
+        )
+        self.assertIn('id="app"', artifact["html"])
+        self.assertNotIn("\\\"", artifact["html"])
+        self.assertIn("\n", artifact["js"])
+        self.assertNotIn("\\n", artifact["js"])
+        self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
+
+    def test_correctly_escaped_javascript_keeps_its_string_escapes(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "js": "const lines = 'a\\nb'.split('\\n');\ndocument.getElementById('app').title = lines[0];",
+            }
+        )
+
+        self.assertIn("'a\\nb'", artifact["js"])
+
+    def test_an_app_root_is_added_when_the_javascript_looks_it_up(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "html": "<section><h2>四半期売上</h2><p>Q1 から Q4 まで</p></section>",
+                "js": "document.getElementById('app').dataset.ready = 'yes';",
+            }
+        )
+
+        self.assertIn('id="app"', artifact["html"])
+        self.assertIn("四半期売上", artifact["html"])
+
+    def test_markup_without_an_app_lookup_is_left_alone(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "html": "<section><h2>四半期売上</h2><p>Q1 から Q4 まで</p></section>",
+                "js": "document.querySelector('h2').dataset.ready = 'yes';",
+            }
+        )
+
+        self.assertEqual(
+            artifact["html"], "<section><h2>四半期売上</h2><p>Q1 から Q4 まで</p></section>"
+        )
+
+    def test_a_full_document_shell_is_unwrapped_to_its_body(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "html": (
+                    "<!DOCTYPE html><html><head><title>Gantt</title></head>"
+                    '<body><div id="app"></div></body></html>'
+                ),
+            }
+        )
+
+        self.assertEqual(artifact["html"].strip(), '<div id="app"></div>')
+
+
+class GeneratedUiJavaScriptScanTests(unittest.TestCase):
+    def test_an_ordinary_anonymous_function_is_not_treated_as_the_function_constructor(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "js": (
+                    "(function(){\n"
+                    "  const app = document.getElementById('app');\n"
+                    "  app.addEventListener('click', function(){ app.dataset.hit = '1'; });\n"
+                    "})();"
+                ),
+            }
+        )
+
+        self.assertIn("(function(){", artifact["js"])
+
+    def test_building_code_from_a_string_is_still_rejected(self):
+        for javascript in (
+            "const run = new Function('return 1'); run();",
+            "const run = Function('return 1'); run();",
+            "eval('1 + 1');",
+        ):
+            with self.subTest(javascript=javascript):
+                with self.assertRaisesRegex(GenerativeUiValidationError, "not allowed"):
+                    validate_artifact_payload({**VALID_ARTIFACT, "js": javascript})
+
+    def test_a_broken_expression_inside_a_template_substitution_is_rejected(self):
+        with self.assertRaisesRegex(GenerativeUiValidationError, "syntax"):
+            validate_artifact_payload(
+                {
+                    **VALID_ARTIFACT,
+                    "js": (
+                        "const rows = ['a'];\n"
+                        "const app = document.getElementById('app');\n"
+                        "app.innerHTML = `<b>${rows.map((row) => row.toUpperCase()}</b>`;"
+                    ),
+                }
+            )
+
+    def test_a_valid_template_substitution_is_accepted(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "js": (
+                    "const rows = [{ name: 'A', done: true }];\n"
+                    "const app = document.getElementById('app');\n"
+                    "app.innerHTML = rows.map((row) => "
+                    "`<div class=\"row${row.done ? ' done' : ''}\">${row.name}</div>`).join('');"
+                ),
+            }
+        )
+
+        self.assertIn("row.done", artifact["js"])
+
+    def test_an_unterminated_string_literal_is_a_structural_error(self):
+        self.assertIn(
+            "unterminated",
+            javascript_structure_error("const label = 'long text\nconst next = 1;") or "",
+        )
+
+    def test_trailing_output_after_the_closing_brace_does_not_lose_the_artifact(self):
+        payload = json.dumps(
+            {"version": 1, "title": "承認フロー", **GOOD_ARTIFACT_SOURCES}, ensure_ascii=False
+        )
+        for trailing in ("}", '"', "</div>"):
+            with self.subTest(trailing=trailing):
+                normalized = normalize_response_with_artifacts(
+                    "承認フローです。\n\n```chatcore-artifact\n" + payload + trailing + "\n```",
+                    recover_truncated=True,
+                    ui_mode="2D",
+                )
+
+                self.assertEqual(normalized.validation_errors, [])
+                self.assertTrue(normalized.has_artifact())
+                self.assertEqual(normalized.text, "承認フローです。")
+
+    def test_an_escape_that_is_invalid_in_json_is_read_as_a_literal_backslash(self):
+        # JS のテンプレート内の `` \` `` を JSON へ入れるとき、モデルは `\\` を1つ落とす。
+        # Putting `` \` `` from a JS template into JSON, models drop one `\\`.
+        payload = (
+            '{"version":1,"title":"t","html":"<div id=\\"app\\"></div>",'
+            '"css":"#app{padding:20px}","js":"const app=document.getElementById(\'app\');'
+            'app.textContent=`\\`ok\\``;"}'
+        )
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n" + payload + "\n```",
+            recover_truncated=True,
+            ui_mode="2D",
+        )
+
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertTrue(normalized.has_artifact())
+
+    def test_lookalike_punctuation_in_code_is_repaired_without_touching_strings(self):
+        artifact = validate_artifact_payload(
+            {
+                **VALID_ARTIFACT,
+                "js": (
+                    "const points = [[\u22121, 2], [3, \u22124]];\n"
+                    "const label = '\u7bc4\u56f2\u306f \u22121 \u304b\u3089 1\uff08\u4e21\u7aef\uff09';\n"
+                    "document.getElementById('app').dataset.count = points.length + label.length;"
+                ),
+            }
+        )
+
+        self.assertIn("[[-1, 2], [3, -4]]", artifact["js"])
+        self.assertIn("\u22121 \u304b\u3089 1\uff08\u4e21\u7aef\uff09", artifact["js"])
+
+    def test_a_stray_backslash_outside_a_string_is_a_structural_error(self):
+        self.assertIn(
+            "stray backslash",
+            javascript_structure_error(r"const app = 1;\nif (app) { app += \1; }") or "",
+        )
+
+    def test_a_javascript_only_over_escape_is_recovered_rather_than_rejected(self):
+        artifact = validate_artifact_payload(
+            {**VALID_ARTIFACT, "js": r"const app = document.getElementById('app');\napp.hidden = false;"}
+        )
+
+        self.assertIn("\n", artifact["js"])
+        self.assertNotIn("\\n", artifact["js"])
+
+
+class GeneratedUiQualityGateTests(unittest.TestCase):
+    def test_a_javascript_rendered_interface_is_not_called_sparse(self):
+        normalized = normalize_response_with_artifacts(
+            "売上を可視化しました。\n\n```chatcore-artifact\n"
+            + json.dumps(
+                {
+                    **VALID_ARTIFACT,
+                    "html": '<div id="app"></div>',
+                    "css": (
+                        "#app{padding:24px;font-family:system-ui,sans-serif;color:#0f172a}\n"
+                        ".chart{display:flex;align-items:flex-end;gap:16px;height:240px}\n"
+                        ".bar{flex:1;background:#4f46e5;border-radius:6px 6px 0 0}"
+                    ),
+                    "js": (
+                        "const data = [120, 150, 90, 210];\n"
+                        "const app = document.getElementById('app');\n"
+                        "app.innerHTML = '<div class=\"chart\">' + data.map((value) => "
+                        "'<div class=\"bar\" style=\"height:' + value + 'px\"></div>').join('') + '</div>';\n"
+                        "app.addEventListener('click', (event) => {\n"
+                        "  const bar = event.target.closest('.bar');\n"
+                        "  if (bar) { bar.classList.toggle('selected'); }\n"
+                        "});"
+                    ),
+                },
+                ensure_ascii=False,
+            )
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
+
+    def test_markup_driven_content_still_has_to_carry_something(self):
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n"
+            + json.dumps(
+                {**VALID_ARTIFACT, "html": '<div id="app"></div>', "css": "", "js": ""},
+                ensure_ascii=False,
+            )
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        self.assertIn("2D initial content is too sparse", requested_artifact_quality_issues(normalized, "2D"))
+
+    def test_the_prompt_worked_example_passes_the_validator_and_the_quality_gate(self):
+        normalized = normalize_response_with_artifacts(
+            GENERATIVE_UI_EXECUTION_CONTRACT, ui_mode="2D"
+        )
+
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertTrue(normalized.has_artifact())
+        self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
 
 
 class GeneratedUiStatusDeliveryTests(unittest.TestCase):
