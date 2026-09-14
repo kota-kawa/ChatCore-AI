@@ -61,6 +61,9 @@ export function GlobalAiAgent() {
         initialY={100}
         positionStorageKey={POSITION_STORAGE_KEY}
         initialFocusSelector=".mini-chat-input"
+        avoidTextInputFocusOnTouch
+        avoidElementSelector=".global-ai-agent-button"
+        avoidElementMinViewportWidth={641}
       >
         <MiniChat />
       </DraggableModal>

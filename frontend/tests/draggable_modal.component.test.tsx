@@ -6,9 +6,14 @@ import { DraggableModal } from "../components/ui/DraggableModal";
 describe("DraggableModal", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => (
+      window.setTimeout(() => callback(performance.now()), 16)
+    ));
+    vi.stubGlobal("cancelAnimationFrame", (frameId: number) => window.clearTimeout(frameId));
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -23,6 +28,7 @@ describe("DraggableModal", () => {
         <input aria-label="最初の入力" />
       </DraggableModal>
     );
+    act(() => vi.advanceTimersByTime(32));
     act(() => vi.advanceTimersByTime(0));
 
     expect(screen.getByRole("dialog", { name: "テストモーダル" })).toBeInTheDocument();
@@ -57,7 +63,7 @@ describe("DraggableModal", () => {
       </DraggableModal>
     );
 
-    const dialog = screen.getByRole("dialog", { name: "位置保存" });
+    const dialog = screen.getByRole("dialog", { hidden: true });
     expect(dialog).toHaveStyle({ left: "240px", top: "180px" });
     expect(JSON.parse(window.sessionStorage.getItem("agent-position") ?? "null")).toEqual({
       x: 240,
@@ -72,6 +78,7 @@ describe("DraggableModal", () => {
         content
       </DraggableModal>
     );
+    act(() => vi.advanceTimersByTime(32));
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "チャコを閉じる" }), {
       clientX: 300,
@@ -95,8 +102,91 @@ describe("DraggableModal", () => {
       </DraggableModal>
     );
 
+    act(() => vi.advanceTimersByTime(32));
     act(() => vi.advanceTimersByTime(0));
 
     expect(screen.getByRole("textbox", { name: "依頼内容" })).toHaveFocus();
+  });
+
+  it("keeps focus away from text input on touch-sized viewports", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+
+    render(
+      <DraggableModal
+        isOpen
+        onClose={vi.fn()}
+        title="モバイル入力"
+        initialFocusSelector=".agent-input"
+        avoidTextInputFocusOnTouch
+      >
+        <textarea className="agent-input" aria-label="モバイル依頼内容" />
+      </DraggableModal>
+    );
+
+    act(() => vi.advanceTimersByTime(32));
+    act(() => vi.advanceTimersByTime(0));
+
+    expect(screen.getByRole("button", { name: "チャコを閉じる" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "モバイル依頼内容" })).not.toHaveFocus();
+  });
+
+  it("prepares the mounted surface before starting its entry animation", () => {
+    const { rerender } = render(
+      <DraggableModal isOpen={false} onClose={vi.fn()} title="表示準備">
+        content
+      </DraggableModal>
+    );
+
+    rerender(
+      <DraggableModal isOpen onClose={vi.fn()} title="表示準備">
+        content
+      </DraggableModal>
+    );
+
+    const dialog = document.querySelector<HTMLElement>(".global-ai-agent-modal");
+    expect(dialog).not.toBeNull();
+    expect(dialog).toHaveClass("is-preparing");
+
+    act(() => vi.advanceTimersByTime(32));
+
+    expect(dialog).toHaveClass("is-open");
+  });
+
+  it("moves an overlapping desktop position away from the launcher before entry", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1366);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(392);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(620);
+    const launcher = document.createElement("button");
+    launcher.className = "test-agent-launcher";
+    launcher.getBoundingClientRect = () => ({
+      left: 40,
+      top: 668,
+      right: 100,
+      bottom: 728,
+      width: 60,
+      height: 60,
+      x: 40,
+      y: 668,
+      toJSON: () => undefined,
+    });
+    document.body.append(launcher);
+
+    render(
+      <DraggableModal
+        isOpen
+        onClose={vi.fn()}
+        title="重なり回避"
+        initialX={20}
+        initialY={100}
+        avoidElementSelector=".test-agent-launcher"
+        avoidElementMinViewportWidth={641}
+      >
+        content
+      </DraggableModal>
+    );
+
+    expect(document.querySelector(".global-ai-agent-modal")).toHaveStyle({ left: "20px", top: "36px" });
+    launcher.remove();
   });
 });

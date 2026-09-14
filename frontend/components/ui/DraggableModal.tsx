@@ -1,6 +1,13 @@
-import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import {
+  clampModalPosition,
+  keepPositionIfUnchanged,
+  positionModalAwayFromRect,
+  type Position,
+  type ViewportBounds,
+} from "../../lib/ui/draggable_modal_position";
 import { readSessionJson, writeSessionJson } from "../../lib/utils";
 
 // ドラッグ可能モーダルのprops型定義
@@ -14,11 +21,11 @@ type DraggableModalProps = {
   initialY?: number;
   positionStorageKey?: string;
   initialFocusSelector?: string;
+  avoidTextInputFocusOnTouch?: boolean;
+  avoidElementSelector?: string;
+  avoidElementMinViewportWidth?: number;
 };
 
-// モーダルのx/y座標を表す型
-// Type representing the x/y coordinates of the modal
-type Position = { x: number; y: number };
 // モーダルを閉じるアニメーションの時間（ミリ秒）
 // Duration of the modal close animation (milliseconds)
 const CLOSE_ANIMATION_MS = 320;
@@ -27,6 +34,20 @@ const CLOSE_ANIMATION_MS = 320;
 // Type guard to check if a value is a finite number
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function getViewportBounds(): ViewportBounds {
+  const visualViewport = window.visualViewport;
+  return {
+    left: visualViewport?.offsetLeft ?? 0,
+    top: visualViewport?.offsetTop ?? 0,
+    width: visualViewport?.width ?? window.innerWidth,
+    height: visualViewport?.height ?? window.innerHeight,
+  };
+}
+
+function isTouchViewport() {
+  return window.innerWidth <= 640 || window.matchMedia?.("(pointer: coarse)").matches === true;
 }
 
 // ヘッダーをドラッグして画面内を自由に移動できるモーダルコンポーネント
@@ -40,6 +61,9 @@ export function DraggableModal({
   initialY = 100,
   positionStorageKey,
   initialFocusSelector,
+  avoidTextInputFocusOnTouch = false,
+  avoidElementSelector,
+  avoidElementMinViewportWidth = 0,
 }: DraggableModalProps) {
   const { t } = useTranslation();
   const fallbackTitle = t("agent.header");
@@ -56,6 +80,9 @@ export function DraggableModal({
   // 閉じるアニメーション中もDOMを保持するフラグ
   // Flag to keep the DOM during the close animation
   const [shouldRender, setShouldRender] = useState(isOpen);
+  // DOMの準備と位置補正が済んでから入場アニメーションを始める
+  // Start the entry animation only after the DOM and position are ready
+  const [isEntryReady, setIsEntryReady] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   // モーダルを閉じた後にフォーカスを戻す要素のref
   // Ref to the element that should receive focus after the modal closes
@@ -82,7 +109,7 @@ export function DraggableModal({
 
   // 閉じるアニメーションが完了するまでDOMを保持する
   // Keep the DOM until the close animation completes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       return undefined;
@@ -90,6 +117,7 @@ export function DraggableModal({
 
     const timer = window.setTimeout(() => {
       setShouldRender(false);
+      setIsEntryReady(false);
     }, CLOSE_ANIMATION_MS);
 
     return () => {
@@ -101,17 +129,30 @@ export function DraggableModal({
   // Clamp position so the modal stays within the viewport
   const clampPosition = useCallback((nextPosition: { x: number; y: number }) => {
     const modal = modalRef.current;
-    const modalWidth = modal?.offsetWidth || 360;
-    const modalHeight = modal?.offsetHeight || 520;
-    const margin = 12;
-    const maxX = Math.max(margin, window.innerWidth - modalWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - modalHeight - margin);
-
-    return {
-      x: Math.min(Math.max(nextPosition.x, margin), maxX),
-      y: Math.min(Math.max(nextPosition.y, margin), maxY),
-    };
+    return clampModalPosition(
+      nextPosition,
+      { width: modal?.offsetWidth || 360, height: modal?.offsetHeight || 520 },
+      getViewportBounds(),
+    );
   }, []);
+
+  // 開くときは、指定された固定要素（チャコボタンなど）との重なりも避ける
+  // On open, also avoid overlapping a specified fixed element such as the Chaco launcher
+  const resolveOpenPosition = useCallback((nextPosition: Position) => {
+    const modal = modalRef.current;
+    const viewport = getViewportBounds();
+    const avoidedElement = avoidElementSelector && viewport.width >= avoidElementMinViewportWidth
+      ? document.querySelector<HTMLElement>(avoidElementSelector)
+      : null;
+    const avoidedRect = avoidedElement?.getBoundingClientRect();
+
+    return positionModalAwayFromRect(
+      nextPosition,
+      { width: modal?.offsetWidth || 360, height: modal?.offsetHeight || 520 },
+      viewport,
+      avoidedRect,
+    );
+  }, [avoidElementMinViewportWidth, avoidElementSelector]);
 
   // マウスドラッグ開始ハンドラー（閉じるボタンクリックは除外）
   // Mouse drag start handler (excluding close button clicks)
@@ -194,16 +235,30 @@ export function DraggableModal({
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // 初回描画前に位置を確定し、非表示の準備フレーム後にアニメーションを開始する
+  // Resolve position before paint, then animate after a hidden preparation frame
+  useLayoutEffect(() => {
+    if (!shouldRender || !isOpen) return undefined;
+
+    setPosition((current) => keepPositionIfUnchanged(current, resolveOpenPosition(current)));
+    let animationFrame = window.requestAnimationFrame(() => {
+      animationFrame = window.requestAnimationFrame(() => {
+        setIsEntryReady(true);
+      });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isOpen, resolveOpenPosition, shouldRender]);
+
   // ウィンドウリサイズとVisual Viewport変化時にモーダルをビューポート内に収める
   // Keep the modal within the viewport on window resize and Visual Viewport changes
   useEffect(() => {
-    if (!shouldRender) return undefined;
+    if (!shouldRender || !isOpen) return undefined;
 
     const keepModalInViewport = () => {
-      setPosition((current) => clampPosition(current));
+      setPosition((current) => keepPositionIfUnchanged(current, resolveOpenPosition(current)));
     };
 
-    keepModalInViewport();
     window.addEventListener("resize", keepModalInViewport);
     window.visualViewport?.addEventListener("resize", keepModalInViewport);
     window.visualViewport?.addEventListener("scroll", keepModalInViewport);
@@ -213,30 +268,37 @@ export function DraggableModal({
       window.visualViewport?.removeEventListener("resize", keepModalInViewport);
       window.visualViewport?.removeEventListener("scroll", keepModalInViewport);
     };
-  }, [shouldRender, clampPosition]);
+  }, [isOpen, shouldRender, resolveOpenPosition]);
 
   // モーダルが開いたとき、最初のフォーカス可能な要素にフォーカスを移す
   // Move focus to the first focusable element when the modal opens
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || !isEntryReady) return undefined;
 
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
     const timer = window.setTimeout(() => {
-      const requestedTarget = initialFocusSelector
+      let requestedTarget = initialFocusSelector
         ? modalRef.current?.querySelector<HTMLElement>(initialFocusSelector)
         : null;
+      if (
+        avoidTextInputFocusOnTouch
+        && isTouchViewport()
+        && (requestedTarget instanceof HTMLInputElement || requestedTarget instanceof HTMLTextAreaElement)
+      ) {
+        requestedTarget = null;
+      }
       const focusTarget = requestedTarget ?? modalRef.current?.querySelector<HTMLElement>(
         "input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])"
       );
-      focusTarget?.focus();
+      focusTarget?.focus({ preventScroll: true });
     }, 0);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [initialFocusSelector, isOpen]);
+  }, [avoidTextInputFocusOnTouch, initialFocusSelector, isEntryReady, isOpen]);
 
   // モーダルが閉じたとき、フォーカスを元の要素に戻す
   // Return focus to the previously focused element when the modal closes
@@ -269,13 +331,18 @@ export function DraggableModal({
   // Remove from DOM after close animation completes
   if (!shouldRender) return null;
 
+  const animationClass = isOpen
+    ? isEntryReady ? "is-open" : "is-preparing"
+    : "is-closing";
+
   return (
     <div
       ref={modalRef}
-      className={`ai-agent-modal global-ai-agent-modal ${isOpen ? "is-open" : "is-closing"}`}
+      className={`ai-agent-modal global-ai-agent-modal ${animationClass}`}
       role="dialog"
       aria-modal="false"
       aria-label={title || fallbackTitle}
+      aria-hidden={!isOpen || !isEntryReady ? true : undefined}
       style={{
         position: "fixed",
         left: `${position.x}px`,
