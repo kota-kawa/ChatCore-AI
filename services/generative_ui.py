@@ -13,12 +13,14 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from services.generative_ui_escaping import repair_over_escaped_sources
 from services.generative_ui_intent import (
     inject_generative_ui_mode_instruction,
     is_explicit_generative_ui_opt_out,
 )
 from services.generative_ui_javascript import (
     javascript_structure_error,
+    repair_code_homoglyphs,
     unsupported_library_references,
 )
 from services.generative_ui_repair import (
@@ -69,11 +71,6 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-ARTIFACT_BLOCK_RE = re.compile(
-    r"```chatcore-artifact(?:\s+json)?\s*"
-    r"(?P<json>\{[\s\S]*?\})\s*```",
-    re.IGNORECASE,
-)
 ARTIFACT_OPEN_FENCE_RE = re.compile(
     r"```chatcore-artifact(?:\s+json)?[^\S\n]*\n?",
     re.IGNORECASE,
@@ -184,6 +181,21 @@ _NAV_ATTR_RE = re.compile(
     r"\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+)",
     re.IGNORECASE,
 )
+_APP_ROOT_RE = re.compile(r"""\bid\s*=\s*(?:"app"|'app'|app\b)""", re.IGNORECASE)
+# JSがDOMを生成しているかの判定。生成UIでは、これが最も一般的で正しい作りになる。
+# Whether the JavaScript builds the DOM itself, which is the most common and correct shape here.
+_JS_RENDERS_DOM_RE = re.compile(
+    r"\b(?:innerHTML|outerHTML|textContent|insertAdjacentHTML|appendChild|append|prepend|"
+    r"replaceChildren|createElement|createElementNS|createTextNode|getContext)\b",
+)
+_APP_LOOKUP_RE = re.compile(
+    r"""getElementById\s*\(\s*['"]app['"]|querySelector(?:All)?\s*\(\s*['"]#app['"]""",
+)
+_DOCUMENT_SCAFFOLD_RE = re.compile(
+    r"<!doctype[^>]*>|<\s*/?\s*(?:html|body)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HEAD_BLOCK_RE = re.compile(r"<\s*head\b[^>]*>[\s\S]*?<\s*/\s*head\s*>", re.IGNORECASE)
 _CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(?P<value>[^'\"\)]+)\1\s*\)", re.IGNORECASE)
 _CSS_IMPORT_RE = re.compile(r"@import\b[^;]*(?:;|$)", re.IGNORECASE)
 _ARTIFACT_SOURCE_KEY_RE = re.compile(
@@ -204,6 +216,12 @@ _WEB_SEARCH_SOURCES_BLOCK_RE = re.compile(
     r"(?:(?!</?details\b)[\s\S])*?</details>",
     re.IGNORECASE,
 )
+# JavaScript は大文字小文字を区別するため、この表は大小を区別して照合する。IGNORECASE を
+# 付けると `Function(` の規則が普通の `function(` に一致し、無名関数やIIFEを含む
+# Artifact がすべて拒否される。
+# JavaScript is case-sensitive, so this table matches case-sensitively. Under IGNORECASE the
+# `Function(` rule also matches an ordinary `function(`, which rejects every artifact that
+# contains an anonymous function or an IIFE.
 _JS_BANNED_TOKEN_RE = re.compile(
     r"(\bfetch\s*\(|\bXMLHttpRequest\s*\(|\bWebSocket\s*\(|\bEventSource\s*\(|"
     r"\bnavigator\s*\.\s*sendBeacon\b|\b(?:Worker|SharedWorker)\s*\(|"
@@ -222,7 +240,6 @@ _JS_BANNED_TOKEN_RE = re.compile(
     r"\bpostMessage\s*\(|"
     r"\b(?:window|document)\s*\.\s*location\b|"
     r"(?<![\w$])location\s*(?:=|\.|\[))",
-    re.IGNORECASE,
 )
 # 生成UIのバリデーションエラーを表すカスタム例外クラスです。
 # Custom exception class representing a validation error for generative UI.
@@ -482,13 +499,30 @@ def _coerce_height(value: Any) -> int | None:
 
 
 # HTML本文が空の場合に、JavaScriptからDOM操作ができるようデフォルトのコンテナ要素を挿入します。
-# Inject a default fallback container element if the HTML body is empty but JS refers to #app.
+# また、JSが #app を探しているのにマークアップに無い場合は、既存のマークアップごと包む。
+# 参照先が無いと getElementById は null を返し、最初の1行で例外になって画面が空になる。
+# Inject a default container when the markup is empty, and wrap existing markup when the
+# JavaScript looks up #app but the markup has no such element: the lookup would return null and
+# throw on the first line, leaving a blank frame.
 def _ensure_artifact_has_body(html: str, js: str) -> str:
-    if html.strip():
+    if not html.strip():
+        return '<div id="app" class="chatcore-generated-root"></div>'
+    if _APP_ROOT_RE.search(html) or not _APP_LOOKUP_RE.search(js):
         return html
-    if "getElementById('app')" in js or 'getElementById("app")' in js:
-        return '<div id="app"></div>'
-    return '<div id="app" class="chatcore-generated-root"></div>'
+    return f'<div id="app">{html}</div>'
+
+
+# モデルは html にドキュメント全体（doctype・html・head・body）を書くことがある。
+# Artifact の html は本文の断片として差し込まれるため、この外殻は表示されない要素として
+# 残るだけで意味がない。取り除いて中身だけを残す。
+# Models sometimes put a whole document (doctype/html/head/body) into html. An artifact's html is
+# inserted as a body fragment, so that shell only contributes invisible elements. Unwrap it.
+def _unwrap_document_scaffolding(html: str) -> str:
+    if not _DOCUMENT_SCAFFOLD_RE.search(html):
+        return html
+    unwrapped = _HEAD_BLOCK_RE.sub("", html)
+    unwrapped = _DOCUMENT_SCAFFOLD_RE.sub("", unwrapped)
+    return unwrapped.strip() or html
 
 
 # JSON文字列から、C言語風の1行コメント(//)およびブロックコメント(/* */)を除去します。
@@ -532,6 +566,51 @@ def _strip_json_comments(source: str) -> str:
             index += 2
             continue
         output.append(char)
+        index += 1
+    return "".join(output)
+
+
+# JSONとして無効なエスケープ（`\\`` や `\\x` など）を、リテラルのバックスラッシュへ直します。
+# JS のテンプレートリテラル内で `\\`` を書いたコードを JSON 文字列へ入れるときに、モデルは
+# 一段分のエスケープを落としがちで、その1文字のためにArtifact全体が落ちる。意図は
+# 「バックスラッシュそのもの」なので、二重化して復元する。
+# Repair escapes that are invalid in JSON (`\\`` , `\\x`, ...) into a literal backslash. Models drop
+# one level of escaping when code containing `` \\` `` inside a JS template literal goes into a JSON
+# string, and that single character rejects the whole artifact. The intent is a literal backslash,
+# so it is doubled back.
+_VALID_JSON_ESCAPE_CHARS = set('"\\/bfnrt')
+_JSON_UNICODE_ESCAPE_RE = re.compile(r"[0-9a-fA-F]{4}")
+
+
+def _escape_invalid_json_escapes(source: str) -> str:
+    output: list[str] = []
+    in_string = False
+    index = 0
+    while index < len(source):
+        char = source[index]
+        if not in_string:
+            output.append(char)
+            if char == '"':
+                in_string = True
+            index += 1
+            continue
+        if char == '"':
+            output.append(char)
+            in_string = False
+            index += 1
+            continue
+        if char != "\\":
+            output.append(char)
+            index += 1
+            continue
+        following = source[index + 1] if index + 1 < len(source) else ""
+        if following in _VALID_JSON_ESCAPE_CHARS or (
+            following == "u" and _JSON_UNICODE_ESCAPE_RE.fullmatch(source[index + 2 : index + 6])
+        ):
+            output.append(source[index : index + 2])
+            index += 2
+            continue
+        output.append("\\\\")
         index += 1
     return "".join(output)
 
@@ -594,11 +673,25 @@ def _escape_json_string_newlines(source: str) -> str:
 def _normalize_jsonish_source(source: str) -> str:
     return _remove_trailing_json_commas(
         _strip_json_comments(
-            _escape_json_string_newlines(
-                _remove_json_line_continuations(source)
+            _escape_invalid_json_escapes(
+                _escape_json_string_newlines(
+                    _remove_json_line_continuations(source)
+                )
             )
         )
     )
+
+
+# 閉じ括弧のあとに余分なトークン（`}`、`"`、`</div>` など）を付けて終える出力がある。
+# オブジェクト自体は完全なので、先頭の1オブジェクトだけを読み、後続は捨てる。
+# Some outputs end with one stray token after the closing brace (`}`, `"`, `</div>`). The object
+# itself is complete, so read the first object and discard whatever follows.
+def _loads_leading_json_object(source: str, *, strict: bool = True) -> Any:
+    start = source.find("{")
+    if start < 0:
+        raise json.JSONDecodeError("no JSON object found", source, 0)
+    value, _ = json.JSONDecoder(strict=strict).raw_decode(source[start:])
+    return value
 
 
 # テキストをJSONオブジェクトとしてロードします。パース失敗時は正規化を施した上で再試行します。
@@ -607,12 +700,21 @@ def _loads_artifact_json(raw_json: str) -> Any:
     try:
         return json.loads(raw_json)
     except json.JSONDecodeError:
-        # strict=False は文字列内の生の制御文字（タブ等）を許容する。モデル出力では
-        # コード断片が未エスケープのまま混ざることがあるため、リトライ側だけ緩める。
-        # strict=False tolerates raw control characters (tabs etc.) inside strings.
-        # Model outputs sometimes embed unescaped code fragments, so only the retry
-        # path is relaxed.
-        return json.loads(_normalize_jsonish_source(raw_json), strict=False)
+        pass
+    try:
+        return _loads_leading_json_object(raw_json)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # strict=False は文字列内の生の制御文字（タブ等）を許容する。モデル出力では
+    # コード断片が未エスケープのまま混ざることがあるため、リトライ側だけ緩める。
+    # strict=False tolerates raw control characters (tabs etc.) inside strings.
+    # Model outputs sometimes embed unescaped code fragments, so only the retry
+    # path is relaxed.
+    normalized = _normalize_jsonish_source(raw_json)
+    try:
+        return json.loads(normalized, strict=False)
+    except json.JSONDecodeError:
+        return _loads_leading_json_object(normalized, strict=False)
 
 
 # 2つの文字列スパンが重複しているかどうかを判定します。
@@ -867,40 +969,42 @@ def _repair_truncated_json(source: str) -> str | None:
     return None
 
 
-# 途中で途切れて閉じられていないアーティファクトブロックを検出し、復元を試みます。
-# Detect and attempt to restore unclosed artifact code blocks.
-def _extract_truncated_artifact_candidates(
+# artifact フェンス1つを、開きフェンスから読んで候補にします。
+# Read one artifact fence, from its opening fence, into a candidate.
+def _artifact_fence_candidate(
     text: str,
-    occupied_spans: list[tuple[int, int]],
-) -> list[_ArtifactCandidate]:
-    # 閉じフェンスが無いartifactブロック（出力打ち切りや ``` 抜け）を検出する。
-    # 復元できれば部分的なUIを描画し、できなくてもspanを記録して壊れたJSONが
-    # fallback UIにそのまま流れ込むのを防ぐ。
-    # Detect artifact fences that were never closed (truncated output or a missing
-    # ```). Recover a partial UI when possible; otherwise still record the span so
-    # the broken JSON is stripped from the visible text instead of being dumped.
-    candidates: list[_ArtifactCandidate] = []
-    for match in ARTIFACT_OPEN_FENCE_RE.finditer(text):
-        fence_start = match.start()
-        content_start = match.end()
-        if _span_overlaps_any((fence_start, content_start), occupied_spans):
-            continue
-        if text.find("```", content_start) != -1:
-            # A closing fence exists; the standard extractors handle this block.
-            continue
-        brace_start = text.find("{", content_start)
-        if brace_start == -1:
-            continue
-        balanced_end = _find_balanced_object_end(text, brace_start)
-        if balanced_end is not None:
-            raw_json = text[brace_start:balanced_end]
-            span = (fence_start, balanced_end)
-        else:
-            repaired = _repair_truncated_json(text[brace_start:])
-            raw_json = repaired if repaired is not None else ""
-            span = (fence_start, len(text))
-        candidates.append(_ArtifactCandidate(raw_json=raw_json, span=span))
-    return candidates
+    fence_start: int,
+    content_start: int,
+    *,
+    recover_truncated: bool,
+) -> _ArtifactCandidate | None:
+    """Read one fenced artifact block by parsing its JSON object, not by matching its end.
+
+    閉じ括弧のあとに `}` や `</div>` を1つ余分に書いて終える出力があり、ブロックの終端を
+    正規表現で当てにすると、そこで丸ごと取りこぼす。開きフェンスから最初の `{` を探し、
+    対応する閉じ括弧までをオブジェクトとして読み、残りは表示から外すだけにする。
+    Some outputs end with one stray `}` or `</div>` after the closing brace, and matching the
+    block's end with a pattern loses the whole artifact there. Find the first `{` after the
+    opening fence, read through its matching brace, and merely hide whatever trails it.
+    """
+    closing_fence = text.find("```", content_start)
+    block_end = closing_fence + 3 if closing_fence != -1 else len(text)
+    limit = closing_fence if closing_fence != -1 else len(text)
+    brace_start = text.find("{", content_start)
+    if brace_start == -1 or brace_start >= limit:
+        return None
+
+    balanced_end = _find_balanced_object_end(text, brace_start)
+    if balanced_end is not None and balanced_end <= limit:
+        return _ArtifactCandidate(raw_json=text[brace_start:balanced_end], span=(fence_start, block_end))
+    if not recover_truncated:
+        return None
+    # 出力打ち切りや閉じフェンス抜け。復元できなくてもspanは記録し、壊れたJSONが本文へ
+    # そのまま流れ込むのを防ぐ。
+    # Truncated output or a missing closing fence. The span is recorded even when recovery
+    # fails, so the broken JSON is stripped from the prose instead of being dumped into it.
+    repaired = _repair_truncated_json(text[brace_start:limit])
+    return _ArtifactCandidate(raw_json=repaired or "", span=(fence_start, block_end))
 
 
 # 応答テキスト全体から、生成UIアーティファクトの候補スパンをすべて抽出してソートしたリストを返します。
@@ -914,8 +1018,17 @@ def _extract_artifact_candidates(
     candidates: list[_ArtifactCandidate] = []
     occupied_spans: list[tuple[int, int]] = []
 
-    for match in ARTIFACT_BLOCK_RE.finditer(text):
-        candidate = _ArtifactCandidate(raw_json=match.group("json"), span=match.span())
+    for match in ARTIFACT_OPEN_FENCE_RE.finditer(text):
+        if _span_overlaps_any(match.span(), occupied_spans):
+            continue
+        candidate = _artifact_fence_candidate(
+            text,
+            match.start(),
+            match.end(),
+            recover_truncated=recover_truncated,
+        )
+        if candidate is None:
+            continue
         candidates.append(candidate)
         occupied_spans.append(candidate.span)
 
@@ -937,11 +1050,6 @@ def _extract_artifact_candidates(
         source_candidates = _extract_source_code_artifact_candidates(text, occupied_spans)
         candidates.extend(source_candidates)
         occupied_spans.extend(candidate.span for candidate in source_candidates)
-
-    if recover_truncated:
-        truncated_candidates = _extract_truncated_artifact_candidates(text, occupied_spans)
-        candidates.extend(truncated_candidates)
-        occupied_spans.extend(candidate.span for candidate in truncated_candidates)
 
     if recover_explicit_output_variants:
         fenced_spans = [match.span() for match in FENCED_BLOCK_RE.finditer(text)]
@@ -1261,7 +1369,11 @@ def _prepare_artifact_payload(payload: Any) -> tuple[Any, list[str]]:
         css = "\n".join(part for part in [css, *embedded_css] if part)
     if embedded_js:
         js = "\n".join(part for part in [js, *embedded_js] if part)
-    js = _normalize_three_module_imports(js)
+    html, css, js, repaired_escaping = repair_over_escaped_sources(html, css, js)
+    if repaired_escaping:
+        logger.info("Recovered a double-escaped generated UI payload before validation.")
+    js = repair_code_homoglyphs(_normalize_three_module_imports(js))
+    html = _unwrap_document_scaffolding(html)
     html = _ensure_artifact_has_body(html, js)
 
     title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
@@ -1676,8 +1788,8 @@ def requested_artifact_quality_issues(
     visible_text = re.sub(r"<[^>]+>", " ", html)
     visible_text = re.sub(r"\s+", " ", unescape_html(visible_text)).strip()
 
-    if "id=\"app\"" not in html and "id='app'" not in html:
-        issues.append("html is missing the app root")
+    if not _APP_ROOT_RE.search(html) and _APP_LOOKUP_RE.search(js):
+        issues.append("html is missing the app root the JavaScript looks up")
 
     if mode == "3D":
         libraries = artifact.get("libraries")
@@ -1694,14 +1806,19 @@ def requested_artifact_quality_issues(
                 issues.append(f"3D artifact is missing a {label}")
         if len(js) < 500:
             issues.append("3D implementation is too small to be a polished scene")
-        if len(css) < 80:
-            issues.append("3D presentation styling is too sparse")
     else:
-        tag_count = len(re.findall(r"<[A-Za-z][^>]*>", html))
-        if tag_count < 4 or len(visible_text) < 12:
-            issues.append("2D initial content is too sparse")
-        if len(css) < 160:
-            issues.append("2D presentation styling is too sparse")
+        # JS が DOM を組み立てる作りでは、html が `<div id="app">` だけなのが正しい姿で、
+        # 静的マークアップの薄さは欠陥ではない。中身を静的HTMLに置いた作りのときだけ、
+        # 初期表示の充実とスタイルの量を求める。
+        # When the JavaScript builds the DOM, an html of just `<div id="app">` is the correct
+        # shape and thin static markup is not a defect. Demand rich initial markup and styling
+        # only from artifacts that put their content in the static HTML instead.
+        if not _JS_RENDERS_DOM_RE.search(js):
+            tag_count = len(re.findall(r"<[A-Za-z][^>]*>", html))
+            if tag_count < 4 or len(visible_text) < 12:
+                issues.append("2D initial content is too sparse")
+            if len(css) < 160:
+                issues.append("2D presentation styling is too sparse")
         if len(html) + len(css) + len(js) < 500:
             issues.append("2D implementation is too small to be a polished UI")
     return issues
