@@ -43,7 +43,20 @@ test("Chaco modal entry animation stays on compositor-friendly properties", () =
 
   assert.match(chacoSurface, /backdrop-filter:\s*none/);
   assert.match(chacoSurface, /-webkit-backdrop-filter:\s*none/);
+  assert.match(chacoSurface, /contain:\s*layout paint/);
   assert.match(chacoSurface, /will-change:\s*transform,\s*opacity/);
+  assert.match(chacoSurface, /animation:\s*none/);
+  assert.match(
+    globalCss,
+    /\.global-ai-agent-modal\.global-ai-agent-modal\.is-preparing\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?transform:\s*translate3d\(/,
+  );
+  assert.match(
+    globalCss,
+    /\.global-ai-agent-modal\.global-ai-agent-modal\.is-open\s*\{\s*animation:\s*chacoAgentDeploy/,
+  );
   assert.match(chacoAnimations, /transform:\s*translate3d\(/);
-  assert.doesNotMatch(chacoAnimations, /clip-path|filter:/);
+  assert.doesNotMatch(
+    chacoAnimations,
+    /(?:top|left|right|bottom|width|height|clip-path|filter|box-shadow|background-position)\s*:/,
+  );
 });
