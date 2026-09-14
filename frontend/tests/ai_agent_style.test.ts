@@ -32,3 +32,18 @@ test("prompt-share styles leave the shared support agent appearance to global CS
   assert.match(globalCss, /\.global-ai-agent-button\s*\{/);
   assert.match(globalCss, /\.global-ai-agent-modal\.global-ai-agent-modal\s*\{/);
 });
+
+test("Chaco modal entry animation stays on compositor-friendly properties", () => {
+  const chacoSurface = Array.from(
+    globalCss.matchAll(/\.global-ai-agent-modal\.global-ai-agent-modal\s*\{[\s\S]*?\n\}/g),
+  ).find(([block]) => block.includes("--chaco-ink"))?.[0] ?? "";
+  const animationStart = globalCss.indexOf("@keyframes chacoAgentDeploy");
+  const animationEnd = globalCss.indexOf("/* Dark mode keeps Chaco's pastel accents", animationStart);
+  const chacoAnimations = globalCss.slice(animationStart, animationEnd);
+
+  assert.match(chacoSurface, /backdrop-filter:\s*none/);
+  assert.match(chacoSurface, /-webkit-backdrop-filter:\s*none/);
+  assert.match(chacoSurface, /will-change:\s*transform,\s*opacity/);
+  assert.match(chacoAnimations, /transform:\s*translate3d\(/);
+  assert.doesNotMatch(chacoAnimations, /clip-path|filter:/);
+});
