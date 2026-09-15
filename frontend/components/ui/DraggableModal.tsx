@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type CSSProperties, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useVisualViewportHeight } from "../../hooks/use_visual_viewport_height";
 import {
   clampModalPosition,
   keepPositionIfUnchanged,
@@ -83,6 +84,10 @@ export function DraggableModal({
   // DOMの準備と位置補正が済んでから入場アニメーションを始める
   // Start the entry animation only after the DOM and position are ready
   const [isEntryReady, setIsEntryReady] = useState(false);
+  // 画面上キーボードで縮む表示領域の高さ。モーダルの高さをここに収めて入力欄が隠れないようにする
+  // Height of the visual viewport, which the on-screen keyboard shrinks; the modal sizes itself to
+  // fit inside it so its input never ends up behind the keyboard
+  const viewportHeight = useVisualViewportHeight(shouldRender && isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
   // モーダルを閉じた後にフォーカスを戻す要素のref
   // Ref to the element that should receive focus after the modal closes
@@ -250,6 +255,13 @@ export function DraggableModal({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [isOpen, resolveOpenPosition, shouldRender]);
 
+  // 表示領域の高さが変わるとモーダルの高さも変わるため、新しい寸法で位置を取り直す
+  // A change in viewport height resizes the modal, so re-resolve the position with the new size
+  useLayoutEffect(() => {
+    if (!shouldRender || !isOpen || viewportHeight === null) return;
+    setPosition((current) => keepPositionIfUnchanged(current, resolveOpenPosition(current)));
+  }, [isOpen, resolveOpenPosition, shouldRender, viewportHeight]);
+
   // ウィンドウリサイズとVisual Viewport変化時にモーダルをビューポート内に収める
   // Keep the modal within the viewport on window resize and Visual Viewport changes
   useEffect(() => {
@@ -349,6 +361,11 @@ export function DraggableModal({
         top: `${position.y}px`,
         zIndex: 1000,
         cursor: isDragging ? "grabbing" : "auto",
+        // 高さの上限はCSS側が決める。ここは実測した表示領域の高さを渡すだけ
+        // CSS owns the height rules; this only hands it the measured viewport height
+        ...(viewportHeight !== null
+          ? { "--draggable-modal-viewport-height": `${viewportHeight}px` } as CSSProperties
+          : {}),
       }}
     >
       {/* ドラッグ可能なヘッダー / Draggable header */}

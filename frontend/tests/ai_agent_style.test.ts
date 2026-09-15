@@ -60,3 +60,37 @@ test("Chaco modal entry animation stays on compositor-friendly properties", () =
     /(?:top|left|right|bottom|width|height|clip-path|filter|box-shadow|background-position)\s*:/,
   );
 });
+
+// キーボードが出ている間も入力欄が見えるように、モーダルの高さは実測した表示領域に従う。
+// The modal's height follows the measured visual viewport so its input stays visible with the
+// on-screen keyboard open.
+test("Chaco modal sizes itself from the visual viewport, not from 100vh", () => {
+  const surface = removeCssComments(globalCss).match(
+    /\.global-ai-agent-modal\.global-ai-agent-modal\s*\{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(
+    surface,
+    /--agent-modal-available-height:\s*calc\(var\(--draggable-modal-viewport-height,\s*100vh\)\s*-\s*24px\)/,
+    "the available height must come from the measured viewport with a 100vh fallback",
+  );
+
+  // 下限も表示領域に収める。素の px の下限はキーボードの上にはみ出す原因になる。
+  // The floor is capped by the same value; a plain px floor is what pushed the input off-screen.
+  for (const [label, block] of [
+    ["desktop", surface],
+    ["mobile", removeCssComments(globalCss)
+      .slice(removeCssComments(globalCss).indexOf("@media (max-width: 640px)"))
+      .match(/\.global-ai-agent-modal\.global-ai-agent-modal\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? ""],
+  ] as const) {
+    assert.match(block, /height:\s*min\(\d+px,\s*var\(--agent-modal-available-height\)\)/, label);
+    assert.match(block, /min-height:\s*min\(\d+px,\s*var\(--agent-modal-available-height\)\)/, label);
+  }
+
+  // モーダル側に値を渡すのは DraggableModal の責務。
+  // Handing the measured height to the modal is DraggableModal's job.
+  const draggableModal = readFileSync(
+    new URL("../components/ui/DraggableModal.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(draggableModal, /"--draggable-modal-viewport-height": `\$\{viewportHeight\}px`/);
+});
