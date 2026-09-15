@@ -40,6 +40,9 @@ import "../public/prompt_share/static/css/pages/prompt_share.dark-mode.css";
 import "../public/prompt_share/static/css/pages/prompt_manage.css";
 import "../public/static/css/pages/user_settings/user_settings.css";
 import "../public/static/css/pages/chat/shared_chat.css";
+// タッチ端末の入力欄フォーカス時ズームを防ぐガード。上書きのため必ず CSS import の最後に置く。
+// Touch-device focus-zoom guard; it must stay last so it wins the cascade.
+import "../public/static/css/base/form_zoom_guard.css";
 // 単一ページからのみ到達し、残りのグローバル束とセレクタが重ならないページCSSは
 // _app に載せず、所有ページの next/head から <link> で読み込む（STYLING_STRATEGY.md 参照）。
 // oauth_authorize.css / shared_memo.css / shared_prompt.css がこれに該当する。

@@ -77,7 +77,13 @@ const RUNTIME_STATUS_DELAY_MS = 500;
 const RUNTIME_STATUS_TIMEOUT_MS = 8000;
 
 // サンドボックス内に適用するベースCSSリセット
-// Base CSS reset applied inside the sandbox
+// iframe は別ドキュメントなので _app.tsx の base/form_zoom_guard.css は届かない。生成UIが
+// 16px 未満の入力欄を出すとタップで親ページごとズームするため、同じ下限をここにも持たせる。
+// このリセットはアーティファクトのCSSより前に連結されるので !important が要る。
+// Base CSS reset applied inside the sandbox. The iframe is a separate document, so
+// base/form_zoom_guard.css from _app.tsx never reaches it; a generated control under 16px would
+// zoom the whole parent page on tap, so the same floor is repeated here. This reset is
+// concatenated before the artifact's own CSS, which is why it needs !important.
 const BASE_SANDBOX_CSS = `
 html,body{margin:0;min-height:100%;background:transparent;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere;}
 *{box-sizing:border-box;}
@@ -86,6 +92,7 @@ table{max-width:100%;border-collapse:collapse;}
 pre{max-width:100%;overflow:auto;}
 button,input,select,textarea{font:inherit;}
 button{cursor:pointer;}
+@media (pointer:coarse){input:not([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="submit"],[type="button"],[type="reset"],[type="file"]),textarea,select{font-size:max(16px,1em)!important;}}
 a{color:inherit;}
 #chatcore-artifact-root{display:block;min-height:160px;width:100%;overflow:auto;}
 .chatcore-empty-artifact{min-height:180px;margin:0;padding:18px;border:1px solid #d1d5db;border-radius:8px;background:#f8fafc;color:#111827;display:flex;flex-direction:column;justify-content:center;gap:8px;}

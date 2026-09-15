@@ -10,6 +10,9 @@
 
 html {
   overflow-x: hidden;
+  /* iOS の横向き時の自動文字拡大を抑止する / Disable iOS' automatic text inflation in landscape */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
