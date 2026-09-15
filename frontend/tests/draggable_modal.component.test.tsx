@@ -152,6 +152,50 @@ describe("DraggableModal", () => {
     expect(dialog).toHaveClass("is-open");
   });
 
+  it("shrinks to the visual viewport and pulls itself above the on-screen keyboard", () => {
+    // jsdom には visualViewport が無いので、キーボードで縮む表示領域を EventTarget で再現する
+    // jsdom has no visualViewport, so stand in an EventTarget that shrinks like the real one
+    const visualViewport = Object.assign(new EventTarget(), {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 390,
+      height: 740,
+    });
+    vi.stubGlobal("visualViewport", visualViewport);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(740);
+
+    render(
+      <DraggableModal isOpen onClose={vi.fn()} title="キーボード回避" initialX={12} initialY={100}>
+        <textarea aria-label="依頼内容" />
+      </DraggableModal>
+    );
+    act(() => vi.advanceTimersByTime(32));
+
+    const dialog = document.querySelector<HTMLElement>(".global-ai-agent-modal");
+    expect(dialog?.style.getPropertyValue("--draggable-modal-viewport-height")).toBe("740px");
+    expect(dialog).toHaveStyle({ top: "100px" });
+
+    // キーボードが開く / The keyboard opens
+    act(() => {
+      visualViewport.height = 410;
+      visualViewport.dispatchEvent(new Event("resize"));
+      vi.advanceTimersByTime(32);
+    });
+
+    expect(dialog?.style.getPropertyValue("--draggable-modal-viewport-height")).toBe("410px");
+    expect(dialog).toHaveStyle({ top: "12px" });
+
+    // キーボードが閉じたら元の高さへ戻す / Restore the full height once the keyboard closes
+    act(() => {
+      visualViewport.height = 740;
+      visualViewport.dispatchEvent(new Event("resize"));
+      vi.advanceTimersByTime(32);
+    });
+
+    expect(dialog?.style.getPropertyValue("--draggable-modal-viewport-height")).toBe("740px");
+  });
+
   it("moves an overlapping desktop position away from the launcher before entry", () => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1366);
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);

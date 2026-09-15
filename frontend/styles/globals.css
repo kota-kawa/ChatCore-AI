@@ -634,9 +634,18 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 .global-ai-agent-modal.global-ai-agent-modal {
+  /* 画面上キーボードが出ると表示領域は縮むが 100vh は縮まない。DraggableModal が実測した
+     表示領域の高さを --draggable-modal-viewport-height で渡してくるので、高さの上限も
+     下限もその中に収める。下限を素の px で書くと、キーボードで狭くなった表示領域より
+     モーダルが高くなり、下端の入力欄がキーボードに隠れてしまう。
+     The on-screen keyboard shrinks the visual viewport while 100vh stays put, so both the cap
+     and the floor come from --draggable-modal-viewport-height, the height DraggableModal
+     measures. A plain px floor would let the modal outgrow the shrunken viewport and push its
+     input area behind the keyboard. */
+  --agent-modal-available-height: calc(var(--draggable-modal-viewport-height, 100vh) - 24px);
   width: clamp(320px, calc(100vw - 24px), 392px);
-  height: min(620px, calc(100vh - 24px));
-  min-height: 420px;
+  height: min(620px, var(--agent-modal-available-height));
+  min-height: min(420px, var(--agent-modal-available-height));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1989,8 +1998,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 
   .global-ai-agent-modal.global-ai-agent-modal {
     width: calc(100vw - 24px);
-    height: min(560px, calc(100vh - 24px));
-    min-height: 390px;
+    height: min(560px, var(--agent-modal-available-height));
+    min-height: min(390px, var(--agent-modal-available-height));
   }
 
   .global-ai-agent-modal .mini-chat-messages {
