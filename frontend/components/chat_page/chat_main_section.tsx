@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
 import { ChatRoomSearch } from "./chat_room_search";
 import { InlineLoading } from "../ui/inline_loading";
@@ -16,6 +16,7 @@ import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_heigh
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
 
 // チャット画面の中央ペイン全体（サイドバー・メッセージリスト・入力欄）を管理するコンポーネント。
 // Component managing the entire chat center pane: sidebar, message list, and input area.
@@ -222,6 +223,18 @@ function ChatMainSectionComponent() {
 
   // サイドバーをスクロールしたとき、下端に近づいたら追加のチャットルームを読み込む。
   // Load more chat rooms when the sidebar is scrolled near the bottom (within 160px).
+  // Mac の IME は変換確定の Enter を送信キーとして通してしまうため、composition の状態で弾く。
+  // macOS IMEs let the Enter that confirms a conversion through as a plain send key, so the
+  // composition state has to gate it.
+  const { compositionHandlers: chatInputCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
+  const handleChatInputKeyDownWithIme = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (isComposingKeyEvent(event)) return;
+      handleChatInputKeyDown(event);
+    },
+    [handleChatInputKeyDown, isComposingKeyEvent],
+  );
+
   const handleSidebarScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
       if (!chatRoomsHasMore || isLoadingMoreChatRooms) return;
@@ -858,7 +871,8 @@ function ChatMainSectionComponent() {
                   adjustChatInputHeight(event.currentTarget);
                 }}
                 onFocus={handleChatInputFocus}
-                onKeyDown={handleChatInputKeyDown}
+                {...chatInputCompositionHandlers}
+                onKeyDown={handleChatInputKeyDownWithIme}
               ></textarea>
               {/* 生成中は停止ボタン、それ以外は送信ボタンとして機能する。 */}
               {/* Acts as a stop button while generating, and a send button otherwise. */}

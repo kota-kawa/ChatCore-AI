@@ -27,6 +27,7 @@ import {
   useHomePageUiContext,
 } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
 
 type TaskCardProps = {
   task: NormalizedTask;
@@ -409,17 +410,18 @@ function SetupSectionComponent() {
 
   // Enterキーで送信、IME変換中および Shift+Enterは無視する
   // Submit on Enter but skip during IME composition or when Shift is held (newline intent)
+  const { compositionHandlers: setupInfoCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
   const handleSetupInfoKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.nativeEvent.isComposing || event.key === "Process") return;
       if (event.key !== "Enter" || event.shiftKey) return;
+      if (isComposingKeyEvent(event)) return;
 
       event.preventDefault();
       if (!canSendSetupMessage) return;
       finishPointerDrag();
       void handleSetupSendMessage();
     },
-    [canSendSetupMessage, finishPointerDrag, handleSetupSendMessage],
+    [canSendSetupMessage, finishPointerDrag, handleSetupSendMessage, isComposingKeyEvent],
   );
 
   // モデルトリガーボタンでの矢印キー操作をドロップダウンナビゲーションにマップする
@@ -579,6 +581,7 @@ function SetupSectionComponent() {
                 onChange={(event) => {
                   setSetupInfo(event.target.value);
                 }}
+                {...setupInfoCompositionHandlers}
                 onKeyDown={handleSetupInfoKeyDown}
               ></textarea>
 

@@ -4,6 +4,7 @@ import { useHomePageProjectContext } from "../../../contexts/chat_page/home_page
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../../lib/ui/ime_submit_guard";
 
 const MAX_PROJECT_NAME_LENGTH = 255;
 const MAX_PROJECT_INSTRUCTIONS_LENGTH = 20000;
@@ -21,6 +22,7 @@ export function NewProjectModal() {
     closeNewProjectModal,
   } = useHomePageProjectContext();
 
+  const { compositionHandlers: nameCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLInputElement>();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
 
@@ -77,11 +79,12 @@ export function NewProjectModal() {
               maxLength={MAX_PROJECT_NAME_LENGTH}
               value={name}
               onChange={(event) => setName(event.target.value)}
+              {...nameCompositionHandlers}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  handleSubmit();
-                }
+                if (event.key !== "Enter") return;
+                if (isComposingKeyEvent(event)) return;
+                event.preventDefault();
+                handleSubmit();
               }}
             />
           </label>
