@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useImeSubmitGuard } from "../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../hooks/use_ime_submit_guard";
 
 // ガードを実DOMイベントで検証するための最小コンポーネント
 // Minimal component that exercises the guard through real DOM events
@@ -69,6 +69,18 @@ describe("useImeSubmitGuard", () => {
     fireEvent.compositionEnd(textarea, { data: "日本語" });
     fireEvent.keyDown(textarea, { key: "Enter", isComposing: false });
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // Android のソフトキーボードは英単語の入力でも送信キーの直前に compositionend を出す。
+  // ここまで猶予に含めると、英語入力の送信が丸ごと効かなくなる。
+  // Android soft keyboards emit compositionend right before the send key even for plain English
+  // words; covering that with the grace window would break sending on English input entirely.
+  it("ASCIIだけの確定（Androidの英単語入力）は送信を止めない", () => {
+    const { onSubmit, textarea } = setup();
+    fireEvent.compositionStart(textarea);
+    fireEvent.compositionEnd(textarea, { data: "hello" });
+    fireEvent.keyDown(textarea, { key: "Enter", isComposing: false });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it("変換確定から十分に間が空いたEnterは送信する", async () => {

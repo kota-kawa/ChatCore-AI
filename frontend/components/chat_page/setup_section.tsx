@@ -27,7 +27,7 @@ import {
   useHomePageUiContext,
 } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 type TaskCardProps = {
   task: NormalizedTask;

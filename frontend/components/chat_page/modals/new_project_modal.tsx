@@ -4,7 +4,7 @@ import { useHomePageProjectContext } from "../../../contexts/chat_page/home_page
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../../hooks/use_ime_submit_guard";
 
 const MAX_PROJECT_NAME_LENGTH = 255;
 const MAX_PROJECT_INSTRUCTIONS_LENGTH = 20000;

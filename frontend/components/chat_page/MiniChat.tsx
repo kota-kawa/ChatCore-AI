@@ -42,7 +42,7 @@ import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { CopyButton } from "../ui/copy_button";
 import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.png";
 

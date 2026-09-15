@@ -1,5 +1,10 @@
 import { getRuntimeLocale } from "../../lib/i18n/config";
 import {
+  isImeCompositionKeyEvent,
+  isWithinCompositionGrace,
+  shouldArmCompositionGrace,
+} from "../../lib/ui/ime_composition";
+import {
   buildButtonMarkup,
   buildDialogMarkup,
   buildPromptFieldMarkup,
@@ -397,6 +402,10 @@ class GlobalPromptModal {
   private readonly okLabelEl: HTMLElement;
   private readonly cancelLabelEl: HTMLElement;
   private readonly queue: PromptQueueItem[] = [];
+  // IME変換を確定した時刻。確定のEnterを入力確定と読み違えないための猶予に使う。
+  // When an IME conversion was committed, used as the grace window that keeps the confirming
+  // Enter from being read as "accept this value".
+  private compositionEndedAt = Number.NEGATIVE_INFINITY;
   private currentItem: PromptQueueItem | null = null;
   private isVisible = false;
   private previouslyFocusedElement: HTMLElement | null = null;
@@ -501,7 +510,15 @@ class GlobalPromptModal {
     this.closeBtn.addEventListener("click", () => this.finish(null));
     this.cancelBtn.addEventListener("click", () => this.finish(null));
     this.okBtn.addEventListener("click", () => this.finish(this.inputEl.value));
+    this.inputEl.addEventListener("compositionend", (event) => {
+      this.compositionEndedAt = shouldArmCompositionGrace(event.data) ? event.timeStamp : Number.NEGATIVE_INFINITY;
+    });
     document.addEventListener("keydown", this.handleKeyDown, true);
+  }
+
+  private isComposingKeyEvent(event: KeyboardEvent): boolean {
+    if (isImeCompositionKeyEvent(event)) return true;
+    return isWithinCompositionGrace(event.timeStamp, this.compositionEndedAt);
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent) => {
@@ -514,6 +531,11 @@ class GlobalPromptModal {
     }
 
     if (event.key === "Enter") {
+      // 日本語変換を確定するEnterで入力を確定させない。Mac では変換確定の keydown が
+      // isComposing なしで届くため、確定直後の猶予でも判定する。
+      // The Enter that confirms a Japanese conversion must not accept the value. On Mac that
+      // keydown arrives without isComposing, so the post-commit grace window is checked too.
+      if (this.isComposingKeyEvent(event)) return;
       event.preventDefault();
       this.finish(this.inputEl.value);
       return;

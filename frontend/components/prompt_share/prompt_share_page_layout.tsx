@@ -11,7 +11,7 @@ import type {
 } from "./prompt_share_page_types";
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import type { ImportActionState } from "../../hooks/use_import_action";
 import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";

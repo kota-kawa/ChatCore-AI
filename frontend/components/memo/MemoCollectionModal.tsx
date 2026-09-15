@@ -1,7 +1,7 @@
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import {
   useMemoPageListContext,
   useMemoPageModalsContext,

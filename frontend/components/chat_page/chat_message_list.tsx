@@ -30,7 +30,7 @@ import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 // SSR 環境では useLayoutEffect が警告を出すため、ブラウザ上でのみ useLayoutEffect を使う。
 // Use useLayoutEffect on the browser to avoid React SSR warnings.

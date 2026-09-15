@@ -111,6 +111,38 @@ describe("global alert & confirm modal", () => {
     vi.runOnlyPendingTimers();
   });
 
+  // 日本語の変換確定Enterでリネームが走ってしまう不具合の回帰テスト。Mac では変換確定の
+  // keydown が isComposing なしで届くため、compositionend 直後かどうかで判定する。
+  // Regression test for the rename that fired on the Enter confirming a Japanese conversion. On
+  // Mac that keydown arrives without isComposing, so the check leans on the preceding
+  // compositionend instead.
+  it("keeps the Enter that confirms an IME conversion from accepting the value", async () => {
+    const pending = showPromptModal("チャットルーム名", { defaultValue: "旧タイトル" });
+
+    const dialog = root(PROMPT_ROOT);
+    const input = dialog.querySelector<HTMLInputElement>('input[data-cc-prompt-input="true"]');
+    if (!input) throw new Error("prompt input is missing");
+
+    input.value = "新しい名前";
+    input.dispatchEvent(new CompositionEvent("compositionend", { data: "新しい名前", bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(dialog.classList.contains("is-visible")).toBe(true);
+
+    // 変換に属さない二度目のEnterは従来どおり確定させる。
+    // A second Enter that belongs to no conversion still accepts the value.
+    vi.advanceTimersByTime(200);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await expect(pending).resolves.toBe("新しい名前");
+    vi.runOnlyPendingTimers();
+  });
+
   it("resolves null when the prompt dialog is cancelled", async () => {
     const pending = showPromptModal("チャットルーム名", { defaultValue: "旧タイトル" });
     button(PROMPT_ROOT, 'data-cc-prompt-cancel="true"').click();

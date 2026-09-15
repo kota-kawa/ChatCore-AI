@@ -16,7 +16,7 @@ import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_heigh
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
-import { useImeSubmitGuard } from "../../lib/ui/ime_submit_guard";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 // チャット画面の中央ペイン全体（サイドバー・メッセージリスト・入力欄）を管理するコンポーネント。
 // Component managing the entire chat center pane: sidebar, message list, and input area.
@@ -179,6 +179,18 @@ function ChatMainSectionComponent() {
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
   const chatFooterRef = useChatFooterHeight<HTMLDivElement>();
 
+  // Mac の IME は変換確定の Enter を送信キーとして通してしまうため、composition の状態で弾く。
+  // macOS IMEs let the Enter that confirms a conversion through as a plain send key, so the
+  // composition state has to gate it.
+  const { compositionHandlers: chatInputCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
+  const handleChatInputKeyDownWithIme = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (isComposingKeyEvent(event)) return;
+      handleChatInputKeyDown(event);
+    },
+    [handleChatInputKeyDown, isComposingKeyEvent],
+  );
+
   // ファイル選択ダイアログ経由のファイル追加処理。選択後に input の値をリセットして
   // 同じファイルを再度選択できるようにする。
   // Handle files chosen via the file picker dialog; reset input value to allow re-selection.
@@ -223,18 +235,6 @@ function ChatMainSectionComponent() {
 
   // サイドバーをスクロールしたとき、下端に近づいたら追加のチャットルームを読み込む。
   // Load more chat rooms when the sidebar is scrolled near the bottom (within 160px).
-  // Mac の IME は変換確定の Enter を送信キーとして通してしまうため、composition の状態で弾く。
-  // macOS IMEs let the Enter that confirms a conversion through as a plain send key, so the
-  // composition state has to gate it.
-  const { compositionHandlers: chatInputCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
-  const handleChatInputKeyDownWithIme = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (isComposingKeyEvent(event)) return;
-      handleChatInputKeyDown(event);
-    },
-    [handleChatInputKeyDown, isComposingKeyEvent],
-  );
-
   const handleSidebarScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
       if (!chatRoomsHasMore || isLoadingMoreChatRooms) return;
