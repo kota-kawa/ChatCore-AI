@@ -69,3 +69,36 @@ test("a coloured memo paints the whole detail modal surface, not just a band", (
     "the thin colour band is redundant once the whole surface carries the colour",
   );
 });
+
+// メモエージェントは MiniChat の表示オプションを既定と違う形で使う。使ったオプションの分だけ
+// パネル側の CSS が必要で、無いと文言や補足が素のまま出て崩れる。
+// The memo agent renders MiniChat with non-default display options. Each option it turns on needs
+// a matching rule in the panel's CSS; without one the extra text renders unstyled and breaks out.
+test("the memo agent panel styles every MiniChat option it turns on", () => {
+  const agentPanel = memoDetailModal.slice(memoDetailModal.indexOf("memo-modal__agent-panel"));
+  const scope = "\\.memo-modal \\.memo-modal__agent-panel ";
+
+  // 文言つきの会話クリア / The clear control with its label
+  assert.match(agentPanel, /iconOnlyClearButton=\{false\}/);
+  const clearRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-clear-btn\\s*\\{([\\s\\S]*?)\\}`));
+  assert.ok(clearRule, "the labelled clear control must be styled");
+  assert.match(clearRule[1], /width:\s*auto/, "a fixed square would wrap the label out of the panel");
+  assert.match(clearRule[1], /white-space:\s*nowrap/);
+  assert.match(
+    memoCss,
+    new RegExp(`${scope}\\.mini-chat-clear-btn--icon-only\\s*\\{[\\s\\S]*?width:\\s*34px`),
+    "the icon-only variant must still collapse back to a square",
+  );
+
+  // 使用モデルの表示 / The model label
+  assert.match(agentPanel, /showModelLabel/);
+  const modelRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-model-label\\s*\\{([\\s\\S]*?)\\}`));
+  assert.ok(modelRule, "the model label must be styled as a caption, not as body text");
+  assert.match(modelRule[1], /font-size:\s*0\.7rem/);
+  assert.match(modelRule[1], /color:\s*var\(--modal-text-muted\)/);
+
+  // 会話上限の注意書きは MiniChat が常に出しうる / MiniChat can always show the context notice
+  const noticeRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-context-notice\\s*\\{([\\s\\S]*?)\\}`));
+  assert.ok(noticeRule, "the context notice must be styled");
+  assert.match(noticeRule[1], /background:\s*var\(--modal-surface-muted\)/);
+});

@@ -5325,6 +5325,39 @@ body.memo-page {
   overflow-wrap: anywhere;
 }
 
+/* 応答に使ったモデル名。MiniChat に showModelLabel を渡しているのはこのパネルだけなので、
+   ここで持たないと本文と同じ大きさで出てしまう。
+   The model that answered. This panel is the only caller passing showModelLabel, so without a
+   rule here the label renders at body size. */
+.memo-modal .memo-modal__agent-panel .mini-chat-model-label {
+  margin-top: 0.45rem;
+  color: var(--modal-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+/* 会話が上限に達したときの注意書き / Notice shown once the conversation hits its limit */
+.memo-modal .memo-modal__agent-panel .mini-chat-context-notice {
+  align-self: center;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: min(100%, 320px);
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--modal-surface-muted);
+  color: var(--modal-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-context-notice i {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--modal-accent);
+}
+
 .memo-modal .memo-modal__agent-panel .mini-chat-markdown {
   color: inherit;
   font-size: 0.86rem;
@@ -5589,6 +5622,32 @@ body.memo-page {
 .memo-modal .memo-modal__agent-panel .mini-chat-action-btn:hover:not(:disabled) {
   border-color: var(--modal-danger);
   color: var(--modal-danger);
+}
+
+/* 会話クリアは文言つきで出る（MemoDetailModal が iconOnlyClearButton={false} を渡す）。
+   上の 34px 角のままだとラベルが1文字ずつ折り返し、パネルの外まで縦に伸びてしまう。
+   The clear control renders with its label here (MemoDetailModal passes iconOnlyClearButton
+   as false). Left at the 34px square above, that label wraps one character per line and runs
+   outside the panel. */
+.memo-modal .memo-modal__agent-panel .mini-chat-clear-btn {
+  width: auto;
+  min-width: 34px;
+  gap: 0.3rem;
+  padding: 0 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-clear-btn--icon-only {
+  width: 34px;
+  gap: 0;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-clear-btn i {
+  font-size: 0.92rem;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-stop-btn {
