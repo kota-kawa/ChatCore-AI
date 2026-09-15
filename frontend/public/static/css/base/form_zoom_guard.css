@@ -15,8 +15,14 @@
    The design tokens (--text-base = 15px, --text-sm = 14px) stay untouched because every page
    builds on them; this file only raises the floor, and only on touch devices.
 
-   このファイルは _app.tsx の CSS import 群の最後に読み込むこと（後勝ちのカスケード順のため）。
-   Import this file last in _app.tsx so it comes last in the cascade. */
+   効き目は import 順ではなく !important で担保している（入力欄の font-size に !important を
+   付けている CSS は他に無い）。_app.tsx での末尾配置は、将来 !important が増えたときのための
+   保険であって前提ではない。なお next/head の <link> 経由で読まれるページ CSS は、SSR と
+   クライアント遷移で順序が入れ替わるため、順序には元から頼れない。
+   The guard wins through !important, not through import order: no other stylesheet marks a form
+   control's font-size as important. Being last in _app.tsx is insurance for the day one does, not
+   a precondition - page CSS pulled in through next/head swaps order between SSR and client
+   navigation, so order was never dependable here. */
 
 @media (pointer: coarse) {
   /* !important を使う理由 / Why !important is required here:
@@ -55,6 +61,10 @@
      larger than 16px would shrink. The few that do restate their own size, matching their page
      stylesheet; since !important rules are ranked by specificity and order, each selector below
      matches or beats the guard's own (0,1,1). */
+  /* 値は memo/memo_form.css が正本。ずれると「スマホだけ元のサイズ」という無音の食い違いに
+     なるため、form_zoom_guard_style.test.ts が両者の一致を検証している。
+     memo/memo_form.css owns these values. A drift would silently pin the touch rendering to the
+     old size, so form_zoom_guard_style.test.ts asserts the two stay equal. */
   input.memo-quick-capture__title-input {
     font-size: max(16px, 1.05rem) !important;
   }

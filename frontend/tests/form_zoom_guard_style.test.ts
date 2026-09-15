@@ -41,18 +41,17 @@ test("form zoom guard raises touch-device controls to at least 16px", () => {
 
 // 既存のクラスセレクタ（詳細度 (0,2,0) まである）に勝つため、このファイルだけ !important を使う。
 // This file alone uses !important so it can outrank existing class selectors.
-test("form zoom guard documents why it needs !important", () => {
-  assert.match(formZoomGuardCss, /!important/, "the guard relies on !important");
-  assert.match(
-    formZoomGuardCss,
-    /!important[\s\S]*?詳細度/,
-    "the Japanese comment must explain why !important is unavoidable",
-  );
-  assert.match(
-    formZoomGuardCss,
-    /!important[\s\S]*?specificity/i,
-    "the English comment must explain why !important is unavoidable",
-  );
+test("form zoom guard keeps its declarations important", () => {
+  const declarations = [...guardRules.matchAll(/font-size:[^;]+;/g)].map((match) => match[0]);
+
+  assert.ok(declarations.length > 0, "the guard must declare a font-size");
+  for (const declaration of declarations) {
+    assert.match(
+      declaration,
+      /!important/,
+      `every guard declaration must outrank class selectors: ${declaration}`,
+    );
+  }
 });
 
 // トグル系の input は拡大対象外。サイズを変えるとレイアウトが崩れるため。
@@ -60,7 +59,7 @@ test("form zoom guard documents why it needs !important", () => {
 test("form zoom guard excludes controls that never trigger focus zoom", () => {
   const exclusions = /input:not\(([^)]*)\)/.exec(guardRules)?.[1] ?? "";
 
-  for (const type of ["checkbox", "radio", "range", "color", "submit", "button", "reset"]) {
+  for (const type of ["checkbox", "radio", "range", "color", "submit", "button", "reset", "file"]) {
     assert.ok(
       exclusions.includes(`[type="${type}"]`),
       `input[type="${type}"] must be excluded from the zoom guard`,
@@ -93,6 +92,55 @@ test("_app.tsx imports the zoom guard last among CSS imports", () => {
     cssImports[cssImports.length - 1],
     GUARD_IMPORT,
     "the zoom guard must come after every other CSS import",
+  );
+});
+
+// 16px より大きく作られた入力欄はガードで縮めないよう書き戻しているが、その値はページ CSS が
+// 正本。ずれると「デスクトップだけ新しいサイズ、スマホだけ古いサイズ」という無音の食い違いになる。
+// Controls deliberately larger than 16px are written back so the guard cannot shrink them, but the
+// page stylesheet owns those values. A drift would silently leave touch devices on the old size.
+test("the zoom guard write-backs match the sizes memo_form.css declares", () => {
+  const memoFormCss = readFileSync(
+    new URL("../public/memo/static/css/memo_form.css", import.meta.url),
+    "utf8",
+  );
+
+  const writeBacks = [
+    { selector: ".memo-quick-capture__title-input", source: /\.memo-quick-capture__title-input\s*\{[^}]*?font-size:\s*([^;]+);/ },
+    { selector: ".memo-modal__title-input", source: /\.memo-modal__title-input\s*\{[^}]*?font-size:\s*([^;]+);/ },
+  ];
+
+  for (const { selector, source } of writeBacks) {
+    const declared = source.exec(memoFormCss)?.[1]?.trim();
+    assert.ok(declared, `memo_form.css must still declare a font-size for ${selector}`);
+
+    const guarded = new RegExp(`${selector.replace(".", "\\.")}\\s*\\{[^}]*?font-size:\\s*max\\(\\s*16px\\s*,\\s*([^)]+)\\)`)
+      .exec(guardRules)?.[1]
+      ?.trim();
+    assert.ok(guarded, `form_zoom_guard.css must write ${selector} back`);
+
+    assert.equal(
+      guarded,
+      declared,
+      `${selector}: the guard writes back ${guarded} but memo_form.css declares ${declared}`,
+    );
+  }
+});
+
+// 生成UIは iframe の別ドキュメントなので、グローバルCSSが届かない。同じ下限を srcDoc の
+// ベースCSSにも持たせないと、生成されたフォームのタップで親ページごとズームする。
+// The generated UI lives in a separate iframe document that global CSS never reaches, so the same
+// floor has to be repeated in the srcDoc base CSS or tapping a generated form zooms the parent.
+test("the sandbox srcDoc carries the same zoom floor", () => {
+  const sandboxSource = readFileSync(
+    new URL("../components/chat_page/sandbox_artifact_frame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    sandboxSource,
+    /@media \(pointer:coarse\)\{input:not\([^)]*\)[^{]*\{font-size:max\(16px,1em\)!important;\}\}/,
+    "the sandbox base CSS must floor its controls at 16px on touch devices",
   );
 });
 

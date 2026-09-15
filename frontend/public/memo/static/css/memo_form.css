@@ -2773,6 +2773,8 @@ body.memo-page {
   background: transparent;
 }
 
+/* font-size を変えるときは base/form_zoom_guard.css の書き戻しも同じ値に揃えること。
+   Keep the write-back in base/form_zoom_guard.css in step when this font-size changes. */
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input {
   min-height: 44px;
   padding: 0.65rem 1rem 0.2rem;
@@ -4816,6 +4818,8 @@ body.memo-page {
   min-height: 40px;
 }
 
+/* font-size を変えるときは base/form_zoom_guard.css の書き戻しも同じ値に揃えること。
+   Keep the write-back in base/form_zoom_guard.css in step when this font-size changes. */
 .memo-modal .memo-modal__title-input {
   box-sizing: border-box;
   width: calc(100% + 1rem);
