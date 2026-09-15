@@ -72,7 +72,7 @@ test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
   assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
   assert.doesNotMatch(srcDoc, /rect\.width > 2 && rect\.height > 2\) return true/);
   assert.match(srcDoc, /hasBackground \|\| hasBorder \|\| style\.boxShadow/);
-  assert.match(srcDoc, /runtimeFailed = true/);
+  assert.match(srcDoc, /EVIDENCE_STRONG/);
   assert.match(srcDoc, /node\.closest\("#chatcore-empty-artifact"\)/);
 });
 
@@ -92,6 +92,87 @@ test("sandbox keeps the safe fallback visible after a runtime error", async () =
 
   assert.ok(dom.window.document.getElementById("chatcore-empty-artifact"));
   dom.window.close();
+});
+
+// iframe が親へ送った postMessage を集める。実行結果の判定はこのメッセージだけで決まる。
+// Collects the postMessage traffic the iframe sends to its parent: the verdict travels only here.
+async function collectSandboxMessages(
+  srcDoc: string,
+  waitMs: number,
+  during?: (win: Window & typeof globalThis) => void,
+) {
+  const dom = new JSDOM(srcDoc, { pretendToBeVisual: true, runScripts: "dangerously" });
+  const win = dom.window as unknown as Window & typeof globalThis;
+  const received: Array<{ type?: string; state?: string; message?: string }> = [];
+  win.addEventListener("message", (event: MessageEvent) => {
+    received.push(event.data as { type?: string; state?: string; message?: string });
+  });
+  if (during) during(win);
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  const statuses = received.filter((entry) => entry?.type === "chatcore-artifact-status");
+  const errors = received.filter((entry) => entry?.type === "chatcore-artifact-error");
+  dom.window.close();
+  return { statuses, errors };
+}
+
+test("an exception after the UI rendered never reports a failure", async () => {
+  // クリックハンドラの失敗などは、表示されているUIを失敗扱いにしてはいけない。
+  // A failing click handler must not condemn a UI that is on screen.
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    js: `
+      document.getElementById("app").textContent = "rendered";
+      setTimeout(function(){ throw new Error("late failure"); }, 560);
+    `,
+  });
+
+  const { statuses, errors } = await collectSandboxMessages(srcDoc, 750);
+
+  assert.deepEqual(statuses.map((entry) => entry.state), ["ready"]);
+  assert.ok(errors.length >= 1, "診断用のエラー通知は残る / the diagnostic error is still delivered");
+});
+
+test("a CSP block that did not stop the render reports ready", async () => {
+  // フォントやメディアの遮断は描画を止めない。赤い警告を出す理由にはならない。
+  // A blocked font or media file does not stop the render, so it is no reason to warn.
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    js: 'document.getElementById("app").textContent = "rendered";',
+  });
+
+  const { statuses } = await collectSandboxMessages(srcDoc, 750, (win) => {
+    const event = new win.Event("securitypolicyviolation");
+    Object.defineProperty(event, "violatedDirective", { value: "font-src" });
+    win.document.dispatchEvent(event);
+  });
+
+  assert.deepEqual(statuses.map((entry) => entry.state), ["ready"]);
+});
+
+test("a CSP block that left the frame empty still reports csp_blocked", async () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({ ...artifact, html: "", css: "", js: "" });
+
+  const { statuses } = await collectSandboxMessages(srcDoc, 750, (win) => {
+    const event = new win.Event("securitypolicyviolation");
+    Object.defineProperty(event, "violatedDirective", { value: "script-src" });
+    win.document.dispatchEvent(event);
+  });
+
+  assert.deepEqual(statuses.map((entry) => entry.state), ["csp_blocked"]);
+  assert.equal(statuses[0]?.message, "script-src");
+});
+
+test("a failed run with nothing on screen still reports runtime_error", async () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    css: "",
+    js: 'throw new Error("render failed");',
+  });
+
+  const { statuses } = await collectSandboxMessages(srcDoc, 750);
+
+  assert.deepEqual(statuses.map((entry) => entry.state), ["runtime_error"]);
+  assert.match(String(statuses[0]?.message), /render failed/);
 });
 
 test("buildSandboxArtifactSrcDoc injects local three.js when the artifact requests it", () => {

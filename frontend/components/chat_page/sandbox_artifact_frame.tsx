@@ -137,8 +137,18 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   var MIN_HEIGHT = ${MIN_FRAME_HEIGHT};
   var MAX_HEIGHT = ${MAX_FRAME_HEIGHT};
   var resizePending = false;
-  var runtimeFailed = false;
   var statusReported = false;
+  var readyReported = false;
+  var firstErrorMessage = "";
+  var cspViolation = "";
+  // 描画の証拠の強さ。文字・図形・操作要素は確かな証拠、背景や枠だけの箱は弱い証拠として扱う。
+  // 弱い証拠は、色のついた空箱を成功と読み違えないために例外が起きたときだけ格下げする。
+  // How strong the evidence of a render is. Text, graphics, and controls are solid evidence; a box
+  // with only a background or border is weak, and weak evidence is discounted when something threw
+  // so that a coloured empty box is never mistaken for a result.
+  var EVIDENCE_NONE = 0;
+  var EVIDENCE_WEAK = 1;
+  var EVIDENCE_STRONG = 2;
   function root(){
     return document.getElementById("chatcore-artifact-root") || document.body;
   }
@@ -170,18 +180,19 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
       setTimeout(sendHeight, 16);
     }
   }
-  function hasRenderableContent(){
+  function contentEvidence(){
     var container = root();
-    if (!container) return false;
+    if (!container) return EVIDENCE_NONE;
     var nodes = container.querySelectorAll ? container.querySelectorAll("*") : (container.children || []);
+    var weak = false;
     for (var i = 0; i < nodes.length; i += 1) {
       var node = nodes[i];
       if (node.id === "chatcore-empty-artifact" || (node.closest && node.closest("#chatcore-empty-artifact"))) continue;
       var tag = String(node.tagName || "").toLowerCase();
       if (tag === "script" || tag === "style") continue;
-      if (/^(canvas|svg|img|video|button|input|select|textarea)$/.test(tag)) return true;
-      if (node.querySelector && node.querySelector("canvas,svg,img,video,button,input,select,textarea")) return true;
-      if (String(node.textContent || "").trim()) return true;
+      if (/^(canvas|svg|img|video|button|input|select|textarea)$/.test(tag)) return EVIDENCE_STRONG;
+      if (node.querySelector && node.querySelector("canvas,svg,img,video,button,input,select,textarea")) return EVIDENCE_STRONG;
+      if (String(node.textContent || "").trim()) return EVIDENCE_STRONG;
       // 空の #app もCSSによって寸法を持つことがあるため、寸法だけでは描画成功と判定しない。
       // An empty #app can have dimensions from CSS, so geometry alone is not
       // evidence of a successful render.
@@ -197,13 +208,24 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
         );
         var hasBorder = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth]
           .some(function(width){ return parseFloat(width || "0") > 0; });
-        if (hasBackground || hasBorder || style.boxShadow !== "none") return true;
+        if (hasBackground || hasBorder || style.boxShadow !== "none") weak = true;
       }
     }
-    return false;
+    return weak ? EVIDENCE_WEAK : EVIDENCE_NONE;
+  }
+  function hasRenderableContent(){
+    return contentEvidence() !== EVIDENCE_NONE;
   }
   function ensureVisibleContent(){
-    if (!runtimeFailed && hasRenderableContent()) {
+    // 例外が起きた直後は、色や枠だけの空箱を描画成功と見なさない。ただし一度 ready を報告した
+    // あとは、クリック時の例外で完成した表示を空扱いに落とさない。
+    // Right after an exception a box with only colour or a border does not count as a render, but
+    // once ready has been reported a later click-time exception never demotes a finished display.
+    var evidence = contentEvidence();
+    var rendered = (firstErrorMessage && !readyReported)
+      ? evidence === EVIDENCE_STRONG
+      : evidence !== EVIDENCE_NONE;
+    if (rendered) {
       var existing = document.getElementById("chatcore-empty-artifact");
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
       requestHeight();
@@ -224,24 +246,49 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
     requestHeight();
   }
   function reportStatus(state, message){
-    // 失敗は後から上書きしない。最初に観測した失敗の理由をそのまま親へ渡す。
-    // A failure is never overwritten: the first observed reason is the one reported.
+    // 結果は一度だけ確定させる。確定後に届く例外は結論を塗り替えない。
+    // The outcome is settled once; a later exception never rewrites that conclusion.
     if (statusReported) return;
     statusReported = true;
+    readyReported = state === "ready";
     send("chatcore-artifact-status", {
       state: state,
       message: String(message || "").slice(0, 180)
     });
   }
+  // 例外はその場では失敗と決めない。描画されているUIをボタン1つの例外で「実行できません
+  // でした」に落とすのが誤検知の元だったため、理由だけ控えて判定チェックポイントへ回す。
+  // 親のコンソールには常に流すので、診断の手掛かりは失われない。
+  // An exception is not a verdict on its own. Condemning a UI that did render because one
+  // handler threw was the source of the false alarm, so the reason is only recorded and the
+  // verdict is left to the checkpoint. The parent console still receives every one of them.
   function reportError(message){
-    runtimeFailed = true;
-    send("chatcore-artifact-error", { message: String(message || "Artifact script error") });
-    reportStatus("runtime_error", message);
+    var text = String(message || "Artifact script error");
+    if (!firstErrorMessage) firstErrorMessage = text;
+    send("chatcore-artifact-error", { message: text });
     setTimeout(ensureVisibleContent, 0);
   }
+  // 実行結果は「実際に何か描画されたか」で決める。フォントやメディアの遮断のように、
+  // 描画を止めない失敗まで赤い警告にしない。
+  // The outcome is decided by whether anything actually rendered, so failures that do not
+  // stop the render - a blocked font or media file - never raise the red warning.
   function reportRuntimeOutcome(){
-    if (runtimeFailed) return;
-    reportStatus(hasRenderableContent() ? "ready" : "blank", "");
+    if (statusReported) return;
+    var evidence = contentEvidence();
+    var failed = firstErrorMessage || cspViolation;
+    if (evidence === EVIDENCE_STRONG || (evidence === EVIDENCE_WEAK && !failed)) {
+      reportStatus("ready", "");
+      return;
+    }
+    if (cspViolation) {
+      reportStatus("csp_blocked", cspViolation);
+      return;
+    }
+    if (firstErrorMessage) {
+      reportStatus("runtime_error", firstErrorMessage);
+      return;
+    }
+    reportStatus("blank", "");
   }
   window.__chatcoreEnsureArtifactVisible = ensureVisibleContent;
   window.__chatcoreReportArtifactError = reportError;
@@ -256,8 +303,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
     reportError((reason && reason.message) || reason || "Unhandled promise rejection");
   });
   document.addEventListener("securitypolicyviolation", function(event){
-    runtimeFailed = true;
-    reportStatus("csp_blocked", (event && event.violatedDirective) || "csp");
+    if (!cspViolation) cspViolation = String((event && event.violatedDirective) || "csp");
   });
   if (typeof ResizeObserver === "function") {
     try { new ResizeObserver(requestHeight).observe(document.documentElement); } catch (_) {}
@@ -334,7 +380,6 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   const { locale, t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
-  const [errorMessage, setErrorMessage] = useState("");
   const [runtimeState, setRuntimeState] = useState<SandboxArtifactRuntimeState | "">("");
   // srcDoc の CSP には自オリジンの絶対URL（window.location.origin）が必要なため、
   // サーバーでは組み立てられない。SSR とハイドレーション初回は srcDoc を付けず、
@@ -352,23 +397,38 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     [artifact, isMounted, locale]
   );
 
-  // アーティファクトが変わったら高さとエラーをリセットする
-  // Reset height and error when the artifact changes
+  // 高さのリセットは指定値が変わったときだけ。同じ内容の再配信で iframe が実測した高さを
+  // 捨てると、正しく伸びていた表示が既定値へ縮む。
+  // Reset the height only when the requested value changes; dropping the height the iframe
+  // measured on an identical re-delivery would shrink a correctly grown frame back to default.
   useEffect(() => {
     setHeight(clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
-    setErrorMessage("");
+  }, [artifact.height]);
+
+  // 実行結果を捨てるのは srcDoc（iframe に実際に流し込む内容）が変わったときだけにする。
+  // ストリームはフェンス確定時と done で同じアーティファクトを二度配るため、毎回 normalize
+  // された別オブジェクトが届く。参照が変わっただけでリセットすると、内容が同じ srcDoc では
+  // iframe が再読み込みされず ready が二度と来ないので、完走した描画がタイムアウト扱いになる。
+  // Only a change of srcDoc - what the iframe actually runs - discards the outcome. The stream
+  // delivers the same artifact twice (at the closing fence and again on done) and each delivery
+  // is normalized into a fresh object. Resetting on that identity change would clear a ready
+  // that can never arrive again, because an unchanged srcDoc does not reload the iframe, and the
+  // finished render would then be reported as a timeout.
+  useEffect(() => {
     setRuntimeState("");
-  }, [artifact]);
+  }, [srcDoc]);
 
   // 結果が何も届かないまま止まった場合もタイムアウトとして扱う。無言のままにしない。
-  // A run that reports nothing at all is a timeout, not a silent success.
+  // 結果が確定したらタイマーは畳む（古いタイマーが後から発火して結果を奪わないように）。
+  // A run that reports nothing at all is a timeout, not a silent success. The timer is torn down
+  // as soon as the outcome is known so a stale one cannot fire later and steal the verdict.
   useEffect(() => {
-    if (!srcDoc) return undefined;
+    if (!srcDoc || runtimeState !== "") return undefined;
     const timer = window.setTimeout(() => {
       setRuntimeState((previous) => (previous ? previous : "timeout"));
     }, RUNTIME_STATUS_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [srcDoc]);
+  }, [runtimeState, srcDoc]);
 
   // iframeからのpostMessageで高さ変更とエラーを受け取る
   // Receive height changes and errors from the iframe via postMessage
@@ -389,11 +449,12 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
         return;
       }
 
+      // 例外は診断用に残すだけ。表示するかどうかは iframe が返す実行結果だけで決める。
+      // An exception is kept for diagnostics only; the banner is driven by the reported outcome.
       if ((data as { type?: unknown }).type === "chatcore-artifact-error") {
         const message = (data as { message?: unknown }).message;
         const normalizedMessage = typeof message === "string" ? message.slice(0, 180) : "Artifact error";
         console.warn(`Generated UI runtime error (${artifact.title}): ${normalizedMessage}`);
-        setErrorMessage(normalizedMessage);
         return;
       }
 
@@ -414,7 +475,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
   // 例外・CSP遮断・タイムアウトは同じ「実行できなかった」、空表示だけは別の文言で伝える。
   // A thrown error, a CSP block, and a timeout share one message; a blank render gets its own.
-  const runtimeFailed = Boolean(errorMessage) || (runtimeState !== "" && runtimeState !== "ready");
+  const runtimeFailed = runtimeState !== "" && runtimeState !== "ready";
   const runtimeMessage = runtimeState === "blank"
     ? t("chat.generatedUiBlank")
     : (runtimeFailed ? t("chat.generatedUiError") : "");
