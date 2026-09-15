@@ -213,9 +213,6 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
     }
     return weak ? EVIDENCE_WEAK : EVIDENCE_NONE;
   }
-  function hasRenderableContent(){
-    return contentEvidence() !== EVIDENCE_NONE;
-  }
   function ensureVisibleContent(){
     // 例外が起きた直後は、色や枠だけの空箱を描画成功と見なさない。ただし一度 ready を報告した
     // あとは、クリック時の例外で完成した表示を空扱いに落とさない。
@@ -504,7 +501,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
         style={{ height }}
       />
       {runtimeMessage ? (
-        <p className="sandbox-artifact__error" data-runtime-state={runtimeState || "runtime_error"}>
+        <p className="sandbox-artifact__error" data-runtime-state={runtimeState}>
           {runtimeMessage}
         </p>
       ) : null}

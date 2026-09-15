@@ -72,7 +72,7 @@ test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
   assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
   assert.doesNotMatch(srcDoc, /rect\.width > 2 && rect\.height > 2\) return true/);
   assert.match(srcDoc, /hasBackground \|\| hasBorder \|\| style\.boxShadow/);
-  assert.match(srcDoc, /EVIDENCE_STRONG/);
+  assert.match(srcDoc, /firstErrorMessage && !readyReported/);
   assert.match(srcDoc, /node\.closest\("#chatcore-empty-artifact"\)/);
 });
 
