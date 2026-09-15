@@ -11,6 +11,7 @@ import type {
 } from "./prompt_share_page_types";
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import type { ImportActionState } from "../../hooks/use_import_action";
 import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
@@ -152,6 +153,16 @@ export function PromptSharePageLayout({
   children
 }: PromptSharePageLayoutProps) {
   const { locale, t } = useTranslation();
+  // IME変換確定のEnterで検索が走らないようにする（Mac の日本語入力で誤発火する）
+  // Keep the Enter that confirms an IME conversion from firing the search (misfires with Japanese input on Mac)
+  const { compositionHandlers: searchCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLInputElement>();
+  const handleSearchKeyDown = React.useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (isComposingKeyEvent(event)) return;
+      onSearchInputKeyDown(event);
+    },
+    [isComposingKeyEvent, onSearchInputKeyDown],
+  );
   const getCategoryLabel = (category: PromptCategory) => category.value === "all"
     ? t("promptShare.all")
     : getCategoryLabelOrFallback(category.value, category.label, locale);
@@ -234,7 +245,8 @@ export function PromptSharePageLayout({
                 onChange={(event) => {
                   onSearchInputChange(event.target.value);
                 }}
-                onKeyDown={onSearchInputKeyDown}
+                {...searchCompositionHandlers}
+                onKeyDown={handleSearchKeyDown}
               />
               <button
                 id="searchButton"

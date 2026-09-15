@@ -42,6 +42,7 @@ import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { CopyButton } from "../ui/copy_button";
 import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.png";
 
@@ -62,6 +63,7 @@ export function MiniChat({
   onMemoEdit,
 }: MiniChatProps = {}) {
   const { locale, t } = useTranslation();
+  const { compositionHandlers: inputCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
   // 呼び出し側が文言を渡さないとき（左下のサポートエージェント）は、日本語を既定値に
   // 埋め込まずカタログから引く。既定の日本語と一致するかで英訳を差し替える方式は、
   // 文言を少し直すだけで英語版が日本語に戻ってしまい壊れやすい。
@@ -568,7 +570,10 @@ export function MiniChat({
   }, [messages, isGenerating, statusText, progressSteps.length]);
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.key !== "Enter" || event.shiftKey) return;
+    // Mac の IME は変換確定の Enter を送信キーとして通してしまうため composition の状態で弾く
+    // macOS IMEs let the Enter confirming a conversion through, so gate it on composition state
+    if (isComposingKeyEvent(event)) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   };
@@ -793,6 +798,7 @@ export function MiniChat({
             className="mini-chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            {...inputCompositionHandlers}
             onKeyDown={handleInputKeyDown}
             placeholder={resolvedInputPlaceholder}
             aria-label={t("agent.inputLabel")}

@@ -1,6 +1,7 @@
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import {
   useMemoPageListContext,
   useMemoPageModalsContext,
@@ -44,6 +45,7 @@ function CollectionColorPicker({ id, value, onChange }: CollectionColorPickerPro
 // 共通モーダル面（cc-modal）に、新規作成フォームと既存コレクションの一覧を節として並べる。
 // Shared modal surface (cc-modal) with the create form and the existing collection list as sections.
 export function MemoCollectionModal() {
+  const { compositionHandlers: newCollectionCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLInputElement>();
   const { collections } = useMemoPageListContext();
   const {
     isCollectionPanelOpen,
@@ -97,7 +99,15 @@ export function MemoCollectionModal() {
               placeholder={t("memo.newCollectionName")}
               aria-label={t("memo.newCollectionName")}
               maxLength={100}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleCreateCollection(); } }}
+              {...newCollectionCompositionHandlers}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                // IME変換確定のEnterで作成してしまわないよう composition の状態で弾く
+                // Gate on composition state so the Enter confirming an IME conversion does not create
+                if (isComposingKeyEvent(e)) return;
+                e.preventDefault();
+                void handleCreateCollection();
+              }}
             />
             <div className="memo-collection-create__footer">
               <CollectionColorPicker id="new-collection-color" value={newCollectionColor} onChange={setNewCollectionColor} />

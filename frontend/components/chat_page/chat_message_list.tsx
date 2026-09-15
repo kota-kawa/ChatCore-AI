@@ -30,6 +30,7 @@ import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 import { useTranslation } from "../../contexts/locale_context";
+import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
 // SSR 環境では useLayoutEffect が警告を出すため、ブラウザ上でのみ useLayoutEffect を使う。
 // Use useLayoutEffect on the browser to avoid React SSR warnings.
@@ -64,9 +65,10 @@ function UserMessageEditForm({
 
   // IME 確定中の Enter による誤送信を防ぎ、Escape でキャンセル、Enter（Shift なし）で送信する。
   // Prevent accidental submit during IME composition; Escape cancels, bare Enter submits.
+  const { compositionHandlers: editCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.nativeEvent.isComposing) return;
+      if (isComposingKeyEvent(event)) return;
       if (event.key === "Escape") {
         onCancel();
         return;
@@ -79,7 +81,7 @@ function UserMessageEditForm({
         }
       }
     },
-    [onCancel, onSubmit, text],
+    [isComposingKeyEvent, onCancel, onSubmit, text],
   );
 
   // テキスト変更のたびに textarea の高さを内容に合わせて伸縮させる（最大 240px）。
@@ -104,6 +106,7 @@ function UserMessageEditForm({
         value={text}
         rows={1}
         onChange={handleChange}
+        {...editCompositionHandlers}
         onKeyDown={handleKeyDown}
       />
       <div className="user-message-edit-actions">
