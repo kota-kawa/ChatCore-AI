@@ -1,0 +1,65 @@
+/* form_zoom_guard.css
+   責務は 1 つだけ: タッチ端末で入力欄にフォーカスしたときの自動ズームを防ぐ。
+   Single responsibility: stop touch devices from auto-zooming when a form control gains focus.
+
+   iOS Safari は、フォーカスした input / textarea / select の font-size が 16px 未満だと
+   ページ全体を自動で拡大する。viewport meta に maximum-scale や user-scalable=no を足せば
+   止まるが、利用者のピンチ拡大まで奪うためアクセシビリティ上採用できない。
+   したがって font-size 側だけで解決する。
+   iOS Safari zooms the whole page whenever the focused input / textarea / select renders below
+   16px. Locking the viewport with maximum-scale or user-scalable=no would also take pinch zoom
+   away from the user, which is an accessibility regression, so the fix stays on font-size.
+
+   デザイントークン（--text-base = 15px, --text-sm = 14px）は全ページの見た目の土台なので
+   変更しない。ここではタッチ端末だけを対象に下限を持ち上げる。
+   The design tokens (--text-base = 15px, --text-sm = 14px) stay untouched because every page
+   builds on them; this file only raises the floor, and only on touch devices.
+
+   このファイルは _app.tsx の CSS import 群の最後に読み込むこと（後勝ちのカスケード順のため）。
+   Import this file last in _app.tsx so it comes last in the cascade. */
+
+@media (pointer: coarse) {
+  /* !important を使う理由 / Why !important is required here:
+     既存の入力欄は必ずクラスセレクタで装飾されており、
+     `.memo-modal-scope .memo-collection-create__input` のように詳細度 (0,2,0) のものまである。
+     要素セレクタ主体のこのガードは詳細度では絶対に勝てず、かといって同じ宣言を各ページ CSS へ
+     配り直すと「ズーム防止」という責務が全ファイルに散らばってしまう。
+     そのため、リポジトリ内でこのファイルに限り !important の使用を許可している。
+     Every existing control is styled through class selectors - some as specific as (0,2,0), e.g.
+     `.memo-modal-scope .memo-collection-create__input`. An element-level guard can never outrank
+     them on specificity, and duplicating the declaration into every page stylesheet would scatter
+     the "prevent zoom" responsibility across the whole tree. That is why !important is allowed in
+     this file, and only in this file.
+
+     max(16px, 1em) は下限を 16px に固定するだけで、親から継承した 16px 以上のサイズは保つ。
+     max(16px, 1em) pins the floor at 16px and leaves anything inherited at 16px or above alone. */
+  input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="submit"],
+      [type="button"],
+      [type="reset"],
+      [type="file"]
+    ),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+
+  /* ガードの基準は 1em（＝親の font-size）なので、意図的に 16px より大きく作られた入力欄は
+     そのままだと縮んでしまう。該当するものだけページ CSS と同じ値を書き戻す。
+     !important どうしの勝敗は詳細度と記述順で決まるため、上のガード (0,1,1) と同等以上にしている。
+     The guard measures against 1em (the parent's font-size), so controls that deliberately run
+     larger than 16px would shrink. The few that do restate their own size, matching their page
+     stylesheet; since !important rules are ranked by specificity and order, each selector below
+     matches or beats the guard's own (0,1,1). */
+  input.memo-quick-capture__title-input {
+    font-size: max(16px, 1.05rem) !important;
+  }
+
+  .memo-modal .memo-modal__title-input {
+    font-size: max(16px, 1.125rem) !important;
+  }
+}
