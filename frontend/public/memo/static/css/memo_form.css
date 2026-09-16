@@ -5695,21 +5695,8 @@ body.memo-page {
   color: var(--modal-danger);
 }
 
-/* 会話クリアは文言つきで出る（MemoDetailModal が iconOnlyClearButton={false} を渡す）。
-   上の 34px 角のままだとラベルが1文字ずつ折り返し、パネルの外まで縦に伸びてしまう。
-   The clear control renders with its label here (MemoDetailModal passes iconOnlyClearButton
-   as false). Left at the 34px square above, that label wraps one character per line and runs
-   outside the panel. */
-.memo-modal .memo-modal__agent-panel .mini-chat-clear-btn {
-  width: auto;
-  min-width: 34px;
-  gap: 0.3rem;
-  padding: 0 0.55rem;
-  font-size: 0.74rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
+/* 会話クリアはトップページのチャコと同じくアイコンだけで表示する。
+   The memo companion keeps the same icon-only clear control as Chaco on the home page. */
 .memo-modal .memo-modal__agent-panel .mini-chat-clear-btn--icon-only {
   width: 34px;
   gap: 0;
