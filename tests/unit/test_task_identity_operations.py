@@ -12,6 +12,7 @@ from blueprints.chat.tasks import (
     delete_task,
 )
 from services.api_errors import ResourceNotFoundError
+from services.chat_message_normalization import find_latest_task_launch_request, mark_task_launch_input_for_llm
 from tests.helpers.request_helpers import build_request
 
 
@@ -68,7 +69,26 @@ class TaskIdentityOperationsTestCase(unittest.TestCase):
         parsed = _parse_task_launch_message(
             "【タスク】同名タスク\n【タスクID】42\n【状況・作業環境】テスト"
         )
-        self.assertEqual(parsed, {"task": "同名タスク", "task_id": 42, "setup_info": "テスト"})
+        self.assertEqual(parsed, {"task": "同名タスク", "task_id": 42, "setup_info": "テスト", "task_input": "テスト"})
+
+    def test_prior_task_launch_is_not_active_for_a_later_user_message(self):
+        messages = [
+            {"role": "user", "content": "【タスク】翻訳\n【状況・作業環境】Translate this."},
+            {"role": "assistant", "content": "これを翻訳して。"},
+            {"role": "user", "content": "それは上に示してあるよね？"},
+        ]
+
+        self.assertIsNone(find_latest_task_launch_request(messages))
+        self.assertIs(mark_task_launch_input_for_llm(messages, None), messages)
+
+    def test_launch_input_is_labelled_only_in_the_llm_copy(self):
+        messages = [{"role": "user", "content": "【タスク】翻訳\n【状況・作業環境】Translate this."}]
+        request = find_latest_task_launch_request(messages)
+
+        labelled = mark_task_launch_input_for_llm(messages, request)
+
+        self.assertEqual(labelled[0]["content"], "【タスク】翻訳\n<task_input>\nTranslate this.\n</task_input>")
+        self.assertEqual(messages[0]["content"], "【タスク】翻訳\n【状況・作業環境】Translate this.")
 
     def test_task_launch_loader_passes_task_id_to_async_service(self):
         with patch(

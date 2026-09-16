@@ -105,6 +105,8 @@ def parse_task_launch_message(message: str) -> dict[str, Any] | None:
     parsed: dict[str, Any] = {
         "task": task_match.group("task").strip(),
         "setup_info": setup_info,
+        # Keep setup_info for the existing UI/title contract; task_input is the LLM-facing meaning.
+        "task_input": setup_info,
     }
     task_id_match = re.search(r"^【タスクID】(?P<task_id>\d+)[ \t]*$", message, re.MULTILINE)
     if task_id_match:
@@ -114,17 +116,38 @@ def parse_task_launch_message(message: str) -> dict[str, Any] | None:
     return parsed
 
 
-# メッセージ履歴から最も新しいタスク起動リクエストを検索抽出する関数
-# Search and extract the most recent task launch request from conversation history.
+# 最新のユーザー発話だけから、このターンのタスク起動を抽出する関数
+# Extract a task launch only from the latest user message for this turn.
 def find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, Any] | None:
     """
-    会話履歴を逆順でスキャンし、最も新しいユーザーメッセージからタスク起動情報を抽出します。
-    Searches and extracts the most recent task launch request from conversation history.
+    最新のユーザー発話がタスク起動でなければ、過去のタスクを再適用しません。
+    Never reapplies a historical task when the latest user message is ordinary conversation.
     """
     for message in reversed(messages):
         if str(message.get("role", "")) != "user":
             continue
-        parsed = parse_task_launch_message(str(message.get("content", "")))
-        if parsed is not None:
-            return parsed
+        return parse_task_launch_message(str(message.get("content", "")))
     return None
+
+
+def mark_task_launch_input_for_llm(
+    messages: list[dict[str, Any]], task_request: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Label the current launch input in its user-role message without changing stored/UI text."""
+    if not task_request or not task_request.get("task_input"):
+        return messages
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if message.get("role") != "user":
+            continue
+        content = str(message.get("content", ""))
+        marker = "【状況・作業環境】"
+        prefix, found, task_input = content.partition(marker)
+        if not found:
+            return messages
+        labelled_message = {
+            **message,
+            "content": f"{prefix}<task_input>\n{task_input.strip()}\n</task_input>",
+        }
+        return [*messages[:index], labelled_message, *messages[index + 1:]]
+    return messages

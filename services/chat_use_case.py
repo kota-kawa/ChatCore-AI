@@ -33,6 +33,7 @@ from services.attached_files import (
 from services.auth_limits import AuthLimitService
 from services.chat_async_bridge import _run_async_callback
 from services.chat_generation import ChatGenerationAlreadyRunningError, ChatGenerationService
+from services.chat_message_normalization import mark_task_launch_input_for_llm
 from services.chat_post_dependencies import (
     ChatPostBackgroundDependencies,
     ChatPostGenerationDependencies,
@@ -460,6 +461,10 @@ class ChatPostUseCase:
         # メッセージ履歴を LLM 向けに正規化
         # Normalize message history for LLM compatibility
         turn.normalized_all_messages = self.deps.prompts.normalize_messages_for_llm(turn.all_messages)
+        turn.active_task_request = self.deps.prompts.find_latest_task_launch_request(turn.normalized_all_messages)
+        turn.normalized_all_messages = mark_task_launch_input_for_llm(
+            turn.normalized_all_messages, turn.active_task_request
+        )
         self._reattach_prior_uploads(turn)
         await self._prepend_reference_blocks(turn)
 
@@ -556,7 +561,6 @@ class ChatPostUseCase:
         """最新のタスク起動リクエストと定義プロンプトの読み込み / Load the latest task launch request and corresponding task definitions."""
         deps = self.deps
 
-        turn.active_task_request = deps.prompts.find_latest_task_launch_request(turn.normalized_all_messages)
         prompt_data = None
         if turn.active_task_request is not None:
             task_id = turn.active_task_request.get("task_id")
