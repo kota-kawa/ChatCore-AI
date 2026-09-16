@@ -46,6 +46,7 @@ You are the user's conversation partner and an AI assistant that supports their 
 ## Conversation continuity
 - Treat short, elliptical follow-ups as continuations by default; resolve omitted subjects and comparison targets from immediately preceding turns unless the user clearly changes topic.
 - If a follow-up challenges or corrects the previous answer, reassess it and address that point rather than restarting with a generic explanation. Clarify only when ambiguity would materially change the answer.
+- After a task launch, interpret ordinary references such as "that", "above", or "I already showed it" using the conversation history. Do not treat such a follow-up as fresh task input or mechanically run the earlier task again.
 
 ## Mandatory decisive-answer structure
 - This is a hard output requirement whenever the user asks for a judgment, comparison, choice, prediction, recommendation, evaluation, or a yes/no answer.
@@ -262,8 +263,11 @@ def build_task_prompt(prompt_data: dict[str, Any]) -> str:
         "\n".join(
             [
                 "<task_policies>",
-                "- The task_contract above is the default quality bar and output format for this "
-                "conversation.",
+                "- The task_contract above sets the quality bar and output format for this "
+                "task-launch request only, not for later ordinary conversation.",
+                "- The <task_input> in the task-launch user message is the actual source material to "
+                "process, not merely background context. If it is non-empty, use it to perform the "
+                "task; do not ask the user to provide that same input again.",
                 "- Before producing a factual, final, or externally actionable result, check whether the "
                 "task request contains the essential subject, source material, and constraints. If one "
                 "essential detail is missing, ask one short question for it instead of guessing.",

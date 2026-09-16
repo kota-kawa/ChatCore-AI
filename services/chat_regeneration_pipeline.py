@@ -31,6 +31,7 @@ from services.chat_generation import (
 )
 from services.chat_message_normalization import (
     find_latest_task_launch_request,
+    mark_task_launch_input_for_llm,
     normalize_messages_for_llm,
     prepend_attached_files_to_user_messages,
 )
@@ -315,10 +316,11 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     selected_reference_query = pipeline_input.selected_reference_query
     if selected_reference_query is None:
         selected_reference_query = _latest_user_content(normalized_all_messages)
+    active_task_request = find_latest_task_launch_request(normalized_all_messages)
+    normalized_all_messages = mark_task_launch_input_for_llm(normalized_all_messages, active_task_request)
     normalized_all_messages = prepend_attached_files_to_user_messages(
         normalized_all_messages
     )
-    active_task_request = find_latest_task_launch_request(normalized_all_messages)
     prompt_data = None
     if active_task_request is not None:
         task_id = active_task_request.get("task_id")

@@ -338,17 +338,23 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("<task_contract>", conversation_messages[1]["content"])
         self.assertIn("<response_rules>", conversation_messages[1]["content"])
         self.assertIn("<output_format>", conversation_messages[1]["content"])
+        self.assertIn("actual source material to process", conversation_messages[1]["content"])
+        self.assertIn("do not ask the user to provide that same input again", conversation_messages[1]["content"])
         self.assertEqual(
             conversation_messages[-1]["content"],
-            "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
+            "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
+        )
+        self.assertEqual(
+            saved_messages[0]["content"],
+            "【タスク】📧 メール作成<br>【状況・作業環境】新製品リリース案内のメールを作りたい",
         )
 
-    # 日本語: 初回ターンの後、フォローアップmessage保持するタスクガイダンスことを検証します。
-    # English: Verify that follow up message keeps task guidance after first turn.
-    def test_follow_up_message_keeps_task_guidance_after_first_turn(self):
+    # 日本語: タスク後の参照発話は、履歴を使った通常会話として扱い、タスクを再起動しない。
+    # English: A referential follow-up uses history as conversation, without relaunching the task.
+    def test_follow_up_reference_uses_history_without_reapplying_task(self):
         request = make_request(
             {
-                "message": "件名だけ3案ください",
+                "message": "示してあるよね？",
                 "chat_room_id": "room-1",
                 "model": "claude-haiku-4-5-20251001",
             },
@@ -411,12 +417,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["response"], "ok")
-        mock_fetch.assert_awaited_once_with("📧 メール作成", None, None)
+        mock_fetch.assert_not_awaited()
 
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
-        self.assertIn("<task_contract>", conversation_messages[1]["content"])
-        self.assertEqual(conversation_messages[-1]["content"], "件名だけ3案ください")
+        self.assertFalse(any("<task_contract>" in message["content"] for message in conversation_messages))
+        self.assertIn("新製品リリース案内のメールを作りたい", conversation_messages[-3]["content"])
+        self.assertEqual(conversation_messages[-2]["content"], "了解しました。")
+        self.assertEqual(conversation_messages[-1]["content"], "示してあるよね？")
+        self.assertNotIn("<task_input>", conversation_messages[-1]["content"])
 
     # 日本語: プロンプトルックアップ失敗するのとき、タスク起動継続することを検証します。
     # English: Verify that task launch continues when prompt lookup fails.
@@ -492,7 +501,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         self.assertEqual(
             conversation_messages[2]["content"],
-            "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
+            "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
         )
 
     # 日本語: チャット含む保存されたユーザープロフィールコンテキスト内の、ログインことを検証します。
