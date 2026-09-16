@@ -273,7 +273,7 @@ export function MemoDetailModal() {
                     enableActions={false}
                     persistConversation={false}
                     showModelLabel
-                    iconOnlyClearButton={false}
+                    iconOnlyClearButton={true}
                     agentIconPath="/static/ChacoMemo.png"
                     onMemoEdit={applyAgentMemoEdit}
                   />

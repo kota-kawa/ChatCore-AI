@@ -393,7 +393,7 @@ export const jaMessages = {
   "memo.preview": "プレビュー",
   "memo.noPreviewText": "プレビューするテキストがありません。",
   "memo.writePlaceholder": "メモを入力...",
-  "memo.agentTitle": "メモ専用エージェント",
+  "memo.agentTitle": "メモのチャコ",
   "memo.agentHeaderSubtitle": "このメモを一緒に整理",
   "memo.agentDescription": "このメモの内容を参照して、要約や質問に加えて、本文の編集も依頼できます。編集は実行ボタンを押したときだけ反映されます。",
   "memo.agentPlaceholder": "このメモについて質問・編集を依頼する...",

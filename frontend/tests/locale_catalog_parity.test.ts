@@ -27,3 +27,8 @@ test("no English message contains Japanese characters", () => {
     .map(([key, value]) => `${key}: ${value}`);
   assert.deepEqual(leaked, [], `Japanese text left in the English catalog:\n${leaked.join("\n")}`);
 });
+
+test("names the memo companion as Chaco in both locales", () => {
+  assert.equal(jaMessages["memo.agentTitle"], "メモのチャコ");
+  assert.equal(enMessages["memo.agentTitle"], "Chaco for Memos");
+});

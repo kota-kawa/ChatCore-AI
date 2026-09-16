@@ -71,23 +71,23 @@ test("a coloured memo paints the whole detail modal surface, not just a band", (
 });
 
 // メモエージェントは MiniChat の表示オプションを既定と違う形で使う。使ったオプションの分だけ
-// パネル側の CSS が必要で、無いと文言や補足が素のまま出て崩れる。
-// The memo agent renders MiniChat with non-default display options. Each option it turns on needs
-// a matching rule in the panel's CSS; without one the extra text renders unstyled and breaks out.
+// パネル側の CSS が必要で、無いと補足が素のまま出て崩れる。
+// The memo agent renders MiniChat with display options that need matching panel styles.
 test("the memo agent panel styles every MiniChat option it turns on", () => {
   const agentPanel = memoDetailModal.slice(memoDetailModal.indexOf("memo-modal__agent-panel"));
   const scope = "\\.memo-modal \\.memo-modal__agent-panel ";
 
-  // 文言つきの会話クリア / The clear control with its label
-  assert.match(agentPanel, /iconOnlyClearButton=\{false\}/);
-  const clearRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-clear-btn\\s*\\{([\\s\\S]*?)\\}`));
-  assert.ok(clearRule, "the labelled clear control must be styled");
-  assert.match(clearRule[1], /width:\s*auto/, "a fixed square would wrap the label out of the panel");
-  assert.match(clearRule[1], /white-space:\s*nowrap/);
+  // トップページのチャコと同じアイコンのみの会話クリア / Icon-only clear control, matching Chaco on the home page
+  assert.match(agentPanel, /iconOnlyClearButton=\{true\}/);
   assert.match(
     memoCss,
     new RegExp(`${scope}\\.mini-chat-clear-btn--icon-only\\s*\\{[\\s\\S]*?width:\\s*34px`),
-    "the icon-only variant must still collapse back to a square",
+    "the icon-only clear control must stay a compact square",
+  );
+  assert.doesNotMatch(
+    memoCss,
+    new RegExp(`${scope}\\.mini-chat-clear-btn\\s*\\{`),
+    "the memo panel must not add styles for a labelled clear control",
   );
 
   // 使用モデルの表示 / The model label
