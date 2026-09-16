@@ -5000,6 +5000,21 @@ body.memo-page {
   color: var(--modal-accent);
 }
 
+.memo-modal .memo-modal__agent-toggle {
+  border-radius: 11px;
+}
+
+.memo-modal .memo-modal__agent-toggle img {
+  width: 29px;
+  height: 29px;
+  object-fit: contain;
+}
+
+.memo-modal .memo-modal__agent-toggle.is-active {
+  border-color: #dfaa7e;
+  background: #fff0df;
+}
+
 .memo-modal .memo-modal__icon-btn:focus-visible,
 .memo-modal .memo-modal__agent-close:focus-visible {
   outline: none;
@@ -5113,15 +5128,29 @@ body.memo-page {
 
 /* ── 詳細モーダル: メモエージェント / Detail modal: memo agent ───────── */
 .memo-modal .memo-modal__agent-panel {
+  --modal-accent: #ae522e;
+  --modal-accent-hover: #8e3f22;
+  --modal-accent-text: #ffffff;
+  --modal-accent-soft: #fff0df;
+  --modal-border: rgba(151, 84, 48, 0.28);
+  --modal-border-soft: rgba(151, 84, 48, 0.17);
+  --modal-text: #614331;
+  --modal-text-muted: #755c4c;
+  --modal-surface: #fffdf7;
+  --modal-surface-muted: #fff4e5;
+  --modal-focus-ring: 0 0 0 4px rgba(220, 126, 71, 0.2);
   display: flex;
   flex: 0 0 clamp(320px, 36%, 420px);
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--modal-border);
-  border-radius: 10px;
-  background: var(--modal-surface);
+  border: 2px solid rgba(224, 151, 91, 0.48);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 95% 2%, rgba(120, 189, 229, 0.2), transparent 35%),
+    linear-gradient(180deg, #fffdf7 0%, #fff2e3 100%);
+  box-shadow: 0 10px 28px rgba(109, 75, 61, 0.12), 0 0 0 5px rgba(239, 183, 121, 0.1);
 }
 
 .memo-modal .memo-modal__agent-header {
@@ -5129,9 +5158,30 @@ body.memo-page {
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.6rem 0.85rem;
-  border-bottom: 1px solid var(--modal-border-soft);
+  gap: 0.7rem;
+  min-height: 72px;
+  padding: 0.65rem 0.75rem 0.65rem 0.9rem;
+  border-bottom: 1px solid rgba(174, 82, 46, 0.16);
+  background: linear-gradient(110deg, #ffe9c9 0%, #ffefdf 56%, #eaf5f7 100%);
+}
+
+.memo-modal .memo-modal__agent-header-icon {
+  display: inline-flex;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(151, 84, 48, 0.2);
+  border-radius: 15px;
+  background: rgba(255, 253, 247, 0.82);
+  box-shadow: 0 4px 12px rgba(109, 75, 61, 0.1);
+}
+
+.memo-modal .memo-modal__agent-header-icon img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 
 .memo-modal .memo-modal__agent-header-info {
@@ -5144,7 +5194,7 @@ body.memo-page {
 .memo-modal .memo-modal__agent-header strong {
   overflow: hidden;
   color: var(--modal-text);
-  font-size: 0.92rem;
+  font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -5161,8 +5211,9 @@ body.memo-page {
   width: 32px;
   height: 32px;
   min-width: 32px;
-  border-color: transparent;
-  background: transparent;
+  border-color: rgba(151, 84, 48, 0.15);
+  border-radius: 11px;
+  background: rgba(255, 253, 247, 0.7);
 }
 
 /* エージェント面の中のミニチャット。面・罫線・文字色はすべて --modal-* トークン
@@ -5206,19 +5257,25 @@ body.memo-page {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--modal-border);
-  border-radius: 10px;
-  background: var(--modal-surface-muted);
+  width: 78px;
+  height: 78px;
+  border: 2px solid rgba(151, 84, 48, 0.22);
+  border-radius: 24px;
+  background: linear-gradient(145deg, #fff8e7 0%, #ffe5c2 62%, #e5f2f7 100%);
   color: var(--modal-accent);
-  font-size: 1.25rem;
+  box-shadow: 0 10px 24px rgba(109, 75, 61, 0.12), 0 0 0 6px rgba(239, 183, 121, 0.12);
   opacity: 1;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-robot-icon .mini-chat-agent-icon {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-placeholder strong {
   color: var(--modal-text);
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-placeholder p {
@@ -5242,32 +5299,39 @@ body.memo-page {
   min-height: 36px;
   padding: 0.45rem 0.65rem;
   border: 1px solid var(--modal-border);
-  border-radius: 8px;
-  background: var(--modal-surface);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--modal-text);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 4px 12px rgba(109, 75, 61, 0.06);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-suggestion:nth-child(even) {
+  border-color: rgba(120, 189, 229, 0.42);
+  background: #f1f9ff;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-suggestion:hover {
   border-color: var(--modal-accent);
-  background: var(--modal-surface-muted);
+  background: #fff0df;
+  transform: translateY(-1px);
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-message {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: end;
   gap: 0.5rem;
   max-width: 96%;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-message--user {
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-self: flex-end;
 }
 
@@ -5276,21 +5340,27 @@ body.memo-page {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--modal-border);
-  border-radius: 8px;
-  background: var(--modal-surface-muted);
+  border-radius: 11px;
+  background: #fff3da;
   color: var(--modal-accent);
   font-size: 0.84rem;
+}
+
+.memo-modal .memo-modal__agent-panel .mini-chat-avatar .mini-chat-agent-icon {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-message--user .mini-chat-avatar {
   grid-row: 1;
   grid-column: 2;
-  border-color: var(--modal-accent);
-  background: var(--modal-accent);
-  color: var(--modal-accent-text);
+  border-color: rgba(120, 189, 229, 0.52);
+  background: #d9effc;
+  color: #24536b;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-text-wrapper {
@@ -5299,19 +5369,19 @@ body.memo-page {
   max-width: 100%;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--modal-border-soft);
-  border-radius: 10px;
-  background: var(--modal-surface-muted);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
   color: var(--modal-text);
-  box-shadow: none;
+  box-shadow: 0 6px 15px rgba(109, 75, 61, 0.07);
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-message--user .mini-chat-text-wrapper {
   grid-row: 1;
   grid-column: 1;
   justify-self: end;
-  border-color: var(--modal-accent);
-  background: var(--modal-accent);
-  color: var(--modal-accent-text);
+  border-color: rgba(120, 189, 229, 0.48);
+  background: #dff2fd;
+  color: #244b61;
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-text-wrapper--error {
@@ -5541,7 +5611,7 @@ body.memo-page {
   gap: 0.5rem;
   padding: 0.7rem 0.8rem;
   border-top: 1px solid var(--modal-border-soft);
-  background: var(--modal-surface);
+  background: rgba(255, 250, 241, 0.96);
   box-shadow: none;
 }
 
@@ -5554,8 +5624,8 @@ body.memo-page {
   min-height: 42px;
   padding: 0.2rem 0.2rem 0.2rem 0.7rem;
   border: 1px solid var(--modal-border);
-  border-radius: 8px;
-  background: var(--modal-surface);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -5598,7 +5668,8 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-send-btn {
   border-color: var(--modal-accent);
-  background: var(--modal-accent);
+  border-radius: 11px;
+  background: linear-gradient(135deg, #c76c3b, #ad4f2c);
   color: var(--modal-accent-text);
 }
 
@@ -5689,7 +5760,7 @@ body.memo-page {
   gap: 0.25rem;
   padding: 0.2rem 0.5rem;
   border: 1px solid var(--modal-border);
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
   color: var(--modal-text-muted);
   font: inherit;
@@ -5722,8 +5793,8 @@ body.memo-page {
   margin-top: 0.5rem;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--modal-border);
-  border-radius: 8px;
-  background: var(--modal-surface);
+  border-radius: 15px;
+  background: var(--modal-surface-muted);
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-action-steps {
@@ -5866,7 +5937,7 @@ body.memo-page {
   min-height: 36px;
   padding: 0 0.75rem;
   border: 1px solid var(--modal-accent);
-  border-radius: 8px;
+  border-radius: 11px;
   background: var(--modal-accent);
   color: var(--modal-accent-text);
   font: inherit;
@@ -5884,6 +5955,100 @@ body.memo-page {
 .memo-modal .memo-modal__agent-panel .mini-chat-execute-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* チャコの丸みと淡い配色を保ちつつ、メモ側は紙とオレンジを主役にする。
+   The memo companion uses Chaco's soft shapes with a warm paper palette. */
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel {
+  --modal-accent: #f0a36e;
+  --modal-accent-hover: #ffc092;
+  --modal-accent-text: #42291f;
+  --modal-accent-soft: rgba(240, 163, 110, 0.18);
+  --modal-border: rgba(240, 163, 110, 0.32);
+  --modal-border-soft: rgba(240, 163, 110, 0.2);
+  --modal-text: #fff1de;
+  --modal-text-muted: #e5cbb7;
+  --modal-surface: #3b3431;
+  --modal-surface-muted: #493a33;
+  --modal-focus-ring: 0 0 0 4px rgba(240, 163, 110, 0.22);
+  border-color: rgba(240, 163, 110, 0.42);
+  background:
+    radial-gradient(circle at 95% 2%, rgba(120, 189, 229, 0.14), transparent 35%),
+    linear-gradient(180deg, #3b3431 0%, #302e31 100%);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), 0 0 0 5px rgba(240, 163, 110, 0.08);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-toggle.is-active {
+  border-color: rgba(240, 163, 110, 0.5);
+  background: rgba(240, 163, 110, 0.18);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-header {
+  border-bottom-color: rgba(240, 163, 110, 0.25);
+  background: linear-gradient(110deg, #604536 0%, #51423b 58%, #364956 100%);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-header-icon,
+[data-theme="dark"] .memo-modal .memo-modal__agent-close {
+  border-color: rgba(240, 163, 110, 0.26);
+  background: rgba(59, 52, 49, 0.8);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-robot-icon {
+  border-color: rgba(240, 163, 110, 0.34);
+  background: linear-gradient(145deg, #5e4938 0%, #59463a 60%, #3e5360 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2), 0 0 0 6px rgba(240, 163, 110, 0.1);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-suggestion {
+  background: rgba(77, 60, 49, 0.88);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-suggestion:nth-child(even) {
+  border-color: rgba(120, 189, 229, 0.34);
+  background: rgba(53, 72, 84, 0.84);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-suggestion:hover {
+  background: #684735;
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-avatar {
+  background: #554034;
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-message--user .mini-chat-avatar,
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-message--user .mini-chat-text-wrapper {
+  border-color: rgba(120, 189, 229, 0.38);
+  background: #3a5a6a;
+  color: #e5f5ff;
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-text-wrapper {
+  background: rgba(69, 57, 50, 0.92);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.14);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-input-area {
+  background: rgba(48, 46, 49, 0.96);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-input-wrapper {
+  background: rgba(69, 57, 50, 0.92);
+}
+
+[data-theme="dark"] .memo-modal .memo-modal__agent-panel .mini-chat-send-btn {
+  background: linear-gradient(135deg, #f6b07d, #e89560);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memo-modal .memo-modal__agent-panel .mini-chat-suggestion {
+    transition: none;
+  }
+
+  .memo-modal .memo-modal__agent-panel .mini-chat-suggestion:hover {
+    transform: none;
+  }
 }
 
 /* ── 書き出しモーダル / Export modal ─────────────────────────────────── */

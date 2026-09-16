@@ -46,6 +46,20 @@ describe("support agent localization", () => {
     expect(screen.getByRole("button", { name: "How do I use this page?" })).toBeInTheDocument();
   });
 
+  it("uses the memo mascot for the welcome state and assistant replies when requested", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <LocaleProvider initialLocale="en">
+        <MiniChat agentIconPath="/static/ChacoMemo.png" quickPrompts={["Summarize"]} persistConversation={false} />
+      </LocaleProvider>,
+    );
+
+    expect(container.querySelector('.mini-chat-placeholder img[src="/static/ChacoMemo.png"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Summarize" }));
+    await screen.findByText("Concise answer");
+    expect(container.querySelector('.mini-chat-message--assistant img[src="/static/ChacoMemo.png"]')).toBeInTheDocument();
+  });
+
   it("keeps the Japanese copy when the display language is Japanese", () => {
     renderSupportAgent("ja");
 

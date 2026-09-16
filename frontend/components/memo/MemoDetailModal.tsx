@@ -198,7 +198,7 @@ export function MemoDetailModal() {
                 data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
                 data-tooltip-placement="bottom"
               >
-                <i className="bi bi-robot" aria-hidden="true"></i>
+                <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
               </button>
               <span
                 className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
@@ -246,9 +246,12 @@ export function MemoDetailModal() {
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>
                   <div className="memo-modal__agent-header">
+                    <span className="memo-modal__agent-header-icon" aria-hidden="true">
+                      <img src="/static/ChacoMemo.png" alt="" />
+                    </span>
                     <div className="memo-modal__agent-header-info">
-                      <strong>{t("memo.askAgent")}</strong>
-                      <span className="memo-modal__agent-label">Memo Agent</span>
+                      <strong>{t("memo.agentTitle")}</strong>
+                      <span className="memo-modal__agent-label">{t("memo.agentHeaderSubtitle")}</span>
                     </div>
                     <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label={t("memo.closeAgent")}>
                       <i className="bi bi-x-lg" aria-hidden="true"></i>
@@ -271,7 +274,7 @@ export function MemoDetailModal() {
                     persistConversation={false}
                     showModelLabel
                     iconOnlyClearButton={false}
-                    showChacoIcon={false}
+                    agentIconPath="/static/ChacoMemo.png"
                     onMemoEdit={applyAgentMemoEdit}
                   />
                 </aside>
