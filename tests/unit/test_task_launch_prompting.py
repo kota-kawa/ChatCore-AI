@@ -95,6 +95,24 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("resolve omitted subjects and comparison targets", BASE_SYSTEM_PROMPT)
         self.assertIn("reassess it and address that point", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 否定疑問文を含む確認には、はい・いいえを強制せず命題を一度だけ明確に答える。
+    # English: Confirmations answer the proposition once without forcing yes/no polarity.
+    def test_base_system_prompt_answers_yes_no_questions_as_propositions(self):
+        yes_no_rules = BASE_SYSTEM_PROMPT.split("## Yes/no questions\n", 1)[1].split("\n## ", 1)[0]
+        decisive_rules = BASE_SYSTEM_PROMPT.split("## Mandatory decisive-answer structure\n", 1)[1].split("\n## ", 1)[0]
+
+        self.assertIn("underlying proposition directly and unambiguously", yes_no_rules)
+        self.assertIn('a literal "yes" or "no" is not required', yes_no_rules)
+        self.assertIn("Japanese negative questions", yes_no_rules)
+        self.assertIn('State "X is Y" or "X is not Y" directly instead', yes_no_rules)
+        self.assertIn("do not repeat it at the end", yes_no_rules)
+        self.assertIn("takes precedence over the closing-verdict rule", yes_no_rules)
+        self.assertNotIn("a yes/no answer", decisive_rules)
+        self.assertIn("except for short confirmation questions governed by the yes/no rules above", decisive_rules)
+        self.assertIn("a short confirmation is complete with one direct answer", decisive_rules)
+        self.assertIn("incomplete for these substantive requests", decisive_rules)
+        self.assertIn("except for short confirmation questions, which need only one direct conclusion", BASE_SYSTEM_PROMPT)
+
     # 日本語: 判断を求める回答の冒頭と末尾で、同じ明確な結論を必須としていることを検証します。
     # English: Verify judgments require the same clear verdict at both the opening and closing.
     def test_base_system_prompt_requires_decisive_opening_and_closing(self):
