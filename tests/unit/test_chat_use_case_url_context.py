@@ -313,6 +313,45 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
         self.assertTrue(pages[0].truncated)
         self.assertTrue(pages[0].text.startswith(pages[0].excerpt))
 
+    # 過去ターンで貼られたURLが、本文を取得せずに生成ジョブへ渡ることを検証します。
+    # Verify URLs pasted in earlier turns reach the generation job without being fetched.
+    def test_earlier_turn_urls_are_handed_to_the_generation_job(self):
+        earlier_url = "https://example.com/earlier"
+        use_case, deps, _captured = self._build_use_case(streaming=True)
+        # 1ターン目でURLを貼り、2ターン目は普通の追加質問にする。
+        # The first turn pastes a URL and the second asks an ordinary follow-up.
+        deps.rooms.ephemeral_store.append_message("sid-1", "room-1", "user", f"要約して {earlier_url}")
+        deps.rooms.ephemeral_store.append_message("sid-1", "room-1", "assistant", "要約しました。")
+        request = build_request(
+            method="POST",
+            path="/api/chat",
+            json_body={
+                "message": "その記事の後半は？",
+                "chat_room_id": "room-1",
+                "model": "test-model",
+            },
+            session={},
+        )
+
+        with patch(
+            "services.chat_url_context.fetch_urls_documents"
+        ) as fetch_urls:
+            asyncio.run(
+                use_case.execute(
+                    request,
+                    auth_limit_service=object(),
+                    llm_daily_limit_service=object(),
+                    chat_generation_service=object(),
+                )
+            )
+
+        # 追加質問にURLは無いので、このターンでは取得が走らない。
+        # The follow-up holds no URL, so this turn performs no fetch.
+        fetch_urls.assert_not_called()
+        kwargs = deps.generation.start_generation_job.call_args.kwargs
+        self.assertEqual(kwargs["earlier_pasted_urls"], (earlier_url,))
+        self.assertEqual(kwargs["pasted_url_pages"], ())
+
     def test_fetched_url_href_is_attribute_escaped(self):
         fetched_url = 'https://example.com/article?q=a&name="fake"'
         content, _mock_fetch, _deps = self._run(

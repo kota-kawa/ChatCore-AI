@@ -8,6 +8,7 @@ from services.chat_agent_budget import AgentStepBudget
 from services.chat_generation import ChatGenerationJob
 from services.chat_url_context import (
     build_pasted_url_pages,
+    collect_earlier_pasted_urls,
     pasted_url_evidence_id,
     render_fetched_urls_block,
 )
@@ -291,6 +292,110 @@ class PastedUrlGenerationTestCase(unittest.TestCase):
         self.assertTrue(self.page.text.startswith(excerpt))
         self.assertTrue(self.page.text[len(excerpt):].startswith(read_text))
         self.assertGreater(len(read_text), 0)
+
+
+# 過去ターンで貼られたURLは、取得せずに読み取りの入口だけを登録する。
+# A URL pasted in an earlier turn registers only a reading entry point, with no fetch.
+class EarlierPastedUrlTestCase(unittest.TestCase):
+    def setUp(self):
+        self.url = "https://example.com/earlier-article"
+        self.messages = [
+            {"role": "user", "content": f"この記事を要約して {self.url}"},
+            {"role": "assistant", "content": "要約しました。"},
+            {"role": "user", "content": "その記事の後半には何が書いてある？"},
+        ]
+
+    def make_job(self, *, earlier_pasted_urls=()):
+        saved = Mock(return_value=None)
+        job = ChatGenerationJob(
+            conversation_messages=self.messages,
+            model="openai/gpt-oss-120b",
+            persist_response=saved,
+            earlier_pasted_urls=earlier_pasted_urls,
+        )
+        return job, saved
+
+    def test_without_earlier_urls_the_page_is_unreachable(self):
+        job, _ = self.make_job()
+        state = job._build_turn_run_state()
+        with patch("services.chat_generation.is_web_search_enabled", return_value=False):
+            job._configure_agent_tools(state)
+
+        self.assertEqual(len(state.evidence_store), 0)
+        self.assertFalse(state.evidence_store.has_web_records())
+        self.assertEqual(job._available_agent_tools(state), [])
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_earlier_url_is_registered_without_fetching(self, fetch):
+        urls = collect_earlier_pasted_urls(self.messages)
+        self.assertEqual(urls, (self.url,))
+
+        job, _ = self.make_job(earlier_pasted_urls=urls)
+        state = job._build_turn_run_state()
+        with patch("services.chat_generation.is_web_search_enabled", return_value=False):
+            job._configure_agent_tools(state)
+
+        evidence_id = pasted_url_evidence_id(self.url)
+        self.assertTrue(state.evidence_store.has_web_records())
+        self.assertIn(evidence_id, state.turn_state.evidence_refs)
+        execution = state.turn_state.executed_searches[0]
+        self.assertEqual(execution.tool_name, "pasted_url")
+        self.assertEqual(execution.status, "pasted_in_earlier_turn")
+        self.assertIn(
+            "read_web_page",
+            {tool["function"]["name"] for tool in job._available_agent_tools(state)},
+        )
+        # 登録だけではネットワークへ出ない。
+        # Registering alone never reaches the network.
+        fetch.assert_not_called()
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_reading_an_earlier_url_fetches_on_demand(self, fetch):
+        fetch.return_value = FetchedUrlDocument(
+            self.url, self.url, "記事", "前半。\n後半にはまとめがあります。"
+        )
+        job, _ = self.make_job(earlier_pasted_urls=(self.url,))
+        state = job._build_turn_run_state()
+
+        payload = state.web_page_reader.execute_read_web_page(
+            {"evidence_id": pasted_url_evidence_id(self.url)}
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("後半にはまとめ", payload["text"])
+        fetch.assert_called_once_with(self.url)
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_a_url_pasted_again_this_turn_keeps_its_fetched_body(self, fetch):
+        pages = build_pasted_url_pages(
+            {
+                self.url: FetchedUrlDocument(
+                    requested_url=self.url,
+                    final_url=self.url,
+                    title="今回取得した記事",
+                    text="今回のターンで取得した本文",
+                )
+            }
+        )
+        saved = Mock(return_value=None)
+        job = ChatGenerationJob(
+            conversation_messages=self.messages,
+            model="openai/gpt-oss-120b",
+            persist_response=saved,
+            pasted_url_pages=pages,
+            earlier_pasted_urls=(self.url,),
+        )
+        state = job._build_turn_run_state()
+
+        evidence_id = pasted_url_evidence_id(self.url)
+        record = state.evidence_store.get(evidence_id)
+        self.assertEqual(record["source"]["title"], "今回取得した記事")
+        # 重複登録で台帳が二重にならず、種も残る。
+        # The duplicate neither doubles the ledger nor discards the seeded body.
+        self.assertEqual(len(state.turn_state.executed_searches), 1)
+        payload = state.web_page_reader.execute_read_web_page({"evidence_id": evidence_id})
+        self.assertEqual(payload["text"], "今回のターンで取得した本文")
+        fetch.assert_not_called()
 
 
 if __name__ == "__main__":

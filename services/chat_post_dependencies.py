@@ -219,6 +219,7 @@ class StartGenerationJob(Protocol):
         service: ChatGenerationService | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
         pasted_url_pages: Sequence[PastedUrlPage] = (),
+        earlier_pasted_urls: Sequence[str] = (),
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,

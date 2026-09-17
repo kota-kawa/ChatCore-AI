@@ -3730,6 +3730,74 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("<fetched_urls>", latest)
         self.assertIn("この記事を要約して", latest)
 
+    # 日本語: 再生成でも、過去ターンで貼られた URL が読み取りの入口として生成ジョブへ渡ることを検証します。
+    # English: Verify regeneration hands earlier-turn URLs to the job as a reading entry point.
+    def test_regenerate_hands_earlier_turn_urls_to_the_generation_job(self):
+        earlier_url = "https://example.com/earlier"
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("blueprints.chat.messages.cleanup_ephemeral_chats"))
+            stack.enter_context(patch("blueprints.chat.messages.validate_model_name"))
+            stack.enter_context(
+                patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None))
+            )
+            stack.enter_context(
+                patch(
+                    "blueprints.chat.messages.get_active_path",
+                    new=AsyncMock(return_value=[
+                        {"id": 8, "message": f"要約して {earlier_url}", "sender": "user"},
+                        {"id": 9, "message": "要約しました。", "sender": "assistant"},
+                        {"id": 10, "message": "その記事の後半は？", "sender": "user"},
+                        {"id": 11, "message": "old answer", "sender": "assistant"},
+                    ]),
+                )
+            )
+            stack.enter_context(patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})))
+            stack.enter_context(patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})))
+            stack.enter_context(
+                patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[]))
+            )
+            stack.enter_context(
+                patch(
+                    "blueprints.chat.messages.get_room_web_search_contexts",
+                    new=AsyncMock(return_value=[]),
+                )
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300))
+            )
+            stack.enter_context(patch("blueprints.chat.messages.is_streaming_model", return_value=True))
+            fetch_urls = stack.enter_context(
+                patch("services.chat_url_context.fetch_urls_documents")
+            )
+            start_job = stack.enter_context(
+                patch("services.chat_regeneration_pipeline.start_generation_job")
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages._build_llm_stream_response", return_value="stream")
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages._iter_llm_stream_events", return_value=iter(()))
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12))
+            )
+            asyncio.run(chat_regenerate(request))
+
+        fetch_urls.assert_not_called()
+        kwargs = start_job.call_args.kwargs
+        self.assertEqual(kwargs["earlier_pasted_urls"], (earlier_url,))
+        self.assertEqual(kwargs["pasted_url_pages"], ())
+
     # 日本語: 編集して再生成した場合、編集後の発話に含まれる URL の全文が生成ジョブへ渡ることを検証します。
     # English: Verify editing and regenerating hands the edited message's page bodies to the job.
     def test_edit_and_regenerate_hands_pasted_pages_to_the_generation_job(self):

@@ -9,9 +9,12 @@ from xml.etree import ElementTree
 from services.chat_context import estimate_token_count
 from services.chat_evidence_store import EvidenceStore
 from services.chat_url_context import (
+    EARLIER_PASTED_URL_LOOKBACK_MESSAGES,
     INLINE_URL_CONTEXT_TOKEN_BUDGET,
+    MAX_EARLIER_PASTED_URLS,
     MIN_INLINE_URL_TOKENS_PER_PAGE,
     build_pasted_url_pages,
+    collect_earlier_pasted_urls,
     pasted_url_evidence_id,
     render_fetched_urls_block,
 )
@@ -151,6 +154,103 @@ class RenderFetchedUrlsBlockTestCase(unittest.TestCase):
     # Verify no pages render as an empty string.
     def test_no_pages_render_empty(self):
         self.assertEqual(render_fetched_urls_block(()), "")
+
+
+class CollectEarlierPastedUrlsTestCase(unittest.TestCase):
+    # 過去ターンで貼られたURLを、新しい順に拾うことを検証します。
+    # Verify URLs pasted in earlier turns are collected newest first.
+    def test_collects_urls_from_earlier_user_turns(self):
+        messages = [
+            {"role": "user", "content": "最初の記事 https://example.com/a"},
+            {"role": "assistant", "content": "要約しました。"},
+            {"role": "user", "content": "次の記事 https://example.com/b"},
+            {"role": "assistant", "content": "こちらも要約しました。"},
+            {"role": "user", "content": "2つの違いは？"},
+        ]
+        self.assertEqual(
+            collect_earlier_pasted_urls(messages),
+            ("https://example.com/b", "https://example.com/a"),
+        )
+
+    # 最新のユーザー発話のURLは取得経路が扱うため、ここでは拾わないことを検証します。
+    # Verify the newest user message is left to the fetching path.
+    def test_newest_user_message_is_excluded(self):
+        messages = [
+            {"role": "user", "content": "前の質問"},
+            {"role": "assistant", "content": "回答"},
+            {"role": "user", "content": "この記事を読んで https://example.com/now"},
+        ]
+        self.assertEqual(collect_earlier_pasted_urls(messages), ())
+
+    # アシスタント回答に含まれるURLは「ユーザーが貼ったURL」として扱わないことを検証します。
+    # Verify URLs inside an assistant reply are never treated as pasted by the user.
+    def test_assistant_urls_are_ignored(self):
+        messages = [
+            {"role": "user", "content": "調べて"},
+            {"role": "assistant", "content": "出典 https://spam.example.com/ad を参照"},
+            {"role": "user", "content": "もう少し詳しく"},
+        ]
+        self.assertEqual(collect_earlier_pasted_urls(messages), ())
+
+    # 重複URLはフラグメント違いも含めて正規化し、1件にまとめることを検証します。
+    # Verify duplicates, including fragment-only differences, collapse into one entry.
+    def test_duplicates_collapse_after_canonicalization(self):
+        messages = [
+            {"role": "user", "content": "https://example.com/a#section"},
+            {"role": "user", "content": "https://example.com/a"},
+            {"role": "user", "content": "https://example.com/b"},
+            {"role": "user", "content": "まとめて"},
+        ]
+        self.assertEqual(
+            collect_earlier_pasted_urls(messages),
+            ("https://example.com/b", "https://example.com/a"),
+        )
+
+    # 件数の上限をちょうど超えたところで打ち切られることを検証します。
+    # Verify collection stops exactly at the URL cap.
+    def test_url_cap_is_exact(self):
+        def collect(url_count):
+            messages = [
+                {"role": "user", "content": f"https://example.com/{index}"}
+                for index in range(url_count)
+            ]
+            return collect_earlier_pasted_urls([*messages, {"role": "user", "content": "まとめて"}])
+
+        self.assertEqual(len(collect(MAX_EARLIER_PASTED_URLS)), MAX_EARLIER_PASTED_URLS)
+        self.assertEqual(len(collect(MAX_EARLIER_PASTED_URLS + 1)), MAX_EARLIER_PASTED_URLS)
+
+    # 遡る発話数の上限が、ちょうど境界の発話まで含み、その1つ先を含まないことを検証します。
+    # Verify the look-back cap includes the boundary message and excludes the one beyond it.
+    def test_look_back_cap_is_exact(self):
+        def collect(filler_count):
+            messages = [
+                {"role": "user", "content": "https://example.com/far"},
+                *[
+                    {"role": "user", "content": "URLのない発話"}
+                    for _ in range(filler_count)
+                ],
+                {"role": "user", "content": "まとめて"},
+            ]
+            return collect_earlier_pasted_urls(messages)
+
+        # 境界の発話（遡り上限ちょうど）は含む。
+        # The message at the look-back boundary is still inspected.
+        self.assertEqual(
+            collect(EARLIER_PASTED_URL_LOOKBACK_MESSAGES - 1),
+            ("https://example.com/far",),
+        )
+        # その1つ先は含まない。
+        # The next one beyond it is not.
+        self.assertEqual(collect(EARLIER_PASTED_URL_LOOKBACK_MESSAGES), ())
+
+    # HTTP(S) でないURLや壊れたURLは拾わないことを検証します。
+    # Verify non-HTTP(S) and malformed URLs are skipped.
+    def test_unusable_urls_are_skipped(self):
+        messages = [
+            {"role": "user", "content": "ftp://example.com/x と https://example.com:8443/y"},
+            {"role": "user", "content": "まとめて"},
+        ]
+        self.assertEqual(collect_earlier_pasted_urls(messages), ())
 
 
 class PastedPageEvidenceTestCase(unittest.TestCase):
