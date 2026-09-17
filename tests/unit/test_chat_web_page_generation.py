@@ -6,6 +6,11 @@ from unittest.mock import Mock, patch
 
 from services.chat_agent_budget import AgentStepBudget
 from services.chat_generation import ChatGenerationJob
+from services.chat_url_context import (
+    build_pasted_url_pages,
+    pasted_url_evidence_id,
+    render_fetched_urls_block,
+)
 from services.url_fetcher import FetchedUrlDocument
 from services.web_search import WebSearchResult, WebSearchSource
 
@@ -189,6 +194,97 @@ class WebPageGenerationTestCase(unittest.TestCase):
             job._configure_agent_tools(state)
         names = {tool["function"]["name"] for tool in job._available_agent_tools(state)}
         self.assertEqual(names, {"web_search"})
+
+
+# チャット欄に貼られた長いURLは、抜粋だけを前置したうえで残りを分割読み取りできる。
+# A long pasted URL is prepended as an excerpt only, and the rest stays readable in chunks.
+class PastedUrlGenerationTestCase(unittest.TestCase):
+    def setUp(self):
+        self.url = "https://example.com/long-article"
+        self.body = "".join(f"段落{index}の内容です。\n" for index in range(1, 1001))
+        self.pages = build_pasted_url_pages(
+            {
+                self.url: FetchedUrlDocument(
+                    requested_url=self.url,
+                    final_url=self.url,
+                    title="長い記事",
+                    text=self.body,
+                )
+            }
+        )
+        self.page = self.pages[0]
+
+    def make_job(self, messages):
+        saved = Mock(return_value=None)
+        job = ChatGenerationJob(
+            conversation_messages=messages,
+            model="openai/gpt-oss-120b",
+            persist_response=saved,
+            pasted_url_pages=self.pages,
+        )
+        return job, saved
+
+    def test_pasted_page_is_registered_as_readable_evidence(self):
+        job, _ = self.make_job([{"role": "user", "content": "要約して"}])
+        state = job._build_turn_run_state()
+
+        evidence_id = pasted_url_evidence_id(self.url)
+        self.assertTrue(state.evidence_store.has_web_records())
+        self.assertIn(evidence_id, state.turn_state.evidence_refs)
+        execution = state.turn_state.executed_searches[0]
+        self.assertEqual(execution.tool_name, "pasted_url")
+        self.assertEqual(execution.query, self.url)
+        self.assertEqual(execution.evidence_ids, (evidence_id,))
+
+    def test_model_reads_the_rest_of_the_page_in_chunks_without_refetching(self):
+        evidence_id = pasted_url_evidence_id(self.url)
+        excerpt = self.page.excerpt
+        prompt = (
+            f"{render_fetched_urls_block(self.pages)}\n\n{self.url} の終盤に何が書いてある？"
+        )
+        calls = 0
+        read_text = ""
+
+        def stream(messages, _model, *, tools=None, **_kwargs):
+            nonlocal calls, read_text
+            calls += 1
+            if calls == 1:
+                names = {tool["function"]["name"] for tool in tools or []}
+                self.assertIn("read_web_page", names)
+                yield json.dumps(
+                    [tool_call("read_web_page", evidence_id=evidence_id, start=len(excerpt))]
+                )
+            elif calls == 2:
+                payload = json.loads(messages[-1]["content"])
+                self.assertEqual(payload["status"], "ok")
+                self.assertEqual(payload["start"], len(excerpt))
+                self.assertEqual(payload["total_chars"], len(self.page.text))
+                read_text = payload["text"]
+                yield json.dumps(
+                    [tool_call("read_web_page", evidence_id=evidence_id, start=payload["next_start"])]
+                )
+            else:
+                payload = json.loads(messages[-1]["content"])
+                read_text += payload["text"]
+                yield "終盤の内容をまとめました。"
+
+        job, saved = self.make_job([{"role": "user", "content": prompt}])
+        with (
+            patch("services.chat_generation.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_web_page_reader.fetch_url_document") as fetch,
+        ):
+            job._run()
+
+        # 取得済み本文を種にしているので、読み直しでネットワークへは出ない。
+        # The seeded body means paging never returns to the network.
+        fetch.assert_not_called()
+        saved.assert_called_once()
+        # 抜粋の直後から隙間なく続きを読めている。
+        # Reading resumes directly after the excerpt with no gap.
+        self.assertTrue(self.page.text.startswith(excerpt))
+        self.assertTrue(self.page.text[len(excerpt):].startswith(read_text))
+        self.assertGreater(len(read_text), 0)
 
 
 if __name__ == "__main__":

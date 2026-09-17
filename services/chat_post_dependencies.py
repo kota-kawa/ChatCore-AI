@@ -35,6 +35,7 @@ from services.chat_regeneration_pipeline import (
     RebuildRoomSummary,
     SaveMessageToDb,
 )
+from services.chat_url_context import PastedUrlPage
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import GenerativeUiMode
 from services.selected_reference_context import SelectedReferenceLookupTrace
@@ -217,6 +218,7 @@ class StartGenerationJob(Protocol):
         on_error: Callable[[], None] | None = None,
         service: ChatGenerationService | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
+        pasted_url_pages: Sequence[PastedUrlPage] = (),
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,

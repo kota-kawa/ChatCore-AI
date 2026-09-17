@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import Future, TimeoutError
 from typing import Any
 
@@ -67,6 +67,11 @@ from .chat_turn_state import (
     parse_turn_state_update,
     strip_turn_state_update,
     strip_turn_state_update_chunks,
+)
+from .chat_url_context import (
+    PASTED_URL_STATUS,
+    PASTED_URL_TOOL_NAME,
+    PastedUrlPage,
 )
 from .chat_web_page_reader import (
     READ_WEB_PAGE_TOOL_NAME,
@@ -512,6 +517,7 @@ class ChatGenerationJob:
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
+        pasted_url_pages: Sequence[PastedUrlPage] = (),
         is_cancel_requested: Callable[[], bool] | None = None,
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
@@ -532,6 +538,11 @@ class ChatGenerationJob:
         # failure disappears silently.
         self._artifact_status_payload: dict[str, str] | None = None
         self._prior_web_search_results = list(prior_web_search_results or [])
+        # 発話に貼られたURLの取得済み本文。ターン開始時に根拠として登録し、read_web_page が
+        # 再取得なしで分割して読めるようにする。
+        # Bodies already fetched for URLs pasted in the message. They are registered as
+        # evidence at turn start so read_web_page pages through them without fetching again.
+        self._pasted_url_pages = tuple(pasted_url_pages or ())
         # メモ/マイコンテキスト検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
         # ジョブ自身はセッションもDBも知らないままでいられる。None のときは機能そのものが無効。
         # Memo / My Context lookup. The caller passes a closure already bound to a user id, so the
@@ -1278,6 +1289,7 @@ class ChatGenerationJob:
             continuation_state_filter=TurnStateUpdateFilter(),
             web_search_trace_steps=selected_reference_steps(self._selected_reference_trace),
         )
+        self._register_pasted_url_pages(state)
         for prior_result in self._prior_web_search_results:
             turn_state.record_search(
                 tool_name="web_search",
@@ -1300,6 +1312,34 @@ class ChatGenerationJob:
                 status=str(selected_trace.payload.get("status") or "ok"),
             )
         return state
+
+    # 貼り付けURLの本文を、検索結果とは別経路で根拠に載せる。抜粋は既に発話へ前置済みなので、
+    # ここで登録するのは「続きを分割して読むための入口」である。
+    # Register pasted page bodies as evidence on a path of their own. The excerpt is already in
+    # the message; what is registered here is the entry point for reading the rest in chunks.
+    def _register_pasted_url_pages(self, state: ChatTurnRunState) -> None:
+        for page in self._pasted_url_pages:
+            reference = state.evidence_store.add_pasted_page(
+                url=page.url,
+                title=page.title,
+                snippet=page.snippet,
+                fetched_at=page.fetched_at,
+            )
+            if reference is None:
+                continue
+            state.web_page_reader.seed_page(
+                page.url,
+                text=page.text,
+                title=page.title,
+                fetched_at=page.fetched_at,
+            )
+            state.turn_state.record_search(
+                tool_name=PASTED_URL_TOOL_NAME,
+                query=page.url,
+                evidence_refs=(reference,),
+                searched_at=page.fetched_at,
+                status=PASTED_URL_STATUS,
+            )
 
     # 検索結果が届いた時点で表示候補の画像を選ぶ。停止しても露出済み画像を保存できる。
     # Select images as soon as a search result arrives so a stop still keeps revealed ones.
@@ -3264,6 +3304,7 @@ class ChatGenerationService:
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
+        pasted_url_pages: Sequence[PastedUrlPage] = (),
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
@@ -3299,6 +3340,7 @@ class ChatGenerationService:
                 on_event=lambda event: self._publish_distributed_event(job_key, event),
                 on_error=on_error,
                 prior_web_search_results=prior_web_search_results,
+                pasted_url_pages=pasted_url_pages,
                 is_cancel_requested=lambda: self._is_remote_cancel_requested(job_key),
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
@@ -3452,6 +3494,7 @@ def start_generation_job(
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
     prior_web_search_results: list[WebSearchResult] | None = None,
+    pasted_url_pages: Sequence[PastedUrlPage] = (),
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
     selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
@@ -3471,6 +3514,7 @@ def start_generation_job(
         on_finished=on_finished,
         on_error=on_error,
         prior_web_search_results=prior_web_search_results,
+        pasted_url_pages=pasted_url_pages,
         personal_knowledge_search=personal_knowledge_search,
         shared_prompt_search=shared_prompt_search,
         selected_reference_trace=selected_reference_trace,
