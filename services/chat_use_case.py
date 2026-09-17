@@ -45,7 +45,11 @@ from services.chat_post_dependencies import (
     ChatPostWebDependencies,
 )
 from services.chat_title import build_initial_title_candidates, generate_chat_room_title
-from services.chat_url_context import PastedUrlPage, fetch_pasted_url_context
+from services.chat_url_context import (
+    PastedUrlPage,
+    collect_earlier_pasted_urls,
+    fetch_pasted_url_context,
+)
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     GenerativeUiMode,
@@ -175,6 +179,9 @@ class _ChatPostTurn:
     # English: Pages fetched for URLs pasted in the message. The excerpt is prepended to the
     #          message and the full body goes to the generation job's page-reading cache.
     pasted_url_pages: tuple[PastedUrlPage, ...] = ()
+    # 日本語: 過去ターンで貼られたURL。本文は持たず、読み取りの入口としてだけ渡す。
+    # English: URLs pasted in earlier turns, carried only as a reading entry point.
+    earlier_pasted_urls: tuple[str, ...] = ()
     generation_key: str = ""
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
@@ -466,6 +473,11 @@ class ChatPostUseCase:
         # メッセージ履歴を LLM 向けに正規化
         # Normalize message history for LLM compatibility
         turn.normalized_all_messages = self.deps.prompts.normalize_messages_for_llm(turn.all_messages)
+        # 過去ターンのURLは、参照ブロックを前置する前の生の発話からだけ集める。前置後に拾うと、
+        # 外部ページや添付本文に含まれるリンクまでユーザーが貼ったものとして扱ってしまう。
+        # Earlier URLs are collected from the raw messages, before any reference block is
+        # prepended: extracting later would treat links inside page or attachment text as pasted.
+        turn.earlier_pasted_urls = collect_earlier_pasted_urls(turn.normalized_all_messages)
         turn.active_task_request = self.deps.prompts.find_latest_task_launch_request(turn.normalized_all_messages)
         turn.normalized_all_messages = mark_task_launch_input_for_llm(
             turn.normalized_all_messages, turn.active_task_request
@@ -861,6 +873,7 @@ class ChatPostUseCase:
                 service=turn.chat_generation_service,
                 prior_web_search_results=turn.prior_web_search_results,
                 pasted_url_pages=turn.pasted_url_pages,
+                earlier_pasted_urls=turn.earlier_pasted_urls,
                 personal_knowledge_search=turn.personal_knowledge_search,
                 shared_prompt_search=turn.shared_prompt_search,
                 selected_reference_trace=turn.selected_reference_trace,

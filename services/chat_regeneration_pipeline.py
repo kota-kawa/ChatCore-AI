@@ -41,7 +41,11 @@ from services.chat_prompt import (
     build_task_prompt,
     build_user_profile_prompt,
 )
-from services.chat_url_context import PastedUrlPage, fetch_pasted_url_context
+from services.chat_url_context import (
+    PastedUrlPage,
+    collect_earlier_pasted_urls,
+    fetch_pasted_url_context,
+)
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
     artifact_status_part,
@@ -319,6 +323,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     # URL 抽出も、添付やタスク標識を前置する前の「ユーザー自身の文面」から行う。
     # URL extraction also reads the user's own text, before attachments or task markers.
     latest_user_message_text = _latest_user_content(normalized_all_messages)
+    earlier_pasted_urls = collect_earlier_pasted_urls(normalized_all_messages)
     if selected_reference_query is None:
         selected_reference_query = latest_user_message_text
     active_task_request = find_latest_task_launch_request(normalized_all_messages)
@@ -538,6 +543,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 service=pipeline_input.chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
                 pasted_url_pages=pasted_url_pages,
+                earlier_pasted_urls=earlier_pasted_urls,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,
