@@ -175,5 +175,73 @@ class WebPageReaderTestCase(unittest.TestCase):
         fetch.assert_not_called()
 
 
+# チャット欄に貼られたURLは取得済み本文を種として渡され、再取得なしで分割読み取りできる。
+# A URL pasted into the chat seeds its already-fetched body, so chunked reads never refetch.
+class SeededPastedPageTestCase(unittest.TestCase):
+    def setUp(self):
+        self.store = EvidenceStore()
+        self.url = "https://example.com/long"
+        self.text = "".join(f"行{index}\n" for index in range(1, 2001))
+        self.reference = self.store.add_pasted_page(
+            url=self.url,
+            title="長い記事",
+            snippet=self.text[:50],
+            fetched_at="2026-09-18T00:00:00+00:00",
+        )
+        self.reader = WebPageReader(self.store)
+        self.reader.seed_page(
+            self.url,
+            text=self.text,
+            title="長い記事",
+            fetched_at="2026-09-18T00:00:00+00:00",
+        )
+
+    def read(self, **kwargs):
+        return self.reader.execute_read_web_page(
+            {"evidence_id": self.reference["evidence_id"], **kwargs}
+        )
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_seeded_page_is_read_without_fetching(self, fetch):
+        result = self.read(length=100)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["text"], self.text[:100])
+        self.assertEqual(result["total_chars"], len(self.text))
+        self.assertEqual(result["fetched_at"], "2026-09-18T00:00:00+00:00")
+        fetch.assert_not_called()
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_chunked_reads_cover_the_whole_body(self, fetch):
+        collected = ""
+        start = 0
+        for _ in range(40):
+            chunk = self.read(start=start, length=MAX_PAGE_LENGTH)
+            self.assertEqual(chunk["status"], "ok")
+            collected += chunk["text"]
+            if chunk["next_start"] is None:
+                break
+            start = chunk["next_start"]
+        self.assertEqual(collected, self.text)
+        fetch.assert_not_called()
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_reading_after_an_inlined_excerpt_resumes_without_a_gap(self, fetch):
+        # 発話へ前置した抜粋の直後（= その文字数）から続きを読めることを確かめる。
+        # The read resumes exactly where the excerpt prepended to the message stopped.
+        excerpt = self.text[:3_000]
+        result = self.read(start=len(excerpt), length=1_000)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(excerpt + result["text"], self.text[: len(excerpt) + len(result["text"])])
+        fetch.assert_not_called()
+
+    def test_seed_never_replaces_a_page_already_in_the_cache(self):
+        self.assertFalse(self.reader.seed_page(self.url, text="別の本文"))
+        self.assertEqual(self.read(length=10)["text"], self.text[:10])
+
+    def test_seed_rejects_unusable_input(self):
+        self.assertFalse(self.reader.seed_page("ftp://example.com/x", text="本文"))
+        self.assertFalse(self.reader.seed_page("https://example.com/empty", text=""))
+
+
 if __name__ == "__main__":
     unittest.main()

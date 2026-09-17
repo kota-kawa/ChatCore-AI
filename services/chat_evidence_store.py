@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import urlsplit
 
 from services.web_search import WebSearchResult, WebSearchSource
 
@@ -241,6 +242,61 @@ class EvidenceStore:
             self._records[evidence_id] = record
             references.append(self._web_reference(record))
         return tuple(references)
+
+    def add_pasted_page(
+        self,
+        *,
+        url: str,
+        title: str = "",
+        snippet: str = "",
+        fetched_at: str = "",
+    ) -> dict[str, Any] | None:
+        """Index a page the user pasted into the chat so ``read_web_page`` can serve it.
+
+        検索で見つけたページと同じ ``web`` レコード形状で持つ。本文そのものはここに入れず、
+        ページ読み取り側のキャッシュが持つ（本文は範囲指定でしかプロンプトへ入らない）。
+        The record keeps the same ``web`` shape a searched source has. The body itself is not
+        stored here but in the page reader's cache, so it can only enter the prompt as a
+        bounded range.
+        """
+        normalized_url = _clean_metadata_text(url)
+        if not normalized_url:
+            return None
+        try:
+            hostname = urlsplit(normalized_url).hostname or ""
+        except ValueError:
+            hostname = ""
+        normalized_snippet = _clean_metadata_text(snippet)
+        source = WebSearchSource(
+            url=normalized_url,
+            title=_clean_metadata_text(title),
+            hostname=hostname,
+            age="",
+            snippets=(normalized_snippet,) if normalized_snippet else (),
+        )
+        record: dict[str, Any] = {
+            "evidence_id": source.evidence_id,
+            "source_type": "web",
+            "query": "",
+            "searched_at": _clean_metadata_text(fetched_at),
+            "freshness": "",
+            "source": asdict(source),
+            "search_contexts": [],
+            "origin": "pasted_url",
+        }
+        existing = self._records.get(source.evidence_id)
+        if existing is not None and existing.get("source_type") == "web":
+            # 貼り付けには検索クエリも鮮度も無い。同じURLの検索結果が先にあるなら、
+            # 空の値で上書きせず既存のメタデータを残す（回答が情報の時点を失わないため）。
+            # A paste carries no query and no freshness. When a search already found the same
+            # URL, its metadata is kept rather than overwritten with blanks, so the answer does
+            # not lose when the information is from.
+            for key in ("query", "searched_at", "freshness"):
+                if _clean_metadata_text(existing.get(key)):
+                    record[key] = existing[key]
+            record = self._merge_web_record(existing, record)
+        self._records[source.evidence_id] = record
+        return self._web_reference(record)
 
     def add_reference_payload(
         self,

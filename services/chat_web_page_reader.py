@@ -134,6 +134,37 @@ class WebPageReader:
             return _error(page["status"], page["message"], max_chars)
         return self._read_range(page, evidence_id, start, length, max_chars)
 
+    def seed_page(
+        self,
+        url: str,
+        *,
+        text: str,
+        title: str = "",
+        final_url: str = "",
+        fetched_at: str = "",
+    ) -> bool:
+        """Serve an already-fetched body from this turn's cache instead of fetching again.
+
+        貼り付けURLはターン開始前に取得済みなので、同じページを読むために再度ネットワークへ
+        出る必要はない。取得予算も消費しない。
+        A pasted URL was already fetched before the turn started, so reading it again must not
+        cost another request; a seeded page also leaves the fetch budget untouched.
+        """
+        canonical_url = canonicalize_url(url)
+        if not canonical_url or not text or canonical_url in self._pages:
+            return False
+        bounded_text = text[:MAX_URL_TEXT_CHARS]
+        self._pages[canonical_url] = {
+            "status": "ok",
+            "url": canonical_url,
+            "final_url": canonicalize_url(final_url) or canonical_url,
+            "title": title[:300],
+            "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
+            "text": bounded_text,
+            "text_limit_reached": len(bounded_text) >= MAX_URL_TEXT_CHARS,
+        }
+        return True
+
     def _fetch(self, url: str) -> dict[str, Any]:
         if self._fetch_count >= self._max_pages or self._remaining_seconds <= 0:
             return {"status": "fetch_budget_exhausted", "message": "This answer's external page-fetch budget is exhausted."}

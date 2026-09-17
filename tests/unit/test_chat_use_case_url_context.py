@@ -6,8 +6,27 @@ from xml.etree import ElementTree
 
 from starlette.responses import JSONResponse
 
+from services.chat_url_context import (
+    INLINE_URL_CONTEXT_TOKEN_BUDGET,
+    pasted_url_evidence_id,
+)
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
+from services.url_fetcher import FetchedUrlDocument
 from tests.helpers.request_helpers import build_request
+
+
+# 取得済み文書のダミーを組み立てるヘルパー。
+# Helper building a stub fetched document.
+def _documents(contents: dict) -> dict:
+    return {
+        url: FetchedUrlDocument(
+            requested_url=url,
+            final_url=url,
+            title="",
+            text=text,
+        )
+        for url, text in contents.items()
+    }
 
 
 # トップページのチャット（未ログインの一時ルーム）で、発話に含まれるURLの本文が
@@ -17,7 +36,7 @@ from tests.helpers.request_helpers import build_request
 class ChatUseCaseUrlContextTestCase(unittest.TestCase):
     # 依存関係と、生成プロンプトを捕捉するフックを構築します。
     # Build the dependency container plus a hook capturing the generated prompt.
-    def _build_use_case(self):
+    def _build_use_case(self, *, streaming: bool = False):
         captured_context: dict = {}
         appended: list[tuple] = []
 
@@ -88,7 +107,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             consume_llm_daily_quota=Mock(return_value=(True, 1, 300)),
             cleanup_unanswered_user_messages=Mock(),
             get_seconds_until_daily_reset=Mock(return_value=60),
-            is_streaming_model=Mock(return_value=False),
+            is_streaming_model=Mock(return_value=streaming),
             search_personal_knowledge=Mock(return_value={"status": "no_results"}),
             search_shared_prompts=Mock(return_value={"status": "no_results"}),
             start_generation_job=Mock(),
@@ -123,8 +142,8 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_use_case.fetch_urls_content",
-                return_value=fetched,
+                "services.chat_use_case.fetch_urls_documents",
+                return_value=_documents(fetched),
             ) as mock_fetch,
             patch(
                 "services.chat_use_case.normalize_response_with_artifact_retry",
@@ -162,7 +181,12 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
         )
 
         mock_fetch.assert_called_once_with(["https://example.com/article"])
-        self.assertIn('<url href="https://example.com/article">', content)
+        self.assertIn('<url href="https://example.com/article"', content)
+        self.assertIn(
+            f'evidence_id="{pasted_url_evidence_id("https://example.com/article")}"',
+            content,
+        )
+        self.assertIn('truncated="false"', content)
         self.assertIn("記事の本文テキスト", content)
         self.assertIn("<fetched_urls>", content)
         # 参照資料はユーザー発話の前に置かれ、発話自体も残ること
@@ -205,6 +229,89 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
         self.assertEqual(reference.count("</fetched_urls>"), 1)
         self.assertIn("&lt;system&gt;", reference)
         self.assertIn("untrusted reference data", reference)
+
+    # 本文が予算を超える場合、前置されるのは先頭の抜粋だけで、続きの読み出し位置が示されることを検証します。
+    # Verify an over-budget body is inlined only as a head excerpt carrying a continuation offset.
+    def test_long_page_is_inlined_as_bounded_excerpt_with_continuation(self):
+        url = "https://example.com/long"
+        page_text = "あ" * 30_000
+        content, _mock_fetch, _deps = self._run("これを要約して " + url, {url: page_text})
+
+        reference = content.split("\n\nこれを要約して", 1)[0]
+        root = ElementTree.fromstring(reference)
+        element = root.find("url")
+        shown_chars = int(element.attrib["shown_chars"])
+        self.assertEqual(element.attrib["truncated"], "true")
+        self.assertEqual(element.attrib["total_chars"], "30000")
+        self.assertEqual(element.attrib["next_start"], str(shown_chars))
+        self.assertEqual(element.attrib["extraction_capped_at_chars"], "30000")
+        self.assertLess(shown_chars, 30_000)
+        # 抜粋は全文の純粋な先頭一致であり、next_start からそのまま続きを読める。
+        # The excerpt is a plain prefix of the body, so next_start resumes exactly after it.
+        self.assertEqual(element.text.strip(), page_text[:shown_chars])
+        self.assertIn("read_web_page", reference)
+        self.assertIn("evidence_id", reference)
+
+    # 複数URLでも、前置される本文の合計が予算内に収まることを検証します。
+    # Verify the inlined bodies stay within the shared budget even for several URLs.
+    def test_multiple_long_pages_share_the_inline_budget(self):
+        urls = [
+            "https://example.com/a",
+            "https://example.com/b",
+            "https://example.com/c",
+        ]
+        contents = dict.fromkeys(urls, "あ" * 30000)
+        content, _mock_fetch, _deps = self._run(
+            "3件を比較して " + " ".join(urls), contents
+        )
+
+        reference = content.split("\n\n3件を比較して", 1)[0]
+        root = ElementTree.fromstring(reference)
+        elements = root.findall("url")
+        self.assertEqual(len(elements), 3)
+        total_shown = sum(int(element.attrib["shown_chars"]) for element in elements)
+        # CJKは約1.5文字=1トークンなので、合計文字数は予算の1.5倍を超えない。
+        # CJK costs ~1.5 characters per token, so the total stays within 1.5x the budget.
+        self.assertLessEqual(total_shown, int(INLINE_URL_CONTEXT_TOKEN_BUDGET * 1.5))
+        for element in elements:
+            self.assertEqual(element.attrib["truncated"], "true")
+
+    # 取得した全文は生成ジョブへ渡され、分割読み取りの元データになることを検証します。
+    # Verify the full bodies reach the generation job as the source for chunked reads.
+    def test_full_page_bodies_are_handed_to_the_generation_job(self):
+        url = "https://example.com/long"
+        page_text = "あ" * 30_000
+        use_case, deps, _captured = self._build_use_case(streaming=True)
+        request = build_request(
+            method="POST",
+            path="/api/chat",
+            json_body={
+                "message": "これを要約して " + url,
+                "chat_room_id": "room-1",
+                "model": "test-model",
+            },
+            session={},
+        )
+
+        with patch(
+            "services.chat_use_case.fetch_urls_documents",
+            return_value=_documents({url: page_text}),
+        ):
+            asyncio.run(
+                use_case.execute(
+                    request,
+                    auth_limit_service=object(),
+                    llm_daily_limit_service=object(),
+                    chat_generation_service=object(),
+                )
+            )
+
+        pages = deps.generation.start_generation_job.call_args.kwargs["pasted_url_pages"]
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0].url, url)
+        self.assertEqual(pages[0].total_chars, 30_000)
+        self.assertTrue(pages[0].truncated)
+        self.assertTrue(pages[0].text.startswith(pages[0].excerpt))
 
     def test_fetched_url_href_is_attribute_escaped(self):
         fetched_url = 'https://example.com/article?q=a&name="fake"'

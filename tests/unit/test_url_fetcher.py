@@ -881,6 +881,17 @@ class UrlLoggingTest(unittest.TestCase):
         self.assertNotIn("SECRET", "\n".join(captured.output))
 
 
+# 取得済み文書のダミーを組み立てるヘルパー。
+# Helper building a stub fetched document.
+def _document(url: str, text: str, *, title: str = "") -> url_fetcher.FetchedUrlDocument:
+    return url_fetcher.FetchedUrlDocument(
+        requested_url=url,
+        final_url=url,
+        title=title,
+        text=text,
+    )
+
+
 # 複数のURLからまとめてコンテンツをフェッチし、成功した結果のみをマッピングして返す関数をテストするクラス。
 # Test class to check batch fetching of contents from multiple URLs and mapping successful results.
 class FetchUrlsContentTest(unittest.TestCase):
@@ -888,16 +899,40 @@ class FetchUrlsContentTest(unittest.TestCase):
     # Verify that a dictionary mapping of only successfully fetched URLs to their text contents is returned.
     def test_returns_mapping_of_successful_fetches(self):
         contents = {"https://a.com": "text-a", "https://b.com": None, "https://c.com": "text-c"}
-        with patch.object(url_fetcher, "fetch_url_content", side_effect=contents.get):
+
+        def fetch(url):
+            text = contents.get(url)
+            return _document(url, text) if text else None
+
+        with patch.object(url_fetcher, "fetch_url_document", side_effect=fetch):
             result = url_fetcher.fetch_urls_content(
                 ["https://a.com", "https://b.com", "https://c.com"]
             )
         self.assertEqual(result, {"https://a.com": "text-a", "https://c.com": "text-c"})
 
+    # 文書版は本文に加えてタイトルなどのメタデータも保持したまま返すことを検証します。
+    # Verify the document variant keeps metadata such as the title alongside the body.
+    def test_document_variant_keeps_fetched_metadata(self):
+        document = _document("https://a.com", "text-a", title="記事タイトル")
+        with patch.object(url_fetcher, "fetch_url_document", side_effect=lambda _url: document):
+            result = url_fetcher.fetch_urls_documents(["https://a.com"])
+        self.assertEqual(result, {"https://a.com": document})
+        self.assertEqual(result["https://a.com"].title, "記事タイトル")
+
+    # 本文が空の文書は成功として扱わないことを検証します。
+    # Verify a document without readable text is not treated as a success.
+    def test_document_without_text_is_dropped(self):
+        with patch.object(
+            url_fetcher,
+            "fetch_url_document",
+            side_effect=lambda url: _document(url, ""),
+        ):
+            self.assertEqual(url_fetcher.fetch_urls_documents(["https://a.com"]), {})
+
     # 全てのURLフェッチが失敗した際に、例外を起こさず空の辞書が返却されることを検証します。
     # Verify that an empty dictionary is returned if all URL fetches fail.
     def test_returns_empty_dict_when_all_fail(self):
-        with patch.object(url_fetcher, "fetch_url_content", return_value=None):
+        with patch.object(url_fetcher, "fetch_url_document", return_value=None):
             result = url_fetcher.fetch_urls_content(["https://example.com"])
         self.assertEqual(result, {})
 
@@ -911,7 +946,7 @@ class FetchUrlsContentTest(unittest.TestCase):
         try:
             with (
                 patch.object(url_fetcher, "URL_FETCH_TURN_BUDGET", 0.05),
-                patch.object(url_fetcher, "fetch_url_content", side_effect=lambda _url: release.wait(0.5)),
+                patch.object(url_fetcher, "fetch_url_document", side_effect=lambda _url: release.wait(0.5)),
             ):
                 started = time.monotonic()
                 result = url_fetcher.fetch_urls_content(["https://a.com", "https://b.com", "https://c.com"])
@@ -928,12 +963,12 @@ class FetchUrlsContentTest(unittest.TestCase):
             if url == "https://slow.com":
                 release.wait(0.5)
                 return None
-            return "safe article"
+            return _document(url, "safe article")
 
         try:
             with (
                 patch.object(url_fetcher, "URL_FETCH_TURN_BUDGET", 0.1),
-                patch.object(url_fetcher, "fetch_url_content", side_effect=fetch),
+                patch.object(url_fetcher, "fetch_url_document", side_effect=fetch),
             ):
                 result = url_fetcher.fetch_urls_content(["https://slow.com", "https://safe.com"])
             self.assertEqual(result, {"https://safe.com": "safe article"})
@@ -946,7 +981,7 @@ class FetchUrlsContentTest(unittest.TestCase):
             with (
                 patch.object(url_fetcher, "URL_FETCH_TIMEOUT", 0.05),
                 patch.object(url_fetcher, "URL_FETCH_TURN_BUDGET", 0.2),
-                patch.object(url_fetcher, "fetch_url_content", side_effect=lambda _url: release.wait(0.5)),
+                patch.object(url_fetcher, "fetch_url_document", side_effect=lambda _url: release.wait(0.5)),
             ):
                 started = time.monotonic()
                 self.assertEqual(url_fetcher.fetch_urls_content(["https://slow.com"]), {})

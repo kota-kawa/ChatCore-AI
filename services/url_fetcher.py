@@ -603,32 +603,40 @@ def fetch_url_content(url: str) -> str | None:
     return document.text if document is not None else None
 
 
-def fetch_urls_content(urls: list[str]) -> dict[str, str]:
-    """各URLの内容を取得し、成功した結果のみを {url: text} の形式で返す。
+def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
+    """各URLの文書を取得し、本文を得られたものだけを {url: document} で返す。
 
-    Fetch content for each URL; return {url: text} for successful fetches only.
+    Fetch each URL and return {url: document} for the fetches that yielded text.
     """
     if not urls:
         return {}
     unique_urls = list(dict.fromkeys(urls))[:MAX_URLS_PER_MESSAGE]
-    result: dict[str, str] = {}
+    result: dict[str, FetchedUrlDocument] = {}
     executor = ThreadPoolExecutor(max_workers=len(unique_urls), thread_name_prefix="chat-url-fetch")
     try:
-        future_to_url = {executor.submit(fetch_url_content, url): url for url in unique_urls}
+        future_to_url = {executor.submit(fetch_url_document, url): url for url in unique_urls}
         try:
             # Concurrent starts make the per-URL limit tighter today; the turn limit stays an independent ceiling.
             for future in as_completed(future_to_url, timeout=min(URL_FETCH_TIMEOUT, URL_FETCH_TURN_BUDGET)):
                 url = future_to_url[future]
                 try:
-                    content = future.result()
+                    document = future.result()
                 except Exception:
                     logger.debug("Failed to collect fetched URL %s", url_for_logging(url))
                     continue
-                if content:
-                    result[url] = content
+                if document is not None and document.text:
+                    result[url] = document
         except FuturesTimeoutError:
             pass
     finally:
         # A stalled resolver or read must not hold the chat turn after its waiting budget.
         executor.shutdown(wait=False, cancel_futures=True)
     return {url: result[url] for url in unique_urls if url in result}
+
+
+def fetch_urls_content(urls: list[str]) -> dict[str, str]:
+    """各URLの内容を取得し、成功した結果のみを {url: text} の形式で返す。
+
+    Fetch content for each URL; return {url: text} for successful fetches only.
+    """
+    return {url: document.text for url, document in fetch_urls_documents(urls).items()}
