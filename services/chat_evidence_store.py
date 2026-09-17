@@ -286,6 +286,14 @@ class EvidenceStore:
         }
         existing = self._records.get(source.evidence_id)
         if existing is not None and existing.get("source_type") == "web":
+            # 貼り付けには検索クエリも鮮度も無い。同じURLの検索結果が先にあるなら、
+            # 空の値で上書きせず既存のメタデータを残す（回答が情報の時点を失わないため）。
+            # A paste carries no query and no freshness. When a search already found the same
+            # URL, its metadata is kept rather than overwritten with blanks, so the answer does
+            # not lose when the information is from.
+            for key in ("query", "searched_at", "freshness"):
+                if _clean_metadata_text(existing.get(key)):
+                    record[key] = existing[key]
             record = self._merge_web_record(existing, record)
         self._records[source.evidence_id] = record
         return self._web_reference(record)

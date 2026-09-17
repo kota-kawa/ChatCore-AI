@@ -16,10 +16,15 @@ from services.chat_url_context import (
     render_fetched_urls_block,
 )
 from services.url_fetcher import MAX_URL_TEXT_CHARS, FetchedUrlDocument
+from services.web_search import WebSearchResult, WebSearchSource
 
 
-def document(url: str, text: str, *, title: str = "") -> FetchedUrlDocument:
-    return FetchedUrlDocument(requested_url=url, final_url=url, title=title, text=text)
+def document(
+    url: str, text: str, *, title: str = "", final_url: str = ""
+) -> FetchedUrlDocument:
+    return FetchedUrlDocument(
+        requested_url=url, final_url=final_url or url, title=title, text=text
+    )
 
 
 class BuildPastedUrlPagesTestCase(unittest.TestCase):
@@ -71,6 +76,19 @@ class BuildPastedUrlPagesTestCase(unittest.TestCase):
             f'extraction_capped_at_chars="{MAX_URL_TEXT_CHARS}"',
             render_fetched_urls_block((page,)),
         )
+
+    # リダイレクト後の実URLが保持されることを検証します。
+    # Verify the post-redirect URL is carried on the page.
+    def test_final_url_is_preserved(self):
+        page = build_pasted_url_pages(
+            {
+                "https://example.com/a": document(
+                    "https://example.com/a", "本文", final_url="https://example.com/final"
+                )
+            }
+        )[0]
+        self.assertEqual(page.url, "https://example.com/a")
+        self.assertEqual(page.final_url, "https://example.com/final")
 
     # 本文が空のページは前置対象から外れることを検証します。
     # Verify a page without readable text is dropped instead of inlined empty.
@@ -162,6 +180,38 @@ class PastedPageEvidenceTestCase(unittest.TestCase):
         store = EvidenceStore()
         self.assertIsNone(store.add_pasted_page(url="   "))
         self.assertEqual(len(store), 0)
+
+    # 検索で見つけた後に同じURLを貼っても、検索クエリと鮮度が空で上書きされないことを検証します。
+    # Verify pasting a URL a search already found does not blank its query and freshness.
+    def test_paste_after_search_keeps_the_search_metadata(self):
+        store = EvidenceStore()
+        source = WebSearchSource(
+            url="https://example.com/a",
+            title="記事",
+            hostname="example.com",
+            age="",
+            snippets=("検索の抜粋",),
+        )
+        store.add_web_result(
+            WebSearchResult(
+                query="東京 天気",
+                searched_at="2026-09-10T00:00:00+00:00",
+                freshness="pd",
+                sources=(source,),
+            )
+        )
+
+        reference = store.add_pasted_page(
+            url="https://example.com/a",
+            title="記事",
+            snippet="貼り付けの抜粋",
+            fetched_at="2026-09-18T00:00:00+00:00",
+        )
+
+        self.assertEqual(reference["query"], "東京 天気")
+        self.assertEqual(reference["searched_at"], "2026-09-10T00:00:00+00:00")
+        self.assertEqual(reference["freshness"], "pd")
+        self.assertEqual(store.get(reference["evidence_id"])["origin"], "pasted_url")
 
     # 同じURLを再登録してもレコードが増えないことを検証します。
     # Verify registering the same URL twice keeps a single record.

@@ -206,7 +206,7 @@ class PastedUrlGenerationTestCase(unittest.TestCase):
             {
                 self.url: FetchedUrlDocument(
                     requested_url=self.url,
-                    final_url=self.url,
+                    final_url="https://example.com/long-article-final",
                     title="長い記事",
                     text=self.body,
                 )
@@ -235,6 +235,12 @@ class PastedUrlGenerationTestCase(unittest.TestCase):
         self.assertEqual(execution.tool_name, "pasted_url")
         self.assertEqual(execution.query, self.url)
         self.assertEqual(execution.evidence_ids, (evidence_id,))
+        # リダイレクト後の実URLが読み取り応答に残る。
+        # The post-redirect URL survives into the read response.
+        payload = state.web_page_reader.execute_read_web_page(
+            {"evidence_id": evidence_id, "length": 20}
+        )
+        self.assertEqual(payload["final_url"], "https://example.com/long-article-final")
 
     def test_model_reads_the_rest_of_the_page_in_chunks_without_refetching(self):
         evidence_id = pasted_url_evidence_id(self.url)

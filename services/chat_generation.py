@@ -1331,6 +1331,7 @@ class ChatGenerationJob:
                 page.url,
                 text=page.text,
                 title=page.title,
+                final_url=page.final_url,
                 fetched_at=page.fetched_at,
             )
             state.turn_state.record_search(

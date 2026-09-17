@@ -70,6 +70,9 @@ class PastedUrlPage:
     """One pasted URL: the excerpt that enters the prompt plus the body kept for paging."""
 
     url: str
+    # リダイレクト後の実URL。ページ読み取りの応答が示す取得元をぶらさないために持つ。
+    # The post-redirect URL, kept so a page read reports the same origin the fetch landed on.
+    final_url: str
     title: str
     # 抽出済み本文の全量（MAX_URL_TEXT_CHARS で頭打ち）。read_web_page が範囲指定で読む。
     # The whole extracted body (capped at MAX_URL_TEXT_CHARS); read_web_page reads ranges of it.
@@ -171,6 +174,7 @@ def build_pasted_url_pages(
         pages.append(
             PastedUrlPage(
                 url=url,
+                final_url=document.final_url or url,
                 title=_redact_secretish_text(document.title)[:PASTED_URL_TITLE_CHARS],
                 text=text,
                 excerpt=_prefix_within_token_budget(text, per_page_tokens),
