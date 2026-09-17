@@ -142,7 +142,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_use_case.fetch_urls_documents",
+                "services.chat_url_context.fetch_urls_documents",
                 return_value=_documents(fetched),
             ) as mock_fetch,
             patch(
@@ -294,7 +294,7 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
         )
 
         with patch(
-            "services.chat_use_case.fetch_urls_documents",
+            "services.chat_url_context.fetch_urls_documents",
             return_value=_documents({url: page_text}),
         ):
             asyncio.run(

@@ -56,6 +56,7 @@ from services.selected_reference_context import (
     SHARED_PROMPT_SOURCE,
     SelectedReferenceLookupTrace,
 )
+from services.url_fetcher import FetchedUrlDocument
 from services.web_search import (
     WEB_SEARCH_ERROR_REQUEST_FAILED,
     WEB_SEARCH_MAX_CONTEXT_CHARS,
@@ -3563,6 +3564,136 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(any("要約方針" in content and "要約テンプレ" in content for content in contents))
         personal_search.assert_awaited_once_with(42, "要約して")
         shared_search.assert_awaited_once_with("要約して")
+
+    # 日本語: 再生成でも、発話に貼られた URL の本文を取得し直してプロンプトへ前置することを検証します。
+    # English: Verify regeneration refetches a pasted URL and prepends its body to the prompt.
+    def test_regenerate_refetches_pasted_url_into_llm_context(self):
+        captured_messages = {}
+        url = "https://example.com/article"
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+
+        def get_llm_response(messages, model):
+            captured_messages["messages"] = messages
+            return "new answer"
+
+        document = FetchedUrlDocument(
+            requested_url=url, final_url=url, title="記事", text="リンク先の本文テキスト"
+        )
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                new=AsyncMock(return_value=[
+                    {
+                        "id": 10,
+                        "message": f"この記事を要約して {url}",
+                        "sender": "user",
+                        "attached_file_names": ["sample.pdf"],
+                        "attached_file_contents": [
+                            {"name": "sample.pdf", "content": "[page 1]\nPDF BODY"}
+                        ],
+                    },
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ]),
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch(
+                "services.chat_url_context.fetch_urls_documents",
+                return_value={url: document},
+            ) as fetch_urls,
+            patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
+            patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12)),
+        ):
+            response = asyncio.run(chat_regenerate(request))
+
+        self.assertEqual(response.status_code, 200)
+        fetch_urls.assert_called_once_with([url])
+        latest = captured_messages["messages"][-1]["content"]
+        self.assertEqual(latest.split("\n")[0], "<fetched_urls>")
+        self.assertIn("リンク先の本文テキスト", latest)
+        # 参照資料の順序は送信時と同じ（URL本文 → 添付本文 → 依頼文）。
+        # The reference order matches an ordinary send: URL body, attachments, then the request.
+        self.assertLess(latest.index("リンク先の本文テキスト"), latest.index("PDF BODY"))
+        self.assertLess(latest.index("PDF BODY"), latest.index("この記事を要約して"))
+
+    # 日本語: 編集して再生成した場合、編集後の発話に含まれる URL の全文が生成ジョブへ渡ることを検証します。
+    # English: Verify editing and regenerating hands the edited message's page bodies to the job.
+    def test_edit_and_regenerate_hands_pasted_pages_to_the_generation_job(self):
+        url = "https://example.com/long"
+        page_text = "あ" * 30_000
+        request = build_request(
+            method="POST",
+            path="/api/chat_edit_and_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "new_message": f"この記事の終盤を教えて {url}",
+                "trailing_user_count": 0,
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+        document = FetchedUrlDocument(
+            requested_url=url, final_url=url, title="長い記事", text=page_text
+        )
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                new=AsyncMock(return_value=[
+                    {"id": 10, "message": "前の質問", "sender": "user"},
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ]),
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=True),
+            patch(
+                "services.chat_url_context.fetch_urls_documents",
+                return_value={url: document},
+            ),
+            patch("services.chat_regeneration_pipeline.start_generation_job") as start_job,
+            patch("blueprints.chat.messages._build_llm_stream_response", return_value="stream"),
+            patch("blueprints.chat.messages._iter_llm_stream_events", return_value=iter(())),
+            patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=21)),
+        ):
+            asyncio.run(chat_edit_and_regenerate(request))
+
+        pages = start_job.call_args.kwargs["pasted_url_pages"]
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0].url, url)
+        self.assertEqual(pages[0].total_chars, 30_000)
+        self.assertTrue(pages[0].truncated)
+        # 前置されるのは抜粋だけで、残りは read_web_page が分割して読む。
+        # Only the excerpt is prepended; read_web_page pages through the rest.
+        latest = start_job.call_args.kwargs["conversation_messages"][-1]["content"]
+        self.assertIn("<fetched_urls>", latest)
+        self.assertLess(len(latest), 30_000)
 
     # 日本語: 非ストリーミング経路（is_streaming_model=False）でLLM呼び出しが失敗した場合、
     # ユーザーへのエラー応答だけでなく詳細なログも必ず残ることを検証します。

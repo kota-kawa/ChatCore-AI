@@ -34,12 +34,14 @@ from services.chat_message_normalization import (
     mark_task_launch_input_for_llm,
     normalize_messages_for_llm,
     prepend_attached_files_to_user_messages,
+    prepend_reference_block_to_latest_user_message,
 )
 from services.chat_prompt import (
     build_base_system_prompt,
     build_task_prompt,
     build_user_profile_prompt,
 )
+from services.chat_url_context import PastedUrlPage, fetch_pasted_url_context
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
     artifact_status_part,
@@ -314,13 +316,28 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     # 添付本文を前置する前のテキストを検索クエリに使う（前置後は添付本文が混ざる）。
     # Derive the query before attachments are prepended, so it stays the user's own text.
     selected_reference_query = pipeline_input.selected_reference_query
+    # URL 抽出も、添付やタスク標識を前置する前の「ユーザー自身の文面」から行う。
+    # URL extraction also reads the user's own text, before attachments or task markers.
+    latest_user_message_text = _latest_user_content(normalized_all_messages)
     if selected_reference_query is None:
-        selected_reference_query = _latest_user_content(normalized_all_messages)
+        selected_reference_query = latest_user_message_text
     active_task_request = find_latest_task_launch_request(normalized_all_messages)
     normalized_all_messages = mark_task_launch_input_for_llm(normalized_all_messages, active_task_request)
     normalized_all_messages = prepend_attached_files_to_user_messages(
         normalized_all_messages
     )
+    # 再生成でも、発話に貼られた URL を送信時と同じ条件で読み直す。取得せずに再生成すると、
+    # モデルはリンク先へ到達する手段を持たないまま URL 文字列だけを見て答えることになる。
+    # Regeneration re-reads pasted URLs on the same terms as the original send. Without this the
+    # model has no way to reach the linked page and would answer from the bare URL text.
+    pasted_url_pages: tuple[PastedUrlPage, ...] = ()
+    if latest_user_message_text:
+        pasted_url_pages, url_reference_block = await run_blocking(
+            fetch_pasted_url_context, latest_user_message_text
+        )
+        normalized_all_messages = prepend_reference_block_to_latest_user_message(
+            normalized_all_messages, url_reference_block
+        )
     prompt_data = None
     if active_task_request is not None:
         task_id = active_task_request.get("task_id")
@@ -520,6 +537,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 on_error=on_error,
                 service=pipeline_input.chat_generation_service,
                 prior_web_search_results=prior_web_search_results,
+                pasted_url_pages=pasted_url_pages,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
                 selected_reference_trace=selected_reference_trace,

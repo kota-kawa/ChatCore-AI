@@ -84,6 +84,30 @@ def prepend_attached_files_to_user_messages(
     return updated_messages
 
 
+def prepend_reference_block_to_latest_user_message(
+    messages: list[dict[str, Any]],
+    block: str,
+) -> list[dict[str, Any]]:
+    """
+    生成した参照資料ブロックを、最新のユーザー発話の先頭へ差し込みます。
+    Inserts a generated reference block ahead of the newest user message.
+
+    最新メッセージがユーザー発話でない場合は何もしません。参照ブロックは「最新の発話」
+    としてトリミングされる前提の形（`services/chat_context.py` の参照文脈分割）であり、
+    途中の発話へ付けると依頼文より先に切り落とされるためです。
+    Nothing happens unless the newest message is the user's: the reference split in
+    `services/chat_context.py` only protects the newest message, so attaching the block to an
+    older turn would let trimming cut it before the request it belongs to.
+    """
+    if not block or not messages or str(messages[-1].get("role", "")) != "user":
+        return messages
+    latest = messages[-1]
+    return [
+        *messages[:-1],
+        {**latest, "content": f"{block}\n\n{latest.get('content', '')}"},
+    ]
+
+
 # ユーザーメッセージからタスク名と状況設定情報を抽出するパース関数
 # Parse and extract task launch parameters from a user message content.
 def parse_task_launch_message(message: str) -> dict[str, Any] | None:
