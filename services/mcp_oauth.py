@@ -16,7 +16,6 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
-import requests
 from cryptography.fernet import Fernet, MultiFernet
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from mcp.server.auth.provider import (
@@ -53,7 +52,13 @@ from services.repositories.mcp_oauth_repository import (
     McpOAuthRepository,
 )
 from services.runtime_config import get_session_secret_key
-from services.url_fetcher import _pin_dns, _resolve_safe_ip
+from services.url_fetcher import (
+    _new_direct_session,
+    _pin_dns,
+    _resolve_safe_ip,
+    canonicalize_url,
+    url_for_logging,
+)
 
 MCP_PROMPTS_READ_SCOPE = "prompts:read"
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
@@ -369,16 +374,20 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
     if found:
         return cached
 
-    parsed = urlparse(client_id)
-    if parsed.scheme != "https" or not parsed.netloc or not parsed.path:
+    original = urlparse(client_id)
+    if original.scheme != "https" or not original.netloc or not original.path:
         return None
-    ip = _resolve_safe_ip(client_id)
+    normalized_url = canonicalize_url(client_id)
+    if normalized_url is None:
+        return None
+    parsed = urlparse(normalized_url)
+    ip = _resolve_safe_ip(normalized_url)
     if ip is None or not parsed.hostname:
         return None
     try:
-        with _pin_dns({parsed.hostname: ip}):
-            response = requests.get(
-                client_id,
+        with _new_direct_session() as session, _pin_dns({parsed.hostname: ip}):
+            response = session.get(
+                normalized_url,
                 headers={"Accept": "application/json", "User-Agent": "Chat-Core-MCP/1.0"},
                 timeout=10,
                 allow_redirects=False,
@@ -420,9 +429,8 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
         _validate_redirect_uris(client)
         _write_cimd_cache(client_id, client, MAX_CIMD_CACHE_SECONDS)
     except Exception:
-        # 日本語: CIMD メタデータの取得や検証に失敗するとクライアントを拒否するため、原因が追えるよう記録します。
-        # English: A failed CIMD metadata fetch or validation rejects the client, so record why it happened.
-        logger.warning("Failed to load CIMD metadata for client %s; caching a negative result.", client_id, exc_info=True)
+        # Exception details may contain the original signed client URL.
+        logger.warning("Failed to load CIMD metadata for client %s; caching a negative result.", url_for_logging(client_id))
         _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
         return None
     else:

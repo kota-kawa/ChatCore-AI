@@ -5,7 +5,10 @@ import logging
 import re
 import socket
 import threading
+import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -26,6 +29,8 @@ MAX_URLS_PER_MESSAGE = 3
 MAX_URL_RESPONSE_BYTES = 300_000   # 300 KB raw cap before decoding
 MAX_URL_TEXT_CHARS = 30_000        # chars of plain text kept per URL
 URL_FETCH_TIMEOUT = 10             # seconds
+URL_FETCH_TURN_BUDGET = 12         # seconds waiting for all pasted URLs
+MAX_CONCURRENT_URL_FETCHES = 12
 MAX_REDIRECT_HOPS = 5
 MAX_LINKS_PER_DOCUMENT = 40
 MAX_LINK_URL_CHARS = 1_000
@@ -37,22 +42,10 @@ MAX_IMAGES_PER_DOCUMENT = 20
 # Regular expression to extract URLs
 _URL_RE = re.compile(r"https?://[^\s<>\"'`()\[\]{}|\\^]+", re.IGNORECASE)
 
-# SSRF対策用：ループバック、プライベート、リンクローカル等のアドレス範囲をブロックする
-# SSRF protection: block requests to loopback, private, and link-local ranges.
-_BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
-    ipaddress.ip_network("100.64.0.0/10"),    # carrier-grade NAT
-    ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
-)
 _BLOCKED_HOSTNAMES = frozenset({"localhost"})
 _REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
+_fetch_slots = threading.BoundedSemaphore(MAX_CONCURRENT_URL_FETCHES)
+_fetch_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_URL_FETCHES, thread_name_prefix="url-fetch")
 
 # リクエストヘッダー
 # Request headers
@@ -129,6 +122,13 @@ def _pin_dns(host_to_ip: dict[str, str]) -> Iterator[None]:
         yield
     finally:
         _dns_pin_local.mapping = previous
+
+
+def _new_direct_session() -> requests.Session:
+    """Avoid proxy and .netrc settings that could bypass pinning or disclose local credentials."""
+    session = requests.Session()
+    session.trust_env = False
+    return session
 
 
 class _TextExtractor(HTMLParser):
@@ -305,12 +305,15 @@ def canonicalize_url(url: str) -> str | None:
         if parsed.username is not None or parsed.password is not None:
             return None
         hostname = parsed.hostname.lower()
+        if ":" not in hostname:
+            # Requests converts IDNs to ASCII before connecting; pinning must use that same host.
+            hostname = hostname.encode("idna").decode("ascii")
         display_hostname = f"[{hostname}]" if ":" in hostname else hostname
         port = parsed.port
-        if port is None or (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
-            netloc = display_hostname
-        else:
-            netloc = f"{display_hostname}:{port}"
+        # The fetcher also handles discovered links and redirects; one check protects every path.
+        if port is not None and port != (80 if scheme == "http" else 443):
+            return None
+        netloc = display_hostname
         normalized = urlunsplit((scheme, netloc, parsed.path or "/", parsed.query, ""))
         return normalized if len(normalized) <= MAX_LINK_URL_CHARS else None
     except (TypeError, ValueError):
@@ -396,13 +399,28 @@ def extract_urls_from_text(text: str) -> list[str]:
     return result
 
 
+def url_for_logging(url: str) -> str:
+    """Keep only the URL origin and path in diagnostics, never credentials or signed parameters."""
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        if not hostname or parsed.scheme.lower() not in {"http", "https"}:
+            return "<invalid URL>"
+        display_hostname = f"[{hostname}]" if ":" in hostname else hostname
+        port = parsed.port
+        netloc = f"{display_hostname}:{port}" if port is not None else display_hostname
+        return urlunsplit((parsed.scheme.lower(), netloc, parsed.path, "", ""))
+    except (TypeError, ValueError):
+        return "<invalid URL>"
+
+
 def _resolve_safe_ip(url: str) -> str | None:
     """URLが安全に取得可能であれば解決されたIPを返し、そうでなければ None を返す。
 
     Return the resolved IP for *url* if it is safe to fetch, else None.
 
-    Performs the SSRF check: rejects non-http(s) schemes, deny-listed
-    hostnames, and IPs in private/loopback/link-local ranges. The returned
+    Performs the SSRF check: rejects non-http(s) schemes, blocked
+    hostnames, and any DNS answer that is not a global IP. The returned
     IP is used to pin DNS resolution during the actual fetch so a rebinding
     attack cannot redirect the TCP connection to a different address.
     """
@@ -416,32 +434,50 @@ def _resolve_safe_ip(url: str) -> str | None:
             return None
         if hostname in _BLOCKED_HOSTNAMES:
             return None
-        ip_str = socket.gethostbyname(hostname)
-        ip = ipaddress.ip_address(ip_str)
-        if any(ip in net for net in _BLOCKED_NETWORKS):
+        answers = socket.getaddrinfo(hostname, parsed.port or (80 if parsed.scheme == "http" else 443), type=socket.SOCK_STREAM)
+        if not answers:
             return None
+        safe_ips: list[str] = []
+        for family, _type, _proto, _canonname, sockaddr in answers:
+            if family not in {socket.AF_INET, socket.AF_INET6}:
+                return None
+            ip = ipaddress.ip_address(sockaddr[0])
+            # A mixed public/private DNS set must fail closed even though one address could be pinned.
+            if (
+                not ip.is_global
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+                or (isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped and not ip.ipv4_mapped.is_global)
+            ):
+                return None
+            safe_ips.append(str(ip))
     except Exception:
-        logger.debug("Failed to resolve a safe IP for URL %s; treating it as unsafe.", url, exc_info=True)
+        # Exception messages can include the original signed URL; never log their contents.
+        logger.debug("Failed to resolve a safe IP for URL %s; treating it as unsafe.", url_for_logging(url))
         return None
     else:
-        return ip_str
+        return safe_ips[0]
 
 
-def fetch_url_document(url: str) -> FetchedUrlDocument | None:
+def _fetch_url_document_impl(url: str) -> FetchedUrlDocument | None:
     """単一のURLを取得し、本文・最終URL・追跡可能リンクを返す。
 
     Fetch a single URL and return readable content plus discovered links.
 
     Redirects are followed manually (up to MAX_REDIRECT_HOPS) and every hop
-    is re-validated against the SSRF deny list so an attacker-controlled
+    is re-validated against the global-IP requirement so an attacker-controlled
     server cannot 302 us into the metadata service. DNS resolution is
     pinned to the IP we validated at SSRF-check time so a rebinding flip
     between check and connect cannot reach an internal address.
     """
     current_url = url
     host_to_ip: dict[str, str] = {}
+    deadline = time.monotonic() + URL_FETCH_TIMEOUT
 
     for _hop in range(MAX_REDIRECT_HOPS + 1):
+        if time.monotonic() >= deadline:
+            return None
         normalized_current_url = canonicalize_url(current_url)
         if normalized_current_url is None:
             return None
@@ -449,17 +485,20 @@ def fetch_url_document(url: str) -> FetchedUrlDocument | None:
         ip = _resolve_safe_ip(current_url)
         if ip is None:
             return None
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
         hostname = urlparse(current_url).hostname
         if hostname is None:
             return None
         host_to_ip[hostname] = ip
 
         try:
-            with _pin_dns(host_to_ip):
-                response = requests.get(
+            with _new_direct_session() as session, _pin_dns(host_to_ip):
+                response = session.get(
                     current_url,
                     headers=_FETCH_HEADERS,
-                    timeout=URL_FETCH_TIMEOUT,
+                    timeout=remaining,
                     allow_redirects=False,
                     stream=True,
                 )
@@ -476,16 +515,20 @@ def fetch_url_document(url: str) -> FetchedUrlDocument | None:
 
                     response.raise_for_status()
                     content_type = response.headers.get("content-type", "").lower()
-                    is_html = "text/html" in content_type
-                    is_plain = "text/plain" in content_type
+                    media_type = content_type.split(";", 1)[0].strip()
+                    is_html = media_type == "text/html"
+                    is_plain = media_type == "text/plain"
                     if not (is_html or is_plain):
                         return None
 
                     chunks: list[bytes] = []
                     total = 0
                     for chunk in response.iter_content(chunk_size=16_384):
-                        chunks.append(chunk)
-                        total += len(chunk)
+                        if time.monotonic() >= deadline:
+                            return None
+                        remaining_bytes = MAX_URL_RESPONSE_BYTES - total
+                        chunks.append(chunk[:remaining_bytes])
+                        total += min(len(chunk), remaining_bytes)
                         if total >= MAX_URL_RESPONSE_BYTES:
                             # LLM 文脈に入れる抜粋用途なので、巨大ページは先頭だけ読んで打ち切る。
                             # メモリ消費と応答待ち時間を URL 1 件ごとに固定上限へ収めるため。
@@ -524,10 +567,31 @@ def fetch_url_document(url: str) -> FetchedUrlDocument | None:
                 finally:
                     response.close()
         except Exception:
-            logger.debug("Failed to fetch URL %s", current_url, exc_info=True)
+            logger.debug("Failed to fetch URL %s", url_for_logging(current_url))
             return None
 
     return None
+
+
+def fetch_url_document(url: str) -> FetchedUrlDocument | None:
+    """Return within one URL's waiting limit while bounding unfinished network workers globally."""
+    if not _fetch_slots.acquire(blocking=False):
+        return None
+    try:
+        future = _fetch_executor.submit(_fetch_url_document_impl, url)
+    except Exception:
+        _fetch_slots.release()
+        return None
+    # A timed-out DNS or read can continue; retain its slot until the worker actually exits.
+    future.add_done_callback(lambda _future: _fetch_slots.release())
+    try:
+        return future.result(timeout=URL_FETCH_TIMEOUT)
+    except FuturesTimeoutError:
+        future.cancel()
+        return None
+    except Exception:
+        logger.debug("Failed to fetch URL %s", url_for_logging(url))
+        return None
 
 
 def fetch_url_content(url: str) -> str | None:
@@ -544,9 +608,27 @@ def fetch_urls_content(urls: list[str]) -> dict[str, str]:
 
     Fetch content for each URL; return {url: text} for successful fetches only.
     """
+    if not urls:
+        return {}
+    unique_urls = list(dict.fromkeys(urls))[:MAX_URLS_PER_MESSAGE]
     result: dict[str, str] = {}
-    for url in urls:
-        content = fetch_url_content(url)
-        if content:
-            result[url] = content
-    return result
+    executor = ThreadPoolExecutor(max_workers=len(unique_urls), thread_name_prefix="chat-url-fetch")
+    try:
+        future_to_url = {executor.submit(fetch_url_content, url): url for url in unique_urls}
+        try:
+            # Concurrent starts make the per-URL limit tighter today; the turn limit stays an independent ceiling.
+            for future in as_completed(future_to_url, timeout=min(URL_FETCH_TIMEOUT, URL_FETCH_TURN_BUDGET)):
+                url = future_to_url[future]
+                try:
+                    content = future.result()
+                except Exception:
+                    logger.debug("Failed to collect fetched URL %s", url_for_logging(url))
+                    continue
+                if content:
+                    result[url] = content
+        except FuturesTimeoutError:
+            pass
+    finally:
+        # A stalled resolver or read must not hold the chat turn after its waiting budget.
+        executor.shutdown(wait=False, cancel_futures=True)
+    return {url: result[url] for url in unique_urls if url in result}

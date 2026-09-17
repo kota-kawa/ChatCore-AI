@@ -47,6 +47,19 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         env_patcher.start()
         self.addCleanup(env_patcher.stop)
+
+    def test_failed_page_fetch_does_not_log_signed_url_or_exception(self):
+        signed_url = "https://example.com/article?token=SECRET"
+        with (
+            patch.object(web_search, "fetch_url_document", side_effect=RuntimeError(signed_url)),
+            self.assertLogs(web_search.logger, level="DEBUG") as captured,
+        ):
+            self.assertEqual(web_search._fetch_documents_concurrently([signed_url]), {})
+        logs = "\n".join(captured.output)
+        self.assertIn("https://example.com/article", logs)
+        self.assertNotIn("SECRET", logs)
+        self.assertNotIn("token=", logs)
+
     # English: Verify that search brave llm context parses sources.
     def test_search_brave_llm_context_parses_sources(self):
         response = MagicMock()

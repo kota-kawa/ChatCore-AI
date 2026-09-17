@@ -14,6 +14,7 @@ from services.chat_evidence_store import MAX_EVIDENCE_ID_CHARS, EvidenceStore
 from services.url_fetcher import (
     MAX_URL_RESPONSE_BYTES,
     MAX_URL_TEXT_CHARS,
+    URL_FETCH_TIMEOUT,
     canonicalize_url,
     fetch_url_document,
 )
@@ -140,11 +141,13 @@ class WebPageReader:
         started = time.monotonic()
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="chat-web-page")
         future = executor.submit(fetch_url_document, url)
+        wait_seconds = min(self._remaining_seconds, URL_FETCH_TIMEOUT)
         try:
-            document = future.result(timeout=self._remaining_seconds)
+            document = future.result(timeout=wait_seconds)
         except TimeoutError:
-            self._remaining_seconds = 0
-            return {"status": "fetch_timeout", "message": "Page retrieval exceeded this answer's network waiting budget."}
+            if wait_seconds >= self._remaining_seconds:
+                self._remaining_seconds = 0
+            return {"status": "fetch_timeout", "message": "Page retrieval timed out."}
         except Exception:
             logger.debug("Known web evidence retrieval failed", exc_info=True)
             return {"status": "fetch_failed", "message": "Unable to retrieve this page. Do not infer its contents."}
