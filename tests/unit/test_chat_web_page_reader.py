@@ -113,6 +113,7 @@ class WebPageReaderTestCase(unittest.TestCase):
 
     @patch("services.chat_web_page_reader.ThreadPoolExecutor")
     def test_timeout_is_cached_and_prevents_further_external_fetches(self, executor_class):
+        self.reader = WebPageReader(self.store, max_fetch_seconds=0.1)
         executor = executor_class.return_value
         executor.submit.return_value = Mock(spec=Future)
         executor.submit.return_value.result.side_effect = TimeoutError
@@ -123,6 +124,22 @@ class WebPageReaderTestCase(unittest.TestCase):
         self.assertEqual(result["status"], "fetch_budget_exhausted")
         executor.submit.assert_called_once()
         executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+
+    @patch("services.chat_web_page_reader.ThreadPoolExecutor")
+    def test_per_page_timeout_preserves_remaining_budget_for_another_page(self, executor_class):
+        executor = executor_class.return_value
+        slow_future = Mock(spec=Future)
+        slow_future.result.side_effect = TimeoutError
+        safe_future = Mock(spec=Future)
+        safe_future.result.return_value = self.document()
+        executor.submit.side_effect = [slow_future, safe_future]
+
+        self.assertEqual(self.read()["status"], "fetch_timeout")
+        other = self.add_source("https://example.com/other")
+        result = self.reader.execute_read_web_page({"evidence_id": other.evidence_id})
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(executor.submit.call_count, 2)
+        self.assertEqual(slow_future.result.call_args.kwargs["timeout"], 10)
 
     @patch("services.chat_web_page_reader.fetch_url_document")
     def test_text_extraction_limit_and_invalid_range_are_explicit(self, fetch):
@@ -141,7 +158,7 @@ class WebPageReaderTestCase(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(result, ensure_ascii=False)), 100)
         fetch.assert_not_called()
 
-    @patch("services.url_fetcher.requests.get")
+    @patch("services.url_fetcher.requests.Session.get")
     @patch("services.url_fetcher._resolve_safe_ip", return_value=None)
     def test_saved_unsafe_url_still_passes_through_existing_ssrf_guard(self, resolve, request):
         source = self.add_source("http://127.0.0.1/private")
@@ -149,6 +166,13 @@ class WebPageReaderTestCase(unittest.TestCase):
         self.assertEqual(result["status"], "fetch_failed")
         resolve.assert_called_once_with(source.url)
         request.assert_not_called()
+
+    @patch("services.chat_web_page_reader.fetch_url_document")
+    def test_nonstandard_port_evidence_never_starts_fetch(self, fetch):
+        source = self.add_source("https://example.com:8443/private")
+        result = self.reader.execute_read_web_page({"evidence_id": source.evidence_id})
+        self.assertEqual(result["status"], "fetch_failed")
+        fetch.assert_not_called()
 
 
 if __name__ == "__main__":

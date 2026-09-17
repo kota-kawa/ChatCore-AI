@@ -33,6 +33,7 @@ from services.url_fetcher import (
     FetchedUrlDocument,
     canonicalize_url,
     fetch_url_document,
+    url_for_logging,
 )
 from services.web_search_images import WebSearchImageCandidate
 
@@ -1216,7 +1217,7 @@ def _fetch_documents_concurrently(
                 try:
                     document = future.result()
                 except Exception:
-                    logger.debug("Failed to read web page %s", url, exc_info=True)
+                    logger.debug("Failed to read web page %s", url_for_logging(url))
                     continue
                 if document is not None and document.text:
                     fetched[url] = document

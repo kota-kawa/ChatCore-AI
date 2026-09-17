@@ -11,7 +11,7 @@ from mcp.shared.auth import InvalidRedirectUriError as McpInvalidRedirectUriErro
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
-from services import mcp_oauth
+from services import mcp_oauth, url_fetcher
 from services.repositories.mcp_oauth_repository import McpOAuthRepository
 
 SERVER_URL = "https://chat.example.test/mcp"
@@ -45,6 +45,37 @@ def _make_params(resource, scopes=None):
 
 
 class McpOAuthTestCase(unittest.TestCase):
+    def test_cimd_idn_fetch_is_pinned_without_environment_credentials_or_signed_url_logs(self):
+        client_id = "https://例え.テスト/metadata?token=SECRET"
+        observed = {}
+
+        def fail_fetch(session, url, **_kwargs):
+            observed.update(
+                url=url,
+                trust_env=session.trust_env,
+                mapping=getattr(url_fetcher._dns_pin_local, "mapping", None),
+            )
+            raise RuntimeError(client_id)
+
+        mcp_oauth._cimd_cache.clear()
+        try:
+            with (
+                patch("services.mcp_oauth._resolve_safe_ip", return_value="93.184.216.34"),
+                patch("requests.Session.get", autospec=True, side_effect=fail_fetch),
+                self.assertLogs(mcp_oauth.logger, level="WARNING") as captured,
+            ):
+                self.assertIsNone(mcp_oauth._cimd_client(client_id))
+            ascii_url = "https://xn--r8jz45g.xn--zckzah/metadata?token=SECRET"
+            self.assertEqual(observed["url"], ascii_url)
+            self.assertFalse(observed["trust_env"])
+            self.assertEqual(observed["mapping"], {"xn--r8jz45g.xn--zckzah": "93.184.216.34"})
+            logs = "\n".join(captured.output)
+            self.assertIn("https://例え.テスト/metadata", logs)
+            self.assertNotIn("SECRET", logs)
+            self.assertNotIn("token=", logs)
+        finally:
+            mcp_oauth._cimd_cache.clear()
+
     def test_cimd_client_accepts_claude_code_ephemeral_loopback_port(self):
         client = mcp_oauth.CimdOAuthClientInformation(
             client_id="https://claude.ai/oauth/client-metadata",
