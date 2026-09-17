@@ -106,6 +106,26 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertIn(question, selected[0]["content"])
         self.assertLessEqual(estimate_token_count(selected[0]["content"]), 40)
 
+    def test_latest_user_request_survives_failed_url_fetch_notice(self):
+        # 取得失敗ブロックも生成された参照文脈として扱い、依頼文を先に確保する。
+        # The fetch-failure block counts as generated reference context, so the request wins.
+        question = "リンク先が読めないなら、その旨だけ伝えてください。"
+        content = (
+            "<fetched_urls_status>\n"
+            f"{'取得に失敗しました。' * 200}\n"
+            "</fetched_urls_status>\n\n"
+            f"{question}"
+        )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=40,
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertIn(question, selected[0]["content"])
+        self.assertLessEqual(estimate_token_count(selected[0]["content"]), 40)
+
     def test_latest_user_request_survives_combined_url_and_attachment_context(self):
         question = "添付資料とURLの内容を比較して、日本語で差分を説明して。"
         content = (

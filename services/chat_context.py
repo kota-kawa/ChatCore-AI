@@ -20,12 +20,17 @@ _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _INLINE_WHITESPACE_PATTERN = re.compile(r"(?<=\S)[ \t]+")
 _TRAILING_WHITESPACE_PATTERN = re.compile(r"[ \t]+$", re.MULTILINE)
 _BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
+# 取得失敗を伝える <fetched_urls_status> も生成された参照ブロックである。ここに含めないと、
+# 取得に失敗したターンだけ依頼文を守る分割が働かず、通常の切り詰めへ落ちる。
+# <fetched_urls_status>, which reports a failed fetch, is a generated reference block too.
+# Leaving it out made a failed-fetch turn fall back to ordinary trimming, losing the split
+# that protects the user's request.
 _REFERENCE_CONTEXT_START_PATTERN = re.compile(
-    r"\A<(?:fetched_urls|attached_files)(?:\s[^>]*)?>",
+    r"\A<(?:fetched_urls(?:_status)?|attached_files)(?:\s[^>]*)?>",
     re.IGNORECASE,
 )
 _REFERENCE_CONTEXT_BOUNDARY_PATTERN = re.compile(
-    r"(?P<closing></(?:fetched_urls|attached_files)>)[ \t]*\n[ \t]*\n",
+    r"(?P<closing></(?:fetched_urls(?:_status)?|attached_files)>)[ \t]*\n[ \t]*\n",
     re.IGNORECASE,
 )
 

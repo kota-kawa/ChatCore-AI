@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 from starlette.responses import StreamingResponse
@@ -3565,6 +3566,32 @@ class ChatStreamingTestCase(unittest.TestCase):
         personal_search.assert_awaited_once_with(42, "要約して")
         shared_search.assert_awaited_once_with("要約して")
 
+    # 日本語: 再生成エンドポイントのテストが共有する、DB／LLM境界の差し替え一式を返します。
+    # English: The shared DB/LLM boundary patches the regenerate endpoint tests reuse.
+    def _regenerate_patches(self, *, user_message: str):
+        return (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", new=AsyncMock(return_value=None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                new=AsyncMock(return_value=[
+                    {"id": 10, "message": user_message, "sender": "user"},
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ]),
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
+            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
+            patch(
+                "blueprints.chat.messages.get_room_web_search_contexts",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12)),
+        )
+
     # 日本語: 再生成でも、発話に貼られた URL の本文を取得し直してプロンプトへ前置することを検証します。
     # English: Verify regeneration refetches a pasted URL and prepends its body to the prompt.
     def test_regenerate_refetches_pasted_url_into_llm_context(self):
@@ -3633,6 +3660,75 @@ class ChatStreamingTestCase(unittest.TestCase):
         # The reference order matches an ordinary send: URL body, attachments, then the request.
         self.assertLess(latest.index("リンク先の本文テキスト"), latest.index("PDF BODY"))
         self.assertLess(latest.index("PDF BODY"), latest.index("この記事を要約して"))
+
+    # 日本語: 再生成対象の発話に URL が無ければ、取得処理そのものが走らないことを検証します。
+    # English: Verify a regenerated message without a URL never reaches the fetcher.
+    def test_regenerate_without_a_url_never_fetches(self):
+        captured_messages = {}
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+
+        def get_llm_response(messages, model):
+            captured_messages["messages"] = messages
+            return "new answer"
+
+        with ExitStack() as stack:
+            for patcher in self._regenerate_patches(user_message="URLのない普通の質問です"):
+                stack.enter_context(patcher)
+            fetch_urls = stack.enter_context(
+                patch("services.chat_url_context.fetch_urls_documents")
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response)
+            )
+            asyncio.run(chat_regenerate(request))
+
+        fetch_urls.assert_not_called()
+        latest = captured_messages["messages"][-1]["content"]
+        self.assertNotIn("<fetched_urls", latest)
+        self.assertEqual(latest, "URLのない普通の質問です")
+
+    # 日本語: 再生成で URL 取得が全件失敗した場合、推測を禁じる注意ブロックが前置されることを検証します。
+    # English: Verify a regeneration whose fetches all fail prepends the do-not-guess notice.
+    def test_regenerate_adds_status_block_when_every_fetch_fails(self):
+        captured_messages = {}
+        url = "https://example.com/unreachable"
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+
+        def get_llm_response(messages, model):
+            captured_messages["messages"] = messages
+            return "new answer"
+
+        with ExitStack() as stack:
+            for patcher in self._regenerate_patches(user_message=f"この記事を要約して {url}"):
+                stack.enter_context(patcher)
+            stack.enter_context(
+                patch("services.chat_url_context.fetch_urls_documents", return_value={})
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response)
+            )
+            asyncio.run(chat_regenerate(request))
+
+        latest = captured_messages["messages"][-1]["content"]
+        self.assertIn("<fetched_urls_status>", latest)
+        self.assertNotIn("<fetched_urls>", latest)
+        self.assertIn("この記事を要約して", latest)
 
     # 日本語: 編集して再生成した場合、編集後の発話に含まれる URL の全文が生成ジョブへ渡ることを検証します。
     # English: Verify editing and regenerating hands the edited message's page bodies to the job.
