@@ -192,9 +192,9 @@ class CollectEarlierPastedUrlsTestCase(unittest.TestCase):
         ]
         self.assertEqual(collect_earlier_pasted_urls(messages), ())
 
-    # 重複URLは正規化して1件にまとめ、除外指定も効くことを検証します。
-    # Verify duplicates collapse after canonicalization and exclusions are honored.
-    def test_duplicates_collapse_and_exclusions_apply(self):
+    # 重複URLはフラグメント違いも含めて正規化し、1件にまとめることを検証します。
+    # Verify duplicates, including fragment-only differences, collapse into one entry.
+    def test_duplicates_collapse_after_canonicalization(self):
         messages = [
             {"role": "user", "content": "https://example.com/a#section"},
             {"role": "user", "content": "https://example.com/a"},
@@ -205,30 +205,43 @@ class CollectEarlierPastedUrlsTestCase(unittest.TestCase):
             collect_earlier_pasted_urls(messages),
             ("https://example.com/b", "https://example.com/a"),
         )
+
+    # 件数の上限をちょうど超えたところで打ち切られることを検証します。
+    # Verify collection stops exactly at the URL cap.
+    def test_url_cap_is_exact(self):
+        def collect(url_count):
+            messages = [
+                {"role": "user", "content": f"https://example.com/{index}"}
+                for index in range(url_count)
+            ]
+            return collect_earlier_pasted_urls([*messages, {"role": "user", "content": "まとめて"}])
+
+        self.assertEqual(len(collect(MAX_EARLIER_PASTED_URLS)), MAX_EARLIER_PASTED_URLS)
+        self.assertEqual(len(collect(MAX_EARLIER_PASTED_URLS + 1)), MAX_EARLIER_PASTED_URLS)
+
+    # 遡る発話数の上限が、ちょうど境界の発話まで含み、その1つ先を含まないことを検証します。
+    # Verify the look-back cap includes the boundary message and excludes the one beyond it.
+    def test_look_back_cap_is_exact(self):
+        def collect(filler_count):
+            messages = [
+                {"role": "user", "content": "https://example.com/far"},
+                *[
+                    {"role": "user", "content": "URLのない発話"}
+                    for _ in range(filler_count)
+                ],
+                {"role": "user", "content": "まとめて"},
+            ]
+            return collect_earlier_pasted_urls(messages)
+
+        # 境界の発話（遡り上限ちょうど）は含む。
+        # The message at the look-back boundary is still inspected.
         self.assertEqual(
-            collect_earlier_pasted_urls(messages, exclude_urls=["https://example.com/b"]),
-            ("https://example.com/a",),
+            collect(EARLIER_PASTED_URL_LOOKBACK_MESSAGES - 1),
+            ("https://example.com/far",),
         )
-
-    # 件数と遡る発話数の上限が効くことを検証します。
-    # Verify both the URL cap and the look-back cap apply.
-    def test_caps_bound_the_collection(self):
-        many_urls = [
-            {"role": "user", "content": f"https://example.com/{index}"}
-            for index in range(MAX_EARLIER_PASTED_URLS + 4)
-        ]
-        collected = collect_earlier_pasted_urls([*many_urls, {"role": "user", "content": "まとめて"}])
-        self.assertEqual(len(collected), MAX_EARLIER_PASTED_URLS)
-
-        far_back = [
-            {"role": "user", "content": "https://example.com/far"},
-            *[
-                {"role": "user", "content": "URLのない発話"}
-                for _ in range(EARLIER_PASTED_URL_LOOKBACK_MESSAGES)
-            ],
-            {"role": "user", "content": "まとめて"},
-        ]
-        self.assertEqual(collect_earlier_pasted_urls(far_back), ())
+        # その1つ先は含まない。
+        # The next one beyond it is not.
+        self.assertEqual(collect(EARLIER_PASTED_URL_LOOKBACK_MESSAGES), ())
 
     # HTTP(S) でないURLや壊れたURLは拾わないことを検証します。
     # Verify non-HTTP(S) and malformed URLs are skipped.

@@ -16,7 +16,7 @@ stays readable in chunks through ``read_web_page``.
 from __future__ import annotations
 
 import html
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -236,10 +236,13 @@ def render_fetched_urls_block(pages: tuple[PastedUrlPage, ...]) -> str:
 
 def collect_earlier_pasted_urls(
     messages: Sequence[Mapping[str, Any]],
-    *,
-    exclude_urls: Collection[str] = (),
 ) -> tuple[str, ...]:
     """Return URLs the user pasted in earlier turns, newest first.
+
+    今回のターンで取得済みのURLをここで除く必要はない。重複は登録側（evidence_id 一致）で
+    弾かれ、本文を持つレコードが常に優先される。
+    A URL already fetched this turn needs no filtering here: registration drops the duplicate by
+    evidence ID and always keeps the record that holds a body.
 
     渡すのは参照ブロックを前置する**前**のユーザー発話に限ること。前置後の文面から拾うと、
     外部ページ本文や添付本文に含まれるリンクまで「ユーザーが貼ったURL」として扱われ、
@@ -248,7 +251,6 @@ def collect_earlier_pasted_urls(
     a prefixed message would treat links inside external page text or attachments as if the user
     had pasted them, turning untrusted data into fetch targets.
     """
-    excluded = {canonicalize_url(url) or url for url in exclude_urls}
     collected: list[str] = []
     seen: set[str] = set()
     inspected = 0
@@ -265,7 +267,7 @@ def collect_earlier_pasted_urls(
         inspected += 1
         for raw_url in extract_urls_from_text(content):
             canonical_url = canonicalize_url(raw_url)
-            if canonical_url is None or canonical_url in excluded or canonical_url in seen:
+            if canonical_url is None or canonical_url in seen:
                 continue
             seen.add(canonical_url)
             collected.append(canonical_url)
