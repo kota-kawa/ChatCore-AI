@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from services.chat_context import estimate_token_count
-from services.url_fetcher import MAX_URL_TEXT_CHARS, FetchedUrlDocument
+from services.url_fetcher import (
+    MAX_URL_TEXT_CHARS,
+    FetchedUrlDocument,
+    extract_urls_from_text,
+    fetch_urls_documents,
+)
 from services.web_search import _redact_secretish_text, build_web_search_evidence_id
 
 # 直近ユーザー発話へ前置できるURL本文の合計トークン予算。RECENT_HISTORY_TOKEN_BUDGET
@@ -220,6 +225,22 @@ def render_fetched_urls_block(pages: tuple[PastedUrlPage, ...]) -> str:
     return f"<fetched_urls>\n{_UNTRUSTED_NOTICE}\n{continuation}{body}\n</fetched_urls>"
 
 
+def fetch_pasted_url_context(message_text: str) -> tuple[tuple[PastedUrlPage, ...], str]:
+    """Fetch the URLs in one user message and return its pages and the block to prepend.
+
+    発話にURLが無ければ空の結果を返し、1件も読めなければ推測を禁じる注意ブロックを返す。
+    ネットワークI/Oを含むため、呼び出し側は非同期経路から ``run_blocking`` 経由で呼ぶこと。
+    A message with no URL yields an empty result, and a message whose links were all
+    unreadable yields the block that forbids guessing. This performs network I/O, so async
+    callers must reach it through ``run_blocking``.
+    """
+    urls = extract_urls_from_text(message_text)
+    if not urls:
+        return (), ""
+    pages = build_pasted_url_pages(fetch_urls_documents(urls))
+    return pages, render_fetched_urls_block(pages) or FETCH_FAILURE_BLOCK
+
+
 __all__ = [
     "FETCH_FAILURE_BLOCK",
     "INLINE_URL_CONTEXT_TOKEN_BUDGET",
@@ -228,6 +249,7 @@ __all__ = [
     "PASTED_URL_TOOL_NAME",
     "PastedUrlPage",
     "build_pasted_url_pages",
+    "fetch_pasted_url_context",
     "pasted_url_evidence_id",
     "render_fetched_urls_block",
 ]

@@ -45,12 +45,7 @@ from services.chat_post_dependencies import (
     ChatPostWebDependencies,
 )
 from services.chat_title import build_initial_title_candidates, generate_chat_room_title
-from services.chat_url_context import (
-    FETCH_FAILURE_BLOCK,
-    PastedUrlPage,
-    build_pasted_url_pages,
-    render_fetched_urls_block,
-)
+from services.chat_url_context import PastedUrlPage, fetch_pasted_url_context
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     GenerativeUiMode,
@@ -75,7 +70,6 @@ from services.selected_reference_context import (
     augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import build_selected_reference_searchers
-from services.url_fetcher import extract_urls_from_text, fetch_urls_documents
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
     WebSearchResult,
@@ -526,16 +520,15 @@ class ChatPostUseCase:
 
         # メッセージからのURL抽出およびコンテンツ取得
         # Extract URLs from the user message and fetch their web contents
-        urls_in_message = extract_urls_from_text(turn.user_message)
-        if urls_in_message:
-            # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
-            # system message に混ぜると、外部ページ本文が指示階層を持っているように見えやすい。
-            # 長いページは先頭の抜粋だけを前置し、残りは read_web_page の分割読み取りへ回す。
-            # Only the head of a long page is prepended; the rest is left to read_web_page.
-            fetched_documents = await run_blocking(fetch_urls_documents, urls_in_message)
-            turn.pasted_url_pages = build_pasted_url_pages(fetched_documents)
-            url_block = render_fetched_urls_block(turn.pasted_url_pages)
-            prefix_blocks.append(url_block if url_block else FETCH_FAILURE_BLOCK)
+        # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
+        # system message に混ぜると、外部ページ本文が指示階層を持っているように見えやすい。
+        # 長いページは先頭の抜粋だけを前置し、残りは read_web_page の分割読み取りへ回す。
+        # Only the head of a long page is prepended; the rest is left to read_web_page.
+        turn.pasted_url_pages, url_block = await run_blocking(
+            fetch_pasted_url_context, turn.user_message
+        )
+        if url_block:
+            prefix_blocks.append(url_block)
 
         if turn.prepared_attached_files:
             prefix_blocks.append(format_attached_files_for_prompt(turn.prepared_attached_files))
