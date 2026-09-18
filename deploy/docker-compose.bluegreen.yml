@@ -223,15 +223,23 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_URL: ${FRONTEND_URL:-https://chatcore-ai.com}
-    image: chat-core-frontend:latest
+        # [JP] 同じ色の app をコンテナ間DNSで直接指す。公開ドメイン経由だと
+        #      切替中に別の色へ流れる色ずれと、外向きDNS/TLS/hairpin NAT への依存が生じる。
+        # [EN] Point at the same color's app over the compose network. Going through the public
+        #      domain can hit the other color mid-switch and depends on outbound DNS/TLS/hairpin NAT.
+        BACKEND_URL: http://app_blue:5004
+    # [JP] Next.js は rewrite 先をビルド時に .next のマニフェストへ焼き込むため、色ごとに別タグへビルドする。
+    #      1つのタグを共有すると、後からビルドした色の宛先が両方の色に残ってしまう。
+    # [EN] Next.js bakes the rewrite destination into the .next manifest at build time, so each color
+    #      needs its own tag; sharing one tag would leave both colors pointing at whichever built last.
+    image: chat-core-frontend:blue
     container_name: chatcore_frontend_blue
     logging: *default_logging
     # [JP] Next.js の SSR と画像最適化のスパイク用。app より小さくてよい。
     # [EN] Headroom for Next.js SSR and image optimization; smaller than the app.
     mem_limit: 1g
     environment:
-      - BACKEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
+      - BACKEND_URL=http://app_blue:5004
     ports:
       # ホスト側 nginx からのみアクセスするためループバックに限定する
       # Bind to loopback only; the host nginx is the sole external consumer.
@@ -253,7 +261,15 @@ services:
 
   frontend_green:
     <<: *frontend_service
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://app_green:5004
+    image: chat-core-frontend:green
     container_name: chatcore_frontend_green
+    environment:
+      - BACKEND_URL=http://app_green:5004
     ports:
       - "127.0.0.1:3001:3000"
 
