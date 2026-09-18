@@ -54,6 +54,9 @@ ERROR_AVATAR_NOT_FOUND = "アバター画像が見つかりません。"
 # User-facing messages for the profile read/update endpoint.
 ERROR_USER_NOT_FOUND = "ユーザーが存在しません"
 ERROR_USERNAME_REQUIRED = "ユーザー名は必須です"
+ERROR_PROFILE_INPUT_TOO_LONG = (
+    "入力内容が長すぎます。ユーザー名・自己紹介・AIへの指示の文字数を減らしてください。"
+)
 ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION = (
     "メールアドレスを変更するには、新しいアドレス宛に送信される"
     "認証コードによる確認が必要です。設定画面の「メールアドレス変更」"

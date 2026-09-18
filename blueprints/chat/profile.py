@@ -36,6 +36,7 @@ from services.error_messages import (
     ERROR_AVATAR_TOO_LARGE,
     ERROR_LOGIN_REQUIRED,
     ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION,
+    ERROR_PROFILE_INPUT_TOO_LONG,
     ERROR_USER_NOT_FOUND,
     ERROR_USERNAME_REQUIRED,
     MESSAGE_PROFILE_UPDATED,
@@ -46,7 +47,11 @@ from services.llm_daily_limit import (
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
 )
-from services.request_models import EmailChangeConfirmRequest, EmailChangeRequest
+from services.request_models import (
+    EmailChangeConfirmRequest,
+    EmailChangeRequest,
+    UserProfileUpdateRequest,
+)
 from services.security import constant_time_compare, generate_verification_code
 from services.web import (
     jsonify,
@@ -332,10 +337,24 @@ async def user_profile(request: Request):
     # マルチパートフォームからの入力を取得
     # Extract input fields from the multipart form
     form = await request.form()
-    username = (form.get('username') or '').strip()
-    submitted_email = (form.get('email') or '').strip()
-    bio = (form.get('bio') or '').strip()
-    llm_profile_context = (form.get('llm_profile_context') or '').strip()
+    # テキスト項目は Pydantic で長さを検証する（DBカラムは Text で上限が無い）
+    # Validate the text field lengths with Pydantic: the columns are unbounded Text.
+    payload, validation_error = validate_payload_model(
+        {
+            'username': form.get('username') or '',
+            'email': form.get('email') or '',
+            'bio': form.get('bio') or '',
+            'llm_profile_context': form.get('llm_profile_context') or '',
+        },
+        UserProfileUpdateRequest,
+        error_message=ERROR_PROFILE_INPUT_TOO_LONG,
+    )
+    if validation_error is not None:
+        return validation_error
+    username = payload.username
+    submitted_email = payload.email
+    bio = payload.bio
+    llm_profile_context = payload.llm_profile_context
     avatar_f = form.get('avatar')      # 画像ファイル (任意)
     # Optional avatar file from multipart form.
 

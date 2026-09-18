@@ -51,6 +51,7 @@ from services.request_models import (  # noqa: E402
     ShareMemoRequest,
     UpdateTasksOrderRequest,
     UpdateUserSkillStateRequest,
+    UserProfileUpdateRequest,
 )
 from services.response_models import (  # noqa: E402
     ApiDetailObject,
@@ -128,6 +129,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ContextFactCandidateApproveRequest", ContextFactCandidateApproveRequest),
     ("ContextFactCandidateRejectRequest", ContextFactCandidateRejectRequest),
     ("ContextExtractionSettingsUpdateRequest", ContextExtractionSettingsUpdateRequest),
+    ("UserProfileUpdateRequest", UserProfileUpdateRequest),
     # Response payloads (source of truth: services/response_models.py)
     ("ApiErrorPayload", ApiErrorPayload),
     ("ApiDetailObject", ApiDetailObject),

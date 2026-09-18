@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 0eea29e96068d84c4c85704bb22343f0d8d2930d26f6bf3da147c02736d8fe09
+// Schema fingerprint: 986793123f282409c9df009bf2e2d56a684de0048821218991c9f7076fdd423e
 
 import { z } from "zod";
 
@@ -112,6 +112,9 @@ export type ContextFactCandidateRejectRequest = z.infer<typeof ContextFactCandid
 
 export const ContextExtractionSettingsUpdateRequestSchema = z.object({ "enabled": z.boolean() });
 export type ContextExtractionSettingsUpdateRequest = z.infer<typeof ContextExtractionSettingsUpdateRequestSchema>;
+
+export const UserProfileUpdateRequestSchema = z.object({ "username": z.string().max(255).default(""), "email": z.string().max(254).default(""), "bio": z.string().max(2000).default(""), "llm_profile_context": z.string().max(20000).default("") });
+export type UserProfileUpdateRequest = z.infer<typeof UserProfileUpdateRequestSchema>;
 
 export const ApiErrorPayloadSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null) }).catchall(z.any());
 export type ApiErrorPayload = z.infer<typeof ApiErrorPayloadSchema>;
