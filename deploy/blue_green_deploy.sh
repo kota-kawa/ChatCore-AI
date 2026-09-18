@@ -81,6 +81,7 @@ validate_required_env() {
     POSTGRES_DB
     POSTGRES_USER
     POSTGRES_PASSWORD
+    REDIS_PASSWORD
     FASTAPI_SECRET_KEY
   )
   local mcp_enabled="${MCP_ENABLED:-false}"
