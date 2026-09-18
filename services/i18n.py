@@ -39,7 +39,7 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "ai_agent.invalid_request": "AIエージェントリクエストが不正です。",
         "ai_agent.rate_limited": "AIエージェントの試行回数が多すぎます。{seconds}秒ほど待ってから再試行してください。",
         "ai_agent.monthly_limit": (
-            "今月のAIエージェント利用上限（全ユーザー合計 {limit} 回）に達しました。"
+            "今月のAIエージェント利用上限（1ユーザーあたり {limit} 回）に達しました。"
             "翌月になってから再度お試しください。"
         ),
         "ai_agent.progress.memo_loading": "メモを読み込んでいます...",
@@ -67,7 +67,7 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "preferences.update_failed": "Failed to update the language preference.",
         "ai_agent.invalid_request": "The AI agent request is invalid.",
         "ai_agent.rate_limited": "Too many AI agent requests. Try again in about {seconds} seconds.",
-        "ai_agent.monthly_limit": "The shared monthly AI agent limit ({limit} requests) has been reached. Try again next month.",
+        "ai_agent.monthly_limit": "Your monthly AI agent limit ({limit} requests) has been reached. Try again next month.",
         "ai_agent.progress.memo_loading": "Loading the memo...",
         "ai_agent.progress.memo_edit": "Preparing an edit...",
         "ai_agent.progress.response": "Generating a response...",
