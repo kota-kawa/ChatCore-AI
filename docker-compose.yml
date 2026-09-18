@@ -37,6 +37,9 @@ services:
       - AUTH_EMAIL_DAILY_SEND_LIMIT=${AUTH_EMAIL_DAILY_SEND_LIMIT:-50}
       - GUEST_CHAT_DAILY_LIMIT=${GUEST_CHAT_DAILY_LIMIT:-10}
       - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-127.0.0.1,::1}
+      # uvicorn が X-Forwarded-For を信頼する送信元。空なら docker/app-entrypoint.sh の既定値。
+      # Peers uvicorn trusts for X-Forwarded-For; empty falls back to the docker/app-entrypoint.sh default.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-}
       - FASTAPI_SECRET_KEY=${FASTAPI_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
