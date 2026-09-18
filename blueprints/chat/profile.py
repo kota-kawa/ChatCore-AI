@@ -14,7 +14,11 @@ from services.auth_limits import (
     consume_auth_email_send_limits,
     get_auth_limit_service,
 )
-from services.avatar_storage import build_avatar_public_url, get_avatar_upload_root
+from services.avatar_storage import (
+    AVATAR_MAX_BYTES,
+    build_avatar_public_url,
+    get_avatar_upload_root,
+)
 from services.chat_service import (
     commit_email_change,
     get_user_by_email,
@@ -75,10 +79,6 @@ EMAIL_CHANGE_STAGE_CURRENT = "current_email"
 EMAIL_CHANGE_STAGE_NEW = "new_email"
 
 logger = logging.getLogger(__name__)
-
-# アバター画像の最大許容サイズ（5MB）
-# Maximum allowed bytes for an avatar image file (5MB).
-AVATAR_MAX_BYTES = 5 * 1024 * 1024
 
 # アバター画像を読み書きする際のバッファチャンクサイズ（1MB）
 # Chunk size (1MB) used when reading and writing the avatar file in bytes.

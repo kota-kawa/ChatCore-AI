@@ -21,6 +21,7 @@ from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError  # noqa: E402
 from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
 from services.auth_limits import AuthLimitService  # noqa: E402
 from services.avatar_cleanup import cleanup_orphaned_avatars  # noqa: E402
+from services.avatar_storage import AVATAR_MAX_REQUEST_BYTES  # noqa: E402
 from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
 )
@@ -250,6 +251,11 @@ app.add_middleware(
     RequestBodySizeLimitMiddleware,
     path="/prompt_share/api/prompts",
     max_bytes=PROMPT_ATTACHMENT_MAX_REQUEST_BYTES,
+)
+app.add_middleware(
+    RequestBodySizeLimitMiddleware,
+    path="/api/user/profile",
+    max_bytes=AVATAR_MAX_REQUEST_BYTES,
 )
 
 # ミドルウェア設定値をアプリケーション状態に保存
