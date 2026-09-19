@@ -337,6 +337,10 @@ describe("failed chat turns", () => {
   });
 });
 
+// 「一時チャット」は本文を端末に残さない約束の機能なので、JSON応答・ストリーム応答
+// のどちらでも localStorage には一切書き込まれないことを確認する。
+// "Temporary chat" promises never to leave its text on the device, so neither a
+// JSON nor a streamed answer may ever be written to localStorage.
 describe("temporary chat rooms never persist locally", () => {
   beforeEach(() => {
     resilientFetchMock.mockReset();
@@ -402,3 +406,61 @@ describe("temporary chat rooms never persist locally", () => {
 // the stale value and slips past that guard. acquireGeneration() is ref-based and
 // takes effect immediately; only truncating once it succeeds must stop a second
 // click from deleting one answer too many.
+describe("regenerate double click", () => {
+  beforeEach(() => {
+    resilientFetchMock.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("truncates only once when regenerate is triggered twice in the same tick", async () => {
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-1" }));
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      await result.current.actions.generateResponse("question-1", "model", "room-1");
+    });
+
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-2" }));
+    await act(async () => {
+      await result.current.actions.generateResponse("question-2", "model", "room-1");
+    });
+
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-2",
+    ]);
+
+    // regenerateLastResponse also fires an unawaited refreshActivePath() GET after
+    // a JSON answer; let it fail harmlessly so it does not overwrite the local
+    // cache this assertion checks (its own catch keeps the optimistic state).
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("chat_regenerate")) {
+        return createJsonResponse(200, { response: "answer-3" });
+      }
+      return createJsonResponse(500, { error: "not relevant to this test" });
+    });
+
+    let firstRegenerate: Promise<void>;
+    let secondRegenerate: Promise<void>;
+    act(() => {
+      firstRegenerate = result.current.actions.regenerateLastResponse("model", "room-1");
+      secondRegenerate = result.current.actions.regenerateLastResponse("model", "room-1");
+    });
+    await act(async () => {
+      await Promise.all([firstRegenerate!, secondRegenerate!]);
+    });
+
+    // 2回目のクリックは生成を開始せず（guard busy）、履歴も切り詰めない。
+    // question-2 とその回答が失われず、最後の回答だけが置き換わる。
+    // The second click starts no generation (guard busy) and truncates
+    // nothing: question-2 and its answer survive, only the last answer changes.
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-3",
+    ]);
+    expect(requestedUrls().filter((url) => url.includes("chat_regenerate"))).toHaveLength(1);
+  });
+});

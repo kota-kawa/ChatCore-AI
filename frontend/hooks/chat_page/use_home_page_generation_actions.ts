@@ -1264,10 +1264,19 @@ export function useHomePageGenerationActions({
 
   const editAndRegenerateMessage = useCallback(
     async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
-      truncateHistoryForEdit(roomId, trailingUserCount);
-
+      // isGenerating は React state なので同じ tick で連打されると更新前の値のまま
+      // ガードを通過してしまう。acquireGeneration() は ref ベースで即時に効くため、
+      // 取得できたときだけ履歴を切り詰める。そうしないと二重クリックの2回目が
+      // 生成を開始しないまま、さらに1つ前の回答まで消してしまう。
+      // isGenerating is React state, so a double click within the same tick still
+      // sees the stale value and slips past that guard. acquireGeneration() is
+      // ref-based and takes effect immediately, so only truncate once it
+      // succeeds — otherwise a second click starts no generation but still
+      // deletes one more answer than intended.
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+
+      truncateHistoryForEdit(roomId, trailingUserCount);
       markChatRoomActive(roomId);
 
       const userMsg: UiChatMessage = {
@@ -1432,10 +1441,13 @@ export function useHomePageGenerationActions({
 
   const regenerateLastResponse = useCallback(
     async (model: string, roomId: string) => {
-      truncateLastAnswerForRegenerate(roomId);
-
+      // 上の editAndRegenerateMessage と同じ理由で、取得できたときだけ切り詰める。
+      // Same reasoning as editAndRegenerateMessage above: only truncate once
+      // acquireGeneration() actually succeeds.
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+
+      truncateLastAnswerForRegenerate(roomId);
       markChatRoomActive(roomId);
       beginRegeneratedTurn(generation);
 
