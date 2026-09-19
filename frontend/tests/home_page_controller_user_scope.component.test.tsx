@@ -48,14 +48,25 @@ function installMatchMediaStub() {
 // the auth check (/api/current_user) reports a different user, both the screen
 // and the local state must be wiped.
 describe("useHomePageController user scope reconciliation", () => {
-  it("wipes a previous user's cached room once a different user is confirmed", async () => {
+  // これがレビューで指摘された主要シナリオ: ログイン済みの利用者ならほぼ全員が
+  // userScope を記録済みなので、「userScope が記録されているか」では利用者1と
+  // 利用者2を区別できない。区別できない以上、認証確認の応答が届くまでは本文を
+  // 一切描画してはならない（レイアウト＝どの部屋・どの画面かは即時復元してよい）。
+  // This is the primary scenario the review reported: almost every logged-in
+  // user already has a recorded userScope, so "is userScope recorded" cannot
+  // distinguish user 1 from user 2. Since it cannot distinguish them, no
+  // message text may be painted until the auth check's response arrives
+  // (restoring the layout — which room/view was active — instantly is fine).
+  it("never paints a previous user's message text before auth resolves, even when userScope matches the stale cache", async () => {
     installMatchMediaStub();
     localStorage.clear();
 
-    // ブラウザに残っていた利用者1の状態（別アカウントでの再ログインなどを想定し、
-    // 認証キャッシュはあえて "ログイン中" のまま残しておく）。
-    // State left behind by user 1 (the auth cache is deliberately left "logged
-    // in", simulating a re-login as a different account that skipped logout).
+    // ブラウザに残っていた利用者1の状態。userScope は "ほぼ全員" が持つ状態を
+    // 再現するためにあえて記録済みにしておく（認証キャッシュも "ログイン中"の
+    // まま残す）。
+    // State left behind by user 1. userScope is deliberately already recorded,
+    // reproducing the state "almost everyone" logged in is in (the auth cache
+    // is also left "logged in").
     localStorage.setItem("chatcore.chat.userScope", "user:1");
     localStorage.setItem("chatcore.auth.loggedIn", "1");
     localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
@@ -63,7 +74,7 @@ describe("useHomePageController user scope reconciliation", () => {
     writeStoredHomePageViewState("chat");
     localStorage.setItem(
       "chatHistory_room-of-user-1",
-      JSON.stringify([{ text: "user 1's private message", sender: "user" }]),
+      JSON.stringify([{ text: "USER 1 PRIVATE MESSAGE", sender: "user" }]),
     );
 
     let resolveCurrentUser!: (response: Response) => void;
@@ -79,8 +90,16 @@ describe("useHomePageController user scope reconciliation", () => {
 
     const { result } = renderHook(() => useHomePageController());
 
-    // 認証確認が解決する前は、ユーザー1のキャッシュがまだそのまま残っている。
-    // Before the auth check resolves, user 1's cache is still untouched.
+    // 認証確認が解決する前: レイアウト（部屋・ビュー状態）は即時復元されて
+    // よいが、本文は空でなければならない。ここが失敗する場合、fetch の
+    // 往復時間だけ前の利用者の本文が画面に出てから消えるフラッシュが
+    // 実際に起きている。
+    // Before the auth check resolves: the layout (room/view state) may be
+    // restored instantly, but the message text must be empty. If this fails,
+    // the previous user's text is actually flashing on screen for the
+    // duration of the fetch round trip.
+    expect(result.current.pageViewState).toBe("chat");
+    expect(result.current.messages).toEqual([]);
     expect(readStoredUserScope()).toBe("user:1");
 
     await act(async () => {
@@ -92,6 +111,49 @@ describe("useHomePageController user scope reconciliation", () => {
     expect(readStoredHistory("room-of-user-1")).toEqual([]);
     expect(localStorage.getItem("chatcore.chat.activeRoomId")).toBeNull();
     await waitFor(() => expect(result.current.pageViewState).toBe("setup"));
+    expect(result.current.messages).toEqual([]);
+  });
+
+  // 本文の即時復元をやめても、機微でないレイアウト（部屋の選択・画面状態）は
+  // 引き続き認証解決を待たずに復元されることを確認する。ここが壊れると、
+  // 正当な同一利用者の再訪問のたびにセットアップ画面が一瞬表示されてしまう。
+  // Confirm that giving up on instantly restoring message text does not
+  // regress the non-sensitive layout restore (which room, which view). If
+  // this breaks, a legitimate same-user revisit would flash the setup view
+  // every time.
+  it("still restores the room/view layout instantly for a legitimate revisit", async () => {
+    installMatchMediaStub();
+    localStorage.clear();
+
+    localStorage.setItem("chatcore.chat.userScope", "user:1");
+    localStorage.setItem("chatcore.auth.loggedIn", "1");
+    localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
+    writeStoredActiveChatRoom("room-of-user-1", "normal");
+    writeStoredHomePageViewState("chat");
+    localStorage.setItem(
+      "chatHistory_room-of-user-1",
+      JSON.stringify([{ text: "user 1's own message", sender: "user" }]),
+    );
+
+    const currentUserPromise = new Promise<Response>(() => {
+      // 認証確認をあえて未解決のままにし、レイアウト復元が解決を待たずに
+      // 行われることを確認する。
+      // Deliberately leave the auth check unresolved to confirm the layout
+      // restore does not wait for it.
+    });
+
+    fetchMock.mockImplementation(async (url: unknown) => {
+      const requestedUrl = String(url);
+      if (requestedUrl.includes("current_user")) return currentUserPromise;
+      return jsonResponse({});
+    });
+
+    const { result } = renderHook(() => useHomePageController());
+
+    expect(result.current.pageViewState).toBe("chat");
+    expect(result.current.currentRoomId).toBe("room-of-user-1");
+    // 本文だけは認証解決まで空のまま（スケルトン相当）。
+    // Only the message text stays empty until auth resolves (skeleton state).
     expect(result.current.messages).toEqual([]);
   });
 

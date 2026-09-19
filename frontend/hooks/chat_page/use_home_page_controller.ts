@@ -37,7 +37,6 @@ import {
   readStoredActiveChatRoom,
   readRestorableHomePageViewState,
   readCachedAuthState,
-  readStoredUserScope,
   reconcileStoredUserScope,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
@@ -980,25 +979,19 @@ export function useHomePageController() {
 
   const restoreHomeViewFromStorage = useCallback(() => {
     try {
-      // 認証確認（/api/current_user）はこの後に非同期で走る。ここで無条件に
-      // ローカル履歴を描画すると、直前にログアウトした端末で次の利用者（別
-      // アカウントや未ログイン）に前の利用者の本文が一瞬でも表示されてしまう。
-      // 「ログイン済み」キャッシュだけでは、ログアウトを経由しないユーザー切替
-      // （別アカウントでの再ログインなど）で loggedIn=true のまま持ち主だけが
-      // 変わるケースを見逃す。永続状態の持ち主を記録した userScope が
-      // 記録されているときだけ、同一利用者の再訪問とみなして即時復元する。
-      // ログアウトはこのキャッシュと userScope の両方を消すため、次の訪問者
-      // では false になりローカル本文は描画されない。
+      // 認証確認（/api/current_user）はこの後に非同期で走る。どれだけ厳しい
+      // ヒューリスティックを積んでも、ログアウトを経由しないユーザー切替
+      // （別アカウントでの再ログインなど）はローカルストレージの中身だけでは
+      // 判別できない。したがって本文（メッセージ）は絶対にここで描画せず、
+      // 常にサーバーからの loadChatHistory の応答を待つ。ここで即時復元して
+      // よいのは、部屋の選択やビュー状態など機微でないレイアウトだけ。
       // The auth check (/api/current_user) only resolves later, asynchronously.
-      // Painting local history unconditionally here would flash the previous
-      // user's text to whoever opens this device next (a different account or
-      // a guest) right after a logout. The cached "logged in" flag alone
-      // misses a user switch that skips logout (re-login as a different
-      // account keeps loggedIn=true while only the owner changes), so also
-      // require a recorded userScope before treating this as the same user
-      // returning. Logout clears both the flag and the scope, so the next
-      // visitor gets false and no local text is painted.
-      const trustedForLocalRestore = readCachedAuthState() === true && readStoredUserScope() !== null;
+      // No amount of localStorage heuristics can distinguish a user switch
+      // that skips logout (re-login as a different account, etc.) from the
+      // same user returning, so message TEXT is never painted here — it
+      // always waits for the server's loadChatHistory response. Only
+      // non-sensitive layout (which room/view was active) is safe to restore
+      // instantly here.
       const activeGeneration = readActiveStoredGenerationState();
       const storedViewState = activeGeneration ? "chat" : readRestorableHomePageViewState();
       if (activeGeneration) {
@@ -1009,7 +1002,6 @@ export function useHomePageController() {
         // 復元時はローカル履歴を末尾アンカリングしたいので、一覧を新規マウントさせる。
         // key は currentRoomId に依存しなくなったため、ここで明示的に reset する。
         setChatMessageListResetKey((previous) => previous + 1);
-        if (trustedForLocalRestore) loadLocalChatHistory(activeGeneration.roomId);
         void loadChatHistory(activeGeneration.roomId, true);
         return;
       }
@@ -1023,7 +1015,6 @@ export function useHomePageController() {
         if (storedViewState === "chat") {
           setPageViewState("chat");
           setChatMessageListResetKey((previous) => previous + 1);
-          if (trustedForLocalRestore) loadLocalChatHistory(storedActiveRoom.roomId);
           void loadChatHistory(storedActiveRoom.roomId, true);
         }
         return;
@@ -1043,7 +1034,6 @@ export function useHomePageController() {
     }
   }, [
     loadChatHistory,
-    loadLocalChatHistory,
     setCurrentRoomId,
     setChatMessageListResetKey,
     setCurrentRoomMode,
