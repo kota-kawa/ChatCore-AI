@@ -85,6 +85,63 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException ? error.name === "AbortError" : (error as { name?: string })?.name === "AbortError";
 }
 
+// fetch はヘッダーが届いた時点で解決するため、本文の読み取りはタイムアウトの外に
+// 出てしまう。ヘッダーだけ返して本文で止まるサーバーやプロキシに対しては、
+// res.json() / res.text() が無制限に待つことになる。
+// そこで本文を素通しするストリームで包み、読み切る（またはキャンセルされる）まで
+// タイムアウトと呼び出し側の中断を生かしたままにする。バッファリングはしないので、
+// 逐次読み出し（SSE など）の挙動は変わらない。
+//
+// fetch settles as soon as the headers arrive, so reading the body used to fall
+// outside the timeout: against a server that returns headers and then stalls,
+// res.json() / res.text() waited forever. Wrap the body in a pass-through stream
+// so the deadline (and the caller's abort) stays armed until the body is fully
+// read or cancelled. Nothing is buffered, so incremental readers are unaffected.
+function withBodyDeadline(response: Response, release: () => void): Response {
+  const source = response.body;
+  // 本文を持たない応答（204 など）や、Response として作り直せない応答はそのまま返す。
+  // Bodyless responses (204 and friends) and ones we cannot rebuild pass through.
+  if (!source || response.status < 200) {
+    release();
+    return response;
+  }
+
+  const reader = source.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          release();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (error) {
+        release();
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      release();
+      return reader.cancel(reason);
+    },
+  });
+
+  const wrapped = new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  // Response のコンストラクタでは復元できない情報（リダイレクト先など）を引き継ぐ。
+  // Carry over the fields the Response constructor cannot reproduce (a caller may
+  // follow response.url after a redirect).
+  for (const key of ["url", "redirected", "type"] as const) {
+    Object.defineProperty(wrapped, key, { get: () => response[key], configurable: true });
+  }
+  return wrapped;
+}
+
 /**
  * タイムアウトとリトライを備えた fetch。冪等(GET/HEAD)リクエストのみ自動リトライする。
  * A fetch with timeout and retry. Only idempotent (GET/HEAD) requests are retried automatically.
@@ -123,6 +180,11 @@ export async function resilientFetch(
     callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
 
     let timedOut = false;
+    // 本文を呼び出し側へ引き渡した後は、finally での即時クリアではなく
+    // withBodyDeadline 側の release() にタイムアウト解除を委ねる。
+    // Once the body is handed off to the caller, timeout teardown is deferred
+    // to withBodyDeadline's release() instead of the immediate finally below.
+    let handedOffToBody = false;
     const timeoutId =
       timeoutMs > 0
         ? setTimeout(() => {
@@ -130,6 +192,10 @@ export async function resilientFetch(
             controller.abort(new DOMException("Request timed out", "TimeoutError"));
           }, timeoutMs)
         : null;
+    const cleanupAttempt = () => {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      callerSignal?.removeEventListener("abort", onCallerAbort);
+    };
 
     try {
       const response = await fetch(input, { ...init, signal: controller.signal });
@@ -139,7 +205,14 @@ export async function resilientFetch(
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
         lastError = new Error(`Server responded with status ${response.status}`);
       } else {
-        return response;
+        // ここで cleanupAttempt() を即実行すると、本文の読み取り中はタイムアウトも
+        // 呼び出し側の中断も効かなくなる（fetch はヘッダー到達で解決するため）。
+        // withBodyDeadline が本文を読み切る／キャンセルされるまで持ち越す。
+        // Running cleanupAttempt() here would leave the body read unguarded,
+        // since fetch settles as soon as headers arrive. Defer it until
+        // withBodyDeadline finishes or cancels the body.
+        handedOffToBody = true;
+        return withBodyDeadline(response, cleanupAttempt);
       }
     } catch (error) {
       // タイムアウトによる中断はリトライ対象。呼び出し側による中断はそのまま伝播する。
@@ -154,8 +227,7 @@ export async function resilientFetch(
       }
       lastError = error;
     } finally {
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      callerSignal?.removeEventListener("abort", onCallerAbort);
+      if (!handedOffToBody) cleanupAttempt();
     }
 
     // ここに到達したのはリトライ可能な失敗。次の試行まで待機する。
