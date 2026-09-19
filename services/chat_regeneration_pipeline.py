@@ -23,6 +23,7 @@ from services.chat_async_bridge import _run_async_callback
 from services.chat_context import build_context_messages
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
+    ChatGenerationCapacityError,
     ChatGenerationJob,
     ChatGenerationService,
     build_generation_key,
@@ -85,6 +86,11 @@ from services.web_search_trace import (
 # 生成中の重複リクエストを弾く際の共通文言（両エンドポイントで同一）
 # Shared message returned when a generation is already running (identical for both endpoints).
 GENERATION_ALREADY_RUNNING_MESSAGE = "このチャットルームでは回答を生成中です。完了までお待ちください。"
+# 生成ジョブ専用プールが満杯で新規ジョブを受け付けられない際の共通文言
+# Shared message returned when the generation-only pool has no free slot for a new job.
+GENERATION_CAPACITY_EXCEEDED_MESSAGE = (
+    "生成の同時実行数が上限に達しています。しばらく待ってから再試行してください。"
+)
 
 
 # 依存として差し替える境界（DB／LLM／一時ストア）の型定義
@@ -554,6 +560,11 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             return ChatRegenerationRejected(
                 payload={"error": GENERATION_ALREADY_RUNNING_MESSAGE},
                 status_code=409,
+            )
+        except ChatGenerationCapacityError:
+            return ChatRegenerationRejected(
+                payload={"error": GENERATION_CAPACITY_EXCEEDED_MESSAGE},
+                status_code=503,
             )
 
         return ChatRegenerationStreamStarted(job=job)
