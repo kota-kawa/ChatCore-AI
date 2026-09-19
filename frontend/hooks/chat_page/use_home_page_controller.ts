@@ -1213,7 +1213,20 @@ export function useHomePageController() {
     });
 
     promptAssistControllerRef.current = (controller || null) as PromptAssistController | null;
-  }, []);
+    // モーダルは ModalShell 経由でマウントされ、初回コミット時は自身の
+    // useEffect(() => setMounted(true), []) がまだ走っていないため
+    // newPromptAssistRootRef 等は null のままこの effect が空振りする。
+    // isNewPromptModalOpen を依存に加え、モーダルを開くたびに再試行することで
+    // ref が揃った後の初期化を保証する（promptAssistControllerRef の
+    // ガードにより二重初期化はしない）。
+    // The modal mounts through ModalShell, whose own
+    // useEffect(() => setMounted(true), []) has not run yet on this effect's
+    // first commit, so newPromptAssistRootRef and the field refs are still
+    // null and this effect no-ops. Re-running it every time the modal opens
+    // (via isNewPromptModalOpen) guarantees it retries once the refs are
+    // populated; the promptAssistControllerRef guard above prevents a second
+    // initialization.
+  }, [isNewPromptModalOpen]);
 
   useEffect(() => {
     if (newPromptStatus.variant === "error") {
