@@ -455,6 +455,18 @@ export function consumeAuthSuccessHint() {
     return false;
   }
 
+  // このヒントは Google OAuth のコールバックが「/」へ直接（/login を経由せず）
+  // 着地するときに付く。着地した時点で新規の認証が確定しているので、この端末に
+  // 残っていた前の利用者の永続状態を今すぐ破棄する。ここで消しておけば、直後の
+  // restoreHomeViewFromStorage が古い持ち主のレイアウトを一瞬でも復元しない。
+  // This hint is attached when the Google OAuth callback lands directly on "/"
+  // (bypassing /login). By the time it lands, a fresh authentication has just
+  // been confirmed, so wipe whatever persisted state a previous user left on
+  // this device right now. Clearing it here means the restoreHomeViewFromStorage
+  // that follows never restores the previous owner's layout, even briefly.
+  clearAllHomePagePersistedState();
+  clearStoredUserScope();
+
   writeCachedAuthState(true);
   url.searchParams.delete(AUTH_SUCCESS_HINT.queryParam);
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;

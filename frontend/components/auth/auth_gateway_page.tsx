@@ -10,6 +10,7 @@ import {
 } from "../../scripts/core/passkeys";
 import { fetchJson } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { clearAllHomePagePersistedState, clearStoredUserScope } from "../../lib/chat_page/storage";
 import { REDIRECT_DELAY_MS } from "./auth_gateway_modules/constants";
 import { AuthCodeStep } from "./auth_gateway_modules/components/auth_code_step";
 import { AuthEntryStep } from "./auth_gateway_modules/components/auth_entry_step";
@@ -72,9 +73,24 @@ export default function AuthGatewayPage() {
     }
   };
 
+  // 認証成功（メールコード・パスキー・Google のいずれか）は必ずこのページを
+  // 経由してホームへリダイレクトされる。ユーザー切替はログアウトを経由しない
+  // 場合でも必ずログインを経由するため、リダイレクト直前にこの端末へ残る
+  // 前の利用者のチャット全文・持ち主マーカーを消しておけば、直後にホーム画面が
+  // 誤って前の利用者の本文を復元することがなくなる。
+  // Every successful authentication (email code, passkey, or Google) redirects
+  // home through this page. A user switch always goes through login even when
+  // it skips logout, so wiping any previous user's chat text and owner marker
+  // right before the redirect guarantees the home page can never restore it.
+  const clearHomePagePersistedStateForFreshLogin = () => {
+    clearAllHomePagePersistedState();
+    clearStoredUserScope();
+  };
+
   // 認証完了後に指定パスへ遅延リダイレクトをスケジュールする
   // Schedule a delayed redirect to the specified path after authentication completes
   const scheduleRedirect = (targetPath: string = getPostAuthRedirectPath()) => {
+    clearHomePagePersistedStateForFreshLogin();
     clearTimer(redirectTimerRef);
     setRedirectingAfterAuth(true);
     redirectTimerRef.current = setTimeout(() => {
@@ -157,6 +173,7 @@ export default function AuthGatewayPage() {
             );
             return;
           }
+          clearHomePagePersistedStateForFreshLogin();
           window.location.href = nextPath;
         }
       } catch (error) {
@@ -271,6 +288,7 @@ export default function AuthGatewayPage() {
     setPasskeyPending(true);
     try {
       await authenticateWithPasskey();
+      clearHomePagePersistedStateForFreshLogin();
       window.location.href = getPostAuthRedirectPath();
     } catch (error) {
       // ユーザーがキャンセルした場合はエラー表示しない
