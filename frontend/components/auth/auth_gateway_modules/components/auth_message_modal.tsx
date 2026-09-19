@@ -1,3 +1,6 @@
+import { ModalShell } from "../../../ui/modal_shell";
+import { useTranslation } from "../../../../contexts/locale_context";
+
 // 認証メッセージモーダルのprops型定義
 // Props type definition for the authentication message modal
 type AuthMessageModalProps = {
@@ -7,16 +10,23 @@ type AuthMessageModalProps = {
 };
 
 // 認証処理の結果メッセージを表示するモーダルコンポーネント
-// Modal component that displays result messages from authentication processes
+// 共通のModalShell（role="dialog"・フォーカストラップ・Escape/背景クリックでの閉じる操作）に乗せつつ、
+// 見た目は既存の.modal-content/.close/#modalMessageをそのまま流用する。
+// Modal component that displays result messages from authentication processes.
+// Rides on the shared ModalShell (role="dialog", focus trap, Escape/backdrop close) while
+// reusing the existing .modal-content/.close/#modalMessage visuals as-is.
 export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessageModalProps) {
   const { t } = useTranslation();
   return (
-    <div
+    <ModalShell
+      isOpen={Boolean(message)}
+      onClose={onHide}
       id="messageModal"
-      // messageがある場合にモーダルを開き、クローズ中はアニメーションクラスを付与する
-      // Open the modal when message is present; add animation class while closing
-      className={`modal ${message ? "is-open" : ""} ${isModalClosing ? "hide-animation" : ""}`}
-      onClick={onHide}
+      // isModalClosing中は閉じるアニメーション用クラスを維持する（既存の hide-animation と同じ仕組み）
+      // Keep the closing-animation class while isModalClosing is true (same mechanism as the old hide-animation)
+      className={`auth-message-modal${isModalClosing ? " hide-animation" : ""}`}
+      labelledBy="modalMessage"
+      initialFocusSelector=".close"
     >
       {/* クリックイベントの伝播を止めてモーダル本体のクリックで閉じないようにする */}
       {/* Stop click propagation so clicking inside the modal doesn't close it */}
@@ -26,7 +36,6 @@ export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessag
         </button>
         <p id="modalMessage">{message}</p>
       </div>
-    </div>
+    </ModalShell>
   );
 }
-import { useTranslation } from "../../../../contexts/locale_context";

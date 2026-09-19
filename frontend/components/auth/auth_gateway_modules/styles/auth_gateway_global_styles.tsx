@@ -411,19 +411,14 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         }
       }
 
-      .modal {
-        position: fixed;
-        inset: 0;
+      /* メッセージモーダルの外殻はModalShell（.modal-base）が担うため、
+         このページ固有の見た目（背景の濃さ・余白・重なり順）だけをスコープで上書きする。
+         The message modal's outer shell now comes from ModalShell (.modal-base);
+         only this page's own look (backdrop darkness, padding, stacking order) is overridden here. */
+      .modal-base.auth-message-modal {
         z-index: 40;
-        display: none;
-        align-items: center;
-        justify-content: center;
         padding: 20px;
         background: rgba(0, 0, 0, 0.5);
-      }
-
-      .modal.is-open {
-        display: flex;
       }
 
       .modal-content {
@@ -437,7 +432,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         animation: modalIn 0.18s ease;
       }
 
-      .modal.hide-animation .modal-content {
+      .auth-message-modal.hide-animation .modal-content {
         animation: modalOut 0.18s ease forwards;
       }
 
