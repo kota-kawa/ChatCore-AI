@@ -15,6 +15,7 @@ const ARTIFACT: GenerativeUiArtifactV1 = {
 };
 
 const RUNTIME_ERROR_TEXT = "生成UIの一部を実行できませんでした。";
+const NAVIGATION_BLOCKED_TEXT = "生成UIが別のページへ移動しようとしたため、安全のため表示を停止しました。";
 
 // iframe から親へ届く postMessage を、source 判定を満たす形で再現する。
 // Replays a postMessage from the iframe in a form that satisfies the parent's source check.
@@ -24,6 +25,22 @@ function postFromIframe(data: unknown) {
   Object.defineProperty(event, "source", { value: iframe?.contentWindow });
   act(() => {
     window.dispatchEvent(event);
+  });
+}
+
+// iframe要素自身のloadイベントを再現する。実ブラウザでは、srcdocの初回表示の後にもう一度
+// loadが来るのは、フレーム自身が別のドキュメントへ遷移した（例: `location.href = "..."`）
+// ときだけ（ヘッドレスChromiumでの実測で確認済み）。ここではjsdom上でその回数だけを
+// 制御して、コンポーネント側の検出ロジック（sandbox_artifact_frame.tsx）を検証する。
+// Replays the iframe element's own load event. In a real browser, a load arriving again
+// after the initial srcdoc render only happens when the frame itself has navigated to a
+// different document (e.g. `location.href = "..."`), confirmed against headless Chromium.
+// This drives that count directly under jsdom to exercise the parent-side detection logic.
+function fireIframeLoad() {
+  const iframe = document.querySelector("iframe");
+  if (!iframe) throw new Error("iframe not found in the current render output");
+  act(() => {
+    iframe.dispatchEvent(new Event("load"));
   });
 }
 
@@ -95,5 +112,50 @@ describe("SandboxArtifactFrame", () => {
     });
 
     expect(screen.getByText(RUNTIME_ERROR_TEXT)).toBeInTheDocument();
+  });
+
+  // sandbox="allow-scripts" は iframe 自身がトップレベル遷移すること
+  // （`location.href = "..."` 等）までは止めない。allow-top-navigation は親ページを道連れに
+  // する遷移だけを防ぐ属性で、フレーム自身の遷移には無関係。ここでは、その遷移を親フレームが
+  // load イベント回数から検出し、フレームを破棄することを検証する。
+  // sandbox="allow-scripts" does not stop the iframe from navigating itself at the top level
+  // (e.g. `location.href = "..."`) - allow-top-navigation only guards the *parent* page from
+  // being dragged along, not the frame's own navigation. These verify the parent detects that
+  // navigation from the iframe element's load-event count and destroys the frame.
+  it("srcdocの初回ロードでは遮断しない", () => {
+    render(<SandboxArtifactFrame artifact={ARTIFACT} />);
+
+    fireIframeLoad();
+
+    expect(document.querySelector("iframe")).not.toBeNull();
+    expect(screen.queryByText(NAVIGATION_BLOCKED_TEXT)).toBeNull();
+  });
+
+  it("srcdoc設定後の想定外の2回目のloadを遷移とみなしフレームを破棄する", () => {
+    render(<SandboxArtifactFrame artifact={ARTIFACT} />);
+
+    fireIframeLoad(); // 初回表示（無視されるべき）
+    fireIframeLoad(); // アーティファクト内JSがlocationで遷移した想定
+
+    // iframeそのものをDOMから外し、中で動いていたスクリプトを止める。
+    // Removes the iframe from the DOM, stopping whatever script was still running inside it.
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(screen.getByText(NAVIGATION_BLOCKED_TEXT)).toBeInTheDocument();
+  });
+
+  it("遷移検出後に新しいアーティファクトが届けばフレーム表示へ復帰する", () => {
+    const { rerender } = render(<SandboxArtifactFrame artifact={ARTIFACT} />);
+    fireIframeLoad();
+    fireIframeLoad();
+    expect(screen.getByText(NAVIGATION_BLOCKED_TEXT)).toBeInTheDocument();
+
+    rerender(
+      <SandboxArtifactFrame
+        artifact={{ ...ARTIFACT, js: "document.getElementById('app').textContent = 'again';" }}
+      />
+    );
+
+    expect(document.querySelector("iframe")).not.toBeNull();
+    expect(screen.queryByText(NAVIGATION_BLOCKED_TEXT)).toBeNull();
   });
 });
