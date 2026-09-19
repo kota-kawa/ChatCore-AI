@@ -37,6 +37,7 @@ import {
   readStoredActiveChatRoom,
   readRestorableHomePageViewState,
   readCachedAuthState,
+  readStoredUserScope,
   reconcileStoredUserScope,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
@@ -857,6 +858,7 @@ export function useHomePageController() {
     setHistoryNextBeforeId(null);
     setIsLoadingOlder(false);
   }, [
+    currentRoomIdRef,
     setChatMessageListResetKey,
     setCurrentRoomId,
     setCurrentRoomMode,
@@ -981,17 +983,22 @@ export function useHomePageController() {
       // 認証確認（/api/current_user）はこの後に非同期で走る。ここで無条件に
       // ローカル履歴を描画すると、直前にログアウトした端末で次の利用者（別
       // アカウントや未ログイン）に前の利用者の本文が一瞬でも表示されてしまう。
-      // ログイン済みキャッシュが立っているときだけ、同一利用者の再訪問とみなして
-      // 即時復元する。ログアウトはこのキャッシュを消すため、次の訪問者では
-      // false になりローカル本文は描画されない。
+      // 「ログイン済み」キャッシュだけでは、ログアウトを経由しないユーザー切替
+      // （別アカウントでの再ログインなど）で loggedIn=true のまま持ち主だけが
+      // 変わるケースを見逃す。永続状態の持ち主を記録した userScope が
+      // 記録されているときだけ、同一利用者の再訪問とみなして即時復元する。
+      // ログアウトはこのキャッシュと userScope の両方を消すため、次の訪問者
+      // では false になりローカル本文は描画されない。
       // The auth check (/api/current_user) only resolves later, asynchronously.
       // Painting local history unconditionally here would flash the previous
       // user's text to whoever opens this device next (a different account or
-      // a guest) right after a logout. Only restore instantly when the cached
-      // "logged in" flag is set, treating that as the same user returning;
-      // logout clears the flag, so the next visitor gets false and no local
-      // text is painted.
-      const trustedForLocalRestore = readCachedAuthState() === true;
+      // a guest) right after a logout. The cached "logged in" flag alone
+      // misses a user switch that skips logout (re-login as a different
+      // account keeps loggedIn=true while only the owner changes), so also
+      // require a recorded userScope before treating this as the same user
+      // returning. Logout clears both the flag and the scope, so the next
+      // visitor gets false and no local text is painted.
+      const trustedForLocalRestore = readCachedAuthState() === true && readStoredUserScope() !== null;
       const activeGeneration = readActiveStoredGenerationState();
       const storedViewState = activeGeneration ? "chat" : readRestorableHomePageViewState();
       if (activeGeneration) {

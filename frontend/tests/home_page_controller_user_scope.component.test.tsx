@@ -126,6 +126,67 @@ describe("useHomePageController user scope reconciliation", () => {
     expect(localStorage.getItem("chatcore.chat.activeRoomId")).toBe("room-of-user-1");
   });
 
+  // 「ログイン中」キャッシュだけでは、ログアウトを経由しないユーザー切り替え
+  // （別アカウントでの再ログインなど）を検出できない。chatcore.auth.loggedIn は
+  // 立っているが、この端末の持ち主を記録した userScope がまだ一度も書かれて
+  // いない状態（＝現在の利用者がこのキャッシュの持ち主だと確認された実績が
+  // 一度もない）では、認証確認が解決する前にローカル本文を描画してはならない。
+  // A "logged in" cache alone cannot detect a user switch that skips logout
+  // (re-login as a different account, etc.). chatcore.auth.loggedIn is set,
+  // but when this device's owner marker (userScope) has never been recorded
+  // (i.e. nothing has ever confirmed that whoever is behind this cache is
+  // still the user reading the screen now), local text must not be painted
+  // before the auth check resolves.
+  it("does not paint locally cached text before auth resolves when no owner scope has been recorded", async () => {
+    installMatchMediaStub();
+    localStorage.clear();
+
+    // 認証キャッシュだけが残り、userScope は一度も記録されていない状態
+    // （レビューで指摘された再現手順: chatcore.auth.loggedIn=1 と
+    // chatHistory_<roomId> だけが残っている）。
+    // Only the auth cache remains; userScope has never been written (the
+    // scenario the review reported: chatcore.auth.loggedIn=1 and
+    // chatHistory_<roomId> alone).
+    localStorage.setItem("chatcore.auth.loggedIn", "1");
+    localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
+    writeStoredActiveChatRoom("room-of-user-1", "normal");
+    writeStoredHomePageViewState("chat");
+    localStorage.setItem(
+      "chatHistory_room-of-user-1",
+      JSON.stringify([{ text: "USER 1 PRIVATE MESSAGE", sender: "user" }]),
+    );
+    expect(readStoredUserScope()).toBeNull();
+
+    let resolveCurrentUser!: (response: Response) => void;
+    const currentUserPromise = new Promise<Response>((resolve) => {
+      resolveCurrentUser = resolve;
+    });
+
+    fetchMock.mockImplementation(async (url: unknown) => {
+      const requestedUrl = String(url);
+      if (requestedUrl.includes("current_user")) return currentUserPromise;
+      return jsonResponse({});
+    });
+
+    const { result } = renderHook(() => useHomePageController());
+
+    // 認証確認 (/api/current_user) が解決する前でも、ユーザー1の本文は
+    // 一切描画されない。ここが失敗する場合、fetch の往復時間だけ前の利用者の
+    // 本文が画面に出てから消えるフラッシュが実際に起きている。
+    // Even before the auth check (/api/current_user) resolves, user 1's text
+    // must never be rendered. If this fails, the previous user's text is
+    // actually flashing on screen for the duration of the fetch round trip.
+    expect(result.current.pageViewState).toBe("chat");
+    expect(result.current.messages).toEqual([]);
+
+    await act(async () => {
+      resolveCurrentUser(jsonResponse({ logged_in: true, user: { id: 2 } }));
+    });
+    await waitFor(() => expect(result.current.authResolved).toBe(true));
+
+    expect(result.current.messages).toEqual([]);
+  });
+
   // ログアウト後（chatcore.auth.loggedIn が消えている状態）に、まだ残っている
   // ローカル本文を認証確認より前に描画してはいけない。
   // After a logout (chatcore.auth.loggedIn cleared), any local text still on
