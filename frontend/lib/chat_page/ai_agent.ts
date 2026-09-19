@@ -354,23 +354,35 @@ export async function* readSseStream(response: Response): AsyncGenerator<AiAgent
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  // 呼び出し側は done / action_plan / error を受け取った時点で break するため、
+  // 最後まで読み切らずにジェネレーターが閉じられるのが通常経路になる。その場合も
+  // reader を解放しないと response.body がロックされたまま接続が残る。
+  // Callers break as soon as done / action_plan / error arrives, so closing the
+  // generator early is the normal path. Release the reader there too, otherwise
+  // response.body stays locked and the connection leaks.
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
 
-    for (const block of blocks) {
-      const event = parseSseBlock(block);
-      if (event) yield event;
+      for (const block of blocks) {
+        const event = parseSseBlock(block);
+        if (event) yield event;
+      }
     }
-  }
 
-  buffer += decoder.decode();
-  const trailingEvent = parseSseBlock(buffer);
-  if (trailingEvent) yield trailingEvent;
+    buffer += decoder.decode();
+    const trailingEvent = parseSseBlock(buffer);
+    if (trailingEvent) yield trailingEvent;
+  } finally {
+    await reader.cancel().catch(() => {
+      // no-op
+    });
+  }
 }
 
 /**
