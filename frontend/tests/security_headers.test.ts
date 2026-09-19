@@ -17,7 +17,7 @@ test("Next.js responses deny framing with CSP and X-Frame-Options", async () => 
 
   assert.equal(
     headers.get("Content-Security-Policy"),
-    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'self'",
   );
   assert.equal(headers.get("X-Frame-Options"), "DENY");
   assert.equal(headers.get("X-Content-Type-Options"), "nosniff");

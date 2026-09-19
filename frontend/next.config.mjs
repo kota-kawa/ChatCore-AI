@@ -1,8 +1,21 @@
 const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
+// frame-src 'self' is the real boundary against the generated-UI sandbox iframe navigating
+// itself to an external origin (e.g. `location.href = "https://attacker/..."`, a meta-refresh,
+// or repeated navigations to a 204/download endpoint). The iframe's own sandbox/CSP cannot stop
+// that: sandbox="allow-scripts" without allow-top-navigation only protects the *parent* page from
+// being dragged along, and the iframe's meta CSP connect-src governs fetch/XHR, not navigation.
+// frame-src is checked by Chromium before the navigation request is ever sent - confirmed against
+// real Chromium with the exact srcdoc this app generates (frontend/components/chat_page/
+// sandbox_artifact_frame.tsx): a synchronous `self["loc"+"ation"].href = ...` inside the artifact,
+// a meta-refresh, and three repeated navigations to a 204 endpoint were all blocked with zero
+// outbound requests, while the initial about:srcdoc load (and a normal rendering artifact) were
+// unaffected. Without frame-src, the same synchronous navigation reached the attacker every time.
+// The only iframe in this app is that sandbox artifact, so 'self' never needs to permit anything
+// else; see docs/architecture/system_design_deep_dive.md section 9.6 for the full writeup.
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
-    value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'self'"
   },
   {
     key: "X-Frame-Options",
