@@ -170,6 +170,11 @@ logger = logging.getLogger(__name__)
 
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
+# アクティブジョブロックのTTLをこの分数ごとに更新する。3分割にしておけば、更新が
+# 1回落ちても次の再試行がTTL切れ前に間に合う。
+# Renew the active-job lock at this fraction of its TTL. Splitting it into thirds gives a
+# missed renewal one more attempt before the TTL actually expires.
+ACTIVE_JOB_LOCK_RENEWAL_TTL_FRACTION = 3
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
@@ -534,6 +539,8 @@ class ChatGenerationJob:
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
+        renew_active_job_lock: Callable[[], bool] | None = None,
+        renew_active_job_lock_interval_seconds: float = 0.0,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -605,6 +612,16 @@ class ChatGenerationJob:
         self._selected_web_search_images: list[dict[str, str]] = []
         self._finalize_lock = threading.Lock()
         self._response_persisted = False
+        # アクティブジョブロックのTTLを定期更新するための設定とスレッド。
+        # トークンが無い（Redis未使用）場合は更新スレッドを起動しない。
+        # Settings and thread for periodically renewing the active-job lock's TTL.
+        # No renewal thread starts when there is no token (Redis unused).
+        self._renew_active_job_lock = renew_active_job_lock
+        self._renew_active_job_lock_interval_seconds = max(
+            float(renew_active_job_lock_interval_seconds), 0.0
+        )
+        self._lock_renewal_thread: threading.Thread | None = None
+        self._lock_renewal_stop_event = threading.Event()
         # 1ターン分の生成テレメトリ。長いステップのターンで「短い（不足生成）」と
         # 「切れた（打ち切り）」を運用ログから切り分けるために集計する。
         # Per-turn telemetry so operations can separate under-generation from truncation on
@@ -674,6 +691,43 @@ class ChatGenerationJob:
         # Submit to the generation-only pool; a full pool raises ChatGenerationCapacityError,
         # which start_generation_job simply lets propagate to its caller.
         self._future = submit_generation_task(self._run)
+        if self._renew_active_job_lock is not None and self._renew_active_job_lock_interval_seconds > 0:
+            thread = threading.Thread(
+                target=self._run_lock_renewal_loop,
+                name="chat-generation-lock-renewal",
+                daemon=True,
+            )
+            self._lock_renewal_thread = thread
+            thread.start()
+
+    # アクティブジョブロックのTTLを、所有トークンを確認しながら定期更新するループ。
+    # ジョブが完了したら（`_mark_done` が停止イベントを立てて）即座に抜ける。
+    # Loop that periodically renews the active-job lock's TTL while checking the owner
+    # token. It exits as soon as the job finishes (`_mark_done` sets the stop event).
+    def _run_lock_renewal_loop(self) -> None:
+        renew = self._renew_active_job_lock
+        if renew is None:
+            return
+        interval = self._renew_active_job_lock_interval_seconds
+        while not self._lock_renewal_stop_event.wait(timeout=interval):
+            if self.is_done:
+                return
+            try:
+                renewed = renew()
+            except Exception:
+                logger.exception("Failed to renew the active chat generation job lock.")
+                continue
+            if not renewed:
+                # 他ワーカーがロックを奪った、またはRedis障害で確認できなかった場合。
+                # ここでジョブを止めることはしない（フェイルクローズは新規開始側の
+                # try_acquire_active_job_lock が担う）が、運用ログには残す。
+                # Another worker took the lock, or a Redis outage made this unverifiable.
+                # This does not stop the job here (fail-closed admission is enforced by
+                # try_acquire_active_job_lock on new starts); just record it for operators.
+                logger.warning(
+                    "Could not renew the active chat generation job lock; "
+                    "it may have expired or been taken over by another worker."
+                )
 
     # ジョブの実行をキャンセルし、生成途中のテキストを保存して abortedイベントを発行する
     # Cancel the job, persist any partial text, and publish an aborted event
@@ -887,6 +941,10 @@ class ChatGenerationJob:
             return None
         self.is_done = True
         self.finished_at = time.monotonic()
+        # ロック更新スレッドが最大 interval 秒も無駄に生き残らないよう、完了と同時に起こす。
+        # Wake the lock-renewal thread immediately instead of letting it linger up to
+        # one interval after completion.
+        self._lock_renewal_stop_event.set()
         if self._on_finished_called or self._on_finished is None:
             return None
         self._on_finished_called = True
@@ -3125,6 +3183,14 @@ class ChatGenerationService:
     ) -> None:
         self._job_retention_seconds = job_retention_seconds
         self._active_job_lock_ttl_seconds = max(active_job_lock_ttl_seconds, 1)
+        # ジョブが生きている限りTTLを更新し続けるので、TTL自体はターンの壁時計上限では
+        # なく「応答不能になったワーカーの掃除まで待つ時間」として機能する。
+        # As long as the job is alive its TTL keeps getting renewed, so the TTL itself is not
+        # a wall-clock cap on the turn; it only bounds how long a dead worker's lock lingers.
+        self._active_job_lock_renew_interval_seconds = max(
+            self._active_job_lock_ttl_seconds / ACTIVE_JOB_LOCK_RENEWAL_TTL_FRACTION,
+            1.0,
+        )
         self._distributed_stream_idle_timeout_seconds = max(
             float(distributed_stream_idle_timeout_seconds),
             0.0,
@@ -3169,6 +3235,11 @@ class ChatGenerationService:
     # Release the Redis active job lock that was acquired by this instance
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
         self._coordinator.release_active_job_lock(job_key, lock_token)
+
+    # 自分が取得した Redis アクティブジョブロックのTTLを、所有トークンを確認しながら延長する
+    # Extend the TTL of the Redis active job lock this instance owns, verifying the owner token
+    def _refresh_active_job_lock(self, job_key: str, lock_token: str | None) -> bool:
+        return self._coordinator.refresh_active_job_lock(job_key, lock_token)
 
     # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
     # Check if a Redis active job lock exists for the specified job key
@@ -3391,6 +3462,12 @@ class ChatGenerationService:
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,
+                renew_active_job_lock=(
+                    (lambda: self._refresh_active_job_lock(job_key, lock_token))
+                    if lock_token is not None
+                    else None
+                ),
+                renew_active_job_lock_interval_seconds=self._active_job_lock_renew_interval_seconds,
             )
             self._jobs[job_key] = job
 
