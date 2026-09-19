@@ -116,12 +116,32 @@ describe("SandboxArtifactFrame", () => {
 
   // sandbox="allow-scripts" は iframe 自身がトップレベル遷移すること
   // （`location.href = "..."` 等）までは止めない。allow-top-navigation は親ページを道連れに
-  // する遷移だけを防ぐ属性で、フレーム自身の遷移には無関係。ここでは、その遷移を親フレームが
-  // load イベント回数から検出し、フレームを破棄することを検証する。
+  // する遷移だけを防ぐ属性で、フレーム自身の遷移には無関係。主たる防御は親アプリのCSPの
+  // `frame-src 'self'`（frontend/next.config.mjs）で、これはナビゲーション先URLをリクエスト
+  // 送出前にブロックする（実ブラウザで実測確認済み。同期・setTimeout遅延・meta refresh・
+  // 204応答への繰り返し遷移のいずれも、frame-src 'self' の下ではネットワークリクエストが
+  // 一切送出されずに止まる）。ここでのload イベント回数カウンタは、その防御が万一効かない
+  // 場合の第二層に過ぎない。
   // sandbox="allow-scripts" does not stop the iframe from navigating itself at the top level
   // (e.g. `location.href = "..."`) - allow-top-navigation only guards the *parent* page from
-  // being dragged along, not the frame's own navigation. These verify the parent detects that
-  // navigation from the iframe element's load-event count and destroys the frame.
+  // being dragged along, not the frame's own navigation. The primary defense is the parent
+  // app's CSP `frame-src 'self'` (frontend/next.config.mjs), which blocks the navigation target
+  // before any request is sent (confirmed against a real browser: synchronous, setTimeout-
+  // deferred, meta-refresh, and repeated navigations to a 204 endpoint are all blocked with zero
+  // network requests under frame-src 'self'). The load-event counter tested below is only a
+  // second layer for when that primary defense is somehow unavailable.
+  //
+  // 既知の制約: このテストは「初回のsrcdocロードでは遮断しない」ことを検証するが、これは
+  // 同時に「1回しかloadが来ない状況を区別できない」ことも意味する。攻撃者JSが解析中に
+  // 同期的に `location.href = ...` を代入した場合、元のsrcdocのloadは発火せず遷移後
+  // （または失敗後）のドキュメントのloadだけが1回だけ来るため、このカウンタ単体では
+  // 検出できない。frame-src 'self' が主防御である理由はここにある。
+  // Known limitation: this test verifies the first load after srcdoc is not treated as a
+  // navigation, but that also means a situation where exactly one load arrives is
+  // indistinguishable from an attack. If the artifact's JS assigns `location.href = ...`
+  // synchronously while the document is still parsing, the original srcdoc's load never fires
+  // and only the navigated-to (or failed) document's load arrives - exactly once - so this
+  // counter alone cannot detect it. This is why frame-src 'self' is the primary defense.
   it("srcdocの初回ロードでは遮断しない", () => {
     render(<SandboxArtifactFrame artifact={ARTIFACT} />);
 
