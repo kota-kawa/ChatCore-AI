@@ -212,6 +212,21 @@ export async function resilientFetch(
         // since fetch settles as soon as headers arrive. Defer it until
         // withBodyDeadline finishes or cancels the body.
         handedOffToBody = true;
+        // 呼び出し側がステータスだけ見て本文を一度も読まない／キャンセルしない
+        // 場合、withBodyDeadline の pull() は本文を読み切るまで release() を
+        // 呼ばない（ReadableStream は内部キューが埋まると自動では pull() を
+        // 再実行しない）。それだけに頼ると、タイムアウトタイマーと中断リスナーが
+        // 残り続けてしまう。内部 AbortController の中断（タイムアウト発火／
+        // 呼び出し側の中断の転送）にも後始末を結び付け、本文が読まれなくても
+        // 高々 timeoutMs で片付くようにする。
+        // If the caller only checks the status and never reads or cancels the
+        // body, withBodyDeadline's pull() never calls release() (a
+        // ReadableStream does not auto-repull once its internal queue is
+        // full). Relying on that alone would leave the timeout timer and the
+        // abort listener dangling. Also tie cleanup to the internal
+        // AbortController firing (timeout or a forwarded caller abort), so an
+        // unread body is still cleaned up within at most timeoutMs.
+        controller.signal.addEventListener("abort", cleanupAttempt, { once: true });
         return withBodyDeadline(response, cleanupAttempt);
       }
     } catch (error) {

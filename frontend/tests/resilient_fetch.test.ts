@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import test from "node:test";
 
 import { resilientFetch } from "../scripts/core/resilient_fetch";
@@ -162,6 +163,57 @@ test("keeps the deadline armed while the body is read, not just until headers ar
     // Headers arrived, so resilientFetch itself succeeds. If the timeout still guards
     // the body read, this read fails instead of hanging forever.
     await assert.rejects(response.text());
+  } finally {
+    restoreFetch();
+  }
+});
+
+// レビュー指摘（非ブロッキング）: ステータスだけ見て本文を一度も読まない／
+// キャンセルしない呼び出し（/api/chat_stop、/logout など）では、
+// withBodyDeadline の release() が呼ばれず、タイムアウトタイマーと呼び出し側の
+// 中断リスナーが残り得る。内部 AbortController の中断にも後始末を結び付け、
+// 本文が読まれなくても timeoutMs 以内に片付くことを確認する。
+// Review finding (non-blocking): a call that only checks the status and never
+// reads or cancels the body (/api/chat_stop, /logout, ...) used to leave
+// withBodyDeadline's release() uncalled, dangling the timeout timer and the
+// caller's abort listener. Cleanup is also tied to the internal
+// AbortController firing, so it still happens within timeoutMs even when the
+// body is never touched.
+test("cleans up the timeout and the caller's abort listener even when the body is never read", async () => {
+  globalThis.fetch = (async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // 同期的にチャンクを積むだけで決して close/done にしない。
+        // ReadableStream は内部キューが埋まると、実際に消費されるまで
+        // pull() を再度呼ばないため、これ以降は何も起きない
+        // （実際の JSON 本文を誰も .json()/.text() で読まないのと同じ状況）。
+        // Synchronously enqueue a chunk and never close/signal done. A
+        // ReadableStream will not call pull() again until its queue is
+        // drained, so nothing else happens from here on — mirroring a real
+        // JSON body nobody ever calls .json()/.text() on.
+        controller.enqueue(encoder.encode("{}"));
+      },
+    });
+    return new Response(body, { status: 200 });
+  }) as typeof fetch;
+
+  const callerController = new AbortController();
+  try {
+    const response = await resilientFetch(
+      "/api/test",
+      { signal: callerController.signal },
+      { timeoutMs: 10, retries: 0 },
+    );
+    assert.equal(response.status, 200);
+    // 呼び出し側は chat_stop / logout のようにステータスだけ見て本文を無視する。
+    // The caller ignores the body entirely, like chat_stop / logout do.
+
+    // タイムアウトの発火とその後始末が終わるまで待つ。
+    // Wait past the timeout and its cleanup.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.equal(getEventListeners(callerController.signal, "abort").length, 0);
   } finally {
     restoreFetch();
   }
