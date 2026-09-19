@@ -13,6 +13,13 @@ import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntr
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
 const GENERATION_STATE_KEY_PREFIX = "chatGeneration_";
 
+// ログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）から、
+// 直前の利用者の永続状態を守るための「持ち主」マーカー。
+// Marks who this browser's persisted chat state currently belongs to, so a user
+// switch that skips logout does not leak the previous user's persisted state.
+const USER_SCOPE_KEY = "chatcore.chat.userScope";
+const ANONYMOUS_USER_SCOPE = "anonymous";
+
 export type StoredHomePageViewState = "setup" | "chat";
 type WritableHomePageViewState = StoredHomePageViewState | "launching";
 
@@ -313,6 +320,61 @@ export function clearAllHomePagePersistedState() {
   } catch {
     // ignore localStorage failures
   }
+}
+
+function normalizeUserScopeValue(userId: string | null): string {
+  const trimmed = typeof userId === "string" ? userId.trim() : "";
+  return trimmed ? `user:${trimmed}` : ANONYMOUS_USER_SCOPE;
+}
+
+export function readStoredUserScope(): string | null {
+  try {
+    return localStorage.getItem(USER_SCOPE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearStoredUserScope() {
+  try {
+    localStorage.removeItem(USER_SCOPE_KEY);
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+// 保存済みの永続状態が「今確認できた利用者」のものか検証し、食い違っていれば
+// 一括破棄する。ログアウトを経由しないユーザー切り替え（別アカウントでの
+// 再ログインなど）から、直前の利用者の本文を守るための最後の砦。
+// スコープが未記録（初回訪問など）の場合は、破棄せずそのまま記録するだけにする。
+// Validate the persisted state against the just-confirmed user and wipe it all
+// on a mismatch. This is the last line of defense against a user switch that
+// skips logout (re-login as a different account, etc.). When no scope has
+// been recorded yet (a fresh browser, for example) there is nothing to
+// protect against, so it is simply recorded.
+export function reconcileStoredUserScope(userId: string | null): { changed: boolean } {
+  const nextScope = normalizeUserScopeValue(userId);
+  const previousScope = readStoredUserScope();
+
+  if (previousScope !== null && previousScope !== nextScope) {
+    clearAllHomePagePersistedState();
+    try {
+      localStorage.setItem(USER_SCOPE_KEY, nextScope);
+    } catch {
+      // ignore localStorage failures
+    }
+    return { changed: true };
+  }
+
+  if (previousScope === null) {
+    try {
+      localStorage.setItem(USER_SCOPE_KEY, nextScope);
+    } catch {
+      // ignore localStorage failures
+    }
+  }
+
+  return { changed: false };
 }
 
 export function normalizeHistorySender(sender: string | undefined): ChatSender {

@@ -5,12 +5,14 @@ import {
   appendStoredHistory,
   clearAllHomePagePersistedState,
   clearStoredGenerationState,
+  reconcileStoredUserScope,
   removeStoredHistory,
   readStoredActiveChatRoom,
   readActiveStoredGenerationState,
   readRestorableHomePageViewState,
   readStoredGenerationState,
   readStoredHistory,
+  readStoredUserScope,
   writeStoredActiveChatRoom,
   writeStoredHomePageViewState,
   writeStoredGenerationState,
@@ -391,4 +393,62 @@ test("clearAllHomePagePersistedState wipes chat text, generation state, drafts a
   assert.equal(readRestorableHomePageViewState(), "setup");
   assert.equal(storage.getItem(STORAGE_KEYS.tasksCachePrefix + "list"), null);
   assert.equal(storage.getItem(STORAGE_KEYS.setupInfoDraft), null);
+});
+
+test("reconcileStoredUserScope records the first user without wiping anything", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  writeStoredHistory("room-a", [{ text: "user A's message", sender: "user" }]);
+
+  const result = reconcileStoredUserScope("42");
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(readStoredHistory("room-a"), [{ text: "user A's message", sender: "user" }]);
+  assert.equal(readStoredUserScope(), "user:42");
+});
+
+test("reconcileStoredUserScope keeps state when the same user returns", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's message", sender: "user" }]);
+
+  const result = reconcileStoredUserScope("42");
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(readStoredHistory("room-a"), [{ text: "user A's message", sender: "user" }]);
+});
+
+// これがログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）
+// から、前の利用者の本文を守る最後の砦。
+// This is the last line of defense protecting a previous user's text from a
+// user switch that skips logout (re-login as a different account, etc.).
+test("reconcileStoredUserScope wipes everything when a different user is confirmed", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's private message", sender: "user" }]);
+  writeStoredActiveChatRoom("room-a", "normal");
+
+  const result = reconcileStoredUserScope("99");
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredActiveChatRoom(), null);
+  assert.equal(readStoredUserScope(), "user:99");
+});
+
+test("reconcileStoredUserScope treats logout (null) as a scope of its own", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's private message", sender: "user" }]);
+
+  // セッション切れなどでログイン状態が失われた場合も、以後は別利用者として扱う。
+  // A lost session (expiry, etc.) is treated as a different user from then on.
+  const result = reconcileStoredUserScope(null);
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredUserScope(), "anonymous");
 });
