@@ -371,6 +371,7 @@ const RUNTIME_STATES = new Set<SandboxArtifactRuntimeState>([
   "runtime_error",
   "csp_blocked",
   "timeout",
+  "navigation_blocked",
 ]);
 
 function clampHeight(value: number) {
@@ -400,6 +401,80 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     () => (isMounted ? buildSandboxArtifactSrcDoc(artifact, locale === "en") : undefined),
     [artifact, isMounted, locale]
   );
+
+  // --- トップレベル遷移の検出（sandbox="allow-scripts" は自身の遷移までは止めない） -------
+  // iframe の sandbox 属性に allow-top-navigation を与えていなくても、iframe 自身の
+  // ブラウジングコンテキストを他のURLへ遷移させること（例: `location.href = "https://..."`）
+  // は防げない。allow-top-navigation は「親ページを道連れにする遷移」だけを止める属性で、
+  // フレーム自身の遷移には無関係。CSPのconnect-src等もfetch/XHRなどの「接続」は塞ぐが、
+  // ブラウザのナビゲーション（location遷移・a要素のクリック等）は対象外（navigate-to は
+  // 各ブラウザから廃止済み）。したがって、外部を読み取ったLLM出力からの間接プロンプト
+  // インジェクションで偽ログインフォームを描画し、入力値をURLクエリに載せて
+  // `location.href` で攻撃者サーバーへ送る、という経路をJS側の禁止語チェック
+  // （services/generative_ui.py の正規表現ブロックリスト）だけでは塞ぎきれない
+  // （分割文字列・`atob`・`(0,eval)` 等で容易に回避されるため）。
+  //
+  // ここでは実行境界（このコンポーネント）側で遷移を検出する。iframe は
+  // allow-same-origin を与えていないopaque originなので、親から
+  // `iframe.contentWindow.location` を読むことはできない（読もうとするとSecurityError）。
+  // そのため「どこへ遷移したか」は分からないが、「想定したsrcdoc以外の何かへ遷移した」こと
+  // だけは、iframe要素のload イベント回数から推定できる: srcdocを割り当てた後に来る
+  // 1回目のloadは初回表示、2回目以降のloadは、フレーム自身が別のドキュメントへナビゲート
+  // した結果としてしか起こり得ない（同一ドキュメント内のフラグメント遷移や内部の
+  // DOM書き換えではloadは再発火しない）。ヘッドレスChromiumでの実測でも、
+  // `self["loc"+"ation"].href = "..."` の実行後にiframe要素のloadが2回目として発火し、
+  // その時点で既に外部へのリクエストが実際に送出されていることを確認済み。
+  //
+  // 重要な限界: この仕組みは「遷移が完了して load が発火した後」にしか気づけないため、
+  // 遷移によるリクエスト自体は少なくとも1回は発射されてしまう（＝完全な防止ではなく、
+  // 気づいた時点でフレームを破棄し、以後の被害の継続だけを止める事後対策）。根本対策は
+  // 生成UIを専用オリジン（例: sandbox.<host>）で配信すること（別フェーズ、今回未実施）。
+  //
+  // Top-level navigation detection (sandbox="allow-scripts" does not stop the frame from
+  // navigating itself). Without allow-top-navigation, the sandbox still cannot stop the
+  // iframe's own browsing context from navigating to another URL (e.g.
+  // `location.href = "https://..."`) - allow-top-navigation only guards against the frame
+  // dragging the *parent* page along. CSP's connect-src etc. block fetch/XHR "connections",
+  // not browser navigation (location assignment, clicking an <a>); `navigate-to` has been
+  // removed from every browser. So an indirect prompt injection (fetched page text -> model
+  // -> artifact) can render a fake login form and exfiltrate input via a URL query through
+  // `location.href`, and the server-side banned-token regex (services/generative_ui.py)
+  // alone cannot close that path (it is bypassed by split strings, atob, (0,eval), etc.).
+  //
+  // Detection therefore lives at the execution boundary (this component). The iframe has no
+  // allow-same-origin, so it has an opaque origin and the parent cannot read
+  // `iframe.contentWindow.location` (doing so throws a SecurityError). We cannot see *where*
+  // it navigated, but we can infer *that* it navigated away from the srcdoc we set, from how
+  // many times the iframe element's load event fires: the first load after assigning srcdoc
+  // is the initial render; any load after that can only be caused by the frame navigating to
+  // a different document (a same-document fragment change or in-page DOM mutation never
+  // re-fires load). A real headless-Chromium run confirmed this: after executing
+  // `self["loc"+"ation"].href = "..."`, the iframe element's load fired a second time, and by
+  // then the outbound request had already actually been sent.
+  //
+  // Important limitation: because this only fires once the navigation's load event has
+  // completed, the navigation request itself is sent at least once before we can react - this
+  // is damage containment after the fact, not prevention. The real fix is serving generated
+  // UI from a dedicated origin (e.g. sandbox.<host>), left for a later phase.
+  const lastSrcDocRef = useRef<string | undefined>(undefined);
+  const loadCountRef = useRef(0);
+  // レンダー中に比較してリセットする（useEffectで遅らせない）。about:blank の初期表示から
+  // 実際のsrcdoc読み込みへ切り替わる瞬間はごく短時間で、effectでのリセットが実際のload
+  // イベントより後になる競合が起こり得るため、コミット前のレンダー時点で確実に合わせる。
+  // Reset during render, not in a useEffect: the gap between the initial about:blank and the
+  // real srcdoc load is short enough that an effect-based reset could race behind the actual
+  // load event, so this is settled before commit instead.
+  if (lastSrcDocRef.current !== srcDoc) {
+    lastSrcDocRef.current = srcDoc;
+    loadCountRef.current = 0;
+  }
+  const handleFrameLoad = () => {
+    if (!srcDoc) return; // isMounted前のabout:blankは監視対象外（保護すべきsrcdocがまだ無い）
+    loadCountRef.current += 1;
+    if (loadCountRef.current > 1) {
+      setRuntimeState("navigation_blocked");
+    }
+  };
 
   // 高さのリセットは指定値が変わったときだけ。同じ内容の再配信で iframe が実測した高さを
   // 捨てると、正しく伸びていた表示が既定値へ縮む。
@@ -477,11 +552,16 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   }, [artifact.title]);
 
   const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
-  // 例外・CSP遮断・タイムアウトは同じ「実行できなかった」、空表示だけは別の文言で伝える。
-  // A thrown error, a CSP block, and a timeout share one message; a blank render gets its own.
+  // navigation_blocked はフレームを破棄した後の専用文言、blank も別の文言、それ以外の
+  // 失敗（例外・CSP遮断・タイムアウト）は同じ「実行できなかった」文言でまとめる。
+  // navigation_blocked gets its own message once the frame has been destroyed, blank gets
+  // its own too, and the remaining failures (exception, CSP block, timeout) share one message.
   const runtimeFailed = runtimeState !== "" && runtimeState !== "ready";
+  const navigationBlocked = runtimeState === "navigation_blocked";
   const runtimeMessage = runtimeState === "blank"
     ? t("chat.generatedUiBlank")
+    : navigationBlocked
+    ? t("chat.generatedUiNavigationBlocked")
     : (runtimeFailed ? t("chat.generatedUiError") : "");
 
   return (
@@ -498,15 +578,31 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
           {badgeLabel}
         </span>
       </header>
-      <iframe
-        ref={iframeRef}
-        className="sandbox-artifact__frame"
-        title={artifact.title}
-        sandbox="allow-scripts"
-        referrerPolicy="no-referrer"
-        srcDoc={srcDoc}
-        style={{ height }}
-      />
+      {navigationBlocked ? (
+        // フレームを破棄する: iframeをDOMから外し、そのブラウジングコンテキスト（と中で
+        // 動いていたスクリプト・タイマー）を確実に停止する。ただし遷移によるリクエスト
+        // 自体はこの時点で既に送出済み（上のコメント参照）。
+        // Destroy the frame: removing the iframe from the DOM terminates its browsing
+        // context (and any scripts/timers still running inside it). The navigation
+        // request itself, however, has already been sent by this point (see comment above).
+        <div
+          className="sandbox-artifact__frame"
+          style={{ height }}
+          role="img"
+          aria-label={runtimeMessage}
+        />
+      ) : (
+        <iframe
+          ref={iframeRef}
+          className="sandbox-artifact__frame"
+          title={artifact.title}
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
+          srcDoc={srcDoc}
+          style={{ height }}
+          onLoad={handleFrameLoad}
+        />
+      )}
       {runtimeMessage ? (
         <p className="sandbox-artifact__error" data-runtime-state={runtimeState}>
           {runtimeMessage}

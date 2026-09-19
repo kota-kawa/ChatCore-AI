@@ -80,14 +80,20 @@ export type GenerativeUiArtifactStatusV1 = {
 
 // サンドボックス内の実行結果。サーバー検証を通っても、ブラウザでは空表示・例外・
 // CSP遮断・タイムアウトが起きうるため、iframe から受け取って区別する。
+// navigation_blocked だけは iframe からの自己申告ではなく、親フレームが iframe 要素の
+// load イベントから推定する（詳細は sandbox_artifact_frame.tsx を参照）。
 // Runtime outcome inside the sandbox. Server-side validation cannot see a blank render,
 // a thrown error, a CSP block, or a timeout, so the iframe reports which one happened.
+// navigation_blocked is the one exception: it is not self-reported by the iframe, but
+// inferred by the parent frame from the iframe element's load events (see
+// sandbox_artifact_frame.tsx for details).
 export type SandboxArtifactRuntimeState =
   | "ready"
   | "blank"
   | "runtime_error"
   | "csp_blocked"
-  | "timeout";
+  | "timeout"
+  | "navigation_blocked";
 
 export type InteractiveButtonsV1 = {
   type: "yes_no" | "multiple_choice";
