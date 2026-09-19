@@ -116,6 +116,23 @@ export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomM
 
 export type StoredHistoryWriteResult = HistoryCacheWriteResult;
 
+// 「一時チャット」は本文を端末に残さないという約束の機能なので、書き込みは
+// 一律スキップし、既存キャッシュが残っていれば消す。呼び出し側で分岐を
+// 覚えておかなくて済むよう、ガードはここに集約する。
+// "Temporary chat" promises never to leave its text on the device, so every
+// write here is skipped outright, and any pre-existing cache entry for the
+// room is dropped. The guard lives here so callers do not each need to
+// remember the branch.
+function skippedTemporaryWrite(roomId: string, droppedEntries: number): StoredHistoryWriteResult {
+  removeCachedHistory(roomId);
+  return {
+    stored: true,
+    truncated: false,
+    retainedEntries: 0,
+    droppedEntries,
+  };
+}
+
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
     const raw = readCachedHistory(roomId);
@@ -145,11 +162,21 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   }
 }
 
-export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
+export function writeStoredHistory(
+  roomId: string,
+  entries: StoredHistoryEntry[],
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, entries.length);
   return writeCachedHistory(roomId, entries);
 }
 
-export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry): StoredHistoryWriteResult {
+export function appendStoredHistory(
+  roomId: string,
+  entry: StoredHistoryEntry,
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, 1);
   const existing = readStoredHistory(roomId);
   return writeStoredHistory(roomId, [...existing, entry]);
 }
@@ -168,7 +195,12 @@ export function removeLastStoredHistoryEntry(
   return writeStoredHistory(roomId, existing.slice(0, -1));
 }
 
-export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
+export function prependStoredHistory(
+  roomId: string,
+  entries: StoredHistoryEntry[],
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, entries.length);
   const existing = readStoredHistory(roomId);
   return writeStoredHistory(roomId, [...entries, ...existing]);
 }
@@ -230,6 +262,15 @@ export function writeStoredGenerationState(state: StoredGenerationState): boolea
     updatedAt: Date.now(),
   });
   if (!normalized) return false;
+
+  // 一時チャットの生成途中テキストも本文なので永続化しない。以前のスキップ前に
+  // 書かれた値が残っていれば、ここで消す。
+  // A temporary chat's in-flight generated text is still message content, so it is
+  // never persisted. Drop anything written before this guard existed.
+  if (normalized.roomMode === "temporary") {
+    clearStoredGenerationState(normalized.roomId);
+    return true;
+  }
 
   try {
     const serialized = JSON.stringify(normalized);

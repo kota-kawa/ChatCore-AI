@@ -5,6 +5,7 @@ import {
   appendStoredHistory,
   clearAllHomePagePersistedState,
   clearStoredGenerationState,
+  prependStoredHistory,
   reconcileStoredUserScope,
   removeStoredHistory,
   readStoredActiveChatRoom,
@@ -180,7 +181,7 @@ test("stored generation state can be restored as the active generation", () => {
 
   const stored = writeStoredGenerationState({
     roomId: "room-stream",
-    roomMode: "temporary",
+    roomMode: "normal",
     lastEventId: 12,
     streamedText: "途中まで",
     updatedAt: Date.now(),
@@ -189,7 +190,7 @@ test("stored generation state can be restored as the active generation", () => {
   assert.equal(stored, true);
   const restored = readStoredGenerationState("room-stream");
   assert.equal(restored?.roomId, "room-stream");
-  assert.equal(restored?.roomMode, "temporary");
+  assert.equal(restored?.roomMode, "normal");
   assert.equal(restored?.lastEventId, 12);
   assert.equal(restored?.streamedText, "途中まで");
   assert.equal(typeof restored?.updatedAt, "number");
@@ -366,6 +367,55 @@ test("readStoredHistory keeps a generated UI failure notice on reload", () => {
     type: "artifact_status",
     status: { state: "rejected", reasonCode: "required_artifact_missing" },
   });
+});
+
+test("temporary rooms never persist history, and drop any pre-existing cache", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  // 保存済みの本文が残っている状態から一時チャットに切り替わったケースも想定する。
+  // Also cover switching to a temporary room while old cached text still exists.
+  writeStoredHistory("room-temp", [{ text: "before", sender: "user" }]);
+
+  const writeResult = writeStoredHistory("room-temp", [{ text: "leaked?", sender: "bot" }], "temporary");
+  assert.equal(writeResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+
+  const appendResult = appendStoredHistory("room-temp", { text: "leaked?", sender: "user" }, "temporary");
+  assert.equal(appendResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+
+  const prependResult = prependStoredHistory("room-temp", [{ text: "leaked?", sender: "bot" }], "temporary");
+  assert.equal(prependResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+});
+
+test("temporary rooms never persist in-flight generation state", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  const stored = writeStoredGenerationState({
+    roomId: "room-temp",
+    roomMode: "temporary",
+    lastEventId: 3,
+    streamedText: "leaked partial answer",
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(stored, true);
+  assert.equal(readStoredGenerationState("room-temp"), null);
+  assert.equal(readActiveStoredGenerationState(), null);
+});
+
+test("normal rooms are unaffected by the temporary-room guard", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  writeStoredHistory("room-normal", [{ text: "kept", sender: "user" }], "normal");
+  assert.deepEqual(readStoredHistory("room-normal"), [{ text: "kept", sender: "user" }]);
+
+  appendStoredHistory("room-normal", { text: "also kept", sender: "bot" }, "normal");
+  assert.deepEqual(readStoredHistory("room-normal"), [
+    { text: "kept", sender: "user" },
+    { text: "also kept", sender: "bot" },
+  ]);
 });
 
 test("clearAllHomePagePersistedState wipes chat text, generation state, drafts and pointers", () => {

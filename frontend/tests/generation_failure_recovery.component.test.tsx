@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_generation_actions";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
-import { readStoredHistory } from "../lib/chat_page/storage";
+import { readStoredGenerationState, readStoredHistory } from "../lib/chat_page/storage";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
@@ -336,3 +336,69 @@ describe("failed chat turns", () => {
     expect(messages[0].text).toContain("該当ルームが見つかりません");
   });
 });
+
+describe("temporary chat rooms never persist locally", () => {
+  beforeEach(() => {
+    resilientFetchMock.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("does not persist a JSON-answered turn", async () => {
+    resilientFetchMock.mockResolvedValue(createJsonResponse(200, { response: "一時的な回答" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("一時的な質問", "model", "room-1", undefined, "temporary");
+    });
+
+    expect(result.current.state.messages.map((message) => message.sender)).toEqual(["user", "assistant"]);
+    expect(readStoredHistory("room-1")).toEqual([]);
+    expect(readStoredGenerationState("room-1")).toBeNull();
+  });
+
+  it("does not persist a streamed answer", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createStreamResponse([
+        `id: 1\nevent: chunk\ndata: ${JSON.stringify({ text: "一時" })}\n\n`,
+        `id: 2\nevent: done\ndata: ${JSON.stringify({ response: "一時的な回答" })}\n\n`,
+      ]),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("一時的な質問", "model", "room-1", undefined, "temporary");
+    });
+
+    const assistantMessages = result.current.state.messages.filter((message) => message.sender === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0].text).toBe("一時的な回答");
+    expect(readStoredHistory("room-1")).toEqual([]);
+    expect(readStoredGenerationState("room-1")).toBeNull();
+  });
+
+  it("still persists a normal room's answer for comparison", async () => {
+    resilientFetchMock.mockResolvedValue(createJsonResponse(200, { response: "通常の回答" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("通常の質問", "model", "room-1", undefined, "normal");
+    });
+
+    expect(readStoredHistory("room-1")).toEqual([
+      { text: "通常の質問", sender: "user" },
+      { text: "通常の回答", sender: "bot" },
+    ]);
+  });
+});
+
+// isGenerating は React state なので同じ tick 内の二重クリックでは更新前の値のまま
+// ガードを通過する。acquireGeneration() は ref ベースで即時に効くため、取得できた
+// ときだけ履歴を切り詰めることで、2回目のクリックがさらに1つ前の回答まで
+// 消してしまわないことを確認する。
+// isGenerating is React state, so a double click within the same tick still sees
+// the stale value and slips past that guard. acquireGeneration() is ref-based and
+// takes effect immediately; only truncating once it succeeds must stop a second
+// click from deleting one answer too many.
