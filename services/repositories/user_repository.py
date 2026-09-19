@@ -82,6 +82,19 @@ class UserRepository:
         return bool(result.rowcount)
 
     async def commit_email_change(self, user_id: int, new_email: str) -> bool:
+        # A `SELECT ... FOR UPDATE` locks the rows it finds, but when no row matches
+        # the target email it locks nothing.  Two concurrent changes to emails that
+        # only differ by case (`Foo@x.com` / `foo@x.com`) then both see zero rows and
+        # both commit, producing a duplicate the `lower(email)` check was meant to
+        # block.  An advisory lock keyed on the normalized target email serializes
+        # any concurrent attempts to claim the same address, closing that window
+        # without a schema change.  Same pattern as the guest-prompt quota lock in
+        # ``services/guest_prompt_service.py``.
+        normalized_email = new_email.strip().lower()
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": f"user-email-change:{normalized_email}"},
+        )
         current = await self.session.scalar(
             select(User).where(func.lower(User.email) == func.lower(new_email)).with_for_update()
         )
