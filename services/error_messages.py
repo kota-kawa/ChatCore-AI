@@ -72,6 +72,9 @@ ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED = "このメディアタイプはフ�
 ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID = "添付ファイル名が不正です。"
 ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED = "許可されていない形式の添付ファイルです。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
+ERROR_PROMPT_FORM_UNPARSABLE = (
+    "フォームデータを読み取れませんでした。添付画像は5MB以下の画像1件までにしてください。"
+)
 # 添付の有無に関わらず適用されるプロンプト投稿のレート制限文言です。
 # Prompt posting rate limit messages, applied whether or not an attachment is present.
 ERROR_PROMPT_CREATE_RATE_LIMITED = (
