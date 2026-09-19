@@ -597,6 +597,13 @@ class ChatGenerationJob:
         # Buffer the current model step until tool-call presence is known; use it as a partial
         # response only when the user cancels generation.
         self._pending_stream_chunks: list[str] = []
+        # `_chunks` / `_pending_stream_chunks` の読み書きを、生成スレッドと停止経路
+        # （リクエストスレッドの cancel()）の間で排他制御する。cancel() が内側で
+        # `_take_pending_answer_text()` を呼ぶため再入可能な RLock にしている。
+        # Guards reads/writes of `_chunks` / `_pending_stream_chunks` between the generation
+        # thread and the stop path (cancel() on the request thread). An RLock is used because
+        # cancel() calls `_take_pending_answer_text()` while already holding it.
+        self._chunks_lock = threading.RLock()
         # 調査の締めステップなど、ユーザー向け本文にならない一時バッファであることの印。
         # Marks a pending buffer that is internal-only and must never be saved as the answer.
         self._pending_stream_is_internal = False
@@ -740,11 +747,21 @@ class ChatGenerationJob:
             return
         self._cancelled = True
 
-        pending_text = self._take_pending_answer_text()
+        # 取り出し・追記・読み取りをひとつの排他区間にまとめる。生成スレッド側の
+        # `_publish_completed_answer_step` も同じロックの下で `_cancelled` を見てから
+        # 追記するため、ここで確定した partial_text と生成スレッドの通常経路の保存が
+        # 二重に本文を積むことはない。
+        # Take, append and read as one critical section. The generation thread's own
+        # `_publish_completed_answer_step` checks `_cancelled` under the same lock before
+        # appending, so the partial_text finalized here and the generation thread's normal
+        # save path can never both commit the same text.
+        with self._chunks_lock:
+            pending_text = self._take_pending_answer_text()
+            if pending_text:
+                self._chunks.append(pending_text)
+            partial_text = "".join(self._chunks)
         if pending_text:
-            self._chunks.append(pending_text)
             self._publish("chunk", {"text": pending_text})
-        partial_text = "".join(self._chunks)
         if not partial_text.strip():
             # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
             # No body yet: skip persisting an empty reply and only signal the abort.
@@ -789,29 +806,34 @@ class ChatGenerationJob:
     # while holding text the model wrote but the turn never published, so how it is taken —
     # stripping internal notes, splicing a rewrite, removing boundary overlap — lives here.
     def _take_pending_answer_text(self) -> str:
-        if not self._pending_stream_chunks or self._pending_stream_is_internal:
-            return ""
-        # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
-        # An end during a research step must not leave internal notes in the saved body.
-        pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
-        existing_text = "".join(self._chunks)
-        # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
-        # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
-        # Use the existing tail as an anchor even if cancellation races the rewrite-mode
-        # flag. The same splice handles normal boundary overlap; the window covers short text.
-        should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
-            existing_text,
-            pending_text,
-        )
-        if should_splice:
-            spliced_pending = splice_restarted_answer(existing_text, pending_text)
-            # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
-            # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
-            pending_text = spliced_pending if spliced_pending is not None else ""
-        else:
-            pending_text = strip_continuation_overlap(existing_text, pending_text)
-        self._pending_stream_chunks = []
-        self._pending_stream_is_rewrite = False
+        # `_chunks_lock` は再入可能。cancel() が既に保持したまま呼んでも、生成スレッドから
+        # 単独で呼んでも安全にする。
+        # `_chunks_lock` is reentrant so this is safe whether cancel() already holds it or
+        # the generation thread calls this on its own.
+        with self._chunks_lock:
+            if not self._pending_stream_chunks or self._pending_stream_is_internal:
+                return ""
+            # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
+            # An end during a research step must not leave internal notes in the saved body.
+            pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
+            existing_text = "".join(self._chunks)
+            # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
+            # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
+            # Use the existing tail as an anchor even if cancellation races the rewrite-mode
+            # flag. The same splice handles normal boundary overlap; the window covers short text.
+            should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
+                existing_text,
+                pending_text,
+            )
+            if should_splice:
+                spliced_pending = splice_restarted_answer(existing_text, pending_text)
+                # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+                # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+                pending_text = spliced_pending if spliced_pending is not None else ""
+            else:
+                pending_text = strip_continuation_overlap(existing_text, pending_text)
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
         return pending_text
 
     # 自プロセス・他プロセスのいずれかから停止が要求されたかを判定する
@@ -1047,7 +1069,8 @@ class ChatGenerationJob:
                     emitted = True
                     if discard_partial_on_retry:
                         attempt_chunks.append(chunk)
-                        self._pending_stream_chunks[:] = attempt_chunks
+                        with self._chunks_lock:
+                            self._pending_stream_chunks[:] = attempt_chunks
                     else:
                         yield chunk
             except LlmOutputLimitError as exc:
@@ -1069,7 +1092,8 @@ class ChatGenerationJob:
                 self._last_stream_output_limited = True
                 if discard_partial_on_retry:
                     buffered = list(attempt_chunks)
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                     yield from buffered
                 return
             except LlmToolSchemaError as exc:
@@ -1095,7 +1119,8 @@ class ChatGenerationJob:
                 self._telemetry.tool_schema_recoveries += 1
                 current_tools = None
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                 continue
             except LlmRetryableProviderError as exc:
                 # レート制限もここで再試行する。1ターンに複数回のモデル判断を回す以上、
@@ -1112,7 +1137,8 @@ class ChatGenerationJob:
                 ):
                     raise
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                 delay = _llm_stream_retry_delay(exc, attempt)
                 attempt += 1
                 logger.warning(
@@ -1128,7 +1154,8 @@ class ChatGenerationJob:
                     raise
             else:
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                     yield from attempt_chunks
                 return
 
@@ -1567,7 +1594,17 @@ class ChatGenerationJob:
                 if trace_block:
                     chunk = f"{trace_block}\n\n{chunk}"
 
-            chunks.append(chunk)
+            with self._chunks_lock:
+                # cancel() が既にこのステップの本文を部分回答として保存済みなら、
+                # 同じ本文をここでも積むと保存内容が二重化する。ロックの下で
+                # `_cancelled` を確認し、cancel() の salvage と排他にすることで防ぐ。
+                # If cancel() has already persisted this step's text as the partial
+                # answer, appending it here too would duplicate the saved body. Checking
+                # `_cancelled` under the same lock makes this mutually exclusive with
+                # cancel()'s own salvage.
+                if self._cancelled:
+                    return
+                chunks.append(chunk)
             streaming_evidence = combine_web_search_results(
                 [*state.web_search_results, *self._prior_web_search_results]
             )
@@ -1632,13 +1669,15 @@ class ChatGenerationJob:
     # Hand the continuation pass's undelivered buffer to the job so a stop or a
     # disconnect still routes it through the persistence path.
     def _adopt_continuation_buffer(self, buffer: list[str]) -> None:
-        self._pending_stream_chunks = buffer
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = buffer
+            self._pending_stream_is_rewrite = False
 
     # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
     # Tell the cancellation path when a continuation has switched to a full rewrite.
     def _set_continuation_buffer_mode(self, is_rewrite: bool) -> None:
-        self._pending_stream_is_rewrite = is_rewrite
+        with self._chunks_lock:
+            self._pending_stream_is_rewrite = is_rewrite
 
     # 出力上限で切れた回答の続きだけを取り直すフェーズ。
     # The phase that fetches only the remainder of an answer cut off at the output cap.
@@ -1685,8 +1724,9 @@ class ChatGenerationJob:
             # バッファや書き直しモードを誤って拾わないようにする。
             # Clear shared state on every exit so later persistence cannot adopt a stale
             # continuation buffer or rewrite mode.
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
         trailing = state.continuation_state_filter.flush()
         if trailing:
             self._publish_completed_answer_step(state, [trailing])
@@ -1906,8 +1946,9 @@ class ChatGenerationJob:
                     exc_info=exc,
                     extra=telemetry.as_log_extra(),
                 )
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
+                with self._chunks_lock:
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                 state.suppress_next_generation_started = True
                 continue
             if decision.outcome == "stopped":
@@ -1925,8 +1966,9 @@ class ChatGenerationJob:
                     continue
                 return False
 
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             telemetry.research_phase_used = True
             self._dispatch_tool_calls(state, decision.tool_calls, llm_step)
 
@@ -1942,8 +1984,9 @@ class ChatGenerationJob:
     ) -> ModelDecision:
         tool_calls_buffer: list[dict[str, Any]] = []
         step_chunks: list[str] = []
-        self._pending_stream_chunks = step_chunks
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = step_chunks
+            self._pending_stream_is_rewrite = False
         try:
             for chunk in self._iter_llm_stream_with_retry(
                 turn_messages,
@@ -1960,7 +2003,12 @@ class ChatGenerationJob:
                 if parsed_tool_calls is not None:
                     tool_calls_buffer.extend(parsed_tool_calls)
                 else:
-                    step_chunks.append(chunk)
+                    # `step_chunks` は `self._pending_stream_chunks` と同一オブジェクト
+                    # （直前で代入済み）。cancel() 側の読み取りと同じロックで追記する。
+                    # `step_chunks` is the very same object as `self._pending_stream_chunks`
+                    # (assigned above); append it under the same lock cancel() reads with.
+                    with self._chunks_lock:
+                        step_chunks.append(chunk)
         except LlmInputLimitError:
             # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
             # TurnState と直前の会話を残して同じ判断を1度だけやり直す。
@@ -1971,8 +2019,9 @@ class ChatGenerationJob:
             state.minimal_context_required = True
             state.telemetry.input_limit_recoveries += 1
             state.telemetry.context_recovery_count += 1
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             state.suppress_next_generation_started = True
             return ModelDecision(outcome="replay")
         except LlmToolSchemaError:
@@ -1989,8 +2038,9 @@ class ChatGenerationJob:
             ):
                 state.tool_schema_recovery_attempted = True
                 state.telemetry.tool_schema_recoveries += 1
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
+                with self._chunks_lock:
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                 state.suppress_next_generation_started = True
                 return ModelDecision(outcome="replay")
             raise
@@ -2016,8 +2066,9 @@ class ChatGenerationJob:
     ) -> bool:
         telemetry = state.telemetry
         output_limited = self._last_stream_output_limited
-        self._pending_stream_chunks = []
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
         # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
         # Keep the model's own boundaries and drop only the internal envelope.
         visible_chunks = strip_turn_state_update_chunks(step_chunks)
