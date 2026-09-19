@@ -1238,7 +1238,7 @@ export function useHomePageGenerationActions({
   // 編集対象より後ろを、画面と表示キャッシュの両方から切り落とす。
   // Trim everything after the edit target from both the screen and the cache.
   const truncateHistoryForEdit = useCallback(
-    (roomId: string, trailingUserCount: number) => {
+    (roomId: string, trailingUserCount: number, roomMode: ChatRoomMode) => {
       setMessages((previous) => {
         const userIndices: number[] = [];
         previous.forEach((m, i) => {
@@ -1256,7 +1256,7 @@ export function useHomePageGenerationActions({
       });
       if (userStoredIndices.length > trailingUserCount) {
         const targetStoredIdx = userStoredIndices[userStoredIndices.length - 1 - trailingUserCount];
-        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx)));
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx), roomMode));
       }
     },
     [notifyStoredHistoryWriteIssue, removeThinkingMessages],
@@ -1276,7 +1276,7 @@ export function useHomePageGenerationActions({
       const generation = acquireGeneration(roomId);
       if (!generation) return;
 
-      truncateHistoryForEdit(roomId, trailingUserCount);
+      truncateHistoryForEdit(roomId, trailingUserCount, currentRoomMode);
       markChatRoomActive(roomId);
 
       const userMsg: UiChatMessage = {
@@ -1375,7 +1375,7 @@ export function useHomePageGenerationActions({
   // 直前の回答（と表示キャッシュの最後のbot発話）を取り消して再生成に備える。
   // Drop the previous answer (and the last cached bot entry) before regenerating.
   const truncateLastAnswerForRegenerate = useCallback(
-    (roomId: string) => {
+    (roomId: string, roomMode: ChatRoomMode) => {
       setMessages((previous) => {
         let lastAssistantIdx = -1;
         for (let i = previous.length - 1; i >= 0; i--) {
@@ -1397,7 +1397,7 @@ export function useHomePageGenerationActions({
         }
       }
       if (lastBotLocalIdx >= 0) {
-        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx)));
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx), roomMode));
       }
     },
     [notifyStoredHistoryWriteIssue, removeThinkingMessages],
@@ -1447,7 +1447,7 @@ export function useHomePageGenerationActions({
       const generation = acquireGeneration(roomId);
       if (!generation) return;
 
-      truncateLastAnswerForRegenerate(roomId);
+      truncateLastAnswerForRegenerate(roomId, currentRoomMode);
       markChatRoomActive(roomId);
       beginRegeneratedTurn(generation);
 

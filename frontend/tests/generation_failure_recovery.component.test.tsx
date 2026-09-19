@@ -463,4 +463,60 @@ describe("regenerate double click", () => {
     ]);
     expect(requestedUrls().filter((url) => url.includes("chat_regenerate"))).toHaveLength(1);
   });
+
+  // editAndRegenerateMessage received the identical fix (acquire before
+  // truncate); verify it symmetrically so the two code paths do not drift.
+  it("truncates only once when edit-and-regenerate is triggered twice in the same tick", async () => {
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-1" }));
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      await result.current.actions.generateResponse("question-1", "model", "room-1");
+    });
+
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-2" }));
+    await act(async () => {
+      await result.current.actions.generateResponse("question-2", "model", "room-1");
+    });
+
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-2",
+    ]);
+
+    // editAndRegenerateMessage also fires an unawaited refreshActivePath() GET
+    // after a JSON answer; let it fail harmlessly so it does not overwrite the
+    // local cache this assertion checks (its own catch keeps the optimistic
+    // state).
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("chat_edit_and_regenerate")) {
+        return createJsonResponse(200, { response: "edited-answer" });
+      }
+      return createJsonResponse(500, { error: "not relevant to this test" });
+    });
+
+    let firstEdit: Promise<void>;
+    let secondEdit: Promise<void>;
+    act(() => {
+      firstEdit = result.current.actions.editAndRegenerateMessage("edited-question", 0, "model", "room-1");
+      secondEdit = result.current.actions.editAndRegenerateMessage("edited-question-2", 0, "model", "room-1");
+    });
+    await act(async () => {
+      await Promise.all([firstEdit!, secondEdit!]);
+    });
+
+    // 2回目のクリックは生成を開始せず（guard busy）、履歴も切り詰めない。
+    // question-1 とその回答は残り、直前のやり取りだけが編集後の内容に置き換わる。
+    // The second click starts no generation (guard busy) and truncates
+    // nothing: question-1 and its answer survive, only the last exchange is
+    // replaced by the edit.
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "edited-question",
+      "edited-answer",
+    ]);
+    expect(requestedUrls().filter((url) => url.includes("chat_edit_and_regenerate"))).toHaveLength(1);
+  });
 });
