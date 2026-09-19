@@ -218,7 +218,7 @@ class SharedContentRepository:
         axis_conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
         params: dict[str, Any] = {
             "locale": locale,
-            "search_term": f"%{query}%",
+            "search_term": build_like_pattern(query),
             "category_keys": matching_category_keys,
             "fetch_limit": int(per_page) + 1,
             "offset": offset,
@@ -231,12 +231,12 @@ class SharedContentRepository:
             axis_conditions.append("p.media_type = :search_media_type")
             params["search_media_type"] = media_type
         matched_condition = """(
-            p.title ILIKE :search_term OR
-            p.content ILIKE :search_term OR
-            p.description ILIKE :search_term OR
+            p.title ILIKE :search_term ESCAPE '\\' OR
+            p.content ILIKE :search_term ESCAPE '\\' OR
+            p.description ILIKE :search_term ESCAPE '\\' OR
             p.category = ANY(:category_keys) OR
-            p.author ILIKE :search_term OR
-            u.username ILIKE :search_term
+            p.author ILIKE :search_term ESCAPE '\\' OR
+            u.username ILIKE :search_term ESCAPE '\\'
         )"""
         count = None
         if include_total:
