@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   appendStoredHistory,
+  clearAllHomePagePersistedState,
   clearStoredGenerationState,
   removeStoredHistory,
   readStoredActiveChatRoom,
@@ -363,4 +364,31 @@ test("readStoredHistory keeps a generated UI failure notice on reload", () => {
     type: "artifact_status",
     status: { state: "rejected", reasonCode: "required_artifact_missing" },
   });
+});
+
+test("clearAllHomePagePersistedState wipes chat text, generation state, drafts and pointers", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  writeStoredHistory("room-a", [{ text: "secret", sender: "user" }]);
+  writeStoredGenerationState({
+    roomId: "room-a",
+    roomMode: "normal",
+    lastEventId: 1,
+    streamedText: "streaming",
+    updatedAt: Date.now(),
+  });
+  writeStoredActiveChatRoom("room-a", "normal");
+  writeStoredHomePageViewState("chat");
+  storage.setItem(STORAGE_KEYS.tasksCachePrefix + "list", "[]");
+  storage.setItem(STORAGE_KEYS.setupInfoDraft, "draft text");
+
+  clearAllHomePagePersistedState();
+
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredGenerationState("room-a"), null);
+  assert.equal(readStoredActiveChatRoom(), null);
+  assert.equal(readRestorableHomePageViewState(), "setup");
+  assert.equal(storage.getItem(STORAGE_KEYS.tasksCachePrefix + "list"), null);
+  assert.equal(storage.getItem(STORAGE_KEYS.setupInfoDraft), null);
 });

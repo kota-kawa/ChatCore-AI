@@ -2,6 +2,7 @@ import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { normalizeChatMessageParts } from "./api_contract";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import {
+  clearAllCachedHistory,
   readCachedHistory,
   removeCachedHistory,
   writeCachedHistory,
@@ -10,6 +11,7 @@ import {
 import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
 
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
+const GENERATION_STATE_KEY_PREFIX = "chatGeneration_";
 
 export type StoredHomePageViewState = "setup" | "chat";
 type WritableHomePageViewState = StoredHomePageViewState | "launching";
@@ -20,7 +22,7 @@ export type StoredActiveChatRoom = {
 };
 
 function getStoredGenerationKey(roomId: string) {
-  return `chatGeneration_${roomId}`;
+  return `${GENERATION_STATE_KEY_PREFIX}${roomId}`;
 }
 
 function normalizeStoredRoomMode(rawMode: unknown): ChatRoomMode {
@@ -270,6 +272,46 @@ export function readActiveStoredGenerationState(): StoredGenerationState | null 
     return readStoredGenerationState(active.roomId);
   } catch {
     return null;
+  }
+}
+
+// ログアウト、またはユーザー切り替え検知時に、この端末に残る本文・進行状態・
+// 下書きを一括で消す。チャット全文の chatHistory_*／chatGeneration_* に加え、
+// 復元経路が読む activeRoomId 系・ホーム画面のビュー状態・タスクキャッシュ・
+// セットアップ下書きも対象にする。
+// Wipe every locally persisted chat body, in-flight state and draft on this
+// device, whether triggered by logout or a detected user switch. Covers the
+// full chat text (chatHistory_*/chatGeneration_*) plus the active-room
+// pointer, home view state, task cache and the setup draft the restore path
+// reads.
+export function clearAllHomePagePersistedState() {
+  try {
+    clearAllCachedHistory();
+  } catch {
+    // ignore localStorage failures
+  }
+
+  try {
+    for (let indexPosition = localStorage.length - 1; indexPosition >= 0; indexPosition -= 1) {
+      const key = localStorage.key(indexPosition);
+      if (!key) continue;
+      if (key.startsWith(GENERATION_STATE_KEY_PREFIX) || key.startsWith(STORAGE_KEYS.tasksCachePrefix)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore localStorage failures
+  }
+
+  try {
+    localStorage.removeItem(STORAGE_KEYS.activeChatRoomId);
+    localStorage.removeItem(STORAGE_KEYS.activeChatRoomMode);
+    localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
+    localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
+    localStorage.removeItem(STORAGE_KEYS.homePageViewState);
+    localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
+  } catch {
+    // ignore localStorage failures
   }
 }
 
