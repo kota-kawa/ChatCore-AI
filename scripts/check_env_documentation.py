@@ -33,6 +33,9 @@ DEPLOY_ONLY_VARIABLES: dict[str, str] = {
     "POSTGRES_WORK_MEM": "docker-compose.yml / deploy: postgres -c tuning flag",
     "POSTGRES_MAINTENANCE_WORK_MEM": "docker-compose.yml / deploy: postgres -c tuning flag",
     "POSTGRES_LOG_MIN_DURATION_MS": "docker-compose.yml / deploy: postgres -c tuning flag",
+    # 日本語: uvicorn の起動引数 `--forwarded-allow-ips` へ渡す信頼プロキシ一覧です（Python 側では読みません）。
+    # English: Passed to uvicorn's `--forwarded-allow-ips` startup argument; never read by Python.
+    "FORWARDED_ALLOW_IPS": "docker/app-entrypoint.sh: uvicorn --forwarded-allow-ips argument",
     # 日本語: docker-compose が redis の起動コマンド引数へ展開する上限値です。
     # English: Expanded by docker-compose into the redis startup command arguments.
     "REDIS_MAXMEMORY": "docker-compose.yml / deploy: redis --maxmemory flag",

@@ -22,9 +22,23 @@ fi
 #   WEB_CONCURRENCY * DB_POOL_MAX_CONN < Postgres max_connections.
 WEB_CONCURRENCY="${WEB_CONCURRENCY:-1}"
 
+# [JP] --proxy-headers を有効にすると uvicorn は X-Forwarded-For からクライアントIPを解決する。
+#      ワイルドカード（*）にすると送信元を問わずヘッダー先頭の値をそのまま採用してしまい、
+#      per-IP のレート制限が偽装1つで無効化される。信頼する送信元は前段プロキシだけに限定する。
+#      既定値はループバックと RFC1918（アプリのポートは 127.0.0.1 にバインドしているため、
+#      ホストの nginx からは docker のブリッジ・ゲートウェイ経由で届く）。
+#      別構成では FORWARDED_ALLOW_IPS に実際のプロキシIP／CIDRを設定して絞り込むこと。
+# [EN] With --proxy-headers uvicorn resolves the client IP from X-Forwarded-For. A wildcard (*)
+#      accepts the leading header value from any peer, so a single spoofed header disables the
+#      per-IP rate limits. Trust only the fronting proxy. The default covers loopback plus RFC1918,
+#      because the app ports are bound to 127.0.0.1 and the host nginx therefore reaches the
+#      container through the docker bridge gateway. Override FORWARDED_ALLOW_IPS with the actual
+#      proxy IPs/CIDRs for other topologies.
+FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
+
 exec uvicorn app:app \
     --host=0.0.0.0 \
     --port=5004 \
     --workers "${WEB_CONCURRENCY}" \
     --proxy-headers \
-    --forwarded-allow-ips=*
+    --forwarded-allow-ips="${FORWARDED_ALLOW_IPS}"

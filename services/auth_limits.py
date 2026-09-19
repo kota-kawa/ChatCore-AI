@@ -132,6 +132,19 @@ def _get_request_client_host(request: Request) -> str | None:
 
 # プロキシを考慮した上で、Request から実際のクライアント IP アドレスを取得する
 # Get the real client IP address from the Request, taking proxies into account
+#
+# 日本語: クライアントIPを決めるのは前段の nginx で、`X-Forwarded-For` をクライアント送信値へ追記せず
+#         `$remote_addr` で上書きする（`deploy/chatcore-ai.conf`）。uvicorn は `--proxy-headers` と
+#         限定した `--forwarded-allow-ips`（`docker/app-entrypoint.sh`）でその1件だけを解決するため、
+#         通常は `request.client.host` が既に実クライアントIPになっている。
+#         以下のヘッダー参照は、直接の接続元が `TRUSTED_PROXY_IPS` に含まれる場合のフォールバックで、
+#         uvicorn 側のプロキシヘッダー処理を使わない構成のためだけに残している。
+# English: The fronting nginx decides the client IP: it overwrites `X-Forwarded-For` with `$remote_addr`
+#          instead of appending to the client-supplied value (`deploy/chatcore-ai.conf`). uvicorn resolves
+#          that single entry through `--proxy-headers` with a bounded `--forwarded-allow-ips`
+#          (`docker/app-entrypoint.sh`), so `request.client.host` is normally already the real client IP.
+#          The header lookups below are the fallback used when the direct peer is listed in
+#          `TRUSTED_PROXY_IPS`, kept only for topologies that do not rely on uvicorn's proxy headers.
 def get_request_client_ip(request: Request) -> str:
     client_host = _get_request_client_host(request)
     direct_client_ip = _parse_ip_address(client_host)
