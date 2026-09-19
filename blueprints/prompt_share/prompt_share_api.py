@@ -19,6 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse
+from starlette.exceptions import HTTPException
 
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
@@ -33,6 +34,7 @@ from services.error_messages import (
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
     ERROR_PROMPT_CREATE_RATE_LIMITED,
     ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE,
+    ERROR_PROMPT_FORM_UNPARSABLE,
     ERROR_PROMPT_NOT_FOUND,
     MESSAGE_SHARED_SKILL_ADDED,
 )
@@ -644,7 +646,20 @@ async def create_prompt(request: Request):
     upload_file = None
     has_file_upload = False
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
-        form = await request.form(max_files=1, max_fields=32, max_part_size=256 * 1024)
+        # パート単位の上限は添付画像の上限に揃える。256KB のままだと 256KB〜5MB の
+        # 正当な画像が multipart 解析の時点で弾かれ、生の英語メッセージが返っていた。
+        # Keep the per-part cap aligned with the attachment cap. At 256KB every valid
+        # image between 256KB and 5MB failed during multipart parsing, surfacing
+        # Starlette's raw English message to the user.
+        try:
+            form = await request.form(
+                max_files=1,
+                max_fields=32,
+                max_part_size=PROMPT_ATTACHMENT_MAX_BYTES,
+            )
+        except HTTPException:
+            logger.info("Rejected an unparsable prompt create form.")
+            return jsonify({"error": ERROR_PROMPT_FORM_UNPARSABLE}, status_code=400)
         candidate = form.get("reference_image")
         upload_file = candidate if getattr(candidate, "filename", "") else None
         has_file_upload = any(bool(getattr(value, "filename", "")) for value in form.values())
