@@ -3,13 +3,17 @@ import test from "node:test";
 
 import {
   appendStoredHistory,
+  clearAllHomePagePersistedState,
   clearStoredGenerationState,
+  prependStoredHistory,
+  reconcileStoredUserScope,
   removeStoredHistory,
   readStoredActiveChatRoom,
   readActiveStoredGenerationState,
   readRestorableHomePageViewState,
   readStoredGenerationState,
   readStoredHistory,
+  readStoredUserScope,
   writeStoredActiveChatRoom,
   writeStoredHomePageViewState,
   writeStoredGenerationState,
@@ -177,7 +181,7 @@ test("stored generation state can be restored as the active generation", () => {
 
   const stored = writeStoredGenerationState({
     roomId: "room-stream",
-    roomMode: "temporary",
+    roomMode: "normal",
     lastEventId: 12,
     streamedText: "途中まで",
     updatedAt: Date.now(),
@@ -186,7 +190,7 @@ test("stored generation state can be restored as the active generation", () => {
   assert.equal(stored, true);
   const restored = readStoredGenerationState("room-stream");
   assert.equal(restored?.roomId, "room-stream");
-  assert.equal(restored?.roomMode, "temporary");
+  assert.equal(restored?.roomMode, "normal");
   assert.equal(restored?.lastEventId, 12);
   assert.equal(restored?.streamedText, "途中まで");
   assert.equal(typeof restored?.updatedAt, "number");
@@ -363,4 +367,138 @@ test("readStoredHistory keeps a generated UI failure notice on reload", () => {
     type: "artifact_status",
     status: { state: "rejected", reasonCode: "required_artifact_missing" },
   });
+});
+
+test("temporary rooms never persist history, and drop any pre-existing cache", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  // 保存済みの本文が残っている状態から一時チャットに切り替わったケースも想定する。
+  // Also cover switching to a temporary room while old cached text still exists.
+  writeStoredHistory("room-temp", [{ text: "before", sender: "user" }]);
+
+  const writeResult = writeStoredHistory("room-temp", [{ text: "leaked?", sender: "bot" }], "temporary");
+  assert.equal(writeResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+
+  const appendResult = appendStoredHistory("room-temp", { text: "leaked?", sender: "user" }, "temporary");
+  assert.equal(appendResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+
+  const prependResult = prependStoredHistory("room-temp", [{ text: "leaked?", sender: "bot" }], "temporary");
+  assert.equal(prependResult.stored, true);
+  assert.deepEqual(readStoredHistory("room-temp"), []);
+});
+
+test("temporary rooms never persist in-flight generation state", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  const stored = writeStoredGenerationState({
+    roomId: "room-temp",
+    roomMode: "temporary",
+    lastEventId: 3,
+    streamedText: "leaked partial answer",
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(stored, true);
+  assert.equal(readStoredGenerationState("room-temp"), null);
+  assert.equal(readActiveStoredGenerationState(), null);
+});
+
+test("normal rooms are unaffected by the temporary-room guard", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  writeStoredHistory("room-normal", [{ text: "kept", sender: "user" }], "normal");
+  assert.deepEqual(readStoredHistory("room-normal"), [{ text: "kept", sender: "user" }]);
+
+  appendStoredHistory("room-normal", { text: "also kept", sender: "bot" }, "normal");
+  assert.deepEqual(readStoredHistory("room-normal"), [
+    { text: "kept", sender: "user" },
+    { text: "also kept", sender: "bot" },
+  ]);
+});
+
+test("clearAllHomePagePersistedState wipes chat text, generation state, drafts and pointers", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  writeStoredHistory("room-a", [{ text: "secret", sender: "user" }]);
+  writeStoredGenerationState({
+    roomId: "room-a",
+    roomMode: "normal",
+    lastEventId: 1,
+    streamedText: "streaming",
+    updatedAt: Date.now(),
+  });
+  writeStoredActiveChatRoom("room-a", "normal");
+  writeStoredHomePageViewState("chat");
+  storage.setItem(STORAGE_KEYS.tasksCachePrefix + "list", "[]");
+  storage.setItem(STORAGE_KEYS.setupInfoDraft, "draft text");
+
+  clearAllHomePagePersistedState();
+
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredGenerationState("room-a"), null);
+  assert.equal(readStoredActiveChatRoom(), null);
+  assert.equal(readRestorableHomePageViewState(), "setup");
+  assert.equal(storage.getItem(STORAGE_KEYS.tasksCachePrefix + "list"), null);
+  assert.equal(storage.getItem(STORAGE_KEYS.setupInfoDraft), null);
+});
+
+test("reconcileStoredUserScope records the first user without wiping anything", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  writeStoredHistory("room-a", [{ text: "user A's message", sender: "user" }]);
+
+  const result = reconcileStoredUserScope("42");
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(readStoredHistory("room-a"), [{ text: "user A's message", sender: "user" }]);
+  assert.equal(readStoredUserScope(), "user:42");
+});
+
+test("reconcileStoredUserScope keeps state when the same user returns", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's message", sender: "user" }]);
+
+  const result = reconcileStoredUserScope("42");
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(readStoredHistory("room-a"), [{ text: "user A's message", sender: "user" }]);
+});
+
+// これがログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）
+// から、前の利用者の本文を守る最後の砦。
+// This is the last line of defense protecting a previous user's text from a
+// user switch that skips logout (re-login as a different account, etc.).
+test("reconcileStoredUserScope wipes everything when a different user is confirmed", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's private message", sender: "user" }]);
+  writeStoredActiveChatRoom("room-a", "normal");
+
+  const result = reconcileStoredUserScope("99");
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredActiveChatRoom(), null);
+  assert.equal(readStoredUserScope(), "user:99");
+});
+
+test("reconcileStoredUserScope treats logout (null) as a scope of its own", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+
+  reconcileStoredUserScope("42");
+  writeStoredHistory("room-a", [{ text: "user A's private message", sender: "user" }]);
+
+  // セッション切れなどでログイン状態が失われた場合も、以後は別利用者として扱う。
+  // A lost session (expiry, etc.) is treated as a different user from then on.
+  const result = reconcileStoredUserScope(null);
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(readStoredHistory("room-a"), []);
+  assert.equal(readStoredUserScope(), "anonymous");
 });

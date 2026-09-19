@@ -160,4 +160,51 @@ describe("user menu localization", () => {
     expect(shadow?.querySelector('a[href="/settings"]')).toHaveTextContent("設定");
     expect(shadow?.querySelector('a[href="/logout"]')).toHaveTextContent("ログアウト");
   });
+
+  // ログアウト後も同一端末の次の利用者にチャット全文が残るのが本バグの本体。
+  // クリックした結果、会話全文・生成状態・下書き・タスクキャッシュ・アクティブ
+  // ルームの指し先・認証キャッシュのすべてが消えることを確認する。
+  // The core bug: without this, the next person on this device could still see
+  // the previous user's full chat text after logout. Verify the click wipes the
+  // chat text, generation state, drafts, task cache, the active-room pointer and
+  // the auth cache all at once.
+  it("wipes every locally persisted chat state on logout", async () => {
+    localStorage.clear();
+    localStorage.setItem("chatHistory_room-a", JSON.stringify([{ text: "secret answer", sender: "bot" }]));
+    localStorage.setItem("chatGeneration_room-a", JSON.stringify({
+      roomId: "room-a",
+      roomMode: "normal",
+      lastEventId: 1,
+      streamedText: "still streaming",
+      updatedAt: Date.now(),
+    }));
+    localStorage.setItem("chatcore.chat.activeRoomId", "room-a");
+    localStorage.setItem("chatcore.chat.activeRoomMode", "normal");
+    localStorage.setItem("chatcore.home.viewState", "chat");
+    localStorage.setItem("chatcore.setup.infoDraft", "unsent draft");
+    localStorage.setItem("chatcore.tasks.v3.list", "[]");
+    localStorage.setItem("chatcore.auth.loggedIn", "1");
+    localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
+
+    resilientFetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    document.documentElement.lang = "en";
+    await import("../scripts/components/user_icon");
+    const element = document.createElement("user-icon");
+    document.body.append(element);
+    const logoutAnchor = element.shadowRoot?.querySelector('a[href="/logout"]') as HTMLAnchorElement;
+
+    logoutAnchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await waitFor(() => expect(resilientFetchMock).toHaveBeenCalledWith("/logout", expect.objectContaining({ method: "POST" })));
+
+    expect(localStorage.getItem("chatHistory_room-a")).toBeNull();
+    expect(localStorage.getItem("chatGeneration_room-a")).toBeNull();
+    expect(localStorage.getItem("chatcore.chat.activeRoomId")).toBeNull();
+    expect(localStorage.getItem("chatcore.chat.activeRoomMode")).toBeNull();
+    expect(localStorage.getItem("chatcore.home.viewState")).toBeNull();
+    expect(localStorage.getItem("chatcore.setup.infoDraft")).toBeNull();
+    expect(localStorage.getItem("chatcore.tasks.v3.list")).toBeNull();
+    expect(localStorage.getItem("chatcore.auth.loggedIn")).toBeNull();
+    expect(localStorage.getItem("chatcore.auth.cachedAt")).toBeNull();
+  });
 });

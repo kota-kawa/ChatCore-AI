@@ -272,6 +272,22 @@ export function removeCachedHistory(roomId: string) {
   writeHistoryIndex(index);
 }
 
+// ログアウトやユーザー切り替え時に、この端末に残る会話全文を一括で消す。
+// Wipe every cached room's full chat text at once, for logout or a user switch.
+export function clearAllCachedHistory() {
+  try {
+    for (let indexPosition = localStorage.length - 1; indexPosition >= 0; indexPosition -= 1) {
+      const key = localStorage.key(indexPosition);
+      if (key?.startsWith(HISTORY_KEY_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    }
+    localStorage.removeItem(HISTORY_INDEX_KEY);
+  } catch {
+    // Best-effort: an inaccessible localStorage has nothing to clear anyway.
+  }
+}
+
 export const __test__ = {
   HISTORY_CACHE_TTL_MS,
   HISTORY_INDEX_KEY,

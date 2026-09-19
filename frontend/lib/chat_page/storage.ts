@@ -2,6 +2,7 @@ import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { normalizeChatMessageParts } from "./api_contract";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import {
+  clearAllCachedHistory,
   readCachedHistory,
   removeCachedHistory,
   writeCachedHistory,
@@ -10,6 +11,14 @@ import {
 import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
 
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
+const GENERATION_STATE_KEY_PREFIX = "chatGeneration_";
+
+// ログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）から、
+// 直前の利用者の永続状態を守るための「持ち主」マーカー。
+// Marks who this browser's persisted chat state currently belongs to, so a user
+// switch that skips logout does not leak the previous user's persisted state.
+const USER_SCOPE_KEY = "chatcore.chat.userScope";
+const ANONYMOUS_USER_SCOPE = "anonymous";
 
 export type StoredHomePageViewState = "setup" | "chat";
 type WritableHomePageViewState = StoredHomePageViewState | "launching";
@@ -20,7 +29,7 @@ export type StoredActiveChatRoom = {
 };
 
 function getStoredGenerationKey(roomId: string) {
-  return `chatGeneration_${roomId}`;
+  return `${GENERATION_STATE_KEY_PREFIX}${roomId}`;
 }
 
 function normalizeStoredRoomMode(rawMode: unknown): ChatRoomMode {
@@ -107,6 +116,23 @@ export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomM
 
 export type StoredHistoryWriteResult = HistoryCacheWriteResult;
 
+// 「一時チャット」は本文を端末に残さないという約束の機能なので、書き込みは
+// 一律スキップし、既存キャッシュが残っていれば消す。呼び出し側で分岐を
+// 覚えておかなくて済むよう、ガードはここに集約する。
+// "Temporary chat" promises never to leave its text on the device, so every
+// write here is skipped outright, and any pre-existing cache entry for the
+// room is dropped. The guard lives here so callers do not each need to
+// remember the branch.
+function skippedTemporaryWrite(roomId: string, droppedEntries: number): StoredHistoryWriteResult {
+  removeCachedHistory(roomId);
+  return {
+    stored: true,
+    truncated: false,
+    retainedEntries: 0,
+    droppedEntries,
+  };
+}
+
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
     const raw = readCachedHistory(roomId);
@@ -136,11 +162,21 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   }
 }
 
-export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
+export function writeStoredHistory(
+  roomId: string,
+  entries: StoredHistoryEntry[],
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, entries.length);
   return writeCachedHistory(roomId, entries);
 }
 
-export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry): StoredHistoryWriteResult {
+export function appendStoredHistory(
+  roomId: string,
+  entry: StoredHistoryEntry,
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, 1);
   const existing = readStoredHistory(roomId);
   return writeStoredHistory(roomId, [...existing, entry]);
 }
@@ -159,7 +195,12 @@ export function removeLastStoredHistoryEntry(
   return writeStoredHistory(roomId, existing.slice(0, -1));
 }
 
-export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
+export function prependStoredHistory(
+  roomId: string,
+  entries: StoredHistoryEntry[],
+  roomMode: ChatRoomMode = "normal",
+): StoredHistoryWriteResult {
+  if (roomMode === "temporary") return skippedTemporaryWrite(roomId, entries.length);
   const existing = readStoredHistory(roomId);
   return writeStoredHistory(roomId, [...entries, ...existing]);
 }
@@ -222,6 +263,15 @@ export function writeStoredGenerationState(state: StoredGenerationState): boolea
   });
   if (!normalized) return false;
 
+  // 一時チャットの生成途中テキストも本文なので永続化しない。以前のスキップ前に
+  // 書かれた値が残っていれば、ここで消す。
+  // A temporary chat's in-flight generated text is still message content, so it is
+  // never persisted. Drop anything written before this guard existed.
+  if (normalized.roomMode === "temporary") {
+    clearStoredGenerationState(normalized.roomId);
+    return true;
+  }
+
   try {
     const serialized = JSON.stringify(normalized);
     localStorage.setItem(getStoredGenerationKey(normalized.roomId), serialized);
@@ -273,6 +323,101 @@ export function readActiveStoredGenerationState(): StoredGenerationState | null 
   }
 }
 
+// ログアウト、またはユーザー切り替え検知時に、この端末に残る本文・進行状態・
+// 下書きを一括で消す。チャット全文の chatHistory_*／chatGeneration_* に加え、
+// 復元経路が読む activeRoomId 系・ホーム画面のビュー状態・タスクキャッシュ・
+// セットアップ下書きも対象にする。
+// Wipe every locally persisted chat body, in-flight state and draft on this
+// device, whether triggered by logout or a detected user switch. Covers the
+// full chat text (chatHistory_*/chatGeneration_*) plus the active-room
+// pointer, home view state, task cache and the setup draft the restore path
+// reads.
+export function clearAllHomePagePersistedState() {
+  try {
+    clearAllCachedHistory();
+  } catch {
+    // ignore localStorage failures
+  }
+
+  try {
+    for (let indexPosition = localStorage.length - 1; indexPosition >= 0; indexPosition -= 1) {
+      const key = localStorage.key(indexPosition);
+      if (!key) continue;
+      if (key.startsWith(GENERATION_STATE_KEY_PREFIX) || key.startsWith(STORAGE_KEYS.tasksCachePrefix)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore localStorage failures
+  }
+
+  try {
+    localStorage.removeItem(STORAGE_KEYS.activeChatRoomId);
+    localStorage.removeItem(STORAGE_KEYS.activeChatRoomMode);
+    localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
+    localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
+    localStorage.removeItem(STORAGE_KEYS.homePageViewState);
+    localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function normalizeUserScopeValue(userId: string | null): string {
+  const trimmed = typeof userId === "string" ? userId.trim() : "";
+  return trimmed ? `user:${trimmed}` : ANONYMOUS_USER_SCOPE;
+}
+
+export function readStoredUserScope(): string | null {
+  try {
+    return localStorage.getItem(USER_SCOPE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearStoredUserScope() {
+  try {
+    localStorage.removeItem(USER_SCOPE_KEY);
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+// 保存済みの永続状態が「今確認できた利用者」のものか検証し、食い違っていれば
+// 一括破棄する。ログアウトを経由しないユーザー切り替え（別アカウントでの
+// 再ログインなど）から、直前の利用者の本文を守るための最後の砦。
+// スコープが未記録（初回訪問など）の場合は、破棄せずそのまま記録するだけにする。
+// Validate the persisted state against the just-confirmed user and wipe it all
+// on a mismatch. This is the last line of defense against a user switch that
+// skips logout (re-login as a different account, etc.). When no scope has
+// been recorded yet (a fresh browser, for example) there is nothing to
+// protect against, so it is simply recorded.
+export function reconcileStoredUserScope(userId: string | null): { changed: boolean } {
+  const nextScope = normalizeUserScopeValue(userId);
+  const previousScope = readStoredUserScope();
+
+  if (previousScope !== null && previousScope !== nextScope) {
+    clearAllHomePagePersistedState();
+    try {
+      localStorage.setItem(USER_SCOPE_KEY, nextScope);
+    } catch {
+      // ignore localStorage failures
+    }
+    return { changed: true };
+  }
+
+  if (previousScope === null) {
+    try {
+      localStorage.setItem(USER_SCOPE_KEY, nextScope);
+    } catch {
+      // ignore localStorage failures
+    }
+  }
+
+  return { changed: false };
+}
+
 export function normalizeHistorySender(sender: string | undefined): ChatSender {
   if (sender === "user") return "user";
   if (sender === "thinking") return "thinking";
@@ -309,6 +454,18 @@ export function consumeAuthSuccessHint() {
   if (url.searchParams.get(AUTH_SUCCESS_HINT.queryParam) !== AUTH_SUCCESS_HINT.successValue) {
     return false;
   }
+
+  // このヒントは Google OAuth のコールバックが「/」へ直接（/login を経由せず）
+  // 着地するときに付く。着地した時点で新規の認証が確定しているので、この端末に
+  // 残っていた前の利用者の永続状態を今すぐ破棄する。ここで消しておけば、直後の
+  // restoreHomeViewFromStorage が古い持ち主のレイアウトを一瞬でも復元しない。
+  // This hint is attached when the Google OAuth callback lands directly on "/"
+  // (bypassing /login). By the time it lands, a fresh authentication has just
+  // been confirmed, so wipe whatever persisted state a previous user left on
+  // this device right now. Clearing it here means the restoreHomeViewFromStorage
+  // that follows never restores the previous owner's layout, even briefly.
+  clearAllHomePagePersistedState();
+  clearStoredUserScope();
 
   writeCachedAuthState(true);
   url.searchParams.delete(AUTH_SUCCESS_HINT.queryParam);

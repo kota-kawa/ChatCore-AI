@@ -354,7 +354,7 @@ export function useHomePageGenerationActions({
     );
   }, []);
 
-  const saveUiMessagesToLocalStorage = useCallback((roomId: string, uiMessages: UiChatMessage[]) => {
+  const saveUiMessagesToLocalStorage = useCallback((roomId: string, uiMessages: UiChatMessage[], roomMode: ChatRoomMode) => {
     const normalized = uiMessages
       .filter((message) => message.sender === "user" || message.sender === "assistant")
       .map((message) => ({
@@ -362,7 +362,7 @@ export function useHomePageGenerationActions({
         sender: toStoredSender(message.sender),
         ...(message.parts?.length ? { parts: message.parts } : {}),
       }));
-    notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized));
+    notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized, roomMode));
   }, [notifyStoredHistoryWriteIssue]);
 
   const applyRoomTitleUpdate = useCallback((roomId: string, title: unknown) => {
@@ -471,6 +471,7 @@ export function useHomePageGenerationActions({
   const buildGenerationStreamHost = useCallback(
     (
       generation: ActiveGeneration,
+      roomMode: ChatRoomMode,
       onUnansweredFailure?: (message: string) => void,
     ): GenerationStreamHost => {
       const { roomId } = generation;
@@ -499,7 +500,7 @@ export function useHomePageGenerationActions({
           },
           clearGenerationState: () => clearStoredGenerationState(roomId),
           persistAssistantAnswer: (entry) => {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, entry));
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, entry, roomMode));
           },
         },
         openStream: (lastEventId) =>
@@ -526,9 +527,10 @@ export function useHomePageGenerationActions({
     (
       response: Response,
       generation: ActiveGeneration,
+      roomMode: ChatRoomMode,
       options?: { onUnansweredFailure?: (message: string) => void },
     ): Promise<boolean> =>
-      consumeGenerationStream(response, buildGenerationStreamHost(generation, options?.onUnansweredFailure)),
+      consumeGenerationStream(response, buildGenerationStreamHost(generation, roomMode, options?.onUnansweredFailure)),
     [buildGenerationStreamHost],
   );
 
@@ -562,7 +564,7 @@ export function useHomePageGenerationActions({
   );
 
   const connectToGenerationStream = useCallback(
-    async (roomId: string) => {
+    async (roomId: string, roomMode: ChatRoomMode) => {
       const generation = acquireGeneration(roomId);
       if (!generation) return false;
 
@@ -601,7 +603,7 @@ export function useHomePageGenerationActions({
           return;
         }
 
-        await consumeStreamingChatResponse(response, generation);
+        await consumeStreamingChatResponse(response, generation, roomMode);
       } catch (error) {
         if (isGenerationActive(generation) && !(error instanceof DOMException && error.name === "AbortError")) {
           appendAssistantErrorMessage(
@@ -651,7 +653,7 @@ export function useHomePageGenerationActions({
           prependScrollRestoreRef.current = null;
           setIsLoadingOlder(false);
           setMessages(nextMessages);
-          saveUiMessagesToLocalStorage(roomId, nextMessages);
+          saveUiMessagesToLocalStorage(roomId, nextMessages, loadedHistory.roomMode);
           requestScrollToBottom();
         };
 
@@ -695,13 +697,13 @@ export function useHomePageGenerationActions({
 
         if (generationStatus.is_generating) {
           commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId);
+          void connectToGenerationStream(roomId, loadedHistory.roomMode);
           return;
         }
 
         if (generationStatus.has_replayable_job) {
           commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId);
+          void connectToGenerationStream(roomId, loadedHistory.roomMode);
           return;
         }
 
@@ -731,7 +733,7 @@ export function useHomePageGenerationActions({
     };
 
     try {
-      const { messages: olderMessages, pagination } = await fetchChatHistoryPage(roomId, historyNextBeforeId);
+      const { messages: olderMessages, pagination, roomMode: olderRoomMode } = await fetchChatHistoryPage(roomId, historyNextBeforeId);
       if (currentRoomIdRef.current !== roomId) {
         prependScrollRestoreRef.current = null;
         return;
@@ -756,6 +758,7 @@ export function useHomePageGenerationActions({
           uiMessages
             .filter((message) => message.sender === "user" || message.sender === "assistant")
             .map((message) => ({ text: message.text, sender: toStoredSender(message.sender) })),
+          olderRoomMode,
         ),
       );
     } catch (error) {
@@ -791,7 +794,7 @@ export function useHomePageGenerationActions({
         setHistoryHasMore(loaded.pagination.hasMore);
         setHistoryNextBeforeId(loaded.pagination.nextBeforeId);
         setMessages(uiMessages);
-        saveUiMessagesToLocalStorage(roomId, uiMessages);
+        saveUiMessagesToLocalStorage(roomId, uiMessages, loaded.roomMode);
         // 編集・再生成の直後に走るため、ここで下端へ送ると回答の追従スクロールが
         // 戻ってしまう。分岐表示の更新だけを行い、スクロール位置には触れない。
         // This runs right after an edit or regeneration, so scrolling here would
@@ -830,7 +833,7 @@ export function useHomePageGenerationActions({
         setHistoryHasMore(false);
         setHistoryNextBeforeId(null);
         setMessages(uiMessages);
-        saveUiMessagesToLocalStorage(roomId, uiMessages);
+        saveUiMessagesToLocalStorage(roomId, uiMessages, payload.roomMode);
       } catch {
         showToast(localize("分岐の切り替えに失敗しました。", "Could not switch branches."), { variant: "error" });
       }
@@ -928,7 +931,7 @@ export function useHomePageGenerationActions({
         if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
         return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
       });
-      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: userMessage.text, sender: "user" }));
+      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: userMessage.text, sender: "user" }, roomMode));
       resetStoredGenerationProgress(roomId, roomMode);
       requestScrollToBottom();
     },
@@ -1061,6 +1064,7 @@ export function useHomePageGenerationActions({
   const applyJsonChatResponse = useCallback(
     async (
       generation: ActiveGeneration,
+      roomMode: ChatRoomMode,
       response: Response,
       handleUnansweredFailure: (message: string) => void,
     ): Promise<boolean> => {
@@ -1086,7 +1090,7 @@ export function useHomePageGenerationActions({
           text: data.response,
           sender: "bot",
           ...(data.parts?.length ? { parts: data.parts } : {}),
-        }));
+        }, roomMode));
         applyRoomTitleUpdate(generation.roomId, data.roomTitle);
       }
       clearStoredGenerationState(generation.roomId);
@@ -1110,12 +1114,13 @@ export function useHomePageGenerationActions({
   const attachToServerSideGeneration = useCallback(
     async (
       generation: ActiveGeneration,
+      roomMode: ChatRoomMode,
       handleUnansweredFailure: (message: string) => void,
       error: unknown,
     ): Promise<boolean> => {
       const recoveredResponse = await recoverInitialGenerationStream(generation.roomId, generation);
       if (recoveredResponse && isGenerationActive(generation)) {
-        return consumeStreamingChatResponse(recoveredResponse, generation, {
+        return consumeStreamingChatResponse(recoveredResponse, generation, roomMode, {
           onUnansweredFailure: handleUnansweredFailure,
         });
       }
@@ -1173,19 +1178,19 @@ export function useHomePageGenerationActions({
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
-          return await consumeStreamingChatResponse(response, generation, {
+          return await consumeStreamingChatResponse(response, generation, roomMode, {
             onUnansweredFailure: handleUnansweredFailure,
           });
         }
 
-        return await applyJsonChatResponse(generation, response, handleUnansweredFailure);
+        return await applyJsonChatResponse(generation, roomMode, response, handleUnansweredFailure);
       } catch (error) {
         if (generation.abortController.signal.aborted) {
           removeThinkingAfterAbort(generation);
           return false;
         }
 
-        return await attachToServerSideGeneration(generation, handleUnansweredFailure, error);
+        return await attachToServerSideGeneration(generation, roomMode, handleUnansweredFailure, error);
       } finally {
         releaseGeneration(generation);
       }
@@ -1233,7 +1238,7 @@ export function useHomePageGenerationActions({
   // 編集対象より後ろを、画面と表示キャッシュの両方から切り落とす。
   // Trim everything after the edit target from both the screen and the cache.
   const truncateHistoryForEdit = useCallback(
-    (roomId: string, trailingUserCount: number) => {
+    (roomId: string, trailingUserCount: number, roomMode: ChatRoomMode) => {
       setMessages((previous) => {
         const userIndices: number[] = [];
         previous.forEach((m, i) => {
@@ -1251,7 +1256,7 @@ export function useHomePageGenerationActions({
       });
       if (userStoredIndices.length > trailingUserCount) {
         const targetStoredIdx = userStoredIndices[userStoredIndices.length - 1 - trailingUserCount];
-        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx)));
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx), roomMode));
       }
     },
     [notifyStoredHistoryWriteIssue, removeThinkingMessages],
@@ -1259,10 +1264,19 @@ export function useHomePageGenerationActions({
 
   const editAndRegenerateMessage = useCallback(
     async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
-      truncateHistoryForEdit(roomId, trailingUserCount);
-
+      // isGenerating は React state なので同じ tick で連打されると更新前の値のまま
+      // ガードを通過してしまう。acquireGeneration() は ref ベースで即時に効くため、
+      // 取得できたときだけ履歴を切り詰める。そうしないと二重クリックの2回目が
+      // 生成を開始しないまま、さらに1つ前の回答まで消してしまう。
+      // isGenerating is React state, so a double click within the same tick still
+      // sees the stale value and slips past that guard. acquireGeneration() is
+      // ref-based and takes effect immediately, so only truncate once it
+      // succeeds — otherwise a second click starts no generation but still
+      // deletes one more answer than intended.
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+
+      truncateHistoryForEdit(roomId, trailingUserCount, currentRoomMode);
       markChatRoomActive(roomId);
 
       const userMsg: UiChatMessage = {
@@ -1300,7 +1314,7 @@ export function useHomePageGenerationActions({
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
-          await consumeStreamingChatResponse(response, generation, {
+          await consumeStreamingChatResponse(response, generation, currentRoomMode, {
             onUnansweredFailure: handleUnansweredFailure,
           });
           void refreshActivePath(roomId);
@@ -1316,7 +1330,7 @@ export function useHomePageGenerationActions({
               text: data.response,
               sender: "bot",
               ...(data.parts?.length ? { parts: data.parts } : {}),
-            }));
+            }, currentRoomMode));
           }
           clearStoredGenerationState(roomId);
           void refreshActivePath(roomId);
@@ -1361,7 +1375,7 @@ export function useHomePageGenerationActions({
   // 直前の回答（と表示キャッシュの最後のbot発話）を取り消して再生成に備える。
   // Drop the previous answer (and the last cached bot entry) before regenerating.
   const truncateLastAnswerForRegenerate = useCallback(
-    (roomId: string) => {
+    (roomId: string, roomMode: ChatRoomMode) => {
       setMessages((previous) => {
         let lastAssistantIdx = -1;
         for (let i = previous.length - 1; i >= 0; i--) {
@@ -1383,7 +1397,7 @@ export function useHomePageGenerationActions({
         }
       }
       if (lastBotLocalIdx >= 0) {
-        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx)));
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx), roomMode));
       }
     },
     [notifyStoredHistoryWriteIssue, removeThinkingMessages],
@@ -1427,10 +1441,13 @@ export function useHomePageGenerationActions({
 
   const regenerateLastResponse = useCallback(
     async (model: string, roomId: string) => {
-      truncateLastAnswerForRegenerate(roomId);
-
+      // 上の editAndRegenerateMessage と同じ理由で、取得できたときだけ切り詰める。
+      // Same reasoning as editAndRegenerateMessage above: only truncate once
+      // acquireGeneration() actually succeeds.
       const generation = acquireGeneration(roomId);
       if (!generation) return;
+
+      truncateLastAnswerForRegenerate(roomId, currentRoomMode);
       markChatRoomActive(roomId);
       beginRegeneratedTurn(generation);
 
@@ -1454,7 +1471,7 @@ export function useHomePageGenerationActions({
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
-          await consumeStreamingChatResponse(response, generation);
+          await consumeStreamingChatResponse(response, generation, currentRoomMode);
           void refreshActivePath(roomId);
           return;
         }
@@ -1468,7 +1485,7 @@ export function useHomePageGenerationActions({
               text: data.response,
               sender: "bot",
               ...(data.parts?.length ? { parts: data.parts } : {}),
-            }));
+            }, currentRoomMode));
           }
           clearStoredGenerationState(roomId);
           void refreshActivePath(roomId);
@@ -1509,6 +1526,7 @@ export function useHomePageGenerationActions({
       appendJsonAssistantMessage,
       beginRegeneratedTurn,
       consumeStreamingChatResponse,
+      currentRoomMode,
       isGenerationActive,
       markChatRoomActive,
       notifyStoredHistoryWriteIssue,
