@@ -30,7 +30,6 @@ from services.message_parts_display import (
     normalize_message_parts_for_display,
 )
 
-from .background_executor import submit_background_task
 from .chat_agent_budget import (
     AgentStepBudget,
 )
@@ -54,6 +53,14 @@ from .chat_generation_coordinator import (
     # blueprints が `services.chat_generation` から直接 import しているため再エクスポートする。
     # Re-exported because the blueprints import it straight from `services.chat_generation`.
     ChatGenerationStreamTimeoutError,  # noqa: F401
+)
+from .chat_generation_executor import (
+    # chat_use_case / chat_regeneration_pipeline が `services.chat_generation` から直接
+    # import しているため再エクスポートする。
+    # Re-exported because chat_use_case / chat_regeneration_pipeline import it straight
+    # from `services.chat_generation`.
+    ChatGenerationCapacityError,  # noqa: F401
+    submit_generation_task,
 )
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_generation_turn import ChatTurnRunState, ModelDecision
@@ -662,7 +669,11 @@ class ChatGenerationJob:
     def start(self) -> None:
         if self._future is not None:
             return
-        self._future = submit_background_task(self._run)
+        # 生成ジョブ専用プールへ投入する。空き枠が無ければ ChatGenerationCapacityError が
+        # 送出され、呼び出し元（start_generation_job）がそのまま呼び出し元へ伝える。
+        # Submit to the generation-only pool; a full pool raises ChatGenerationCapacityError,
+        # which start_generation_job simply lets propagate to its caller.
+        self._future = submit_generation_task(self._run)
 
     # ジョブの実行をキャンセルし、生成途中のテキストを保存して abortedイベントを発行する
     # Cancel the job, persist any partial text, and publish an aborted event
