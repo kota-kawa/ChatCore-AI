@@ -492,7 +492,7 @@ test("a drop with no event id ever received ends the turn instead of retrying fo
 // Bug 1: a resume point exists, but reconnecting itself keeps failing.
 // Verify it gives up once the retry budget is exhausted instead of looping
 // forever.
-test("reconnect attempts stop after the retry budget instead of spinning forever", async () => {
+test("reconnect attempts stop after 12 CONSECUTIVE failures instead of spinning forever", async () => {
   const clock = createFakeClock();
   let attempts = 0;
 
@@ -520,6 +520,50 @@ test("reconnect attempts stop after the retry budget instead of spinning forever
   assert.equal(recorder.errors().length, 1);
   assert.match(recorder.errors()[0], /ストリームを再開できませんでした/);
   assert.equal(assistantMessages(recorder.messages())[0]?.text, "途中まで");
+});
+
+// レビュー指摘: 再接続上限は「生涯合計」ではなく「連続失敗」に対する予算で
+// なければならない。11回連続で再接続に成功した後にたった1回失敗しても、
+// そこで打ち切ってはいけない（1回失敗しても次で回復すれば良い）。
+// Review finding: the reconnect budget must cap consecutive failures, not a
+// lifetime total. Eleven consecutive successful reconnects followed by a
+// single failure must not cut the turn off (it should simply try again).
+test("many successful reconnects followed by a single failure do not cut the turn off", async () => {
+  const clock = createFakeClock();
+  let openStreamCalls = 0;
+
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: () => {
+      openStreamCalls += 1;
+      const eventId = openStreamCalls + 1;
+      if (openStreamCalls === 12) {
+        // 12回目だけ失敗させる。生涯合計で数えていると、11回の成功を経ても
+        // ここでちょうど上限(12)に達して打ち切られてしまう。
+        // Only the 12th call fails. Counting a lifetime total would make this
+        // land exactly on the cap (12) despite 11 prior successes.
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+      if (openStreamCalls === 13) {
+        return Promise.resolve(createScriptedStream([sseBlock(eventId, "done", { response: "最終回答" })]).response);
+      }
+      // 毎回1チャンク届けてすぐ切断し、次の再接続を促す。
+      // Deliver one chunk each time, then disconnect to prompt another reconnect.
+      return Promise.resolve(
+        createScriptedStream([sseBlock(eventId, "chunk", { text: `chunk-${openStreamCalls}` })]).response,
+      );
+    },
+  });
+  seedThinkingMessage(recorder);
+
+  const interrupted = createScriptedStream([sseBlock(1, "chunk", { text: "開始" })]);
+
+  const completed = await settleStream(consumeGenerationStream(interrupted.response, recorder.host), clock, 3_000);
+
+  assert.equal(completed, true);
+  assert.equal(openStreamCalls, 13);
+  assert.deepEqual(recorder.errors(), []);
+  assert.equal(assistantMessages(recorder.messages())[0].text, "最終回答");
 });
 
 test("aborting during the reconnect wait ends the turn quietly", async () => {

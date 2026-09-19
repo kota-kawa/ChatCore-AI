@@ -60,14 +60,21 @@ const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
 // and makes the last part of a fast response snap into view.
 const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
-// 再接続の試行上限。バックオフは 15 秒で頭打ちになるため、この回数で約 105 秒
-// 粘ってから諦める。上限が無いと、復旧しない切断（ヘッダーだけ返して本文を送らない
-// プロキシなど）で「思考中」のまま無限に空転し、エラー表示も生成ガードの解放も
-// 起きなくなる。
-// Upper bound on reconnect attempts. The backoff tops out at 15s, so this keeps
-// trying for roughly 105 seconds before giving up. Without a bound, a drop that
-// never recovers (e.g. a proxy that returns headers but no events) spins
-// forever: no error is surfaced and the generation guard is never released.
+// 再接続の「連続失敗」試行上限（生涯合計ではない）。1回でも再接続に成功すれば
+// カウントはリセットされる。バックオフは 15 秒で頭打ちになるため、この回数で
+// 約 105 秒粘ってから諦める。上限が無いと、復旧しない切断（ヘッダーだけ返して
+// 本文を送らないプロキシなど）で「思考中」のまま無限に空転し、エラー表示も
+// 生成ガードの解放も起きなくなる。生涯合計にしてしまうと、長時間ターンで
+// 回線が不安定でも正常に復旧し続けているケースまで、通算回数を使い切っただけで
+// 打ち切られてしまう。
+// Upper bound on *consecutive* reconnect failures (not a lifetime total): the
+// count resets to zero on every successful reconnect. The backoff tops out at
+// 15s, so this keeps trying for roughly 105 seconds before giving up. Without
+// a bound, a drop that never recovers (e.g. a proxy that returns headers but
+// no events) spins forever: no error is surfaced and the generation guard is
+// never released. Treating it as a lifetime total instead would cut off a
+// long turn that keeps recovering fine over a flaky connection, just because
+// the lifetime count ran out.
 const MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS = 12;
 
 export type GenerationStreamTimers = {
@@ -722,6 +729,15 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         }
         continue;
       }
+      // 再接続が成功したので連続失敗のカウントをリセットする。上限は「生涯合計」
+      // ではなく「連続何回失敗したか」に対する予算であるべきで、そうしないと
+      // 長時間ターンで回線が不安定でも正常に復旧し続けているケースが、通算回数
+      // を使い切っただけで打ち切られてしまう。
+      // Reset the consecutive-failure count on a successful reconnect. The
+      // budget is meant to cap consecutive failures, not a lifetime total;
+      // otherwise a long turn that keeps recovering fine over a flaky
+      // connection would get cut off just because the lifetime count ran out.
+      reconnectAttempt = 0;
       activeResponse = reconnectResponse;
     }
 
