@@ -60,6 +60,16 @@ const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
 // and makes the last part of a fast response snap into view.
 const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
+// 再接続の試行上限。バックオフは 15 秒で頭打ちになるため、この回数で約 105 秒
+// 粘ってから諦める。上限が無いと、復旧しない切断（ヘッダーだけ返して本文を送らない
+// プロキシなど）で「思考中」のまま無限に空転し、エラー表示も生成ガードの解放も
+// 起きなくなる。
+// Upper bound on reconnect attempts. The backoff tops out at 15s, so this keeps
+// trying for roughly 105 seconds before giving up. Without a bound, a drop that
+// never recovers (e.g. a proxy that returns headers but no events) spins
+// forever: no error is surfaced and the generation guard is never released.
+const MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS = 12;
+
 export type GenerationStreamTimers = {
   now: () => number;
   setTimeout: (handler: () => void, ms: number) => number;
@@ -631,17 +641,39 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
 
   const openReconnectStream = async (): Promise<Response | "unavailable" | null> => {
     const lastEventId = host.lastEventIdByRoom.get(roomId);
-    if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
+    // 再開位置が無いまま切れた（1イベントも届かなかった）場合は、何度試しても
+    // サーバーへ「どこから続けるか」を伝えられない。待つだけ無駄なので即座に諦める。
+    // Dropping before a single event id arrived leaves no resume point, so no
+    // number of retries can tell the server where to continue. Give up at once.
+    if (typeof lastEventId !== "number" || lastEventId <= 0) return "unavailable";
 
     try {
       const reconnectResponse = await host.openStream(lastEventId);
       if (!reconnectResponse.ok) {
+        // 使わない本文は破棄する。放置すると接続が解放されない。
+        // Discard the unused body; leaving it open leaks the connection.
+        try {
+          await reconnectResponse.body?.cancel();
+        } catch {
+          // no-op
+        }
         return isUnrecoverableStreamStatus(reconnectResponse.status) ? "unavailable" : null;
       }
       return reconnectResponse;
     } catch {
       return null;
     }
+  };
+
+  const persistUnresumableStream = () => {
+    persistInterruptedStream(
+      state.streamedText
+        ? host.localize(
+            "ストリームを再開できませんでした。ここまでの応答を保存しました。",
+            "The stream could not be resumed. The response received so far was saved.",
+          )
+        : host.localize("ストリームを再開できませんでした。", "The stream could not be resumed."),
+    );
   };
 
   const runStreamWithReconnects = async (initialResponse: Response): Promise<boolean> => {
@@ -676,20 +708,18 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
 
       const reconnectResponse = await openReconnectStream();
       if (reconnectResponse === "unavailable") {
-        persistInterruptedStream(
-          state.streamedText
-            ? host.localize(
-                "ストリームを再開できませんでした。ここまでの応答を保存しました。",
-                "The stream could not be resumed. The response received so far was saved.",
-              )
-            : host.localize("ストリームを再開できませんでした。", "The stream could not be resumed."),
-        );
+        persistUnresumableStream();
         return false;
       }
       if (!reconnectResponse) {
         // A lost Wi-Fi connection can make the first few reconnects fail
         // even after the browser reports online. Keep the local progress
-        // and continue retrying until the user stops the generation.
+        // and continue retrying, but stop once the attempts run out so the
+        // turn always ends with a visible result instead of spinning forever.
+        if (reconnectAttempt >= MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS) {
+          persistUnresumableStream();
+          return false;
+        }
         continue;
       }
       activeResponse = reconnectResponse;

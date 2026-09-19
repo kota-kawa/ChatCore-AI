@@ -445,7 +445,15 @@ test("repeated reconnect failures follow the capped backoff and keep local progr
   assert.deepEqual(recorder.errors(), []);
 });
 
-test("no reconnect is attempted when no event id was ever received", async () => {
+// バグ1: 再開位置(lastEventId)が一度も届かないまま切断されると、以前は
+// openReconnectStream が無条件に null を返し続け、再試行が永遠にループして
+// エラーも生成ガードの解放も起きなかった。再開位置が無い切断は即座に
+// 諦めるべきで、再接続(host.openStream)を試すだけ無駄である。
+// Bug 1: dropping before a resume point (lastEventId) ever arrived used to
+// make openReconnectStream return null forever, spinning the retry loop with
+// no error and no release of the generation guard. A drop with no resume
+// point should give up immediately; retrying host.openStream cannot help.
+test("a drop with no event id ever received ends the turn instead of retrying forever", async () => {
   const clock = createFakeClock();
   let attempts = 0;
 
@@ -458,25 +466,60 @@ test("no reconnect is attempted when no event id was ever received", async () =>
   });
   seedThinkingMessage(recorder);
 
-  // イベントIDの無いチャンクだけを受けて切断する。
-  // The stream drops after chunks that carry no event id.
+  // イベントIDの無いチャンクだけを受けて切断する（ヘッダーだけ返して本文を
+  // 送らないプロキシ／LB を模す）。
+  // The stream drops after a chunk that carries no event id (mirrors a
+  // proxy/LB that returns headers but sends no events before cutting off).
   const interrupted = createScriptedStream([sseBlock(null, "chunk", { text: "IDなし" })]);
 
-  const consuming = consumeGenerationStream(interrupted.response, recorder.host);
-  await flushMicrotasks();
-  for (let step = 0; step < 6; step += 1) {
-    clock.runFrames();
-    clock.advance(1_000);
-    await flushMicrotasks();
-  }
+  const completed = await settleStream(consumeGenerationStream(interrupted.response, recorder.host), clock);
 
+  assert.equal(completed, false);
+  // 再開位置が無いので、host.openStream は一度も呼ばれない。
+  // With no resume point, host.openStream is never called.
   assert.equal(attempts, 0);
-  // 再接続不能でも進捗は残したまま、停止されるまで再試行を続ける。
-  // With no resume point it keeps retrying, holding on to local progress.
-  assert.equal(assistantMessages(recorder.messages()).length, 1);
+  // ユーザーの目に留まる形で、部分的な回答とエラーを一度だけ残す。
+  // Surfaces visibly: the partial answer plus a single error, exactly once.
+  const answers = assistantMessages(recorder.messages());
+  assert.equal(answers.length, 2);
+  assert.equal(answers[0].text, "IDなし");
+  assert.equal(recorder.errors().length, 1);
+  assert.match(recorder.errors()[0], /ストリームを再開できませんでした/);
+});
 
-  recorder.setActive(false);
-  assert.equal(await settleStream(consuming, clock), false);
+// バグ1: lastEventId はあるが再接続そのものが繰り返し失敗するケース。
+// 上限に達したら諦め、無限ループしないことを確認する。
+// Bug 1: a resume point exists, but reconnecting itself keeps failing.
+// Verify it gives up once the retry budget is exhausted instead of looping
+// forever.
+test("reconnect attempts stop after the retry budget instead of spinning forever", async () => {
+  const clock = createFakeClock();
+  let attempts = 0;
+
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: () => {
+      attempts += 1;
+      return Promise.reject(new TypeError("Failed to fetch"));
+    },
+  });
+  seedThinkingMessage(recorder);
+
+  const interrupted = createScriptedStream([sseBlock(1, "chunk", { text: "途中まで" })]);
+
+  // バックオフの合計は約105秒（0+500+1000+2000+4000+8000+15000*6ms）に及ぶため、
+  // 既定の maxSteps では時間切れになる。
+  // The cumulative backoff runs to roughly 105s (0+500+1000+2000+4000+8000+15000*6ms),
+  // so the default maxSteps would time out before it settles.
+  const completed = await settleStream(consumeGenerationStream(interrupted.response, recorder.host), clock, 3_000);
+
+  assert.equal(completed, false);
+  // 12回試して打ち切る（約105秒粘ってから諦める上限）。
+  // Gives up after exactly 12 attempts (the ~105s retry budget).
+  assert.equal(attempts, 12);
+  assert.equal(recorder.errors().length, 1);
+  assert.match(recorder.errors()[0], /ストリームを再開できませんでした/);
+  assert.equal(assistantMessages(recorder.messages())[0]?.text, "途中まで");
 });
 
 test("aborting during the reconnect wait ends the turn quietly", async () => {
