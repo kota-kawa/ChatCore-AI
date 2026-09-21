@@ -52,3 +52,14 @@ test("the first and last preview blocks carry no outer margin so text starts whe
   assert.match(ruleBody(`${scope} > :first-child`), /margin-top:\s*0/);
   assert.match(ruleBody(`${scope} > :last-child`), /margin-bottom:\s*0/);
 });
+
+// 一覧カードの抜粋も同じ Markdown を描くので、見出しは抜粋の本文（0.9rem）から浮かない大きさに抑える
+// Card excerpts render the same Markdown, so headings must stay close to the 0.9rem excerpt body
+test("memo card excerpt headings stay near the excerpt body size", () => {
+  const scope = ":where(body.memo-page, .memo-page-shell) .memo-item__excerpt";
+  assert.match(ruleBody(`${scope} :is(h1, h2, h3, h4, h5, h6)`), /font-weight:\s*700/);
+  const h1 = ruleBody(`${scope} h1`).match(/font-size:\s*([\d.]+)em/);
+  assert.ok(h1, "excerpt h1 must set an em size relative to the excerpt body");
+  assert.ok(Number(h1[1]) <= 1.1, "excerpt h1 must stay within a tenth of the body size");
+  assert.match(ruleBody(`${scope} > :first-child`), /margin-top:\s*0/);
+});

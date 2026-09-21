@@ -1055,6 +1055,20 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-item__excerpt p { margin: 0 0 0.5rem; }
 :where(body.memo-page, .memo-page-shell) .memo-item__excerpt p:last-child { margin-bottom: 0; }
 
+/* 一覧カードの抜粋も同じ Markdown を描く。ブラウザ既定の h1（2em）は 0.9rem の抜粋の中で
+   浮き上がるので、見出しは本文とほぼ同じ大きさの太字にとどめる（詳細のプレビューと同じ考え方）。
+   Card excerpts render the same Markdown. A browser-default h1 (2em) towers over the 0.9rem
+   excerpt, so headings stay bold at roughly body size, mirroring the detail preview. */
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.5em 0 0.2em;
+  font-weight: 700;
+  line-height: 1.4;
+}
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt h1 { font-size: 1.1em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt h2 { font-size: 1.05em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt :is(h3, h4, h5, h6) { font-size: 1em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt > :first-child { margin-top: 0; }
+
 :where(body.memo-page, .memo-page-shell) .memo-item__footer {
   display: flex;
   align-items: center;
