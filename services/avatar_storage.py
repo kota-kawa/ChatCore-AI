@@ -43,6 +43,16 @@ DEFAULT_AVATAR_URL = "/static/user-icon.png"
 # Maximum avatar URL length the database column accepts.
 AVATAR_URL_MAX_LENGTH = 255
 
+# アバター画像の最大許容サイズ（5MB）
+# Maximum allowed bytes for a single avatar image file (5MB).
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+
+# アバターを含むプロフィール更新リクエスト全体の最大サイズ（画像5MB＋フォーム項目分の余白）
+# Maximum bytes for a whole profile-update request: the avatar plus room for the text fields.
+# ``RequestBodySizeLimitMiddleware`` rejects the stream at this size so multipart parsing never
+# spools hundreds of megabytes to disk before the per-file check runs.
+AVATAR_MAX_REQUEST_BYTES = AVATAR_MAX_BYTES + 1024 * 1024
+
 # 参照されていないアバターを削除するまでの猶予時間（秒）
 # Grace period before an unreferenced avatar file becomes deletable.
 AVATAR_ORPHAN_GRACE_SECONDS = 60 * 60

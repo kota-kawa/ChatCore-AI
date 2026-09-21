@@ -242,6 +242,44 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(b1, (True, 1, 2))
         self.assertEqual(b2, (True, 0, 2))
 
+    def test_per_actor_monthly_ai_agent_quota_does_not_drain_other_actors(self):
+        """
+        あるアクターがAIエージェントの月間上限に達しても、他のアクターの残枠が減らないことを検証します。
+        Verify that one actor exhausting the monthly AI agent quota leaves other actors' budgets intact.
+        """
+        # 月間制限上限を2回に設定
+        # Set monthly limit to 2
+        os.environ["AI_AGENT_MONTHLY_API_LIMIT"] = "2"
+
+        with patch("services.llm_daily_limit.get_redis_client", return_value=None):
+            # ユーザー1が上限に達するまで消費
+            # User 1 consumes until hitting the limit
+            a1 = llm_daily_limit.consume_ai_agent_monthly_quota(
+                current_month="2026-02", user_key="user:1"
+            )
+            a2 = llm_daily_limit.consume_ai_agent_monthly_quota(
+                current_month="2026-02", user_key="user:1"
+            )
+            a3 = llm_daily_limit.consume_ai_agent_monthly_quota(
+                current_month="2026-02", user_key="user:1"
+            )
+            # 別ユーザーとゲストセッションには手つかずの枠が残ることを確認
+            # Assert a different user and a guest session still hold a fresh budget
+            b1 = llm_daily_limit.consume_ai_agent_monthly_quota(
+                current_month="2026-02", user_key="user:2"
+            )
+            g1 = llm_daily_limit.consume_ai_agent_monthly_quota(
+                current_month="2026-02", user_key="guest:abc"
+            )
+
+        # 上限到達がユーザー単位で閉じていることを検証
+        # Assert the cap is confined to the actor that reached it
+        self.assertEqual(a1, (True, 1, 2))
+        self.assertEqual(a2, (True, 0, 2))
+        self.assertEqual(a3, (False, 0, 2))
+        self.assertEqual(b1, (True, 1, 2))
+        self.assertEqual(g1, (True, 1, 2))
+
     def test_brave_web_search_monthly_limit_defaults_to_expected(self):
         """
         Brave Web検索の月間制限環境変数が未設定の場合、デフォルトの上限値に設定されることを検証します。

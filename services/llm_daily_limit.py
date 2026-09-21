@@ -74,6 +74,17 @@ def _seconds_until_next_month() -> int:
     return max(seconds, 1)
 
 
+# クォータキーを組み立てます。user_key があればユーザー/セッション単位のキーへ切り替えます。
+# Build the quota key, scoping it per user/session whenever user_key is provided.
+def _build_quota_key(key_prefix: str, period: str, user_key: str | None) -> str:
+    if not user_key:
+        return f"{key_prefix}:{period}"
+    # Hash to avoid leaking user identifiers into Redis keys and to
+    # keep key length bounded regardless of input.
+    hashed = hashlib.sha256(user_key.encode("utf-8", errors="replace")).hexdigest()
+    return f"{key_prefix}:user:{hashed}:{period}"
+
+
 # 日次リセット（翌日の深夜0時）までの残り秒数を取得します。
 # Retrieve the remaining seconds until the daily reset (midnight of the next day).
 def get_seconds_until_daily_reset() -> int:
@@ -214,13 +225,7 @@ return {1, current}
             return False, 0, daily_limit
 
         today = current_date or date.today().isoformat()
-        if user_key:
-            # Hash to avoid leaking user identifiers into Redis keys and to
-            # keep key length bounded regardless of input.
-            hashed = hashlib.sha256(user_key.encode("utf-8", errors="replace")).hexdigest()
-            quota_key = f"{key_prefix}:user:{hashed}:{today}"
-        else:
-            quota_key = f"{key_prefix}:{today}"
+        quota_key = _build_quota_key(key_prefix, today, user_key)
 
         redis_client = self._get_redis_client()
         if redis_client is not None:
@@ -251,15 +256,18 @@ return {1, current}
         env_name: str,
         default_limit: int,
         current_month: str | None = None,
+        user_key: str | None = None,
     ) -> tuple[bool, int, int]:
         # 月単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替えます。
         # Consume quota using a month-scoped key, preferring Redis and falling back to memory.
+        # When user_key is provided the quota is scoped per user/session so one
+        # caller cannot burn the global monthly budget for everyone else.
         monthly_limit = _get_limit(env_name, default_limit)
         if monthly_limit <= 0:
             return False, 0, monthly_limit
 
         month = current_month or date.today().strftime("%Y-%m")
-        quota_key = f"{key_prefix}:{month}"
+        quota_key = _build_quota_key(key_prefix, month, user_key)
 
         redis_client = self._get_redis_client()
         if redis_client is not None:
@@ -321,14 +329,19 @@ return {1, current}
     def consume_ai_agent_monthly_quota(
         self,
         current_month: str | None = None,
+        *,
+        user_key: str | None = None,
     ) -> tuple[bool, int, int]:
         # サポートAIエージェント用の月次上限を 1 回分消費します。
-        # Consume one unit from the monthly quota for support AI agent usage.
+        # Consume one unit from the monthly quota for support AI agent usage. The
+        # quota is scoped per user_key so a single account or guest session can't
+        # deny service to everyone else by burning the global monthly budget.
         return self._consume_monthly_quota(
             key_prefix=_AI_AGENT_MONTHLY_COUNT_KEY_PREFIX,
             env_name=AI_AGENT_MONTHLY_API_LIMIT_ENV,
             default_limit=DEFAULT_AI_AGENT_MONTHLY_API_LIMIT,
             current_month=current_month,
+            user_key=user_key,
         )
 
     # Brave Web検索の月次クォータを1カウント消費します。
@@ -407,13 +420,17 @@ def consume_ai_agent_monthly_quota(
     current_month: str | None = None,
     *,
     service: LlmDailyLimitService | None = None,
+    user_key: str | None = None,
 ) -> tuple[bool, int, int]:
     target = (
         service
         if isinstance(service, LlmDailyLimitService)
         else get_llm_daily_limit_service()
     )
-    return target.consume_ai_agent_monthly_quota(current_month=current_month)
+    return target.consume_ai_agent_monthly_quota(
+        current_month=current_month,
+        user_key=user_key,
+    )
 
 
 # Brave Web検索の月次クォータを1カウント消費します。

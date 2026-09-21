@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import unittest
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 
+from services.avatar_storage import AVATAR_MAX_BYTES, AVATAR_MAX_REQUEST_BYTES
 from services.request_body_limit import RequestBodySizeLimitMiddleware
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _registered_body_size_limits() -> dict[str, str]:
+    """Read app.py and map each guarded path to the max_bytes symbol it is registered with."""
+    module = ast.parse((REPO_ROOT / "app.py").read_text(encoding="utf-8"))
+    registrations: dict[str, str] = {}
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add_middleware":
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Name):
+            continue
+        if node.args[0].id != "RequestBodySizeLimitMiddleware":
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+        path = keywords.get("path")
+        max_bytes = keywords.get("max_bytes")
+        if isinstance(path, ast.Constant) and isinstance(max_bytes, ast.Name):
+            registrations[str(path.value)] = max_bytes.id
+    return registrations
 
 
 class RequestBodySizeLimitMiddlewareTestCase(unittest.TestCase):
@@ -135,6 +161,70 @@ class RequestBodySizeLimitMiddlewareTestCase(unittest.TestCase):
         )
 
         self.assertEqual(sent[0]["status"], 413)
+
+    def test_rejects_oversize_profile_upload_before_the_form_is_parsed(self):
+        app = FastAPI()
+        app.add_middleware(
+            RequestBodySizeLimitMiddleware,
+            path="/api/user/profile",
+            max_bytes=AVATAR_MAX_REQUEST_BYTES,
+        )
+        parsed = False
+
+        @app.post("/api/user/profile")
+        async def endpoint(request: Request):
+            nonlocal parsed
+            await request.form()
+            parsed = True
+            return {"ok": True}
+
+        sent = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(
+            app(
+                {
+                    "type": "http",
+                    "asgi": {"version": "3.0"},
+                    "http_version": "1.1",
+                    "method": "POST",
+                    "scheme": "http",
+                    "path": "/api/user/profile",
+                    "raw_path": b"/api/user/profile",
+                    "query_string": b"",
+                    "headers": [
+                        (b"content-type", b"multipart/form-data; boundary=x"),
+                        (b"content-length", str(AVATAR_MAX_REQUEST_BYTES + 1).encode()),
+                    ],
+                    "client": ("127.0.0.1", 1234),
+                    "server": ("testserver", 80),
+                },
+                receive,
+                send,
+            )
+        )
+
+        self.assertFalse(parsed)
+        self.assertEqual(sent[0]["status"], 413)
+
+    def test_profile_request_limit_leaves_room_for_a_max_size_avatar(self):
+        self.assertGreater(AVATAR_MAX_REQUEST_BYTES, AVATAR_MAX_BYTES)
+
+
+class RequestBodySizeLimitRegistrationTestCase(unittest.TestCase):
+    def test_upload_endpoints_are_guarded_by_the_body_size_middleware(self):
+        self.assertEqual(
+            _registered_body_size_limits(),
+            {
+                "/prompt_share/api/prompts": "PROMPT_ATTACHMENT_MAX_REQUEST_BYTES",
+                "/api/user/profile": "AVATAR_MAX_REQUEST_BYTES",
+            },
+        )
 
 
 if __name__ == "__main__":

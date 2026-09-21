@@ -902,11 +902,12 @@ async def ai_agent(
             ),
         )
 
-    # 1ヶ月あたりのAIエージェントクォータ制限枠チェック
-    # Check monthly quota limit for AI agent
+    # 1ヶ月あたりのAIエージェントクォータ制限枠チェック（アクター単位）
+    # Check the monthly AI agent quota, scoped to the calling actor
     can_access_llm, _, monthly_limit = await run_blocking(
         consume_ai_agent_monthly_quota,
         service=resolved_llm_daily_limit_service,
+        user_key=actor_key,
     )
     if not can_access_llm:
         return jsonify_rate_limited(

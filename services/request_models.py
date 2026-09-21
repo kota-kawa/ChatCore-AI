@@ -156,6 +156,28 @@ class EmailChangeConfirmRequest(RequestPayloadModel):
     auth_code: NonEmptyStr
 
 
+# 日本語: プロフィール更新で受け取るテキスト項目の最大文字数。
+# English: Maximum lengths accepted for the profile-update text fields.
+MAX_PROFILE_USERNAME_LENGTH = 255
+MAX_PROFILE_BIO_LENGTH = 2000
+MAX_PROFILE_LLM_CONTEXT_LENGTH = 20000
+
+
+# 日本語: プロフィール更新（multipart）のテキスト項目を検証するリクエストペイロード。
+#         DB 側は `Text` 型で長さの上限が無いため、上限はこのモデルで課す。
+#         `llm_profile_context` はプロンプトへ差し込まれるので、プロジェクト指示と同じ
+#         20000 文字に揃える（実際の注入量は USER_PROFILE_TOKEN_BUDGET が切り詰める）。
+# English: Request payload validating the multipart profile-update text fields. The columns are
+#          unbounded `Text`, so the caps live here. `llm_profile_context` is injected into prompts
+#          and matches the project-instructions cap; the prompt budget truncates what is actually
+#          sent to the model.
+class UserProfileUpdateRequest(RequestPayloadModel):
+    username: str = Field(default="", max_length=MAX_PROFILE_USERNAME_LENGTH)
+    email: str = Field(default="", max_length=EMAIL_ADDRESS_MAX_LENGTH)
+    bio: str = Field(default="", max_length=MAX_PROFILE_BIO_LENGTH)
+    llm_profile_context: str = Field(default="", max_length=MAX_PROFILE_LLM_CONTEXT_LENGTH)
+
+
 # 日本語: ログイン認証コード入力用リクエストペイロード。
 # English: Request payload containing the authentication code for verification.
 class AuthCodeRequest(RequestPayloadModel):

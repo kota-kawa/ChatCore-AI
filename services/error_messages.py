@@ -54,6 +54,9 @@ ERROR_AVATAR_NOT_FOUND = "アバター画像が見つかりません。"
 # User-facing messages for the profile read/update endpoint.
 ERROR_USER_NOT_FOUND = "ユーザーが存在しません"
 ERROR_USERNAME_REQUIRED = "ユーザー名は必須です"
+ERROR_PROFILE_INPUT_TOO_LONG = (
+    "入力内容が長すぎます。ユーザー名・自己紹介・AIへの指示の文字数を減らしてください。"
+)
 ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION = (
     "メールアドレスを変更するには、新しいアドレス宛に送信される"
     "認証コードによる確認が必要です。設定画面の「メールアドレス変更」"
@@ -69,6 +72,9 @@ ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED = "このメディアタイプはフ�
 ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID = "添付ファイル名が不正です。"
 ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED = "許可されていない形式の添付ファイルです。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
+ERROR_PROMPT_FORM_UNPARSABLE = (
+    "フォームデータを読み取れませんでした。添付画像は5MB以下の画像1件までにしてください。"
+)
 # 添付の有無に関わらず適用されるプロンプト投稿のレート制限文言です。
 # Prompt posting rate limit messages, applied whether or not an attachment is present.
 ERROR_PROMPT_CREATE_RATE_LIMITED = (
