@@ -4822,6 +4822,20 @@ body.memo-page {
   min-height: 40px;
 }
 
+/* タイトルもクリックで編集に入る（マウス向けの近道）
+   The title also switches to its input on click (a mouse shortcut) */
+.memo-modal .memo-modal__title--editable {
+  cursor: text;
+}
+
+@media (hover: hover) {
+  .memo-modal .memo-modal__title--editable:hover {
+    text-decoration: underline dotted;
+    text-decoration-color: var(--modal-text-muted);
+    text-underline-offset: 0.2em;
+  }
+}
+
 /* font-size を変えるときは base/form_zoom_guard.css の書き戻しも同じ値に揃えること。
    Keep the write-back in base/form_zoom_guard.css in step when this font-size changes. */
 .memo-modal .memo-modal__title-input {
@@ -5039,6 +5053,7 @@ body.memo-page {
 }
 
 .memo-modal .memo-modal__edit-form {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -5081,6 +5096,53 @@ body.memo-page {
   background: transparent;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* プレビュー面はクリック（Enter）でそのまま編集に入れる。読む面に見えたまま「触れる」ことが
+   分かるよう、text カーソルとホバー／フォーカス時のヒントだけで示し、面の見た目は変えない。
+   The preview switches to the editor on click (or Enter). It still reads as a document, so the
+   affordance is only a text cursor plus a hint on hover / focus; the surface itself is unchanged. */
+.memo-modal .memo-modal__preview-pane--editable {
+  border-radius: 8px;
+  cursor: text;
+  outline: none;
+}
+
+.memo-modal .memo-modal__preview-pane--editable:focus-visible {
+  box-shadow: var(--modal-focus-ring);
+}
+
+.memo-modal .memo-modal__edit-hint {
+  position: absolute;
+  top: 0.35rem;
+  right: 1rem;
+  z-index: 1;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--modal-surface-muted);
+  color: var(--modal-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.memo-modal .memo-modal__edit-form:has(.memo-modal__preview-pane--editable:focus-visible) .memo-modal__edit-hint {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .memo-modal .memo-modal__edit-form:has(.memo-modal__preview-pane--editable:hover) .memo-modal__edit-hint {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memo-modal .memo-modal__edit-hint {
+    transition: none;
+  }
 }
 
 .memo-modal .memo-preview-content {
