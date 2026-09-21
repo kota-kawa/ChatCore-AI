@@ -43,26 +43,30 @@ function previewPane() {
 }
 
 describe("MemoDetailModal click-to-edit", () => {
-  it("switches to the editor on a preview click and puts the caret at the end", () => {
+  it("switches to the editor on a preview click and focuses the textarea", () => {
     render(<DetailHarness />);
     expect(screen.queryByRole("textbox", { name: "内容" })).toBeNull();
 
-    fireEvent.click(previewPane());
+    // jsdom には caretPositionFromPoint も寸法も無いので、位置の写しは割合による推定（先頭行）に落ちる
+    // jsdom has neither caretPositionFromPoint nor layout, so the mapping falls back to the ratio estimate (first line)
+    fireEvent.click(previewPane(), { clientX: 10, clientY: 10 });
 
     const textarea = screen.getByRole("textbox", { name: "内容" }) as HTMLTextAreaElement;
     expect(document.activeElement).toBe(textarea);
-    expect(textarea.selectionStart).toBe(BODY.length);
-    expect(textarea.selectionEnd).toBe(BODY.length);
+    expect(textarea.selectionStart).toBe(0);
+    expect(textarea.selectionEnd).toBe(0);
   });
 
-  it("enters the editor with Enter while the preview pane is focused", () => {
+  it("enters the editor with Enter and puts the caret at the end", () => {
     render(<DetailHarness />);
     const pane = previewPane();
     pane.focus();
 
     fireEvent.keyDown(pane, { key: "Enter" });
 
-    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "内容" }));
+    const textarea = screen.getByRole("textbox", { name: "内容" }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(textarea);
+    expect(textarea.selectionStart).toBe(BODY.length);
   });
 
   it("leaves links inside the preview alone", () => {

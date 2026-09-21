@@ -7,7 +7,13 @@ import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
-import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
+import {
+  estimateSourceOffsetByRatio,
+  isSelectionCollapsed,
+  locateSourceOffset,
+  resolveCaretFromPoint,
+  shouldBeginEditingFromClick,
+} from "../../lib/memo/detail_click_to_edit";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
@@ -59,16 +65,31 @@ export function MemoDetailModal() {
     setPreviewMode: setDetailPreviewMode,
   });
 
-  // プレビュー面のクリックで編集に入る。リンク・操作部品・ドラッグ選択は通常動作のまま
-  // Enter edit mode from a preview click; links, controls and drag selections keep their behaviour
+  // プレビュー面のクリックで編集に入る。リンク・操作部品・ドラッグ選択は通常動作のまま。
+  // クリックした文字の原文中の位置と、その行が面のどの高さに見えていたかを手がかりとして渡し、
+  // 編集面で同じ場所が同じ高さに出るようにする（写せないときは面内の割合から行を推定する）。
+  // Enter edit mode from a preview click; links, controls and drag selections keep their behaviour.
+  // The clicked character's source offset and its height within the pane are handed over so the
+  // editor shows the same spot at the same height (falling back to a ratio-based line estimate).
   const handlePreviewClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const shouldEdit = shouldBeginEditingFromClick({
       target: event.target,
       defaultPrevented: event.defaultPrevented,
       selectionCollapsed: isSelectionCollapsed(),
     });
-    if (shouldEdit) beginEditing("body");
-  }, [beginEditing]);
+    if (!shouldEdit) return;
+
+    const pane = event.currentTarget;
+    const paneRect = pane.getBoundingClientRect();
+    const viewportY = event.clientY - paneRect.top;
+    const source = detailEditAiResponse;
+    const mapped = locateSourceOffset(pane, source, resolveCaretFromPoint(pane.ownerDocument, event.clientX, event.clientY));
+    const offset = mapped ?? estimateSourceOffsetByRatio(
+      source,
+      pane.scrollHeight > 0 ? (pane.scrollTop + viewportY) / pane.scrollHeight : 0,
+    );
+    beginEditing("body", { offset, viewportY });
+  }, [beginEditing, detailEditAiResponse]);
 
   // タイトルもドラッグ選択（コピー）の直後は編集に入らない
   // The title too stays put right after a drag selection (copying)
