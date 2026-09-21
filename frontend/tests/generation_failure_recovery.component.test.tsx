@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_generation_actions";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
-import { readStoredHistory } from "../lib/chat_page/storage";
+import { readStoredGenerationState, readStoredHistory } from "../lib/chat_page/storage";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
@@ -334,5 +334,189 @@ describe("failed chat turns", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].error).toBe(true);
     expect(messages[0].text).toContain("該当ルームが見つかりません");
+  });
+});
+
+// 「一時チャット」は本文を端末に残さない約束の機能なので、JSON応答・ストリーム応答
+// のどちらでも localStorage には一切書き込まれないことを確認する。
+// "Temporary chat" promises never to leave its text on the device, so neither a
+// JSON nor a streamed answer may ever be written to localStorage.
+describe("temporary chat rooms never persist locally", () => {
+  beforeEach(() => {
+    resilientFetchMock.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("does not persist a JSON-answered turn", async () => {
+    resilientFetchMock.mockResolvedValue(createJsonResponse(200, { response: "一時的な回答" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("一時的な質問", "model", "room-1", undefined, "temporary");
+    });
+
+    expect(result.current.state.messages.map((message) => message.sender)).toEqual(["user", "assistant"]);
+    expect(readStoredHistory("room-1")).toEqual([]);
+    expect(readStoredGenerationState("room-1")).toBeNull();
+  });
+
+  it("does not persist a streamed answer", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createStreamResponse([
+        `id: 1\nevent: chunk\ndata: ${JSON.stringify({ text: "一時" })}\n\n`,
+        `id: 2\nevent: done\ndata: ${JSON.stringify({ response: "一時的な回答" })}\n\n`,
+      ]),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("一時的な質問", "model", "room-1", undefined, "temporary");
+    });
+
+    const assistantMessages = result.current.state.messages.filter((message) => message.sender === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0].text).toBe("一時的な回答");
+    expect(readStoredHistory("room-1")).toEqual([]);
+    expect(readStoredGenerationState("room-1")).toBeNull();
+  });
+
+  it("still persists a normal room's answer for comparison", async () => {
+    resilientFetchMock.mockResolvedValue(createJsonResponse(200, { response: "通常の回答" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("通常の質問", "model", "room-1", undefined, "normal");
+    });
+
+    expect(readStoredHistory("room-1")).toEqual([
+      { text: "通常の質問", sender: "user" },
+      { text: "通常の回答", sender: "bot" },
+    ]);
+  });
+});
+
+// isGenerating は React state なので同じ tick 内の二重クリックでは更新前の値のまま
+// ガードを通過する。acquireGeneration() は ref ベースで即時に効くため、取得できた
+// ときだけ履歴を切り詰めることで、2回目のクリックがさらに1つ前の回答まで
+// 消してしまわないことを確認する。
+// isGenerating is React state, so a double click within the same tick still sees
+// the stale value and slips past that guard. acquireGeneration() is ref-based and
+// takes effect immediately; only truncating once it succeeds must stop a second
+// click from deleting one answer too many.
+describe("regenerate double click", () => {
+  beforeEach(() => {
+    resilientFetchMock.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("truncates only once when regenerate is triggered twice in the same tick", async () => {
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-1" }));
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      await result.current.actions.generateResponse("question-1", "model", "room-1");
+    });
+
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-2" }));
+    await act(async () => {
+      await result.current.actions.generateResponse("question-2", "model", "room-1");
+    });
+
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-2",
+    ]);
+
+    // regenerateLastResponse also fires an unawaited refreshActivePath() GET after
+    // a JSON answer; let it fail harmlessly so it does not overwrite the local
+    // cache this assertion checks (its own catch keeps the optimistic state).
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("chat_regenerate")) {
+        return createJsonResponse(200, { response: "answer-3" });
+      }
+      return createJsonResponse(500, { error: "not relevant to this test" });
+    });
+
+    let firstRegenerate: Promise<void>;
+    let secondRegenerate: Promise<void>;
+    act(() => {
+      firstRegenerate = result.current.actions.regenerateLastResponse("model", "room-1");
+      secondRegenerate = result.current.actions.regenerateLastResponse("model", "room-1");
+    });
+    await act(async () => {
+      await Promise.all([firstRegenerate!, secondRegenerate!]);
+    });
+
+    // 2回目のクリックは生成を開始せず（guard busy）、履歴も切り詰めない。
+    // question-2 とその回答が失われず、最後の回答だけが置き換わる。
+    // The second click starts no generation (guard busy) and truncates
+    // nothing: question-2 and its answer survive, only the last answer changes.
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-3",
+    ]);
+    expect(requestedUrls().filter((url) => url.includes("chat_regenerate"))).toHaveLength(1);
+  });
+
+  // editAndRegenerateMessage received the identical fix (acquire before
+  // truncate); verify it symmetrically so the two code paths do not drift.
+  it("truncates only once when edit-and-regenerate is triggered twice in the same tick", async () => {
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-1" }));
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      await result.current.actions.generateResponse("question-1", "model", "room-1");
+    });
+
+    resilientFetchMock.mockResolvedValueOnce(createJsonResponse(200, { response: "answer-2" }));
+    await act(async () => {
+      await result.current.actions.generateResponse("question-2", "model", "room-1");
+    });
+
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "question-2",
+      "answer-2",
+    ]);
+
+    // editAndRegenerateMessage also fires an unawaited refreshActivePath() GET
+    // after a JSON answer; let it fail harmlessly so it does not overwrite the
+    // local cache this assertion checks (its own catch keeps the optimistic
+    // state).
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("chat_edit_and_regenerate")) {
+        return createJsonResponse(200, { response: "edited-answer" });
+      }
+      return createJsonResponse(500, { error: "not relevant to this test" });
+    });
+
+    let firstEdit: Promise<void>;
+    let secondEdit: Promise<void>;
+    act(() => {
+      firstEdit = result.current.actions.editAndRegenerateMessage("edited-question", 0, "model", "room-1");
+      secondEdit = result.current.actions.editAndRegenerateMessage("edited-question-2", 0, "model", "room-1");
+    });
+    await act(async () => {
+      await Promise.all([firstEdit!, secondEdit!]);
+    });
+
+    // 2回目のクリックは生成を開始せず（guard busy）、履歴も切り詰めない。
+    // question-1 とその回答は残り、直前のやり取りだけが編集後の内容に置き換わる。
+    // The second click starts no generation (guard busy) and truncates
+    // nothing: question-1 and its answer survive, only the last exchange is
+    // replaced by the edit.
+    expect(readStoredHistory("room-1").map((entry) => entry.text)).toEqual([
+      "question-1",
+      "answer-1",
+      "edited-question",
+      "edited-answer",
+    ]);
+    expect(requestedUrls().filter((url) => url.includes("chat_edit_and_regenerate"))).toHaveLength(1);
   });
 });

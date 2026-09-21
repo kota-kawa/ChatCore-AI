@@ -2,7 +2,9 @@
 // ────────────────────────────────────────────────
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 import { resilientFetch } from "../core/resilient_fetch";
+import { STORAGE_KEYS } from "../core/constants";
 import { clearPersistentCache } from "../../lib/data/persistent_cache";
+import { clearAllHomePagePersistedState, clearStoredUserScope } from "../../lib/chat_page/storage";
 import { LOCALE_CHANGE_EVENT, getRuntimeLocale } from "../../lib/i18n/config";
 import { translate } from "../../lib/i18n/translate";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
@@ -160,6 +162,28 @@ async function postLogoutAndRedirect() {
   // ユーザー切替時に他人のデータを見せないよう、永続 SWR キャッシュを消去する。
   // Clear the persisted SWR cache so a switched user never sees the previous user's data.
   clearPersistentCache();
+  // ホーム画面のチャット全文・生成状態・下書きも同じ理由で消す。次の利用者
+  // （同一端末での別アカウント、または未ログイン）にAの本文を絶対に見せない。
+  // Clear the home page's chat text, generation state and drafts for the same
+  // reason: the next person on this device (another account, or a guest) must
+  // never see the outgoing user's text.
+  clearAllHomePagePersistedState();
+  // このブラウザの「持ち主」記録も外す。次に認証確認が通った利用者を、新規の
+  // 持ち主としてそのまま記録させ、無用な二重破棄を避ける。
+  // Drop the "owner" marker for this browser too, so the next authenticated
+  // user is simply recorded as the new owner instead of triggering a second,
+  // redundant wipe.
+  clearStoredUserScope();
+  // 認証状態キャッシュが "1"（ログイン中）のまま残っていると、次の利用者が
+  // 認証確認より前にログイン済みUIとチャット本文を復元してしまう。
+  // A stale "logged in" auth cache would let the next visitor's pre-auth
+  // restore paint a logged-in UI (and chat text) before the server confirms it.
+  try {
+    localStorage.removeItem(STORAGE_KEYS.authStateCache);
+    localStorage.removeItem(STORAGE_KEYS.authStateCachedAt);
+  } catch {
+    // localStorage が使えなくてもログアウト自体は継続する
+  }
   try {
     const response = await resilientFetch("/logout", {
       method: "POST",

@@ -37,6 +37,7 @@ import {
   readStoredActiveChatRoom,
   readRestorableHomePageViewState,
   readCachedAuthState,
+  reconcileStoredUserScope,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
 import {
@@ -75,6 +76,23 @@ const HOME_BOOT_VIEW_RELEASE_DELAY_MS = 1000;
 
 function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
+}
+
+// /api/current_user は認証済みのとき { user: { id, ... } } を返す。永続状態を
+// ユーザーごとに区切るためだけに読み、失敗しても認証判定そのものには影響させない。
+// /api/current_user returns { user: { id, ... } } once authenticated. This is read
+// solely to scope persisted state per user; a parse failure never affects the
+// auth decision itself.
+async function readCurrentUserIdFromResponse(response: Response): Promise<string | null> {
+  try {
+    const data = (await response.json().catch(() => null)) as { user?: { id?: unknown } } | null;
+    const id = data?.user?.id;
+    if (typeof id === "number" && Number.isFinite(id)) return String(id);
+    if (typeof id === "string" && id.trim()) return id.trim();
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 const buildChatRoomsPageUrl = (cursor?: string | null): string => {
@@ -817,23 +835,70 @@ export function useHomePageController() {
     releaseAuthBootAttribute();
   }, [setAuthHintApplied, setLoggedIn]);
 
+  // ログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）を
+  // 認証確認の結果から検知し、前の利用者の永続状態を画面ごと消す最後の砦。
+  // 通常時（同一利用者の再訪問・初回訪問）は何もしない。
+  // Detects a user switch that skipped logout (re-login as a different
+  // account, etc.) from the auth check's result, and is the last line of
+  // defense that wipes the previous user's persisted state along with the
+  // screen. A no-op for the normal case (same user returning, or a first
+  // visit).
+  const applyResolvedUserScope = useCallback((userId: string | null) => {
+    const { changed } = reconcileStoredUserScope(userId);
+    if (!changed) return;
+
+    setPageViewState("setup");
+    setCurrentRoomId(null);
+    currentRoomIdRef.current = null;
+    setCurrentRoomMode("normal");
+    setChatMessageListResetKey((previous) => previous + 1);
+    setMessages([]);
+    setHistoryHasMore(false);
+    setHistoryNextBeforeId(null);
+    setIsLoadingOlder(false);
+  }, [
+    currentRoomIdRef,
+    setChatMessageListResetKey,
+    setCurrentRoomId,
+    setCurrentRoomMode,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsLoadingOlder,
+    setMessages,
+    setPageViewState,
+  ]);
+
   useEffect(() => {
     const canFallback = isCachedAuthStateFresh() && readCachedAuthState() !== null;
 
     let cancelled = false;
 
     resilientFetch("/api/current_user", { credentials: "same-origin" })
-      .then(readCurrentUserLoggedIn)
-      .then((nextLoggedIn) => {
+      .then(async (response) => {
+        // readCurrentUserLoggedIn consumes the body; read a clone separately so
+        // the confirmed user id is available for the scope check below without
+        // disturbing that existing parsing.
+        const userIdProbe = response.clone();
+        const nextLoggedIn = await readCurrentUserLoggedIn(response);
+        const userId = nextLoggedIn ? await readCurrentUserIdFromResponse(userIdProbe) : null;
+        return { nextLoggedIn, userId };
+      })
+      .then(({ nextLoggedIn, userId }) => {
         if (cancelled) return;
         writeCachedAuthState(nextLoggedIn);
         setLoggedIn(nextLoggedIn);
+        applyResolvedUserScope(userId);
       })
       .catch((error) => {
         if (cancelled) return;
         if (error instanceof CurrentUserAuthError) {
           writeCachedAuthState(false);
           setLoggedIn(false);
+          // セッション切れもユーザー不在という点ではログアウトと同じ。前の利用者の
+          // 永続状態を、次の訪問者に見せないよう破棄する。
+          // An expired session is, for this purpose, the same as no user: wipe
+          // the previous user's persisted state so the next visitor never sees it.
+          applyResolvedUserScope(null);
           showToast(
             error.status === 401
               ? localize("ログインセッションが切れました。再ログインしてください。", "Your session expired. Please log in again.")
@@ -854,7 +919,7 @@ export function useHomePageController() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyResolvedUserScope]);
 
   useEffect(() => {
     setLoggedInState(loggedIn);
@@ -914,6 +979,19 @@ export function useHomePageController() {
 
   const restoreHomeViewFromStorage = useCallback(() => {
     try {
+      // 認証確認（/api/current_user）はこの後に非同期で走る。どれだけ厳しい
+      // ヒューリスティックを積んでも、ログアウトを経由しないユーザー切替
+      // （別アカウントでの再ログインなど）はローカルストレージの中身だけでは
+      // 判別できない。したがって本文（メッセージ）は絶対にここで描画せず、
+      // 常にサーバーからの loadChatHistory の応答を待つ。ここで即時復元して
+      // よいのは、部屋の選択やビュー状態など機微でないレイアウトだけ。
+      // The auth check (/api/current_user) only resolves later, asynchronously.
+      // No amount of localStorage heuristics can distinguish a user switch
+      // that skips logout (re-login as a different account, etc.) from the
+      // same user returning, so message TEXT is never painted here — it
+      // always waits for the server's loadChatHistory response. Only
+      // non-sensitive layout (which room/view was active) is safe to restore
+      // instantly here.
       const activeGeneration = readActiveStoredGenerationState();
       const storedViewState = activeGeneration ? "chat" : readRestorableHomePageViewState();
       if (activeGeneration) {
@@ -924,7 +1002,6 @@ export function useHomePageController() {
         // 復元時はローカル履歴を末尾アンカリングしたいので、一覧を新規マウントさせる。
         // key は currentRoomId に依存しなくなったため、ここで明示的に reset する。
         setChatMessageListResetKey((previous) => previous + 1);
-        loadLocalChatHistory(activeGeneration.roomId);
         void loadChatHistory(activeGeneration.roomId, true);
         return;
       }
@@ -938,7 +1015,6 @@ export function useHomePageController() {
         if (storedViewState === "chat") {
           setPageViewState("chat");
           setChatMessageListResetKey((previous) => previous + 1);
-          loadLocalChatHistory(storedActiveRoom.roomId);
           void loadChatHistory(storedActiveRoom.roomId, true);
         }
         return;
@@ -958,7 +1034,6 @@ export function useHomePageController() {
     }
   }, [
     loadChatHistory,
-    loadLocalChatHistory,
     setCurrentRoomId,
     setChatMessageListResetKey,
     setCurrentRoomMode,
@@ -1135,7 +1210,20 @@ export function useHomePageController() {
     });
 
     promptAssistControllerRef.current = (controller || null) as PromptAssistController | null;
-  }, []);
+    // モーダルは ModalShell 経由でマウントされ、初回コミット時は自身の
+    // useEffect(() => setMounted(true), []) がまだ走っていないため
+    // newPromptAssistRootRef 等は null のままこの effect が空振りする。
+    // isNewPromptModalOpen を依存に加え、モーダルを開くたびに再試行することで
+    // ref が揃った後の初期化を保証する（promptAssistControllerRef の
+    // ガードにより二重初期化はしない）。
+    // The modal mounts through ModalShell, whose own
+    // useEffect(() => setMounted(true), []) has not run yet on this effect's
+    // first commit, so newPromptAssistRootRef and the field refs are still
+    // null and this effect no-ops. Re-running it every time the modal opens
+    // (via isNewPromptModalOpen) guarantees it retries once the refs are
+    // populated; the promptAssistControllerRef guard above prevents a second
+    // initialization.
+  }, [isNewPromptModalOpen]);
 
   useEffect(() => {
     if (newPromptStatus.variant === "error") {
