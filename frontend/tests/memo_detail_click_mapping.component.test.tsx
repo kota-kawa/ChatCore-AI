@@ -38,6 +38,29 @@ describe("locateSourceOffset", () => {
     expect(locateSourceOffset(root, source, { node: second, offset: 0 })).toBe(source.indexOf("牛乳を買う 明日"));
   });
 
+  it("uses the child offset of an element hit instead of always its first text run", () => {
+    const root = renderPreview(html);
+    const firstParagraph = root.querySelector("p") as HTMLElement; // "牛乳を買う " + <strong>今日</strong>
+    // 子 1 番目（<strong>）の手前をクリック → その最初のテキストの先頭
+    // before child 1 (<strong>) → start of its first run
+    expect(locateSourceOffset(root, source, { node: firstParagraph, offset: 1 })).toBe(source.indexOf("今日"));
+    // 子の数を超える位置（段落の末尾の余白）→ 最後のテキストの終わり
+    // past the last child (trailing gap of the paragraph) → end of the last run
+    expect(locateSourceOffset(root, source, { node: firstParagraph, offset: 2 })).toBe(source.indexOf("今日") + 2);
+    // ルート要素の末尾ヒット → 文書全体の最後のテキストの終わり
+    // a hit past the root's last child → end of the document's last run
+    expect(locateSourceOffset(root, source, { node: root, offset: root.childNodes.length })).toBe(source.length);
+  });
+
+  it("falls back to a short fragment around the click when display normalisation changed the run", () => {
+    // 表示側で「見出しに昇格」された行: 描画は "予定" だが原文は "予定:" のような差
+    // a run altered for display: rendered "買い物リスト 今日" but the source line carries extra markup
+    const altered = renderPreview("<h2>買い物リスト 今日</h2>");
+    const alteredSource = "買い物リスト: 今日\n\n牛乳";
+    const node = textNode(altered, 0);
+    expect(locateSourceOffset(altered, alteredSource, { node, offset: 8 })).toBe(alteredSource.indexOf("今日") + 1);
+  });
+
   it("treats an element hit as the start of its first text run and rejects nodes outside the root", () => {
     const root = renderPreview(html);
     const li = root.querySelector("li") as HTMLElement;
@@ -55,5 +78,12 @@ describe("estimateSourceOffsetByRatio", () => {
     expect(estimateSourceOffsetByRatio(source, 0)).toBe(0);
     expect(estimateSourceOffsetByRatio(source, 0.5)).toBe(5); // "ccc" starts after "a\nbb\n"
     expect(estimateSourceOffsetByRatio(source, 1)).toBe(9); // clamped to the last line
+  });
+
+  it("uses a character share when the text has no line breaks (legacy JSON-wrapped memos)", () => {
+    const wrapped = JSON.stringify("一行目\n二行目\n三行目");
+    expect(estimateSourceOffsetByRatio(wrapped, 0)).toBe(0);
+    expect(estimateSourceOffsetByRatio(wrapped, 0.5)).toBe(Math.floor(wrapped.length / 2));
+    expect(estimateSourceOffsetByRatio(wrapped, 2)).toBe(wrapped.length);
   });
 });

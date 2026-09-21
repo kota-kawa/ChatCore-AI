@@ -73,52 +73,97 @@ function textNodesOf(root: Node): Text[] {
   return nodes;
 }
 
-// 描画された Markdown 上のクリック位置を、元の Markdown 文字列の位置へ写す。
-// クリックされたテキストノードの文面は（太字や見出し記号を除けば）原文にそのまま現れるので、
-// 同じ文面のノードが何番目かを数えて原文中の同じ回目の出現を採る。見つからなければ null。
-// Maps a click on the rendered Markdown back to an offset in the source string. The clicked
-// text node's content appears verbatim in the source (markers like ** live outside text nodes),
-// so the nth identical node is matched to the nth occurrence in the source. Null when no match.
+// 要素がヒットしたとき（段落の間の余白など）は、offset 番目の子の位置にあるテキストへ寄せる。
+// 子の数を超えていれば末尾のテキストの終わり、それ以外はその子の最初のテキストの先頭。
+// For an element hit (e.g. the gap between paragraphs), settle on the text at the offset-th child:
+// past the last child means the end of the last text run, otherwise the start of that child's first run.
+function textPointInElement(element: Node, childOffset: number): CaretPoint | null {
+  const children = element.childNodes;
+  if (childOffset >= children.length) {
+    const runs = textNodesOf(element);
+    const last = runs[runs.length - 1];
+    return last ? { node: last, offset: (last.textContent ?? "").length } : null;
+  }
+  for (let i = childOffset; i < children.length; i += 1) {
+    const child = children[i];
+    const first = child.nodeType === 3 /* TEXT_NODE */ ? (child as Text) : textNodesOf(child)[0];
+    if (first) return { node: first, offset: 0 };
+  }
+  const runs = textNodesOf(element);
+  const last = runs[runs.length - 1];
+  return last ? { node: last, offset: (last.textContent ?? "").length } : null;
+}
+
+// 同じ文面のテキストノードのうち何番目か（文書順）/ Ordinal of this node among identical runs, in document order
+function ordinalAmongIdenticalRuns(root: HTMLElement, node: Text, needle: string): number {
+  return textNodesOf(root)
+    .filter((candidate) => candidate !== node && (candidate.textContent ?? "").trim() === needle)
+    .filter((candidate) => candidate.compareDocumentPosition(node) & 4 /* DOCUMENT_POSITION_FOLLOWING */).length;
+}
+
+function nthIndexOf(source: string, needle: string, ordinal: number): number {
+  let index = -1;
+  let from = 0;
+  for (let i = 0; i <= ordinal; i += 1) {
+    index = source.indexOf(needle, from);
+    if (index < 0) return -1;
+    from = index + needle.length;
+  }
+  return index;
+}
+
+const PARTIAL_MATCH_RADIUS = 6;
+
+// 描画された Markdown 上のクリック位置を、textarea が表示している元の文字列の位置へ写す。
+// テキストノードの文面は多くの場合そのまま原文に現れる（** などの記号はノードの外にある）ので、
+// 同じ文面のノードが何番目かを数え、原文中の同じ回目の出現を採る。表示前の正規化（見出しの
+// 昇格、参照表示の除去など）で文面が変わっていて見つからないときは、クリック位置の前後だけを
+// 切り出した短い断片で再照合する。それでも見つからなければ null。
+// Maps a click on the rendered Markdown back to an offset in the raw string the textarea shows.
+// A text node's content usually appears verbatim in the source (markers like ** live outside text
+// nodes), so the nth identical node is matched to the nth occurrence. When display normalisation
+// (heading promotion, stripped references, …) changed the run and it is not found, a short
+// fragment around the click is tried instead. Null when nothing matches.
 export function locateSourceOffset(root: HTMLElement, source: string, caret: CaretPoint | null): number | null {
   if (!caret) return null;
-  let node: Node | null = caret.node;
-  let offsetInNode = caret.offset;
-  if (node.nodeType !== 3 /* TEXT_NODE */) {
-    // 要素が返ったときは、その中の最初のテキストの先頭とみなす
-    // An element hit counts as the start of its first text run
-    node = textNodesOf(node)[0] ?? null;
-    offsetInNode = 0;
-  }
-  if (!node || !root.contains(node)) return null;
+  const point = caret.node.nodeType === 3 /* TEXT_NODE */ ? caret : textPointInElement(caret.node, caret.offset);
+  if (!point || !root.contains(point.node)) return null;
+  const node = point.node as Text;
 
   const run = node.textContent ?? "";
   const needle = run.trim();
   if (!needle) return null;
   const leading = run.length - run.trimStart().length;
+  const within = Math.min(Math.max(point.offset - leading, 0), needle.length);
 
-  const siblings = textNodesOf(root);
-  const ordinal = siblings.filter((candidate) => candidate !== node && (candidate.textContent ?? "").trim() === needle)
-    .filter((candidate) => candidate.compareDocumentPosition(node as Node) & 4 /* DOCUMENT_POSITION_FOLLOWING */).length;
+  const exact = nthIndexOf(source, needle, ordinalAmongIdenticalRuns(root, node, needle));
+  if (exact >= 0) return exact + within;
+  const first = source.indexOf(needle);
+  if (first >= 0) return first + within;
 
-  let index = -1;
-  let from = 0;
-  for (let i = 0; i <= ordinal; i += 1) {
-    index = source.indexOf(needle, from);
-    if (index < 0) break;
-    from = index + needle.length;
+  // 変わった箇所を避けるため、クリック位置を中心に窓を狭めながら照合する（2 文字未満は採らない）
+  // Shrink a window around the click so the altered part falls outside it; fragments under 2 chars are skipped
+  for (let radius = PARTIAL_MATCH_RADIUS; radius >= 1; radius -= 1) {
+    const start = Math.max(0, within - radius);
+    const raw = needle.slice(start, within + radius);
+    const leadingTrim = raw.length - raw.trimStart().length;
+    const fragment = raw.trim();
+    if (fragment.length < 2) continue;
+    const partial = source.indexOf(fragment);
+    if (partial >= 0) return partial + Math.min(Math.max(within - start - leadingTrim, 0), fragment.length);
   }
-  if (index < 0) index = source.indexOf(needle);
-  if (index < 0) return null;
-
-  const within = Math.min(Math.max(offsetInNode - leading, 0), needle.length);
-  return index + within;
+  return null;
 }
 
-// 見出しの無い箇所や写せなかった場合の代替: 面の中でのクリック位置の割合から行を推定する
-// Fallback when the click cannot be mapped: estimate the line from the click's share of the pane
+// 写せなかった場合の代替: 面の中でのクリック位置の割合から行を推定する。改行が無い文字列
+// （JSON 包みの旧データなど）では行が一つしか無いので、文字数の割合に切り替える。
+// Fallback when the click cannot be mapped: estimate the line from the click's share of the pane.
+// A string without newlines (e.g. legacy JSON-wrapped data) has a single line, so use a character share.
 export function estimateSourceOffsetByRatio(source: string, ratio: number): number {
+  const clamped = Math.min(1, Math.max(0, ratio));
   const lines = source.split("\n");
-  const lineIndex = Math.min(lines.length - 1, Math.max(0, Math.floor(ratio * lines.length)));
+  if (lines.length < 2) return Math.floor(clamped * source.length);
+  const lineIndex = Math.min(lines.length - 1, Math.floor(clamped * lines.length));
   let offset = 0;
   for (let i = 0; i < lineIndex; i += 1) offset += lines[i].length + 1;
   return offset;
