@@ -174,8 +174,21 @@ function PromptCardComponent({
     <div
       className={`prompt-card cc-press${isDropdownOpen ? " menu-open" : ""}`}
       data-category={prompt.category || ""}
+      role="button"
+      tabIndex={0}
+      aria-label={t("promptShare.showDetails", { title: prompt.title })}
       onClick={() => {
         onOpenDetail(prompt);
+      }}
+      onKeyDown={(event) => {
+        // カード内のボタン・リンクからバブリングしたキー操作は無視し、
+        // カード自体にフォーカスがある場合のみ詳細モーダルを開く
+        // Ignore key events bubbling up from nested buttons/links; only act when the card itself is focused
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenDetail(prompt);
+        }
       }}
     >
       <div className="prompt-card__header">

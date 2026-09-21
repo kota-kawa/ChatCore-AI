@@ -1807,7 +1807,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   white-space: nowrap;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-select__option:hover {
+:where(body.memo-page, .memo-page-shell) .memo-select__option:hover,
+:where(body.memo-page, .memo-page-shell) .memo-select__option.is-active {
   background: rgba(217, 119, 6, 0.09);
   color: #92400e;
 }
@@ -2263,7 +2264,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   color: #f8fafc;
 }
 
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option:hover {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option:hover,
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option.is-active {
   background: rgba(245, 158, 11, 0.1);
   color: #fbbf24;
 }
@@ -3273,7 +3275,8 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-item__dropdown-item:hover,
 :where(body.memo-page, .memo-page-shell) .memo-select__option:hover,
-:where(body.memo-page, .memo-page-shell) .memo-select__option.is-selected {
+:where(body.memo-page, .memo-page-shell) .memo-select__option.is-selected,
+:where(body.memo-page, .memo-page-shell) .memo-select__option.is-active {
   background: #f1f3f4;
   color: #202124;
 }
@@ -3866,6 +3869,7 @@ body.memo-page {
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option:hover,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option.is-selected,
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__option.is-active,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-item__dropdown-item:hover,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-item__dropdown-item.is-active {
   background: rgba(251, 188, 4, 0.12);

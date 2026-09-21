@@ -29,7 +29,9 @@ import {
 import { useTranslation } from "../../contexts/locale_context";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
-type TaskCardProps = {
+// キーボード操作のテストから直接マウントできるよう型・コンポーネントの両方をexportする
+// Export both the type and the component so keyboard-access tests can mount it directly
+export type TaskCardProps = {
   task: NormalizedTask;
   index: number;
   taskDomKey: string;
@@ -84,7 +86,7 @@ function TemporaryChatCheckIcon() {
 
 // タスク一覧の各カードを描画するコンポーネント
 // Renders a single task card with drag, edit, delete, and detail interactions
-const TaskCard = memo(function TaskCard({
+export const TaskCard = memo(function TaskCard({
   task,
   index,
   taskDomKey,
@@ -117,8 +119,22 @@ const TaskCard = memo(function TaskCard({
         data-launching={isLaunching ? "true" : "false"}
         data-task={task.name}
         data-is_default={task.is_default ? "true" : "false"}
+        role="button"
+        tabIndex={0}
+        aria-label={locale === "en" ? `Launch ${task.name}` : `${task.name}を起動`}
+        aria-disabled={isEditing ? "true" : undefined}
         onClick={() => {
           {/* 編集モード中はクリックによるタスク起動を無効化 / Prevent launch when in edit/reorder mode */}
+          if (isEditing) return;
+          void onLaunch(task);
+        }}
+        onKeyDown={(event) => {
+          // 削除・編集・詳細ボタンからバブリングしたキー操作は無視し、
+          // カード自体にフォーカスがある場合のみタスクを起動する
+          // Ignore key events bubbling up from the delete/edit/detail buttons; only act when the card itself is focused
+          if (event.target !== event.currentTarget) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
           if (isEditing) return;
           void onLaunch(task);
         }}
