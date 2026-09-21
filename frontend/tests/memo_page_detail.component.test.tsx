@@ -74,6 +74,29 @@ describe("useMemoPageDetail", () => {
     expect(mutateMock).toHaveBeenCalled();
   });
 
+  it("opens a memo with a body in preview mode and an empty memo straight in the editor", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    expect(result.current.detailPreviewMode).toBe(true);
+
+    act(() => {
+      result.current.closeMemoDetail();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MEMO_DETAIL_CLOSE_ANIMATION_MS);
+    });
+
+    vi.mocked(loadMemoDetail).mockResolvedValue({ ...baseMemo, id: 2, ai_response: "   " });
+    await act(async () => {
+      await result.current.openMemoDetail(2);
+    });
+    expect(result.current.selectedMemo?.id).toBe(2);
+    expect(result.current.detailPreviewMode).toBe(false);
+  });
+
   it("sends collection flags only when collections exist", async () => {
     const collections: Collection[] = [{ id: 7, name: "仕事", color: "#3b82f6", memo_count: 1 }];
     const { result } = renderHook(() => useDetailHarness(collections));

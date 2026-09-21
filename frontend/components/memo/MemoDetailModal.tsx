@@ -7,11 +7,13 @@ import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
+import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
+import { useMemoDetailEditFocus } from "../../hooks/memo_page/use_memo_detail_edit_focus";
 import {
   useMemoPageDetailContext,
   useMemoPageListContext,
@@ -52,6 +54,34 @@ export function MemoDetailModal() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
+  const { textareaRef, titleInputRef, beginEditing } = useMemoDetailEditFocus({
+    previewMode: detailPreviewMode,
+    setPreviewMode: setDetailPreviewMode,
+  });
+
+  // プレビュー面のクリックで編集に入る。リンク・操作部品・ドラッグ選択は通常動作のまま
+  // Enter edit mode from a preview click; links, controls and drag selections keep their behaviour
+  const handlePreviewClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const shouldEdit = shouldBeginEditingFromClick({
+      target: event.target,
+      defaultPrevented: event.defaultPrevented,
+      selectionCollapsed: isSelectionCollapsed(),
+    });
+    if (shouldEdit) beginEditing("body");
+  }, [beginEditing]);
+
+  // タイトルもドラッグ選択（コピー）の直後は編集に入らない
+  // The title too stays put right after a drag selection (copying)
+  const handleTitleClick = useCallback((event: React.MouseEvent<HTMLHeadingElement>) => {
+    if (event.defaultPrevented || !isSelectionCollapsed()) return;
+    beginEditing("title");
+  }, [beginEditing]);
+
+  const handlePreviewKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+    event.preventDefault();
+    beginEditing("body");
+  }, [beginEditing]);
 
   // 開いた直後はパネル自体へフォーカスし、操作ボタンを勝手に選ばない
   // Focus the panel itself on open instead of jumping to the first action button
@@ -107,9 +137,19 @@ export function MemoDetailModal() {
           <div className="cc-modal__heading memo-modal__heading">
             <span id="memoModalTitle" className="sr-only">{displayTitle}</span>
             {detailPreviewMode ? (
-              <h2 className="cc-modal__title memo-modal__title" aria-hidden="true">{displayTitle}</h2>
+              // マウス向けの近道。キーボードでは編集タブから同じ入力に到達できる
+              // A mouse shortcut; keyboard users reach the same input through the edit tab
+              <h2
+                className="cc-modal__title memo-modal__title memo-modal__title--editable"
+                aria-hidden="true"
+                onClick={handleTitleClick}
+                title={t("memo.clickToEdit")}
+              >
+                {displayTitle}
+              </h2>
             ) : (
               <input
+                ref={titleInputRef}
                 type="text"
                 className="memo-modal__title-input"
                 value={detailEditTitle}
@@ -226,13 +266,26 @@ export function MemoDetailModal() {
             <>
               <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
                 {detailPreviewMode ? (
-                  <div className="memo-modal__preview-pane" role="tabpanel">
-                    {detailEditAiResponse.trim()
-                      ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
-                      : <p className="memo-preview-empty">{t("memo.noPreviewText")}</p>}
-                  </div>
+                  <>
+                    <span id="memo-detail-edit-hint" className="memo-modal__edit-hint">{t("memo.clickToEdit")}</span>
+                    {/* tabIndex=0 は Enter で編集に入るための停止点。本文内のリンク等とは別の停止点になる
+                        tabIndex=0 is the stop that lets Enter start editing; links inside the body remain their own stops */}
+                    <div
+                      className="memo-modal__preview-pane memo-modal__preview-pane--editable"
+                      role="tabpanel"
+                      tabIndex={0}
+                      aria-describedby="memo-detail-edit-hint"
+                      onClick={handlePreviewClick}
+                      onKeyDown={handlePreviewKeyDown}
+                    >
+                      {detailEditAiResponse.trim()
+                        ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
+                        : <p className="memo-preview-empty">{t("memo.noPreviewText")}</p>}
+                    </div>
+                  </>
                 ) : (
                   <textarea
+                    ref={textareaRef}
                     id="memo-detail-ai-response"
                     className="memo-modal__edit-textarea"
                     value={detailEditAiResponse}

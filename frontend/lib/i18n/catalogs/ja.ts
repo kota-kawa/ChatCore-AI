@@ -393,6 +393,7 @@ export const jaMessages = {
   "memo.loadingMemo": "メモを読み込んでいます...",
   "memo.preview": "プレビュー",
   "memo.noPreviewText": "プレビューするテキストがありません。",
+  "memo.clickToEdit": "クリックして編集",
   "memo.writePlaceholder": "メモを入力...",
   "memo.agentTitle": "メモのチャコ",
   "memo.agentHeaderSubtitle": "このメモを一緒に整理",

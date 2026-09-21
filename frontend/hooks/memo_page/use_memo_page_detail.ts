@@ -149,6 +149,9 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
       setDetailEditBackgroundColor(memo.background_color ?? null);
+      // 本文が空なら読むものが無いので、最初から書ける状態で開く
+      // An empty body has nothing to read, so open straight into the editor
+      setDetailPreviewMode(Boolean(memo.ai_response?.trim()));
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
     } catch (error) {

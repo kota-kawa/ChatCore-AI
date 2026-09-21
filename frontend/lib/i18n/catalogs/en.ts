@@ -176,7 +176,7 @@ export const enMessages = {
   "memo.titleLabel": "Title", "memo.backgroundColor": "Memo background color", "memo.copyFullText": "Copy full text",
   "memo.closeAgent": "Close memo chat", "memo.askAgent": "Ask AI about or edit this memo", "memo.saved": "Saved",
   "memo.awaitingAutosave": "Waiting to autosave", "memo.autosaveFailed": "Autosave failed", "memo.loadingMemo": "Loading memo…",
-  "memo.preview": "Preview", "memo.noPreviewText": "There is no text to preview.", "memo.writePlaceholder": "Write a memo…",
+  "memo.preview": "Preview", "memo.noPreviewText": "There is no text to preview.", "memo.clickToEdit": "Click to edit", "memo.writePlaceholder": "Write a memo…",
   "memo.agentTitle": "Chaco for Memos", "memo.agentHeaderSubtitle": "Organize this memo together",
   "memo.agentDescription": "Ask for a summary, questions, or edits based on this memo. Edits are applied only when you run them.",
   "memo.agentPlaceholder": "Ask about or request an edit to this memo…", "memo.list": "Memo list", "memo.noMatchingMemos": "No memos match these filters.",
