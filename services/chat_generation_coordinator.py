@@ -312,6 +312,47 @@ return 0
         except Exception:
             logger.exception("Redis chat generation lock release failed.")
 
+    # 自分が取得した Redis アクティブジョブロックのTTLを、所有トークンを確認しながら延長する。
+    # ターンが TTL（900秒既定）より長くかかっても、生存中のジョブのロックが失効して
+    # 別ワーカーが二重生成を始めないようにするための定期更新。
+    # Extend the TTL of the Redis active job lock this instance owns, verifying the owner
+    # token first. Called periodically so a turn that outlives the TTL (900s by default)
+    # never lets its lock expire out from under a still-running job, which would let another
+    # worker start a duplicate generation.
+    def refresh_active_job_lock(self, job_key: str, lock_token: str | None) -> bool:
+        if not lock_token:
+            return False
+
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return False
+
+        lua_script = """
+local key = KEYS[1]
+local token = ARGV[1]
+local ttl = ARGV[2]
+if redis.call('GET', key) == token then
+  return redis.call('EXPIRE', key, ttl)
+end
+return 0
+"""
+        # GET と EXPIRE を Lua で不可分に実行し、他プロセスが取り直したロックのTTLを
+        # 誤って延長しないようにする（release_active_job_lock と同じ考え方）。
+        # GET and EXPIRE run atomically in Lua so a lock re-acquired by another process is
+        # never extended by mistake, mirroring release_active_job_lock's own safeguard.
+        try:
+            renewed = redis_client.eval(
+                lua_script,
+                1,
+                self.active_lock_key(job_key),
+                lock_token,
+                self._active_job_lock_ttl_seconds,
+            )
+        except Exception:
+            logger.exception("Redis chat generation lock renewal failed.")
+            return False
+        return bool(renewed)
+
     # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
     # Check if a Redis active job lock exists for the specified job key
     def has_active_lock(self, job_key: str) -> bool:

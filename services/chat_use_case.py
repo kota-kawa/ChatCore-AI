@@ -32,7 +32,11 @@ from services.attached_files import (
 )
 from services.auth_limits import AuthLimitService
 from services.chat_async_bridge import _run_async_callback
-from services.chat_generation import ChatGenerationAlreadyRunningError, ChatGenerationService
+from services.chat_generation import (
+    ChatGenerationAlreadyRunningError,
+    ChatGenerationCapacityError,
+    ChatGenerationService,
+)
 from services.chat_message_normalization import mark_task_launch_input_for_llm
 from services.chat_post_dependencies import (
     ChatPostBackgroundDependencies,
@@ -108,6 +112,11 @@ __all__ = [
 # 生成中の重複リクエストを弾く際の文言
 # Message returned when a generation is already running for the room.
 _GENERATION_ALREADY_RUNNING_MESSAGE = "このチャットルームでは回答を生成中です。完了までお待ちください。"
+# 生成ジョブ専用プールが満杯で新規ジョブを受け付けられない際の文言
+# Message returned when the generation-only pool has no free slot for a new job.
+_GENERATION_CAPACITY_EXCEEDED_MESSAGE = (
+    "生成の同時実行数が上限に達しています。しばらく待ってから再試行してください。"
+)
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -884,6 +893,11 @@ class ChatPostUseCase:
             return deps.web.jsonify(
                 {"error": _GENERATION_ALREADY_RUNNING_MESSAGE},
                 status_code=409,
+            )
+        except ChatGenerationCapacityError:
+            return deps.web.jsonify(
+                {"error": _GENERATION_CAPACITY_EXCEEDED_MESSAGE},
+                status_code=503,
             )
 
         return deps.web.build_llm_stream_response(deps.web.iter_llm_stream_events(job))

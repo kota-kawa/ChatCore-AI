@@ -27,6 +27,7 @@ from services.background_executor import (  # noqa: E402
 )
 from services.cache import try_acquire_single_flight  # noqa: E402
 from services.chat_generation import ChatGenerationService  # noqa: E402
+from services.chat_generation_executor import shutdown_generation_executor  # noqa: E402
 from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.db import dispose_engine  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
@@ -215,6 +216,10 @@ async def lifespan(app_instance: FastAPI):
                 logger.exception("Periodic cleanup worker exited with an unexpected error.")
 
             shutdown_background_executor(
+                wait=shutdown_wait_safe,
+                cancel_futures=not shutdown_wait_safe,
+            )
+            shutdown_generation_executor(
                 wait=shutdown_wait_safe,
                 cancel_futures=not shutdown_wait_safe,
             )

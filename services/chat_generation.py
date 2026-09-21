@@ -30,7 +30,6 @@ from services.message_parts_display import (
     normalize_message_parts_for_display,
 )
 
-from .background_executor import submit_background_task
 from .chat_agent_budget import (
     AgentStepBudget,
 )
@@ -54,6 +53,14 @@ from .chat_generation_coordinator import (
     # blueprints が `services.chat_generation` から直接 import しているため再エクスポートする。
     # Re-exported because the blueprints import it straight from `services.chat_generation`.
     ChatGenerationStreamTimeoutError,  # noqa: F401
+)
+from .chat_generation_executor import (
+    # chat_use_case / chat_regeneration_pipeline が `services.chat_generation` から直接
+    # import しているため再エクスポートする。
+    # Re-exported because chat_use_case / chat_regeneration_pipeline import it straight
+    # from `services.chat_generation`.
+    ChatGenerationCapacityError,  # noqa: F401
+    submit_generation_task,
 )
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_generation_turn import ChatTurnRunState, ModelDecision
@@ -163,6 +170,11 @@ logger = logging.getLogger(__name__)
 
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
+# アクティブジョブロックのTTLをこの分数ごとに更新する。3分割にしておけば、更新が
+# 1回落ちても次の再試行がTTL切れ前に間に合う。
+# Renew the active-job lock at this fraction of its TTL. Splitting it into thirds gives a
+# missed renewal one more attempt before the TTL actually expires.
+ACTIVE_JOB_LOCK_RENEWAL_TTL_FRACTION = 3
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
 # 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
@@ -527,6 +539,8 @@ class ChatGenerationJob:
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
+        renew_active_job_lock: Callable[[], bool] | None = None,
+        renew_active_job_lock_interval_seconds: float = 0.0,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -583,6 +597,13 @@ class ChatGenerationJob:
         # Buffer the current model step until tool-call presence is known; use it as a partial
         # response only when the user cancels generation.
         self._pending_stream_chunks: list[str] = []
+        # `_chunks` / `_pending_stream_chunks` の読み書きを、生成スレッドと停止経路
+        # （リクエストスレッドの cancel()）の間で排他制御する。cancel() が内側で
+        # `_take_pending_answer_text()` を呼ぶため再入可能な RLock にしている。
+        # Guards reads/writes of `_chunks` / `_pending_stream_chunks` between the generation
+        # thread and the stop path (cancel() on the request thread). An RLock is used because
+        # cancel() calls `_take_pending_answer_text()` while already holding it.
+        self._chunks_lock = threading.RLock()
         # 調査の締めステップなど、ユーザー向け本文にならない一時バッファであることの印。
         # Marks a pending buffer that is internal-only and must never be saved as the answer.
         self._pending_stream_is_internal = False
@@ -598,6 +619,16 @@ class ChatGenerationJob:
         self._selected_web_search_images: list[dict[str, str]] = []
         self._finalize_lock = threading.Lock()
         self._response_persisted = False
+        # アクティブジョブロックのTTLを定期更新するための設定とスレッド。
+        # トークンが無い（Redis未使用）場合は更新スレッドを起動しない。
+        # Settings and thread for periodically renewing the active-job lock's TTL.
+        # No renewal thread starts when there is no token (Redis unused).
+        self._renew_active_job_lock = renew_active_job_lock
+        self._renew_active_job_lock_interval_seconds = max(
+            float(renew_active_job_lock_interval_seconds), 0.0
+        )
+        self._lock_renewal_thread: threading.Thread | None = None
+        self._lock_renewal_stop_event = threading.Event()
         # 1ターン分の生成テレメトリ。長いステップのターンで「短い（不足生成）」と
         # 「切れた（打ち切り）」を運用ログから切り分けるために集計する。
         # Per-turn telemetry so operations can separate under-generation from truncation on
@@ -662,7 +693,48 @@ class ChatGenerationJob:
     def start(self) -> None:
         if self._future is not None:
             return
-        self._future = submit_background_task(self._run)
+        # 生成ジョブ専用プールへ投入する。空き枠が無ければ ChatGenerationCapacityError が
+        # 送出され、呼び出し元（start_generation_job）がそのまま呼び出し元へ伝える。
+        # Submit to the generation-only pool; a full pool raises ChatGenerationCapacityError,
+        # which start_generation_job simply lets propagate to its caller.
+        self._future = submit_generation_task(self._run)
+        if self._renew_active_job_lock is not None and self._renew_active_job_lock_interval_seconds > 0:
+            thread = threading.Thread(
+                target=self._run_lock_renewal_loop,
+                name="chat-generation-lock-renewal",
+                daemon=True,
+            )
+            self._lock_renewal_thread = thread
+            thread.start()
+
+    # アクティブジョブロックのTTLを、所有トークンを確認しながら定期更新するループ。
+    # ジョブが完了したら（`_mark_done` が停止イベントを立てて）即座に抜ける。
+    # Loop that periodically renews the active-job lock's TTL while checking the owner
+    # token. It exits as soon as the job finishes (`_mark_done` sets the stop event).
+    def _run_lock_renewal_loop(self) -> None:
+        renew = self._renew_active_job_lock
+        if renew is None:
+            return
+        interval = self._renew_active_job_lock_interval_seconds
+        while not self._lock_renewal_stop_event.wait(timeout=interval):
+            if self.is_done:
+                return
+            try:
+                renewed = renew()
+            except Exception:
+                logger.exception("Failed to renew the active chat generation job lock.")
+                continue
+            if not renewed:
+                # 他ワーカーがロックを奪った、またはRedis障害で確認できなかった場合。
+                # ここでジョブを止めることはしない（フェイルクローズは新規開始側の
+                # try_acquire_active_job_lock が担う）が、運用ログには残す。
+                # Another worker took the lock, or a Redis outage made this unverifiable.
+                # This does not stop the job here (fail-closed admission is enforced by
+                # try_acquire_active_job_lock on new starts); just record it for operators.
+                logger.warning(
+                    "Could not renew the active chat generation job lock; "
+                    "it may have expired or been taken over by another worker."
+                )
 
     # ジョブの実行をキャンセルし、生成途中のテキストを保存して abortedイベントを発行する
     # Cancel the job, persist any partial text, and publish an aborted event
@@ -675,11 +747,21 @@ class ChatGenerationJob:
             return
         self._cancelled = True
 
-        pending_text = self._take_pending_answer_text()
+        # 取り出し・追記・読み取りをひとつの排他区間にまとめる。生成スレッド側の
+        # `_publish_completed_answer_step` も同じロックの下で `_cancelled` を見てから
+        # 追記するため、ここで確定した partial_text と生成スレッドの通常経路の保存が
+        # 二重に本文を積むことはない。
+        # Take, append and read as one critical section. The generation thread's own
+        # `_publish_completed_answer_step` checks `_cancelled` under the same lock before
+        # appending, so the partial_text finalized here and the generation thread's normal
+        # save path can never both commit the same text.
+        with self._chunks_lock:
+            pending_text = self._take_pending_answer_text()
+            if pending_text:
+                self._chunks.append(pending_text)
+            partial_text = "".join(self._chunks)
         if pending_text:
-            self._chunks.append(pending_text)
             self._publish("chunk", {"text": pending_text})
-        partial_text = "".join(self._chunks)
         if not partial_text.strip():
             # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
             # No body yet: skip persisting an empty reply and only signal the abort.
@@ -724,29 +806,34 @@ class ChatGenerationJob:
     # while holding text the model wrote but the turn never published, so how it is taken —
     # stripping internal notes, splicing a rewrite, removing boundary overlap — lives here.
     def _take_pending_answer_text(self) -> str:
-        if not self._pending_stream_chunks or self._pending_stream_is_internal:
-            return ""
-        # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
-        # An end during a research step must not leave internal notes in the saved body.
-        pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
-        existing_text = "".join(self._chunks)
-        # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
-        # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
-        # Use the existing tail as an anchor even if cancellation races the rewrite-mode
-        # flag. The same splice handles normal boundary overlap; the window covers short text.
-        should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
-            existing_text,
-            pending_text,
-        )
-        if should_splice:
-            spliced_pending = splice_restarted_answer(existing_text, pending_text)
-            # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
-            # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
-            pending_text = spliced_pending if spliced_pending is not None else ""
-        else:
-            pending_text = strip_continuation_overlap(existing_text, pending_text)
-        self._pending_stream_chunks = []
-        self._pending_stream_is_rewrite = False
+        # `_chunks_lock` は再入可能。cancel() が既に保持したまま呼んでも、生成スレッドから
+        # 単独で呼んでも安全にする。
+        # `_chunks_lock` is reentrant so this is safe whether cancel() already holds it or
+        # the generation thread calls this on its own.
+        with self._chunks_lock:
+            if not self._pending_stream_chunks or self._pending_stream_is_internal:
+                return ""
+            # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
+            # An end during a research step must not leave internal notes in the saved body.
+            pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
+            existing_text = "".join(self._chunks)
+            # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
+            # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
+            # Use the existing tail as an anchor even if cancellation races the rewrite-mode
+            # flag. The same splice handles normal boundary overlap; the window covers short text.
+            should_splice = self._pending_stream_is_rewrite or looks_like_restarted_answer(
+                existing_text,
+                pending_text,
+            )
+            if should_splice:
+                spliced_pending = splice_restarted_answer(existing_text, pending_text)
+                # 書き直しを接合できない場合は本文を丸ごと捨て、二重化を優先して防ぐ。
+                # If a rewrite cannot be spliced, drop it rather than duplicating the answer.
+                pending_text = spliced_pending if spliced_pending is not None else ""
+            else:
+                pending_text = strip_continuation_overlap(existing_text, pending_text)
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
         return pending_text
 
     # 自プロセス・他プロセスのいずれかから停止が要求されたかを判定する
@@ -876,6 +963,10 @@ class ChatGenerationJob:
             return None
         self.is_done = True
         self.finished_at = time.monotonic()
+        # ロック更新スレッドが最大 interval 秒も無駄に生き残らないよう、完了と同時に起こす。
+        # Wake the lock-renewal thread immediately instead of letting it linger up to
+        # one interval after completion.
+        self._lock_renewal_stop_event.set()
         if self._on_finished_called or self._on_finished is None:
             return None
         self._on_finished_called = True
@@ -978,7 +1069,8 @@ class ChatGenerationJob:
                     emitted = True
                     if discard_partial_on_retry:
                         attempt_chunks.append(chunk)
-                        self._pending_stream_chunks[:] = attempt_chunks
+                        with self._chunks_lock:
+                            self._pending_stream_chunks[:] = attempt_chunks
                     else:
                         yield chunk
             except LlmOutputLimitError as exc:
@@ -1000,7 +1092,8 @@ class ChatGenerationJob:
                 self._last_stream_output_limited = True
                 if discard_partial_on_retry:
                     buffered = list(attempt_chunks)
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                     yield from buffered
                 return
             except LlmToolSchemaError as exc:
@@ -1026,7 +1119,8 @@ class ChatGenerationJob:
                 self._telemetry.tool_schema_recoveries += 1
                 current_tools = None
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                 continue
             except LlmRetryableProviderError as exc:
                 # レート制限もここで再試行する。1ターンに複数回のモデル判断を回す以上、
@@ -1043,7 +1137,8 @@ class ChatGenerationJob:
                 ):
                     raise
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                 delay = _llm_stream_retry_delay(exc, attempt)
                 attempt += 1
                 logger.warning(
@@ -1059,7 +1154,8 @@ class ChatGenerationJob:
                     raise
             else:
                 if discard_partial_on_retry:
-                    self._pending_stream_chunks.clear()
+                    with self._chunks_lock:
+                        self._pending_stream_chunks.clear()
                     yield from attempt_chunks
                 return
 
@@ -1498,7 +1594,17 @@ class ChatGenerationJob:
                 if trace_block:
                     chunk = f"{trace_block}\n\n{chunk}"
 
-            chunks.append(chunk)
+            with self._chunks_lock:
+                # cancel() が既にこのステップの本文を部分回答として保存済みなら、
+                # 同じ本文をここでも積むと保存内容が二重化する。ロックの下で
+                # `_cancelled` を確認し、cancel() の salvage と排他にすることで防ぐ。
+                # If cancel() has already persisted this step's text as the partial
+                # answer, appending it here too would duplicate the saved body. Checking
+                # `_cancelled` under the same lock makes this mutually exclusive with
+                # cancel()'s own salvage.
+                if self._cancelled:
+                    return
+                chunks.append(chunk)
             streaming_evidence = combine_web_search_results(
                 [*state.web_search_results, *self._prior_web_search_results]
             )
@@ -1563,13 +1669,15 @@ class ChatGenerationJob:
     # Hand the continuation pass's undelivered buffer to the job so a stop or a
     # disconnect still routes it through the persistence path.
     def _adopt_continuation_buffer(self, buffer: list[str]) -> None:
-        self._pending_stream_chunks = buffer
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = buffer
+            self._pending_stream_is_rewrite = False
 
     # 継続パスが全文の書き直しへ切り替わったことを停止経路へ伝える。
     # Tell the cancellation path when a continuation has switched to a full rewrite.
     def _set_continuation_buffer_mode(self, is_rewrite: bool) -> None:
-        self._pending_stream_is_rewrite = is_rewrite
+        with self._chunks_lock:
+            self._pending_stream_is_rewrite = is_rewrite
 
     # 出力上限で切れた回答の続きだけを取り直すフェーズ。
     # The phase that fetches only the remainder of an answer cut off at the output cap.
@@ -1616,8 +1724,9 @@ class ChatGenerationJob:
             # バッファや書き直しモードを誤って拾わないようにする。
             # Clear shared state on every exit so later persistence cannot adopt a stale
             # continuation buffer or rewrite mode.
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
         trailing = state.continuation_state_filter.flush()
         if trailing:
             self._publish_completed_answer_step(state, [trailing])
@@ -1837,8 +1946,9 @@ class ChatGenerationJob:
                     exc_info=exc,
                     extra=telemetry.as_log_extra(),
                 )
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
+                with self._chunks_lock:
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                 state.suppress_next_generation_started = True
                 continue
             if decision.outcome == "stopped":
@@ -1856,8 +1966,9 @@ class ChatGenerationJob:
                     continue
                 return False
 
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             telemetry.research_phase_used = True
             self._dispatch_tool_calls(state, decision.tool_calls, llm_step)
 
@@ -1873,8 +1984,9 @@ class ChatGenerationJob:
     ) -> ModelDecision:
         tool_calls_buffer: list[dict[str, Any]] = []
         step_chunks: list[str] = []
-        self._pending_stream_chunks = step_chunks
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = step_chunks
+            self._pending_stream_is_rewrite = False
         try:
             for chunk in self._iter_llm_stream_with_retry(
                 turn_messages,
@@ -1891,7 +2003,12 @@ class ChatGenerationJob:
                 if parsed_tool_calls is not None:
                     tool_calls_buffer.extend(parsed_tool_calls)
                 else:
-                    step_chunks.append(chunk)
+                    # `step_chunks` は `self._pending_stream_chunks` と同一オブジェクト
+                    # （直前で代入済み）。cancel() 側の読み取りと同じロックで追記する。
+                    # `step_chunks` is the very same object as `self._pending_stream_chunks`
+                    # (assigned above); append it under the same lock cancel() reads with.
+                    with self._chunks_lock:
+                        step_chunks.append(chunk)
         except LlmInputLimitError:
             # 同じ要求を送り直しても同じ拒否になる。生のツール結果を捨て、
             # TurnState と直前の会話を残して同じ判断を1度だけやり直す。
@@ -1902,8 +2019,9 @@ class ChatGenerationJob:
             state.minimal_context_required = True
             state.telemetry.input_limit_recoveries += 1
             state.telemetry.context_recovery_count += 1
-            self._pending_stream_chunks = []
-            self._pending_stream_is_rewrite = False
+            with self._chunks_lock:
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
             state.suppress_next_generation_started = True
             return ModelDecision(outcome="replay")
         except LlmToolSchemaError:
@@ -1920,8 +2038,9 @@ class ChatGenerationJob:
             ):
                 state.tool_schema_recovery_attempted = True
                 state.telemetry.tool_schema_recoveries += 1
-                self._pending_stream_chunks = []
-                self._pending_stream_is_rewrite = False
+                with self._chunks_lock:
+                    self._pending_stream_chunks = []
+                    self._pending_stream_is_rewrite = False
                 state.suppress_next_generation_started = True
                 return ModelDecision(outcome="replay")
             raise
@@ -1947,8 +2066,9 @@ class ChatGenerationJob:
     ) -> bool:
         telemetry = state.telemetry
         output_limited = self._last_stream_output_limited
-        self._pending_stream_chunks = []
-        self._pending_stream_is_rewrite = False
+        with self._chunks_lock:
+            self._pending_stream_chunks = []
+            self._pending_stream_is_rewrite = False
         # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
         # Keep the model's own boundaries and drop only the internal envelope.
         visible_chunks = strip_turn_state_update_chunks(step_chunks)
@@ -3114,6 +3234,14 @@ class ChatGenerationService:
     ) -> None:
         self._job_retention_seconds = job_retention_seconds
         self._active_job_lock_ttl_seconds = max(active_job_lock_ttl_seconds, 1)
+        # ジョブが生きている限りTTLを更新し続けるので、TTL自体はターンの壁時計上限では
+        # なく「応答不能になったワーカーの掃除まで待つ時間」として機能する。
+        # As long as the job is alive its TTL keeps getting renewed, so the TTL itself is not
+        # a wall-clock cap on the turn; it only bounds how long a dead worker's lock lingers.
+        self._active_job_lock_renew_interval_seconds = max(
+            self._active_job_lock_ttl_seconds / ACTIVE_JOB_LOCK_RENEWAL_TTL_FRACTION,
+            1.0,
+        )
         self._distributed_stream_idle_timeout_seconds = max(
             float(distributed_stream_idle_timeout_seconds),
             0.0,
@@ -3158,6 +3286,11 @@ class ChatGenerationService:
     # Release the Redis active job lock that was acquired by this instance
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
         self._coordinator.release_active_job_lock(job_key, lock_token)
+
+    # 自分が取得した Redis アクティブジョブロックのTTLを、所有トークンを確認しながら延長する
+    # Extend the TTL of the Redis active job lock this instance owns, verifying the owner token
+    def _refresh_active_job_lock(self, job_key: str, lock_token: str | None) -> bool:
+        return self._coordinator.refresh_active_job_lock(job_key, lock_token)
 
     # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
     # Check if a Redis active job lock exists for the specified job key
@@ -3380,6 +3513,12 @@ class ChatGenerationService:
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,
+                renew_active_job_lock=(
+                    (lambda: self._refresh_active_job_lock(job_key, lock_token))
+                    if lock_token is not None
+                    else None
+                ),
+                renew_active_job_lock_interval_seconds=self._active_job_lock_renew_interval_seconds,
             )
             self._jobs[job_key] = job
 
