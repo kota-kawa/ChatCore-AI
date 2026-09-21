@@ -161,6 +161,7 @@ export const jaMessages = {
   "chat.generatedUiUnavailable": "生成UIを表示できませんでした。",
   "chat.generatedUiUnavailableHint": "モデルの出力が不完全だったため、本文のみを表示しています。",
   "chat.generatedUiBlank": "生成UIは読み込めましたが、表示できる内容がありませんでした。",
+  "chat.generatedUiNavigationBlocked": "生成UIが別のページへ移動しようとしたため、安全のため表示を停止しました。",
   "chat.attachmentUnavailable": "チャットの準備中はファイルを添付できません。",
   "chat.deleteTaskConfirm": "このタスクを削除してもよろしいですか？",
   "chat.titleRequired": "タイトルを入力してください。",

