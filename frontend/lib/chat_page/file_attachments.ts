@@ -2,6 +2,15 @@ import type { AttachedFile } from "./types";
 
 export const MAX_ATTACHED_FILES = 5;
 export const MAX_ATTACHMENT_FILE_SIZE_BYTES = 1_048_576;
+// バックエンドの上限に合わせる（services/attached_files.py の
+// MAX_ATTACHED_FILE_CONTENT_LENGTH / MAX_ATTACHED_FILE_NAME 相当）。ここで弾かないと
+// /api/chat が ValidationError になり、無関係なエラー文言だけが表示されて送信できない。
+// Mirrors the backend limits (MAX_ATTACHED_FILE_CONTENT_LENGTH in
+// services/attached_files.py and the name length in services/request_models.py).
+// Without this check /api/chat fails validation and the user only sees an
+// unrelated 400 message.
+export const MAX_ATTACHMENT_TEXT_LENGTH = 100_000;
+export const MAX_ATTACHMENT_NAME_LENGTH = 256;
 
 export const CHAT_ATTACHMENT_ACCEPT = [
   ".txt",
@@ -156,6 +165,11 @@ export async function readSelectedChatAttachments(
       continue;
     }
 
+    if (file.name.length > MAX_ATTACHMENT_NAME_LENGTH) {
+      notifyError(`「${file.name}」はファイル名が${MAX_ATTACHMENT_NAME_LENGTH}文字を超えるため添付できません。`);
+      continue;
+    }
+
     if (!isSupportedChatAttachment(file)) {
       notifyError(`「${file.name}」はサポートされていないファイル形式です。`);
       continue;
@@ -163,6 +177,14 @@ export async function readSelectedChatAttachments(
 
     try {
       const attachment = await readChatAttachmentFile(file);
+      // 1MB 以内でもテキストの文字数はサーバーの上限を超えうる（UTF-8 の1バイト文字が
+      // 並ぶログなど）。ここで弾かないと送信時に無関係なエラーになる。
+      // A file under 1MB can still exceed the server's character limit (e.g. a log
+      // of single-byte characters). Rejecting it here avoids an unrelated error.
+      if (typeof attachment.content === "string" && attachment.content.length > MAX_ATTACHMENT_TEXT_LENGTH) {
+        notifyError(`「${file.name}」は本文が10万文字を超えるため添付できません。`);
+        continue;
+      }
       selected.push(attachment);
       names.add(file.name);
     } catch {
