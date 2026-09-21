@@ -1055,6 +1055,20 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-item__excerpt p { margin: 0 0 0.5rem; }
 :where(body.memo-page, .memo-page-shell) .memo-item__excerpt p:last-child { margin-bottom: 0; }
 
+/* 一覧カードの抜粋も同じ Markdown を描く。ブラウザ既定の h1（2em）は 0.9rem の抜粋の中で
+   浮き上がるので、見出しは本文とほぼ同じ大きさの太字にとどめる（詳細のプレビューと同じ考え方）。
+   Card excerpts render the same Markdown. A browser-default h1 (2em) towers over the 0.9rem
+   excerpt, so headings stay bold at roughly body size, mirroring the detail preview. */
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.5em 0 0.2em;
+  font-weight: 700;
+  line-height: 1.4;
+}
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt h1 { font-size: 1.1em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt h2 { font-size: 1.05em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt :is(h3, h4, h5, h6) { font-size: 1em; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt > :first-child { margin-top: 0; }
+
 :where(body.memo-page, .memo-page-shell) .memo-item__footer {
   display: flex;
   align-items: center;
@@ -1618,6 +1632,10 @@ html[data-cc-auth="in"] .memo-guest-intro {
   overflow: auto;
 }
 
+/* 行間は編集面の textarea（.memo-modal__edit-textarea）と同じ値にそろえる。プレビューと編集を
+   行き来したとき、見出しの無い普通のメモで行位置が一切動かないようにするため。
+   The line-height matches the editor textarea (.memo-modal__edit-textarea) so that switching
+   between preview and edit never shifts the lines of a plain memo. */
 :where(body.memo-page, .memo-page-shell) .memo-preview-content {
   font-size: 1rem;
   line-height: 1.68;
@@ -1625,6 +1643,23 @@ html[data-cc-auth="in"] .memo-guest-intro {
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-preview-content > * { margin: 0.55rem 0; }
+:where(body.memo-page, .memo-page-shell) .memo-preview-content > :first-child { margin-top: 0; }
+:where(body.memo-page, .memo-page-shell) .memo-preview-content > :last-child { margin-bottom: 0; }
+
+/* Markdown の見出しはブラウザ既定（h1 = 2em）のままだと、1rem 一色の編集面から切り替えた瞬間に
+   本文の一部が倍のサイズへ跳ねる。メモは文書ではなくノートなので、階層は本文より一段〜二段だけ
+   大きい控えめなスケールにとどめ、余白も本文の段落に近づける。
+   Left at browser defaults (h1 = 2em), Markdown headings make part of the body double in size the
+   moment the 1rem editor switches to the preview. A memo is a note, not a document, so headings
+   stay one or two steps above the body and keep paragraph-like spacing. */
+:where(body.memo-page, .memo-page-shell) .memo-preview-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.7rem 0 0.3rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+:where(body.memo-page, .memo-page-shell) .memo-preview-content h1 { font-size: 1.25rem; }
+:where(body.memo-page, .memo-page-shell) .memo-preview-content h2 { font-size: 1.125rem; }
+:where(body.memo-page, .memo-page-shell) .memo-preview-content :is(h3, h4, h5, h6) { font-size: 1rem; }
 :where(body.memo-page, .memo-page-shell) .memo-preview-content p { margin: 0.42rem 0; }
 :where(body.memo-page, .memo-page-shell) .memo-preview-content ul,
 :where(body.memo-page, .memo-page-shell) .memo-preview-content ol { margin: 0.4rem 0 0.4rem 1rem; padding-left: 0.8rem; }
@@ -5074,7 +5109,9 @@ body.memo-page {
   color: var(--modal-text);
   font: inherit;
   font-size: 1rem;
-  line-height: 1.75;
+  /* .memo-preview-content と同じ値。memo_preview_typography.test.ts が一致を検証する
+     Same value as .memo-preview-content; memo_preview_typography.test.ts asserts they match */
+  line-height: 1.68;
   resize: none;
 }
 
