@@ -70,6 +70,13 @@ export function MemoDetailModal() {
     if (shouldEdit) beginEditing("body");
   }, [beginEditing]);
 
+  // タイトルもドラッグ選択（コピー）の直後は編集に入らない
+  // The title too stays put right after a drag selection (copying)
+  const handleTitleClick = useCallback((event: React.MouseEvent<HTMLHeadingElement>) => {
+    if (event.defaultPrevented || !isSelectionCollapsed()) return;
+    beginEditing("title");
+  }, [beginEditing]);
+
   const handlePreviewKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
     event.preventDefault();
@@ -135,7 +142,7 @@ export function MemoDetailModal() {
               <h2
                 className="cc-modal__title memo-modal__title memo-modal__title--editable"
                 aria-hidden="true"
-                onClick={() => beginEditing("title")}
+                onClick={handleTitleClick}
                 title={t("memo.clickToEdit")}
               >
                 {displayTitle}
@@ -261,6 +268,8 @@ export function MemoDetailModal() {
                 {detailPreviewMode ? (
                   <>
                     <span id="memo-detail-edit-hint" className="memo-modal__edit-hint">{t("memo.clickToEdit")}</span>
+                    {/* tabIndex=0 は Enter で編集に入るための停止点。本文内のリンク等とは別の停止点になる
+                        tabIndex=0 is the stop that lets Enter start editing; links inside the body remain their own stops */}
                     <div
                       className="memo-modal__preview-pane memo-modal__preview-pane--editable"
                       role="tabpanel"
