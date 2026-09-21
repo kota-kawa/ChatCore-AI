@@ -77,7 +77,9 @@ docker-compose up --build
 
 - Frontend: `http://localhost:3000`
 - API: `http://localhost:5004`
-- When running behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy IPs/CIDRs that may supply `X-Forwarded-For`.
+- When running behind a reverse proxy, make it overwrite `X-Forwarded-For` with the connecting address instead of
+  appending to the client-supplied value, set `FORWARDED_ALLOW_IPS` to the peers uvicorn may trust for that header,
+  and set `TRUSTED_PROXY_IPS` to the proxy IPs/CIDRs that may supply `X-Forwarded-For` / `X-Real-IP`.
 
 ## Database Migrations (Alembic)
 Schema management is unified on Alembic. In development (`FASTAPI_ENV=development`), the app entrypoint waits for PostgreSQL and runs `alembic upgrade head` before starting the API. Production Blue/Green deployment runs migrations explicitly before starting the target color; production app containers skip automatic startup migrations. No separate `init.sql` bootstrap is required or used.
@@ -267,7 +269,9 @@ docker-compose up --build
 
 - フロントエンド: `http://localhost:3000`
 - API: `http://localhost:5004`
-- リバースプロキシ配下で動かす場合は、`X-Forwarded-For` を渡せるプロキシの IP/CIDR を `TRUSTED_PROXY_IPS` に設定してください。
+- リバースプロキシ配下で動かす場合は、`X-Forwarded-For` をクライアント送信値へ追記せず接続元アドレスで上書きするように設定し、
+  uvicorn が同ヘッダーを信頼する接続元を `FORWARDED_ALLOW_IPS` に、`X-Forwarded-For` / `X-Real-IP` を渡せるプロキシの IP/CIDR を
+  `TRUSTED_PROXY_IPS` に設定してください。
 
 ## データベースマイグレーション（Alembic）
 スキーマ管理は Alembic に統一しています。開発環境（`FASTAPI_ENV=development`）では、コンテナのエントリーポイントが PostgreSQL の起動を待ってから `alembic upgrade head` を実行し、APIを起動します。本番のBlue/Greenデプロイでは、対象色の起動前にデプロイスクリプトがmigrationを明示的に実行し、本番コンテナ起動時の自動migrationはスキップします。`init.sql` のような別系統の初期化スクリプトは使いません。
