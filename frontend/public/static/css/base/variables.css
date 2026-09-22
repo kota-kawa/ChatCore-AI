@@ -143,6 +143,14 @@
   --sai-left: env(safe-area-inset-left, 0px);
   --sai-right: env(safe-area-inset-right, 0px);
 
+  --shared-prompt-accent: #185abc;
+  --shared-prompt-action: #1a73e8;
+  --shared-prompt-action-hover: #185abc;
+
+  --shared-memo-accent: #b45309;
+  --shared-memo-accent-strong: #8f5a17;
+  --shared-memo-action: #d97706;
+
   --ps-primary-color: var(--primary-color);
   --ps-accent-color: #11998e;
   --ps-text-color: #333;
@@ -247,6 +255,10 @@
   --chat-border-soft: rgba(25, 195, 125, 0.3);
   --chat-shadow-strong: 0 24px 60px rgba(2, 6, 23, 0.45);
   --chat-shadow-soft: 0 12px 24px rgba(2, 6, 23, 0.38);
+  --shared-prompt-accent: #8ab4f8;
+  --shared-prompt-action: #2563eb;
+  --shared-prompt-action-hover: #1d4ed8;
+
   --ps-text-color: #e5e7eb;
   --ps-light-bg: #0b1220;
   --ps-background-color: var(--ps-light-bg);

@@ -129,9 +129,9 @@ test("shared prompt page renders labels in the requested locale during SSR", () 
   const englishHtml = renderWithLocale("en");
   const japaneseHtml = renderWithLocale("ja");
 
-  assert.match(englishHtml, /shared-prompt-pill">Format: Prompt</);
+  assert.match(englishHtml, /shared-prompt-format">Format: Prompt</);
   assert.doesNotMatch(englishHtml, /プロンプト/);
-  assert.match(japaneseHtml, /shared-prompt-pill">フォーマット: プロンプト</);
+  assert.match(japaneseHtml, /shared-prompt-format">フォーマット: プロンプト</);
 });
 
 // ページのh1はプロンプト名、h2はセクション見出しなので、本文Markdown由来の見出しは
