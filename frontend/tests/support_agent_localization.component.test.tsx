@@ -35,6 +35,25 @@ describe("support agent localization", () => {
     ));
   });
 
+  it("starts an overflowing welcome screen at the top and resets there after clearing", async () => {
+    const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+    try {
+      const user = userEvent.setup();
+      const { container } = renderSupportAgent("en");
+      const messages = container.querySelector<HTMLDivElement>(".mini-chat-messages")!;
+      expect(messages.scrollTop).toBe(0);
+
+      await user.click(screen.getByRole("button", { name: "What can this service do?" }));
+      await screen.findByText("Concise answer");
+      expect(messages.scrollTop).toBe(900);
+
+      await user.click(screen.getByRole("button", { name: "Clear conversation" }));
+      await screen.findByText("Chaco");
+      expect(messages.scrollTop).toBe(0);
+    } finally {
+      height.mockRestore();
+    }
+  });
   it("shows its placeholder copy and quick prompts in English", () => {
     const { container } = renderSupportAgent("en");
 

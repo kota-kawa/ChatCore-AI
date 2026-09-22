@@ -5346,6 +5346,7 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-placeholder {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -5358,6 +5359,7 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-robot-icon {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 78px;
@@ -6807,6 +6809,16 @@ body.memo-page {
 }
 
 @media (max-width: 640px) {
+  .memo-modal .memo-modal__header {
+    padding-right: 1rem;
+  }
+
+  .memo-modal .memo-modal__heading {
+    flex-basis: 100%;
+    box-sizing: border-box;
+    padding-right: 3rem;
+  }
+
   .memo-modal .memo-modal__header > .cc-modal__close {
     top: 0.85rem;
     right: 1rem;
