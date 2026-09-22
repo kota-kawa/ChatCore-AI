@@ -8,6 +8,7 @@ import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
+import { captureMemoEditPosition } from "../../lib/memo/detail_edit_position";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
@@ -67,15 +68,21 @@ export function MemoDetailModal() {
       defaultPrevented: event.defaultPrevented,
       selectionCollapsed: isSelectionCollapsed(),
     });
-    if (shouldEdit) beginEditing("body");
-  }, [beginEditing]);
+    if (shouldEdit) {
+      beginEditing("body", captureMemoEditPosition(
+        event.currentTarget, detailEditAiResponse, event.clientX, event.clientY,
+      ));
+    }
+  }, [beginEditing, detailEditAiResponse]);
 
   // タイトルもドラッグ選択（コピー）の直後は編集に入らない
   // The title too stays put right after a drag selection (copying)
   const handleTitleClick = useCallback((event: React.MouseEvent<HTMLHeadingElement>) => {
     if (event.defaultPrevented || !isSelectionCollapsed()) return;
-    beginEditing("title");
-  }, [beginEditing]);
+    beginEditing("title", captureMemoEditPosition(
+      event.currentTarget, detailEditTitle, event.clientX, event.clientY, false,
+    ));
+  }, [beginEditing, detailEditTitle]);
 
   const handlePreviewKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.target !== event.currentTarget) return;

@@ -43,16 +43,21 @@ function previewPane() {
 }
 
 describe("MemoDetailModal click-to-edit", () => {
-  it("switches to the editor on a preview click and puts the caret at the end", () => {
+  it("switches to the editor at the clicked character", () => {
     render(<DetailHarness />);
     expect(screen.queryByRole("textbox", { name: "内容" })).toBeNull();
 
-    fireEvent.click(previewPane());
+    const text = document.createTreeWalker(previewPane(), NodeFilter.SHOW_TEXT).nextNode()!;
+    const hitTest = vi.fn(() => ({ offsetNode: text, offset: 3 }));
+    Object.defineProperty(document, "caretPositionFromPoint", { configurable: true, value: hitTest });
+    fireEvent.click(previewPane(), { clientX: 120, clientY: 80 });
+    delete (document as unknown as { caretPositionFromPoint?: unknown }).caretPositionFromPoint;
+    expect(hitTest).toHaveBeenCalledWith(120, 80);
 
     const textarea = screen.getByRole("textbox", { name: "内容" }) as HTMLTextAreaElement;
     expect(document.activeElement).toBe(textarea);
-    expect(textarea.selectionStart).toBe(BODY.length);
-    expect(textarea.selectionEnd).toBe(BODY.length);
+    expect(textarea.selectionStart).toBe(3);
+    expect(textarea.selectionEnd).toBe(3);
   });
 
   it("enters the editor with Enter while the preview pane is focused", () => {
@@ -62,7 +67,9 @@ describe("MemoDetailModal click-to-edit", () => {
 
     fireEvent.keyDown(pane, { key: "Enter" });
 
-    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "内容" }));
+    const textarea = screen.getByRole("textbox", { name: "内容" }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(textarea);
+    expect(textarea.selectionStart).toBe(BODY.length);
   });
 
   it("leaves links inside the preview alone", () => {
@@ -97,10 +104,16 @@ describe("MemoDetailModal click-to-edit", () => {
   it("opens the title input when the title is clicked", () => {
     render(<DetailHarness />);
 
-    fireEvent.click(screen.getByText("買い物", { selector: "h2" }));
+    const title = screen.getByText("買い物", { selector: "h2" });
+    const range = document.createRange();
+    range.setStart(title.firstChild!, 1);
+    range.collapse(true);
+    Object.defineProperty(document, "caretRangeFromPoint", { configurable: true, value: () => range });
+    fireEvent.click(title, { clientX: 40, clientY: 40 });
+    delete (document as unknown as { caretRangeFromPoint?: unknown }).caretRangeFromPoint;
 
     const input = screen.getByRole("textbox", { name: "タイトル" }) as HTMLInputElement;
     expect(document.activeElement).toBe(input);
-    expect(input.selectionStart).toBe(TITLE.length);
+    expect(input.selectionStart).toBe(1);
   });
 });
