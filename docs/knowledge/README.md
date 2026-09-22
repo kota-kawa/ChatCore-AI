@@ -9,6 +9,7 @@
 - 見た目や操作に影響するフロントエンド変更を PR 前に実描画で確認する手順は `frontend_visual_verification.md` を参照します。
 - DB・Redis・SSE の切り分けやテストの考え方は `debugging.md` を参照します。
 - API 契約の生成、DB migration、同期漏れの確認は `contracts-and-migrations.md` を参照します。
+- git worktree を分けた後の運用手順（共有資源、node_modules、依存のある作業の順序）は `parallel_work.md` を参照します。
 - 特定サブシステムの設計は `../architecture/`、重要な判断理由は `../decisions/` を参照します。
 - システムデザイン面接向けの説明・見積もり・発展案の練習メモは [`system_design_interview_notes.md`](system_design_interview_notes.md) を参照します。実装契約ではないため、実装判断の根拠には使いません。
 
