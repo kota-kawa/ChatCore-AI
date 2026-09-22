@@ -10,6 +10,10 @@ const memoCss = readFileSync(
   new URL("../public/memo/static/css/memo_form.css", import.meta.url),
   "utf8",
 );
+const globalCss = readFileSync(
+  new URL("../public/static/css/base/global.css", import.meta.url),
+  "utf8",
+);
 
 test("the memo detail modal omits the date and keeps the content switcher in the header", () => {
   assert.doesNotMatch(memoDetailModal, /formatDateTime|memo-modal__date/);
@@ -101,4 +105,53 @@ test("the memo agent panel styles every MiniChat option it turns on", () => {
   const noticeRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-context-notice\\s*\\{([\\s\\S]*?)\\}`));
   assert.ok(noticeRule, "the context notice must be styled");
   assert.match(noticeRule[1], /background:\s*var\(--modal-surface-muted\)/);
+});
+
+// メモ本文は overflow: hidden で、スクロールするのは内側のプレビュー面 / textarea。
+// 本文側に右パディングやガターが残るとバーがパネル端から浮き、本文自身がスクロールする
+// 他のモーダル（.cc-modal__body）と見た目がずれる。
+// The memo body is overflow: hidden and the inner preview pane / textarea scrolls. Right
+// padding or a reserved gutter on the body pushes the bar away from the panel edge that every
+// other modal (.cc-modal__body, which scrolls itself) puts it on.
+test("the memo detail scrollbar sits on the panel edge like every other modal", () => {
+  const gutterRule = globalCss.match(/:where\(([^)]*)\)\s*\{\s*scrollbar-gutter:\s*stable;\s*\}/);
+  assert.ok(gutterRule, "base/global.css must keep its shared scrollbar-gutter list");
+  assert.doesNotMatch(
+    gutterRule[1],
+    /\.memo-modal__body/,
+    "the memo body never scrolls, so a stable gutter there only reserves a strip no bar fills",
+  );
+
+  const singlePanePadding = memoCss.match(
+    /\.memo-modal \.memo-modal__body:not\(\.memo-modal__body--with-agent\)\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(singlePanePadding, "the single-pane body must drop its right padding");
+  assert.match(singlePanePadding[1], /padding-right:\s*0/);
+
+  for (const pane of ["memo-modal__edit-textarea", "memo-modal__preview-pane"]) {
+    assert.match(
+      memoCss,
+      new RegExp(
+        `\\.memo-modal__body:not\\(\\.memo-modal__body--with-agent\\) \\.${pane}[\\s\\S]*?padding-right:`,
+      ),
+      `the right padding must move onto .${pane}, which is what actually scrolls`,
+    );
+  }
+
+  // 読む面と書く面でバーの見た目が変わらないこと（textarea は global.css の既定だと軌道に色が付く）
+  // Reading and editing must show the same bar (the global.css textarea default paints the track)
+  const textareaRule = memoCss.match(/\.memo-modal \.memo-modal__edit-textarea\s*\{([\s\S]*?)\}/);
+  const previewRule = memoCss.match(/\.memo-modal \.memo-modal__preview-pane\s*\{([\s\S]*?)\}/);
+  assert.ok(textareaRule && previewRule, "both memo panes must be styled");
+  for (const rule of [textareaRule[1], previewRule[1]]) {
+    assert.match(rule, /scrollbar-color:\s*var\(--scrollbar-thumb\) transparent/);
+  }
+
+  // エージェント面を縦積みにする幅では本文自身がスクロール側に変わるので、そこは溝を確保する
+  // At the width that stacks the agent panel the body becomes the scroller, so it keeps a gutter
+  const stackedCss = memoCss.slice(memoCss.indexOf("@media (max-width: 1120px)"));
+  const stackedRule = stackedCss.match(/\.memo-modal \.memo-modal__body--with-agent\s*\{([\s\S]*?)\}/);
+  assert.ok(stackedRule, "the stacked agent layout must be styled");
+  assert.match(stackedRule[1], /overflow-y:\s*auto/);
+  assert.match(stackedRule[1], /scrollbar-gutter:\s*stable/);
 });

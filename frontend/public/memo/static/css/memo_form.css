@@ -5083,6 +5083,26 @@ body.memo-page {
   overflow: hidden;
 }
 
+/* 本文そのものはスクロールしない（スクロールするのは内側のプレビュー面 / textarea）。
+   本文に右パディングを持たせると、その分だけスクロールバーがパネル端から内側に浮き、
+   本文自体がスクロールする他のモーダル（.cc-modal__body）と見た目がずれる。そこで
+   単一面のときだけ右パディングをスクロールする面へ移し、バーをパネル端に付ける。
+   エージェント面を並べる --with-agent のときは本文が横並びになり、右端に来るのは
+   エージェント面なので、本文側の右パディングをそのまま残す。
+   The body itself never scrolls (the inner preview pane / textarea does). Right padding on
+   the body pushes the scrollbar inwards, away from the panel edge that every other modal
+   (.cc-modal__body, which scrolls itself) puts it on. So in the single-pane case the right
+   padding moves onto the scrolling pane; with the agent panel open the body is a row and the
+   agent panel owns the right edge, so the body keeps its own padding there. */
+.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) {
+  padding-right: 0;
+}
+
+.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__edit-textarea,
+.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__preview-pane {
+  padding-right: 1.25rem;
+}
+
 .memo-modal .memo-modal__body--with-agent {
   flex-direction: row;
 }
@@ -5113,6 +5133,12 @@ body.memo-page {
      Same value as .memo-preview-content; memo_preview_typography.test.ts asserts they match */
   line-height: 1.68;
   resize: none;
+  /* base/global.css の :where(textarea) 既定は軌道に色が付く。プレビュー面と編集面で
+     スクロールバーの見た目が変わらないよう、ここで同じ指定に揃える。
+     The :where(textarea) default in base/global.css paints the track; match the preview
+     pane so the scrollbar does not change between reading and editing. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .memo-modal .memo-modal__edit-textarea:focus {
@@ -6778,9 +6804,14 @@ body.memo-page {
 
 /* ── 画面幅への対応 / Responsive ─────────────────────────────────────── */
 @media (max-width: 1120px) {
+  /* この幅では本文自身がスクロール側に変わる。バーの出入りで中身が横に動かないよう、
+     ここでだけ溝を確保する（デスクトップ幅の本文は overflow: hidden なので不要）。
+     At this width the body itself becomes the scroller, so reserve the gutter here to keep
+     the contents from shifting as the bar appears (the desktop body is overflow: hidden). */
   .memo-modal .memo-modal__body--with-agent {
     flex-direction: column;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .memo-modal .memo-modal__body--with-agent .memo-modal__edit-form {
@@ -6842,6 +6873,11 @@ body.memo-page {
 
   .memo-modal .memo-modal__body {
     padding: 0.5rem 1rem 0.75rem;
+  }
+
+  .memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__edit-textarea,
+  .memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__preview-pane {
+    padding-right: 1rem;
   }
 
   .memo-modal .memo-select--detail-collection {

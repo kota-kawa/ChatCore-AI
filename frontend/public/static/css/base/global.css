@@ -196,13 +196,19 @@ body::-webkit-scrollbar-corner,
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
 }
 
+/* .memo-modal__body はここに含めない。あの本文は overflow: hidden で、実際に
+   スクロールするのは内側のプレビュー面 / textarea 側。overflow: hidden でも
+   scrollbar-gutter: stable は溝を確保してしまうため、絶対にバーの出ない空白が
+   右端に残る。
+   .memo-modal__body is deliberately absent: it is overflow: hidden and the inner
+   preview pane / textarea does the scrolling. scrollbar-gutter: stable reserves a
+   gutter even on an overflow: hidden box, leaving a strip no scrollbar ever fills. */
 :where(
   .sidebar,
   .chat-messages,
   .model-select-menu,
   .task-detail-modal-shell,
   .task-detail-section-body,
-  .memo-modal__body,
   .settings-content,
   .settings-sidebar .nav-menu
 ) {
