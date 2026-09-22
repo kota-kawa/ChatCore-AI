@@ -55,6 +55,9 @@
 - フレームワーク: `unittest` （`tests/unit/test_edit_default_task.py` を参照）。
 - 命名: テストは `tests/` に配置し、ファイル名には `test_` 接頭辞を付けます。
 - FastAPI ルートのリクエスト/レスポンスの動作に焦点を当て、外部サービスや DB 接続はモック化してください。
+- チャット出力の回帰データセットは `tests/fixtures/llm_eval/chat_output_cases.json` に固定し、`tests/unit/test_llm_output_eval.py` が実行します。期待値はデータ側に書くため、`tests/helpers/llm_eval.py` が読み込み時に形式・参照・ID 重複を検証し、壊れたデータはテスト失敗にします。
+- このデータセットで判定するのは、実行ごとに揺れない観点（引用先が入力に存在する、不正な根拠IDが本文に残らない、生成 UI の状態と品質ゲートの判定）だけです。文章の良し悪しは判定しません。ケースを足すときは根拠IDを手書きせず、出典は `label` で参照し `{{cite:label}}` を本文に書きます。
+- ケースを足したら、そのケースが守っている規則を実装側で一時的に壊し、テストが落ちることを確認してから固定します。落ちないケースは回帰を検出できていないため、期待値の粒度（どの指摘が出るか、本文がどう残るか）を上げます。
 
 ## UI 実装規約
 - トークンの正本は `frontend/public/static/css/base/variables.css`、役割別の一覧と選び方は `frontend/DESIGN_TOKENS.md`、CSS の配置方針は `frontend/STYLING_STRATEGY.md` です。ここには配色や操作の原則だけを置き、色の数値は書きません。新しい UI は既存トークンから選び、既存画面と浮かないことを優先してください。
