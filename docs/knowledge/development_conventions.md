@@ -34,7 +34,7 @@
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
 - JavaScript / TypeScript: `frontend/scripts/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
-- CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。BEM スタイルの `kebab-case` クラス名を推奨します。
+- CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。1 ファイルに無関係なスタイルを混在させないでください。BEM スタイルの `kebab-case` クラス名を推奨します。
 - フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
 - 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
 

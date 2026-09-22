@@ -71,12 +71,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.cache/
+*.tsbuildinfo
 
 # Playwright MCP のセッション出力（スクリーンショット・コンソールログ）
 # Playwright MCP session output (screenshots and console logs)
 .playwright-mcp/
-.cache/
-*.tsbuildinfo
 
 # 環境変数・シークレット（拡張子ごと丸ごと無視せず、実ファイル名を指定する）
 # Environment variables and secrets (name the real files instead of ignoring a whole extension)
