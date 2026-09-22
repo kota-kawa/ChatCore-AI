@@ -6802,9 +6802,14 @@ body.memo-page {
 
 /* ── 画面幅への対応 / Responsive ─────────────────────────────────────── */
 @media (max-width: 1120px) {
+  /* この幅では本文自身がスクロール側に変わる。バーの出入りで中身が横に動かないよう、
+     ここでだけ溝を確保する（デスクトップ幅の本文は overflow: hidden なので不要）。
+     At this width the body itself becomes the scroller, so reserve the gutter here to keep
+     the contents from shifting as the bar appears (the desktop body is overflow: hidden). */
   .memo-modal .memo-modal__body--with-agent {
     flex-direction: column;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .memo-modal .memo-modal__body--with-agent .memo-modal__edit-form {
