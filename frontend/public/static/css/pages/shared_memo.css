@@ -64,7 +64,7 @@
 .shared-memo-page .shared-memo-section h2 {
   margin: 0;
   font-size: 1rem;
-  color: #8f5a17;
+  color: var(--shared-memo-accent-strong);
 }
 
 .shared-memo-page .md-content {
@@ -114,7 +114,7 @@
   height: 1rem;
   margin: 0 0.42rem 0 0;
   vertical-align: -0.16rem;
-  accent-color: #d97706;
+  accent-color: var(--shared-memo-action);
 }
 
 .shared-memo-page .md-content blockquote {
@@ -133,7 +133,7 @@
   padding: 0.12rem 0.35rem;
   border-radius: 4px;
   font-size: 0.87em;
-  color: #b45309;
+  color: var(--shared-memo-accent);
 }
 
 .shared-memo-page .md-content pre {
@@ -182,7 +182,7 @@
 }
 
 .shared-memo-page .md-content a {
-  color: #b45309;
+  color: var(--shared-memo-accent);
   text-decoration: underline;
 }
 

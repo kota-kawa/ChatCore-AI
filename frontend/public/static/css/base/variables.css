@@ -147,6 +147,10 @@
   --shared-prompt-action: #1a73e8;
   --shared-prompt-action-hover: #185abc;
 
+  --shared-memo-accent: #b45309;
+  --shared-memo-accent-strong: #8f5a17;
+  --shared-memo-action: #d97706;
+
   --ps-primary-color: var(--primary-color);
   --ps-accent-color: #11998e;
   --ps-text-color: #333;
