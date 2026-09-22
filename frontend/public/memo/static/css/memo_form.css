@@ -6809,6 +6809,16 @@ body.memo-page {
 }
 
 @media (max-width: 640px) {
+  .memo-modal .memo-modal__header {
+    padding-right: 1rem;
+  }
+
+  .memo-modal .memo-modal__heading {
+    flex-basis: 100%;
+    box-sizing: border-box;
+    padding-right: 3rem;
+  }
+
   .memo-modal .memo-modal__header > .cc-modal__close {
     top: 0.85rem;
     right: 1rem;
