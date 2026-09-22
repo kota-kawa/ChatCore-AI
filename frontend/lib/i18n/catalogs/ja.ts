@@ -397,7 +397,7 @@ export const jaMessages = {
   "memo.writePlaceholder": "メモを入力...",
   "memo.agentTitle": "メモのチャコ",
   "memo.agentHeaderSubtitle": "このメモを一緒に整理",
-  "memo.agentDescription": "このメモの内容を参照して、要約や質問に加えて、本文の編集も依頼できます。編集は実行ボタンを押したときだけ反映されます。",
+  "memo.agentDescription": "このメモの要約・質問・本文の編集を依頼できます。",
   "memo.agentPlaceholder": "このメモについて質問・編集を依頼する...",
   "memo.list": "メモ一覧",
   "memo.noMatchingMemos": "条件に一致するメモがありません。",
