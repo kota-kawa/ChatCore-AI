@@ -145,6 +145,23 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         self.assertEqual(summary["turns"], 0)
         self.assertEqual(summary["uncorrelated_lines"], 1)
 
+    def test_a_turn_that_failed_before_it_started_counts_once(self):
+        """
+        ターン状態の構築に失敗した経路が2行の失敗ログを出しても、1ターンとして数えられることを検証します。
+        Verify a turn that failed during setup counts once even though it logs two failure lines.
+        """
+        telemetry = ChatGenerationTelemetry(model="claude-haiku-4-5")
+        payload = telemetry.as_log_extra()
+        lines = [
+            _log_line("-", "Failed to prepare the chat generation turn.", payload),
+            _log_line("-", "Chat generation ended without a terminal event; closing it as an error.", payload),
+        ]
+
+        summary = self._summary_of(lines)
+
+        self.assertEqual(summary["turns"], 1)
+        self.assertEqual(summary["outcomes"], {"error": 1})
+
     def test_comparison_reports_rate_differences_in_points(self):
         """
         変更前後の比較が、率の差をポイントで表すことを検証します。

@@ -41,8 +41,14 @@ TURN_CLOSING_MESSAGE_PREFIXES = (
     "Chat generation stopped because",
     "Chat generation hit an LLM provider rate limit",
     "Unexpected error while generating chat response.",
-    "Failed to prepare the chat generation turn.",
+    # "Failed to prepare the chat generation turn." はここに入れない。ターン状態の構築に
+    # 失敗した経路では、その直後に必ず "Chat generation ended without a terminal event" が
+    # 続くため、両方を数えると1ターンが2件になる。
+    # "Failed to prepare the chat generation turn." is deliberately absent: that path always
+    # logs "Chat generation ended without a terminal event" right after it, so counting both
+    # would turn one turn into two.
 )
+
 
 # 率として報告する真偽値・カウンタ。ターン単位で「1回でも起きたか」を数える。
 # Boolean and counter fields reported as rates: how many turns saw them at least once.
@@ -292,7 +298,14 @@ def render_comparison(before: dict[str, Any], after: dict[str, Any], show_all: b
     # reports rates and medians only.
     before_total = int(before["turns"])
     after_total = int(after["turns"])
-    lines = [f"ターン数: 変更前 {before_total} → 変更後 {after_total}", ""]
+    lines = [f"ターン数: 変更前 {before_total} → 変更後 {after_total}"]
+    uncorrelated = int(before.get("uncorrelated_lines", 0)) + int(after.get("uncorrelated_lines", 0))
+    if uncorrelated:
+        lines.append(
+            f"※ request_id の無いテレメトリ行が合計 {uncorrelated} 件ありました。"
+            "その範囲はターンを閉じた行だけを数えています。"
+        )
+    lines.append("")
     lines.append(f"{'指標':<34} {'変更前':>10} {'変更後':>10} {'差':>10}")
 
     for outcome in sorted(set(before["outcomes"]) | set(after["outcomes"])):
