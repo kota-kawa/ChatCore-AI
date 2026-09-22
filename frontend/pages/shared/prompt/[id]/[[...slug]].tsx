@@ -522,7 +522,7 @@ export default function SharedPromptPage({
               <h2>{english ? "Explore more public prompts" : "ほかの公開プロンプトも見る"}</h2>
               <p>{english ? "Search and browse public prompts for writing, image generation, reusable skills, and more." : "Chat Core のプロンプト共有では、文章作成・画像生成・スキルなど、さまざまなカテゴリの公開プロンプトを検索・閲覧できます。"}</p>
               <Link href="/prompt_share" className="shared-prompt-cta__button">
-                {english ? "Open the Prompt Library" : "プロンプト共有ページへ"}
+                <i className="bi bi-collection" aria-hidden="true" /> {english ? "Open the Prompt Library" : "プロンプト共有ページへ"}
               </Link>
             </footer>
 
@@ -530,8 +530,9 @@ export default function SharedPromptPage({
               <section className="shared-prompt-recommendations" aria-labelledby="shared-prompt-recommendations-title">
                 <div className="shared-prompt-recommendations__heading">
                   <div>
+                    <p>{english ? "Discover more" : "さらに探す"}</p>
                     <h2 id="shared-prompt-recommendations-title">
-                      {english ? "Recommended prompts" : "おすすめのプロンプト"}
+                      <i className="bi bi-stars" aria-hidden="true" /> {english ? "Recommended prompts" : "おすすめのプロンプト"}
                     </h2>
                   </div>
                   <Link href="/prompt_share">{english ? "View all" : "すべて見る"} <i className="bi bi-arrow-right" aria-hidden="true" /></Link>
