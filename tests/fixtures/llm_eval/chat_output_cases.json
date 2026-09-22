@@ -171,15 +171,15 @@
       "id": "artifact-2d-complete-passes-quality-gate",
       "description": "初期表示・操作・装飾が揃った 2D Artifact は、検証も品質ゲートも通る",
       "ui_mode": "2D",
-      "prose": "今週の重点項目を整理しました。",
+      "prose": "移行作業のチェックリストです。",
       "artifact": {
         "version": 1,
-        "title": "優先度マップ",
-        "description": "項目を選択して詳細を確認できます",
-        "height": 420,
-        "html": "<div id=\"app\"><header><span>Priority map</span><h2>今週の重点項目</h2></header><main><button class=\"item active\">品質改善</button><button class=\"item\">速度改善</button><section><strong>品質改善</strong><p>失敗率を下げて初回表示を安定させます。</p></section></main></div>",
-        "css": "#app{padding:24px;border-radius:18px;background:linear-gradient(135deg,#f8fafc,#eef2ff);color:#172033;font:14px/1.6 system-ui,sans-serif;box-shadow:0 16px 36px #1e3a8a1a}header{margin-bottom:18px}header span{color:#4f46e5;font-weight:700}h2{margin:4px 0;font-size:22px}main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item,section{padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff}.active{color:#fff;background:#4f46e5}section{grid-column:1/-1}section p{margin:6px 0 0;color:#475569}",
-        "js": "const app=document.getElementById('app');app.querySelectorAll('.item').forEach((button)=>button.addEventListener('click',()=>{app.querySelectorAll('.item').forEach((item)=>item.classList.remove('active'));button.classList.add('active');}));"
+        "title": "移行チェックリスト",
+        "description": "完了した項目を数えながら進められます",
+        "height": 440,
+        "html": "<div id=\"app\"><header><span>Migration</span><h2>移行チェックリスト</h2><p class=\"count\">0 / 3 完了</p></header><ul><li><label><input type=\"checkbox\"> データベースのバックアップ</label></li><li><label><input type=\"checkbox\"> 接続先の切り替え</label></li><li><label><input type=\"checkbox\"> 旧環境の停止</label></li></ul></div>",
+        "css": "#app{padding:26px;border-radius:16px;background:#fbfdff;color:#16232f;font:14px/1.7 system-ui,sans-serif;border:1px solid #dbe6f0}header{margin-bottom:16px}header span{color:#0f766e;font-weight:700;letter-spacing:.08em;font-size:12px}h2{margin:6px 0 2px;font-size:21px}.count{margin:0;color:#5b6b7a}ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}li{padding:12px 14px;border:1px solid #e2eaf2;border-radius:10px;background:#fff}label{display:flex;gap:10px;align-items:center;cursor:pointer}li.done{background:#ecfdf5;border-color:#a7f3d0}",
+        "js": "const app=document.getElementById('app');const count=app.querySelector('.count');const items=Array.from(app.querySelectorAll('li'));const update=()=>{const done=items.filter((item)=>item.querySelector('input').checked);items.forEach((item)=>item.classList.toggle('done',item.querySelector('input').checked));count.textContent=`${done.length} / ${items.length} 完了`;};items.forEach((item)=>item.querySelector('input').addEventListener('change',update));update();"
       },
       "expect": {
         "artifact_status": "valid",
@@ -348,15 +348,15 @@
       "id": "artifact-kept-when-mode-says-none",
       "description": "判定が NONE でも、検証を通った Artifact は捨てずに残す（判定の偽陰性を失敗にしないため）",
       "ui_mode": "NONE",
-      "prose": "図にすると分かりやすいのでこちらです。",
+      "prose": "対応表にすると分かりやすいのでこちらです。",
       "artifact": {
         "version": 1,
-        "title": "構成図",
-        "description": "簡易図解",
-        "height": 360,
+        "title": "用語の対応表",
+        "description": "旧名称と新名称の対応",
+        "height": 300,
         "html": "<div id=\"app\"></div>",
-        "css": "#app{padding:16px;border-radius:8px;background:#f8fafc;}",
-        "js": "document.getElementById('app').textContent = 'ready';"
+        "css": "#app{padding:18px;border-radius:12px;background:#f7f9fc;border:1px solid #e2eaf2;font:14px/1.6 system-ui,sans-serif}",
+        "js": "const rows=[['ルーム','スレッド'],['メモ','ノート']];const app=document.getElementById('app');app.innerHTML=rows.map(([a,b])=>`<p>${a} → ${b}</p>`).join('');"
       },
       "expect": {
         "artifact_status": "valid",
