@@ -507,5 +507,31 @@
   .shared-prompt-page .shared-prompt-meta { flex-direction: column; }
   .shared-prompt-page .shared-prompt-section { padding: 1.5rem 0 2rem; }
   .shared-prompt-page .shared-prompt-cta { padding: 1.5rem 1.25rem; }
+  .shared-prompt-page .shared-prompt-recommendations { padding-top: 1rem; }
   .shared-prompt-page .shared-prompt-recommendations__grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* 固定ランチャーの左右に本文の安全帯を置き、見出しやタグを隠さない。
+     Keep recommendation text clear of the fixed launchers on touch-sized screens. */
+  .shared-prompt-page {
+    --shared-prompt-mobile-launcher-clearance: calc(var(--space-12) + var(--space-5));
+    --shared-prompt-mobile-menu-clearance: calc(var(--space-12) + var(--space-12) + var(--space-2) + var(--space-3));
+    --shared-prompt-mobile-menu-link-clearance: calc(var(--space-12) + var(--space-12) + var(--space-8) - var(--space-1) + var(--space-3));
+  }
+
+  .shared-prompt-page .shared-prompt-recommendations__heading > div {
+    width: calc(100% - var(--shared-prompt-mobile-menu-clearance));
+    padding-inline-start: var(--shared-prompt-mobile-launcher-clearance);
+  }
+
+  .shared-prompt-page .shared-prompt-recommendations__heading > a {
+    margin-inline-start: auto;
+    margin-inline-end: var(--shared-prompt-mobile-menu-link-clearance);
+  }
+
+  .shared-prompt-page .shared-prompt-recommendation-card__body {
+    padding-inline-start: var(--shared-prompt-mobile-launcher-clearance);
+    padding-inline-end: var(--shared-prompt-mobile-menu-clearance);
+  }
 }
