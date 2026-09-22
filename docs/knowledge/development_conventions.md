@@ -84,6 +84,25 @@
 - Web 検索のテストデータは、LLM 代替サブエージェントに質問、疑似検索結果、期待する判定、評価観点を生成させて作成します。生成データは検索サービスの実際の出典として扱わず、評価用の入力として扱います。生成後に JSON 形式、必須項目、参照先、重複、日付や検索結果間の整合性を機械的に検証し、失敗したデータは最大 3 回まで自動で再生成してから採用します。3 回で検証に通らないデータは人の確認対象にします。
 - 採用したテストデータは変更前後の比較開始前に固定し、テスト用 fixture または CI アーティファクトとして保存し、データセットの識別子またはハッシュを記録します。比較結果を見てデータを作り直したり、都合のよいケースだけを残したりしません。変更前後の出力は同じデータセットで自動評価し、評価が割れたケース、信頼度が低いケース、回帰が検出されたケースだけを人の確認対象にします。
 - 自動評価では、検索の要否、クエリ、採用情報、要約、引用を変更箇所に応じて確認します。引用先の識別子が入力に存在すること、主張が入力の情報で支えられていること、入力にない事実を追加していないことは機械的な検査を優先し、意味の判定が必要な項目は別の LLM 評価で JSON 形式の判定理由と信頼度を出力させます。
+- チャットの出力に関わる変更では、変更した領域を担保している既存テストを必ず実行します。どれが対応するかは次の通りです。
+
+| 変更する領域 | 主な実装 | 実行するテスト |
+| --- | --- | --- |
+| プロンプト文言 | `services/chat_prompt.py`、`services/prompt_assist.py`、`blueprints/chat/tasks.py` | `tests/unit/test_task_launch_prompting.py`、`tests/unit/test_chat_prompt_management.py`、`tests/unit/test_prompt_assist_logic.py` |
+| ツール定義 | `services/llm_tool_schema.py` | `tests/unit/test_llm_tool_schema.py` |
+| 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
+| Web 検索 | `services/web_search.py`、`services/web_search_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py` |
+| 生成 UI | `services/generative_ui.py`、`services/generative_ui_repair.py` | `tests/unit/test_generative_ui.py`、`tests/unit/test_generated_ui_reliability.py`、`tests/unit/test_generative_ui_contract_matches_validator.py` |
+| モデル設定・プロバイダ | `services/llm.py`、`services/llm_model_limits.py` | `tests/unit/test_llm_service.py` |
+
+- 出力の劣化は文章を読むだけでは判定できないため、変更前後で同じ入力を流し、`services/chat_generation_telemetry.py` が記録する指標を並べます。指標は構造化ログ（既定で `logs/app.log`）の JSON 行に `request_id` とともに出力されるので、該当ターンの行から次のキーを取り出して PR 本文に書きます。
+  - 打ち切りと作り直し: `first_pass_finish_reason`、`continuation_count`、`continuation_stalled`、`continuation_restart_trimmed`
+  - 失敗からの縮退: `empty_answer_recoveries`、`tool_schema_recoveries`、`research_failure_recoveries`、`salvaged_partial_answers`
+  - 予算の使い切り: `llm_turn_budget_exhausted`、`tools_withdrawn_by_budget`、`truncated_evidence_payloads`
+  - 生成 UI: `artifact_status`、`artifact_reason_codes`、`artifact_repair_attempted`、`artifact_repair_succeeded`
+  - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`
+- これらの指標が変更前より悪化した場合は、回答文が良く見えても PR にしません。悪化していないことと、狙った改善が観点の比較で確認できたことの両方が揃ってから PR を作ります。
+- LLM に採点させる判定は実行ごとに揺れるため、CI の合否条件にはしません。CI で守るのは決定的に判定できるもの（形式、契約、引用先の存在、禁止パターンの不在、構造のしきい値）に限り、意味の判定は PR 本文に残す比較で扱います。
 - 検索 API への接続、結果の解析、エラー処理を変える場合は、固定した API 応答を使う関連テストで確認します。検索結果の画面表示や操作を変える場合は `../../AGENTS.md` の Playwright による実描画・実操作確認も行います。
 - 品質が上がったと確認できない場合は PR にせず、原因を調べて修正するかユーザーに報告してください。比較に使った入力・観点・結果は PR 本文に書きます。
 - この比較は本番のプロバイダ・モデル（Groq、OpenAI、Anthropic 上の各モデル）とは別のモデルで行うため、確認できるのは指示文・文脈の組み立て・ツール説明文の改善方向までです。LLM が生成した疑似検索結果は、実際の検索サービスの最新性、結果の品質、接続障害、レート制限の確認には使えません。固定した検索結果を使う比較でも同じ限界があります。ツール引数のサーバー側検証（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）、出力上限の扱い、ストリームイベントの形式などプロバイダ固有の挙動も確認できません。JSON やツール呼び出しの契約が変わる場合は、`services/llm_tool_schema.py` や `services/chat_generation.py` の既存の単体テストで担保し、足りなければ同じ変更でテストを追加してください。
