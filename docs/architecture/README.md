@@ -10,6 +10,7 @@
 - [Deployment and operations](deployment_and_operations.md)
 - [Testing map](testing_map.md)
 - [Prompt attachment storage](prompt_attachment_storage.md)
+- [Security model](security_model.md)
 - [System design deep dive](system_design_deep_dive.md)
 
 `system_design_deep_dive.md` は、機能単位の設計意図（AIエージェント、生成UI、クォータ、代表的な上限、シナリオ、用語）を補う長文の詳細です。`ARCHITECTURE.md` と重複する記述は置かず、該当章へのリンクにしています。
