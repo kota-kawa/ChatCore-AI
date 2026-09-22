@@ -17,6 +17,7 @@ loudly once every slot is taken rather than queueing without a signal.
 from __future__ import annotations
 
 import atexit
+import contextvars
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -90,8 +91,17 @@ class _GenerationExecutor:
             with self._lock:
                 self._in_flight = max(self._in_flight - 1, 0)
 
+        # リクエストの ContextVar（request_id など）はスレッドを跨いで自動では伝播しない。
+        # 生成は丸ごと別スレッドで走るため、そのままだと1ターン分のログが全て request_id="-"
+        # になり、リクエストと突き合わせられなくなる。投入時のコンテキストを複製して渡す。
+        # Request ContextVars (request_id and friends) do not cross threads on their own. A
+        # turn runs entirely in a worker, so without this every generation log line would carry
+        # request_id="-" and could not be tied back to its request. Carry a copy of the
+        # submitting context into the worker.
+        context = contextvars.copy_context()
+
         try:
-            future: Future[T] = executor.submit(func, *args, **kwargs)
+            future: Future[T] = executor.submit(context.run, func, *args, **kwargs)
         except BaseException:
             with self._lock:
                 self._in_flight = max(self._in_flight - 1, 0)
