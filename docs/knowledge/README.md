@@ -6,6 +6,7 @@
 
 - システム全体の責務や変更箇所を知りたい場合は `../../ARCHITECTURE.md` を参照します。
 - コード変更時のコマンド・命名・実装規約・テスト方針は `development_conventions.md` を参照します。
+- 見た目や操作に影響するフロントエンド変更を PR 前に実描画で確認する手順は `frontend_visual_verification.md` を参照します。
 - DB・Redis・SSE の切り分けやテストの考え方は `debugging.md` を参照します。
 - API 契約の生成、DB migration、同期漏れの確認は `contracts-and-migrations.md` を参照します。
 - 特定サブシステムの設計は `../architecture/`、重要な判断理由は `../decisions/` を参照します。
