@@ -26,6 +26,24 @@ TELEMETRY_MARKER_KEY = "first_pass_finish_reason"
 
 DEFAULT_LOG_PATH = Path("logs/app.log")
 
+# ターンを閉じるログのメッセージ。request_id が付かない古いログを数えるときに使う。
+# 生成スレッドへリクエストコンテキストを伝播する修正より前のログは、全行が request_id="-"
+# で届くため、行を畳めない。その場合はターンを閉じた行だけを1ターンとして数える。
+# Messages that close a turn, used for logs whose lines carry no request id. Before request
+# context was carried into the generation thread every line arrived with request_id="-", so
+# such lines cannot be folded; only the closing line is counted as a turn.
+TURN_CLOSING_MESSAGE_PREFIXES = (
+    "Chat generation completed.",
+    "Chat generation ended with a persisted partial answer.",
+    "Chat generation ended without a terminal event",
+    "Chat generation produced an empty response.",
+    "Chat generation stopped due to",
+    "Chat generation stopped because",
+    "Chat generation hit an LLM provider rate limit",
+    "Unexpected error while generating chat response.",
+    "Failed to prepare the chat generation turn.",
+)
+
 # 率として報告する真偽値・カウンタ。ターン単位で「1回でも起きたか」を数える。
 # Boolean and counter fields reported as rates: how many turns saw them at least once.
 OCCURRENCE_FIELDS = (
@@ -93,24 +111,36 @@ def _telemetry_payload(record: dict[str, Any]) -> dict[str, Any] | None:
     return extra
 
 
-def collect_turns(records: Iterable[dict[str, Any]]) -> list[Turn]:
-    # request_id ごとに、終了行があればそれを、無ければ最後のテレメトリ行を採用する。
-    # Prefer the terminal line for each request_id, otherwise keep its last telemetry line.
+def _closes_a_turn(record: dict[str, Any], payload: dict[str, Any]) -> bool:
+    if payload.get(TERMINAL_EVENT_KEY):
+        return True
+    message = str(record.get("message") or "")
+    return message.startswith(TURN_CLOSING_MESSAGE_PREFIXES)
+
+
+def collect_turns(records: Iterable[dict[str, Any]]) -> tuple[list[Turn], int]:
+    # request_id が付いている行は、その ID ごとに畳む（終了行があればそれを採用）。
+    # 付いていない行は畳めないので、ターンを閉じた行だけを1ターンとして数える。
+    # Lines that carry a request id are folded per id, preferring the terminal line. Lines
+    # without one cannot be folded, so only the line that closed the turn counts as a turn.
     turns: dict[str, Turn] = {}
-    unknown_index = 0
+    uncorrelated: list[Turn] = []
+    uncorrelated_lines = 0
 
     for record in records:
         payload = _telemetry_payload(record)
         if payload is None:
             continue
 
-        request_id = str(record.get("request_id") or "")
-        if not request_id or request_id == "-":
-            unknown_index += 1
-            request_id = f"(no-request-id)-{unknown_index}"
-
         terminal_event = payload.get(TERMINAL_EVENT_KEY)
         outcome = str(terminal_event) if terminal_event else "error"
+        request_id = str(record.get("request_id") or "")
+
+        if not request_id or request_id == "-":
+            uncorrelated_lines += 1
+            if _closes_a_turn(record, payload):
+                uncorrelated.append(Turn(request_id="-", outcome=outcome, payload=dict(payload)))
+            continue
 
         existing = turns.get(request_id)
         if existing is not None and existing.outcome in {"done", "incomplete"}:
@@ -118,7 +148,7 @@ def collect_turns(records: Iterable[dict[str, Any]]) -> list[Turn]:
 
         turns[request_id] = Turn(request_id=request_id, outcome=outcome, payload=dict(payload))
 
-    return list(turns.values())
+    return [*turns.values(), *uncorrelated], uncorrelated_lines
 
 
 def _median(values: list[float]) -> float | None:
@@ -151,10 +181,11 @@ def _truthy(value: Any) -> bool:
     return False
 
 
-def summarize(turns: list[Turn]) -> dict[str, Any]:
+def summarize(turns: list[Turn], uncorrelated_lines: int = 0) -> dict[str, Any]:
     total = len(turns)
     summary: dict[str, Any] = {
         "turns": total,
+        "uncorrelated_lines": uncorrelated_lines,
         "outcomes": dict(Counter(turn.outcome for turn in turns)),
         "models": dict(Counter(str(turn.payload.get("model") or "(unknown)") for turn in turns)),
         "first_pass_finish_reason": dict(
@@ -214,6 +245,12 @@ def _format_counter(title: str, counts: dict[str, int], total: int) -> list[str]
 def render_text(summary: dict[str, Any]) -> str:
     total = int(summary["turns"])
     lines = [f"集計したターン数: {total}"]
+    if summary.get("uncorrelated_lines"):
+        lines.append(
+            f"※ request_id の無いテレメトリ行が {summary['uncorrelated_lines']} 件ありました。"
+            "生成スレッドへリクエストコンテキストを伝播する修正より前のログです。"
+            "その範囲はターンを閉じた行だけを数えています。"
+        )
     if total == 0:
         lines.append("テレメトリを含むログ行が見つかりませんでした。")
         return "\n".join(lines)
@@ -349,12 +386,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ログファイルが見つかりません: {path}", file=sys.stderr)
         return 1
 
-    summary = summarize(collect_turns(_iter_log_lines(paths, args.since)))
+    summary = summarize(*collect_turns(_iter_log_lines(paths, args.since)))
     if not baseline_paths:
         print(json.dumps(summary, ensure_ascii=False, indent=2) if args.json else render_text(summary))
         return 0
 
-    baseline = summarize(collect_turns(_iter_log_lines(baseline_paths, args.since)))
+    baseline = summarize(*collect_turns(_iter_log_lines(baseline_paths, args.since)))
     if args.json:
         print(json.dumps({"before": baseline, "after": summary}, ensure_ascii=False, indent=2))
     else:

@@ -62,7 +62,7 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
 
     def _summary_of(self, lines: list[str]) -> dict:
         records = [json.loads(line) for line in lines]
-        return summarize(collect_turns(records))
+        return summarize(*collect_turns(records))
 
     def test_a_turn_is_counted_once_even_though_it_logs_several_lines(self):
         """
@@ -110,6 +110,40 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         lines = [_log_line("req-9", "Request finished.", {"status_code": 200})]
 
         self.assertEqual(self._summary_of(lines)["turns"], 0)
+
+    def test_lines_without_a_request_id_count_only_the_line_that_closed_the_turn(self):
+        """
+        request_id が付かない古いログでも、ターンを閉じた行だけが1ターンとして数えられることを検証します。
+        Verify older logs without a request id count only the line that closed each turn.
+        """
+        lines = [
+            line.replace('"request_id": "req-1"', '"request_id": "-"')
+            for line in _completed_turn("req-1")
+        ]
+        lines += [
+            line.replace('"request_id": "req-2"', '"request_id": "-"')
+            for line in _failed_turn("req-2")
+        ]
+
+        summary = self._summary_of(lines)
+
+        self.assertEqual(summary["turns"], 2)
+        self.assertEqual(summary["outcomes"], {"done": 1, "error": 1})
+        self.assertEqual(summary["uncorrelated_lines"], 3)
+
+    def test_an_unfinished_line_without_a_request_id_is_not_counted_as_a_turn(self):
+        """
+        request_id が無く、ターンも閉じていない途中経過の行が、ターンとして数えられないことを検証します。
+        Verify an in-progress line without a request id is not counted as a turn of its own.
+        """
+        telemetry = ChatGenerationTelemetry(model="claude-haiku-4-5")
+        telemetry.first_pass_finish_reason = "stop"
+        line = _log_line("-", "Stopping the agent loop at the model-decision budget.", telemetry.as_log_extra())
+
+        summary = self._summary_of([line])
+
+        self.assertEqual(summary["turns"], 0)
+        self.assertEqual(summary["uncorrelated_lines"], 1)
 
     def test_comparison_reports_rate_differences_in_points(self):
         """
