@@ -1,5 +1,8 @@
 import { Lexer, type Token } from "marked";
 
+import type { DisplaySourceSpan } from "../../scripts/chat/display_source_positions";
+import { prepareMemoPreviewSource } from "./preview_source";
+
 interface SourceCharacter {
   text: string;
   start: number;
@@ -12,7 +15,7 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
   const characters: SourceCharacter[] = [];
   const decoder = doc.createElement("textarea");
 
-  function append(text: string, positions: number[], decodeEntities: boolean) {
+  function append(text: string, positions: DisplaySourceSpan[], decodeEntities: boolean) {
     for (let i = 0; i < text.length; i++) {
       const entity = decodeEntities && text[i] === "&" && text.slice(i).match(/^&(?:#\d+|#x[\da-f]+|[a-z][\da-z]+);/i)?.[0];
       const raw = entity || text[i];
@@ -20,7 +23,7 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
       const visible = entity ? decoder.value : raw;
       for (let j = 0; j < visible.length; j++) {
         if (!/\s/.test(visible[j])) {
-          characters.push({ text: visible[j], start: positions[i], end: positions[i + raw.length - 1] + 1 });
+          characters.push({ text: visible[j], start: positions[i].start, end: positions[i + raw.length - 1].end });
         }
       }
       i += raw.length - 1;
@@ -28,10 +31,10 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
   }
 
   // Blockquotes/lists remove prefixes from continuation lines before lexing children.
-  function locate(text: string, parent: string, positions: number[], from: number) {
+  function locate(text: string, parent: string, positions: DisplaySourceSpan[], from: number) {
     const exact = parent.indexOf(text, from);
     if (exact >= 0) return { positions: positions.slice(exact, exact + text.length), end: exact + text.length };
-    const mapped: number[] = [];
+    const mapped: DisplaySourceSpan[] = [];
     let cursor = from;
     for (const line of text.split("\n")) {
       const start = parent.indexOf(line, cursor);
@@ -48,13 +51,14 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
     return { positions: mapped, end: cursor };
   }
 
-  function walk(tokens: Token[], parent: string, positions: number[]) {
+  function walk(tokens: Token[], parent: string, positions: DisplaySourceSpan[]) {
     let cursor = 0;
     for (const token of tokens) {
       const located = locate(token.raw, parent, positions, cursor);
       if (!located) continue;
       cursor = located.end;
       const mapped = located.positions;
+      if (token.type === "image") continue;
       if (token.type === "list") {
         walk(token.items, token.raw, mapped);
       } else if (token.type === "table") {
@@ -77,13 +81,8 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
     }
   }
 
-  const normalized = source.replace(/\r\n?/g, "\n");
-  const positions: number[] = [];
-  for (let i = 0; i < source.length; i++) {
-    positions.push(i);
-    if (source[i] === "\r" && source[i + 1] === "\n") i++;
-  }
-  walk(Lexer.lex(normalized, { gfm: true, breaks: true }), normalized, positions);
+  const prepared = prepareMemoPreviewSource(source);
+  walk(Lexer.lex(prepared.text, { gfm: true, breaks: true }), prepared.text, prepared.positions);
   return characters;
 }
 
@@ -116,7 +115,7 @@ export function sourceOffsetAtCaret(root: HTMLElement, node: Node, offset: numbe
       const previous = characters[start + count - 1];
       const spaces = before.match(/\s*$/)?.[0].length || 0;
       const next = characters[start + count];
-      return Math.min(previous.end + spaces, next?.start ?? source.length);
+      return spaces > 0 && next ? next.start : previous.end;
     }
     cursor = start + compact.length;
   }

@@ -80,3 +80,14 @@ function stripWebSearchArtifacts(text: string): string {
 }
 
 export { stripWebSearchArtifacts, stripWebSearchCitationsHtml, stripWebSearchSourcesHtml };
+
+// Retain offsets while excluding the same legacy artifacts as the visible preview.
+export function maskWebSearchArtifacts(text: string): string {
+  const mask = (match: string) => match.replace(/[^\r\n]/g, " ");
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(WEB_SEARCH_SOURCES_BLOCK_PATTERN, mask);
+  } while (text !== previous);
+  return text.replace(WEB_SEARCH_CITATION_PATTERN, mask).replace(SELECTED_REFERENCE_MARKER_PATTERN, mask);
+}

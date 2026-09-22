@@ -33,6 +33,34 @@ describe("memo preview source positions", () => {
     expect(sourceOffsetAtCaret(root, textNode(root, text), offset, source)).toBe(expected);
   });
 
+  it.each([
+    { source: "[\n\\frac{a}{b}\n]", text: "(a)/(b)", offset: 2, anchor: "a}" },
+    { source: "[\n\\left(x\\right) + \\rho\n]", text: "(x) + ρ", offset: 7, anchor: "\\rho", length: 4 },
+    { source: "[\n\\frac{\\frac{a}{b}}{c}\n]", text: "((a)/(b))/(c)", offset: 3, anchor: "a}" },
+    { source: "説明 (x_1) 続き", text: "x_1", offset: 2, anchor: "x_1", length: 2 },
+    { source: "zero\u200bwidth", text: "zerowidth", offset: 5, anchor: "width" },
+    { source: '本文 <a class="web-search-citation">same</a> same', text: "本文 same", offset: 5, anchor: "same", length: 2 },
+    { source: "![foo](url) foo", text: " foo", offset: 2, anchor: "foo" },
+  ])("maps preview transformations: $source", ({ source, text, offset, anchor, length = 1 }) => {
+    const root = preview(source);
+    expect(sourceOffsetAtCaret(root, textNode(root, text), offset, source)).toBe(source.lastIndexOf(anchor) + length);
+  });
+
+  it("maps legacy JSON string content back to the stored representation", () => {
+    const source = JSON.stringify("最初の行\n\n次の行");
+    const root = preview(JSON.parse(source));
+    expect(sourceOffsetAtCaret(root, textNode(root, "次の行"), 1, source)).toBe(source.indexOf("次の行") + 1);
+  });
+
+  it.each([
+    { source: "```plaintext\r\nfoo\r\nbar\r\n```", text: "foo\nbar", offset: 4, anchor: "bar" },
+    { source: 'A <a class="web-search-citation">Z</a> Z', text: "A Z", offset: 2, anchor: "Z" },
+    { source: JSON.stringify("A\tB"), display: "A\tB", text: "A\tB", offset: 2, anchor: "B" },
+  ])("maps whitespace boundaries: $source", ({ source, display, text, offset, anchor }) => {
+    const root = preview(display ?? source);
+    expect(sourceOffsetAtCaret(root, textNode(root, text), offset, source)).toBe(source.lastIndexOf(anchor));
+  });
+
   it("keeps repeated paragraphs distinct", () => {
     const source = "同じ文章\n\n同じ文章\n\n同じ文章";
     const root = preview(source);

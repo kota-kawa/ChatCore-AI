@@ -43,11 +43,14 @@ export function useMemoDetailEditFocus({ previewMode, setPreviewMode }: UseMemoD
     if (!element) return;
     // クリックでは指定位置、Enter では従来どおり末尾から編集する。
     // Clicks retain their source position; Enter keeps the append shortcut.
-    const offset = Math.min((position ? position.offset ?? 0 : element.value.length), element.value.length);
+    const rawOffset = position ? position.offset ?? 0 : element.value.length;
+    const offset = element instanceof HTMLTextAreaElement && position
+      ? Math.min(element.defaultValue.slice(0, rawOffset).replace(/\r\n?/g, "\n").length, element.value.length)
+      : Math.min(rawOffset, element.value.length);
     element.focus({ preventScroll: true });
     element.setSelectionRange(offset, offset);
     if (element instanceof HTMLTextAreaElement) {
-      if (position) alignTextareaToClick(element, position);
+      if (position) alignTextareaToClick(element, { ...position, offset: position.offset === null ? null : offset });
       else element.scrollTop = element.scrollHeight;
     }
   }, [previewMode]);

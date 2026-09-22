@@ -1,3 +1,5 @@
+import { replaceDisplayText, type DisplaySourceSpan } from "./display_source_positions";
+
 function readBracedGroup(value: string, startIndex: number) {
   if (value[startIndex] !== "{") return null;
 
@@ -21,7 +23,7 @@ function readBracedGroup(value: string, startIndex: number) {
   return null;
 }
 
-function replaceLatexFractions(value: string) {
+function replaceLatexFractions(value: string, positions?: DisplaySourceSpan[]) {
   let output = value;
   for (let pass = 0; pass < 4; pass += 1) {
     const commandIndex = output.search(/\\d?frac\{/);
@@ -33,6 +35,20 @@ function replaceLatexFractions(value: string) {
     const denominator = readBracedGroup(output, numerator.endIndex);
     if (!denominator) break;
 
+    if (positions) {
+      const numeratorStart = commandIndex + command.length;
+      const denominatorStart = numerator.endIndex;
+      const replacementSpans = [
+        positions[numeratorStart],
+        ...positions.slice(numeratorStart + 1, numerator.endIndex - 1),
+        positions[numerator.endIndex - 1],
+        positions[numerator.endIndex - 1],
+        positions[denominatorStart],
+        ...positions.slice(denominatorStart + 1, denominator.endIndex - 1),
+        positions[denominator.endIndex - 1],
+      ];
+      positions.splice(commandIndex, denominator.endIndex - commandIndex, ...replacementSpans);
+    }
     output = [
       output.slice(0, commandIndex),
       `(${numerator.content})/(${denominator.content})`,
@@ -42,30 +58,30 @@ function replaceLatexFractions(value: string) {
   return output;
 }
 
-export function formatMathExpressionForDisplay(value: string) {
-  return replaceLatexFractions(value)
-    .replace(/\\left\s*/g, "")
-    .replace(/\\right\s*/g, "")
-    .replace(/\\begin\{cases\}/g, "{")
-    .replace(/\\end\{cases\}/g, "")
-    .replace(/\\\[\s*\d+(?:\.\d+)?(?:pt|em|ex|px)\s*\]/g, "")
-    .replace(/\\\\/g, "")
-    .replace(/\s*&\s*/g, "    ")
-    .replace(/\\qquad/g, "    ")
-    .replace(/\\quad/g, "  ")
-    .replace(/\\lambda/g, "λ")
-    .replace(/\\mu/g, "μ")
-    .replace(/\\rho/g, "ρ")
-    .replace(/\\sum/g, "∑")
-    .replace(/\\leq?/g, "≤")
-    .replace(/\\geq?/g, "≥")
-    .replace(/\\neq/g, "≠")
-    .replace(/\\infty/g, "∞")
-    .replace(/\\cdot/g, "⋅")
-    .replace(/\\times/g, "×")
-    .replace(/,\s*/g, ", ")
-    .replace(/\s{5,}/g, "    ")
-    .trim();
+export function formatMathExpressionForDisplay(value: string, positions?: DisplaySourceSpan[]) {
+  let output = replaceLatexFractions(value, positions);
+  output = replaceDisplayText(output, /\\left\s*/g, "", positions);
+  output = replaceDisplayText(output, /\\right\s*/g, "", positions);
+  output = replaceDisplayText(output, /\\begin\{cases\}/g, "{", positions);
+  output = replaceDisplayText(output, /\\end\{cases\}/g, "", positions);
+  output = replaceDisplayText(output, /\\\[\s*\d+(?:\.\d+)?(?:pt|em|ex|px)\s*\]/g, "", positions);
+  output = replaceDisplayText(output, /\\\\/g, "", positions);
+  output = replaceDisplayText(output, /\s*&\s*/g, "    ", positions);
+  output = replaceDisplayText(output, /\\qquad/g, "    ", positions);
+  output = replaceDisplayText(output, /\\quad/g, "  ", positions);
+  output = replaceDisplayText(output, /\\lambda/g, "λ", positions);
+  output = replaceDisplayText(output, /\\mu/g, "μ", positions);
+  output = replaceDisplayText(output, /\\rho/g, "ρ", positions);
+  output = replaceDisplayText(output, /\\sum/g, "∑", positions);
+  output = replaceDisplayText(output, /\\leq?/g, "≤", positions);
+  output = replaceDisplayText(output, /\\geq?/g, "≥", positions);
+  output = replaceDisplayText(output, /\\neq/g, "≠", positions);
+  output = replaceDisplayText(output, /\\infty/g, "∞", positions);
+  output = replaceDisplayText(output, /\\cdot/g, "⋅", positions);
+  output = replaceDisplayText(output, /\\times/g, "×", positions);
+  output = replaceDisplayText(output, /,\s*/g, ", ", positions);
+  output = replaceDisplayText(output, /\s{5,}/g, "    ", positions);
+  return replaceDisplayText(output, /^\s+|\s+$/g, "", positions);
 }
 
 export function looksLikeLooseMathLine(line: string) {

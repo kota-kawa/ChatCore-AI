@@ -17,10 +17,10 @@ const memo: MemoDetail = { id: 1, title: TITLE, ai_response: BODY };
 
 // モーダルが実際に依存する状態だけを持つハーネス（プレビュー／編集、タイトル、本文）
 // Harness holding just the state the modal really drives: preview vs edit, title and body
-function DetailHarness() {
+function DetailHarness({ body = BODY }: { body?: string }) {
   const [detailPreviewMode, setDetailPreviewMode] = useState(true);
   const [detailEditTitle, setDetailEditTitle] = useState(TITLE);
-  const [detailEditAiResponse, setDetailEditAiResponse] = useState(BODY);
+  const [detailEditAiResponse, setDetailEditAiResponse] = useState(body);
   const controller = createMemoPageControllerStub({
     selectedMemo: memo,
     detailPreviewMode,
@@ -58,6 +58,18 @@ describe("MemoDetailModal click-to-edit", () => {
     expect(document.activeElement).toBe(textarea);
     expect(textarea.selectionStart).toBe(3);
     expect(textarea.selectionEnd).toBe(3);
+  });
+
+  it("converts CRLF source offsets to the textarea's LF offsets", () => {
+    render(<DetailHarness body={"# title\r\n\r\n次の行"} />);
+    const text = screen.getByText("次の行").firstChild!;
+    Object.defineProperty(document, "caretPositionFromPoint", {
+      configurable: true, value: () => ({ offsetNode: text, offset: 1 }),
+    });
+    fireEvent.click(previewPane(), { clientX: 120, clientY: 80 });
+    delete (document as unknown as { caretPositionFromPoint?: unknown }).caretPositionFromPoint;
+    const textarea = screen.getByRole("textbox", { name: "内容" }) as HTMLTextAreaElement;
+    expect(textarea.selectionStart).toBe("# title\n\n次".length);
   });
 
   it("enters the editor with Enter while the preview pane is focused", () => {
