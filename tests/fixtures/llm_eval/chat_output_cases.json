@@ -1,0 +1,391 @@
+{
+  "citation_cases": [
+    {
+      "id": "citation-resolves-both-marker-forms",
+      "description": "検索結果に存在する根拠は、正規形と全角形のどちらの marker でも出典チップになる",
+      "question": "新料金はいつから適用されますか",
+      "query": "新料金 適用開始",
+      "sources": [
+        {
+          "label": "price_notice",
+          "url": "https://example.com/pricing/notice",
+          "title": "新料金プランのお知らせ",
+          "hostname": "example.com",
+          "age": "2026-05-12",
+          "snippets": [
+            "新料金は 2026 年 6 月 1 日から適用されます。"
+          ]
+        },
+        {
+          "label": "faq",
+          "url": "https://example.org/support/faq",
+          "title": "よくある質問",
+          "hostname": "example.org",
+          "age": "2026-05-20",
+          "snippets": [
+            "既存契約は次回更新日から新料金になります。"
+          ]
+        }
+      ],
+      "model_output": "新料金は 2026 年 6 月 1 日から適用されます {{cite:price_notice}}。既存契約は次回更新日からです {{cite_fullwidth:faq}}。",
+      "expect": {
+        "citation_labels": [
+          "price_notice",
+          "faq"
+        ],
+        "invalid_markers": [],
+        "plain_text": "新料金は 2026 年 6 月 1 日から適用されます 。既存契約は次回更新日からです 。"
+      }
+    },
+    {
+      "id": "citation-drops-unknown-evidence-id",
+      "description": "検索結果に無い根拠IDの引用は本文から取り除かれ、不正 marker として報告される",
+      "question": "解約手数料はいくらですか",
+      "query": "解約手数料",
+      "sources": [
+        {
+          "label": "terms",
+          "url": "https://example.com/terms",
+          "title": "利用規約",
+          "hostname": "example.com",
+          "age": "2026-04-02",
+          "snippets": [
+            "解約手数料は発生しません。"
+          ]
+        }
+      ],
+      "model_output": "解約手数料は発生しません {{cite:terms}}。なお違約金の記載もありません [[source:src_00000000000000000000]]。",
+      "expect": {
+        "citation_labels": [
+          "terms"
+        ],
+        "invalid_markers": [
+          "[[source:src_00000000000000000000]]"
+        ],
+        "plain_text": "解約手数料は発生しません 。なお違約金の記載もありません 。"
+      }
+    },
+    {
+      "id": "citation-maps-each-marker-to-its-own-source",
+      "description": "同じ段落で別々の出典を引くとき、各 marker がそれぞれの出典に対応する",
+      "question": "障害の原因と復旧時刻を教えてください",
+      "query": "障害 原因 復旧",
+      "sources": [
+        {
+          "label": "incident",
+          "url": "https://status.example.com/incidents/2026-05-30",
+          "title": "障害報告",
+          "hostname": "status.example.com",
+          "age": "2026-05-30",
+          "snippets": [
+            "原因は認証基盤の設定変更でした。"
+          ]
+        },
+        {
+          "label": "postmortem",
+          "url": "https://blog.example.net/postmortem",
+          "title": "事後報告",
+          "hostname": "blog.example.net",
+          "age": "2026-06-02",
+          "snippets": [
+            "復旧は 14:20 に完了しました。"
+          ]
+        }
+      ],
+      "model_output": "原因は認証基盤の設定変更でした {{cite:incident}}。復旧は 14:20 に完了しています {{cite:postmortem}}。再発防止策も同じ報告にあります {{cite:postmortem}}。",
+      "expect": {
+        "citation_labels": [
+          "incident",
+          "postmortem",
+          "postmortem"
+        ],
+        "invalid_markers": [],
+        "plain_text": "原因は認証基盤の設定変更でした 。復旧は 14:20 に完了しています 。再発防止策も同じ報告にあります 。"
+      }
+    },
+    {
+      "id": "citation-keeps-plain-answer-untouched",
+      "description": "引用 marker を含まない回答は、本文をそのまま残し出典も付けない",
+      "question": "サポートの受付時間を教えてください",
+      "query": "サポート 受付時間",
+      "sources": [
+        {
+          "label": "support",
+          "url": "https://example.com/support",
+          "title": "サポート窓口",
+          "hostname": "example.com",
+          "age": "2026-03-15",
+          "snippets": [
+            "受付時間は平日 10:00-18:00 です。"
+          ]
+        }
+      ],
+      "model_output": "受付時間は平日 10:00-18:00 です。土日祝は翌営業日の対応になります。",
+      "expect": {
+        "citation_labels": [],
+        "invalid_markers": [],
+        "plain_text": "受付時間は平日 10:00-18:00 です。土日祝は翌営業日の対応になります。"
+      }
+    },
+    {
+      "id": "citation-rejects-a-source-with-an-unsafe-url",
+      "description": "出典のURLが http(s) でない場合、その引用は描画せず不正 marker として扱う",
+      "question": "手順の参考リンクを教えてください",
+      "query": "手順 参考リンク",
+      "sources": [
+        {
+          "label": "safe",
+          "url": "https://example.com/guide",
+          "title": "設定ガイド",
+          "hostname": "example.com",
+          "age": "2026-05-01",
+          "snippets": [
+            "設定手順はこちらです。"
+          ]
+        },
+        {
+          "label": "unsafe",
+          "url": "javascript:alert(1)",
+          "title": "危険なリンク",
+          "hostname": "example.com",
+          "age": "2026-05-02",
+          "snippets": [
+            "本文を取得できませんでした。"
+          ]
+        }
+      ],
+      "model_output": "設定手順はガイドにあります {{cite:safe}}。もう一件の候補は参照できません {{cite:unsafe}}。",
+      "expect": {
+        "citation_labels": [
+          "safe"
+        ],
+        "invalid_markers": [
+          "{{cite:unsafe}}"
+        ],
+        "plain_text": "設定手順はガイドにあります 。もう一件の候補は参照できません 。"
+      }
+    }
+  ],
+  "artifact_cases": [
+    {
+      "id": "artifact-2d-complete-passes-quality-gate",
+      "description": "初期表示・操作・装飾が揃った 2D Artifact は、検証も品質ゲートも通る",
+      "ui_mode": "2D",
+      "prose": "移行作業のチェックリストです。",
+      "artifact": {
+        "version": 1,
+        "title": "移行チェックリスト",
+        "description": "完了した項目を数えながら進められます",
+        "height": 440,
+        "html": "<div id=\"app\"><header><span>Migration</span><h2>移行チェックリスト</h2><p class=\"count\">0 / 3 完了</p></header><ul><li><label><input type=\"checkbox\"> データベースのバックアップ</label></li><li><label><input type=\"checkbox\"> 接続先の切り替え</label></li><li><label><input type=\"checkbox\"> 旧環境の停止</label></li></ul></div>",
+        "css": "#app{padding:26px;border-radius:16px;background:#fbfdff;color:#16232f;font:14px/1.7 system-ui,sans-serif;border:1px solid #dbe6f0}header{margin-bottom:16px}header span{color:#0f766e;font-weight:700;letter-spacing:.08em;font-size:12px}h2{margin:6px 0 2px;font-size:21px}.count{margin:0;color:#5b6b7a}ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}li{padding:12px 14px;border:1px solid #e2eaf2;border-radius:10px;background:#fff}label{display:flex;gap:10px;align-items:center;cursor:pointer}li.done{background:#ecfdf5;border-color:#a7f3d0}",
+        "js": "const app=document.getElementById('app');const count=app.querySelector('.count');const items=Array.from(app.querySelectorAll('li'));const update=()=>{const done=items.filter((item)=>item.querySelector('input').checked);items.forEach((item)=>item.classList.toggle('done',item.querySelector('input').checked));count.textContent=`${done.length} / ${items.length} 完了`;};items.forEach((item)=>item.querySelector('input').addEventListener('change',update));update();"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": []
+      }
+    },
+    {
+      "id": "artifact-2d-js-rendered-but-too-small",
+      "description": "JavaScript が DOM を作る作りでも、実装が小さすぎる 2D Artifact は規模の指摘だけを受ける",
+      "ui_mode": "2D",
+      "prose": "簡単な図にしました。",
+      "artifact": {
+        "version": 1,
+        "title": "構成図",
+        "description": "クリックできる簡易図解",
+        "height": 360,
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{padding:16px;border-radius:8px;background:#f8fafc;}",
+        "js": "document.getElementById('app').textContent = 'ready';"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": [
+          "2D implementation is too small to be a polished UI"
+        ]
+      }
+    },
+    {
+      "id": "artifact-2d-static-markup-is-too-sparse",
+      "description": "静的HTMLに中身を置く作りで初期表示が薄い場合、薄さと規模の両方が指摘される",
+      "ui_mode": "2D",
+      "prose": "料金の一覧です。",
+      "artifact": {
+        "version": 1,
+        "title": "料金表",
+        "description": "静的な料金表",
+        "height": 320,
+        "html": "<div id=\"app\"><p>A</p></div>",
+        "css": "#app{padding:24px;border-radius:18px;background:#f8fafc;color:#172033;font:14px/1.6 system-ui,sans-serif;box-shadow:0 16px 36px #1e3a8a1a;display:grid;gap:12px}p{margin:0;font-size:15px;letter-spacing:.01em}",
+        "js": "console.log('ready');const total=1+1;const label='料金表';const note=label+total;window.__note=note;const pad=Array.from({length:6}).map((_,i)=>i).join(',');window.__pad=pad;"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": [
+          "2D initial content is too sparse",
+          "2D implementation is too small to be a polished UI"
+        ]
+      }
+    },
+    {
+      "id": "artifact-2d-static-styling-is-too-sparse",
+      "description": "静的HTMLの中身は足りていても、装飾が薄い 2D Artifact はスタイルの薄さを指摘される",
+      "ui_mode": "2D",
+      "prose": "初期設定の手順です。",
+      "artifact": {
+        "version": 1,
+        "title": "手順",
+        "description": "静的な手順表示",
+        "height": 320,
+        "html": "<div id=\"app\"><h2>初期設定の手順</h2><ol><li>設定画面を開く</li><li>通知を有効にする</li><li>保存する</li></ol><p>反映には数分かかります。</p></div>",
+        "css": "#app{padding:16px}h2{font-size:18px}",
+        "js": "console.log('static');const note='手順';window.__note=note;const pad=Array.from({length:12}).map((_,i)=>i).join(',');window.__pad=pad;const more=pad+note;window.__more=more;"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": [
+          "2D presentation styling is too sparse",
+          "2D implementation is too small to be a polished UI"
+        ]
+      }
+    },
+    {
+      "id": "artifact-3d-missing-renderer",
+      "description": "three.js のシーンを組んでも renderer を作らない 3D Artifact は必須要素の欠落として検出される",
+      "ui_mode": "3D",
+      "prose": "立体で示します。",
+      "artifact": {
+        "version": 1,
+        "title": "立体図",
+        "description": "回転する立方体",
+        "height": 420,
+        "libraries": [
+          "three"
+        ],
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{width:100%;height:420px;border-radius:18px;background:#0b1120;box-shadow:0 16px 36px #1e3a8a1a;display:block;overflow:hidden;position:relative;margin:0 auto;max-width:720px}",
+        "js": "const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(60,16/9,0.1,100);const geometry=new THREE.BoxGeometry(1,1,1);const material=new THREE.MeshStandardMaterial({color:0x4f46e5});const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);scene.add(new THREE.AmbientLight(0xffffff,0.8));camera.position.z=3;function animate(){mesh.rotation.y+=0.01;renderer.render(scene,camera);requestAnimationFrame(animate);}animate();"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": [
+          "3D artifact is missing a renderer",
+          "3D implementation is too small to be a polished scene"
+        ]
+      }
+    },
+    {
+      "id": "artifact-3d-missing-render-call",
+      "description": "renderer を作っても描画呼び出しが無い 3D Artifact は、静止画面になる欠落として検出される",
+      "ui_mode": "3D",
+      "prose": "立体で示します。",
+      "artifact": {
+        "version": 1,
+        "title": "立体図",
+        "description": "回転する立方体",
+        "height": 420,
+        "libraries": [
+          "three"
+        ],
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{width:100%;height:420px;border-radius:18px;background:#0b1120;box-shadow:0 16px 36px #1e3a8a1a;display:block;overflow:hidden;position:relative;margin:0 auto;max-width:720px}",
+        "js": "const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(720,420);document.getElementById('app').appendChild(renderer.domElement);const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(60,16/9,0.1,100);const geometry=new THREE.BoxGeometry(1,1,1);const material=new THREE.MeshStandardMaterial({color:0x4f46e5});const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);scene.add(new THREE.AmbientLight(0xffffff,0.8));camera.position.z=3;function animate(){mesh.rotation.y+=0.01;requestAnimationFrame(animate);}animate();"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": [
+          "3D artifact is missing a render call"
+        ]
+      }
+    },
+    {
+      "id": "artifact-missing-when-requested",
+      "description": "UI を求められたターンで Artifact が無い出力は、欠落として検出される",
+      "ui_mode": "2D",
+      "prose": "図は作らず、文章で手順を説明します。まず設定画面を開き、次に通知を有効にします。",
+      "artifact": null,
+      "expect": {
+        "artifact_status": "missing",
+        "reason_codes": [
+          "required_artifact_missing"
+        ],
+        "quality_issue_labels": [
+          "expected exactly one artifact, received 0"
+        ]
+      }
+    },
+    {
+      "id": "artifact-rejects-disallowed-javascript-api",
+      "description": "サンドボックスで禁止された API を使う Artifact は不正として扱われ、本文だけが残る",
+      "ui_mode": "2D",
+      "prose": "外部データを読み込む画面です。",
+      "artifact": {
+        "version": 1,
+        "title": "取得",
+        "description": "外部取得",
+        "height": 300,
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{padding:16px}",
+        "js": "fetch('https://example.com/data.json').then(r=>r.json()).then(d=>{document.getElementById('app').textContent=JSON.stringify(d);});"
+      },
+      "expect": {
+        "artifact_status": "invalid",
+        "reason_codes": [
+          "artifact_malformed"
+        ],
+        "quality_issue_labels": null
+      }
+    },
+    {
+      "id": "artifact-kept-when-mode-says-none",
+      "description": "判定が NONE でも、検証を通った Artifact は捨てずに残す（判定の偽陰性を失敗にしないため）",
+      "ui_mode": "NONE",
+      "prose": "対応表にすると分かりやすいのでこちらです。",
+      "artifact": {
+        "version": 1,
+        "title": "用語の対応表",
+        "description": "旧名称と新名称の対応",
+        "height": 300,
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{padding:18px;border-radius:12px;background:#f7f9fc;border:1px solid #e2eaf2;font:14px/1.6 system-ui,sans-serif}",
+        "js": "const rows=[['ルーム','スレッド'],['メモ','ノート']];const app=document.getElementById('app');app.innerHTML=rows.map(([a,b])=>`<p>${a} → ${b}</p>`).join('');"
+      },
+      "expect": {
+        "artifact_status": "valid",
+        "reason_codes": [],
+        "quality_issue_labels": null
+      }
+    },
+    {
+      "id": "artifact-suppressed-when-user-opts-out",
+      "description": "ユーザーが UI 不要と書いたターンでは、Artifact を出さずに抑制する",
+      "ui_mode": "2D",
+      "explicit_ui_opt_out": true,
+      "prose": "文章だけで説明します。",
+      "artifact": {
+        "version": 1,
+        "title": "構成図",
+        "description": "簡易図解",
+        "height": 360,
+        "html": "<div id=\"app\"></div>",
+        "css": "#app{padding:16px;border-radius:8px;background:#f8fafc;}",
+        "js": "document.getElementById('app').textContent = 'ready';"
+      },
+      "expect": {
+        "artifact_status": "suppressed",
+        "reason_codes": [
+          "explicit_ui_opt_out"
+        ],
+        "quality_issue_labels": null
+      }
+    }
+  ]
+}
