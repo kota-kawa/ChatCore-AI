@@ -425,23 +425,22 @@ export default function SharedPromptPage({
         ) : prompt ? (
           <article className="shared-prompt-shell">
             <header className="shared-prompt-header">
-              <p className="shared-prompt-kicker">Prompt Share</p>
-              <div className="shared-prompt-pills" aria-label={english ? "Prompt format and output media" : "投稿のフォーマットと生成メディア"}>
-                <span className="shared-prompt-pill">{english ? "Format" : "フォーマット"}: {formatLabel}</span>
-                <span className="shared-prompt-pill shared-prompt-pill--media">{english ? "Media" : "生成メディア"}: {mediaLabel}</span>
+              <p className="shared-prompt-kicker">{categoryLabel}</p>
+              <div className="shared-prompt-formats" aria-label={english ? "Prompt format and output media" : "投稿のフォーマットと生成メディア"}>
+                <span className="shared-prompt-format">{english ? "Format" : "フォーマット"}: {formatLabel}</span>
+                <span className="shared-prompt-format">{english ? "Media" : "生成メディア"}: {mediaLabel}</span>
               </div>
               <h1>{promptTitle}</h1>
               <div className="shared-prompt-meta">
-                <span><i className="bi bi-folder2-open" aria-hidden="true" /> {english ? "Category" : "カテゴリ"}: {categoryLabel}</span>
-                <span><i className="bi bi-person-circle" aria-hidden="true" /> {english ? "Author" : "投稿者"}: {prompt.author || (english ? "Anonymous" : "匿名ユーザー")}</span>
-                {prompt.created_at ? <span><i className="bi bi-calendar3" aria-hidden="true" /> {english ? "Published" : "投稿日"}: {formatDate(prompt.created_at)}</span> : null}
-                {prompt.ai_model ? <span><i className="bi bi-cpu" aria-hidden="true" /> {english ? "AI model" : "使用AI"}: {prompt.ai_model}</span> : null}
+                <span>{english ? "Author" : "投稿者"}: {prompt.author || (english ? "Anonymous" : "匿名ユーザー")}</span>
+                {prompt.created_at ? <span>{english ? "Published" : "投稿日"}: {formatDate(prompt.created_at)}</span> : null}
+                {prompt.ai_model ? <span>{english ? "AI model" : "使用AI"}: {prompt.ai_model}</span> : null}
               </div>
             </header>
 
             {prompt.description?.trim() ? (
               <section className="shared-prompt-section shared-prompt-description" aria-labelledby="shared-prompt-description-title">
-                <h2 id="shared-prompt-description-title"><i className="bi bi-info-circle" aria-hidden="true" /> {t("promptShare.description")}</h2>
+                <h2 id="shared-prompt-description-title">{t("promptShare.description")}</h2>
                 <p>{prompt.description}</p>
               </section>
             ) : null}
@@ -456,21 +455,21 @@ export default function SharedPromptPage({
             {/* スキルプロンプト以外はプロンプト本文を表示 / Show prompt content for non-skill prompts */}
             {!isSkillPrompt ? (
               <section className="shared-prompt-section">
-                <h2><i className="bi bi-file-earmark-text" aria-hidden="true" /> {english ? "Content" : "内容"}</h2>
+                <h2>{english ? "Content" : "内容"}</h2>
                 <MarkdownContent text={prompt.content || ""} ssrHtml={promptHtml.content} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.input_examples ? (
               <section className="shared-prompt-section">
-                <h2><i className="bi bi-box-arrow-in-right" aria-hidden="true" /> {english ? "Input example" : "入力例"}</h2>
+                <h2>{english ? "Input example" : "入力例"}</h2>
                 <MarkdownContent text={prompt.input_examples} ssrHtml={promptHtml.inputExamples} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.output_examples ? (
               <section className="shared-prompt-section">
-                <h2><i className="bi bi-box-arrow-right" aria-hidden="true" /> {english ? "Output example" : "出力例"}</h2>
+                <h2>{english ? "Output example" : "出力例"}</h2>
                 <MarkdownContent text={prompt.output_examples} ssrHtml={promptHtml.outputExamples} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
@@ -478,7 +477,7 @@ export default function SharedPromptPage({
             {/* スキルプロンプトのMarkdown定義 / Skill prompt Markdown definition */}
             {prompt.skill_markdown ? (
               <section className="shared-prompt-section">
-                <h2><i className="bi bi-stars" aria-hidden="true" /> {english ? "SKILL definition (Markdown)" : "SKILL定義 (Markdown)"}</h2>
+                <h2>{english ? "SKILL definition (Markdown)" : "SKILL定義 (Markdown)"}</h2>
                 <MarkdownContent text={prompt.skill_markdown} ssrHtml={promptHtml.skillMarkdown} className="md-content" headingOffset={BODY_HEADING_OFFSET} />
               </section>
             ) : null}
@@ -486,7 +485,6 @@ export default function SharedPromptPage({
             {skillResources.length > 0 ? (
               <section className="shared-prompt-section shared-prompt-resources">
                 <h2>
-                  <i className="bi bi-files" aria-hidden="true" />
                   {english ? "Additional resources" : "追加リソース"}
                   <span className="shared-prompt-resources__count">{skillResources.length} {english ? (skillResources.length === 1 ? "file" : "files") : "ファイル"}</span>
                 </h2>
@@ -524,7 +522,7 @@ export default function SharedPromptPage({
               <h2>{english ? "Explore more public prompts" : "ほかの公開プロンプトも見る"}</h2>
               <p>{english ? "Search and browse public prompts for writing, image generation, reusable skills, and more." : "Chat Core のプロンプト共有では、文章作成・画像生成・スキルなど、さまざまなカテゴリの公開プロンプトを検索・閲覧できます。"}</p>
               <Link href="/prompt_share" className="shared-prompt-cta__button">
-                <i className="bi bi-collection" aria-hidden="true" /> {english ? "Open the Prompt Library" : "プロンプト共有ページへ"}
+                {english ? "Open the Prompt Library" : "プロンプト共有ページへ"}
               </Link>
             </footer>
 
@@ -532,9 +530,8 @@ export default function SharedPromptPage({
               <section className="shared-prompt-recommendations" aria-labelledby="shared-prompt-recommendations-title">
                 <div className="shared-prompt-recommendations__heading">
                   <div>
-                    <p>Discover more</p>
                     <h2 id="shared-prompt-recommendations-title">
-                      <i className="bi bi-stars" aria-hidden="true" /> {english ? "Recommended prompts" : "おすすめのプロンプト"}
+                      {english ? "Recommended prompts" : "おすすめのプロンプト"}
                     </h2>
                   </div>
                   <Link href="/prompt_share">{english ? "View all" : "すべて見る"} <i className="bi bi-arrow-right" aria-hidden="true" /></Link>
@@ -566,7 +563,7 @@ export default function SharedPromptPage({
                           />
                         ) : null}
                         <div className="shared-prompt-recommendation-card__body">
-                          <div className="shared-prompt-recommendation-card__pills">
+                          <div className="shared-prompt-recommendation-card__meta">
                             <span>{getCategoryLabelOrFallback(recommendedPrompt.category, undefined, locale)}</span>
                             <span>{getPromptFormatLabel(recommendationFormat, locale)}</span>
                             <span>{getPromptMediaLabel(recommendationMedia, locale)}</span>
