@@ -9,7 +9,7 @@
 - `frontend/` は独立した Next.js アプリ（`strike-frontend`）です。`components/`、`hooks/`、`contexts/`、`lib/` などで構成され、スタイル方針は `frontend/STYLING_STRATEGY.md` を参照してください。バックエンドの API とやり取りする UI はここに実装します。
 - `frontend/public/` には Next.js が配信する公開アセットと CSS があります。
 - `alembic/versions/` には PostgreSQL のスキーマ移行履歴が保存されています。
-- `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
+- `tests/` には `tests/unit/` および `tests/integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
 
 ## ビルド、テスト、開発コマンド
 - Python コマンドは `python3`（および `python3 -m pip`）を使用してください。
@@ -33,7 +33,7 @@
 
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
-- JavaScript / TypeScript: `frontend/scripts/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
+- JavaScript / TypeScript: `frontend/components/`・`frontend/hooks/`・`frontend/lib/` にある既存のモジュールパターン（機能別ディレクトリ、用途別 hook と Context への分割、`lib/` の再利用ロジック）に従い、ファイルを単一責任に保ちます。`frontend/scripts/` はブラウザ側の共通ランタイム（CSRF、テーマ、再試行付き fetch）とテストランナーの置き場で、画面ロジックは置きません。
 - CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。1 ファイルに無関係なスタイルを混在させないでください。BEM スタイルの `kebab-case` クラス名を推奨します。
 - フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
 - 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
@@ -67,9 +67,18 @@
 - 反転面（濃色の面）のフォーカスリングを、その面と同じ色にしないでください。白地では地色のオフセットを挟み、濃色面では白のリングを使います。
 - 濃色面では白地用の線色や副次色はコントラストが取れません。濃色面専用のトークンを使い、白地用の値を流用しないでください。
 
+## サブエージェントの指定
+`AGENTS.md` が要求する 2 種類のサブエージェントの指定です。ツールやモデルの名称が変わったら、この表だけを更新します。
+
+| 役割 | 用途 | Codex | Claude Code |
+| --- | --- | --- | --- |
+| レビュー用サブエージェント | PR を作る前の独立レビュー（スコープ・差分・チェックリストだけを渡す） | luna max | Sonnet 5 |
+| LLM 代替サブエージェント | 「AI 出力の品質確認」で LLM API の代わりに応答を生成する | luna | Sonnet 5 |
+
 ## AI 出力の品質確認
 - 対象は LLM に渡す内容や応答の扱いを変える変更です。例: プロンプト文言（`blueprints/chat/tasks.py`、`services/chat_prompt.py`、`services/prompt_assist.py`）、ツール定義（`services/llm_tool_schema.py`）、会話・コンテキストの組み立てと判断ループ（`services/chat_generation.py`）、モデル名・温度・出力上限などの設定。
-- 実 API は呼ばず、サブエージェント（Codex では luna、Claude Code では Sonnet 5）を LLM API の代わりに使います。変更前と変更後のプロンプト・ツール定義・会話を実装と同じ手順で組み立て、同じ入力に対する出力を得てください。
+- 実 API は呼ばず、LLM 代替サブエージェント（「サブエージェントの指定」参照）を LLM API の代わりに使います。変更前と変更後のプロンプト・ツール定義・会話を実装と同じ手順で組み立て、同じ入力に対する出力を得てください。
 - 入力は代表的なケースを 3〜5 件用意します。通常ケースに加え、変更で改善を狙ったケースと、退行しやすいケース（長い文脈、ツール呼び出しが要る質問、日本語と英語の混在など）を含めます。
 - 判定は観点を先に決めて行います。例: 指示への追従、事実性と出典、形式（JSON やツール呼び出しの契約）、冗長さ、口調。変更前後の出力を並べ、観点ごとにどちらが良いかを根拠付きで記録します。
 - 品質が上がったと確認できない場合は PR にせず、原因を調べて修正するかユーザーに報告してください。比較に使った入力・観点・結果は PR 本文に書きます。
+- この比較は本番のプロバイダ・モデル（Groq、OpenAI、Anthropic 上の各モデル）とは別のモデルで行うため、確認できるのは指示文・文脈の組み立て・ツール説明文の改善方向までです。ツール引数のサーバー側検証（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）、出力上限の扱い、ストリームイベントの形式などプロバイダ固有の挙動は確認できません。JSON やツール呼び出しの契約が変わる場合は、`services/llm_tool_schema.py` や `services/chat_generation.py` の既存の単体テストで担保し、足りなければ同じ変更でテストを追加してください。

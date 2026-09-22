@@ -166,6 +166,11 @@ jobs:
           set -euo pipefail
           python scripts/check_env_documentation.py
 
+      - name: Verify documentation path references
+        run: |
+          set -euo pipefail
+          python scripts/check_doc_paths.py
+
   typecheck_backend:
     name: Backend Type Check (mypy)
     runs-on: ubuntu-latest

@@ -21,7 +21,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | URL | ページ入口 | 主な UI／状態 | 主な Backend 境界 |
 | --- | --- | --- | --- |
 | `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE |
-| `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `register.tsx`, `oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
+| `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `pages/register.tsx`, `pages/oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `components/auth/auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
 | `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like` |
 | `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
 | `/prompt_share` | `pages/prompt_share/index.tsx` | `components/prompt_share/`、プロンプト共有 hook 群 | `/prompt_share/api/*`、`/search/prompts`、`/api/*` |
@@ -30,7 +30,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | `/shared/[token]` | `pages/shared/[token].tsx` | `components/shared_chat/` | 共有チャット取得・fork API |
 | `/shared/memo/[token]` | `pages/shared/memo/[token].tsx` | 共有メモ表示 | `/memo/api/shared` |
 | `/shared/prompt/[id]/[[...slug]]` | `pages/shared/prompt/[id]/[[...slug]].tsx` | 共有プロンプト詳細 | `/prompt_share/api/prompts/{id}` |
-| `/admin`, `/admin/login` | `pages/admin/index.tsx`, `login.tsx` | 管理画面固有の UI と Tailwind 互換スタイル | `/admin/api/*` |
+| `/admin`, `/admin/login` | `pages/admin/index.tsx`, `pages/admin/login.tsx` | 管理画面固有の UI と Tailwind 互換スタイル | `/admin/api/*` |
 | `/lp`, `/chat/lp`, `/memo/lp`, `/prompt_share/lp` | 各 `pages/*/lp.tsx` | LP 専用 components と page CSS | 原則公開ページ。必要なデータ取得のみ API を利用 |
 | `/help`, `/terms`, `/privacy` | 各ページ入口 | `components/docs/`、help コンテンツ | 静的／翻訳データ中心 |
 
