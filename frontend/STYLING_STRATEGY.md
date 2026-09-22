@@ -2,6 +2,7 @@
 
 - Primary styling axis: **CSS custom properties + modular CSS files**.
 - `:root` tokens are defined only in `public/static/css/base/variables.css`.
+- The colour, radius and shadow tokens, and the rules for choosing them, are documented in `DESIGN_TOKENS.md` (Japanese). Change a value in `variables.css` and that document in the same commit.
 - Page-level visual differences (for example scrollbars) use page-scoped variables such as `--page-scrollbar-*`, not duplicated `:root` tokens.
 - Bootstrap's full CSS bundle is not loaded. `bootstrap-icons` remains available via npm, and the few legacy Bootstrap class names still used by prompt/settings screens are covered by `styles/bootstrap-compat.css`.
 - Tailwind utility usage remains in admin pages as a legacy exception; new shared tokens must still be defined via `variables.css`.

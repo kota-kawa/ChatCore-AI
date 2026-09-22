@@ -51,7 +51,7 @@
 - FastAPI ルートのリクエスト/レスポンスの動作に焦点を当て、外部サービスや DB 接続はモック化してください。
 
 ## UI 実装規約
-- トークンの正本は `frontend/public/static/css/base/variables.css`、CSS の配置方針は `frontend/STYLING_STRATEGY.md` です。ここには配色や操作の原則だけを置き、色の数値は書きません。
+- トークンの正本は `frontend/public/static/css/base/variables.css`、役割別の一覧と選び方は `frontend/DESIGN_TOKENS.md`、CSS の配置方針は `frontend/STYLING_STRATEGY.md` です。ここには配色や操作の原則だけを置き、色の数値は書きません。新しい UI は既存トークンから選び、既存画面と浮かないことを優先してください。
 - ホバー（`:hover`）だけで現れる操作はタッチ端末では触れません。タップで開く導線を必ず用意し、ポインタを持たない端末で同じ操作ができるかを実装前に確認してください。
 - アイコンだけのボタンは、タップ領域を 44×44px 以上にしてください。
 - 色は `variables.css` のトークンで定義し、コンポーネントやページの CSS に生の 16 進数を書かないでください。
