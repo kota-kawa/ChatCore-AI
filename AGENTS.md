@@ -1,71 +1,18 @@
 # リポジトリガイドライン
 
-## プロジェクト構成とモジュール構成
-- `app.py` はメインサーバーの FastAPI エントリーポイントです。
-- `blueprints/` には機能モジュール（auth、chat、memo、prompt_share、context_vault、admin、MCP OAuth）と、それぞれのルーティング・ハンドラが含まれています。
-- `services/` には、共通のインテグレーション（DB、LLM、メール、ユーザーヘルパー）が格納されています。DB アクセスは可能な限り `services/repositories/`（`chat_repository.py` など）のリポジトリ経由に寄せてください。
-- `frontend/` は独立した Next.js アプリ（`strike-frontend`）です。`components/`、`hooks/`、`contexts/`、`lib/` などで構成され、スタイル方針は `frontend/STYLING_STRATEGY.md` を参照してください。バックエンドの API とやり取りする UI はここに実装します。
-- `frontend/public/` には Next.js が配信する公開アセットと CSS があります（リポジトリ直下に `static/` はありません）。
-- `alembic/versions/` には PostgreSQL のスキーマ移行履歴が保存されています。
-- `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
-
 ## ドキュメントの参照先
 - `README.md` は公開向けの概要・機能紹介・起動手順です。内部設計の正本としては扱わず、実装との差分が見つかった場合は公開向け説明として修正します。
 - `ARCHITECTURE.md` はシステム構成、責務、リクエスト経路、データ・契約の境界をまとめた内部設計の正本です。複数レイヤーにまたがる変更では最初に必要な章だけ参照してください。
-- `docs/architecture/` はサブシステム固有の詳細です。現在のプロンプト添付画像の保存境界は `docs/architecture/prompt_attachment_storage.md` にあります。
-- `docs/architecture/README.md` は構造詳細の索引です。Frontend の機能マップ、Backend のルートマップ、DB エンティティ、Docker／デプロイ、テスト対応表へ必要なときだけ辿ってください。
-- `docs/architecture/frontend_feature_map.md` はページから主要コンポーネント・hook・API までの対応表です。
-- `docs/architecture/backend_route_map.md` は router、URL 接頭辞、機能別の Backend ハンドラの対応表です。
-- `docs/architecture/data_model.md` は主要 PostgreSQL エンティティと Redis／ファイル保存の境界を説明します。
-- `docs/architecture/deployment_and_operations.md` は Docker Compose、Blue/Green、起動順、ポート、永続ボリュームを説明します。
-- `docs/architecture/testing_map.md` は機能ごとの Backend／Frontend テストの選び方を説明します。
-- `docs/architecture/system_design_deep_dive.md` は機能単位の設計意図（AIエージェント、生成UI、クォータ、代表的な上限、シナリオ、用語）の長文詳細です。`ARCHITECTURE.md` と重複する内容は持たず、該当章へのリンクになっています。
+- `docs/architecture/` はサブシステム固有の設計の正本です。全体像は持たないので、索引から必要なファイルだけ辿ってください。
+- `docs/architecture/README.md` は構造詳細の索引です。Frontend の機能マップ、Backend のルートマップ、DB エンティティ、Docker／デプロイ、テスト対応表、機能単位の設計意図（`system_design_deep_dive.md`）へ必要なときだけ辿ってください。
+- `docs/knowledge/development_conventions.md` はプロジェクト構成、ビルド・テストコマンド、スキーマ同期、実装規約、命名規則、責務分割、テスト方針をまとめた開発規約です。コードを変更する作業では着手前に必ず読んでください。
 - `docs/knowledge/README.md` は再利用可能な知見の索引です。デバッグ手順は `docs/knowledge/debugging.md`、API契約とマイグレーションの注意点は `docs/knowledge/contracts-and-migrations.md` を参照してください。作業ログや一時的な状態は追加しません。
 - `docs/knowledge/system_design_interview_notes.md` はシステムデザイン面接向けの準備メモです。容量見積もりや将来の発展案は現在の実装ではないため、実装判断の根拠として引用しないでください。
 - `docs/decisions/README.md` は重要な技術判断（ADR）の索引です。判断を変更・追加するときは、既存 ADR を確認して理由と影響を更新・記録してください。
 - `docs/manual/` は利用者向けマニュアルであり、実装の責務や内部挙動を確認する資料ではありません。
 - `frontend/STYLING_STRATEGY.md` は Next.js 側の CSS 配置・トークン・レガシー互換方針です。UI の変更時は `ARCHITECTURE.md` のフロントエンド章と併せて参照してください。
-
-## ビルド、テスト、開発コマンド
-> **注意:** この環境には `python` コマンドがありません。Python コマンドはすべて `python3`（および `python3 -m pip`）を使用してください。
-- `docker-compose up --build` は、Docker を使用してフルスタック（FastAPI + PostgreSQL）をビルドし、実行します。
-- `python3 -m pip install -r requirements.txt` は、ローカル開発用の Python 依存関係をインストールします。
-- `python3 app.py` は、FastAPI アプリをローカルで起動します（必要な環境変数が設定されていることを確認してください）。
-- `python3 -m unittest` はテストスイートを実行します。特定のファイルをターゲットにする場合は、`python3 -m unittest tests.unit.test_edit_default_task` のように実行します。
-- フロントエンド（`frontend/`）は Node のコマンドを使用します。`npm run dev`（開発サーバー）、`npm run build`（ビルド）、`npm run lint`（ESLint）、`npm run typecheck`（型検査）、`npm run test`（ロジック + コンポーネントテスト）を実行してください。フロントエンドを変更したら、変更箇所と直接影響を受ける範囲に必要な `lint`／`typecheck`／テストを実行してください。
-- 依存バージョンは完全固定（`==` および固定タグ）が必須です。`python3 scripts/check_version_locks.py` で requirements とロック、Docker イメージ、npm スペックの固定を検証できます。浮動バージョン（`^`、`~`、`latest` など）は追加しないでください。
-- バックエンドの静的解析設定は `pyproject.toml` に集約されています。`python3 -m ruff check app.py blueprints services scripts tests` で lint、`python3 -m mypy` で型検査を実行します。mypy は `[tool.mypy]` の `files` に挙げたモジュールだけを検査対象とする段階導入方式で、型付けを広げるときはこのリストへ 1 行追加してください。
-- 環境変数を新しく読むコードを追加したら `.env.example` にも追記してください。`python3 scripts/check_env_documentation.py` がコードと `.env.example` の差分を検出し、CI でも検証されます。
-
-## バックエンド ↔ フロントエンドのスキーマ同期
-- API のリクエスト/レスポンスモデル（`services/request_models.py` などの Pydantic モデル）を変更したら、`frontend/` で `npm run generate:api-schemas`（内部で `python3 scripts/generate_frontend_zod_schemas.py` を実行）を走らせて Zod スキーマを再生成してください。
-- 生成物 `frontend/types/generated/api_schemas.ts` は自動生成ファイル（`AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.`）です。手で編集せず、必ず生成コマンドで更新してください。
-- モデル変更時にスキーマ再生成を忘れると、フロントとバックエンドの型がずれて実行時エラーの原因になります。PR には再生成済みの差分を含めてください。
-
-## 共通ユーティリティと実装規約
-- エラー処理: アドホックな例外ではなく `services/api_errors.py`（`ApiServiceError`、`ResourceNotFoundError`、`ForbiddenOperationError` など）を使用し、ユーザー向け文言は `services/error_messages.py` の定数へ集約してください。
-- ロギング: `print` ではなく `logging.getLogger(__name__)` を使用します。ロガー設定は `services/logging_config.py`（`configure_logging()`）が担うため、モジュール側で `basicConfig` を呼ばないでください。
-- CSRF: 状態を変更するルート（POST/PUT/DELETE など）には、既存の blueprint と同様に CSRF 保護を必ず適用してください。
-
-## コーディングスタイルと命名規則
-- Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
-- JavaScript / TypeScript: `frontend/scripts/` にある既存のモジュールパターンに従い、ファイルを単一責任に保ちます。
-- CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します（リポジトリ直下に `static/css/` は存在しません）。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。BEM スタイルの `kebab-case` クラス名を推奨します。
-- フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
-- 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
-
-## 責務分割とファイル肥大化の防止
-- 1つのファイル・関数・クラスに責務を詰め込みすぎないでください。単一責任の原則（SRP）を守り、役割が増えてきたら早めにモジュールへ分割します。
-- 既存ファイルに機能を追加する際は、そのファイルの責務が肥大化しないか確認してください。関心事が異なる処理は、`services/`（共通ロジック）やブループリント配下の適切なモジュールへ切り出します。
-- 関数が長くなりすぎた場合（目安として1画面に収まらない、複数の責務を持つ）は、意味のある単位に分割します。深いネストは早期リターンやヘルパー関数で平坦化してください。
-- JavaScript / TypeScript は `frontend/scripts/` の既存モジュールパターンに従い、ファイルを単一責任に保ちます。CSS はベース／コンポーネント／ページの区分（`frontend/public/static/css/{base,components,pages}/`）を維持し、1ファイルに無関係なスタイルを混在させないでください。
-- テンプレートやルーティングに複雑なロジックを埋め込まず、ビジネスロジックは `services/` へ寄せ、各レイヤーの責務を明確に保ちます。
-- 既存の重複や肥大化に気づいた場合でも、依頼された変更の範囲を大きく超えるリファクタリングは避け、必要に応じて PR やコメントで分割を提案してください。
-
-## テストガイドライン
-- フレームワーク: `unittest` （`tests/unit/test_edit_default_task.py` を参照）。
-- 命名: テストは `tests/` に配置し、ファイル名には `test_` 接頭辞を付けます。
-- FastAPI ルートのリクエスト/レスポンスの動作に焦点を当て、外部サービスや DB 接続はモック化してください。
+- `frontend/DESIGN_TOKENS.md` は現在の配色・角丸・影のトークンの参考資料です。新しい UI が既存画面と浮かないよう色を選ぶ前に読み、配色を変える場合は `variables.css` と同じコミットで更新してください。
+- ドキュメントを追加・削除したら、同じコミットでこの一覧も更新してください。各行は「パス／内容の区分／いつ参照するか、または何に使わないか」の型で書き、詳細の要約や特定機能に紐づく記述は書きません。
 
 ## コミットおよびプルリクエストのガイドライン
 - `main` ブランチへ直接 push してはいけません。すべての変更は作業ブランチにコミットし、必ず PR（プルリクエスト）を作成して `main` に取り込んでください。
@@ -78,13 +25,21 @@
 ## エージェントの作業ルール
 - 作業開始前に現在のブランチと未コミットの変更を確認してください。`main` ブランチ上では変更を行わず、作業ブランチを使用してください。
 - ユーザーまたは他のエージェントによる既存の変更を、明示的な許可なく上書き、破棄、または巻き戻してはいけません。
+- 要件が曖昧なまま実装コードを書かないでください。着手前に質問してスコープとスコープ外を合意し、合意していない変更は加えません。未使用のヘルパー、過剰な抽象化、コメントアウトした残骸などの不要なコードも生成しません。
+- コメント、docstring、関数名を仕様の根拠にせず、実装本体とテストを読んで判断してください。触った範囲で実装と食い違うコメントや名前を見つけたら、同じ変更で直します。
+- テスト失敗やレビュー指摘に対する自動修正のループは 5 回を上限とします。超えたら自力で続けず、何が未解決でどこで詰まっているかを添えてユーザーに報告してください。
+- 実装したエージェントは自分で完了判定をしないでください。PR を作る前に別のサブエージェント（Codex では luna max、Claude Code では Sonnet 5 を指定）へスコープ・差分・チェックリスト（要件を満たす／スコープ外の変更が無い／不要なコードが無い／テストが通る／禁止事項に触れない）だけを渡してレビューさせ、実装担当の意図や経緯の説明は渡しません。指摘は検証してから反映します。指摘に反論がある場合は握りつぶさずユーザーに上げてください。
 - 修正後は、変更箇所および直接影響を受ける範囲に対応するテストのみを実行してください。変更と関係のないテストやテストスイート全体は実行しません。ただし、変更が横断的で影響範囲を限定できない場合、またはユーザーが明示的に求めた場合はこの限りではありません。テストを実行できない場合は、その理由を最終報告に記載してください。
+- 見た目や操作に影響するフロントエンド変更（CSS、JSX の構造、イベント処理）は、PR を作る前に Playwright で実描画・実操作を確認し、確認した画面・ビューポート（PC とスマホ幅）・テーマ・実測結果を PR 本文に書いてください。手順は `docs/knowledge/frontend_visual_verification.md` にあります。型定義や API クライアントなど描画に出ない変更は対象外です。
+- AI の出力が変わる変更（プロンプト文言、ツール定義、会話やコンテキストの組み立て、モデル設定、判断ループ）は、PR を作る前に LLM API の代わりとしてサブエージェント（Codex では luna、Claude Code では Sonnet 5）に変更前と変更後のプロンプトを同じ入力で与え、出力を並べて比較し、品質が上がったことを確認してください。比較に使った入力・観点・結果を PR 本文に書きます。手順は `docs/knowledge/development_conventions.md` の「AI 出力の品質確認」にあります。
 - サブエージェントと git worktree は別の判断軸です。「作業を独立分割できるか」でサブエージェントを、「作業ツリーを共有すると壊れるか」で worktree を判断してください。
-- サブエージェントを使う: 読み取りのみの調査・レビュー、または担当ファイルを重複なく分割できる編集。担当範囲を明確に分け、原則として同じファイルを同時に編集させないでください。
+- サブエージェントを使う: 読み取りのみの調査・レビュー、または担当ファイルを重複なく分割できる編集。調査・実装・レビューを分けるときは役割ごとに別の担当にし、各担当にはその役割に必要な情報だけを渡します。担当範囲を明確に分け、原則として同じファイルを同時に編集させないでください。
 - worktree を使う（いずれか該当時）: 並列作業が同じ生成物（`frontend/types/generated/api_schemas.ts`、alembic の head、`package-lock.json` など）に触る／別 PR に分けるべき変更を同時に進める／破棄する可能性のある大規模リファクタ／作業ツリーにユーザーの未コミット変更がある。
 - worktree を使わない: 数ファイル規模の変更と、`python3 app.py` の起動が必要な作業。`.env` は git 管理外のため新規 worktree では起動できません。
 - **並行数の上限は worktree の本数ではなく「担当ファイルが重複しないこと」で決めてください。** 同時に走る作業どうしが同じファイルを編集する予定なら、worktree を増やしても解決しません。片方を待たせてください。重複が無ければ機械資源は制約になりません（worktree 1 本あたり数百 MB、`.git` は worktree 間で共有されます）。
 - DB／Redis／ポートは worktree 間で共有されるため、alembic migration の適用や `docker-compose up` を伴う作業は同時に 1 つだけにしてください。
+- worktree を分ける単位は着手前に決め、実装途中で思いつきで分割しないでください。並列作業中は担当 worktree の外を触らず、他の作業への依存が判明したら止めてユーザーに報告します。依存のある作業は同時に走らせず、先行側が終わってから始めます。
+- 作業を複数の担当に分けるときは、着手前に「誰の成果物を誰にどの形式で渡すか」「何が揃ったら次を始めてよいか」「最終判定は誰か」を決めて各担当の依頼文に書いてください。最終判定はユーザーで、エージェント間の判断の不一致はユーザーに上げます。
 - 1 worktree = 1 ブランチ = 1 PR とします。同時にオープンする PR の本数に上限は設けません。ただし並行数を上げるほど、1 本マージするたびに残りを `main` へリベースする手間が増えるため、本数を増やす前に重複の無い単位へ切れているかを確認してください。
 - `main` へのマージは、直前のマージで起動した CI の実行が完了してから行ってください。連続してマージすると、同じ concurrency group に入った先行の実行が打ち切られ、そのコミットの Deploy ジョブが実行されないまま「PR は緑」に見える状態が起こりえます。
 - worktree でフロントエンドを検証する場合は、`frontend/node_modules` を共有ツリーのものへシンボリックリンクしてください（`ln -s <共有ツリー>/frontend/node_modules <worktree>/frontend/node_modules`）。これで `npx tsc --noEmit`／`npx eslint .`／`npx vitest run`／`node scripts/run-logic-tests.cjs` が動きます。**リンク先の共有ツリーを壊すため、`npm install`／`npm ci`／`npm update` は実行しないでください。**

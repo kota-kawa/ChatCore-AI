@@ -37,6 +37,7 @@ flowchart LR
 | DB スキーマの変更履歴 | `alembic/versions/` | `docs/knowledge/contracts-and-migrations.md` |
 | プロンプト添付画像の処理・保存境界 | `services/prompt_attachment_processing.py`, `services/prompt_attachment_storage.py` | `docs/architecture/prompt_attachment_storage.md` |
 | フロントエンドの CSS 規約 | `frontend/STYLING_STRATEGY.md` と `frontend/public/static/css/` | UI 変更時に同文書を確認 |
+| セキュリティの信頼境界 | `services/session_middleware.py`, `services/csrf.py`, `services/security_headers.py`, `services/generative_ui*.py`, `services/mcp_oauth.py`, `services/mcp_request_protection.py` | `docs/architecture/security_model.md` |
 | 技術判断の理由 | `docs/decisions/` | 既存 ADR を更新または新規 ADR を追加 |
 
 ### 構造の詳細マップ
