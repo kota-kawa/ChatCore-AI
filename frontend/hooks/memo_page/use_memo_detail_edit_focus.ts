@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
+
+import { alignTextareaToClick, type MemoEditPosition } from "../../lib/memo/detail_edit_position";
 
 // ---------------------------------------------------------------------------
 // Memo detail: focus hand-off from the preview to the editor
@@ -20,31 +22,36 @@ interface UseMemoDetailEditFocusParams {
 export function useMemoDetailEditFocus({ previewMode, setPreviewMode }: UseMemoDetailEditFocusParams) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const pendingTargetRef = useRef<MemoDetailEditTarget | null>(null);
+  const pendingTargetRef = useRef<{ target: MemoDetailEditTarget; position?: MemoEditPosition } | null>(null);
 
-  const beginEditing = useCallback((target: MemoDetailEditTarget) => {
-    pendingTargetRef.current = target;
+  const beginEditing = useCallback((target: MemoDetailEditTarget, position?: MemoEditPosition) => {
+    pendingTargetRef.current = { target, position };
     setPreviewMode(false);
   }, [setPreviewMode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previewMode) {
       pendingTargetRef.current = null;
       return;
     }
-    const target = pendingTargetRef.current;
-    if (!target) return;
+    const request = pendingTargetRef.current;
+    if (!request) return;
+    const { target, position } = request;
     pendingTargetRef.current = null;
 
     const element = target === "title" ? titleInputRef.current : textareaRef.current;
     if (!element) return;
-    // 追記が最も多い使い方なので、キャレットは末尾に置く
-    // Appending is the most common edit, so the caret goes to the end
-    const end = element.value.length;
+    // クリックでは指定位置、Enter では従来どおり末尾から編集する。
+    // Clicks retain their source position; Enter keeps the append shortcut.
+    const rawOffset = position ? position.offset ?? 0 : element.value.length;
+    const offset = element instanceof HTMLTextAreaElement && position
+      ? Math.min(element.defaultValue.slice(0, rawOffset).replace(/\r\n?/g, "\n").length, element.value.length)
+      : Math.min(rawOffset, element.value.length);
     element.focus({ preventScroll: true });
-    element.setSelectionRange(end, end);
+    element.setSelectionRange(offset, offset);
     if (element instanceof HTMLTextAreaElement) {
-      element.scrollTop = element.scrollHeight;
+      if (position) alignTextareaToClick(element, { ...position, offset: position.offset === null ? null : offset });
+      else element.scrollTop = element.scrollHeight;
     }
   }, [previewMode]);
 
