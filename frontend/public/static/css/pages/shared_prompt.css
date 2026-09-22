@@ -285,6 +285,11 @@
   text-decoration: underline;
 }
 
+.shared-prompt-page .shared-prompt-cta__button:focus-visible {
+  outline-color: var(--surface-primary);
+  outline-offset: -4px;
+}
+
 .shared-prompt-page .shared-prompt-recommendations { padding-top: 2.5rem; }
 
 .shared-prompt-page .shared-prompt-recommendations__heading {
