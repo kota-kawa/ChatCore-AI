@@ -816,7 +816,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 .global-ai-agent-modal .mini-chat-placeholder {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 260px;
   display: flex;
   flex-direction: column;
@@ -829,6 +829,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 .global-ai-agent-modal .mini-chat-robot-icon {
+  flex-shrink: 0;
   width: 54px;
   height: 54px;
   margin-bottom: 0;

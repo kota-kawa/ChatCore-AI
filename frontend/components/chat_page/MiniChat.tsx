@@ -565,7 +565,7 @@ export function MiniChat({
   // Scrolls the message list to the bottom whenever content changes so the latest reply is visible
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTop = messages.length === 0 ? 0 : scrollRef.current.scrollHeight;
     }
   }, [messages, isGenerating, statusText, progressSteps.length]);
 

@@ -5346,6 +5346,7 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-placeholder {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -5358,6 +5359,7 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-robot-icon {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 78px;
