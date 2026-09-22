@@ -88,12 +88,8 @@ class PathIndex:
         bases = (document.parent, Path("."), *(Path(base) for base in extra_bases))
         for base in bases:
             joined = (base / reference).as_posix()
-            normalized = Path(re.sub(r"^(\./)+", "", joined)).as_posix()
-            if ".." in Path(normalized).parts:
-                normalized = _collapse_parent_segments(normalized)
-                if normalized is None:
-                    continue
-            if self.exists(normalized):
+            normalized = _collapse_parent_segments(re.sub(r"^(\./)+", "", joined))
+            if normalized is not None and self.exists(normalized):
                 return True
         # 日本語: `variables.css` のようなファイル名だけの参照は、同名の追跡ファイルが 1 つだけあるときに限り有効とみなします。
         #         同名ファイルが複数あるとどれを指すか決まらないため、文書側でディレクトリを付けて書きます。
