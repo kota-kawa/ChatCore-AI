@@ -3,6 +3,8 @@
 Tests for the admission control in front of the generation-only thread pool.
 """
 
+import io
+import logging
 import os
 import threading
 import time
@@ -10,6 +12,8 @@ import unittest
 from unittest.mock import patch
 
 from services.chat_generation_executor import ChatGenerationCapacityError, _GenerationExecutor
+from services.logging_config import JsonLogFormatter
+from services.request_context import RequestContextFilter, _request_id_var
 
 
 class ChatGenerationExecutorCapacityTestCase(unittest.TestCase):
@@ -86,6 +90,28 @@ class ChatGenerationExecutorCapacityTestCase(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.executor.submit(lambda: None)
             self.assertEqual(self.executor.in_flight(), 0)
+
+
+    # 日本語: 生成ジョブのログが、投入元のリクエストIDを保ったまま出ることを確認する。
+    # English: Verify a generation job's log lines keep the request id of the submitting request.
+    def test_a_job_keeps_the_request_context_of_its_submitter(self):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JsonLogFormatter())
+        handler.addFilter(RequestContextFilter())
+        logger = logging.getLogger("tests.chat_generation_executor.request_context")
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        token = _request_id_var.set("req-from-the-http-layer")
+        try:
+            self.executor.submit(lambda: logger.info("generation log line")).result(timeout=5)
+        finally:
+            _request_id_var.reset(token)
+            logger.removeHandler(handler)
+
+        self.assertIn('"request_id": "req-from-the-http-layer"', stream.getvalue())
 
 
 if __name__ == "__main__":
