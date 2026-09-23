@@ -151,15 +151,6 @@
   --shared-memo-accent-strong: #8f5a17;
   --shared-memo-action: #d97706;
 
-  --ps-primary-color: var(--primary-color);
-  --ps-accent-color: #11998e;
-  --ps-text-color: #333;
-  --ps-light-bg: #f0fdf4;
-  --ps-background-color: var(--ps-light-bg);
-  --ps-card-bg: #ffffff;
-  --ps-border-color: #dddddd;
-  --ps-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-
   --new-prompt-primary-color: var(--primary-dark);
   --new-prompt-accent-color: var(--primary-color);
   --new-prompt-accent-color-strong: var(--primary-hover);
@@ -259,12 +250,6 @@
   --shared-prompt-action: #2563eb;
   --shared-prompt-action-hover: #1d4ed8;
 
-  --ps-text-color: #e5e7eb;
-  --ps-light-bg: #0b1220;
-  --ps-background-color: var(--ps-light-bg);
-  --ps-card-bg: #111827;
-  --ps-border-color: rgba(148, 163, 184, 0.3);
-  --ps-shadow: 0 4px 10px rgba(2, 6, 23, 0.5);
   --new-prompt-text-color: #e5e7eb;
   --new-prompt-muted-text-color: #9ca3af;
   --new-prompt-light-bg: #0b1220;

@@ -37,7 +37,6 @@ import "../public/prompt_share/static/css/pages/prompt_share.ai-agent.css";
 import "../public/prompt_share/static/css/pages/prompt_share.responsive.css";
 import "../public/prompt_share/static/css/pages/prompt_share.button-system.css";
 import "../public/prompt_share/static/css/pages/prompt_share.dark-mode.css";
-import "../public/prompt_share/static/css/pages/prompt_manage.css";
 import "../public/static/css/pages/user_settings/user_settings.css";
 import "../public/static/css/pages/chat/shared_chat.css";
 // タッチ端末の入力欄フォーカス時ズームを防ぐガード。上書きのため必ず CSS import の最後に置く。
