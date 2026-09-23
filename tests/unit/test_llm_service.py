@@ -146,7 +146,10 @@ class LlmServiceTestCase(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(system_prompt, "You are helpful.")
+        self.assertEqual(
+            system_prompt,
+            [{"type": "text", "text": "You are helpful.", "cache_control": {"type": "ephemeral"}}],
+        )
         self.assertEqual(messages[0]["role"], "assistant")
         self.assertEqual(messages[0]["content"][0]["type"], "tool_use")
         self.assertEqual(messages[0]["content"][0]["input"], {"query": "Claude"})
@@ -194,7 +197,15 @@ class LlmServiceTestCase(unittest.TestCase):
         )
 
         self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]["content"], "first\n\nsecond")
+        # 最新の発話の手前（履歴の末尾）にキャッシュの区切りが付き、マージ後もブロックとして残る。
+        # The history end before the latest message keeps its cache breakpoint after merging.
+        self.assertEqual(
+            messages[0]["content"],
+            [
+                {"type": "text", "text": "first", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "second"},
+            ],
+        )
 
     # 日本語: 入力（コンテキスト長）超過を出力上限と混同しないことを検証します。継続生成へ
     # 回すと入力がさらに増えて必ず再失敗するため、別の例外である必要があります。
@@ -585,9 +596,11 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response_kwargs["reasoning"], {"effort": "medium"})
         passed_messages = response_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
-        self.assertTrue(
-            passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
-        )
+        # 先頭の基本プロンプトは全利用者で共通なので、明示の区切りでキャッシュさせる。
+        # The leading base prompt is shared by every user, so it carries an explicit breakpoint.
+        [leading_part] = passed_messages[0]["content"]
+        self.assertTrue(leading_part["text"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n"))
+        self.assertEqual(leading_part["prompt_cache_breakpoint"], {"mode": "explicit"})
 
     def test_get_openai_response_uses_none_reasoning_with_tools_for_luna(self):
         """
@@ -1136,9 +1149,8 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(stream_kwargs["reasoning"], {"effort": "high"})
         passed_messages = stream_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
-        self.assertTrue(
-            passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
-        )
+        [leading_part] = passed_messages[0]["content"]
+        self.assertTrue(leading_part["text"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n"))
 
     def test_get_openai_response_stream_raises_for_max_output_tokens(self):
         mock_openai = MagicMock()

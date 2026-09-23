@@ -81,10 +81,36 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             generative_ui_enabled=False,
         )
 
-        self.assertEqual(
-            [message["content"] for message in context_messages],
-            ["base", "question"],
+        # 生成UIの契約は入らず、実行時文脈（現在時刻）だけが最新の発話の直前に入る。
+        # No UI contract; only the runtime context (current time) sits before the latest message.
+        self.assertEqual(len(context_messages), 3)
+        self.assertEqual(context_messages[0]["content"], "base")
+        self.assertTrue(context_messages[1]["content"].startswith("<runtime_context>"))
+        self.assertEqual(context_messages[2]["content"], "question")
+
+    # 日本語: 毎回変わる現在時刻が会話履歴の後ろ（最新の発話の直前）に置かれ、
+    # 固定の指示と履歴がプロンプトの先頭側にまとまることを検証します。
+    # English: Verify the per-request current time follows the history, right before the latest
+    # message, so the fixed instructions and the history stay together at the prompt's start.
+    def test_runtime_context_follows_the_history_for_prompt_caching(self):
+        context_messages = build_context_messages(
+            base_system_prompt="base",
+            user_profile_prompt="profile",
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[
+                {"role": "user", "content": "earlier question"},
+                {"role": "assistant", "content": "earlier answer"},
+                {"role": "user", "content": "latest question"},
+            ],
+            generative_ui_enabled=False,
         )
+
+        contents = [message["content"] for message in context_messages]
+        self.assertEqual(contents[:4], ["base", "profile", "earlier question", "earlier answer"])
+        self.assertTrue(contents[4].startswith("<runtime_context>"))
+        self.assertEqual(contents[5], "latest question")
 
     def test_latest_user_request_survives_long_fetched_url_context(self):
         question = "この資料を読んで、最も重要な結論を3点で教えてください。"

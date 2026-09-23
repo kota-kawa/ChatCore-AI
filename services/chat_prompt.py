@@ -20,11 +20,30 @@ def insert_after_leading_system_messages(
     messages: list[dict[str, Any]],
     context_message: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Insert dynamic context after the leading system-message block."""
+    """Insert fixed context after the leading system-message block."""
     insert_at = 0
     while insert_at < len(messages) and messages[insert_at].get("role") == "system":
         insert_at += 1
     return [*messages[:insert_at], context_message, *messages[insert_at:]]
+
+
+# ターンやステップごとに変わる文脈は、最新のユーザー発話の直前に置く。
+# プロバイダのプロンプトキャッシュは先頭からの一致にしか効かないため、変わる文脈を
+# 会話履歴より前に置くと、履歴全体が毎回キャッシュから外れて全額課金になる。
+# 固定の指示と履歴を先頭側に、変わる文脈を末尾側に分けることで履歴を再利用させる。
+# Context that changes per turn or per step goes right before the latest user message.
+# Provider prompt caches only match from the start, so changing context placed ahead of the
+# history would evict the whole history from the cache on every request. Keeping fixed
+# instructions and history first and changing context last lets the history be reused.
+def insert_before_latest_user_message(
+    messages: list[dict[str, Any]],
+    context_message: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Insert per-turn context just before the latest user message."""
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].get("role") == "user":
+            return [*messages[:index], context_message, *messages[index:]]
+    return insert_after_leading_system_messages(messages, context_message)
 
 
 # 日本語: 実際にモデルへ送る基本システムプロンプト。「根拠が薄いときの判断」節では、
@@ -104,17 +123,25 @@ You are the user's conversation partner and an AI assistant that supports their 
 """
 
 
-# 現在日時情報などを埋め込んだベースのシステムプロンプトを組み立てる関数
-# Construct the base system prompt containing contextual runtime information like datetime.
-def build_base_system_prompt(
-    current_time: datetime | None = None,
-    *,
-    locale: str = "ja",
-) -> str:
+# 毎ターン変わらない基本のシステムプロンプトを組み立てる関数
+# Construct the fixed base system prompt shared by every turn.
+def build_base_system_prompt(*, locale: str = "ja") -> str:
     """
-    現在時刻やWeb検索などの動的な実行時コンテキストを埋め込んだベースシステムプロンプトを組み立てます。
-    Constructs the base system prompt containing contextual runtime information.
+    毎ターン変わらない基本システムプロンプトを組み立てます。現在時刻は含めません。
+    Constructs the fixed base system prompt. It deliberately carries no current time.
     """
+    language_context = (
+        "## Response language\n"
+        f"{build_response_language_policy(locale)}"
+    )
+    return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{language_context}"
+
+
+# 現在日時と検索能力を伝える実行時コンテキストを、基本プロンプトとは別の system メッセージで作る。
+# 秒まで変わるため、キャッシュされる先頭側ではなく最新の発話の直前へ置く（insert_before_latest_user_message）。
+# Build the runtime context (current time, search capability) as its own system message. It
+# changes every second, so it belongs right before the latest message, not in the cached head.
+def build_runtime_context_message(current_time: datetime | None = None) -> dict[str, str]:
     resolved_time = current_time or datetime.now().astimezone()
     current_datetime_text = resolved_time.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
 
@@ -148,11 +175,7 @@ def build_base_system_prompt(
             "</runtime_context>",
         ]
     )
-    language_context = (
-        "## Response language\n"
-        f"{build_response_language_policy(locale)}"
-    )
-    return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{language_context}\n\n{runtime_context}"
+    return {"role": "system", "content": runtime_context}
 
 
 # ユーザー設定からLLM向けプロフィール用カスタムプロンプトを組み立てる関数

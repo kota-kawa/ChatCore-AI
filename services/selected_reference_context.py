@@ -15,7 +15,7 @@ from threading import Lock
 from typing import Any, cast
 
 from services.async_utils import run_blocking
-from services.chat_prompt import insert_after_leading_system_messages
+from services.chat_prompt import insert_before_latest_user_message
 from services.reference_query_rewrite import rewrite_reference_query
 
 logger = logging.getLogger(__name__)
@@ -533,7 +533,7 @@ def augment_messages_with_selected_references(
         unavailable_sources,
         has_overview=overview_payload is not None,
     )
-    return insert_after_leading_system_messages(
+    return insert_before_latest_user_message(
         messages,
         {"role": "system", "content": context},
     )
@@ -622,7 +622,7 @@ async def augment_messages_with_selected_references_async(
         unavailable_sources,
         has_overview=overview_payload is not None,
     )
-    return insert_after_leading_system_messages(
+    return insert_before_latest_user_message(
         messages,
         {"role": "system", "content": context},
     )

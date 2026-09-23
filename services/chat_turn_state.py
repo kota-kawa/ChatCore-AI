@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .chat_prompt import insert_after_leading_system_messages
+from .chat_prompt import insert_before_latest_user_message
 
 TURN_STATE_UPDATE_OPEN_TAG = "<turn_state_update>"
 TURN_STATE_UPDATE_CLOSE_TAG = "</turn_state_update>"
@@ -229,17 +229,22 @@ def build_turn_loop_messages(
     # Once the tool budget is exhausted, do not resend the normal loop contract that explains
     # how to choose and call tools; use an answer-only contract instead.
     prompt = TURN_LOOP_FORCE_ANSWER_PROMPT if force_answer else TURN_LOOP_SYSTEM_PROMPT
-    contract_messages = insert_after_leading_system_messages(
+    # 契約は TurnState（と検索の引用方針）と同じまとまりとして、最新の発話の直前に置く。
+    # 状態の更新方法を説明する契約だけが状態から離れると、モデルが更新封筒をツール呼び出しと
+    # 取り違える（実測）。末尾側なので、プロンプトキャッシュされる先頭と履歴も変わらない。
+    # The contract joins TurnState (and the citation policy) as one block right before the
+    # latest message. With the contract alone kept away from the state it explains, models were
+    # observed to mistake the update envelope for a tool call. Being at the tail, it also leaves
+    # the cached head and history untouched.
+    contract_messages = insert_before_latest_user_message(
         [dict(message) for message in messages],
         {"role": "system", "content": prompt},
     )
     if not empty_answer_recovery:
         return contract_messages
-    # 回復メモは契約の直後に置く。契約は先頭の system ブロックの一部になるので、
-    # 同じ挿入関数でその直後に並ぶ。
-    # The recovery note goes right after the contract: the contract is now part of the
-    # leading system block, so the same insertion lands immediately behind it.
-    return insert_after_leading_system_messages(
+    # 回復メモは契約の直後に置く。同じ挿入関数で契約の後ろに並ぶ。
+    # The recovery note follows the contract; the same insertion lands right behind it.
+    return insert_before_latest_user_message(
         contract_messages,
         {"role": "system", "content": TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT},
     )

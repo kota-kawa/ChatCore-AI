@@ -23,7 +23,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from services import http_client
-from services.chat_prompt import insert_after_leading_system_messages
+from services.chat_prompt import insert_before_latest_user_message
 from services.env_settings import env_float, env_int_in_range
 from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
 from services.llm_daily_limit import (
@@ -2320,14 +2320,14 @@ def inject_prior_web_search_context(
     conversation_messages: list[dict[str, str]],
     prior_results: list[WebSearchResult] | None,
 ) -> list[dict[str, str]]:
-    # 過去の検索結果があれば、既存 system 群直後に参照用文脈として差し込む
-    # Insert prior search results as a reference context right after existing system messages.
+    # 過去の検索結果があれば、最新の発話の直前に参照用文脈として差し込む（ターンごとに変わるため）
+    # Insert prior search results right before the latest message; they change per turn.
     if not prior_results:
         return conversation_messages
     context_message = build_prior_web_search_system_message(prior_results)
     if context_message is None:
         return conversation_messages
-    return insert_after_leading_system_messages(conversation_messages, context_message)
+    return insert_before_latest_user_message(conversation_messages, context_message)
 
 
 def source_hostname_label(url: str) -> str:
