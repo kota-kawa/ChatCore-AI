@@ -26,7 +26,7 @@ section: 03
 | Claude Haiku 4.5 | Anthropic 製。高速・軽量な応答モデル |
 | GPT OSS 20B (Groq) | 高速レスポンス |
 | Qwen 3.8 27B (Groq) | 高速な汎用応答モデル |
-| GPT-6 Luna | OpenAI 製。高スループット向けの軽量モデル |
+| GPT-6 Luna | OpenAI 製。高スループット向けの軽量モデル（既定で選択） |
 
 ## チャットルームの管理
 

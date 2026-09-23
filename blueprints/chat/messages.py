@@ -108,7 +108,7 @@ from services.generative_ui import (
 )
 from services.i18n import get_request_locale
 from services.llm import (
-    CLAUDE_DEFAULT_MODEL,
+    OPENAI_DEFAULT_MODEL,
     LlmInvalidModelError,
     get_llm_response,
     is_retryable_llm_error,
@@ -687,7 +687,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 schedule_context_extraction=schedule_context_extraction,
             ),
         ),
-        default_model=CLAUDE_DEFAULT_MODEL,
+        default_model=OPENAI_DEFAULT_MODEL,
         locale=locale,
     )
 
@@ -816,7 +816,7 @@ async def chat_regenerate(
         return error_response
 
     chat_room_id_raw = data.get("chat_room_id")
-    model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
+    model_raw = data.get("model") or OPENAI_DEFAULT_MODEL
     # 再生成でも、送信時と同じようにメモ/マイコンテキストを参照できるようにする。
     # Regeneration consults memos and My Context on the same terms as the original send.
     use_personal_knowledge = bool(data.get("use_personal_knowledge"))
@@ -942,7 +942,7 @@ async def chat_edit_and_regenerate(
 
     chat_room_id_raw = data.get("chat_room_id")
     new_message_raw = data.get("new_message")
-    model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
+    model_raw = data.get("model") or OPENAI_DEFAULT_MODEL
     trailing_user_count_raw = data.get("trailing_user_count")
     # 編集して再生成する場合も、送信時と同じようにメモ/マイコンテキストを参照できるようにする。
     # Editing and regenerating consults memos and My Context on the same terms as the original send.
