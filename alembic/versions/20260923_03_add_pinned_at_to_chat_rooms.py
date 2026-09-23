@@ -26,20 +26,17 @@ def upgrade() -> None:
             ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP
         """
     )
-    # Pinned rooms are few per user, so a partial index keeps the pinned-section read cheap
-    # without growing the index for every room.
-    # ピン留めはユーザーあたり少数なので、部分インデックスで全ルーム分の索引を増やさずに読み出しを軽くします。
-    op.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_pinned_at
-            ON chat_rooms (user_id, pinned_at DESC, id DESC)
-            WHERE pinned_at IS NOT NULL
-        """
-    )
+    # No dedicated index: the pinned-section read filters by user_id, which the existing
+    # idx_chat_rooms_user_last_activity_id already narrows to one user's rooms. Building an
+    # index here would block writes to chat_rooms (updated on every message) for the whole
+    # scan, or with CONCURRENTLY give up the per-revision transaction.
+    # 専用の索引は作りません。ピン留めの読み出しは user_id で絞るため、既存の
+    # idx_chat_rooms_user_last_activity_id で1ユーザー分に収まります。ここで索引を作ると、
+    # メッセージごとに更新される chat_rooms への書き込みを走査の間止めるか、CONCURRENTLY で
+    # revision 単位のトランザクションを失うことになります。
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS idx_chat_rooms_user_pinned_at")
     op.execute(
         """
         ALTER TABLE chat_rooms

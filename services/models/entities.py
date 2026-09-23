@@ -107,13 +107,6 @@ class ChatRoom(Base):
         Index("idx_chat_rooms_user_created_at_id", "user_id", desc("created_at"), desc("id")),
         Index("idx_chat_rooms_user_last_activity_id", "user_id", desc("last_activity_at"), desc("id")),
         Index("idx_chat_rooms_project_created_at", "project_id", desc("created_at")),
-        Index(
-            "idx_chat_rooms_user_pinned_at",
-            "user_id",
-            desc("pinned_at"),
-            desc("id"),
-            postgresql_where=text("pinned_at IS NOT NULL"),
-        ),
     )
 
 
