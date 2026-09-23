@@ -133,12 +133,8 @@
   --cc-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
   --cc-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
 
-  --chat-surface: rgba(255, 255, 255, 0.92);
   --chat-surface-strong: #ffffff;
-  --chat-surface-muted: #f3f7f5;
-  --chat-border-soft: rgba(25, 195, 125, 0.18);
   --chat-shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.16);
-  --chat-shadow-soft: 0 12px 24px rgba(0, 0, 0, 0.12);
   --chat-shell-max-width: 1280px;
   --chat-shell-max-width-wide: 1520px;
   --sai-bottom: env(safe-area-inset-bottom, 0px);
@@ -244,12 +240,8 @@
   --scrollbar-thumb-hover: rgba(148, 163, 184, 0.66);
   --scrollbar-thumb-active: rgba(148, 163, 184, 0.76);
   --scrollbar-thumb-border: rgba(15, 23, 42, 0.9);
-  --chat-surface: rgba(15, 23, 42, 0.9);
   --chat-surface-strong: #111827;
-  --chat-surface-muted: #1f2937;
-  --chat-border-soft: rgba(25, 195, 125, 0.3);
   --chat-shadow-strong: 0 24px 60px rgba(2, 6, 23, 0.45);
-  --chat-shadow-soft: 0 12px 24px rgba(2, 6, 23, 0.38);
   --shared-prompt-accent: #8ab4f8;
   --shared-prompt-action: #2563eb;
   --shared-prompt-action-hover: #1d4ed8;

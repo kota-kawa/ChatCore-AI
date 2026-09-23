@@ -1351,7 +1351,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     font-size: var(--setup-card-font-size);
     padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
     overflow: hidden;
-    border-radius: 16px;
     box-shadow: none;
     -webkit-tap-highlight-color: transparent;
   }

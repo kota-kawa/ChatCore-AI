@@ -30,7 +30,7 @@
 
 - **モーダル** `--modal-*`（面、罫線、文字、アクセント、危険色、フォーカスリング）。すべてのモーダルは `components/ui/modal_shell.tsx` と `public/static/css/components/modal_surface.css` を通し、ページは `--modal-accent`、`--modal-accent-hover`、`--modal-accent-text`、`--modal-accent-soft`、`--modal-focus-ring` だけを差し替えます。
 - **設定画面** `--settings-*`。メモ画面の質感に合わせ、白い不透明な面と 1px 罫線、角丸 8px（`--settings-radius-*` はすべて 8px）、影なし（`--settings-shadow: none`）で組みます。文字のボタンとスマホ幅のナビはピル型です。アクセント・危険色・フォーカスリングをライト／ダーク両方で持ちます。新しいページで独自の文脈トークンを作るときは、この構成（面／罫線／文字／アクセント／危険／フォーカス）が雛形として使えます。
-- **チャット** `--chat-surface`、`--chat-surface-strong`、`--chat-surface-muted`、`--chat-border-soft`。半透明の白（ダークでは半透明の紺）です。ホームの入力画面のパネル、入力欄、カードは、メモ画面の質感に合わせて不透明な `--surface-primary` と `--border-default` で組みます。
+- **チャット** `--chat-surface-strong`（ホームの最近のチャットのチップの面）と `--chat-shadow-strong`（通信状態のバナー `.cc-net-banner` の影）。ホームの入力画面のパネル、入力欄、カードは、メモ画面の質感に合わせて不透明な `--surface-primary` と `--border-default` で組みます。
 - **公開プロンプト** `--ps-*` は `public/prompt_share/static/css/pages/prompt_share.foundation.css` の `.prompt-share-page` の中で定義し、ダークは同じ階層の `prompt_share.dark-mode.css` で上書きします。**新規プロンプト** `--new-prompt-*` は `variables.css` で定義し、値は `--primary-*` を参照するか `variables.css` 内で完結します。
 - **共有メモ詳細** `--shared-memo-accent`（リンク・インラインコード: `#b45309`）、`--shared-memo-accent-strong`（セクション見出し: `#8f5a17`）、`--shared-memo-action`（チェックボックスなどの操作色: `#d97706`）。メモ機能の琥珀に揃えます。この画面は `data-theme` に追随せず、ダークでも明るい琥珀の面のままです（既存の挙動）。
 - **ランディングページ** `--lp-*` を各 LP の CSS で再定義します。名前は `--lp-green*` のままですが値は機能ごとの色相で、サービス全体 `#50a35b`、チャット `#0f766e`、メモ `#d97706`、プロンプト共有 `#3c7fcc`（ダークは各ファイルの `:root[data-theme="dark"] .<ページのクラス>` で上書き）。

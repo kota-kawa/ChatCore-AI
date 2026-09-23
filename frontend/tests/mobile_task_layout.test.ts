@@ -97,6 +97,31 @@ test("task buttons carry no shadow at rest and cards use the shared hover shadow
   );
 });
 
+// カードの角丸はメモ画面に合わせて 8px（--radius-sm）。スマホ幅のルールが後ろで別の値に戻さないことも確かめる。
+// Cards use the 8px --radius-sm radius from the memo page; the phone rules must not set another value later.
+test("task cards keep the 8px radius at every width", () => {
+  const baseRule = setupCss.match(
+    /:where\(body\.chat-page, \.chat-page-shell\) \.prompt-card \{([^}]*)\}/,
+  );
+  assert.ok(baseRule, "base task card rule must be present");
+  assert.match(baseRule[1] ?? "", /border-radius:\s*var\(--radius-sm\)\s*;/);
+
+  const query = "@media (max-width: 576px)";
+  let from = 0;
+  let checked = 0;
+  while (true) {
+    const at = setupCss.indexOf(query, from);
+    if (at === -1) break;
+    const block = extractMediaBlock(setupCss.slice(at), query) ?? "";
+    for (const rule of block.matchAll(/\.prompt-card \{([^}]*)\}/g)) {
+      checked += 1;
+      assert.doesNotMatch(rule[1] ?? "", /border-radius:(?!\s*var\(--radius-sm\))/, "phones must not restore another card radius");
+    }
+    from = at + query.length;
+  }
+  assert.ok(checked > 0, "the phone task card rule must be found");
+});
+
 test("phones collapse the task list to three cards to keep the setup screen on one viewport", () => {
   const mobileLimit = taskStateSource.match(/const MOBILE_TASK_COLLAPSE_LIMIT = (\d+);/);
 
