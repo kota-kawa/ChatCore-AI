@@ -2,8 +2,10 @@
    Chat page root-level tokens and shell styles.
    Import ordering is controlled by frontend/pages/_app.tsx. */
 
-/* ホームページ（chat-page）内のボタン質感を
-   「新しいプロンプト作成（＋）」系の立体感にそろえる */
+/* ホームページ（chat-page）で使う緑系のトークン。ボタンはメモ画面に合わせて単色で塗る
+   （塗り方は下のボタン共通層）。
+   Green tokens for the home page (chat-page). Buttons use flat fills to match the memo page
+   (see the shared button layer below). */
 body.chat-page {
   --primary-color: #50a35b;
   --primary-hover: #428b4c;
@@ -24,19 +26,15 @@ body.chat-page {
   --focus-ring: 0 0 0 3px rgba(80, 163, 91, 0.22);
   --shadow-focus: var(--focus-ring);
   --shadow-focus-strong: 0 0 0 4px rgba(80, 163, 91, 0.18);
-  --chat-border-soft: rgba(80, 163, 91, 0.2);
-  --chat-surface-muted: #f1f7f6;
-  --surface: var(--chat-surface);
-  --surface-strong: var(--chat-surface-strong);
-  --surface-muted: var(--chat-surface-muted);
-  --border-soft: var(--chat-border-soft);
-  --shadow-strong: var(--chat-shadow-strong);
-  --shadow-soft: var(--chat-shadow-soft);
   --sai-bottom: env(safe-area-inset-bottom, 0px);
   --sai-left: env(safe-area-inset-left, 0px);
   --sai-right: env(safe-area-inset-right, 0px);
-  --chat-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
-  --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+/* 見出し・ラベルの緑は、ダークでは紺の地で読める明るい緑にする（#367540 のままだと 3.4:1 で読みにくい） */
+/* Headings and labels switch to the lighter green in dark mode; #367540 on the navy surface is only 3.4:1 */
+[data-theme="dark"] body.chat-page {
+  --success-strong: var(--primary-strong);
 }
 
 /* 見出し・ラベルの緑は、ダークでは紺の地で読める明るい緑にする（#367540 のままだと 3.4:1 で読みにくい） */
@@ -64,19 +62,17 @@ body.chat-page :where(
   .card-delete-btn,
   .card-edit-btn
 ) {
+  /* メモ画面に合わせ、影・光沢・グラデーションを持たない単色で塗る。塗りは --chat-button-base、
+     ホバー時は --chat-button-fill を --chat-button-accent に差し替える（背景を直接上書きしないので、
+     要素ごとのホバー指定がそのまま効く）。
+     Flat fills with no shadow, sheen or gradient, matching the memo page. The fill is
+     --chat-button-base; hover swaps --chat-button-fill to --chat-button-accent instead of setting the
+     background, so per-element hover rules still apply. */
   --chat-button-base: var(--primary-color);
   --chat-button-accent: var(--primary-hover, #115e59);
-  --chat-button-shadow-color: rgba(19, 78, 74, 0.22);
-  background:
-    var(--chat-button-sheen),
-    linear-gradient(135deg, var(--chat-button-base) 0%, var(--chat-button-accent) 100%);
-  box-shadow:
-    0 14px 24px var(--chat-button-shadow-color),
-    var(--chat-button-edge-highlight);
+  background: var(--chat-button-fill, var(--chat-button-base));
   transition:
     transform var(--transition-normal, 0.2s ease),
-    box-shadow var(--transition-normal, 0.2s ease),
-    filter var(--transition-normal, 0.2s ease),
     background var(--transition-normal, 0.2s ease),
     color var(--transition-normal, 0.2s ease),
     opacity var(--transition-normal, 0.2s ease);
@@ -107,39 +103,33 @@ body.chat-page :where(
 ) {
   --chat-button-base: rgba(255, 255, 255, 0.98);
   --chat-button-accent: rgba(239, 247, 242, 0.98);
-  --chat-button-shadow-color: rgba(15, 23, 42, 0.12);
 }
 
 body.chat-page .icon-button {
   --chat-button-base: rgba(255, 255, 255, 0.22);
   --chat-button-accent: rgba(255, 255, 255, 0.12);
-  --chat-button-shadow-color: rgba(7, 21, 17, 0.2);
 }
 
 body.chat-page .chat-history-load-more-btn {
   --chat-button-base: rgba(15, 118, 110, 0.16);
   --chat-button-accent: rgba(15, 118, 110, 0.08);
-  --chat-button-shadow-color: rgba(19, 78, 74, 0.16);
   border-color: rgba(15, 118, 110, 0.2);
 }
 
 body.chat-page .code-block-copy-btn {
   --chat-button-base: rgba(255, 255, 255, 0.16);
   --chat-button-accent: rgba(255, 255, 255, 0.06);
-  --chat-button-shadow-color: rgba(15, 23, 42, 0.28);
   color: rgba(255, 255, 255, 0.92);
 }
 
 body.chat-page .card-delete-btn {
   --chat-button-base: var(--danger-color, #dc3545);
   --chat-button-accent: var(--danger-hover, #b91c1c);
-  --chat-button-shadow-color: rgba(220, 38, 38, 0.26);
 }
 
 body.chat-page .card-edit-btn {
   --chat-button-base: var(--info-color, #007bff);
   --chat-button-accent: var(--info-hover, #0b5ed7);
-  --chat-button-shadow-color: rgba(37, 99, 235, 0.24);
 }
 
 body.chat-page .task-card-action-container .card-delete-btn i,
@@ -151,13 +141,11 @@ body.chat-page .task-card-action-container .card-edit-btn i {
 body.chat-page #send-btn.send-btn--stop {
   --chat-button-base: var(--danger-color, #ef4444);
   --chat-button-accent: var(--danger-hover, #dc2626);
-  --chat-button-shadow-color: rgba(220, 38, 38, 0.28);
 }
 
 body.chat-page .model-select-option.is-selected {
   --chat-button-base: var(--primary-color);
   --chat-button-accent: var(--primary-hover, #115e59);
-  --chat-button-shadow-color: rgba(19, 78, 74, 0.24);
   color: #ffffff;
 }
 
@@ -212,16 +200,16 @@ body.chat-page .model-select-option:hover {
 }
 
 body.chat-page .model-select-option.is-selected {
-  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%) !important;
-  border-color: rgba(19, 78, 74, 0.82) !important;
-  box-shadow: 0 10px 18px rgba(19, 78, 74, 0.18) !important;
+  background: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  box-shadow: none !important;
   color: #ffffff !important;
   font-weight: var(--chat-font-heading-weight, 600);
 }
 
 body.chat-page .model-select-option.is-selected:hover {
-  background: linear-gradient(135deg, var(--primary-dark-hover, #0f3f3b) 0%, var(--primary-hover, #115e59) 100%) !important;
-  border-color: rgba(15, 63, 59, 0.92) !important;
+  background: var(--primary-dark-hover, #0f3f3b) !important;
+  border-color: var(--primary-dark-hover, #0f3f3b) !important;
   color: #ffffff !important;
 }
 
@@ -250,11 +238,7 @@ body.chat-page :where(
   .card-delete-btn,
   .card-edit-btn
 ):hover:not(:disabled):not(.chat-share-btn--disabled) {
-  transform: translateY(-1px);
-  filter: saturate(1.06);
-  box-shadow:
-    0 18px 30px color-mix(in srgb, var(--chat-button-shadow-color) 92%, transparent),
-    var(--chat-button-edge-highlight);
+  --chat-button-fill: var(--chat-button-accent);
 }
 
 body.chat-page :where(
@@ -290,9 +274,7 @@ body.chat-page .task-selection-header #edit-task-order-btn:hover:not(:disabled),
 body.chat-page .task-selection-header #edit-task-order-btn:focus:not(:disabled),
 
 body.chat-page .task-selection-header #edit-task-order-btn:focus-visible:not(:disabled) {
-  background:
-    var(--chat-button-sheen),
-    linear-gradient(135deg, var(--chat-button-base) 0%, var(--chat-button-accent) 100%) !important;
+  background: var(--chat-button-fill, var(--chat-button-base)) !important;
   filter: none;
   color: inherit;
   transform: none;
@@ -320,7 +302,7 @@ body.chat-page {
   --page-scrollbar-thumb-hover: rgba(28, 99, 71, 0.4);
   --page-scrollbar-thumb-active: rgba(20, 79, 57, 0.48);
   --page-scrollbar-thumb-border: rgba(246, 250, 247, 0.97);
-  background: #f0f2f1;
+  background: var(--surface-secondary);
   overflow-x: hidden;
   overflow-x: clip;
 }
@@ -352,7 +334,7 @@ body.chat-page {
   justify-content: center;
   align-items: center;
   padding: 1rem;
-  background: #f0f2f1;
+  background: var(--surface-secondary);
   position: relative;
   overflow-x: hidden;
   overflow-x: clip;
@@ -366,17 +348,6 @@ body.chat-page {
   place-items: center;
   isolation: isolate;
   perspective: 1800px;
-}
-
-.chat-page-shell::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 1100px 600px at 5% 5%, rgba(15, 118, 110, 0.06), transparent),
-    radial-gradient(ellipse 800px 500px at 95% 10%, rgba(15, 118, 110, 0.04), transparent);
-  pointer-events: none;
-  z-index: 0;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-page-stage #setup-container,
@@ -503,12 +474,6 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   background: #080f1c;
 }
 
-[data-theme="dark"] .chat-page-shell::before {
-  background:
-    radial-gradient(ellipse 1100px 600px at 5% 5%, rgba(15, 118, 110, 0.1), transparent),
-    radial-gradient(ellipse 800px 500px at 95% 10%, rgba(15, 118, 110, 0.07), transparent);
-}
-
 /* Model select dark mode: rely on variable-driven colors, fix hardcoded borders */
 [data-theme="dark"] body.chat-page .model-select-trigger {
   border-color: rgba(148, 163, 184, 0.26) !important;
@@ -538,18 +503,16 @@ html[data-cc-auth="in"] .setup-form-subtitle {
 }
 
 [data-theme="dark"] body.chat-page .model-select-option.is-selected {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%) !important;
-  border-color: rgba(94, 234, 212, 0.72) !important;
+  background: var(--primary-dark) !important;
+  border-color: var(--primary-color) !important;
   color: #ffffff !important;
   font-weight: var(--chat-font-heading-weight, 600);
-  box-shadow:
-    0 10px 18px rgba(19, 78, 74, 0.34),
-    inset 3px 0 0 rgba(204, 251, 241, 0.9) !important;
+  box-shadow: inset 3px 0 0 rgba(204, 251, 241, 0.9) !important;
 }
 
 [data-theme="dark"] body.chat-page .model-select-option.is-selected:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%) !important;
-  border-color: rgba(153, 246, 228, 0.86) !important;
+  background: var(--primary-dark-hover, #0f3f3b) !important;
+  border-color: var(--primary-color) !important;
   color: #ffffff !important;
 }
 
@@ -618,10 +581,6 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   :where(body.chat-page, .chat-page-shell) .chat-page-stage[data-view="launching"] #chat-container,
 :where(body.chat-page, .chat-page-shell) .chat-page-stage[data-view="chat"] #chat-container {
     height: 100%;
-  }
-
-  .chat-page-shell::before {
-    display: none;
   }
 
   body.chat-page .global-ai-agent-button {

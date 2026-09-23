@@ -406,7 +406,7 @@
   background: var(--primary-color, #19c37d);
   color: #fff;
   border-color: transparent;
-  box-shadow: 0 2px 8px rgba(25, 195, 125, 0.3);
+  box-shadow: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-room-card.active:hover {
@@ -458,10 +458,8 @@
   right: 0;
   min-width: 184px;
   max-width: min(280px, calc(100vw - 32px));
-  background: rgba(255, 255, 255, 0.97);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(0, 0, 0, 0.07);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   display: none;
   flex-direction: column;
@@ -698,8 +696,8 @@
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu {
-  background: rgba(17, 24, 39, 0.98);
-  border-color: rgba(148, 163, 184, 0.2);
+  background: var(--surface-secondary);
+  border-color: var(--border-default);
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.3),
     0 8px 24px rgba(2, 6, 23, 0.46),
