@@ -39,6 +39,12 @@ body.chat-page {
   --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
+/* 見出し・ラベルの緑は、ダークでは紺の地で読める明るい緑にする（#367540 のままだと 3.4:1 で読みにくい） */
+/* Headings and labels switch to the lighter green in dark mode; #367540 on the navy surface is only 3.4:1 */
+[data-theme="dark"] body.chat-page {
+  --success-strong: var(--primary-strong);
+}
+
 body.chat-page :where(
   #auth-buttons .auth-btn,
   .primary-button,
