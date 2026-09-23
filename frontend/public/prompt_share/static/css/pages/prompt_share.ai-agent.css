@@ -78,8 +78,6 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .category-card:hover,
-  .prompt-share-page .prompt-card:hover,
-  .prompt-share-page .prompt-card:active,
   .prompt-share-page .prompt-action-btn:hover,
   .prompt-share-page .meatball-menu:hover,
   .prompt-share-page .prompt-action-btn:active,
