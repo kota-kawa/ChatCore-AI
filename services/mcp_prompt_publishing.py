@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import re
 from urllib.parse import urlsplit
 
@@ -52,6 +53,8 @@ _OPENAI_AZURE_BLOB_HOST_PATTERN = re.compile(
 _OPENAI_FILE_DOWNLOAD_TIMEOUT_SECONDS = (5, 20)
 _DOWNLOAD_CHUNK_BYTES = 64 * 1024
 
+logger = logging.getLogger(__name__)
+
 
 class OpenAIFileInput(BaseModel):
     """ChatGPT file parameter payload documented for ``openai/fileParams``."""
@@ -97,25 +100,31 @@ def save_mcp_prompt_image(
     image_base64: str,
     user_id: int,
     *,
-    filename: str = "",
     mime_type: str = "",
 ) -> dict[str, str]:
     """Decode and save one MCP prompt reference image through the shared upload boundary."""
-    source, data_url_mime = _decode_mcp_image_base64(image_base64)
-    return _save_mcp_prompt_image_source(
-        source,
-        user_id,
-        filename=filename,
-        mime_type=mime_type,
-        source_mime_type=data_url_mime,
-    )
+    try:
+        source, data_url_mime = _decode_mcp_image_base64(image_base64)
+        return _save_mcp_prompt_image_source(
+            source,
+            user_id,
+            mime_type=mime_type,
+            source_mime_type=data_url_mime,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "MCP Base64 prompt image was rejected: base64_characters=%d declared_mime=%s reason=%s",
+            len(image_base64 or ""),
+            mime_type or "-",
+            exc,
+        )
+        raise
 
 
 def _save_mcp_prompt_image_source(
     source: bytes,
     user_id: int,
     *,
-    filename: str = "",
     mime_type: str = "",
     source_mime_type: str | None = None,
 ) -> dict[str, str]:
@@ -132,14 +141,17 @@ def _save_mcp_prompt_image_source(
     if resolved_mime != detected_mime:
         raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
 
-    resolved_filename = str(filename or "").strip()
-    if not resolved_filename:
-        resolved_filename = f"reference{_MIME_TO_EXTENSION[resolved_mime]}"
+    # 共通の保存処理はファイル名の拡張子で形式を確かめるが、クライアントが送る名前は
+    # 日本語だけの名前（secure_filename で拡張子しか残らない）や拡張子なしのことがある。
+    # 保存名はストレージが付け直すので、名前は中身から判定した形式で作る。
+    # The shared upload checks the format by filename extension, but client names may be
+    # non-ASCII only (secure_filename leaves just the extension) or have none. Storage
+    # renames the file anyway, so build the name from the format detected in the bytes.
     return save_prompt_attachment(
         source,
         user_id,
         "image",
-        filename=resolved_filename,
+        filename=f"reference{_MIME_TO_EXTENSION[resolved_mime]}",
         content_type=resolved_mime,
     )
 
@@ -179,6 +191,11 @@ def _download_openai_file(download_url: str) -> tuple[bytes, str]:
             timeout=_OPENAI_FILE_DOWNLOAD_TIMEOUT_SECONDS,
         ) as response:
             if response.status_code != 200:
+                logger.warning(
+                    "ChatGPT file download returned HTTP %d: host=%s",
+                    response.status_code,
+                    urlsplit(validated_url).hostname,
+                )
                 raise ValueError(ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED)
             content_length = response.headers.get("Content-Length", "").strip()
             if content_length:
@@ -208,13 +225,31 @@ def _download_openai_file(download_url: str) -> tuple[bytes, str]:
 
 def save_mcp_prompt_file(image_file: OpenAIFileInput, user_id: int) -> dict[str, str]:
     """Download and save one ChatGPT ``openai/fileParams`` image."""
-    source, response_mime = _download_openai_file(str(image_file.download_url))
-    declared_mime = image_file.mime_type.strip().lower()
-    if not declared_mime and response_mime in MCP_PROMPT_IMAGE_MIME_TYPES:
-        declared_mime = response_mime
-    return _save_mcp_prompt_image_source(
-        source,
-        user_id,
-        filename=image_file.file_name,
-        mime_type=declared_mime,
-    )
+    source = b""
+    response_mime = ""
+    try:
+        source, response_mime = _download_openai_file(str(image_file.download_url))
+        declared_mime = image_file.mime_type.strip().lower()
+        if not declared_mime and response_mime in MCP_PROMPT_IMAGE_MIME_TYPES:
+            declared_mime = response_mime
+        return _save_mcp_prompt_image_source(
+            source,
+            user_id,
+            mime_type=declared_mime,
+        )
+    except ValueError as exc:
+        # 署名付きのクエリを残さないよう、URL はホスト名だけ、原因の例外は型名だけを記録する
+        # （requests の例外メッセージにはクエリ付きのパスが入る）。
+        # Log only the host and the cause's type name so the signed query string never reaches
+        # the logs (requests exception messages include the path with its query).
+        logger.warning(
+            "ChatGPT file prompt image was rejected: host=%s declared_mime=%s response_mime=%s "
+            "bytes=%d cause=%s reason=%s",
+            urlsplit(str(image_file.download_url)).hostname or "-",
+            image_file.mime_type or "-",
+            response_mime or "-",
+            len(source),
+            type(exc.__cause__).__name__ if exc.__cause__ is not None else "-",
+            exc,
+        )
+        raise

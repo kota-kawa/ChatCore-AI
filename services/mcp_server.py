@@ -231,12 +231,11 @@ async def _publish(
                     save_mcp_prompt_image,
                     image_base64,
                     user_id,
-                    filename=image_filename,
                     mime_type=image_mime_type,
                 )
             )
         elif image_file is not None:
-            if image_filename.strip() or image_mime_type.strip():
+            if image_mime_type.strip():
                 raise ValueError(ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT)
             attachments.append(
                 await run_blocking(save_mcp_prompt_file, image_file, user_id)
