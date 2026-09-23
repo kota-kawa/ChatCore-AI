@@ -110,6 +110,8 @@ type HomePageChatContextValue = Pick<
 
 type HomePageSetupChatContextValue = Pick<
   HomePageControllerState,
+  | "chatRooms"
+  | "switchChatRoom"
   | "handleAccessChat"
   | "handleSetupSendMessage"
   | "attachedFiles"
@@ -360,12 +362,16 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
 
   const setupChatValue = useMemo<HomePageSetupChatContextValue>(
     () => ({
+      chatRooms: controller.chatRooms,
+      switchChatRoom: controller.switchChatRoom,
       handleAccessChat: controller.handleAccessChat,
       handleSetupSendMessage: controller.handleSetupSendMessage,
       attachedFiles: controller.attachedFiles,
       setAttachedFiles: controller.setAttachedFiles,
     }),
     [
+      controller.chatRooms,
+      controller.switchChatRoom,
       controller.handleAccessChat,
       controller.handleSetupSendMessage,
       controller.attachedFiles,

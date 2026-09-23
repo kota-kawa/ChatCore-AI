@@ -424,6 +424,16 @@ export function useHomePageController() {
     }
   }, [setSidebarOpen]);
 
+  // 「すべて見る」などルーム一覧を目的にした遷移では、オーバーレイ幅でも一覧を最初に見せる。
+  // 広い画面はビューポート同期でサイドバーが常に開いているので何もしない。
+  // Transitions whose goal is the room list (e.g. "view all") show the list first even at
+  // overlay widths. Wide viewports already keep the sidebar open, so nothing happens there.
+  const openOverlaySidebar = useCallback(() => {
+    if (isOverlaySidebarViewport()) {
+      setSidebarOpen(true);
+    }
+  }, [setSidebarOpen]);
+
   const resetChatRoomsPaginationWindow = useCallback(() => {
     loadingMoreChatRoomsRef.current = false;
     hasLoadedMoreChatRoomsRef.current = false;
@@ -499,6 +509,7 @@ export function useHomePageController() {
     chatInput,
     chatRooms,
     closeOverlaySidebar,
+    openOverlaySidebar,
     closeShareModal,
     createNewChatRoom,
     currentRoomIdRef,

@@ -48,6 +48,7 @@ type UseHomePageRoomActionsParams = {
   chatInput: string;
   chatRooms: ChatRoom[];
   closeOverlaySidebar: () => void;
+  openOverlaySidebar: () => void;
   closeShareModal: () => void;
   createNewChatRoom: (
     roomId: string,
@@ -125,6 +126,7 @@ export function useHomePageRoomActions({
   chatInput,
   chatRooms,
   closeOverlaySidebar,
+  openOverlaySidebar,
   closeShareModal,
   createNewChatRoom,
   currentRoomIdRef,
@@ -468,6 +470,10 @@ export function useHomePageRoomActions({
     ],
   );
 
+  // ホームの「すべて見る」「チャット履歴」から呼ばれる一覧への入口。直近（または表示中）のルームを
+  // 開きつつ、オーバーレイ幅ではサイドバーも開いた状態で遷移し、ラベルどおり一覧が最初に見えるようにする。
+  // Entry point to the room list from the home screen ("view all" / history icon). Opens the latest
+  // (or current) room and, at overlay widths, arrives with the sidebar open so the list is visible first.
   const handleAccessChat = useCallback(async () => {
     if (accessChatInProgressRef.current) return;
     accessChatInProgressRef.current = true;
@@ -479,12 +485,13 @@ export function useHomePageRoomActions({
 
       if (preferredLoadedRoom) {
         switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
+        openOverlaySidebar();
         return;
       }
 
       prepareChatViewTransition();
       setPageViewState("chat");
-      closeOverlaySidebar();
+      openOverlaySidebar();
       setOpenRoomActionsFor(null);
       resetChatMessageList();
 
@@ -504,11 +511,13 @@ export function useHomePageRoomActions({
 
         if (preferredFetchedRoom) {
           switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
+          openOverlaySidebar();
           return;
         }
 
         if (activeRoomId) {
           switchChatRoom(activeRoomId, "normal", { forceReload: true });
+          openOverlaySidebar();
           return;
         }
 
@@ -536,10 +545,10 @@ export function useHomePageRoomActions({
     }
   }, [
     chatRooms,
-    closeOverlaySidebar,
     currentRoomIdRef,
     loadChatRooms,
     loadLocalChatHistory,
+    openOverlaySidebar,
     persistCurrentRoomId,
     prepareChatViewTransition,
     resetChatMessageList,
