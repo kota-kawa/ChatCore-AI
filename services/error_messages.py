@@ -103,11 +103,11 @@ ERROR_MCP_PROMPT_IMAGE_SOURCE_CONFLICT = (
 ERROR_MCP_PROMPT_IMAGE_REQUIRED = "image_fileまたはimage_base64で画像を指定してください。"
 ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_URL_INVALID = (
     "画像ファイルのダウンロードURLが許可されていません。元画像のバイトを取得できる場合は、"
-    "チャンク式アップロードで再試行してください。"
+    "縮小や再圧縮をせず元のバイトのまま、チャンク式アップロードで再試行してください。"
 )
 ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED = (
-    "画像ファイルを取得できませんでした。元画像のバイトを取得できる場合は、"
-    "チャンク式アップロードで再試行してください。"
+    "画像ファイルを取得できませんでした。もう一度image_fileで試し、それでも失敗して元画像のバイトを"
+    "取得できる場合は、縮小や再圧縮をせず元のバイトのまま、チャンク式アップロードで再試行してください。"
 )
 ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED = (
     "画像の一時アップロードが見つからないか、有効期限が切れています。最初から再試行してください。"

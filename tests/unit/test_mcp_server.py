@@ -115,6 +115,10 @@ class McpServerTestCase(unittest.TestCase):
 
         self.assertIn("Write in Markdown", server.instructions)
         self.assertIn("start_image_prompt_upload", server.instructions)
+        # Base64 に切り替える前に image_file を再試行させ、送るときは縮小・再圧縮させない。
+        # Retry image_file before switching to Base64, and never shrink the bytes that are sent.
+        self.assertIn("call it once more with image_file", server.instructions)
+        self.assertIn("never resize, recompress", server.instructions)
         markdown_inputs = {
             "create_memo": "content",
             "update_memo": "content",
@@ -221,6 +225,7 @@ class McpServerTestCase(unittest.TestCase):
             ["image_file"],
         )
         self.assertIn("required image_file", image_prompt_definition["description"])
+        self.assertIn("call it once more with image_file", image_prompt_definition["description"])
 
         base64_definition = next(
             tool.model_dump(by_alias=True)
@@ -229,6 +234,7 @@ class McpServerTestCase(unittest.TestCase):
         )
         self.assertIn("image_base64", base64_definition["inputSchema"]["required"])
         self.assertNotIn("image_file", base64_definition["inputSchema"]["properties"])
+        self.assertIn("do not resize, recompress", base64_definition["description"])
         self.assertIsNone(base64_definition["_meta"])
 
         start_definition = next(
