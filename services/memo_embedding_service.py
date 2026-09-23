@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from services.background_executor import get_background_executor
+from services.background_executor import submit_background_task
 from services.db import session_scope
 from services.embeddings import embeddings_available, generate_embedding
 from services.memo_ai import build_memo_embedding_text
@@ -49,6 +49,6 @@ def schedule_embedding(
             logger.warning("Failed to store embedding for memo %s", memo_id, exc_info=True)
 
     try:
-        get_background_executor().submit(_task)
+        submit_background_task(_task)
     except Exception:
         logger.warning("Failed to schedule embedding task for memo %s", memo_id, exc_info=True)

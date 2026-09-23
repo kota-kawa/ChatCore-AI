@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import contextvars
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, TypeVar
@@ -33,8 +34,12 @@ def get_background_executor() -> ThreadPoolExecutor:
 
 # 関数をバックグラウンドタスクとしてスレッドプールに投入する
 # Submit a function to be executed as a background task in the thread pool
+# 投入時のコンテキストを複製して渡し、使用量の計上先などをタスク側でも読めるようにする。
+# Carry a copy of the submitting context so the task still sees values such as the usage
+# billing subject.
 def submit_background_task(func: Any, *args: Any, **kwargs: Any) -> Future[T]:
-    return get_background_executor().submit(func, *args, **kwargs)
+    context = contextvars.copy_context()
+    return get_background_executor().submit(context.run, func, *args, **kwargs)
 
 
 # バックグラウンドタスク用のエグゼキュータをシャットダウンする

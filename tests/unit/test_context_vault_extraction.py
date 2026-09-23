@@ -278,8 +278,8 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         store = Mock(return_value=1)
 
         with patch(
-            "services.context_vault_extraction.get_background_executor",
-            return_value=executor,
+            "services.context_vault_extraction.submit_background_task",
+            side_effect=executor.submit,
         ):
             schedule_context_extraction(
                 42,
@@ -310,8 +310,8 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         executor = SimpleNamespace(submit=lambda task: submitted.append(task))
         with (
             patch(
-                "services.context_vault_extraction.get_background_executor",
-                return_value=executor,
+                "services.context_vault_extraction.submit_background_task",
+                side_effect=executor.submit,
             ),
             patch("services.context_vault_extraction.logger") as logger,
         ):
@@ -332,8 +332,8 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         executor = SimpleNamespace(submit=Mock(side_effect=RuntimeError("executor stopped")))
         with (
             patch(
-                "services.context_vault_extraction.get_background_executor",
-                return_value=executor,
+                "services.context_vault_extraction.submit_background_task",
+                side_effect=executor.submit,
             ),
             patch("services.context_vault_extraction.logger") as logger,
         ):

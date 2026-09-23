@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import json
 import logging
@@ -232,8 +233,12 @@ def _run_lookups(
     with ThreadPoolExecutor(
         max_workers=len(lookups), thread_name_prefix="selected-reference"
     ) as executor:
+        # 使用量の計上先を引き継ぐ。同じ Context は同時に入れないため投入ごとに複製する。
+        # Carry the usage billing subject; a Context cannot be entered concurrently, so each
+        # submission gets its own copy.
         futures = [
             executor.submit(
+                contextvars.copy_context().run,
                 _run_lookup,
                 search,
                 candidates,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from services.background_executor import get_background_executor
+from services.background_executor import submit_background_task
 from services.db import session_scope
 from services.embeddings import (
     EMBEDDING_MAX_INPUT_CHARS,
@@ -64,7 +64,7 @@ def schedule_embedding(
             )
 
     try:
-        get_background_executor().submit(_task)
+        submit_background_task(_task)
     except Exception:
         logger.warning(
             "Failed to schedule embedding task for context fact %s",

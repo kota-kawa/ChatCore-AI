@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
-from services.background_executor import get_background_executor
+from services.background_executor import submit_background_task
 from services.i18n import build_response_language_policy
 from services.llm import GPT_OSS_120B_MODEL, get_llm_json_response
 from services.request_models import (
@@ -279,7 +279,7 @@ def schedule_context_extraction(
             )
 
     try:
-        get_background_executor().submit(_task)
+        submit_background_task(_task)
     except Exception:
         logger.warning(
             "Failed to schedule personal context extraction.",

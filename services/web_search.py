@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import logging
@@ -1326,7 +1327,10 @@ def _choose_links_for_followup(
     ]
     executor = ThreadPoolExecutor(max_workers=1)
     try:
+        # 使用量の計上先を引き継ぐため、呼び出し元のコンテキストの中で実行する。
+        # Run in the caller's context so the usage billing subject carries over.
         future = executor.submit(
+            contextvars.copy_context().run,
             get_llm_json_response,
             messages,
             WEB_SEARCH_LINK_FOLLOW_MODEL,
