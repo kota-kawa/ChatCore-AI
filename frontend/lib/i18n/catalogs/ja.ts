@@ -84,7 +84,7 @@ export const jaMessages = {
   "home.model": "AIモデル選択",
   "home.recentChats": "最近のチャット",
   "home.recentChatsShort": "最近",
-  "home.viewAllChats": "すべて見る",
+  "home.chatHistory": "チャット履歴",
   "home.openChatHistory": "チャット履歴を開く",
   "home.taskDetailsFor": "{name}の詳細を表示",
   "chat.modelFast": "高速応答",

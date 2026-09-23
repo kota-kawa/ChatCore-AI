@@ -7,7 +7,7 @@ import { splitPinnedChatRooms } from "../../lib/chat_page/home_page_controller_u
 const RECENT_CHAT_LIMIT = 5;
 
 // ホーム画面の入力欄直下に置く「最近のチャット」。直前の会話に 1 タップで戻る導線と、
-// 一覧（サイドバー）への入口を兼ねる。ログイン済みでルームが 1 件以上あるときだけ描画する。
+// チャット履歴（サイドバーの一覧）への入口を兼ねる。ログイン済みでルームが 1 件以上あるときだけ描画する。
 // The "recent chats" row under the home screen's composer: a one-tap way back into a recent
 // conversation plus the entry to the full list (sidebar). Rendered only when logged in with rooms.
 export function RecentChatsStrip() {
@@ -26,6 +26,8 @@ export function RecentChatsStrip() {
 
   return (
     <nav className="recent-chats" aria-label={t("home.recentChats")}>
+      {/* 見出しは短く「最近」にとどめ、行の意味は右端の「チャット履歴」ボタンに持たせる */}
+      {/* Keep the heading to a short "recent"; the "chat history" button at the right end carries the meaning */}
       <span className="recent-chats__label" aria-hidden="true">{t("home.recentChatsShort")}</span>
       <ul className="recent-chats__list">
         {rooms.map((room) => {
@@ -52,7 +54,8 @@ export function RecentChatsStrip() {
           void handleAccessChat();
         }}
       >
-        <span>{t("home.viewAllChats")}</span>
+        <i className="bi bi-clock-history recent-chats__all-icon" aria-hidden="true"></i>
+        <span>{t("home.chatHistory")}</span>
         <i className="bi bi-chevron-right" aria-hidden="true"></i>
       </button>
     </nav>

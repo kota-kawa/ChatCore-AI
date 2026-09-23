@@ -178,6 +178,7 @@
   font-size: var(--text-sm, 0.875rem);
   font-weight: 600;
   color: var(--text-secondary, #6b7280);
+  white-space: nowrap;
 }
 
 :where(body.chat-page, .chat-page-shell) .recent-chats__list {
@@ -285,6 +286,11 @@
 
 :where(body.chat-page, .chat-page-shell) .recent-chats__all .bi {
   font-size: 0.75rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all .recent-chats__all-icon {
+  margin-right: 0.15rem;
+  font-size: 0.95rem;
 }
 
 /* 未ログイン時にタイトル直下へ表示する機能紹介テキスト（控えめなリード文として既存デザインに馴染ませる） */

@@ -59,14 +59,14 @@ describe("RecentChatsStrip", () => {
     expect(screen.getByRole("button", { name: "沖縄旅行のプラン" }).querySelector(".recent-chats__pin")).toBeNull();
   });
 
-  it("チップはそのルームを開き、「すべて見る」は一覧への入口を呼ぶ", () => {
+  it("チップはそのルームを開き、「チャット履歴」は一覧への入口を呼ぶ", () => {
     const { switchChatRoom, handleAccessChat } = renderStrip();
 
     fireEvent.click(screen.getByRole("button", { name: "新規チャット" }));
     expect(switchChatRoom).toHaveBeenCalledWith("b", "temporary");
     expect(handleAccessChat).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "すべて見る" }));
+    fireEvent.click(screen.getByRole("button", { name: "チャット履歴" }));
     expect(handleAccessChat).toHaveBeenCalledTimes(1);
     expect(switchChatRoom).toHaveBeenCalledTimes(1);
   });

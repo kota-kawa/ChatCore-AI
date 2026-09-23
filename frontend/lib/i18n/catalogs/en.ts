@@ -35,7 +35,7 @@ export const enMessages = {
   "home.attachMenu.sharedPromptActive": "Using shared prompts",
   "home.attachMenu.sharedPromptTurnOff": "Stop using shared prompts",
   "home.temporary": "Temporary chat", "home.savedHistory": "Save to history", "home.model": "Choose an AI model",
-  "home.recentChats": "Recent chats", "home.recentChatsShort": "Recent", "home.viewAllChats": "View all",
+  "home.recentChats": "Recent chats", "home.recentChatsShort": "Recent", "home.chatHistory": "Chat history",
   "home.openChatHistory": "Open chat history", "home.taskDetailsFor": "Show details for {name}",
   "chat.modelFast": "fast responses", "chat.modelDeepThinking": "deep thinking",
   "chat.modelBalanced": "balanced", "chat.modelCarefulWriting": "careful writing",
