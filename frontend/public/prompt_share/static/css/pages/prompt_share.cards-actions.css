@@ -54,14 +54,12 @@
   display: flex;
   flex-direction: column;
   gap: 0.86rem;
-  border-radius: 16px;
-  border: 1px solid #d6e2ef;
-  background:
-    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface);
   padding: 1.12rem;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(65, 111, 158, 0.09), 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   overflow: visible;
   user-select: none;
 }
@@ -70,24 +68,14 @@
   content: none;
 }
 
-.prompt-share-page .prompt-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--ps-primary);
-  box-shadow: 0 12px 28px rgba(26, 115, 232, 0.15);
-}
-
-.prompt-share-page .prompt-card:active {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 12px rgba(26, 115, 232, 0.12);
-  border-color: var(--ps-primary);
+.prompt-share-page .prompt-card:hover,
+.prompt-share-page .prompt-card.menu-open {
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .prompt-share-page .prompt-card.menu-open {
   z-index: 20;
-  border-color: rgba(47, 115, 199, 0.52);
-  box-shadow:
-    0 16px 34px rgba(26, 115, 232, 0.18),
-    0 2px 6px rgba(15, 23, 42, 0.06);
 }
 
 .prompt-share-page .prompt-card--skeleton {

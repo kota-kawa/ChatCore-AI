@@ -78,29 +78,6 @@
   box-shadow: none;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .hero-action--primary {
-  background: linear-gradient(135deg, #4f9dff 0%, #337cf0 52%, #1d5fd4 100%);
-  border-color: transparent;
-  color: #ffffff;
-  box-shadow:
-    0 6px 16px rgba(8, 32, 72, 0.5),
-    inset 0 1px 0 rgba(191, 219, 254, 0.28);
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .hero-action--primary:hover {
-  filter: brightness(1.07) saturate(1.06);
-  box-shadow:
-    0 10px 22px rgba(5, 22, 53, 0.58),
-    inset 0 1px 0 rgba(191, 219, 254, 0.4);
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .categories,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
-  background: rgba(17, 24, 39, 0.9);
-  border-color: rgba(148, 163, 184, 0.15);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
-}
-
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-guides {
   border-top-color: rgba(148, 163, 184, 0.22);
 }
@@ -117,11 +94,6 @@
   color: #bfdbfe;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .categories::before,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompts-list::before {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent 58%);
-}
-
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .categories h2,
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompts-list h2 {
   color: #93c5fd;
@@ -131,7 +103,6 @@
   background: #1e293b;
   border-color: #334155;
   color: #e5e7eb;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-card i {
@@ -145,10 +116,9 @@
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-card.active {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border-color: #3b82f6;
-  color: #ffffff;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  background: var(--ps-surface-muted);
+  border-color: var(--ps-primary);
+  color: var(--text-light);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-filter-heading {
@@ -163,7 +133,6 @@
   background: #1e293b;
   border-color: #334155;
   color: #e5e7eb;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-type-filter-btn i {
@@ -177,16 +146,15 @@
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-type-filter-btn.active {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border-color: #3b82f6;
-  color: #ffffff;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  background: var(--ps-surface-muted);
+  border-color: var(--ps-primary);
+  color: var(--text-light);
 }
 
+/* ダークのカードはパネルより一段明るい面にして、件数バッジなどの暗い部品がカードに埋もれないようにする */
+/* Dark cards sit one step lighter than the panel so dark parts such as the count badge stay visible */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card {
-  background: #1f2937;
-  border-color: #374151;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: var(--ps-surface-muted);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card > h3 {
@@ -195,12 +163,6 @@
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card__content {
   color: #d1d5db;
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card:hover {
-  background: #262f3f;
-  border-color: #3b82f6;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card__category-pill {
