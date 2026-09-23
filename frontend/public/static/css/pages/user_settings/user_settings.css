@@ -1,14 +1,16 @@
 /* user_settings.css
    設定ページ（/settings）本体のスタイル。
-   - 面は不透明・1px 罫線・1 段の影。グラデーション・発光・ぼかし・装飾バッジは持たない。
-   - 角丸は 3 段階だけ（面 14px／カード 10px／部品 8px）。
+   - 質感はメモ画面に揃える。面は不透明な白と 1px 罫線で、影は持たない（クリックできるカードだけ、ホバーで薄い影）。
+     グラデーション・発光・ぼかし・装飾バッジは持たない。
+   - 角丸は面・カード・部品とも 8px。文字のボタンとスマホ幅のナビはピル型（アイコンだけのボタンは角丸 8px のまま）。
    - 色は base/variables.css の --settings-* トークンだけを参照し、ダークテーマはトークン側で切り替える。
    - 動きは読み込み中のスピナーと、フォーカス・ホバーの色変化のみ。
    末尾の「プロンプト編集・閲覧モーダル」セクションは Prompt Share と共用で、外殻は
    components/modal_surface.css（cc-modal）に任せている。
    Styles for the settings page body (/settings).
-   - Opaque surfaces, 1px borders, a single shadow step. No gradients, glows, blur or decorative badges.
-   - Three radii only (surface 14px / card 10px / control 8px).
+   - Matches the memo page: opaque white surfaces with 1px borders and no shadow (clickable cards get a light
+     shadow on hover). No gradients, glows, blur or decorative badges.
+   - 8px radius for surfaces, cards and controls; text buttons and the mobile nav are pills (icon-only buttons stay 8px).
    - Colors come from the --settings-* tokens in base/variables.css; dark mode flips the tokens.
    - Motion is limited to loading spinners and hover/focus color changes.
    The trailing "prompt edit / preview modal" section is shared with Prompt Share and relies on
@@ -553,7 +555,7 @@ body.settings-page,
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   3. ボタン  Buttons — 44px、8px 角丸、塗りは primary と danger だけ
+   3. ボタン  Buttons — 44px、ピル型、塗りは primary と danger だけ
    ═══════════════════════════════════════════════════════════════════ */
 :where(body.settings-page, .user-settings-page) :where(
   .primary-button,
@@ -567,9 +569,9 @@ body.settings-page,
   justify-content: center;
   gap: 0.45rem;
   min-height: 44px;
-  padding: 0.55rem 1rem;
+  padding: 0.55rem 1.1rem;
   border: 1px solid var(--settings-border-color);
-  border-radius: var(--settings-radius-control);
+  border-radius: var(--radius-full);
   background: var(--settings-card-bg);
   color: var(--settings-text-primary);
   font: inherit;
@@ -594,6 +596,17 @@ body.settings-page,
 :where(body.settings-page, .user-settings-page) :where(.secondary-button, .ghost-button):hover:not(:disabled) {
   border-color: var(--settings-text-muted);
   background: var(--settings-surface-muted);
+}
+
+/* ゴーストは地も枠も持たず、ホバーで薄く塗る（メモ画面の二次ボタンと同じ） */
+/* Ghost buttons carry no fill or border and tint on hover, like the memo page's secondary buttons */
+:where(body.settings-page, .user-settings-page) .ghost-button {
+  border-color: transparent;
+  background: transparent;
+}
+
+:where(body.settings-page, .user-settings-page) .ghost-button:hover:not(:disabled) {
+  border-color: transparent;
 }
 
 :where(body.settings-page, .user-settings-page) .primary-button {
@@ -992,11 +1005,12 @@ body.settings-page,
   border-radius: var(--settings-radius-card);
   background: var(--settings-card-bg);
   box-shadow: var(--settings-shadow);
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card:hover {
-  border-color: var(--settings-text-muted);
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
   transform: none;
 }
 
@@ -1169,7 +1183,7 @@ body.settings-page,
   min-height: 36px;
   padding: 0.35rem 0.7rem;
   border: 1px solid transparent;
-  border-radius: var(--settings-radius-control);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--settings-text-muted);
   font: inherit;
@@ -1594,7 +1608,7 @@ body.settings-page,
   min-height: 32px;
   padding: 0.25rem 0.55rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--settings-text-muted);
   font: inherit;
@@ -1975,8 +1989,9 @@ body.settings-page,
   :where(body.settings-page, .user-settings-page) .nav-link {
     width: auto;
     min-height: 40px;
-    padding: 0.4rem 0.75rem;
+    padding: 0.4rem 0.85rem;
     border: 1px solid var(--settings-border-color);
+    border-radius: var(--radius-full);
     font-size: 0.875rem;
     white-space: nowrap;
   }
