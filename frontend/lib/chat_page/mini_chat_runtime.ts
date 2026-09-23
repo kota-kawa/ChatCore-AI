@@ -129,7 +129,6 @@ export const RESUME_READY_TIMEOUT_MS = 12_000;
 export const CLIENT_NAVIGABLE_ROUTES = new Set([
   "/",
   "/prompt_share",
-  "/prompt_share/manage",
   "/memo",
   "/settings",
 ]);
