@@ -123,6 +123,7 @@ from services.llm_daily_limit import (
 )
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
+from services.usage_limits import check_usage_limit
 from services.user_skills import (
     build_enabled_user_skills_prompt,
 )
@@ -669,6 +670,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 get_seconds_until_tomorrow=get_seconds_until_tomorrow,
                 consume_llm_daily_quota=consume_llm_daily_quota,
                 get_seconds_until_daily_reset=get_seconds_until_daily_reset,
+                check_usage_limit=check_usage_limit,
             ),
             generation=ChatPostGenerationDependencies(
                 build_generation_key=build_generation_key,
@@ -768,6 +770,7 @@ def _build_regeneration_dependencies() -> ChatRegenerationDependencies:
         list_room_memory_facts=list_room_memory_facts,
         get_room_web_search_contexts=get_room_web_search_contexts,
         consume_llm_daily_quota=consume_llm_daily_quota,
+        check_usage_limit=check_usage_limit,
         is_streaming_model=is_streaming_model,
         search_personal_knowledge=search_personal_knowledge_for_tool,
         search_shared_prompts=search_shared_prompts_for_tool,

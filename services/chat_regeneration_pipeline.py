@@ -71,6 +71,7 @@ from services.selected_reference_context import (
     augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import build_selected_reference_searchers
+from services.usage_limits import UsageLimitBlock, usage_limit_message
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
     deserialize_web_search_results,
@@ -111,6 +112,11 @@ class LoadProjectContextForRoom(Protocol):
         room_mode: str,
         chat_room_id: str,
     ) -> Awaitable[str | None]: ...
+
+
+# 料金ベースの利用上限（日・週・全体の月予算）を判定する。拒否理由か None を返す。
+# Check the cost-based limits (daily, weekly, monthly budget); returns the refusal or None.
+CheckUsageLimit = Callable[[], Awaitable[UsageLimitBlock | None]]
 
 
 class ConsumeLlmDailyQuota(Protocol):
@@ -189,6 +195,7 @@ class ChatRegenerationDependencies:
     list_room_memory_facts: Callable[[str], Awaitable[list[str]]]
     get_room_web_search_contexts: Callable[[str], Awaitable[list[dict[str, Any]]]]
     consume_llm_daily_quota: ConsumeLlmDailyQuota
+    check_usage_limit: CheckUsageLimit
     is_streaming_model: Callable[[str], bool]
     search_personal_knowledge: Callable[[int, str], Awaitable[dict[str, Any]]]
     search_shared_prompts: Callable[[str], Awaitable[dict[str, Any]]]
@@ -422,6 +429,15 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         return ChatRegenerationRejected(
             payload={"error": GENERATION_ALREADY_RUNNING_MESSAGE},
             status_code=409,
+        )
+
+    # 回数の上限を消費する前に判定し、料金の上限で断る要求が回数を減らさないようにする。
+    # Check before consuming the request-count quota so a cost refusal never uses it up.
+    usage_block = await deps.check_usage_limit()
+    if usage_block is not None:
+        return ChatRegenerationRateLimited(
+            message=usage_limit_message(usage_block, request_locale),
+            retry_after=usage_block.retry_after_seconds,
         )
 
     can_access_llm, _, daily_limit = await run_blocking(

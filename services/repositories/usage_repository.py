@@ -5,11 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.models import ApiUsageDaily
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectUsageTotals:
+    """A subject's cost for one day and for the week containing it, in nano-dollars."""
+
+    daily_nano_usd: int
+    weekly_nano_usd: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,3 +70,36 @@ class UsageRepository:
             },
         )
         await session.execute(statement)
+
+    async def subject_totals(
+        self,
+        session: AsyncSession,
+        subject_key: str,
+        *,
+        day: date,
+        week_start: date,
+    ) -> SubjectUsageTotals:
+        """Return ``subject_key``'s cost on ``day`` and from ``week_start`` through ``day``."""
+
+        statement = select(
+            func.coalesce(
+                func.sum(ApiUsageDaily.cost_nano_usd).filter(ApiUsageDaily.usage_date == day),
+                0,
+            ),
+            func.coalesce(func.sum(ApiUsageDaily.cost_nano_usd), 0),
+        ).where(
+            ApiUsageDaily.subject_key == subject_key,
+            ApiUsageDaily.usage_date >= week_start,
+            ApiUsageDaily.usage_date <= day,
+        )
+        daily, weekly = (await session.execute(statement)).one()
+        return SubjectUsageTotals(daily_nano_usd=int(daily), weekly_nano_usd=int(weekly))
+
+    async def total_cost(self, session: AsyncSession, *, start: date, end: date) -> int:
+        """Return every subject's combined cost from ``start`` through ``end``."""
+
+        statement = select(func.coalesce(func.sum(ApiUsageDaily.cost_nano_usd), 0)).where(
+            ApiUsageDaily.usage_date >= start,
+            ApiUsageDaily.usage_date <= end,
+        )
+        return int((await session.execute(statement)).scalar_one())
