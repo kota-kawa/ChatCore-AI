@@ -35,6 +35,22 @@ class LocalePreferenceResponse(ResponsePayloadModel):
     locale: Literal["ja", "en"]
 
 
+# 日本語: 利用上限の1つの期間。金額は返さず、上限に対する割合とリセット時刻だけを持つ。
+# English: One usage-limit window: the share of the limit used and when it resets, never amounts.
+class UsageLimitWindowResponse(ResponsePayloadModel):
+    used_ratio: float = Field(ge=0, le=1)
+    resets_at: str
+
+
+# 日本語: 設定画面に表示する利用状況。上限が無効な期間は null。
+# English: Usage shown on the settings page; a window is null when its limit is disabled.
+class UsageLimitsResponse(ResponsePayloadModel):
+    daily: UsageLimitWindowResponse | None
+    weekly: UsageLimitWindowResponse | None
+    monthly_budget_exhausted: bool
+    monthly_resets_at: str
+
+
 # 日本語: チャットボットの応答テキストを含むJSONレスポンスモデル。
 # English: JSON response model containing the chatbot's text response.
 class ChatJsonResponse(ApiErrorPayload):

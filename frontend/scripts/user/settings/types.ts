@@ -6,7 +6,9 @@ import {
   MyPromptsApiResponseSchema,
   PromptManageMutationApiResponseSchema,
   PromptRecordApiSchema,
+  UsageLimitsResponseSchema,
   type LikedPromptApi,
+  type UsageLimitsResponse,
   type PromptRecordApi
 } from "../../../types/generated/api_schemas";
 
@@ -258,4 +260,10 @@ export function parseMcpOAuthConsentDecision(raw: unknown): string {
     raw,
     "OAuth 同意結果の形式が不正です。"
   ).redirect_url;
+}
+
+export type UsageLimits = UsageLimitsResponse;
+
+export function parseUsageLimits(raw: unknown): UsageLimits {
+  return parseWithSchema(UsageLimitsResponseSchema, raw, "利用状況の形式が不正です。");
 }

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from sqlalchemy.dialects import postgresql
 
 from blueprints.chat.tasks import prompt_assist
+from blueprints.chat.usage import get_usage_limits
 from services.chat_use_case import ChatPostUseCase
 from services.repositories.usage_repository import SubjectUsageTotals, UsageRepository
 from services.usage_limits import (
@@ -251,6 +252,36 @@ class UsageLimitEnforcementTests(unittest.TestCase):
         self.assertIn("error", json.loads(response.body))
         consume_quota.assert_not_called()
         create_payload.assert_not_called()
+
+
+class UsageLimitsEndpointTests(_TotalsMixin, unittest.TestCase):
+    def _get(self, session):
+        request = build_request(method="GET", path="/api/user/usage-limits", session=session)
+        return asyncio.run(get_usage_limits(request))
+
+    def test_requires_login(self):
+        self.assertEqual(self._get({}).status_code, 401)
+
+    def test_returns_shares_and_reset_times_but_never_amounts(self):
+        seen = self.use_totals(daily=0.06, weekly=0.90, monthly=1)
+        response = self._get({"user_id": 8})
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body)
+        self.assertEqual(seen[0][0], "user:8")
+        self.assertAlmostEqual(payload["daily"]["used_ratio"], 0.4)
+        # 上限を超えても 1 で止める。 / Capped at 1 even when a turn overshoots.
+        self.assertEqual(payload["weekly"]["used_ratio"], 1.0)
+        self.assertTrue(payload["daily"]["resets_at"].endswith("+09:00"))
+        self.assertFalse(payload["monthly_budget_exhausted"])
+        self.assertNotIn("limit", json.dumps(payload))
+
+    def test_disabled_limit_is_null(self):
+        self.use_totals()
+        with patch.dict(os.environ, {"USAGE_USER_DAILY_LIMIT_USD": "0"}):
+            payload = json.loads(self._get({"user_id": 8}).body)
+        self.assertIsNone(payload["daily"])
+        self.assertIsNotNone(payload["weekly"])
 
 
 if __name__ == "__main__":

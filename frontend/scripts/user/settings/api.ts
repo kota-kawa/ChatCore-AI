@@ -6,10 +6,12 @@ import {
   parseMcpOAuthConnections,
   parseMcpOAuthConsent,
   parseMcpOAuthConsentDecision,
+  parseUsageLimits,
   type McpOAuthClientCredentials,
   type McpOAuthClientList,
   type McpOAuthConnection,
-  type McpOAuthConsent
+  type McpOAuthConsent,
+  type UsageLimits
 } from "./types";
 import { normalizeLocale, type Locale } from "../../../lib/i18n/config";
 
@@ -33,6 +35,15 @@ export async function loadLocalePreference(): Promise<Locale> {
   const locale = normalizeLocale(payload.locale);
   if (!locale) throw new Error("Unsupported locale returned by preferences API");
   return locale;
+}
+
+export async function loadUsageLimits(): Promise<UsageLimits> {
+  const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
+    "/api/user/usage-limits",
+    { credentials: "same-origin" },
+    { defaultMessage: "利用状況の取得に失敗しました。" }
+  );
+  return parseUsageLimits(payload);
 }
 
 export async function updateLocalePreference(locale: Locale): Promise<Locale> {
