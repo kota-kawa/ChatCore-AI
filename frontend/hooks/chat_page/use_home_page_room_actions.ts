@@ -11,7 +11,9 @@ import type { KeyedMutator } from "swr";
 import { CHAT_ROOMS_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { hasImageAttachments, IMAGE_INPUT_MODEL_ONLY_MESSAGE, modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import {
+  limitToFirstChatRoomsPage,
   removeChatRoomsById,
+  setChatRoomPinnedAt,
   updateChatRoomTitle,
 } from "../../lib/chat_page/home_page_controller_utils";
 import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
@@ -25,6 +27,7 @@ import {
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 import { useTranslation } from "../../contexts/locale_context";
+import type { PinChatRoomRequest } from "../../types/generated/api_schemas";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 function waitForDuration(ms: number) {
@@ -386,19 +389,16 @@ export function useHomePageRoomActions({
         createdAt: new Date().toISOString(),
         mode,
       };
-      const upsert = (rooms: ChatRoom[] = [], maxLength?: number) => {
-        const nextRooms = [
-          createdRoom,
-          ...rooms.filter((room) => room.id !== roomId),
-        ];
-        return typeof maxLength === "number" ? nextRooms.slice(0, maxLength) : nextRooms;
-      };
+      const upsert = (rooms: ChatRoom[] = []) => [
+        createdRoom,
+        ...rooms.filter((room) => room.id !== roomId),
+      ];
 
       setChatRooms((previous) => upsert(previous));
       void mutateChatRooms(
         (previous) => {
           const previousRooms = previous?.rooms ?? cachedChatRooms ?? chatRooms;
-          const nextRooms = upsert(previousRooms, CHAT_ROOMS_PAGE_SIZE);
+          const nextRooms = limitToFirstChatRoomsPage(upsert(previousRooms));
           return {
             rooms: nextRooms,
             pagination: {
@@ -914,7 +914,7 @@ export function useHomePageRoomActions({
             previous
               ? {
                   ...previous,
-                  rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+                  rooms: limitToFirstChatRoomsPage(previousRooms),
                 }
               : previous,
           { revalidate: false },
@@ -986,7 +986,7 @@ export function useHomePageRoomActions({
           previous
             ? {
                 ...previous,
-                rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+                rooms: limitToFirstChatRoomsPage(previousRooms),
               }
             : previous,
         { revalidate: false },
@@ -1053,7 +1053,7 @@ export function useHomePageRoomActions({
             previous
               ? {
                   ...previous,
-                  rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+                  rooms: limitToFirstChatRoomsPage(previousRooms),
                 }
               : previous,
           { revalidate: false },
@@ -1062,6 +1062,51 @@ export function useHomePageRoomActions({
       }
     },
     [chatRooms, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
+  );
+
+  const handleToggleRoomPin = useCallback(
+    async (roomId: string, pinned: boolean) => {
+      setOpenRoomActionsFor(null);
+      const failureLabel = pinned
+        ? localize("ピン留めに失敗しました", "Could not pin the chat")
+        : localize("ピン留めの解除に失敗しました", "Could not unpin the chat");
+      try {
+        const body: PinChatRoomRequest = { room_id: roomId, pinned };
+        const response = await resilientFetch("/api/pin_chat_room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(body),
+        });
+        const payload = await readJsonBodySafe(response);
+        if (!response.ok) {
+          throw new Error(extractApiErrorMessage(payload, failureLabel, response.status));
+        }
+        // 並び順はサーバーが記録したピン留め日時で決めるため、応答を待ってから反映する。
+        // The pin time recorded by the server orders the section, so apply the response rather than guessing.
+        const rawPinnedAt = (payload as { pinned_at?: unknown } | null)?.pinned_at;
+        const pinnedAt = typeof rawPinnedAt === "string" && rawPinnedAt ? rawPinnedAt : null;
+        setChatRooms((previous) => setChatRoomPinnedAt(previous, roomId, pinnedAt));
+        void mutateChatRooms(
+          (previous) =>
+            previous
+              ? {
+                  ...previous,
+                  rooms: setChatRoomPinnedAt(previous.rooms, roomId, pinnedAt),
+                }
+              : previous,
+          { revalidate: false },
+        );
+        // 付け外しのどちらでも最初のページを取り直し、キャッシュとページ境界をサーバーに合わせる。
+        // 外したルームの最終的な位置もここで確定する。
+        // Refetch after either change so the cached first page matches the server; this also
+        // settles an unpinned room where the server's activity order puts it.
+        void mutateChatRooms();
+      } catch (error) {
+        showToast(`${failureLabel}: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
+      }
+    },
+    [localize, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
   return {
@@ -1080,6 +1125,7 @@ export function useHomePageRoomActions({
     handleDeleteRoom,
     handleBulkDeleteRooms,
     handleRenameRoom,
+    handleToggleRoomPin,
     enterRoomSelectionMode,
     toggleRoomSelection,
     cancelRoomSelection,

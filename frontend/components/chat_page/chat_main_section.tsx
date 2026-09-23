@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
+import { ChatRoomCard } from "./chat_room_card";
 import { ChatRoomSearch } from "./chat_room_search";
 import { InlineLoading } from "../ui/inline_loading";
 import { Skeleton } from "../ui/skeleton";
 import { useHomePageChatContext, useHomePageProjectContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { splitPinnedChatRooms } from "../../lib/chat_page/home_page_controller_utils";
 import {
   MAX_ATTACHED_FILES,
   chatAttachmentAccept,
@@ -49,7 +51,7 @@ function ChatMainSectionComponent() {
 
   // プロジェクト一覧と操作（サイドバーのプロジェクトセクション用）。
   // Project list and actions for the sidebar's project section.
-  const { projects, isProjectsLoading, openProject, openNewProjectModal, assignRoomToProject } = useHomePageProjectContext();
+  const { projects, openProject, openNewProjectModal } = useHomePageProjectContext();
 
   // チャット操作に関するすべての状態とハンドラーを Context から取得する。
   // Obtain all chat operation state and handlers from context.
@@ -62,7 +64,6 @@ function ChatMainSectionComponent() {
     isLoadingMoreChatRooms,
     currentRoomId,
     currentRoomMode,
-    openRoomActionsFor,
     isRoomSelectionMode,
     selectedRoomIds,
     isBulkDeletingRooms,
@@ -78,13 +79,7 @@ function ChatMainSectionComponent() {
     isGenerating,
     openShareModal,
     handleNewChat,
-    switchChatRoom,
-    setOpenRoomActionsFor,
-    handleRenameRoom,
-    handleDeleteRoom,
     handleBulkDeleteRooms,
-    enterRoomSelectionMode,
-    toggleRoomSelection,
     cancelRoomSelection,
     setSidebarOpen,
     loadMoreChatRooms,
@@ -136,6 +131,10 @@ function ChatMainSectionComponent() {
       (room.title || t("chat.new")).toLowerCase().includes(normalizedRoomSearchQuery),
     );
   }, [chatRooms, isRoomSearchActive, normalizedRoomSearchQuery, t]);
+  const { pinned: pinnedChatRooms, recent: recentChatRooms } = useMemo(
+    () => splitPinnedChatRooms(filteredChatRooms),
+    [filteredChatRooms],
+  );
 
   // 検索中に絞り込み結果が空でも、未読み込みのルームがあれば末尾センチネルで
   // 追加読み込みが走り、全ルームを横断して検索できる。読み込み完了かつ 0 件なら
@@ -221,22 +220,6 @@ function ChatMainSectionComponent() {
     },
     [setAttachedFiles],
   );
-
-  // チャットルームカードのキーボード操作（Enter/Space）で選択またはルーム切替を行う。
-  // Handle keyboard activation (Enter/Space) on room cards for selection or navigation.
-  const handleRoomCardKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-    roomId: string,
-    roomMode: "normal" | "temporary",
-  ) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    if (isRoomSelectionMode) {
-      toggleRoomSelection(roomId);
-      return;
-    }
-    switchChatRoom(roomId, roomMode);
-  };
 
   // サイドバーをスクロールしたとき、下端に近づいたら追加のチャットルームを読み込む。
   // Load more chat rooms when the sidebar is scrolled near the bottom (within 160px).
@@ -523,174 +506,23 @@ function ChatMainSectionComponent() {
                 ))}
               </div>
             )}
-            {filteredChatRooms.map((room) => {
-              const roomMenuOpen = openRoomActionsFor === room.id;
-              // タイトルが空の場合は「新規チャット」をフォールバック表示する。
-              // Fall back to "新規チャット" when the room has no title yet.
-              const roomTitle = room.title || t("chat.new");
-              const roomMenuId = `room-actions-menu-${room.id}`;
-              const roomSelected = selectedRoomIds.has(room.id);
-
-              return (
-                <div
-                  key={room.id}
-                  className={`chat-room-card cc-press ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""} ${roomMenuOpen ? "chat-room-card--menu-open" : ""}`.trim()}
-                  // 選択モード時は checkbox、通常時は button として扱い、アクセシビリティを確保する。
-                  // Use checkbox role in selection mode, button role otherwise for accessibility.
-                  role={isRoomSelectionMode ? "checkbox" : "button"}
-                  tabIndex={0}
-                  aria-current={currentRoomId === room.id ? "page" : undefined}
-                  aria-checked={isRoomSelectionMode ? (roomSelected ? "true" : "false") : undefined}
-                  onClick={() => {
-                    if (isRoomSelectionMode) {
-                      toggleRoomSelection(room.id);
-                      return;
-                    }
-                    switchChatRoom(room.id, room.mode);
-                  }}
-                  onKeyDown={(event) => {
-                    handleRoomCardKeyDown(event, room.id, room.mode);
-                  }}
-                >
-                  {isRoomSelectionMode && (
-                    <span className="chat-room-card__check" aria-hidden="true">
-                      <i className={`bi ${roomSelected ? "bi-check-lg" : "bi-circle"}`}></i>
-                    </span>
-                  )}
-
-                  <div className="chat-room-card__trigger">
-                    <span className="chat-room-card__title-row">
-                      <span>{roomTitle}</span>
-                      {room.mode === "temporary" && (
-                        <span className="chat-room-card__mode-badge">{english ? "Temporary" : "未保存"}</span>
-                      )}
-                    </span>
-                  </div>
-
-                  {!isRoomSelectionMode && (
-                    // ルームカード右端の縦三点メニュー。名前変更・複数選択・削除を提供する。
-                    // Three-dot context menu on each room card for rename, multi-select, and delete.
-                    <div
-                      className="chat-room-card-actions"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="room-actions-icon cc-press"
-                        aria-label={english ? `Open actions for ${roomTitle}` : `${roomTitle} の操作メニューを開く`}
-                        aria-haspopup="menu"
-                        aria-expanded={roomMenuOpen ? "true" : "false"}
-                        aria-controls={roomMenuId}
-                        onClick={(event) => {
-                          // カードのクリックイベントへの伝播を止めてルーム切替を防ぐ。
-                          // Stop propagation to prevent triggering room switch on card click.
-                          event.stopPropagation();
-                          setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
-                        }}
-                      >
-                        <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
-                      </button>
-
-                      <div
-                        id={roomMenuId}
-                        className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}
-                        role="menu"
-                        aria-hidden={roomMenuOpen ? "false" : "true"}
-                      >
-                        <button
-                          type="button"
-                          className="menu-item menu-item--rename cc-press"
-                          role="menuitem"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setOpenRoomActionsFor(null);
-                            void handleRenameRoom(room.id, room.title);
-                          }}
-                        >
-                          <i className="bi bi-pencil-square menu-item__icon"></i> {english ? "Rename" : "名前変更"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="menu-item menu-item--select cc-press"
-                          role="menuitem"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            enterRoomSelectionMode(room.id);
-                          }}
-                        >
-                          <i className="bi bi-check2-square menu-item__icon"></i> {english ? "Select multiple" : "複数選択"}
-                        </button>
-
-                        {room.mode === "normal" && (
-                          <div className="room-actions-menu__section" role="none">
-                            <div className="room-actions-menu__label" role="presentation">
-                              <i className="bi bi-folder-plus menu-item__icon" aria-hidden="true"></i>
-                              {english ? "Add to project" : "プロジェクトへ追加"}
-                            </div>
-                            {isProjectsLoading ? (
-                              <button
-                                type="button"
-                                className="menu-item menu-item--project is-disabled"
-                                role="menuitem"
-                                disabled
-                              >
-                                {t("common.loading")}
-                              </button>
-                            ) : projects.length > 0 ? (
-                              projects.map((project) => (
-                                <button
-                                  key={project.id}
-                                  type="button"
-                                  className="menu-item menu-item--project cc-press"
-                                  role="menuitem"
-                                  title={project.name}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setOpenRoomActionsFor(null);
-                                    void assignRoomToProject(room.id, project.id, project.name);
-                                  }}
-                                >
-                                  <span className="menu-item__project-name">{project.name}</span>
-                                </button>
-                              ))
-                            ) : (
-                              <button
-                                type="button"
-                                className="menu-item menu-item--project cc-press"
-                                role="menuitem"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setOpenRoomActionsFor(null);
-                                  openNewProjectModal();
-                                }}
-                              >
-                                {english ? "Create a project" : "新規プロジェクトを作成"}
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        <button
-                          type="button"
-                          className="menu-item menu-item--delete cc-press"
-                          role="menuitem"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setOpenRoomActionsFor(null);
-                            void handleDeleteRoom(room.id, room.title);
-                          }}
-                        >
-                          <i className="bi bi-trash menu-item__icon"></i> {t("common.delete")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {pinnedChatRooms.length > 0 && (
+              <div className="chat-room-list__heading">
+                <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
+                <span>{english ? "Pinned" : "ピン留め"}</span>
+              </div>
+            )}
+            {pinnedChatRooms.map((room) => (
+              <ChatRoomCard key={room.id} room={room} />
+            ))}
+            {pinnedChatRooms.length > 0 && recentChatRooms.length > 0 && (
+              <div className="chat-room-list__heading">
+                <span>{english ? "Recent" : "最近"}</span>
+              </div>
+            )}
+            {recentChatRooms.map((room) => (
+              <ChatRoomCard key={room.id} room={room} />
+            ))}
             {showRoomSearchEmptyState && (
               // 検索クエリに一致するチャットが 1 件も無いことを伝える空状態。
               // Empty state shown when no chat matches the search query.

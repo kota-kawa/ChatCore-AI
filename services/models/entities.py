@@ -99,6 +99,7 @@ class ChatRoom(Base):
     mode: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'normal'"))
     active_root_id: Mapped[int | None] = mapped_column(Integer)
     project_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     __table_args__ = (
         CheckConstraint("mode IN ('normal', 'temporary')", name="chk_chat_rooms_mode"),

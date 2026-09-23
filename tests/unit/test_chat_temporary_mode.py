@@ -50,9 +50,11 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             }
             for index in range(21)
         ]
+        pinned = [{"id": "pinned-1", "title": "Pinned", "mode": "normal", "pinned_at": "2026-04-21T10:00:00"}]
         with (
             patch("blueprints.chat.rooms.cleanup_ephemeral_chats"),
             patch("blueprints.chat.rooms._fetch_persisted_user_rooms", new=AsyncMock(return_value=rooms)) as fetch,
+            patch("blueprints.chat.rooms.list_pinned_chat_rooms", new=AsyncMock(return_value=pinned)) as fetch_pinned,
         ):
             response = asyncio.run(get_chat_rooms(request))
 
@@ -60,7 +62,9 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(payload["rooms"]), 20)
         self.assertTrue(payload["pagination"]["has_more"])
+        self.assertEqual(payload["pinned_rooms"], pinned)
         fetch.assert_awaited_once_with(7, limit=21, cursor=None)
+        fetch_pinned.assert_awaited_once_with(7)
 
     def test_get_chat_rooms_passes_decoded_cursor(self):
         cursor = _encode_room_list_cursor(
@@ -75,10 +79,15 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         with (
             patch("blueprints.chat.rooms.cleanup_ephemeral_chats"),
             patch("blueprints.chat.rooms._fetch_persisted_user_rooms", new=AsyncMock(return_value=[])) as fetch,
+            patch("blueprints.chat.rooms.list_pinned_chat_rooms", new=AsyncMock()) as fetch_pinned,
         ):
             response = asyncio.run(get_chat_rooms(request))
 
         self.assertEqual(response.status_code, 200)
+        # 続きのページではピン留めを取り直さない。
+        # Later pages do not re-read the pinned section.
+        self.assertEqual(json.loads(response.body)["pinned_rooms"], [])
+        fetch_pinned.assert_not_awaited()
         fetch.assert_awaited_once_with(
             7,
             limit=21,

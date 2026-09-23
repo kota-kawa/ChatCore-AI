@@ -23,8 +23,10 @@ from services.chat_service import (
     fork_shared_chat_into_db_room,
     get_shared_chat_room_payload,
     list_chat_rooms,
+    list_pinned_chat_rooms,
     rename_chat_room_in_db,
     revoke_shared_chat_token,
+    set_chat_room_pinned,
     validate_room_owner,
 )
 from services.error_messages import (
@@ -43,6 +45,7 @@ from services.request_models import (
     ChatRoomIdsRequest,
     ForkSharedChatRoomRequest,
     NewChatRoomRequest,
+    PinChatRoomRequest,
     RenameChatRoomRequest,
     ShareChatRoomRequest,
 )
@@ -454,9 +457,13 @@ async def get_chat_rooms(request: Request):
             # 次のページ用のカーソル文字列をエンコード
             # Encode next cursor string if there are more rooms
             next_cursor = _encode_room_list_cursor(persisted_rooms[-1]) if has_more and persisted_rooms else None
+            # ピン留めはページングの外に置き、最初のページでまとめて返す（件数の上限は設けない）。
+            # Pins sit outside pagination: the first page returns all of them (there is no cap).
+            pinned_rooms = await list_pinned_chat_rooms(user_id) if cursor is None else []
             return jsonify(
                 {
                     "rooms": persisted_rooms,
+                    "pinned_rooms": pinned_rooms,
                     "pagination": {
                         "limit": limit,
                         "has_more": has_more,
@@ -475,6 +482,7 @@ async def get_chat_rooms(request: Request):
         return jsonify(
             {
                 "rooms": [],
+                "pinned_rooms": [],
                 "pagination": {
                     "limit": CHAT_ROOMS_DEFAULT_PAGE_SIZE,
                     "has_more": False,
@@ -674,6 +682,42 @@ async def rename_chat_room(request: Request):
         if not await run_blocking(ephemeral_store.rename_room, sid, room_id, new_title):
             return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
         return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
+
+
+# チャットルームのピン留めを付け外しするAPIエンドポイント
+# API endpoint to pin or unpin a chat room in the sidebar.
+@chat_bp.post("/api/pin_chat_room", name="chat.pin_chat_room")
+async def pin_chat_room(request: Request):
+    """
+    ログインユーザーの保存済みチャットルームをピン留め、またはピン留め解除します（未保存チャットは対象外）。
+    Pins or unpins a saved chat room owned by the authenticated user; temporary chats cannot be pinned.
+    """
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        PinChatRoomRequest,
+        error_message="room_id と pinned が必要です",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=401)
+
+    try:
+        pinned_at = await set_chat_room_pinned(payload.room_id, user_id, payload.pinned)
+        return jsonify({"room_id": payload.room_id, "pinned_at": pinned_at}, status_code=200)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to update chat room pin for authenticated user.",
+        )
 
 
 # 共有状態のレスポンスペイロードを組み立てる関数

@@ -378,6 +378,20 @@ async def list_chat_rooms(
     return await _read(lambda repo: repo.list_user_rooms(user_id, limit=limit, cursor=cursor), session)
 
 
+async def list_pinned_chat_rooms(user_id: int, *, session: AsyncSession | None = None) -> list[dict[str, Any]]:
+    return await _read(lambda repo: repo.list_pinned_user_rooms(user_id), session)
+
+
+async def set_chat_room_pinned(
+    room_id: str,
+    user_id: int,
+    pinned: bool,
+    *,
+    session: AsyncSession | None = None,
+) -> str | None:
+    return await _write(lambda repo: repo.set_room_pinned(room_id, user_id, pinned), session)
+
+
 async def delete_chat_room_for_user(
     room_id: str,
     user_id: int,

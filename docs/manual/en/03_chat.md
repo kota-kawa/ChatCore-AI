@@ -13,6 +13,8 @@ Enter a message and send it. Choose a model or task when the controls are availa
 
 Signed-in users can open earlier conversations from chat history. Editing or retrying a message may create another branch while retaining the previous version.
 
+To keep a conversation at the top of the sidebar, open its "…" menu and choose **Pin**. Pinned chats appear in the Pinned section, most recently pinned first; choose **Unpin** from the same menu to return a chat to the regular list. Temporary chats cannot be pinned.
+
 ## Attachments and web search
 
 Use the attachment control for supported files. When web search is enabled, verify important claims against the cited sources. Do not upload secrets or information that you are not authorized to share.

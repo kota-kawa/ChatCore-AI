@@ -15,14 +15,16 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
+from services.api_errors import ApiServiceError, ForbiddenOperationError, ResourceNotFoundError
 from services.attached_files import decode_attached_files_from_storage, encode_attached_files_for_storage
 from services.chat_images import decode_chat_images_from_storage, encode_chat_images_for_storage
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import (
     ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
+    ERROR_CHAT_ROOM_FORBIDDEN,
     ERROR_CHAT_ROOM_NOT_FOUND,
     ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
+    ERROR_CHAT_ROOM_TEMPORARY_NOT_PINNABLE,
     ERROR_SHARED_LINK_NOT_FOUND,
 )
 from services.generative_ui import decode_message_parts, encode_message_parts
@@ -314,9 +316,15 @@ class ChatRepository:
         limit: int | None = None,
         cursor: tuple[datetime, str] | None = None,
     ) -> list[dict[str, Any]]:
+        # ピン留めしたルームは list_pinned_user_rooms が別の区画として返すので、ここでは除く。
+        # Pinned rooms are returned as their own section by list_pinned_user_rooms, so exclude them here.
         stmt = (
             select(ChatRoom)
-            .where(ChatRoom.user_id == user_id, or_(ChatRoom.mode.is_(None), ChatRoom.mode != "temporary"))
+            .where(
+                ChatRoom.user_id == user_id,
+                or_(ChatRoom.mode.is_(None), ChatRoom.mode != "temporary"),
+                ChatRoom.pinned_at.is_(None),
+            )
             .order_by(ChatRoom.last_activity_at.desc(), ChatRoom.id.desc())
         )
         if cursor is not None:
@@ -329,6 +337,38 @@ class ChatRepository:
         if limit is not None:
             stmt = stmt.limit(limit)
         return [serialize_room(room) for room in (await self.session.execute(stmt)).scalars().all()]
+
+    async def list_pinned_user_rooms(self, user_id: int) -> list[dict[str, Any]]:
+        stmt = (
+            select(ChatRoom)
+            .where(
+                ChatRoom.user_id == user_id,
+                or_(ChatRoom.mode.is_(None), ChatRoom.mode != "temporary"),
+                ChatRoom.pinned_at.is_not(None),
+            )
+            .order_by(ChatRoom.pinned_at.desc(), ChatRoom.id.desc())
+        )
+        return [serialize_room(room) for room in (await self.session.execute(stmt)).scalars().all()]
+
+    async def set_room_pinned(self, room_id: str, user_id: int, pinned: bool) -> str | None:
+        """Pin or unpin an owned room and return the stored pin time (``None`` when unpinned)."""
+
+        room = await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_FORBIDDEN, lock=True)
+        if room.mode == "temporary":
+            raise ApiServiceError(ERROR_CHAT_ROOM_TEMPORARY_NOT_PINNABLE, 400)
+        # 既に望む状態なら書き込まない。ピン留め済みの日時を保ち、押し直しで並び順が動かないようにする。
+        # Skip the write when already in the requested state; keeping the pin time means re-pinning never reorders.
+        if pinned == (room.pinned_at is not None):
+            return serialize_datetime_iso(room.pinned_at)
+        pinned_at = (
+            await self.session.execute(
+                update(ChatRoom)
+                .where(ChatRoom.id == room.id)
+                .values(pinned_at=func.current_timestamp() if pinned else None)
+                .returning(ChatRoom.pinned_at)
+            )
+        ).scalar_one()
+        return serialize_datetime_iso(pinned_at)
 
     async def delete_room_for_user(self, room_id: str, user_id: int) -> dict[str, str]:
         room = await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_DELETE_FORBIDDEN, lock=True)

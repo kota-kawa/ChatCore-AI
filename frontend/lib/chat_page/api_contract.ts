@@ -24,6 +24,7 @@ import {
   readChatJsonResponseFields,
   readShareChatRoomResponseFields,
 } from "./generated_contract";
+import { mergeUniqueChatRooms } from "./home_page_controller_utils";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 import { asRecord } from "../utils";
 
@@ -276,6 +277,7 @@ export function normalizeChatRoom(raw: unknown): ChatRoom | null {
   const rawTitle = optionalString(record.title);
   const rawCreatedAt = optionalString(record.created_at);
   const rawLastActivityAt = optionalString(record.last_activity_at);
+  const rawPinnedAt = optionalString(record.pinned_at);
   const rawMode = optionalString(record.mode);
 
   return {
@@ -283,6 +285,7 @@ export function normalizeChatRoom(raw: unknown): ChatRoom | null {
     title: rawTitle && rawTitle.trim() ? rawTitle : "新規チャット",
     createdAt: rawCreatedAt,
     ...(rawLastActivityAt !== undefined ? { lastActivityAt: rawLastActivityAt } : {}),
+    ...(rawPinnedAt ? { pinnedAt: rawPinnedAt } : {}),
     mode: rawMode === "temporary" ? "temporary" : "normal",
   };
 }
@@ -306,10 +309,16 @@ export function normalizeChatRoomsPagination(rawPagination: unknown): ChatRoomsP
   };
 }
 
+// 日本語: 最初のページだけが `pinned_rooms`（ピン留め全件）を持ちます。ピン留めを `rooms` の先頭へ
+//         まとめておくと、名前変更・削除・選択などの既存のルーム操作がピン留めにもそのまま効きます。
+//         区画の振り分けは描画側が `pinnedAt` で行います。
+// English: Only the first page carries `pinned_rooms` (every pinned room). Folding them into the front of
+//          `rooms` lets the existing rename, delete and selection flows cover pinned rooms unchanged;
+//          the view splits the sections by `pinnedAt`.
 export function normalizeChatRoomsPayload(rawPayload: unknown): ChatRoomsPage {
   const payload = asRecord(rawPayload);
   return {
-    rooms: normalizeChatRooms(payload.rooms),
+    rooms: mergeUniqueChatRooms(normalizeChatRooms(payload.pinned_rooms), normalizeChatRooms(payload.rooms)),
     pagination: normalizeChatRoomsPagination(payload.pagination),
     error: optionalString(payload.error),
   };

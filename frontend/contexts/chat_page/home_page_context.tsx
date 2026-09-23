@@ -89,6 +89,7 @@ type HomePageChatContextValue = Pick<
   | "switchChatRoom"
   | "setOpenRoomActionsFor"
   | "handleRenameRoom"
+  | "handleToggleRoomPin"
   | "handleDeleteRoom"
   | "handleBulkDeleteRooms"
   | "enterRoomSelectionMode"
@@ -291,6 +292,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       switchChatRoom: controller.switchChatRoom,
       setOpenRoomActionsFor: controller.setOpenRoomActionsFor,
       handleRenameRoom: controller.handleRenameRoom,
+      handleToggleRoomPin: controller.handleToggleRoomPin,
       handleDeleteRoom: controller.handleDeleteRoom,
       handleBulkDeleteRooms: controller.handleBulkDeleteRooms,
       enterRoomSelectionMode: controller.enterRoomSelectionMode,
@@ -336,6 +338,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.switchChatRoom,
       controller.setOpenRoomActionsFor,
       controller.handleRenameRoom,
+      controller.handleToggleRoomPin,
       controller.handleDeleteRoom,
       controller.handleBulkDeleteRooms,
       controller.enterRoomSelectionMode,
