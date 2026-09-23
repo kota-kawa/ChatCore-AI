@@ -85,7 +85,6 @@ export const jaMessages = {
   "home.recentChats": "最近のチャット",
   "home.recentChatsShort": "最近",
   "home.chatHistory": "チャット履歴",
-  "home.openChatHistory": "チャット履歴を開く",
   "home.taskDetailsFor": "{name}の詳細を表示",
   "chat.modelFast": "高速応答",
   "chat.modelDeepThinking": "深い思考",

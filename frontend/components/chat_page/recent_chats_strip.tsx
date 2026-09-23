@@ -47,8 +47,11 @@ export function RecentChatsStrip() {
           );
         })}
       </ul>
+      {/* AI エージェントの chat.showChatHistory はこの id を押してチャット履歴を開く */}
+      {/* The AI agent's chat.showChatHistory clicks this id to open the chat history */}
       <button
         type="button"
+        id="setup-history-btn"
         className="recent-chats__all cc-press"
         onClick={() => {
           void handleAccessChat();
