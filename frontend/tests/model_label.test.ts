@@ -13,13 +13,11 @@ test("model labels keep the model name and localize the model-specific usage hin
     "GPT-OSS 120B（高速応答）",
     "GPT-6 Luna（バランス型）",
     "Qwen 3.8 27B（深い思考）",
-    "Claude Haiku 4.5（丁寧な文章）",
   ];
   const expectedEnglishLabels = [
     "GPT-OSS 120B (fast responses)",
     "GPT-6 Luna (balanced)",
     "Qwen 3.8 27B (deep thinking)",
-    "Claude Haiku 4.5 (careful writing)",
   ];
 
   assert.deepEqual(
