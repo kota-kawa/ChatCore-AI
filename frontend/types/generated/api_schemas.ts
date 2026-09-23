@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 986793123f282409c9df009bf2e2d56a684de0048821218991c9f7076fdd423e
+// Schema fingerprint: d50e217aaa08178a2c81c6e179288045a22ebed491836cf11b9ec2025a02eb77
 
 import { z } from "zod";
 
@@ -124,6 +124,12 @@ export type ApiDetailObject = z.infer<typeof ApiDetailObjectSchema>;
 
 export const LocalePreferenceResponseSchema = z.object({ "locale": z.enum(["ja","en"]) }).catchall(z.any());
 export type LocalePreferenceResponse = z.infer<typeof LocalePreferenceResponseSchema>;
+
+export const UsageLimitWindowResponseSchema = z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any());
+export type UsageLimitWindowResponse = z.infer<typeof UsageLimitWindowResponseSchema>;
+
+export const UsageLimitsResponseSchema = z.object({ "daily": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "weekly": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "monthly_budget_exhausted": z.boolean(), "monthly_resets_at": z.string() }).catchall(z.any());
+export type UsageLimitsResponse = z.infer<typeof UsageLimitsResponseSchema>;
 
 export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;

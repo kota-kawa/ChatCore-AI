@@ -56,6 +56,7 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "ai_agent.error.memo_missing": "メモが見つからないか、アクセスできません。",
         "ai_agent.error.generation": "AIエージェントの応答生成に失敗しました。時間をおいて再試行してください。",
         "ai_agent.error.unexpected": "予期しないエラーが発生しました。",
+        "usage_limit.load_failed": "利用状況の取得に失敗しました。",
         "usage_limit.daily": "本日の利用上限に達しました。明日の0時（日本時間）にリセットされます。",
         "usage_limit.weekly": "今週の利用上限に達しました。月曜日の0時（日本時間）にリセットされます。",
         "usage_limit.monthly_budget": (
@@ -88,6 +89,7 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "ai_agent.error.memo_missing": "The memo could not be found or accessed.",
         "ai_agent.error.generation": "The AI agent could not generate a response. Wait a moment and try again.",
         "ai_agent.error.unexpected": "An unexpected error occurred.",
+        "usage_limit.load_failed": "Could not load your usage.",
         "usage_limit.daily": "You have reached today's usage limit. It resets at midnight Japan time.",
         "usage_limit.weekly": "You have reached this week's usage limit. It resets at midnight on Monday, Japan time.",
         "usage_limit.monthly_budget": (
