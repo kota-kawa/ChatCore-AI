@@ -61,17 +61,17 @@ GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
 # 軽量な補助タスクは会話で選択されたモデルに依存させず、Groq の20Bへ固定する。
 # Keep lightweight auxiliary tasks independent from the chat model selected by the user.
 LIGHTWEIGHT_TASK_MODEL = GPT_OSS_20B_MODEL
-QWEN_3_6_27B_MODEL = "qwen/qwen3.6-27b"
-GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
+QWEN_3_8_27B_MODEL = "qwen/qwen3.8-27b"
+GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
 GPT_OSS_MODELS = {GPT_OSS_20B_MODEL, GPT_OSS_120B_MODEL}
 GROQ_MODEL = GPT_OSS_120B_MODEL
-OPENAI_DEFAULT_MODEL = GPT_5_6_LUNA_MODEL
+OPENAI_DEFAULT_MODEL = GPT_6_LUNA_MODEL
 CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
-# 対応モデル（Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna）はいずれも思考トークンがこの上限に
+# 対応モデル（Claude Haiku / gpt-oss / Qwen / gpt-6-luna）はいずれも思考トークンがこの上限に
 # 含まれる。4096では生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
 # ため、既定値を引き上げる。モデル固有の出力上限は送信前に適用する。
-# All supported models (Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna) count reasoning tokens
+# All supported models (Claude Haiku / gpt-oss / Qwen / gpt-6-luna) count reasoning tokens
 # against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
 # code) mid-stream, so raise the default. Provider-specific hard caps are applied below before
 # a request is sent.
@@ -166,11 +166,11 @@ VALID_GROQ_MODELS = {
     GROQ_MODEL,
     GPT_OSS_120B_MODEL,
     GPT_OSS_20B_MODEL,
-    QWEN_3_6_27B_MODEL,
+    QWEN_3_8_27B_MODEL,
 }
 VALID_OPENAI_MODELS = {
     OPENAI_DEFAULT_MODEL,
-    GPT_5_6_LUNA_MODEL,
+    GPT_6_LUNA_MODEL,
 }
 
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
@@ -641,15 +641,15 @@ def _openai_reasoning_kwargs(
     generation_phase: str = "default",
     has_tool_context: bool = False,
 ) -> dict[str, Any]:
-    """Return phase-aware reasoning options for GPT-5.6 Luna Chat Completions.
+    """Return phase-aware reasoning options for GPT-6 Luna Chat Completions.
 
-    GPT-5.6 Luna rejects function tools combined with non-``none`` reasoning on
+    GPT-6 Luna rejects function tools combined with non-``none`` reasoning on
     the Chat Completions endpoint.  Tool-bearing turns stay on that endpoint
     because their existing message history uses the Chat Completions shape, so
     those requests must explicitly use ``none``.  Tool-free turns continue to
     use the phase-specific reasoning budget.
     """
-    if model_name == GPT_5_6_LUNA_MODEL:
+    if model_name == GPT_6_LUNA_MODEL:
         if has_tool_context:
             return {"reasoning_effort": "none"}
         return {
@@ -663,8 +663,8 @@ def _openai_responses_reasoning_kwargs(
     *,
     generation_phase: str = "default",
 ) -> dict[str, Any]:
-    """Return phase-aware reasoning options for GPT-5.6 Luna Responses API."""
-    if model_name == GPT_5_6_LUNA_MODEL:
+    """Return phase-aware reasoning options for GPT-6 Luna Responses API."""
+    if model_name == GPT_6_LUNA_MODEL:
         return {
             "reasoning": {
                 "effort": "high" if generation_phase == "final_answer" else "medium"
@@ -681,7 +681,7 @@ def _groq_reasoning_kwargs(
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
-    if model_name == QWEN_3_6_27B_MODEL:
+    if model_name == QWEN_3_8_27B_MODEL:
         reasoning_options = {
             "reasoning_effort": "default",
             "reasoning_format": "hidden",

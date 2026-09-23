@@ -24,8 +24,8 @@ from services.chat_context import estimate_token_count
 from services.env_settings import env_int
 from services.llm_model_limits import (
     MODEL_MAX_OUTPUT_TOKENS,
-    QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
-    QWEN_3_6_27B_MODEL,
+    QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
+    QWEN_3_8_27B_MODEL,
     get_model_max_output_tokens,
 )
 
@@ -34,7 +34,7 @@ from services.llm_model_limits import (
 # uses this module for its preflight check.
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
-GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
+GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
 
 # Known windows are kept per model so a deployment can safely run different
@@ -43,8 +43,8 @@ CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
 MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     GPT_OSS_120B_MODEL: 131_072,
     GPT_OSS_20B_MODEL: 131_072,
-    QWEN_3_6_27B_MODEL: 131_072,
-    GPT_5_6_LUNA_MODEL: 128_000,
+    QWEN_3_8_27B_MODEL: 131_072,
+    GPT_6_LUNA_MODEL: 128_000,
     CLAUDE_HAIKU_4_5_MODEL: 200_000,
 }
 DEFAULT_CONTEXT_WINDOW_TOKENS = 65_536
@@ -385,13 +385,13 @@ __all__ = [
     "DEFAULT_CONTEXT_WINDOW_TOKENS",
     "DEFAULT_OUTPUT_TOKENS",
     "DEFAULT_SAFETY_MARGIN_TOKENS",
-    "GPT_5_6_LUNA_MODEL",
+    "GPT_6_LUNA_MODEL",
     "GPT_OSS_20B_MODEL",
     "GPT_OSS_120B_MODEL",
     "MODEL_CONTEXT_WINDOWS",
     "MODEL_MAX_OUTPUT_TOKENS",
-    "QWEN_3_6_27B_MAX_OUTPUT_TOKENS",
-    "QWEN_3_6_27B_MODEL",
+    "QWEN_3_8_27B_MAX_OUTPUT_TOKENS",
+    "QWEN_3_8_27B_MODEL",
     "LlmContextBudget",
     "calculate_available_input_tokens",
     "estimate_messages_and_tools_tokens",

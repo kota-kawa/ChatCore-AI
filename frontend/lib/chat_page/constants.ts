@@ -13,7 +13,7 @@ const chatHistoryPageSizeDefault = chatHistoryContract?.page_size_default;
 export const MAX_CHAT_MESSAGE_LENGTH = 30000;
 export const MAX_SETUP_INFO_LENGTH = 30000;
 export const MAX_RENDERED_CHAT_MESSAGES = 1000;
-export const DEFAULT_MODEL = "openai/gpt-oss-120b";
+export const DEFAULT_MODEL = "gpt-6-luna";
 export const CHAT_ROOMS_PAGE_SIZE = 20;
 export const CHAT_HISTORY_PAGE_SIZE = toPositiveInteger(chatHistoryPageSizeDefault, 50);
 export const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
@@ -244,16 +244,16 @@ export const MODEL_OPTIONS: ModelOption[] = [
     shortLabel: "GPT-OSS 120B",
   },
   {
-    value: "gpt-5.6-luna",
-    label: "GPT-5.6 Luna",
+    value: "gpt-6-luna",
+    label: "GPT-6 Luna",
     descriptionKey: "chat.modelBalanced",
-    shortLabel: "GPT-5.6 Luna",
+    shortLabel: "GPT-6 Luna",
   },
   {
-    value: "qwen/qwen3.6-27b",
-    label: "Qwen 3.6 27B",
+    value: "qwen/qwen3.8-27b",
+    label: "Qwen 3.8 27B",
     descriptionKey: "chat.modelDeepThinking",
-    shortLabel: "Qwen 3.6 27B",
+    shortLabel: "Qwen 3.8 27B",
   },
   {
     value: "claude-haiku-4-5-20251001",

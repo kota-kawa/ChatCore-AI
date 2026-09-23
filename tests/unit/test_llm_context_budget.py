@@ -7,8 +7,8 @@ from services.llm_context_budget import (
     DEFAULT_CONTEXT_WINDOW_TOKENS,
     GPT_OSS_120B_MODEL,
     MODEL_CONTEXT_WINDOWS,
-    QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
-    QWEN_3_6_27B_MODEL,
+    QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
+    QWEN_3_8_27B_MODEL,
     LlmContextBudget,
     estimate_messages_tokens,
     estimate_request_tokens,
@@ -96,21 +96,21 @@ class LlmContextBudgetTestCase(unittest.TestCase):
     def test_model_output_cap_applies_to_provider_budget(self):
         with patch.dict(os.environ, {"LLM_MAX_TOKENS_ANSWER": "32768"}):
             self.assertEqual(
-                get_model_max_output_tokens(QWEN_3_6_27B_MODEL),
-                QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
+                get_model_max_output_tokens(QWEN_3_8_27B_MODEL),
+                QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
             )
             self.assertEqual(
-                get_output_reserved_tokens("agent", QWEN_3_6_27B_MODEL),
-                QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
+                get_output_reserved_tokens("agent", QWEN_3_8_27B_MODEL),
+                QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
             )
             budget = get_context_budget(
-                QWEN_3_6_27B_MODEL,
+                QWEN_3_8_27B_MODEL,
                 "agent",
                 output_reserved_tokens=32_768,
             )
             self.assertEqual(
                 budget.output_reserved_tokens,
-                QWEN_3_6_27B_MAX_OUTPUT_TOKENS,
+                QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
             )
 
     def test_message_estimate_includes_metadata_and_tool_calls(self):

@@ -467,7 +467,7 @@ class LlmServiceTestCase(unittest.TestCase):
             clear=False,
         ):
             self.assertEqual(llm.GROQ_MODEL, llm.GPT_OSS_120B_MODEL)
-            self.assertEqual(llm.OPENAI_DEFAULT_MODEL, llm.GPT_5_6_LUNA_MODEL)
+            self.assertEqual(llm.OPENAI_DEFAULT_MODEL, llm.GPT_6_LUNA_MODEL)
             self.assertEqual(llm.CLAUDE_DEFAULT_MODEL, llm.CLAUDE_HAIKU_4_5_MODEL)
 
     def test_get_claude_response_redacts_anthropic_api_keys(self):
@@ -518,18 +518,18 @@ class LlmServiceTestCase(unittest.TestCase):
         with patch.object(llm, "groq_client", mock_groq):
             response = llm.get_llm_response(
                 [{"role": "user", "content": "hello"}],
-                llm.QWEN_3_6_27B_MODEL,
+                llm.QWEN_3_8_27B_MODEL,
             )
 
         self.assertEqual(response, "qwen-ok")
         self.assertEqual(
             mock_groq.chat.completions.create.call_args.kwargs["model"],
-            llm.QWEN_3_6_27B_MODEL,
+            llm.QWEN_3_8_27B_MODEL,
         )
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
         self.assertEqual(
             request_kwargs["max_completion_tokens"],
-            llm.max_output_tokens_for_model(llm.QWEN_3_6_27B_MODEL),
+            llm.max_output_tokens_for_model(llm.QWEN_3_8_27B_MODEL),
         )
         self.assertNotIn("max_tokens", request_kwargs)
         self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
@@ -573,7 +573,7 @@ class LlmServiceTestCase(unittest.TestCase):
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": "hello"},
                 ],
-                llm.GPT_5_6_LUNA_MODEL,
+                llm.GPT_6_LUNA_MODEL,
             )
 
         # レスポンスおよび渡されたパラメータの検証
@@ -581,7 +581,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "openai-ok")
         mock_openai.responses.create.assert_called_once()
         response_kwargs = mock_openai.responses.create.call_args.kwargs
-        self.assertEqual(response_kwargs["model"], llm.GPT_5_6_LUNA_MODEL)
+        self.assertEqual(response_kwargs["model"], llm.GPT_6_LUNA_MODEL)
         self.assertEqual(response_kwargs["reasoning"], {"effort": "medium"})
         passed_messages = response_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
@@ -600,7 +600,7 @@ class LlmServiceTestCase(unittest.TestCase):
         with patch.object(llm, "openai_client", mock_openai):
             response = llm.get_openai_response(
                 [{"role": "user", "content": "search this"}],
-                llm.GPT_5_6_LUNA_MODEL,
+                llm.GPT_6_LUNA_MODEL,
                 tools=[{"type": "function", "function": {"name": "web_search"}}],
                 generation_phase="final_answer",
             )
@@ -805,7 +805,7 @@ class LlmServiceTestCase(unittest.TestCase):
             with self.assertRaises(llm.LlmConfigurationError):
                 llm.get_openai_response(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_6_LUNA_MODEL,
+                    llm.GPT_6_LUNA_MODEL,
                 )
 
     def test_get_claude_response_stream_yields_chunks_and_closes_stream(self):
@@ -962,7 +962,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_groq_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.QWEN_3_6_27B_MODEL,
+                    llm.QWEN_3_8_27B_MODEL,
                     generation_phase="agent",
                 )
             )
@@ -971,7 +971,7 @@ class LlmServiceTestCase(unittest.TestCase):
         request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
         self.assertEqual(
             request_kwargs["max_completion_tokens"],
-            llm.max_output_tokens_for_model(llm.QWEN_3_6_27B_MODEL),
+            llm.max_output_tokens_for_model(llm.QWEN_3_8_27B_MODEL),
         )
         self.assertNotIn("max_tokens", request_kwargs)
         self.assertEqual(request_kwargs["extra_body"]["reasoning_effort"], "default")
@@ -993,7 +993,7 @@ class LlmServiceTestCase(unittest.TestCase):
         ):
             with self.subTest(generation_phase=generation_phase):
                 extra_body = llm._groq_reasoning_kwargs(
-                    llm.QWEN_3_6_27B_MODEL,
+                    llm.QWEN_3_8_27B_MODEL,
                     generation_phase=generation_phase,
                 )["extra_body"]
                 self.assertEqual(extra_body["reasoning_effort"], "default")
@@ -1123,7 +1123,7 @@ class LlmServiceTestCase(unittest.TestCase):
                         {"role": "system", "content": "You are a helpful assistant."},
                         {"role": "user", "content": "hello"},
                     ],
-                    llm.GPT_5_6_LUNA_MODEL,
+                    llm.GPT_6_LUNA_MODEL,
                     generation_phase="final_answer",
                 )
             )
@@ -1164,7 +1164,7 @@ class LlmServiceTestCase(unittest.TestCase):
         with patch.object(llm, "openai_client", mock_openai):
             stream = llm.get_openai_response_stream(
                 [{"role": "user", "content": "hello"}],
-                llm.GPT_5_6_LUNA_MODEL,
+                llm.GPT_6_LUNA_MODEL,
             )
             self.assertEqual(next(stream), "partial")
             with self.assertRaises(llm.LlmOutputLimitError):
@@ -1183,7 +1183,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_openai_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_6_LUNA_MODEL,
+                    llm.GPT_6_LUNA_MODEL,
                     tools=[{"type": "function", "function": {"name": "web_search"}}],
                     generation_phase="final_answer",
                 )
@@ -1197,7 +1197,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(
             chat_kwargs["max_completion_tokens"],
             llm.max_output_tokens_for_model(
-                llm.GPT_5_6_LUNA_MODEL,
+                llm.GPT_6_LUNA_MODEL,
                 "final_answer",
             ),
         )
@@ -1246,7 +1246,7 @@ class LlmServiceTestCase(unittest.TestCase):
         ]
 
         with patch.object(llm, "openai_client", mock_openai):
-            response = list(llm.get_openai_response_stream(messages, llm.GPT_5_6_LUNA_MODEL))
+            response = list(llm.get_openai_response_stream(messages, llm.GPT_6_LUNA_MODEL))
 
         # 履歴が存在するため、chat.completions.create がフォールバックされることを検証
         # Verify fallback to chat.completions.create due to tool history
@@ -1274,7 +1274,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_llm_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_6_LUNA_MODEL,
+                    llm.GPT_6_LUNA_MODEL,
                 )
             )
 
