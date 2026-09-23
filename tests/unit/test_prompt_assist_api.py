@@ -11,6 +11,7 @@ from blueprints.chat.tasks import (
     prompt_assist,
 )
 from services.llm import LlmProviderError
+from services.memo_agent_actions import MemoAgentContext
 from services.request_models import AiAgentRequest
 from tests.helpers.request_helpers import build_request
 
@@ -313,12 +314,12 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertIn("#searchInput", mock_llm.call_args.args[0][0]["content"])
         self.assertIn("ChatCore 機能カタログ", mock_llm.call_args.args[0][0]["content"])
 
-    # 日本語: メモの編集依頼に対して、memo_editステップを含むアクションプランが返ることを検証します。
-    # English: Verify that a memo edit request yields an action plan containing a memo_edit step.
-    def test_ai_agent_memo_edit_request_returns_action_plan(self):
+    # 日本語: メモ経路のテストで共通の依存（制限・メモ文脈・意図分類・LLM）を差し替えて実行し、SSEイベントを返します。
+    # English: Run a memo-scoped request with the shared dependencies (limits, memo context, intent, LLMs) patched.
+    def _run_memo_agent(self, message, memo_context, *, intent, edit_llm, answer_llm=None):
         request = make_ai_agent_request(
             {
-                "messages": [{"role": "user", "content": "誤字脱字を修正して"}],
+                "messages": [{"role": "user", "content": message}],
                 "current_page": "/memo",
                 "memo_id": 12,
             },
@@ -333,22 +334,39 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
                         new_callable=AsyncMock,
-                        return_value="【現在開いているメモ】\nタイトル: 会議メモ\n\n本文:\n誤字のある本文",
+                        return_value=memo_context,
                     ):
-                        with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):
-                            with patch(
-                                "blueprints.chat.tasks.get_llm_response",
-                                return_value=(
-                                    '{"description":"誤字を修正します",'
-                                    '"steps":[{"action":"memo_edit","description":"誤字を直した本文へ置き換えます",'
-                                    '"content":"修正済みの本文"}]}'
-                                ),
-                            ) as mock_llm:
-                                response = await ai_agent(request)
-                                events = await _collect_sse_events(response)
-            return response, events, mock_llm
+                        with patch("blueprints.chat.tasks.classify_memo_intent", return_value=intent):
+                            with patch("services.memo_agent_actions.get_llm_response", **edit_llm) as mock_edit:
+                                with patch(
+                                    "blueprints.chat.tasks.get_llm_response",
+                                    **(answer_llm or {"return_value": "回答です。"}),
+                                ) as mock_answer:
+                                    response = await ai_agent(request)
+                                    events = await _collect_sse_events(response)
+            return response, events, mock_edit, mock_answer
 
-        response, events, mock_llm = asyncio.run(_run())
+        return asyncio.run(_run())
+
+    # 日本語: メモの編集依頼に対して、memo_editステップを含むアクションプランが返ることを検証します。
+    # English: Verify that a memo edit request yields an action plan containing a memo_edit step.
+    def test_ai_agent_memo_edit_request_returns_action_plan(self):
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "誤字脱字を修正して",
+            MemoAgentContext(
+                prompt_context="【現在開いているメモ】\nタイトル: 会議メモ\n\n本文:\n誤字のある本文",
+                stored_body="誤字のある本文",
+                body_truncated=False,
+            ),
+            intent="edit",
+            edit_llm={
+                "return_value": (
+                    '{"description":"誤字を修正します",'
+                    '"steps":[{"action":"memo_edit","description":"誤字を直した本文へ置き換えます",'
+                    '"content":"修正済みの本文"}]}'
+                ),
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(("progress", {"message": "編集案を作成中..."}), events)
@@ -357,124 +375,204 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(plan["description"], "誤字を修正します")
         self.assertEqual(plan["steps"][0]["action"], "memo_edit")
         self.assertEqual(plan["steps"][0]["content"], "修正済みの本文")
+        self.assertEqual(plan["model"], "openai/gpt-oss-120b")
         # 編集計画の生成にメモ本文が参照情報として渡されていることを確認する
         # Confirm the memo body was passed as reference context for plan generation
-        self.assertIn("誤字のある本文", mock_llm.call_args.args[0][0]["content"])
+        self.assertIn("誤字のある本文", mock_edit.call_args.args[0][0]["content"])
+        mock_answer.assert_not_called()
+
+    # 日本語: 部分置換の編集計画は、全文ではなく edits としてフロントへ送られることを検証します。
+    # English: Verify a partial-edit plan reaches the frontend as edits rather than a full body.
+    def test_ai_agent_memo_partial_edit_returns_edits(self):
+        response, events, mock_edit, _ = self._run_memo_agent(
+            "誤字を直して",
+            MemoAgentContext(
+                prompt_context="[Memo currently open]\nBody:\n会議は月よう日です。\n議題は予算です。",
+                stored_body="会議は月よう日です。\r\n議題は予算です。",
+                body_truncated=False,
+            ),
+            intent="edit",
+            edit_llm={
+                "return_value": json.dumps({
+                    "description": "誤字を直します",
+                    "steps": [{
+                        "action": "memo_edit",
+                        "description": "曜日の表記を直します",
+                        "edits": [{"old_string": "月よう日", "new_string": "月曜日"}],
+                    }],
+                }, ensure_ascii=False),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[-1][0], "action_plan")
+        step = events[-1][1]["steps"][0]
+        self.assertEqual(step["edits"], [{"old_string": "月よう日", "new_string": "月曜日"}])
+        self.assertNotIn("content", step)
+        mock_edit.assert_called_once()
+
+    # 日本語: old_string が本文に見つからない計画は、理由を添えて1回だけ作り直させることを検証します。
+    # English: Verify a plan whose old_string is missing from the body is regenerated once with the reason.
+    def test_ai_agent_memo_partial_edit_regenerates_once_on_mismatch(self):
+        def plan(old_string):
+            return json.dumps({
+                "description": "誤字を直します",
+                "steps": [{
+                    "action": "memo_edit",
+                    "description": "曜日を直します",
+                    "edits": [{"old_string": old_string, "new_string": "月曜日"}],
+                }],
+            }, ensure_ascii=False)
+
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "誤字を直して",
+            MemoAgentContext(
+                prompt_context="[Memo currently open]\nBody:\n会議は月よう日です。",
+                stored_body="会議は月よう日です。",
+                body_truncated=False,
+            ),
+            intent="edit",
+            edit_llm={"side_effect": [plan("月よう日。"), plan("月よう日")]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[-1][0], "action_plan")
+        self.assertEqual(events[-1][1]["steps"][0]["edits"][0]["old_string"], "月よう日")
+        self.assertEqual(mock_edit.call_count, 2)
+        feedback = mock_edit.call_args_list[1].args[0][-1]["content"]
+        self.assertIn("edits[0].old_string was not found in the body", feedback)
+        mock_answer.assert_not_called()
+
+    # 日本語: 作り直しても照合できなければ、通常のQA回答へ切り替えることを検証します。
+    # English: Verify the route falls back to a QA answer when the regenerated plan still does not match.
+    def test_ai_agent_memo_edit_falls_back_to_answer_after_failed_regeneration(self):
+        unmatched = json.dumps({
+            "description": "誤字を直します",
+            "steps": [{
+                "action": "memo_edit",
+                "description": "曜日を直します",
+                "edits": [{"old_string": "火曜日", "new_string": "水曜日"}],
+            }],
+        }, ensure_ascii=False)
+
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "誤字を直して",
+            MemoAgentContext(
+                prompt_context="[Memo currently open]\nBody:\n会議は月曜日です。",
+                stored_body="会議は月曜日です。",
+                body_truncated=False,
+            ),
+            intent="edit",
+            edit_llm={"side_effect": [unmatched, unmatched]},
+            answer_llm={"return_value": "代わりの回答です。"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[-1], ("done", {"response": "代わりの回答です。", "model": "openai/gpt-oss-120b"}))
+        self.assertEqual(mock_edit.call_count, 2)
+        mock_answer.assert_called_once()
 
     # 日本語: メモへの質問はこれまで通りdoneイベントで直接回答が返ることを検証します。
     # English: Verify that memo questions still return a direct answer via the done event.
     def test_ai_agent_memo_question_still_returns_answer(self):
-        request = make_ai_agent_request(
-            {
-                "messages": [{"role": "user", "content": "このメモを要約して"}],
-                "current_page": "/memo",
-                "memo_id": 12,
-            },
-            session={"user_id": 7},
+        response, events, mock_edit, _ = self._run_memo_agent(
+            "このメモを要約して",
+            MemoAgentContext(
+                prompt_context="【現在開いているメモ】\n本文:\nテスト本文",
+                stored_body="テスト本文",
+                body_truncated=False,
+            ),
+            intent="qa",
+            edit_llm={"return_value": "使われない"},
+            answer_llm={"return_value": "要約です。"},
         )
-
-        async def _run():
-            # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-            # English: Mock dependencies or context to configure the test environment.
-            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
-                    with patch(
-                        "blueprints.chat.tasks._build_ai_agent_memo_context",
-                        new_callable=AsyncMock,
-                        return_value="【現在開いているメモ】\n本文:\nテスト本文",
-                    ):
-                        with patch("blueprints.chat.tasks.classify_memo_intent", return_value="qa"):
-                            with patch("blueprints.chat.tasks.get_llm_response", return_value="要約です。"):
-                                response = await ai_agent(request)
-                                events = await _collect_sse_events(response)
-            return response, events
-
-        response, events = asyncio.run(_run())
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(events[-1][0], "done")
         self.assertEqual(events[-1][1]["response"], "要約です。")
+        mock_edit.assert_not_called()
 
-    # 日本語: 編集計画を生成できない場合は通常回答へフォールバックすることを検証します。
-    # English: Verify the fallback to a normal answer when no valid edit plan is produced.
+    # 日本語: 編集計画を生成できない（計画を作らない）応答は、作り直さずに通常回答へフォールバックすることを検証します。
+    # English: Verify a reply without a plan falls back to a normal answer without a regeneration.
     def test_ai_agent_memo_edit_falls_back_to_answer_when_plan_invalid(self):
-        request = make_ai_agent_request(
-            {
-                "messages": [{"role": "user", "content": "本文を書き直して"}],
-                "current_page": "/memo",
-                "memo_id": 12,
-            },
-            session={"user_id": 7},
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "本文を書き直して",
+            MemoAgentContext(
+                prompt_context="【現在開いているメモ】\n本文:\nテスト本文",
+                stored_body="テスト本文",
+                body_truncated=False,
+            ),
+            intent="edit",
+            edit_llm={"return_value": "編集計画を作れませんでした。"},
+            answer_llm={"return_value": "代わりの回答です。"},
         )
-
-        async def _run():
-            # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-            # English: Mock dependencies or context to configure the test environment.
-            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
-                    with patch(
-                        "blueprints.chat.tasks._build_ai_agent_memo_context",
-                        new_callable=AsyncMock,
-                        return_value="【現在開いているメモ】\n本文:\nテスト本文",
-                    ):
-                        with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):
-                            with patch(
-                                "blueprints.chat.tasks.get_llm_response",
-                                side_effect=["編集計画を作れませんでした。", "代わりの回答です。"],
-                            ) as mock_llm:
-                                response = await ai_agent(request)
-                                events = await _collect_sse_events(response)
-            return response, events, mock_llm
-
-        response, events, mock_llm = asyncio.run(_run())
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(events[-1][0], "done")
         self.assertEqual(events[-1][1]["response"], "代わりの回答です。")
-        self.assertEqual(mock_llm.call_count, 2)
+        mock_edit.assert_called_once()
+        mock_answer.assert_called_once()
 
-    # 日本語: 本文が切り詰められたメモへの編集依頼では、全文置換の編集計画を生成しないことを検証します。
-    # English: Verify that no full-replacement edit plan is generated when the memo body was truncated.
-    def test_ai_agent_memo_edit_skipped_when_body_truncated(self):
-        request = make_ai_agent_request(
-            {
-                "messages": [{"role": "user", "content": "本文を書き直して"}],
-                "current_page": "/memo",
-                "memo_id": 12,
+    # 日本語: 本文を切り詰めたメモでも、見えている範囲への部分置換は保存済みの全文で照合して提案できることを検証します。
+    # English: Verify a truncated memo still gets a partial-edit plan, matched against the full stored body.
+    def test_ai_agent_memo_partial_edit_allowed_when_body_truncated(self):
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "冒頭の誤字を直して",
+            MemoAgentContext(
+                prompt_context=(
+                    "[Memo currently open]\nBody:\n長い本文の先頭部分\n\n"
+                    "(part of the body was omitted because it is long)"
+                ),
+                stored_body="長い本文の先頭部分\n見えていない末尾の段落",
+                body_truncated=True,
+            ),
+            intent="edit",
+            edit_llm={
+                "return_value": json.dumps({
+                    "description": "冒頭を直します",
+                    "steps": [{
+                        "action": "memo_edit",
+                        "description": "冒頭の表記を直します",
+                        "edits": [{"old_string": "先頭部分", "new_string": "冒頭部分"}],
+                    }],
+                }, ensure_ascii=False),
             },
-            session={"user_id": 7},
         )
 
-        async def _run():
-            # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-            # English: Mock dependencies or context to configure the test environment.
-            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
-                    with patch(
-                        "blueprints.chat.tasks._build_ai_agent_memo_context",
-                        new_callable=AsyncMock,
-                        return_value=(
-                            "[Memo currently open]\n本文:\n長い本文の先頭部分\n\n"
-                            "(part of the body was omitted because it is long)"
-                        ),
-                    ):
-                        with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):
-                            with patch(
-                                "blueprints.chat.tasks.get_llm_response",
-                                return_value="回答です。",
-                            ) as mock_llm:
-                                response = await ai_agent(request)
-                                events = await _collect_sse_events(response)
-            return response, events, mock_llm
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(("progress", {"message": "編集案を作成中..."}), events)
+        self.assertEqual(events[-1][0], "action_plan")
+        self.assertEqual(events[-1][1]["steps"][0]["edits"][0]["new_string"], "冒頭部分")
+        self.assertIn('Use "edits" only', mock_edit.call_args.args[0][0]["content"])
+        mock_answer.assert_not_called()
 
-        response, events, mock_llm = asyncio.run(_run())
+    # 日本語: 本文を切り詰めたメモでは全文置換を採用せず、作り直しでも直らなければQA回答へ切り替えることを検証します。
+    # English: Verify a truncated memo never takes a full replacement and falls back to QA if the retry keeps one.
+    def test_ai_agent_memo_full_replacement_refused_when_body_truncated(self):
+        full_replacement = (
+            '{"description":"書き直します","steps":[{"action":"memo_edit",'
+            '"description":"本文を置き換えます","content":"短くなった本文"}]}'
+        )
+
+        response, events, mock_edit, mock_answer = self._run_memo_agent(
+            "本文を書き直して",
+            MemoAgentContext(
+                prompt_context=(
+                    "[Memo currently open]\nBody:\n長い本文の先頭部分\n\n"
+                    "(part of the body was omitted because it is long)"
+                ),
+                stored_body="長い本文の先頭部分\n見えていない末尾の段落",
+                body_truncated=True,
+            ),
+            intent="edit",
+            edit_llm={"side_effect": [full_replacement, full_replacement]},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(events[-1][0], "done")
-        # 編集計画生成のLLM呼び出しは行われず、通常回答の1回だけになる
-        # Only the single QA-answer LLM call happens; no plan-generation call is made
-        self.assertEqual(mock_llm.call_count, 1)
-        self.assertNotIn(("progress", {"message": "編集案を作成中..."}), events)
+        self.assertEqual(mock_edit.call_count, 2)
+        self.assertIn("The body is truncated", mock_edit.call_args_list[1].args[0][-1]["content"])
+        mock_answer.assert_called_once()
 
     # 日本語: monthlyクォータ超過のとき、aiagent返却する429ことを検証します。
     # English: Verify that ai agent returns 429 when monthly quota exceeded.

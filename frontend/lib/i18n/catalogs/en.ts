@@ -183,6 +183,7 @@ export const enMessages = {
   "memo.crawlFeatureOrganize": "Search and organize by title, content, and collection", "memo.crawlFeatureExport": "Export as Markdown, JSON, or CSV",
   "memo.crawlFeatureShare": "Publish only the memos you choose with sharing links",
   "memo.emptyEditedBody": "The edit could not be applied because the revised memo is empty.", "memo.titleAutoPlaceholder": "Leave blank to use the first line",
+  "memo.agentEditConflict": "The memo has changed since this edit was prepared, so it could not be applied. Please ask for the edit again.",
   "memo.titleLabel": "Title", "memo.backgroundColor": "Memo background color", "memo.copyFullText": "Copy full text",
   "memo.closeAgent": "Close memo chat", "memo.askAgent": "Ask AI about or edit this memo", "memo.saved": "Saved",
   "memo.awaitingAutosave": "Waiting to autosave", "memo.autosaveFailed": "Autosave failed", "memo.loadingMemo": "Loading memo…",

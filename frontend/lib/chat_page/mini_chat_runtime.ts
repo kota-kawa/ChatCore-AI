@@ -14,6 +14,7 @@ import {
 import { readSessionJson, writeSessionJson } from "../utils";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import type { Locale } from "../i18n/config";
+import { readMemoEditStep, type MemoEditPayload } from "../memo/agent_edits";
 import { miniChatCopy } from "./mini_chat_copy";
 
 // アクション実行中の進捗状態を追跡する型定義
@@ -48,10 +49,6 @@ export type NavigateInternal = (path: string) => Promise<NavigationOutcome>;
 // beforeunload イベントで保存する残ステップのコンテキスト
 // Context persisted to sessionStorage when an undetected unload tears down the page mid-plan
 export type UnloadContext = { remaining: ActionStep[]; expectedPath?: string } | null;
-
-// memo_edit ステップが適用する編集内容
-// Edit payload a memo_edit step applies to the currently open memo
-export type MemoEditPayload = { content: string; title?: string };
 
 // memo_edit ステップを実際のメモ編集状態へ反映するハンドラ
 // Handler that applies a memo_edit step to the host page's memo editing state
@@ -790,12 +787,12 @@ async function executeMemoEdit(
   if (!applyMemoEdit) {
     return { ok: false, message: miniChatCopy(locale, "memoEditUnavailable"), needsReplan: false };
   }
-  const content = typeof step.content === "string" ? step.content : "";
-  if (!content.trim()) {
-    return { ok: false, message: miniChatCopy(locale, "memoEditEmpty"), needsReplan: false };
+  const read = readMemoEditStep(step);
+  if (!read.ok) {
+    const copyKey = read.reason === "empty" ? "memoEditEmpty" : "memoEditInvalid";
+    return { ok: false, message: miniChatCopy(locale, copyKey), needsReplan: false };
   }
-  const title = typeof step.title === "string" && step.title.trim() ? step.title : undefined;
-  return applyMemoEdit({ content, title });
+  return applyMemoEdit(read.payload);
 }
 
 // 1 ステップを実行する — ナビゲーション・確認ダイアログ・リトライを含む完全なライフサイクル
@@ -982,6 +979,20 @@ export function describeActionStep(step: ActionStep, locale: Locale = "ja"): Act
   }
   if (step.action === "memo_edit" && step.content) {
     details.push({ label: english ? "Edited memo" : "編集後の本文", value: step.content, multiline: true });
+  }
+  // 部分置換は編集ごとに変更前／変更後を並べる。複数あるときだけ番号を付けて見分ける
+  // Partial edits list each passage before and after; numbers are added only when there is more than one
+  if (step.action === "memo_edit" && step.edits?.length) {
+    const numbered = step.edits.length > 1;
+    step.edits.forEach((edit, index) => {
+      const suffix = numbered ? ` ${index + 1}` : "";
+      details.push({ label: `${english ? "Before" : "変更前"}${suffix}`, value: edit.old_string, multiline: true });
+      details.push({
+        label: `${english ? "After" : "変更後"}${suffix}`,
+        value: edit.new_string || (english ? "(removed)" : "（削除）"),
+        multiline: true,
+      });
+    });
   }
 
   if (step.risk) details.push({ label: english ? "Risk" : "リスク", value: RISK_LABELS[locale][step.risk] });

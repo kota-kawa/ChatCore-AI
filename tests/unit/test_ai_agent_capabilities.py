@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
 
-from blueprints.chat.tasks import _build_ai_agent_memo_context, _build_ai_agent_messages
+from blueprints.chat.tasks import (
+    AI_AGENT_MEMO_CONTEXT_MAX_LENGTH,
+    MEMO_CONTEXT_TRUNCATED_NOTICE,
+    _build_ai_agent_memo_context,
+    _build_ai_agent_messages,
+)
 from services.agent_capabilities import build_capability_context
 from services.intent_classifier import classify_intent
 from services.page_actions import build_action_messages, parse_action_response
@@ -390,8 +395,28 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
             context = asyncio.run(_build_ai_agent_memo_context(7, 12))
 
         mock_fetch.assert_awaited_once_with(7, 12)
-        self.assertIn("議事録", context)
-        self.assertIn("決定事項: リリース", context)
+        self.assertIn("議事録", context.prompt_context)
+        self.assertIn("決定事項: リリース", context.prompt_context)
+        self.assertEqual(context.stored_body, '"決定事項: リリース"')
+        self.assertFalse(context.body_truncated)
+
+    # 日本語: 長いメモは先頭だけをLLMへ見せつつ、照合用に保存済みの全文と切り詰めの有無を返すことを検証します。
+    # English: Verify a long memo shows only its head to the LLM while keeping the full stored body and truncation flag.
+    def test_build_ai_agent_memo_context_keeps_full_body_when_truncating(self):
+        stored_body = "一行目\r\n" + "あ" * AI_AGENT_MEMO_CONTEXT_MAX_LENGTH + "末尾"
+        with patch(
+            "blueprints.chat.tasks.fetch_memo_detail",
+            new_callable=AsyncMock,
+            return_value={"title": "長いメモ", "ai_response": stored_body},
+        ):
+            context = asyncio.run(_build_ai_agent_memo_context(7, 12))
+
+        self.assertTrue(context.body_truncated)
+        self.assertEqual(context.stored_body, stored_body)
+        self.assertIn("一行目\nあ", context.prompt_context)
+        self.assertNotIn("\r", context.prompt_context)
+        self.assertNotIn("末尾", context.prompt_context)
+        self.assertTrue(context.prompt_context.endswith(MEMO_CONTEXT_TRUNCATED_NOTICE))
 
     # 日本語: DOMテキスト長が制限文字数（例: 12000文字）を超えた場合に、モデルのバリデーションエラーが発生することを検証します。
     # English: Verify that the AiAgentRequest model rejects oversized DOM content lengths with a validation error.
