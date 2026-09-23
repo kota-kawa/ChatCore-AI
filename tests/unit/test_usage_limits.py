@@ -89,8 +89,8 @@ class UsageLimitSettingsTests(unittest.TestCase):
                 os.environ.pop(name, None)
             settings = load_usage_limit_settings()
 
-        self.assertEqual(settings.user_daily, round(0.15 * _USD))
-        self.assertEqual(settings.user_weekly, round(0.60 * _USD))
+        self.assertEqual(settings.user_daily, round(1.50 * _USD))
+        self.assertEqual(settings.user_weekly, round(6.00 * _USD))
         self.assertEqual(settings.guest_daily, round(0.03 * _USD))
         self.assertEqual(settings.guest_weekly, round(0.10 * _USD))
         # $30 の 90% = $27 で止める。 / Stop at 90% of $30 = $27.
@@ -99,18 +99,18 @@ class UsageLimitSettingsTests(unittest.TestCase):
 
 class UsageLimitCheckTests(_TotalsMixin, unittest.TestCase):
     def test_user_under_every_limit_may_start(self):
-        self.use_totals(daily=0.10, weekly=0.50, monthly=20)
+        self.use_totals(daily=1.00, weekly=5.00, monthly=20)
         self.assertIsNone(asyncio.run(check_usage_limit("user:1", now=_NOW)))
 
     def test_daily_limit_blocks_until_midnight(self):
-        self.use_totals(daily=0.15, weekly=0.15)
+        self.use_totals(daily=1.50, weekly=1.50)
         block = asyncio.run(check_usage_limit("user:1", now=_NOW))
         self.assertEqual(block.reason, "daily")
         self.assertEqual(block.resets_at, _jst(2026, 9, 24))
         self.assertEqual(block.retry_after_seconds, 12 * 3600)
 
     def test_weekly_limit_is_reported_even_when_the_day_is_also_spent(self):
-        self.use_totals(daily=0.20, weekly=0.60)
+        self.use_totals(daily=2.00, weekly=6.00)
         block = asyncio.run(check_usage_limit("user:1", now=_NOW))
         self.assertEqual(block.reason, "weekly")
         self.assertEqual(block.resets_at, _jst(2026, 9, 28))
@@ -263,7 +263,7 @@ class UsageLimitsEndpointTests(_TotalsMixin, unittest.TestCase):
         self.assertEqual(self._get({}).status_code, 401)
 
     def test_returns_shares_and_reset_times_but_never_amounts(self):
-        seen = self.use_totals(daily=0.06, weekly=0.90, monthly=1)
+        seen = self.use_totals(daily=0.60, weekly=9.00, monthly=1)
         response = self._get({"user_id": 8})
 
         self.assertEqual(response.status_code, 200)
