@@ -67,37 +67,34 @@ test("tablet and desktop keep the two-column task layout", () => {
   );
 });
 
-test("task buttons do not cast a shadow in any visual state", () => {
+// タスクのボタン（カードと開閉ボタン）は通常時に影を持たない。カードはメモ画面のカードに合わせ、
+// ホバー時だけ共通トークンの薄い影を付ける（ダークではトークンの値が none なので影は出ない）。
+// Task buttons (cards and the detail toggle) carry no shadow at rest. Cards follow the memo page and only
+// pick up the shared hover token, whose dark value is none.
+test("task buttons carry no shadow at rest and cards use the shared hover shadow", () => {
   const promptCardRule = setupCss.match(
     /:where\(body\.chat-page, \.chat-page-shell\) \.prompt-card \{([^}]*)\}/,
   );
   const promptCardHoverRule = setupCss.match(
     /:where\(body\.chat-page, \.chat-page-shell\) \.prompt-card:hover \{([^}]*)\}/,
   );
-  const darkPromptCardRule = setupCss.match(
-    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.prompt-card \{([^}]*)\}/,
-  );
-  const darkPromptCardHoverRule = setupCss.match(
-    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.prompt-card:hover \{([^}]*)\}/,
-  );
   const taskDetailToggleRule = setupCss.match(
     /:where\(body\.chat-page, \.chat-page-shell\) \.task-detail-toggle \{([^}]*)\}/,
   );
-  const darkTaskDetailToggleRule = setupCss.match(
-    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.task-detail-toggle \{([^}]*)\}/,
-  );
 
-  for (const rule of [
-    promptCardRule,
-    promptCardHoverRule,
-    darkPromptCardRule,
-    darkPromptCardHoverRule,
-    taskDetailToggleRule,
-    darkTaskDetailToggleRule,
-  ]) {
-    assert.ok(rule, "task button shadow rule must be present");
+  for (const rule of [promptCardRule, taskDetailToggleRule]) {
+    assert.ok(rule, "task button rule must be present");
     assert.match(rule[1] ?? "", /box-shadow:\s*none(?:\s*!important)?\s*;/);
   }
+
+  assert.ok(promptCardHoverRule, "task card hover rule must be present");
+  assert.match(promptCardHoverRule[1] ?? "", /box-shadow:\s*var\(--shadow-card-hover\)\s*;/);
+  assert.doesNotMatch(promptCardHoverRule[1] ?? "", /transform:/, "cards must not lift on hover");
+  assert.doesNotMatch(
+    setupCss,
+    /\[data-theme="dark"\] :where\(body\.chat-page, \.chat-page-shell\) \.(?:prompt-card|task-detail-toggle)(?::hover)? \{[^}]*box-shadow:(?!\s*none)/,
+    "dark overrides must not add a shadow back",
+  );
 });
 
 test("phones collapse the task list to three cards to keep the setup screen on one viewport", () => {

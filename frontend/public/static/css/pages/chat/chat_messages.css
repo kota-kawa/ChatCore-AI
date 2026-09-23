@@ -204,7 +204,6 @@
   border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) var(--radius-xs, 4px) var(--radius-lg, 20px);
   animation: userMessageAppear 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
   border: none;
-  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -986,7 +985,6 @@
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.72);
   box-shadow: none;
-  transform: translateY(-1px);
 }
 
 :where(body.chat-page, .chat-page-shell) .user-message-edit-submit:disabled {
@@ -1101,13 +1099,11 @@
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 50%;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-default);
+  background: var(--surface-primary);
   color: var(--text-secondary, #6b7280);
   font-size: 1.1rem;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(8px);
   transition:
     opacity var(--transition-normal, 0.2s ease),
     transform var(--transition-normal, 0.2s ease),
@@ -1219,8 +1215,7 @@
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .scroll-to-bottom-btn {
-  background: rgba(17, 24, 39, 0.92);
-  border-color: rgba(148, 163, 184, 0.22);
+  background: var(--surface-primary);
   color: #94a3b8;
 }
 

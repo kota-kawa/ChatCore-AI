@@ -12,11 +12,9 @@
   flex-direction: column;
   z-index: 100;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.07);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.97);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  background: var(--surface-primary);
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.05),
     0 8px 24px rgba(0, 0, 0, 0.1),
@@ -92,8 +90,8 @@
 
 /* ダークテーマ / Dark theme */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-attach-menu__list {
-  border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(17, 24, 39, 0.98);
+  border-color: var(--border-default);
+  background: var(--surface-secondary);
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.3),
     0 8px 24px rgba(2, 6, 23, 0.46),

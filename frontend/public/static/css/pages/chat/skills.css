@@ -5,9 +5,9 @@
   margin-top: 0.15rem;
   padding: 0.78rem 0.9rem 0.82rem;
   box-sizing: border-box;
-  border: 1px solid rgba(15, 118, 110, 0.16);
-  border-radius: 18px;
-  background: rgba(248, 252, 250, 0.72);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
 }
 
 :where(body.chat-page, .chat-page-shell) .skill-section__header {
@@ -66,7 +66,6 @@
 :where(body.chat-page, .chat-page-shell) .skill-section__add:hover {
   border-color: rgba(15, 118, 110, 0.55);
   background: #ffffff;
-  transform: translateY(-1px);
 }
 
 :where(body.chat-page, .chat-page-shell) .skill-section__add:focus-visible,
@@ -408,11 +407,6 @@
     white-space: nowrap;
   }
 
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section {
-  border-color: rgba(94, 234, 212, 0.18);
-  background: rgba(15, 36, 31, 0.74);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .skill-section__title,

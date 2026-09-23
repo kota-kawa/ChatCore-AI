@@ -18,18 +18,16 @@
   --setup-toggle-size: 44px;
   --setup-info-min-height: 5.5rem;
   --setup-container-max-width: clamp(640px, 58vw, 1040px);
-  background: var(--surface);
+  background: var(--surface-primary);
   padding:
     max(var(--setup-container-padding-y), env(safe-area-inset-top, 0px))
     max(var(--setup-container-padding-x), env(safe-area-inset-right, 0px))
     max(var(--setup-container-padding-y), env(safe-area-inset-bottom, 0px))
     max(var(--setup-container-padding-x), env(safe-area-inset-left, 0px));
   border-radius: 24px;
-  border: 1px solid var(--border-soft);
-  box-shadow: var(--shadow-strong);
+  border: 1px solid var(--border-default);
   width: 100%;
   max-width: var(--setup-container-max-width);
-  backdrop-filter: blur(12px);
   animation: slideUp 0.6s ease-out;
   position: relative;
   overflow: hidden;
@@ -66,14 +64,6 @@
   opacity: 0;
   transform: translate3d(0, -22px, -150px) scale(0.94) rotateX(7deg);
   filter: blur(10px);
-  pointer-events: none;
-}
-
-:where(body.chat-page, .chat-page-shell) #setup-container::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), transparent 55%);
   pointer-events: none;
 }
 
@@ -336,9 +326,9 @@
 :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
   position: relative;
   padding: 0.6rem;
-  border: 1px solid #d7e8e5;
+  border: 1px solid var(--border-default);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--surface-primary);
   transition:
     border var(--transition-normal, 0.2s ease),
     box-shadow var(--transition-normal, 0.2s ease),
@@ -356,7 +346,7 @@
 :where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
   border-color: var(--primary-color);
   box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
-  background: #ffffff;
+  background: var(--surface-primary);
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area {
@@ -458,8 +448,6 @@
 :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   --chat-button-base: #059669;
   --chat-button-accent: #047857;
-  --chat-button-shadow-color: rgba(5, 150, 105, 0.28);
-  --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 body.chat-page #setup-info::-webkit-scrollbar {
@@ -592,14 +580,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   padding: 0;
   border: 1px solid rgba(33, 78, 60, 0.12);
   border-radius: var(--radius-full, 999px);
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.96), rgba(238, 248, 243, 0.92)),
-    rgba(255, 255, 255, 0.94);
+  background: var(--surface-primary);
   color: #224538;
   cursor: pointer;
-  box-shadow:
-    0 10px 24px rgba(16, 44, 35, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
   transition:
     border var(--transition-normal, 0.2s ease),
     box-shadow var(--transition-normal, 0.2s ease),
@@ -609,22 +592,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:hover {
-  transform: translateY(-1px);
   border-color: rgba(15, 118, 110, 0.34);
-  box-shadow:
-    0 14px 28px rgba(15, 118, 110, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  background: var(--primary-subtle);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active {
   border-color: rgba(180, 83, 9, 0.22);
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(255, 247, 237, 0.96)),
-    rgba(255, 255, 255, 0.94);
+  background: rgba(255, 247, 237, 0.96);
   color: #9a3412;
-  box-shadow:
-    0 14px 30px rgba(180, 83, 9, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active .chat-save-mode-toggle__icon {
@@ -634,9 +609,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:focus-visible {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow:
-    var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2)),
-    0 12px 24px rgba(16, 44, 35, 0.1);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__icon {
@@ -760,20 +733,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-color: rgba(15, 118, 110, 0.28);
 }
 
-:where(body.chat-page, .chat-page-shell) .model-select-option.is-selected {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
-  border-color: rgba(19, 78, 74, 0.82);
-  color: #ffffff;
-  font-weight: var(--chat-font-heading-weight, 600);
-  box-shadow: 0 10px 18px rgba(19, 78, 74, 0.18);
-}
-
-:where(body.chat-page, .chat-page-shell) .model-select-option.is-selected:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
-  border-color: rgba(15, 63, 59, 0.92);
-  color: #ffffff;
-}
-
 :where(body.chat-page, .chat-page-shell) .model-select-option:focus-visible {
   outline: 2px solid rgba(15, 118, 110, 0.42);
   outline-offset: 2px;
@@ -818,14 +777,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .prompt-card {
   background: #ffffff;
   padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
     transform var(--transition-normal, 0.2s ease),
     border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
     opacity var(--transition-normal, 0.2s ease),
     filter var(--transition-normal, 0.2s ease);
-  border: 1px solid #dcebe8;
+  border: 1px solid var(--border-default);
   width: 100%;
   text-align: center;
   position: relative;
@@ -836,9 +796,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 :where(body.chat-page, .chat-page-shell) .prompt-card:hover {
-  transform: translateY(-3px);
-  box-shadow: none;
-  border-color: rgba(15, 118, 110, 0.45);
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 
 :where(body.chat-page, .chat-page-shell) .task-selection[data-launching="true"] {
@@ -964,21 +923,20 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
-  border: 1px solid rgba(15, 118, 110, 0.5) !important;
+  background: var(--primary-color) !important;
+  border: 1px solid var(--primary-color) !important;
   color: #ffffff !important;
   box-shadow: none !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-detail-toggle:hover {
-  background: linear-gradient(135deg, #115e59 0%, #0f766e 100%) !important;
-  border-color: rgba(15, 94, 89, 0.7) !important;
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
   box-shadow: none !important;
-  transform: translateY(-2px) scale(1.06) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-detail-toggle:active {
-  transform: translateY(0) scale(0.96) !important;
+  transform: scale(0.96) !important;
   box-shadow: none !important;
 }
 
@@ -1120,14 +1078,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn {
   --chat-button-base: var(--primary-color);
   --chat-button-accent: var(--primary-hover);
-  --chat-button-shadow-color: rgba(80, 163, 91, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.26);
 }
 
 :where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
-  --chat-button-base: #84cc16;
-  --chat-button-accent: #65a30d;
-  --chat-button-shadow-color: rgba(101, 163, 13, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
@@ -1214,13 +1168,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 248, 247, 0.98) 100%),
-      #f7f8f7;
+    background: var(--surface-sidebar);
     padding:
       /* Share the first row with the right-side account control instead of reserving an empty toolbar row. */
       calc(0.625rem + env(safe-area-inset-top, 0px))
@@ -1289,10 +1239,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
      (frameless textarea plus an action row) is shared with every width. */
   :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
     padding: 0.52rem;
-    border-color: rgba(212, 224, 218, 0.92);
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-info-input-area {
@@ -1430,8 +1377,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     height: 40px;
     min-width: 40px;
     min-height: 40px;
-    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
-    border: 1px solid rgba(15, 118, 110, 0.5) !important;
+    background: var(--primary-color) !important;
+    border: 1px solid var(--primary-color) !important;
     color: #ffffff !important;
     box-shadow: none !important;
   }
@@ -1487,13 +1434,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 /* 入力欄の枠はシェルが描くので、ダークの配色もシェル側に持たせる */
 /* The shell draws the field's frame, so the dark palette lives on it too */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(148, 163, 184, 0.22);
+  background: var(--surface-primary);
+  border-color: var(--border-default);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
-  background: rgba(17, 24, 39, 1);
-  border-color: rgba(15, 118, 110, 0.52);
+  border-color: var(--primary-color);
   box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
 }
 
@@ -1546,57 +1492,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-color: rgba(15, 118, 110, 0.3);
 }
 
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option.is-selected {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
-  border-color: rgba(94, 234, 212, 0.72);
-  color: #ffffff;
-  font-weight: var(--chat-font-heading-weight, 600);
-  box-shadow:
-    0 10px 18px rgba(19, 78, 74, 0.34),
-    inset 3px 0 0 rgba(204, 251, 241, 0.9);
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option.is-selected:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
-  border-color: rgba(153, 246, 228, 0.86);
-  color: #ffffff;
-}
-
 /* Prompt cards */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .prompt-card {
-  background: rgba(17, 24, 39, 0.88);
-  border-color: rgba(15, 118, 110, 0.18);
+  background: var(--surface-secondary);
   color: var(--text-dark, #e5e7eb);
-  box-shadow: none;
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .prompt-card:hover {
-  background: rgba(22, 33, 54, 0.96);
-  border-color: rgba(15, 118, 110, 0.44);
-  box-shadow: none;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-header {
   color: var(--text-dark, #e5e7eb);
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle {
-  background: linear-gradient(135deg, #115e59 0%, #0d9488 100%) !important;
-  border: 1px solid rgba(94, 234, 212, 0.45) !important;
-  color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:hover {
-  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
-  border-color: rgba(153, 246, 228, 0.65) !important;
-  box-shadow: none !important;
-  transform: translateY(-2px) scale(1.06) !important;
-}
-
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:active {
-  transform: translateY(0) scale(0.96) !important;
-  box-shadow: none !important;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle:focus-visible {
@@ -1606,27 +1509,18 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* Save mode toggle */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
-  background:
-    radial-gradient(circle at 30% 30%, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.92)),
-    rgba(15, 23, 42, 0.94);
-  border-color: rgba(148, 163, 184, 0.24);
+  background: var(--surface-primary);
+  border-color: var(--border-default);
   color: #99f6e4;
-  box-shadow:
-    0 10px 24px rgba(2, 6, 23, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:hover {
   border-color: rgba(15, 118, 110, 0.38);
-  box-shadow:
-    0 14px 28px rgba(15, 118, 110, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--primary-subtle);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active {
-  background:
-    radial-gradient(circle at 30% 30%, rgba(30, 27, 20, 0.96), rgba(20, 18, 14, 0.92)),
-    rgba(20, 18, 14, 0.94);
+  background: rgba(20, 18, 14, 0.94);
   border-color: rgba(180, 83, 9, 0.36);
   color: #fcd34d;
 }
@@ -1656,19 +1550,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   --chat-button-base: #34d399;
   --chat-button-accent: #10b981;
-  --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
 }
 
 @media (max-width: 576px) {
   [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #setup-container {
-    background:
-      linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(8, 13, 24, 0.98) 100%),
-      #0b1220;
+    background: var(--surface-tertiary);
   }
 
   [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
-    border-color: rgba(148, 163, 184, 0.2);
-    background: rgba(17, 24, 39, 0.78);
-    box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
+    border-color: var(--border-default);
+    background: var(--surface-primary);
   }
 }

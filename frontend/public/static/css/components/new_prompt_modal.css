@@ -25,9 +25,7 @@
 
 :where(body.chat-page, .chat-page-shell) .circle-button {
   position: relative;
-  background:
-    radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%),
-    linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+  background: var(--primary-color);
   color: var(--text-light, #ffffff);
   width: 44px;
   height: 44px;
@@ -40,15 +38,12 @@
   cursor: pointer;
   transition:
     transform var(--transition-normal, 0.2s ease),
-    box-shadow var(--transition-normal, 0.2s ease),
-    filter var(--transition-slow, 0.3s ease);
-  box-shadow: 0 14px 24px rgba(19, 78, 74, 0.22);
+    background var(--transition-normal, 0.2s ease);
   flex-shrink: 0;
 }
 
 :where(body.chat-page, .chat-page-shell) .circle-button:hover {
-  transform: translateY(-1px);
-  filter: saturate(1.06);
+  background: var(--primary-hover);
 }
 
 :where(body.chat-page, .chat-page-shell) #openNewPromptModal .bi-plus-lg {
