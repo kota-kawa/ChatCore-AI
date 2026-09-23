@@ -9,7 +9,6 @@ export type SharedDomRefs = {
   chatRoomListEl: HTMLElement | null;
   setupInfoElement: HTMLTextAreaElement | null;
   aiModelSelect: HTMLSelectElement | null;
-  accessChatBtn: HTMLElement | null;
   taskSelection: HTMLElement | null;
 };
 
@@ -27,7 +26,6 @@ export function initSharedDomRefs(): SharedDomRefs {
     chatRoomListEl: document.getElementById("chat-room-list"),
     setupInfoElement: document.getElementById("setup-info") as HTMLTextAreaElement | null,
     aiModelSelect: document.getElementById("ai-model") as HTMLSelectElement | null,
-    accessChatBtn: document.getElementById("access-chat-btn"),
     taskSelection: document.querySelector(".task-selection") as HTMLElement | null
   };
 
