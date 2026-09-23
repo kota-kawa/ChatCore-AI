@@ -232,6 +232,23 @@
   word-break: break-word;
 }
 
+/* 履歴の区画見出し（ピン留め／最近）。ピン留めがあるときだけ表示する */
+:where(body.chat-page, .chat-page-shell) .chat-room-list__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.85rem 0.3rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+:where(body.chat-page, .chat-page-shell) .chat-room-list__heading:first-child {
+  padding-top: 0.2rem;
+}
+
 /* 追加読み込み中インジケータ（スクロールページネーション） */
 :where(body.chat-page, .chat-page-shell) .chat-room-list__loading {
   display: flex;
@@ -506,12 +523,15 @@
   flex-shrink: 0;
 }
 
-:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin {
   color: #1c1c1e;
 }
 
 :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:hover,
-:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin:hover,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin:focus-visible {
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -686,12 +706,15 @@
     0 0 0 0.5px rgba(148, 163, 184, 0.1);
 }
 
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin {
   color: #e2e8f0;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:hover,
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--pin:focus-visible {
   background: rgba(148, 163, 184, 0.12);
 }
 

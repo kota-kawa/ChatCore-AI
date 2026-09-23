@@ -6,6 +6,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import { Skeleton } from "../ui/skeleton";
 import { useHomePageChatContext, useHomePageProjectContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { splitPinnedChatRooms } from "../../lib/chat_page/home_page_controller_utils";
 import {
   MAX_ATTACHED_FILES,
   chatAttachmentAccept,
@@ -130,6 +131,10 @@ function ChatMainSectionComponent() {
       (room.title || t("chat.new")).toLowerCase().includes(normalizedRoomSearchQuery),
     );
   }, [chatRooms, isRoomSearchActive, normalizedRoomSearchQuery, t]);
+  const { pinned: pinnedChatRooms, recent: recentChatRooms } = useMemo(
+    () => splitPinnedChatRooms(filteredChatRooms),
+    [filteredChatRooms],
+  );
 
   // 検索中に絞り込み結果が空でも、未読み込みのルームがあれば末尾センチネルで
   // 追加読み込みが走り、全ルームを横断して検索できる。読み込み完了かつ 0 件なら
@@ -501,7 +506,21 @@ function ChatMainSectionComponent() {
                 ))}
               </div>
             )}
-            {filteredChatRooms.map((room) => (
+            {pinnedChatRooms.length > 0 && (
+              <div className="chat-room-list__heading">
+                <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
+                <span>{english ? "Pinned" : "ピン留め"}</span>
+              </div>
+            )}
+            {pinnedChatRooms.map((room) => (
+              <ChatRoomCard key={room.id} room={room} />
+            ))}
+            {pinnedChatRooms.length > 0 && recentChatRooms.length > 0 && (
+              <div className="chat-room-list__heading">
+                <span>{english ? "Recent" : "最近"}</span>
+              </div>
+            )}
+            {recentChatRooms.map((room) => (
               <ChatRoomCard key={room.id} room={room} />
             ))}
             {showRoomSearchEmptyState && (

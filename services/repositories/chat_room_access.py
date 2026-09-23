@@ -72,4 +72,8 @@ def serialize_room(room: ChatRoom, *, project_room: bool = False) -> dict[str, A
     if project_room:
         payload["createdAt"] = payload.pop("created_at")
         payload["lastActivityAt"] = payload.pop("last_activity_at")
+    else:
+        # ピン留めはサイドバーの履歴だけが使うので、プロジェクト詳細には載せない。
+        # Only the sidebar history uses pins, so project detail payloads leave it out.
+        payload["pinned_at"] = serialize_datetime_iso(room.pinned_at)
     return payload

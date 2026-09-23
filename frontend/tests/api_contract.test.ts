@@ -58,6 +58,18 @@ test("normalizeChatRoomsPayload keeps room pagination", () => {
   });
 });
 
+test("normalizeChatRoomsPayload folds pinned rooms into the front of rooms", () => {
+  const normalized = normalizeChatRoomsPayload({
+    rooms: [{ id: "room-1", title: "Room 1", mode: "normal", pinned_at: null }],
+    pinned_rooms: [{ id: "pinned-1", title: "Pinned", mode: "normal", pinned_at: "2026-09-23T12:00:00" }],
+    pagination: { has_more: false, next_cursor: null },
+  });
+
+  assert.deepEqual(normalized.rooms.map((room) => room.id), ["pinned-1", "room-1"]);
+  assert.equal(normalized.rooms[0]?.pinnedAt, "2026-09-23T12:00:00");
+  assert.equal("pinnedAt" in (normalized.rooms[1] ?? {}), false);
+});
+
 test("normalizeChatHistoryMessages keeps known fields only", () => {
   const normalized = normalizeChatHistoryMessages([
     { id: 5, message: "hello", sender: "user", timestamp: "2026-01-01" },

@@ -51,6 +51,11 @@
 所有者確認を通り、一時チャットは対象外です。公開読み取りの
 `GET /api/shared_chat_room` は失効済み・期限切れのトークンを 404 として扱います。
 
+チャットのピン留めは `POST /api/pin_chat_room`（`room_id` と `pinned`）で付け外しします。
+所有者確認は `load_owned_room` を通り、未保存（temporary）のチャットは対象外です。
+`GET /api/get_chat_rooms` はピン留めした部屋を `rooms` のページングから外し、
+カーソルなしの最初のページでだけ `pinned_rooms` として返します。
+
 ## 共通のルート境界
 
 - 状態変更ルートは `require_csrf` を router dependency または既存共通境界から適用します。

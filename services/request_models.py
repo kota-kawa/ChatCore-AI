@@ -221,6 +221,13 @@ class RenameChatRoomRequest(RequestPayloadModel):
     new_title: NonEmptyStr
 
 
+# 日本語: チャットルームのピン留めを付け外しする際のリクエストペイロード。
+# English: Request payload for pinning or unpinning a chat room.
+class PinChatRoomRequest(RequestPayloadModel):
+    room_id: ChatRoomIdStr
+    pinned: bool
+
+
 # 日本語: チャットルームの共有リンクを生成する際のリクエストペイロード。
 # English: Request payload for sharing a chat room.
 class ShareChatRoomRequest(RequestPayloadModel):

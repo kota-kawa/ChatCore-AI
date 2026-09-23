@@ -7,8 +7,8 @@ type ChatRoomCardProps = {
   room: ChatRoom;
 };
 
-// サイドバーのチャット1件分のカードと操作メニュー。
-// One sidebar chat card with its actions menu.
+// サイドバーのチャット1件分のカードと操作メニュー。ピン留めと最近の両区画で同じカードを使う。
+// One sidebar chat card with its actions menu, shared by the pinned and recent sections.
 export function ChatRoomCard({ room }: ChatRoomCardProps) {
   const { locale, t } = useTranslation();
   const english = locale === "en";
@@ -21,6 +21,7 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
     switchChatRoom,
     setOpenRoomActionsFor,
     handleRenameRoom,
+    handleToggleRoomPin,
     handleDeleteRoom,
     enterRoomSelectionMode,
     toggleRoomSelection,
@@ -44,6 +45,7 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
   const roomTitle = room.title || t("chat.new");
   const roomMenuId = `room-actions-menu-${room.id}`;
   const roomSelected = selectedRoomIds.has(room.id);
+  const roomPinned = Boolean(room.pinnedAt);
 
   return (
     <div
@@ -81,8 +83,8 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
       </div>
 
       {!isRoomSelectionMode && (
-        // ルームカード右端の縦三点メニュー。名前変更・複数選択・削除を提供する。
-        // Three-dot context menu on each room card for rename, multi-select, and delete.
+        // ルームカード右端の縦三点メニュー。名前変更・ピン留め・複数選択・削除を提供する。
+        // Three-dot context menu on each room card for rename, pin, multi-select, and delete.
         <div
           className="chat-room-card-actions"
           onClick={(event) => {
@@ -125,6 +127,20 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
               <i className="bi bi-pencil-square menu-item__icon"></i> {english ? "Rename" : "名前変更"}
             </button>
 
+            {room.mode === "normal" && (
+              <button
+                type="button"
+                className="menu-item menu-item--pin cc-press"
+                role="menuitem"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleToggleRoomPin(room.id, !roomPinned);
+                }}
+              >
+                <i className={`bi ${roomPinned ? "bi-pin-angle-fill" : "bi-pin-angle"} menu-item__icon`}></i>{" "}
+                {roomPinned ? (english ? "Unpin" : "ピン留めを外す") : (english ? "Pin" : "ピン留め")}
+              </button>
+            )}
 
             <button
               type="button"

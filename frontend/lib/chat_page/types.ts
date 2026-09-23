@@ -17,6 +17,9 @@ export type ChatRoom = {
   title: string;
   createdAt?: string;
   lastActivityAt?: string;
+  // ピン留めした日時。無ければピン留めされていない。
+  // When the room was pinned; absent means it is not pinned.
+  pinnedAt?: string;
   mode: ChatRoomMode;
 };
 
