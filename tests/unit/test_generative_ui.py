@@ -11,7 +11,7 @@ from services.generative_ui import (
     requested_artifact_quality_issues,
     validate_artifact_payload,
 )
-from services.user_skills import GENERATIVE_UI_SKILL_INSTRUCTIONS
+from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT, GENERATIVE_UI_SKILL_INSTRUCTIONS
 from services.web_search_trace import build_web_search_trace_markdown
 
 # 有効なアーティファクトの定義
@@ -270,8 +270,10 @@ document.getElementById('app').textContent = 'ready';
         self.assertIn("UI_MODE = NONE` by default", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertEqual(GENERATIVE_UI_SKILL_INSTRUCTIONS.count("```chatcore-artifact"), 1)
+        # 出力形式は実行契約だけが持ち、Skill の指示は判定規則に絞る。
+        # The output format lives only in the execution contract; the Skill keeps the decision rules.
+        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_EXECUTION_CONTRACT)
+        self.assertNotIn("```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
 
     def test_normalize_response_does_not_create_fallback_for_short_display_intent(self):
         """短い表示宣言だけではUIを自動生成しない。"""
