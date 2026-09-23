@@ -13,6 +13,7 @@ NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-}"
 DEPLOY_TARGET_COLOR="${DEPLOY_TARGET_COLOR:-}"
 PROMPT_SHARE_UPLOAD_VOLUME="${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}"
 AVATAR_UPLOAD_VOLUME="${AVATAR_UPLOAD_VOLUME:-chatcore-ai_avatar_uploads}"
+CHAT_IMAGE_UPLOAD_VOLUME="${CHAT_IMAGE_UPLOAD_VOLUME:-chatcore-ai_chat_image_uploads}"
 PROMPT_SHARE_LEGACY_UPLOAD_DIR="/app/frontend/public/static/uploads/prompt_share"
 PROMPT_SHARE_UPLOAD_MIGRATION_MARKER=".legacy_container_migration_complete"
 UPLOAD_MIGRATION_IMAGE="alpine:3.24.1"
@@ -737,6 +738,7 @@ ensure_volume_ownership() {
 ensure_upload_volume_ownership() {
   ensure_volume_ownership "${PROMPT_SHARE_UPLOAD_VOLUME}" "Prompt-share upload" || return 1
   ensure_volume_ownership "${AVATAR_UPLOAD_VOLUME}" "Avatar upload" || return 1
+  ensure_volume_ownership "${CHAT_IMAGE_UPLOAD_VOLUME}" "Chat image upload" || return 1
 }
 
 CURRENT_COLOR="$(detect_active_color)"

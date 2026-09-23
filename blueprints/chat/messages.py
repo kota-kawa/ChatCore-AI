@@ -38,6 +38,7 @@ from services.chat_generation import (
     iter_generation_events,
     start_generation_job,
 )
+from services.chat_images import decode_chat_images_from_storage, encode_chat_images_for_storage
 from services.chat_message_normalization import (
     find_latest_task_launch_request,
     normalize_messages_for_llm,
@@ -203,6 +204,20 @@ def _resolve_chat_generation_service(
 
 # ゲストユーザー用のチャットルームアクセス権を検証する非同期関数
 # Asynchronously validate the guest session's access privileges to the specified room.
+# 編集して送り直す発話へ、元の発話の添付（文書の本文と画像）を引き継ぐための引数。
+# Keyword arguments that carry the original message's attachments (document text and images)
+# over to the edited message.
+def _carried_attachment_kwargs(message: dict[str, Any]) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    attached_file_contents = decode_attached_files_from_storage(message.get("attached_file_contents"))
+    if attached_file_contents:
+        kwargs["attached_file_contents"] = attached_file_contents
+    attached_images = decode_chat_images_from_storage(message.get("attached_images"))
+    if attached_images:
+        kwargs["attached_images"] = attached_images
+    return kwargs
+
+
 async def _validate_guest_room_access(session: dict, chat_room_id: str):
     """
     ゲストセッションの指定ルームへのアクセス権を検証します。
@@ -587,6 +602,7 @@ def _paginate_ephemeral_chat_history(
             "id": index + 1,
             "message": row.get("content", ""),
             **({"message_parts": row.get("message_parts")} if row.get("message_parts") else {}),
+            **({"attached_images": row.get("attached_images")} if row.get("attached_images") else {}),
             "sender": row.get("role", ""),
             "timestamp": "",
         }
@@ -879,6 +895,8 @@ async def chat_regenerate(
                 }
                 if node.get("attached_file_contents"):
                     entry["attached_file_contents"] = node["attached_file_contents"]
+                if node.get("attached_images"):
+                    entry["attached_images"] = node["attached_images"]
                 if node.get("message_parts"):
                     entry["message_parts"] = node["message_parts"]
                 all_messages.append(entry)
@@ -1005,14 +1023,7 @@ async def chat_edit_and_regenerate(
             if len(user_positions) <= trailing_user_count:
                 return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
-            target_attached_file_contents = decode_attached_files_from_storage(
-                existing_messages[target_pos].get("attached_file_contents")
-            )
-            attachment_content_kwargs = (
-                {"attached_file_contents": target_attached_file_contents}
-                if target_attached_file_contents
-                else {}
-            )
+            attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
             await run_blocking(
                 ephemeral_store.delete_messages_from_trailing_user_count,
                 sid,
@@ -1039,14 +1050,7 @@ async def chat_edit_and_regenerate(
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             edit_parent_id = path[target_pos - 1]["id"] if target_pos > 0 else None
             target_attached_file_names = path[target_pos].get("attached_file_names")
-            target_attached_file_contents = decode_attached_files_from_storage(
-                path[target_pos].get("attached_file_contents")
-            )
-            attachment_content_kwargs = (
-                {"attached_file_contents": target_attached_file_contents}
-                if target_attached_file_contents
-                else {}
-            )
+            attachment_content_kwargs = _carried_attachment_kwargs(path[target_pos])
             assistant_parent_id = await save_message_to_db(
                 chat_room_id,
                 formatted_user_message,
@@ -1065,6 +1069,7 @@ async def chat_edit_and_regenerate(
                         if node.get("attached_file_contents")
                         else {}
                     ),
+                    **({"attached_images": node["attached_images"]} if node.get("attached_images") else {}),
                     **(
                         {"message_parts": node["message_parts"]}
                         if node.get("message_parts")
@@ -1073,15 +1078,19 @@ async def chat_edit_and_regenerate(
                 }
                 for node in path[:target_pos]
             ]
-            edited_message = {"role": "user", "content": formatted_user_message}
-            if target_attached_file_contents:
+            edited_message: dict[str, Any] = {"role": "user", "content": formatted_user_message}
+            if "attached_file_contents" in attachment_content_kwargs:
                 edited_message["attached_file_contents"] = [
                     {
                         "name": attached_file.name,
                         "content": attached_file.content,
                     }
-                    for attached_file in target_attached_file_contents
+                    for attached_file in attachment_content_kwargs["attached_file_contents"]
                 ]
+            if "attached_images" in attachment_content_kwargs:
+                edited_message["attached_images"] = encode_chat_images_for_storage(
+                    attachment_content_kwargs["attached_images"]
+                )
             all_messages.append(edited_message)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
@@ -1095,14 +1104,7 @@ async def chat_edit_and_regenerate(
         if len(user_positions) <= trailing_user_count:
             return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
         target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
-        target_attached_file_contents = decode_attached_files_from_storage(
-            existing_messages[target_pos].get("attached_file_contents")
-        )
-        attachment_content_kwargs = (
-            {"attached_file_contents": target_attached_file_contents}
-            if target_attached_file_contents
-            else {}
-        )
+        attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
         await run_blocking(
             ephemeral_store.delete_messages_from_trailing_user_count,
             sid,

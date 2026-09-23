@@ -18,7 +18,7 @@ load_dotenv(".env.local", override=True)
 from fastapi import FastAPI, Request  # noqa: E402
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError  # noqa: E402
 
-from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
+from blueprints.chat import cleanup_ephemeral_chats, ephemeral_store  # noqa: E402
 from services.auth_limits import AuthLimitService  # noqa: E402
 from services.avatar_cleanup import cleanup_orphaned_avatars  # noqa: E402
 from services.avatar_storage import AVATAR_MAX_REQUEST_BYTES  # noqa: E402
@@ -28,6 +28,7 @@ from services.background_executor import (  # noqa: E402
 from services.cache import try_acquire_single_flight  # noqa: E402
 from services.chat_generation import ChatGenerationService  # noqa: E402
 from services.chat_generation_executor import shutdown_generation_executor  # noqa: E402
+from services.chat_image_cleanup import cleanup_orphaned_chat_images  # noqa: E402
 from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.db import dispose_engine  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
@@ -126,6 +127,17 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
             )
             if avatar_lock:
                 await cleanup_orphaned_avatars()
+            chat_image_lock = await asyncio.to_thread(
+                try_acquire_single_flight,
+                "chat_image_cleanup",
+                CLEANUP_LOCK_TTL_SECONDS,
+            )
+            if chat_image_lock:
+                temporary_room_image_ids = await asyncio.to_thread(ephemeral_store.list_referenced_image_ids)
+                # 一時ルームの参照が読めない回は消さない。使用中の画像を消すより次回へ回す方が安全。
+                # Skip a run whose temporary-room references are unreadable rather than delete images in use.
+                if temporary_room_image_ids is not None:
+                    await cleanup_orphaned_chat_images(temporary_room_image_ids)
         except Exception:
             logger.exception("Failed to run periodic cleanup.")
         # 設定間隔だけ待機するか、停止イベントの発生を待つ

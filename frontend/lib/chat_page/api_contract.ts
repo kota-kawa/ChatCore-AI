@@ -1,5 +1,6 @@
 import type {
   ChatHistoryMessagePayload,
+  ChatHistoryAttachedImage,
   ChatHistoryPagination,
   ChatResponsePayload,
   ChatMessagePart,
@@ -314,6 +315,22 @@ export function normalizeChatRoomsPayload(rawPayload: unknown): ChatRoomsPage {
   };
 }
 
+// 日本語: 添付画像の参照は ID・名前・寸法がそろったものだけを残します（ID は配信 URL に使うため）。
+// English: Keep only image references with an id, name and dimensions; the id builds the delivery URL.
+function normalizeHistoryAttachedImages(rawImages: unknown): ChatHistoryAttachedImage[] | undefined {
+  if (!Array.isArray(rawImages)) return undefined;
+  const images = rawImages.flatMap((raw) => {
+    const image = asRecord(raw);
+    const id = optionalString(image.id);
+    const name = optionalString(image.name);
+    if (!id || !/^[0-9a-f]{48}$/.test(id) || !name) return [];
+    const width = typeof image.width === "number" && image.width > 0 ? image.width : 0;
+    const height = typeof image.height === "number" && image.height > 0 ? image.height : 0;
+    return [{ id, name, width, height }];
+  });
+  return images.length > 0 ? images : undefined;
+}
+
 // 日本語: `id` / `message` / `sender` / `timestamp` は生成スキーマ `ChatHistoryMessageSchema` で検証し、
 //         契約に宣言のない追加キーだけをここで正規化します。
 // English: `id`, `message`, `sender`, and `timestamp` are validated by the generated
@@ -327,6 +344,7 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
       Array.isArray(rawFileNames) && rawFileNames.length > 0
         ? (rawFileNames.filter((n) => typeof n === "string") as string[])
         : undefined;
+    const attached_images = normalizeHistoryAttachedImages(record.attached_images);
     const rawSiblingIds = record.sibling_ids;
     const sibling_ids = Array.isArray(rawSiblingIds)
       ? (rawSiblingIds.filter((value) => typeof value === "number") as number[])
@@ -336,6 +354,7 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
       ...readChatHistoryMessageFields(record),
       ...(message_parts ? { message_parts } : {}),
       ...(attached_file_names ? { attached_file_names } : {}),
+      ...(attached_images ? { attached_images } : {}),
       ...(asPositiveNumber(record.version_index) ? { version_index: asPositiveNumber(record.version_index)! } : {}),
       ...(asPositiveNumber(record.version_count) ? { version_count: asPositiveNumber(record.version_count)! } : {}),
       ...(sibling_ids && sibling_ids.length > 0 ? { sibling_ids } : {}),

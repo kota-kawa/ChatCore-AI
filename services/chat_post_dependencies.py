@@ -123,6 +123,7 @@ class StoreUserMessageAndLoadTurnContext(Protocol):
         attached_file_names: list[str] | None = None,
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
+        attached_images: list[Any] | None = None,
     ) -> MaybeAwaitable[dict[str, Any]]: ...
 
 

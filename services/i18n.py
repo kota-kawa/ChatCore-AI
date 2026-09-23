@@ -116,6 +116,10 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
     "AIからの回答が空でした。もう一度お試しください。": (
         "The AI returned an empty answer. Please try again."
     ),
+    "画像を読み込めるのは GPT-6 Luna だけです。モデルを GPT-6 Luna に切り替えるか、画像を外してください。": (
+        "Only GPT-6 Luna can read images. Switch the model to GPT-6 Luna or remove the images."
+    ),
+    "画像が見つかりません。": "The image could not be found.",
     "共有リンクが見つかりません": "The shared link could not be found.",
     "共有対象のメモが見つかりません。": "The memo to share could not be found.",
     "プロンプト一覧のカーソルが不正です。": "The prompt feed cursor is invalid.",

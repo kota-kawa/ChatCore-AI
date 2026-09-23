@@ -30,6 +30,7 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
+from services.chat_images import apply_attached_images_for_model
 from services.chat_message_normalization import (
     find_latest_task_launch_request,
     mark_task_launch_input_for_llm,
@@ -341,6 +342,9 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         selected_reference_query = latest_user_message_text
     active_task_request = find_latest_task_launch_request(normalized_all_messages)
     normalized_all_messages = mark_task_launch_input_for_llm(normalized_all_messages, active_task_request)
+    # 再生成では別のモデルを選べるため、画像は再生成に使うモデルに合わせて渡し直す。
+    # Regeneration may use another model, so images are re-applied for the model in use.
+    normalized_all_messages = apply_attached_images_for_model(normalized_all_messages, model)
     normalized_all_messages = prepend_attached_files_to_user_messages(
         normalized_all_messages
     )

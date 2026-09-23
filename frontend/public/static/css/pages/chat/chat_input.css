@@ -668,6 +668,16 @@
   color: var(--primary-color, #2dd4bf);
 }
 
+/* 画像添付はアイコンの代わりに小さなプレビューを出す。 */
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__thumb {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  border: 1px solid var(--border-default);
+}
+
 /* ─── コンポーザー URL 検出チップ ─── */
 :where(body.chat-page, .chat-page-shell) .chat-detected-urls {
   display: flex;
@@ -747,6 +757,27 @@
 :where(body.chat-page, .chat-page-shell) .user-message-attachment-chip i {
   font-size: 0.78rem;
   opacity: 0.8;
+}
+
+/* 送信済みメッセージの添付画像。吹き出しの幅に収め、縦長の写真も高さを抑える。 */
+:where(body.chat-page, .chat-page-shell) .user-message-images {
+  display: flex;
+  flex-wrap: wrap;
+  /* 既定の stretch だと、横長の写真が隣の縦長画像の高さまで伸びて切り取られる。 */
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .user-message-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 240px);
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 /* 文字数カウンター */

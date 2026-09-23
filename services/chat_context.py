@@ -3,7 +3,9 @@ from __future__ import annotations
 import html
 import math
 import re
+from typing import Any
 
+from services.chat_images import IMAGE_INPUTS_KEY, estimate_image_input_tokens
 from services.chat_prompt import build_runtime_context_message, insert_before_latest_user_message
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
@@ -351,27 +353,43 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
 # トークン予算と上限メッセージ数に収まる範囲で、直近のメッセージを後ろから順に選択する
 # Select recent messages from the end, fitting within the token budget and maximum message limit
 def select_recent_messages(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     token_budget: int,
     *,
     max_messages: int = RECENT_HISTORY_MAX_MESSAGES,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     if token_budget <= 0 or max_messages <= 0:
         return []
 
-    normalized_messages = [
-        {
+    normalized_messages: list[dict[str, Any]] = []
+    for message in messages:
+        normalized: dict[str, Any] = {
             "role": str(message.get("role", "user")),
             "content": normalize_message_text(message.get("content", "")),
         }
-        for message in messages
-    ]
-    normalized_messages = [message for message in normalized_messages if message["content"]]
+        # 画像の参照は本文と別に持ち回す。ここで落とすと画像を読めるモデルにも届かない。
+        # Image references travel beside the text; dropping them here would hide them from the model.
+        if message.get(IMAGE_INPUTS_KEY):
+            normalized[IMAGE_INPUTS_KEY] = message[IMAGE_INPUTS_KEY]
+        if normalized["content"] or normalized.get(IMAGE_INPUTS_KEY):
+            normalized_messages.append(normalized)
     if not normalized_messages:
         return []
 
-    selected_reversed: list[dict[str, str]] = []
+    selected_reversed: list[dict[str, Any]] = []
     remaining_tokens = token_budget
+
+    def with_images(message: dict[str, Any], content: str, *, always: bool = False) -> dict[str, Any]:
+        """Return the selected message, keeping its images when they fit the remaining budget."""
+        nonlocal remaining_tokens
+        selected: dict[str, Any] = {"role": message["role"], "content": content}
+        image_inputs = message.get(IMAGE_INPUTS_KEY)
+        if image_inputs:
+            image_tokens = estimate_image_input_tokens(image_inputs)
+            if always or image_tokens <= remaining_tokens:
+                selected[IMAGE_INPUTS_KEY] = image_inputs
+                remaining_tokens -= image_tokens
+        return selected
 
     # Include the newest message first and retain a compact representation of
     # the two preceding messages. Allocating that window up front prevents one
@@ -380,9 +398,9 @@ def select_recent_messages(
     newest_content = _trim_latest_message_to_token_budget(
         newest["content"], newest["role"], remaining_tokens
     )
-    if not newest_content:
+    if not newest_content and not newest.get(IMAGE_INPUTS_KEY):
         return []
-    selected_reversed.append({"role": newest["role"], "content": newest_content})
+    selected_reversed.append(with_images(newest, newest_content, always=True))
     remaining_tokens -= estimate_token_count(newest_content)
 
     guaranteed_count = min(
@@ -397,10 +415,10 @@ def select_recent_messages(
         slots_remaining = len(guaranteed_messages) - offset
         allocation = max(1, math.ceil(remaining_tokens / slots_remaining))
         content = trim_text_to_token_budget(message["content"], allocation)
-        if not content:
+        if not content and not message.get(IMAGE_INPUTS_KEY):
             continue
-        selected_reversed.append({"role": message["role"], "content": content})
         remaining_tokens -= estimate_token_count(content)
+        selected_reversed.append(with_images(message, content))
 
     # Fill the remaining capacity with older history. If a message is too large,
     # preserve a bounded version and keep walking instead of terminating early.
@@ -409,10 +427,10 @@ def select_recent_messages(
         if len(selected_reversed) >= max_messages or remaining_tokens <= 0:
             break
         content = trim_text_to_token_budget(message["content"], remaining_tokens)
-        if not content:
+        if not content and not message.get(IMAGE_INPUTS_KEY):
             continue
-        selected_reversed.append({"role": message["role"], "content": content})
         remaining_tokens -= estimate_token_count(content)
+        selected_reversed.append(with_images(message, content))
 
     return list(reversed(selected_reversed))
 

@@ -52,6 +52,7 @@ except ImportError:  # pragma: no cover - depends on SDK version
     AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
     RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
+from services.chat_images import IMAGE_INPUTS_KEY, build_openai_image_parts, model_accepts_image_input
 from services.env_settings import env_int
 from services.llm_model_limits import get_model_max_output_tokens
 from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
@@ -904,6 +905,60 @@ def _with_openai_cache_breakpoints(
     return marked
 
 
+def _with_image_parts(
+    model_name: str,
+    messages: ConversationMessages,
+    *,
+    responses_api: bool,
+) -> ConversationMessages:
+    """Resolve ``image_inputs`` references into content parts, or drop them for text-only models.
+
+    画像はキャッシュ区切りを付けたテキストより前に置く。区切りはその位置までを同一の接頭辞と
+    みなすため、後ろに画像を置くと区切りの付いた発話の画像がキャッシュから外れる。
+    Images go before the (possibly breakpoint-marked) text: a breakpoint caches the prefix up to
+    its part, so images placed after it would fall outside the cached prefix.
+    """
+    accepts_images = model_accepts_image_input(model_name)
+    prepared: ConversationMessages = []
+    for message in messages:
+        if IMAGE_INPUTS_KEY not in message:
+            prepared.append(message)
+            continue
+        new_msg = dict(message)
+        image_inputs = new_msg.pop(IMAGE_INPUTS_KEY)
+        image_parts = (
+            build_openai_image_parts(image_inputs, responses_api=responses_api)
+            if accepts_images and new_msg.get("role") == "user"
+            else []
+        )
+        if image_parts:
+            content = new_msg.get("content")
+            if isinstance(content, list):
+                text_parts = content
+            elif content:
+                text_parts = [{"type": "input_text" if responses_api else "text", "text": str(content)}]
+            else:
+                text_parts = []
+            new_msg["content"] = [*image_parts, *text_parts]
+        prepared.append(new_msg)
+    return prepared
+
+
+# OpenAI 互換 API へ渡す直前の最終形。キャッシュ区切りと画像入力をここで一度だけ付ける。
+# Final shape handed to an OpenAI-compatible API; cache breakpoints and images are applied once here.
+def _openai_request_messages(
+    model_name: str,
+    messages: ConversationMessages,
+    *,
+    responses_api: bool,
+) -> ConversationMessages:
+    return _with_image_parts(
+        model_name,
+        _with_openai_cache_breakpoints(model_name, messages, responses_api=responses_api),
+        responses_api=responses_api,
+    )
+
+
 # Groq APIを呼び出してモデルからのテキスト応答または関数呼び出しデータを取得する
 # Call the Groq API to retrieve text responses or function-call details.
 # Groq APIを呼び出して応答を取得します（ツール定義がある場合は関数呼び出しデータを含むJSONを返すことがあります）。
@@ -928,7 +983,7 @@ def get_groq_response(
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
-            "messages": sanitized_messages,
+            "messages": _openai_request_messages(model_name, sanitized_messages, responses_api=False),
             **_chat_completion_token_limit_kwargs(model_name),
             **_groq_reasoning_kwargs(model_name),
             **_chat_completion_tool_kwargs(tools),
@@ -998,7 +1053,7 @@ def _get_openai_compatible_response_stream(
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
-            "messages": _with_openai_cache_breakpoints(
+            "messages": _openai_request_messages(
                 model_name, sanitized_messages, responses_api=False
             ),
             **_chat_completion_token_limit_kwargs(
@@ -1561,7 +1616,7 @@ def get_openai_response(
             # route only the tool usage turns to the Chat Completions API.
             request_kwargs: dict[str, Any] = {
                 "model": model_name,
-                "messages": _with_openai_cache_breakpoints(
+                "messages": _openai_request_messages(
                     model_name, sanitized_messages, responses_api=False
                 ),
                 **_chat_completion_token_limit_kwargs(
@@ -1598,7 +1653,7 @@ def get_openai_response(
 
         response = openai_client.responses.create(
             model=model_name,
-            input=_with_openai_cache_breakpoints(model_name, sanitized_messages, responses_api=True),
+            input=_openai_request_messages(model_name, sanitized_messages, responses_api=True),
             max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
             **_openai_responses_reasoning_kwargs(
                 model_name,
@@ -1665,7 +1720,7 @@ def get_openai_response_stream(
         try:
             with openai_client.responses.stream(
                 model=model_name,
-                input=_with_openai_cache_breakpoints(
+                input=_openai_request_messages(
                     model_name, sanitized_messages, responses_api=True
                 ),
                 max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
@@ -1824,7 +1879,7 @@ def _get_chat_completions_json_response(
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
-            "messages": sanitized_messages,
+            "messages": _openai_request_messages(model_name, sanitized_messages, responses_api=False),
             **_chat_completion_token_limit_kwargs(model_name),
             **(_groq_reasoning_kwargs(model_name) if provider_name == "Groq" else {}),
             **_openai_reasoning_kwargs(model_name),
@@ -1869,7 +1924,7 @@ def _get_openai_responses_json_response(
     try:
         response = openai_client.responses.create(
             model=model_name,
-            input=_with_openai_cache_breakpoints(model_name, sanitized_messages, responses_api=True),
+            input=_openai_request_messages(model_name, sanitized_messages, responses_api=True),
             max_output_tokens=LLM_MAX_TOKENS,
             **_openai_responses_reasoning_kwargs(model_name),
             text={"format": {"type": "json_object"}},

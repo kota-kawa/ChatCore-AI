@@ -1,3 +1,12 @@
+import {
+  CHAT_IMAGE_ACCEPT,
+  downscaleChatImage,
+  IMAGE_INPUT_MODEL_ONLY_MESSAGE,
+  isImageAttachmentName,
+  MAX_CHAT_IMAGE_BYTES,
+  MAX_CHAT_IMAGE_SOURCE_BYTES,
+  type DownscaledChatImage,
+} from "./chat_images";
 import type { AttachedFile } from "./types";
 
 export const MAX_ATTACHED_FILES = 5;
@@ -47,6 +56,12 @@ export const CHAT_ATTACHMENT_ACCEPT = [
   ".pptx",
 ].join(",");
 
+// 画像を読めるモデルを選んでいるときだけ、ファイル選択で画像も選べるようにする。
+// Offer images in the file picker only while a model that reads images is selected.
+export function chatAttachmentAccept(allowImages: boolean): string {
+  return allowImages ? `${CHAT_ATTACHMENT_ACCEPT},${CHAT_IMAGE_ACCEPT}` : CHAT_ATTACHMENT_ACCEPT;
+}
+
 const ACCEPTED_TEXT_FILE_TYPES = new Set([
   "text/plain",
   "text/markdown",
@@ -79,6 +94,7 @@ function isDocumentChatAttachment(file: FileLike): boolean {
 
 export function getAttachmentIconClass(fileName: string): string {
   const lowerName = fileName.toLowerCase();
+  if (isImageAttachmentName(lowerName)) return "bi-file-earmark-image";
   if (lowerName.endsWith(".pdf")) return "bi-file-earmark-pdf";
   if (lowerName.endsWith(".docx")) return "bi-file-earmark-word";
   if (lowerName.endsWith(".xlsx")) return "bi-file-earmark-excel";
@@ -144,10 +160,33 @@ export function mergeChatAttachments(previous: AttachedFile[], additions: Attach
   return next;
 }
 
+type ReadAttachmentOptions = {
+  /** 画像を読めるモデルを選んでいるか / Whether the selected model reads images */
+  allowImages: boolean;
+  /** 画像の縮小処理。テストではブラウザの canvas の代わりを渡す / Image downscaler; tests pass a canvas stand-in */
+  readImage?: (file: File) => Promise<DownscaledChatImage>;
+};
+
+async function readImageAttachment(
+  file: File,
+  readImage: (file: File) => Promise<DownscaledChatImage>,
+): Promise<AttachedFile> {
+  const image = await readImage(file);
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: file.name,
+    size: image.size,
+    mediaType: image.mediaType,
+    dataBase64: image.dataBase64,
+    previewUrl: `data:${image.mediaType};base64,${image.dataBase64}`,
+  };
+}
+
 export async function readSelectedChatAttachments(
   files: File[],
   existingFiles: AttachedFile[],
   notifyError: (message: string) => void,
+  { allowImages, readImage = downscaleChatImage }: ReadAttachmentOptions,
 ): Promise<AttachedFile[]> {
   const selected: AttachedFile[] = [];
   const names = new Set(existingFiles.map((file) => file.name));
@@ -160,13 +199,36 @@ export async function readSelectedChatAttachments(
 
     if (names.has(file.name)) continue;
 
-    if (file.size > MAX_ATTACHMENT_FILE_SIZE_BYTES) {
-      notifyError(`「${file.name}」は1MBを超えるため添付できません。`);
+    if (file.name.length > MAX_ATTACHMENT_NAME_LENGTH) {
+      notifyError(`「${file.name}」はファイル名が${MAX_ATTACHMENT_NAME_LENGTH}文字を超えるため添付できません。`);
       continue;
     }
 
-    if (file.name.length > MAX_ATTACHMENT_NAME_LENGTH) {
-      notifyError(`「${file.name}」はファイル名が${MAX_ATTACHMENT_NAME_LENGTH}文字を超えるため添付できません。`);
+    if (isImageAttachmentName(file.name)) {
+      if (!allowImages) {
+        notifyError(IMAGE_INPUT_MODEL_ONLY_MESSAGE);
+        continue;
+      }
+      if (file.size > MAX_CHAT_IMAGE_SOURCE_BYTES) {
+        notifyError(`「${file.name}」は${MAX_CHAT_IMAGE_SOURCE_BYTES / 1_048_576}MBを超えるため添付できません。`);
+        continue;
+      }
+      try {
+        const attachment = await readImageAttachment(file, readImage);
+        if (attachment.size > MAX_CHAT_IMAGE_BYTES) {
+          notifyError(`「${file.name}」は縮小しても${MAX_CHAT_IMAGE_BYTES / 1_048_576}MBを超えるため添付できません。`);
+          continue;
+        }
+        selected.push(attachment);
+        names.add(file.name);
+      } catch {
+        notifyError(`「${file.name}」を画像として読み取れませんでした。`);
+      }
+      continue;
+    }
+
+    if (file.size > MAX_ATTACHMENT_FILE_SIZE_BYTES) {
+      notifyError(`「${file.name}」は1MBを超えるため添付できません。`);
       continue;
     }
 

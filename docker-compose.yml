@@ -83,6 +83,7 @@ services:
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
       - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
       - AVATAR_UPLOAD_DIR=/app/data/uploads/avatars
+      - CHAT_IMAGE_UPLOAD_DIR=/app/data/uploads/chat_images
       # Per-user total of normalized display + card variants (100 MiB default).
       - PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}
     ports:
@@ -94,6 +95,8 @@ services:
       - prompt_share_uploads:/app/data/uploads/prompt_share
       # Avatar uploads must outlive app container rebuilds and deployments too.
       - avatar_uploads:/app/data/uploads/avatars
+      # Chat images stay private and must survive rebuilds while messages reference them.
+      - chat_image_uploads:/app/data/uploads/chat_images
     depends_on:
       db:
         condition: service_healthy
@@ -265,3 +268,5 @@ volumes:
     name: ${PROMPT_SHARE_UPLOAD_VOLUME:-chatcore-ai_prompt_share_uploads}
   avatar_uploads:
     name: ${AVATAR_UPLOAD_VOLUME:-chatcore-ai_avatar_uploads}
+  chat_image_uploads:
+    name: ${CHAT_IMAGE_UPLOAD_VOLUME:-chatcore-ai_chat_image_uploads}

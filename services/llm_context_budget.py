@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from services.chat_context import estimate_token_count
+from services.chat_images import IMAGE_INPUTS_KEY, estimate_image_input_tokens
 from services.env_settings import env_int
 from services.llm_model_limits import (
     MODEL_MAX_OUTPUT_TOKENS,
@@ -209,6 +210,9 @@ def estimate_messages_tokens(messages: Sequence[Mapping[str, Any]] | None) -> in
     for message in messages:
         serialized = _serialize_for_estimation(message)
         total += estimate_token_count(serialized) + MESSAGE_FRAME_OVERHEAD_TOKENS
+        # 画像は参照だけが載っているので、送信時に展開される画像の分を寸法から足す。
+        # Only image references are present, so add what the images cost once resolved.
+        total += estimate_image_input_tokens(message.get(IMAGE_INPUTS_KEY))
     return total
 
 

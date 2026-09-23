@@ -122,6 +122,7 @@ class ChatHistory(Base):
     active_child_id: Mapped[int | None] = mapped_column(Integer)
     message_parts: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     attached_file_contents: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    attached_images: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     web_search_context: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
     __table_args__ = (

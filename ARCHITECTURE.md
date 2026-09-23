@@ -169,6 +169,8 @@ LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ
 
 プロンプト共有の画像は、処理（デコード、ピクセル数・アニメーション制限、EXIF 向き、メタデータ除去）と保存先を分離しています。保存契約や将来のオブジェクトストレージ移行条件は `docs/architecture/prompt_attachment_storage.md` に集約されています。この文書へ詳細を複製しません。
 
+チャットの添付のうち、文書（テキスト・PDF・Office）は `services/attached_files.py` が本文を抜き出し、発話へ前置します。画像は `services/chat_images.py` がプロンプト画像と同じ処理で検証し直し、`services/chat_image_storage.py` が非公開の保存先へ置きます。履歴に持つのは画像 ID と寸法だけです。画像を読めるモデル（GPT-6 Luna）へ送るときにだけ、`services/llm.py` のアダプタが API ごとの形に変換します。配信は持ち主のセッションに限ります。理由と影響は [ADR 0012](docs/decisions/0012-private-chat-image-input.md) にあります。
+
 ## 4. フロントエンドの構成
 
 - `frontend/pages/`: Next.js Pages Router のページエントリーポイント。ページ単位のデータ取得と画面構成を担当します。
@@ -214,6 +216,7 @@ npm --prefix frontend run generate:api-schemas
 | 認証・セッション・CSRF | `blueprints/auth*`、`services/repositories/auth_identity_repository.py`、`services/session_middleware.py`、`services/csrf.py` | `user_auth_providers`契約、Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |
 | プロンプト画像 | `services/prompt_attachment_processing.py` と storage | `docs/architecture/prompt_attachment_storage.md`、添付テスト |
+| チャット画像 | `services/chat_images.py`、`services/chat_image_storage.py` | `services/llm.py` の画像変換、`frontend/lib/chat_page/chat_images.ts`、[ADR 0012](docs/decisions/0012-private-chat-image-input.md) |
 | UI と CSS | 対応 `pages/`・`components/` | `frontend/STYLING_STRATEGY.md`、typecheck、対象 component test |
 | 既知の障害やデバッグ | — | `docs/knowledge/debugging.md` |
 | 技術判断の変更 | — | `docs/decisions/README.md` と該当 ADR |

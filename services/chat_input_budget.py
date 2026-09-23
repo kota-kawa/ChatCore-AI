@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 from services.chat_context import estimate_token_count
+from services.chat_images import IMAGE_INPUTS_KEY, estimate_image_input_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
         tool_calls = message.get("tool_calls")
         if tool_calls:
             total += estimate_token_count(json.dumps(tool_calls, ensure_ascii=False))
+        total += estimate_image_input_tokens(message.get(IMAGE_INPUTS_KEY))
     return total
 
 

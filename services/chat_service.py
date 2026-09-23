@@ -110,6 +110,7 @@ async def save_message_to_db(
     message_parts: list[dict[str, Any]] | None = None,
     attached_file_contents: list[Any] | None = None,
     web_search_context: list[dict[str, Any]] | None = None,
+    attached_images: list[Any] | None = None,
     *,
     session: AsyncSession | None = None,
 ) -> int | None:
@@ -123,6 +124,7 @@ async def save_message_to_db(
             message_parts,
             attached_file_contents,
             web_search_context,
+            attached_images,
         ),
         session,
     )
@@ -135,6 +137,7 @@ async def store_user_message_and_load_turn_context(
     attached_file_names: list[str] | None = None,
     message_parts: list[dict[str, Any]] | None = None,
     attached_file_contents: list[Any] | None = None,
+    attached_images: list[Any] | None = None,
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
@@ -153,6 +156,7 @@ async def store_user_message_and_load_turn_context(
             attached_file_names,
             message_parts,
             attached_file_contents,
+            attached_images,
         ),
         session,
     )

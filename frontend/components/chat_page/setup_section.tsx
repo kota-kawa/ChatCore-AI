@@ -12,10 +12,11 @@ import {
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { formatModelOptionLabel } from "../../lib/chat_page/model_label";
 import {
-  CHAT_ATTACHMENT_ACCEPT,
   MAX_ATTACHED_FILES,
+  chatAttachmentAccept,
   getAttachmentIconClass,
 } from "../../lib/chat_page/file_attachments";
+import { modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { SkillSection } from "./skill_section";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
@@ -279,6 +280,9 @@ function SetupSectionComponent() {
     });
   }, []);
 
+  // 画像を読めるモデルを選んでいるときだけ画像を添付できる。 / Images attach only while an image-reading model is selected.
+  const imageInputAllowed = modelAcceptsImageInput(selectedModel);
+
   const {
     attachSelectedFiles,
     isAttachmentDropActive,
@@ -287,6 +291,7 @@ function SetupSectionComponent() {
     attachedFiles,
     setAttachedFiles,
     isAttachmentDisabled: isChatLaunching,
+    allowImages: imageInputAllowed,
     focusTargetRef: setupInfoInputRef,
     notifyAttachmentError,
   });
@@ -534,17 +539,25 @@ function SetupSectionComponent() {
                 <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
               </span>
               <span className="chat-attachment-drop-overlay__text">{t("home.dropFiles")}</span>
-              <span className="chat-attachment-drop-overlay__hint">PDF / Office / {locale === "en" ? "Text" : "テキスト"}</span>
+              <span className="chat-attachment-drop-overlay__hint">
+                PDF / Office / {locale === "en" ? "Text" : "テキスト"}
+                {imageInputAllowed ? ` / ${locale === "en" ? "Images" : "画像"}` : ""}
+              </span>
             </div>
             {/* 添付ファイルのチップ一覧（ファイル名・サイズ・削除ボタン）/ Chips showing attached files with name, size, and remove button */}
             {attachedFiles.length > 0 && (
               <div className="setup-attached-files">
                 {attachedFiles.map((file) => (
                   <div key={file.id} className="chat-attached-file-chip">
-                    <i
-                      className={`bi ${getAttachmentIconClass(file.name)} chat-attached-file-chip__icon`}
-                      aria-hidden="true"
-                    ></i>
+                    {file.previewUrl ? (
+                      // 画像はアイコンの代わりに縮小済みのプレビューを出す。 / Images show their downscaled preview.
+                      <img className="chat-attached-file-chip__thumb" src={file.previewUrl} alt="" />
+                    ) : (
+                      <i
+                        className={`bi ${getAttachmentIconClass(file.name)} chat-attached-file-chip__icon`}
+                        aria-hidden="true"
+                      ></i>
+                    )}
                     <span className="chat-attached-file-chip__name" title={file.name}>{file.name}</span>
                     {/* バイト・KB・MBの単位を自動で切り替えて表示 / Dynamically format file size in B, KB, or MB */}
                     <span className="chat-attached-file-chip__size">
@@ -580,7 +593,7 @@ function SetupSectionComponent() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept={CHAT_ATTACHMENT_ACCEPT}
+                accept={chatAttachmentAccept(imageInputAllowed)}
                 className="chat-file-input-hidden"
                 aria-hidden="true"
                 tabIndex={-1}

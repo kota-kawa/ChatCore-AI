@@ -37,6 +37,14 @@ from services.chat_generation import (
     ChatGenerationCapacityError,
     ChatGenerationService,
 )
+from services.chat_image_storage import chat_image_owner_key
+from services.chat_images import (
+    ChatImage,
+    apply_attached_images_for_model,
+    model_accepts_image_input,
+    prepare_chat_images,
+    split_image_attachments,
+)
 from services.chat_message_normalization import mark_task_launch_input_for_llm
 from services.chat_post_dependencies import (
     ChatPostBackgroundDependencies,
@@ -54,7 +62,7 @@ from services.chat_url_context import (
     collect_earlier_pasted_urls,
     fetch_pasted_url_context,
 )
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE, ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED
 from services.generative_ui import (
     GenerativeUiMode,
     artifact_status_part,
@@ -165,6 +173,7 @@ class _ChatPostTurn:
     sid: str | None = None
     room_mode: str = "temporary"
     prepared_attached_files: list[PreparedAttachedFile] = field(default_factory=list)
+    prepared_attached_images: list[ChatImage] = field(default_factory=list)
     saved_user_message_id: int | None = None
     should_auto_title_room: bool = False
     all_messages: list[dict[str, Any]] = field(default_factory=list)
@@ -210,9 +219,18 @@ class _ChatPostTurn:
     # 添付本文をDBへ渡すかどうかで引数の有無が変わるため、キーワード辞書として組み立てる
     # Built as a keyword dict because the argument is only passed when attachments exist
     def attachment_content_kwargs(self) -> dict[str, Any]:
-        if not self.prepared_attached_files:
-            return {}
-        return {"attached_file_contents": self.prepared_attached_files}
+        kwargs: dict[str, Any] = {}
+        if self.prepared_attached_files:
+            kwargs["attached_file_contents"] = self.prepared_attached_files
+        if self.prepared_attached_images:
+            kwargs["attached_images"] = self.prepared_attached_images
+        return kwargs
+
+    # 履歴の添付チップに出す名前。画像も文書と同じ並びに含める。
+    # Names shown as attachment chips in history; images are listed alongside documents.
+    def attached_file_names(self) -> list[str] | None:
+        names = [f.name for f in self.prepared_attached_files] + [i.name for i in self.prepared_attached_images]
+        return names or None
 
     # 通常ルーム（DB保存対象）かどうか
     # Whether this turn targets a DB-backed normal room
@@ -389,8 +407,18 @@ class ChatPostUseCase:
 
         # 添付ファイルのアップロード準備と検証
         # Prepare and validate uploaded attachment files
+        document_items, image_items = split_image_attachments(turn.attached_files)
+        # 画像を読めないモデルへの画像は、保存する前に断る。
+        # Reject images for a model that cannot read them before anything is stored.
+        if image_items and not model_accepts_image_input(turn.model):
+            return deps.web.jsonify({"error": ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED}, status_code=400)
         try:
-            turn.prepared_attached_files = await run_blocking(prepare_attached_files, turn.attached_files)
+            turn.prepared_attached_files = await run_blocking(prepare_attached_files, document_items)
+            turn.prepared_attached_images = await run_blocking(
+                prepare_chat_images,
+                image_items,
+                chat_image_owner_key(user_id=turn.user_id, sid=turn.sid),
+            )
         except AttachedFileValidationError as exc:
             return deps.web.jsonify({"error": str(exc)}, status_code=400)
 
@@ -431,9 +459,7 @@ class ChatPostUseCase:
         """DB保存ルームへ発話を保存し、初回ターンかどうかを判定します / Store the message in a DB-backed room and detect a first turn."""
         deps = self.deps
 
-        attached_file_name_list = (
-            [f.name for f in turn.prepared_attached_files] if turn.prepared_attached_files else None
-        )
+        attached_file_name_list = turn.attached_file_names()
         # 保存と文脈読み出しを1トランザクションへまとめる。新しい発話は能動枝の末尾へ繋がるため、
         # 親の決定・LLM履歴・過去ターンの検索結果はすべて同じ1回のツリー読み出しから導ける。
         # Persisting and loading share one transaction. A new turn extends the active branch, so the
@@ -446,6 +472,11 @@ class ChatPostUseCase:
                 attached_file_name_list,
                 None,
                 turn.prepared_attached_files or None,
+                **(
+                    {"attached_images": turn.prepared_attached_images}
+                    if turn.prepared_attached_images
+                    else {}
+                ),
             )
         )
         turn.saved_user_message_id = context.get("message_id")
@@ -493,6 +524,7 @@ class ChatPostUseCase:
         turn.normalized_all_messages = mark_task_launch_input_for_llm(
             turn.normalized_all_messages, turn.active_task_request
         )
+        turn.normalized_all_messages = apply_attached_images_for_model(turn.normalized_all_messages, turn.model)
         self._reattach_prior_uploads(turn)
         await self._prepend_reference_blocks(turn)
 

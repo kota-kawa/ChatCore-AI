@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 
 import { CHAT_HISTORY_PAGE_SIZE } from "../../lib/chat_page/constants";
+import { toBubbleImagesFromAttachments, toBubbleImagesFromHistory } from "../../lib/chat_page/chat_images";
 import {
   normalizeChatHistoryPayload,
   normalizeChatResponsePayload,
@@ -640,6 +641,7 @@ export function useHomePageGenerationActions({
             text: typeof entry.message === "string" ? entry.message : "",
             ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
             ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+            ...(entry.attached_images?.length ? { attachedImages: toBubbleImagesFromHistory(entry.attached_images) } : {}),
             ...toBranchFields(entry),
           }));
 
@@ -745,6 +747,7 @@ export function useHomePageGenerationActions({
         text: typeof entry.message === "string" ? entry.message : "",
         ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
         ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+        ...(entry.attached_images?.length ? { attachedImages: toBubbleImagesFromHistory(entry.attached_images) } : {}),
         ...toBranchFields(entry),
       }));
 
@@ -777,6 +780,7 @@ export function useHomePageGenerationActions({
         text: typeof entry.message === "string" ? entry.message : "",
         ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
         ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+        ...(entry.attached_images?.length ? { attachedImages: toBubbleImagesFromHistory(entry.attached_images) } : {}),
         ...toBranchFields(entry),
       })),
     [messageSeqRef],
@@ -1154,6 +1158,7 @@ export function useHomePageGenerationActions({
         sender: "user",
         text: message,
         attachedFileNames: attachedFiles?.length ? attachedFiles.map((f) => f.name) : undefined,
+        attachedImages: toBubbleImagesFromAttachments(attachedFiles),
       };
       beginOutgoingTurn(generation, userMessage, roomMode);
 
