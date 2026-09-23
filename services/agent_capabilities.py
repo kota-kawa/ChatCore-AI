@@ -121,14 +121,6 @@ PAGES: tuple[AgentPage, ...] = (
         ),
     ),
     AgentPage(
-        label="投稿したプロンプト",
-        path_pattern=re.compile(r"^/prompt_share/manage"),
-        route="/prompt_share/manage",
-        summary="自分の投稿プロンプトを管理する画面。",
-        features=("投稿済みプロンプトの確認・編集・削除ができる。",),
-        actions=(AgentAction("プロンプト共有へ戻る", "navigate", "/prompt_share", "公開プロンプト画面へ移動する。"),),
-    ),
-    AgentPage(
         label="メモ",
         path_pattern=re.compile(r"^/memo/?$"),
         route="/memo",

@@ -38,6 +38,15 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("メモ", context)
         self.assertIn("設定", context)
 
+    # 日本語: 廃止した投稿プロンプト画面を案内せず、投稿プロンプトの管理先として設定画面を示すことを検証します。
+    # English: Verify the catalog drops the retired posted-prompts page and points to settings for managing posts.
+    def test_capability_context_points_posted_prompt_management_to_settings(self):
+        context = build_capability_context("/")
+
+        self.assertNotIn("/prompt_share/manage", context)
+        settings_line = next(line for line in context.splitlines() if line.startswith("- 設定 /settings"))
+        self.assertIn("投稿したプロンプト", settings_line)
+
     # 日本語: ページコンテキストの生成時に、機能カタログがソースコードの前に配置されることを検証します。
     # English: Verify that the capability catalog is included in the page context before the frontend source code.
     def test_page_context_includes_capability_catalog_before_source(self):
