@@ -55,7 +55,7 @@ AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("chat.sendSetupMessage", "チャット開始欄の内容を送信する。", "{}", "送信ボタンをクリックできる。", risk="medium"),
     AgentTool("chat.openPromptComposer", "チャット画面の新規プロンプト作成モーダルを開く。", "{}", "#newPromptModal が表示される。"),
     AgentTool("chat.toggleTaskOrder", "タスク並び替え編集を切り替える。", "{}", "#edit-task-order-btn をクリックできる。"),
-    AgentTool("chat.showChatHistory", "これまでのチャット画面へ進む。", "{}", "#access-chat-btn をクリックできる。"),
+    AgentTool("chat.showChatHistory", "チャット履歴（これまでのチャット）を開く。", "{}", "#setup-history-btn をクリックできる。"),
     AgentTool("prompt.search", "プロンプト共有で検索語を入力して検索する。", '{"query": "メール返信"}', "#searchInput の値が query になり検索ボタンをクリックできる。"),
     AgentTool("prompt.openComposer", "プロンプト投稿モーダルを開く。", "{}", "#postModal が表示される。"),
     AgentTool("prompt.openLogin", "プロンプト共有ページのログイン/登録導線を開く。", "{}", "#login-btn をクリックできる。"),
@@ -97,7 +97,7 @@ PAGES: tuple[AgentPage, ...] = (
             AgentAction("新規プロンプト作成", "click", "#openNewPromptModal", "新しいプロンプト作成モーダルを開く。"),
             AgentAction("タスク並び替え", "click", "#edit-task-order-btn", "タスクの並び順編集を切り替える。"),
             AgentAction("タスク一覧展開", "click", "#toggle-tasks-btn", "折りたたまれたタスク一覧を展開/収納する。"),
-            AgentAction("チャット履歴", "click", "#access-chat-btn", "これまでのチャットを見る。"),
+            AgentAction("チャット履歴", "click", "#setup-history-btn", "チャット履歴を開く。"),
         ),
     ),
     AgentPage(

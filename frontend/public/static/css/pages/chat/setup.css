@@ -95,7 +95,9 @@
   font-weight: var(--chat-font-heading-weight, 600);
   color: var(--success-strong, #134e4a);
   letter-spacing: var(--chat-font-label-tracking, 0);
-  margin-bottom: var(--setup-title-margin-bottom) !important;
+  /* 下余白はタイトル行（.setup-form-header）が持つ。見出しの既定余白は打ち消す */
+  /* The title row (.setup-form-header) owns the bottom spacing; cancel the heading's default margin */
+  margin: 0 !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
@@ -103,6 +105,192 @@
   height: 2rem;
   flex: 0 0 auto;
   object-fit: contain;
+}
+
+/* タイトル行: 左端に履歴ボタン、中央にタイトル、右端は同幅のスペーサー。
+   ボタンとスペーサーが同じ幅なので、タイトルは行全体に対して中央に置かれる */
+/* Title row: history button at the left edge, title in the middle, an equal-width spacer at the
+   right edge, so the title stays centred against the full row */
+:where(body.chat-page, .chat-page-shell) .setup-form-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--setup-title-margin-bottom);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-form-header .setup-form-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-form-header__spacer {
+  flex: 0 0 2.75rem;
+  height: 2.75rem;
+}
+
+/* チャット画面左上のサイドバー切替と同じゴースト表示のアイコンボタン（44px のタップ領域） */
+/* Ghost icon button styled like the chat view's top-left sidebar toggle (44px tap target) */
+:where(body.chat-page, .chat-page-shell) .setup-history-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-history-button:hover,
+:where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible {
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 入力欄直下の「最近のチャット」。1 行に収め、あふれたチップは横スクロールで見せる。
+   フォームの gap より詰めて置き、入力欄に付属する行として読めるようにする */
+/* The "recent chats" row under the composer. Stays on one line; overflowing chips scroll
+   horizontally. Placed tighter than the form gap so it reads as part of the composer */
+:where(body.chat-page, .chat-page-shell) .recent-chats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin-top: calc(0.6rem - var(--setup-form-gap));
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__label {
+  flex: 0 0 auto;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__list {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* 右端を薄く消して「まだ続きがある」と分かるようにする（スクロールバーは出さない） */
+  /* Fade the right edge so the row reads as scrollable without showing a scrollbar */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__list::-webkit-scrollbar {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__item {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Skill チップと同じ高さ・輪郭（罫線 + 白面）。塗りつぶしの緑は送信などの主操作に残す */
+/* Same height and outline as the Skill chips (border + white surface); solid green stays
+   reserved for primary actions such as send */
+:where(body.chat-page, .chat-page-shell) .recent-chats__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 15rem;
+  height: 36px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-full, 999px);
+  background: var(--chat-surface-strong, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__chip:hover,
+:where(body.chat-page, .chat-page-shell) .recent-chats__chip:focus-visible {
+  border-color: var(--primary-border, rgba(25, 195, 125, 0.18));
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__pin {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__chip-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 36px;
+  padding: 0 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--primary-dark, #0f7a51);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all:hover,
+:where(body.chat-page, .chat-page-shell) .recent-chats__all:focus-visible {
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all .bi {
+  font-size: 0.75rem;
+}
+
+:where(body.chat-page, .chat-page-shell) .recent-chats__all .recent-chats__all-icon {
+  margin-right: 0.15rem;
+  font-size: 0.95rem;
 }
 
 /* 未ログイン時にタイトル直下へ表示する機能紹介テキスト（控えめなリード文として既存デザインに馴染ませる） */
@@ -961,11 +1149,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   margin-top: 0.1rem;
 }
 
-:where(body.chat-page, .chat-page-shell) .setup-access-chat {
-  text-align: center;
-  margin-top: 0.2rem;
-}
-
 :where(body.chat-page, .chat-page-shell) .task-card-action-container {
   position: absolute;
   top: -10px;
@@ -1057,7 +1240,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-form-title {
-    margin-bottom: 0.1rem !important;
     padding-right: 3.2rem;
     justify-content: flex-start;
     text-align: left;
@@ -1069,6 +1251,26 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   :where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
     width: 1.7rem;
     height: 1.7rem;
+  }
+
+  /* スマホはタイトルが左揃えなので、中央揃え用のスペーサーは要らない */
+  /* The title is left-aligned on phones, so the centring spacer is not needed */
+  :where(body.chat-page, .chat-page-shell) .setup-form-header {
+    gap: 0.35rem;
+    margin-bottom: 0.1rem;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .setup-form-header__spacer {
+    display: none;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .recent-chats {
+    gap: 0.4rem;
+    margin-top: calc(0.45rem - var(--setup-form-gap));
+  }
+
+  :where(body.chat-page, .chat-page-shell) .recent-chats__chip {
+    max-width: 12rem;
   }
 
   :where(body.chat-page, .chat-page-shell) .form-label {
@@ -1254,6 +1456,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* ===== Dark Mode ===== */
 /* Form inputs */
+/* 濃色面ではリンク色に --primary-dark のコントラストが足りないので、明るい --primary-color を使う */
+/* On dark surfaces --primary-dark lacks contrast for text, so use the lighter --primary-color */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-history-button:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__chip:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__chip:focus-visible,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__pin,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__all {
+  color: var(--primary-color, #19c37d);
+}
+
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form textarea,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form select {
   background: rgba(15, 23, 42, 0.95);

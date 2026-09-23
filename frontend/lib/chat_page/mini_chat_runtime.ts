@@ -342,7 +342,7 @@ function getAppActionReadySelectors(step: ActionStep) {
   if (command === "chat.sendSetupMessage") return ["[data-agent-id='chat.send-setup-message']"];
   if (command === "chat.openPromptComposer") return ["#openNewPromptModal"];
   if (command === "chat.toggleTaskOrder") return ["#edit-task-order-btn"];
-  if (command === "chat.showChatHistory") return ["#access-chat-btn"];
+  if (command === "chat.showChatHistory") return ["#setup-history-btn"];
   if (command === "prompt.search") return ["#searchInput", "#searchButton"];
   if (command === "prompt.openComposer") return ["#heroOpenPostModal"];
   if (command === "prompt.openLogin") return ["#login-btn"];
@@ -566,7 +566,7 @@ function executeAppAction(step: ActionStep, locale: Locale): StepExecutionResult
     return clickElement("#edit-task-order-btn", locale);
   }
   if (command === "chat.showChatHistory") {
-    return clickElement("#access-chat-btn", locale);
+    return clickElement("#setup-history-btn", locale);
   }
 
   if (command === "prompt.search") {

@@ -18,6 +18,7 @@ import {
 } from "../../lib/chat_page/file_attachments";
 import { modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
+import { RecentChatsStrip } from "./recent_chats_strip";
 import { SkillSection } from "./skill_section";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useTaskReorderDrag } from "../../hooks/chat_page/use_task_reorder_drag";
@@ -512,10 +513,33 @@ function SetupSectionComponent() {
       aria-hidden={isSetupVisible ? "false" : "true"}
     >
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
-        <h2 className="setup-form-title">
-          <img className="setup-form-title__icon" src="/static/favicon.png" alt="" aria-hidden="true" />
-          <span>Chat Core</span>
-        </h2>
+        {/* タイトル行。ログイン時は左端にチャット履歴への入口を置き、チャット画面の左上の
+            サイドバー切替と同じ位置にそろえる。右端の同幅スペーサーはタイトルの中央揃えを保つ。 */}
+        {/* Title row. When logged in, the chat-history entry sits at the left edge, matching the
+            sidebar toggle's top-left position in the chat view; the equal-width spacer keeps the title centred. */}
+        <div className="setup-form-header">
+          {loggedIn && (
+            <button
+              type="button"
+              id="setup-history-btn"
+              className="setup-history-button cc-press"
+              aria-label={t("home.openChatHistory")}
+              data-tooltip={t("home.openChatHistory")}
+              data-tooltip-placement="right"
+              onClick={() => {
+                finishPointerDrag();
+                void handleAccessChat();
+              }}
+            >
+              <i className="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+            </button>
+          )}
+          <h2 className="setup-form-title">
+            <img className="setup-form-title__icon" src="/static/favicon.png" alt="" aria-hidden="true" />
+            <span>Chat Core</span>
+          </h2>
+          {loggedIn && <span className="setup-form-header__spacer" aria-hidden="true" />}
+        </div>
 
         {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
         {/* Short feature intro shown only when logged out (provides crawlable public content) */}
@@ -696,6 +720,8 @@ function SetupSectionComponent() {
             </div>
           )}
         </div>
+
+        <RecentChatsStrip />
 
         <div className="form-group">
           <label className="form-label" htmlFor="ai-model">{t("home.model")}</label>
@@ -891,23 +917,6 @@ function SetupSectionComponent() {
         </div>
 
         <SkillSection loggedIn={loggedIn} />
-
-        {/* ログイン済みユーザーのみ過去チャット履歴へのアクセスボタンを表示 / Chat history button is only shown to logged-in users */}
-        <div className="setup-access-chat">
-          {loggedIn && (
-            <button
-              id="access-chat-btn"
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                finishPointerDrag();
-                void handleAccessChat();
-              }}
-            >
-              <i className="bi bi-chat-left-text"></i> {t("home.viewPastChats")}
-            </button>
-          )}
-        </div>
       </form>
     </div>
   );
