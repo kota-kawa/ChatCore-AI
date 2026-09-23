@@ -13,6 +13,7 @@ from services.attached_files import (
     decode_attached_files_from_storage,
     format_attached_files_for_prompt,
 )
+from services.chat_images import ATTACHED_IMAGES_KEY
 from services.generative_ui import build_message_parts_context
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
@@ -55,6 +56,11 @@ def normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str,
         attached_file_contents = message.get("attached_file_contents")
         if attached_file_contents:
             normalized_message["attached_file_contents"] = attached_file_contents
+        # 画像の参照はモデルが決まった段階で apply_attached_images_for_model が入力へ変える。
+        # Image references become model input once the model is known (apply_attached_images_for_model).
+        attached_images = message.get(ATTACHED_IMAGES_KEY)
+        if attached_images:
+            normalized_message[ATTACHED_IMAGES_KEY] = attached_images
         normalized_messages.append(normalized_message)
     return normalized_messages
 

@@ -7,8 +7,9 @@ from collections.abc import Callable
 from datetime import datetime
 
 from services.attached_files import encode_attached_files_for_storage
+from services.chat_images import decode_chat_images_from_storage, encode_chat_images_for_storage
 
-from .cache import get_redis_client
+from .cache import get_redis_client, is_redis_configured
 
 try:  # pragma: no cover - redis is an optional dependency in test environments
     from redis.exceptions import WatchError
@@ -181,6 +182,39 @@ class EphemeralChatStore:
                     sids_to_delete.append(sid)
             for sid in sids_to_delete:
                 del self._memory[sid]
+
+    # 一時ルームが参照しているチャット画像のID。一時ルームは最後の操作から期限を数えるため、
+    # 画像ファイルの古さだけでは使用中かどうかを判断できない。
+    # Chat image ids referenced by temporary rooms. Their expiry slides with activity, so a
+    # file's age alone cannot tell whether a room still uses it.
+    # Redis を使う設定なのに読めないときは None を返す。手元のメモリだけを見て答えると、
+    # Redis 上のルームが使っている画像まで未参照と判定されてしまう。
+    # Returns None when Redis is configured but unreadable: answering from local memory alone
+    # would report images used by Redis-held rooms as unreferenced.
+    def list_referenced_image_ids(self) -> set[str] | None:
+        redis_client = self._get_redis()
+        rooms: list[dict] = []
+        if redis_client is None:
+            if is_redis_configured():
+                return None
+            with self._memory_lock:
+                rooms = [room for sid_rooms in self._memory.values() for room in sid_rooms.values()]
+        else:
+            try:
+                for key in redis_client.scan_iter(match="ephemeral:*", count=500):
+                    payload = redis_client.get(key)
+                    if payload:
+                        rooms.append(self._decode(payload))
+            except Exception:
+                logger.warning("Could not scan temporary rooms for referenced chat images.", exc_info=True)
+                return None
+        return {
+            image.id
+            for room in rooms
+            for message in room.get("messages") or []
+            if isinstance(message, dict)
+            for image in decode_chat_images_from_storage(message.get("attached_images"))
+        }
 
     # 新しいチャットルームを作成して保存します。
     # Create and store a new chat room.
@@ -444,6 +478,7 @@ class EphemeralChatStore:
         message_parts: list[dict] | None = None,
         attached_file_contents: list | None = None,
         web_search_context: list[dict] | None = None,
+        attached_images: list | None = None,
     ) -> bool:
         # 指定ルームへメッセージを追記して永続化する
         # Append a message to the room and persist updated state.
@@ -460,6 +495,9 @@ class EphemeralChatStore:
             encoded_attached_files = encode_attached_files_for_storage(attached_file_contents)
             if encoded_attached_files:
                 entry["attached_file_contents"] = json.loads(encoded_attached_files)
+        encoded_images = encode_chat_images_for_storage(decode_chat_images_from_storage(attached_images))
+        if encoded_images:
+            entry["attached_images"] = encoded_images
 
         # 追記はロック内で読み直した履歴に対して行う。生成ワーカースレッドとユーザー操作が
         # 重なったとき、外で読んだ履歴に追記すると相手の追記を丸ごと上書きしてしまう。

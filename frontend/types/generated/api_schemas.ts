@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: d50e217aaa08178a2c81c6e179288045a22ebed491836cf11b9ec2025a02eb77
+// Schema fingerprint: fb8640178b4a830bfcb23a4ce61153ef2c1cd78ed0f6c87884f3bcacc933001c
 
 import { z } from "zod";
 
@@ -32,7 +32,7 @@ export type ShareChatRoomRequest = z.infer<typeof ShareChatRoomRequestSchema>;
 export const ForkSharedChatRoomRequestSchema = z.object({ "token": z.string().min(1).max(128), "id": z.string().min(1).max(128) });
 export type ForkSharedChatRoomRequest = z.infer<typeof ForkSharedChatRoomRequestSchema>;
 
-export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null), "attached_files": z.array(z.object({ "name": z.string().min(1).max(256), "content": z.string().max(100000).default(""), "media_type": z.string().max(128).default(""), "data_base64": z.string().max(1398104).default("") })).max(5).optional(), "use_personal_knowledge": z.boolean().default(false), "use_shared_prompts": z.boolean().default(false) });
+export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null), "attached_files": z.array(z.object({ "name": z.string().min(1).max(256), "content": z.string().max(100000).default(""), "media_type": z.string().max(128).default(""), "data_base64": z.string().max(4194304).default("") })).max(5).optional(), "use_personal_knowledge": z.boolean().default(false), "use_shared_prompts": z.boolean().default(false) });
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;
 
 export const UpdateTasksOrderRequestSchema = z.object({ "order": z.array(z.number().int().gt(0)).min(1).max(500) });

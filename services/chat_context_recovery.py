@@ -3,6 +3,7 @@
 from typing import Any
 
 from services.chat_context import estimate_token_count, trim_text_to_token_budget
+from services.chat_images import IMAGE_INPUTS_KEY
 from services.research_state import TURN_STATE_MARKER, is_reference_context_message
 
 RECOVERY_HISTORY_TOKEN_BUDGET = 1500
@@ -10,14 +11,14 @@ RECOVERY_HISTORY_TOKEN_BUDGET = 1500
 
 def build_recovery_base_messages(
     messages: list[dict[str, Any]],
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Keep base guidance, the preceding exchange, and the latest user input.
 
     Reserve a share for each prior message so a long assistant response cannot
     erase its user question. Tool traffic and optional system blocks are omitted;
     the caller projects the complete TurnState and checks the full request budget.
     """
-    base: list[dict[str, str]] = []
+    base: list[dict[str, Any]] = []
     first_system = next(
         (
             message for message in messages
@@ -34,7 +35,13 @@ def build_recovery_base_messages(
         })
 
     conversation = [
-        {"role": str(message["role"]), "content": str(message.get("content") or "")}
+        {
+            "role": str(message["role"]),
+            "content": str(message.get("content") or ""),
+            # 今回の依頼に付いた画像は、縮めた文脈でも依頼そのものの一部として残す。
+            # Images on the current request remain part of the request in the reduced context.
+            **({IMAGE_INPUTS_KEY: message[IMAGE_INPUTS_KEY]} if message.get(IMAGE_INPUTS_KEY) else {}),
+        }
         for message in messages
         if message.get("role") in {"user", "assistant"}
         and not message.get("tool_calls")

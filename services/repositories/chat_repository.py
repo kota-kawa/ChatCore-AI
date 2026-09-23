@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.attached_files import decode_attached_files_from_storage, encode_attached_files_for_storage
+from services.chat_images import decode_chat_images_from_storage, encode_chat_images_for_storage
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import (
     ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
@@ -91,6 +92,7 @@ _TREE_LLM_HISTORY_COLUMNS: tuple[Any, ...] = (
     ChatHistory.sender,
     ChatHistory.message_parts,
     ChatHistory.attached_file_contents,
+    ChatHistory.attached_images,
 )
 _TREE_DISPLAY_COLUMNS: tuple[Any, ...] = (
     ChatHistory.message,
@@ -98,6 +100,7 @@ _TREE_DISPLAY_COLUMNS: tuple[Any, ...] = (
     ChatHistory.timestamp,
     ChatHistory.attached_file_names,
     ChatHistory.message_parts,
+    ChatHistory.attached_images,
 )
 _TREE_DISPLAY_WITH_ATTACHMENTS_COLUMNS: tuple[Any, ...] = (
     *_TREE_DISPLAY_COLUMNS,
@@ -145,6 +148,7 @@ class ChatRepository:
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
         web_search_context: list[dict[str, Any]] | None = None,
+        attached_images: list[Any] | None = None,
     ) -> int | None:
         record = await self._insert_message(
             chat_room_id,
@@ -155,6 +159,7 @@ class ChatRepository:
             message_parts,
             attached_file_contents,
             web_search_context,
+            attached_images,
         )
         return record.id
 
@@ -168,6 +173,7 @@ class ChatRepository:
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
         web_search_context: list[dict[str, Any]] | None = None,
+        attached_images: list[Any] | None = None,
     ) -> ChatHistory:
         """Append one message to the branch and return the stored row.
 
@@ -204,6 +210,7 @@ class ChatRepository:
             parent_id=parent_id,
             message_parts=_jsonb_value(encode_message_parts(message_parts)),
             attached_file_contents=_jsonb_value(encode_attached_files_for_storage(attached_file_contents)),
+            attached_images=encode_chat_images_for_storage(decode_chat_images_from_storage(attached_images)),
             web_search_context=_jsonb_value(
                 json.dumps(web_search_context, ensure_ascii=False) if web_search_context else None
             ),
@@ -231,6 +238,7 @@ class ChatRepository:
         attached_file_names: list[str] | None = None,
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
+        attached_images: list[Any] | None = None,
     ) -> dict[str, Any]:
         """Append one turn to the active branch and derive its context from a single tree read.
 
@@ -254,6 +262,7 @@ class ChatRepository:
             message_parts,
             attached_file_contents,
             None,
+            attached_images,
         )
         # 追記した行は、保存後に読み直した場合と同じ値を持つため、そのまま経路の末尾へ足す。
         # The appended row already holds the stored values, so it extends the path as-is.
@@ -263,6 +272,7 @@ class ChatRepository:
             "sender": record.sender,
             "message_parts": record.message_parts,
             "attached_file_contents": record.attached_file_contents,
+            "attached_images": record.attached_images,
             "web_search_context": record.web_search_context,
         }
         active_path = [*path, appended]
@@ -381,6 +391,14 @@ class ChatRepository:
             update(ChatRoom).where(ChatRoom.id == room_id, ChatRoom.title.in_(titles)).values(title=new_title)
         )
         return bool(result.rowcount)
+
+    async def list_referenced_chat_image_ids(self) -> set[str]:
+        """Return every chat image id still referenced by a stored message, on any branch."""
+
+        values = await self.session.scalars(
+            select(ChatHistory.attached_images).where(ChatHistory.attached_images.is_not(None))
+        )
+        return {image.id for value in values for image in decode_chat_images_from_storage(value)}
 
     async def get_active_path(self, chat_room_id: str, *, include_attachment_contents: bool = False) -> list[dict[str, Any]]:
         columns = _TREE_DISPLAY_WITH_ATTACHMENTS_COLUMNS if include_attachment_contents else _TREE_DISPLAY_COLUMNS
@@ -762,6 +780,9 @@ class ChatRepository:
             attached = decode_attached_files_from_storage(node.get("attached_file_contents"))
             if attached:
                 message["attached_file_contents"] = [{"name": item.name, "content": item.content} for item in attached]
+            images = encode_chat_images_for_storage(decode_chat_images_from_storage(node.get("attached_images")))
+            if images:
+                message["attached_images"] = images
             messages.append(message)
         return messages
 
@@ -855,6 +876,9 @@ class ChatRepository:
         parts = decode_message_parts(node.get("message_parts"))
         if parts:
             entry["message_parts"] = parts
+        images = encode_chat_images_for_storage(decode_chat_images_from_storage(node.get("attached_images")))
+        if images:
+            entry["attached_images"] = images
         if include_attachment_contents:
             attached = decode_attached_files_from_storage(node.get("attached_file_contents"))
             if attached:

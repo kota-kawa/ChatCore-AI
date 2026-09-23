@@ -79,6 +79,7 @@ def cleanup_ephemeral_chats():
 # Import route modules so handlers are registered on APIRouter.
 from . import (  # noqa: F401, E402
     avatar_media,
+    chat_image_media,
     messages,
     preferences,
     profile,

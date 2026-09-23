@@ -266,6 +266,7 @@ class ChatPostRoomTreeReadTestCase(unittest.TestCase):
                 "sender",
                 "message_parts",
                 "attached_file_contents",
+                "attached_images",
                 "web_search_context",
             ],
         )

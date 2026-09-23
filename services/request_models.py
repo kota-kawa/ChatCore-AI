@@ -10,6 +10,7 @@ from services.attached_files import (
     MAX_ATTACHED_FILE_CONTENT_LENGTH,
     MAX_ATTACHED_FILES,
 )
+from services.chat_images import MAX_ATTACHED_IMAGE_BASE64_LENGTH
 from services.prompt_categories import normalize_category
 from services.prompt_resources import (
     MAX_SKILL_RESOURCES,
@@ -247,7 +248,12 @@ class AttachedFileItem(RequestPayloadModel):
     name: str = Field(min_length=1, max_length=256)
     content: str = Field(default="", max_length=MAX_ATTACHED_FILE_CONTENT_LENGTH)
     media_type: str = Field(default="", max_length=128)
-    data_base64: str = Field(default="", max_length=MAX_ATTACHED_FILE_BASE64_LENGTH)
+    # 文書（1MB）と画像（3MB）で上限が違うため、ここは大きい方で受け、種類ごとの上限は変換時に確かめる。
+    # Documents (1MB) and images (3MB) differ, so accept the larger here and check per kind when decoding.
+    data_base64: str = Field(
+        default="",
+        max_length=max(MAX_ATTACHED_FILE_BASE64_LENGTH, MAX_ATTACHED_IMAGE_BASE64_LENGTH),
+    )
 
 
 # 日本語: プロジェクト（ワークスペース）作成のリクエストペイロード。
