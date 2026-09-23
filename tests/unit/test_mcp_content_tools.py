@@ -378,6 +378,31 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(forwarded_file.file_id, "file-123")
         self.assertEqual(forwarded_file.file_name, "reference.png")
 
+    def test_publish_ignores_a_filename_sent_alongside_a_chatgpt_file(self):
+        # ファイル名は保存に使わないので、image_file と一緒に来ても競合として弾かない。
+        # The filename is not used for saving, so sending it with image_file is not a conflict.
+        payload = SharedPromptCreateRequest(title="Image prompt", content="Draw it.", media_type="image")
+        image_file = mcp_server.OpenAIFileInput(
+            download_url="https://files.oaiusercontent.com/file-123/download",
+            file_id="file-123",
+        )
+        attachment = {"url": "/prompt_share/api/media/a.webp", "thumbnail_url": "/prompt_share/api/media/a_card.webp"}
+        with (
+            patch("services.mcp_server._consume_publish_limit", new=AsyncMock()),
+            patch("services.mcp_server.save_mcp_prompt_file", return_value=attachment) as save_file,
+            patch("services.mcp_server.create_shared_prompt", new=AsyncMock(return_value=11)),
+        ):
+            result = asyncio.run(
+                mcp_server._publish(7, payload, image_file=image_file, image_filename="猫.png")
+            )
+            with self.assertRaisesRegex(ValueError, "同時に指定"):
+                asyncio.run(
+                    mcp_server._publish(7, payload, image_file=image_file, image_mime_type="image/png")
+                )
+
+        self.assertTrue(result.image_attached)
+        save_file.assert_called_once_with(image_file, 7)
+
     def test_publish_removes_saved_image_when_database_write_fails(self):
         payload = SharedPromptCreateRequest(
             title="Image prompt",

@@ -193,6 +193,57 @@ class McpPromptPublishingTestCase(unittest.TestCase):
         self.assertTrue(attachment["url"].startswith("/prompt_share/api/media/"))
         self.assertEqual(get.call_args.args[0], str(image_file.download_url))
 
+    def test_saves_a_chatgpt_file_whatever_name_it_arrives_with(self):
+        # 日本語だけの名前は secure_filename で拡張子しか残らず、以前はここで弾いていた。
+        # A non-ASCII-only name reduces to just its extension under secure_filename and used to fail.
+        source = self._image_bytes()
+        for file_name in ("猫.png", "file-abc123", "reference.jpg", ""):
+            with self.subTest(file_name=file_name):
+                response = self._DownloadResponse(source, headers={"Content-Type": "image/png"})
+                image_file = OpenAIFileInput(
+                    download_url="https://files.oaiusercontent.com/file-123/download?token=signed",
+                    file_id="file-123",
+                    file_name=file_name,
+                )
+                with (
+                    tempfile.TemporaryDirectory() as temp_dir,
+                    patch.dict(os.environ, {PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV: temp_dir}),
+                    patch("services.mcp_prompt_publishing.requests.get", return_value=response),
+                ):
+                    attachment = save_mcp_prompt_file(image_file, 42)
+
+                self.assertEqual(attachment["width"], "24")
+                self.assertEqual(attachment["height"], "16")
+
+    def test_logs_a_rejected_chatgpt_file_without_its_signed_query(self):
+        response = self._DownloadResponse(b"", status_code=403)
+        image_file = OpenAIFileInput(
+            download_url="https://files.oaiusercontent.com/file-123/download?token=signed-secret",
+            file_id="file-123",
+            mime_type="image/png",
+        )
+
+        with (
+            patch("services.mcp_prompt_publishing.requests.get", return_value=response),
+            self.assertLogs("services.mcp_prompt_publishing", level="WARNING") as logs,
+        ):
+            with self.assertRaisesRegex(ValueError, "取得できません"):
+                save_mcp_prompt_file(image_file, 42)
+
+        output = "\n".join(logs.output)
+        self.assertIn("HTTP 403", output)
+        self.assertIn("host=files.oaiusercontent.com", output)
+        self.assertIn("declared_mime=image/png", output)
+        self.assertNotIn("signed-secret", output)
+
+    def test_logs_why_a_base64_image_was_rejected(self):
+        with self.assertLogs("services.mcp_prompt_publishing", level="WARNING") as logs:
+            with self.assertRaisesRegex(ValueError, "Base64"):
+                save_mcp_prompt_image("not-base64", 42)
+
+        self.assertIn("base64_characters=10", logs.output[0])
+        self.assertIn("Base64", logs.output[0])
+
     def test_rejects_a_non_openai_file_download_url_without_fetching_it(self):
         image_file = OpenAIFileInput(
             download_url="https://example.com/reference.png",
