@@ -52,8 +52,8 @@ def load_usage_limit_settings() -> UsageLimitSettings:
 
     ratio = min(env_float("USAGE_MONTHLY_STOP_RATIO", 0.9, warn_on_invalid=True), 1.0)
     return UsageLimitSettings(
-        user_daily=_usd_env("USAGE_USER_DAILY_LIMIT_USD", 0.15),
-        user_weekly=_usd_env("USAGE_USER_WEEKLY_LIMIT_USD", 0.60),
+        user_daily=_usd_env("USAGE_USER_DAILY_LIMIT_USD", 1.50),
+        user_weekly=_usd_env("USAGE_USER_WEEKLY_LIMIT_USD", 6.00),
         guest_daily=_usd_env("USAGE_GUEST_DAILY_LIMIT_USD", 0.03),
         guest_weekly=_usd_env("USAGE_GUEST_WEEKLY_LIMIT_USD", 0.10),
         monthly_stop=int(_usd_env("USAGE_MONTHLY_BUDGET_USD", 30.0) * ratio),
