@@ -50,6 +50,13 @@ const nextConfig = {
     defaultLocale: "ja",
     localeDetection: false
   },
+  // 投稿したプロンプトの管理は設定画面に一本化したため、旧 URL は設定の該当セクションへ恒久転送する（i18n で /en 配下にも効く）。
+  // Managing posted prompts now lives only in settings; the legacy URL forwards there (i18n also covers /en).
+  async redirects() {
+    return [
+      { source: "/prompt_share/manage_prompts", destination: "/settings?section=prompts", permanent: true }
+    ];
+  },
   async headers() {
     return [
       {

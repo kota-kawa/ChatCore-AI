@@ -162,7 +162,6 @@ export function pathnamesMatch(expected: string | undefined, actual: string | un
 export const NAVIGABLE_APP_ROUTES = [
   "/",
   "/prompt_share",
-  "/prompt_share/manage",
   "/memo",
   "/settings",
   "/login",

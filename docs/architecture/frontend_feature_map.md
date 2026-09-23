@@ -26,7 +26,6 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
 | `/prompt_share` | `pages/prompt_share/index.tsx` | `components/prompt_share/`、プロンプト共有 hook 群 | `/prompt_share/api/*`、`/search/prompts`、`/api/*` |
 | `/prompt_share/category/[category]` | `pages/prompt_share/category/[category].tsx` | SSRカテゴリガイド、カテゴリ固有SEOコピー、公開プロンプトへのクロール可能なリンク | `/prompt_share/api/prompts?category={category}` |
-| `/prompt_share/manage_prompts` | `pages/prompt_share/manage_prompts.tsx` | 設定用 prompt component、`resilientFetch` | `/prompt_manage/api/*` |
 | `/shared/[token]` | `pages/shared/[token].tsx` | `components/shared_chat/` | 共有チャット取得・fork API |
 | `/shared/memo/[token]` | `pages/shared/memo/[token].tsx` | 共有メモ表示 | `/memo/api/shared` |
 | `/shared/prompt/[id]/[[...slug]]` | `pages/shared/prompt/[id]/[[...slug]].tsx` | 共有プロンプト詳細 | `/prompt_share/api/prompts/{id}` |
