@@ -9,6 +9,7 @@ import {
   type MutableRefObject,
   type RefObject
 } from "react";
+import Image from "next/image";
 
 import {
   ALL_ATTRIBUTE_FIELDS,
@@ -776,7 +777,9 @@ export function PromptShareComposerModal({
                     }
                   }}
                 >
-                  <i className="bi bi-stars" aria-hidden="true"></i>
+                  <span className="composer-ai-assist__mascot" aria-hidden="true">
+                    <Image src="/static/ChacoPrompt.webp" alt="" width={32} height={34} unoptimized />
+                  </span>
                   <span>{t("promptShare.aiAssistToggle")}</span>
                 </summary>
                 <div id="sharedPromptAssistRoot" ref={promptAssistRootRef}></div>

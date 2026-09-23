@@ -1421,15 +1421,33 @@
 
 .prompt-share-modal .composer-ai-assist > summary {
   display: flex;
-  min-height: 46px;
+  min-height: var(--tap-target-min);
   align-items: center;
   gap: 0.55rem;
-  padding: 0.7rem 0.9rem;
+  padding: 0.45rem 0.75rem;
   color: var(--modal-accent);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
+}
+
+.prompt-share-modal .composer-ai-assist__mascot {
+  display: inline-flex;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--modal-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--modal-surface);
+}
+
+.prompt-share-modal .composer-ai-assist__mascot img {
+  display: block;
+  width: 32px;
+  height: auto;
 }
 
 .prompt-share-modal .composer-ai-assist > summary::-webkit-details-marker {

@@ -11,11 +11,11 @@
   --assist-soft: color-mix(in srgb, var(--assist-hue-2) 8%, #ffffff);
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: 0.6rem;
   margin: 0.35rem 0 0.6rem;
-  padding: 1rem;
+  padding: 0.8rem;
   border: 1px solid var(--assist-border);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--assist-soft);
 }
 
@@ -30,21 +30,26 @@
 /* --- header --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__head {
   display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0.7rem;
 }
 
-:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__icon {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__mascot {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  color: #ffffff;
-  font-size: 0.95rem;
-  background: linear-gradient(135deg, var(--assist-hue-1) 0%, var(--assist-hue-2) 100%);
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--assist-border);
+  border-radius: var(--radius-md);
+  background: var(--assist-surface);
+}
+
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__mascot img {
+  display: block;
+  width: 48px;
+  height: auto;
 }
 
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__head-copy {
@@ -116,6 +121,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: var(--tap-target-min);
   border: none;
   border-radius: 12px;
   padding: 0.55rem 1rem;
@@ -276,6 +282,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: var(--tap-target-min);
   border: none;
   border-radius: 12px;
   padding: 0.55rem 1rem;
@@ -301,6 +308,7 @@
 }
 
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry {
+  min-height: var(--tap-target-min);
   border: 1px solid var(--assist-border);
   border-radius: 12px;
   padding: 0.5rem 0.85rem;
@@ -370,6 +378,10 @@
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[data-variant="error"] {
   color: #fdba74;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[data-variant="success"] {
+  color: var(--assist-ink-strong);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__warnings {
