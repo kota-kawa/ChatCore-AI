@@ -19,16 +19,20 @@ USER_SKILLS_TOKEN_BUDGET = 3_400
 GENERATIVE_UI_SYSTEM_SKILL_ID = 0
 GENERATIVE_UI_SYSTEM_SKILL_KEY = "generative_ui"
 
-# This user-facing behavior used to live in BASE_SYSTEM_PROMPT. It and the final
-# output contract now belong to this Skill; the sandbox validator remains a
-# separate, unchanged runtime rule.
+# 生成UIに関するプロンプトは、この Skill の指示と下の実行契約だけが持つ。基本プロンプトや
+# 他のプロンプトには生成UIの記述を置かない（Skill を切ったときに何も残らないようにするため）。
+# 役割分担: この指示は「いつ 2D / 3D / NONE を選ぶか」の判定規則と例、実行契約は出力の形式・
+# 品質・サンドボックスの制約。サンドボックスの検証はプロンプトとは別の実行時の規則。
+# Every Generative UI prompt line lives in this Skill's instructions or in the execution
+# contract below; the base prompt and other prompts carry none, so turning the Skill off leaves
+# nothing behind. Split: these instructions decide when to choose 2D / 3D / NONE, with examples;
+# the contract owns output format, quality and sandbox limits. The sandbox validator remains a
+# separate runtime rule.
 GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 - Use `UI_MODE = NONE` by default. Select 2D when the latest user request explicitly asks to create a visual, diagram, chart, flow, timeline, generative UI, simulation, or interactive demo. Treat those requests as explicit even when the user writes them in Japanese or another language. Do not substitute a Markdown explanation for that requested result.
 - Select 3D when the request explicitly asks for 3D / ３D, Three.js, a solid shape, spatial model, orbit, rotation, or a 3D graph. A 3D request is a request for a working Three.js Artifact, not for an explanation or a code sample.
 - A request for text only, no UI, no diagram, or ordinary code/JSON means UI_MODE is NONE. Do not turn comparisons, procedures, calculations, classifications, explanations, code examples, or JSON examples into an Artifact unless the user explicitly requested visual or interactive output.
-- When UI_MODE is 2D or 3D, output exactly one complete ```chatcore-artifact fenced block after a short introduction. Its JSON must contain version, title, html, css, and js; html must include an element with id="app". Put no alternative HTML, CSS, JavaScript, or JSON code blocks beside it.
-- Before coding, privately choose the visual relationship and composition that best communicate the subject. Make the first render purpose-built and useful through clear hierarchy, deliberate spacing, responsive layout, readable typography, accessible contrast, and meaningful content. Avoid empty shells, prose cards, barely styled tables, placeholder controls, unrelated decoration, and repeated generic dashboards. Do not output planning notes.
-- Before sending a requested Artifact, check that its JSON has one opening and closing object, all embedded newlines and quotes are JSON-escaped, the closing ``` fence is present, and the initial render is visibly non-empty. Prefer a compact complete result over a detailed result that might be cut off.
+- Never output UI_MODE itself. When UI_MODE is 2D or 3D, follow the generative UI execution contract for the Artifact's format and limits.
 
 ### Few-shot examples
 <examples>
@@ -51,29 +55,23 @@ GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 </examples>
 """.strip()
 
-# This final contract is injected after variable context only while the built-in
+# This final contract is injected after the per-room context only while the built-in
 # Skill is enabled. Keeping it with the Skill definition makes every prompt-side
-# Generative UI instruction part of the same immutable default capability.
+# Generative UI instruction part of the same default capability.
 _GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE = """
 <generative_ui_execution_contract>
-This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
-
-Decision order:
-1. NONE by default, including comparisons, flows, hierarchies, calculations, procedures, and explanations.
-2. NONE when the user asked for "text only", "no UI", or "no diagrams".
-3. 3D when the latest user request explicitly asks for 3D / ３D, Three.js, a solid shape, a spatial model, an orbit, rotation, or a 3D graph.
-4. 2D when the latest user request explicitly asks for generative UI, a visualization, a diagram, a chart, a flow, a timeline, or an interactive demo. Japanese requests such as "生成UI", "可視化", "図解", "グラフ", and "フローチャート" are explicit 2D requests.
+This is the final output contract to apply right before you answer, using the UI_MODE chosen under the Generative UI Skill (NONE / 2D / 3D). Never output UI_MODE itself.
 
 Visual exclusivity:
-- Generated UI and web-search image parts are mutually exclusive within one turn. If UI_MODE is 2D or 3D, output the generated UI only; the application will suppress any web-search images.
+- Generated UI and web-search image parts are mutually exclusive within one turn. If UI_MODE is 2D or 3D, output the generated UI only; the application will suppress any web-search images. When UI_MODE is NONE, do not create an Artifact merely to accompany images.
 - If UI_MODE is NONE and the application shows web-search images, a separate selection pass using the selected conversation model has already decided their inline placement. Do not emit image or image-link markup in the prose.
 - Never substitute links for a requested visual. Replying to "show me photos of X" with gallery, image-search, or photo-library URLs, or with one link per item, is prohibited; describe the appearance in prose as well and let the application attach suitable images.
 
 When UI_MODE is 2D or 3D:
-- Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
+- Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete. When a closing verdict is required, put it in the final prose sentence immediately before the Artifact.
 - The JSON must be one valid object containing version, title, html, css, and js, and the html must contain an element with id="app".
 - Do not output separate HTML, CSS, JavaScript, or JSON code blocks. The fenced Artifact is the requested deliverable.
-- Make the first render complete and purpose-built: clear visual hierarchy, deliberate spacing and typography, responsive layout, accessible contrast, and meaningful content. Reject your own draft and simplify or revise it before output if it is an empty shell, a prose card, a barely styled table, placeholder controls, or decoration unrelated to the user's subject.
+- Before coding, privately choose the visual relationship and composition that best communicate the subject, and do not output planning notes. Make the first render complete and purpose-built: clear visual hierarchy, deliberate spacing and typography, responsive layout, accessible contrast, and meaningful content. Reject your own draft and simplify or revise it before output if it is an empty shell, a prose card, a barely styled table, placeholder controls, decoration unrelated to the user's subject, or a repeated generic dashboard. Prefer a compact complete result over a detailed one that might be cut off.
 - For 3D, always include "libraries":["three"]. Use the available global THREE without imports, OrbitControls, loaders, URL textures, or URL models. Create a renderer sized from `app.clientWidth || 560` with a fixed visible height, append its canvas to `document.getElementById("app")`, and create a scene, camera, light, and visible geometry with core features only.
 - Escape exactly once inside the JSON strings: a newline is a single backslash followed by n, and an inner quote is a single backslash followed by a double quote. A doubled backslash reaches the browser as a literal backslash and breaks every line it touches, so never write one unless the code genuinely contains a backslash.
 - Keep the markup root minimal and build the content from js: an html of one root element plus a js that fills it is the expected shape, and it removes the need to escape markup twice.
@@ -198,9 +196,12 @@ def build_chat_skills_context(
     """Combine enabled personal Skills with the built-in Generative UI Skill."""
     generative_ui_enabled = is_generative_ui_skill_enabled(user)
     enabled_skills = list(user_skills)
-    # Guests keep the existing product-level execution contract, but account
-    # Skills are only rendered and injected for an authenticated user record.
-    if generative_ui_enabled and isinstance(user, dict):
+    # 生成UIの Skill は、有効ならゲストにも同じ指示で入れる。ゲストだけ実行契約のみになると、
+    # 判定規則を持たないまま生成UIを出すことになり、ログイン利用者と挙動が分かれる。
+    # The Generative UI Skill is injected whenever it is enabled, guests included. Giving guests
+    # the execution contract alone would let them produce UI without the decision rules and
+    # make their behavior diverge from a signed-in user's.
+    if generative_ui_enabled:
         enabled_skills.insert(
             0,
             build_generative_ui_system_skill(
@@ -236,7 +237,7 @@ def build_enabled_user_skills_prompt(skills: list[dict[str, Any]]) -> str | None
         [
             "<enabled_user_skills>",
             (
-                "The account owner enabled the following reusable instructions. Apply them to the "
+                "The following reusable instructions are enabled for this conversation. Apply them to the "
                 "response when relevant. Product safety rules, the user's current explicit request, "
                 "and more specific project or task instructions take priority."
             ),

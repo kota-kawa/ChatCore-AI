@@ -208,21 +208,27 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             1,
         )
 
-    # 日本語: 生成UIの回答方針がデフォルトSkillへ分離され、共通の画像制約だけがベースに残ることを検証します。
-    # English: Verify Generative UI behavior lives in the default Skill while shared visual constraints stay in the base.
-    def test_default_skill_contains_generative_ui_stability_rules(self):
+    # 日本語: 生成UIの記述が Skill と実行契約だけにあり、基本プロンプトには一切残らないことを検証します。
+    # Skill を切ったときに生成UIの指示が何も残らないようにするため。
+    # English: Verify every Generative UI line lives in the Skill or the execution contract and none
+    # stays in the base prompt, so turning the Skill off leaves no Generative UI instruction behind.
+    def test_generative_ui_prompts_live_only_in_the_skill(self):
         self.assertIn("UI_MODE = NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("Do not turn comparisons", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("text only", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("single turn may show either a generated UI or web-search images", BASE_SYSTEM_PROMPT)
+        self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_EXECUTION_CONTRACT)
+        self.assertIn("mutually exclusive", GENERATIVE_UI_EXECUTION_CONTRACT)
+        for term in ("UI_MODE", "Artifact", "chatcore-artifact", "generated UI", "generative UI"):
+            with self.subTest(term=term):
+                self.assertNotIn(term, BASE_SYSTEM_PROMPT)
+        # 画像の置き方など、生成UIに依存しない画像の規則は基本プロンプトに残す。
+        # Image rules that do not depend on Generative UI stay in the base prompt.
         self.assertIn(
             "Images must never be a trailing footer added only after all prose",
             BASE_SYSTEM_PROMPT,
         )
-        self.assertEqual(GENERATIVE_UI_SKILL_INSTRUCTIONS.count("```chatcore-artifact"), 1)
 
     # 日本語: 画像を求められたときにリンクの羅列で代替させないルールが入っていることを検証します。
     # English: Verify the prompt forbids answering a "show me" request with a list of links.
@@ -360,11 +366,14 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         # The current time sits right before the latest message, not in the cached head.
         self.assertNotIn("<runtime_context>", conversation_messages[0]["content"])
         self.assertIn("<runtime_context>", conversation_messages[-2]["content"])
-        self.assertIn("<task_contract>", conversation_messages[1]["content"])
-        self.assertIn("<response_rules>", conversation_messages[1]["content"])
-        self.assertIn("<output_format>", conversation_messages[1]["content"])
-        self.assertIn("actual source material to process", conversation_messages[1]["content"])
-        self.assertIn("do not ask the user to provide that same input again", conversation_messages[1]["content"])
+        # ゲストでも生成UIの Skill が有効なら、ログイン利用者と同じ Skill の指示が入る。
+        # A guest with the Generative UI Skill enabled gets the same Skill instructions.
+        self.assertIn(GENERATIVE_UI_SKILL_INSTRUCTIONS, conversation_messages[1]["content"])
+        self.assertIn("<task_contract>", conversation_messages[2]["content"])
+        self.assertIn("<response_rules>", conversation_messages[2]["content"])
+        self.assertIn("<output_format>", conversation_messages[2]["content"])
+        self.assertIn("actual source material to process", conversation_messages[2]["content"])
+        self.assertIn("do not ask the user to provide that same input again", conversation_messages[2]["content"])
         self.assertEqual(
             conversation_messages[-1]["content"],
             "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
@@ -515,22 +524,23 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         mock_log.assert_called_once()
 
         conversation_messages = mock_llm.call_args.args[0]
-        self.assertEqual(len(conversation_messages), 4)
+        self.assertEqual(len(conversation_messages), 5)
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertEqual(
             conversation_messages[0]["content"].strip(),
             _build_base_system_prompt().strip(),
         )
+        self.assertIn(GENERATIVE_UI_SKILL_INSTRUCTIONS, conversation_messages[1]["content"])
         self.assertEqual(
-            conversation_messages[1]["content"],
+            conversation_messages[2]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
         )
         self.assertEqual(
-            conversation_messages[2]["content"],
+            conversation_messages[3]["content"],
             build_runtime_context_message(fixed_time)["content"],
         )
         self.assertEqual(
-            conversation_messages[3]["content"],
+            conversation_messages[4]["content"],
             "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
         )
 

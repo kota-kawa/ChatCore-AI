@@ -159,7 +159,9 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("This is an LLM placement plan", system_prompt)
         self.assertIn("after_subject", system_prompt)
         self.assertIn("do not leave the application to infer an anchor", system_prompt)
-        self.assertIn("mutually exclusive", system_prompt)
+        # 生成UIとの排他はコード側で保証するため、画像選択のプロンプトには生成UIの記述を置かない。
+        # Exclusivity with Generative UI is enforced in code, so the selector prompt never mentions it.
+        self.assertNotIn("generated UI", system_prompt)
         self.assertIn("places and travel destinations", system_prompt)
         self.assertIn("programming, legal explanations", system_prompt)
         self.assertIn("Relevance is the highest priority", system_prompt)
