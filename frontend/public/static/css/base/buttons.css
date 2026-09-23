@@ -105,8 +105,9 @@
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* プライマリボタン */
-:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button {
+/* プライマリボタン（設定画面は user_settings.css の自前のボタン体系を使うので対象外） */
+/* Primary button (settings is excluded: it uses its own button system in user_settings.css) */
+:where(body.chat-page, .chat-page-shell) .primary-button {
   background: var(--primary-color);
   color: white;
   padding: 0.65rem 1rem;
@@ -122,14 +123,14 @@
     transform var(--transition-fast, 0.15s ease);
 }
 
-:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:hover {
+:where(body.chat-page, .chat-page-shell) .primary-button:hover {
   background: var(--primary-hover, #15a86b);
   transform: none;
   box-shadow: none;
   filter: none;
 }
 
-:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:active {
+:where(body.chat-page, .chat-page-shell) .primary-button:active {
   transform: scale(0.97);
 }
 

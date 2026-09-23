@@ -63,6 +63,7 @@
   --surface-sidebar: #f7f8f7;
   --border-default: rgba(0, 0, 0, 0.08);
   --border-light: rgba(0, 0, 0, 0.05);
+  --border-card-hover: transparent;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -73,6 +74,7 @@
   --shadow-focus: 0 0 0 3px rgba(25, 195, 125, 0.2);
   --shadow-focus-strong: 0 0 0 4px rgba(25, 195, 125, 0.18);
   --shadow-danger-focus: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  --shadow-card-hover: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
   --radius-xs: 4px;
   --radius-s: 6px;
   --radius-sm: 8px;
@@ -162,7 +164,7 @@
 
   --settings-primary-color-light: #e8f9f3;
   --settings-sidebar-bg: #ffffff;
-  --settings-content-bg: #f4f7f6;
+  --settings-content-bg: #ffffff;
   --settings-card-bg: #ffffff;
   --settings-text-muted: #6c757d;
   --settings-border-color: #dee2e6;
@@ -179,9 +181,9 @@
   --settings-danger: var(--danger-color);
   --settings-danger-hover: var(--danger-hover);
   --settings-danger-soft: rgba(220, 38, 38, 0.08);
-  --settings-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --settings-radius-surface: 14px;
-  --settings-radius-card: 10px;
+  --settings-shadow: none;
+  --settings-radius-surface: 8px;
+  --settings-radius-card: 8px;
   --settings-radius-control: 8px;
   /* 保存成功時の発光演出 / Save-success glow effect */
   --settings-save-glow-soft: rgba(15, 122, 81, 0.1);
@@ -221,6 +223,8 @@
   --surface-sidebar: #111827;
   --border-default: rgba(148, 163, 184, 0.28);
   --border-light: rgba(148, 163, 184, 0.22);
+  --border-card-hover: rgba(148, 163, 184, 0.42);
+  --shadow-card-hover: none;
   --modal-overlay: rgba(2, 6, 23, 0.7);
   --modal-surface: #111827;
   --modal-surface-muted: #1b2333;
@@ -271,7 +275,7 @@
   --settings-danger: #f87171;
   --settings-danger-hover: #ef4444;
   --settings-danger-soft: rgba(248, 113, 113, 0.14);
-  --settings-shadow: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --settings-shadow: none;
   --settings-save-glow-soft: rgba(25, 195, 125, 0.14);
   --settings-save-glow-strong: rgba(25, 195, 125, 0.3);
   --settings-save-sheen: rgba(255, 255, 255, 0.14);
