@@ -1,4 +1,7 @@
-/* Prompt Share 全体のボタン質感をトップページの＋ボタン系に統一 */
+/* Prompt Share のボタン質感。メモ画面に合わせ、影・光沢・グラデーションを持たない単色の面にする。
+   塗りは --ps-button-base、ホバー時の塗りは --ps-button-hover を要素ごとに差し替える。
+   Prompt Share button surface: flat fills with no shadow, sheen or gradient, matching the memo page.
+   Each element swaps --ps-button-base for its fill and --ps-button-hover for its hover fill. */
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
   .hero-action,
@@ -10,55 +13,26 @@
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
 ) {
-  --ps-button-base: rgba(255, 255, 255, 0.98);
-  --ps-button-accent: rgba(241, 245, 249, 0.98);
-  --ps-button-shadow-color: rgba(15, 23, 42, 0.14);
-  background:
-    var(--cc-button-sheen),
-    linear-gradient(135deg, var(--ps-button-base) 0%, var(--ps-button-accent) 100%);
-  box-shadow:
-    0 14px 24px var(--ps-button-shadow-color),
-    var(--cc-button-edge-highlight);
+  --ps-button-base: var(--ps-surface);
+  --ps-button-hover: var(--ps-surface-muted);
+  background: var(--ps-button-base);
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease,
     background 0.2s ease,
     color 0.2s ease,
     opacity 0.2s ease,
     border-color 0.2s ease;
 }
 
-.prompt-share-page .submit-btn {
-  --ps-button-base: var(--ps-primary);
-  --ps-button-accent: var(--ps-primary-strong);
-  --ps-button-shadow-color: rgba(24, 90, 188, 0.28);
-  color: #ffffff;
-}
-
-/* 投稿ボタンは他のプライマリーボタンと同じ青にそろえ、影は細いツールバーに合う軽さにする */
-/* The post button uses the same primary blue as other primary buttons, with a lighter shadow for the toolbar */
+.prompt-share-page .submit-btn,
 .prompt-share-page .hero-action--primary {
   --ps-button-base: var(--ps-primary);
-  --ps-button-accent: var(--ps-primary-strong);
-  --ps-button-shadow-color: rgba(24, 90, 188, 0.26);
+  --ps-button-hover: var(--ps-primary-strong);
+  color: var(--text-light);
+}
+
+.prompt-share-page .hero-action--primary {
   border-color: transparent;
-  color: #ffffff;
-  box-shadow:
-    0 6px 14px var(--ps-button-shadow-color),
-    var(--cc-button-edge-highlight);
-}
-
-.prompt-share-page .hero-action--primary:hover:not(:disabled) {
-  box-shadow:
-    0 10px 20px var(--ps-button-shadow-color),
-    var(--cc-button-edge-highlight);
-}
-
-.prompt-share-page .hero-action--secondary {
-  --ps-button-base: rgba(255, 255, 255, 0.32);
-  --ps-button-accent: rgba(255, 255, 255, 0.16);
-  --ps-button-shadow-color: rgba(15, 23, 42, 0.24);
 }
 
 .prompt-share-page .category-card.active,
@@ -67,11 +41,13 @@
 
 .prompt-share-page .meatball-menu[aria-expanded="true"] {
   --ps-button-base: rgba(234, 243, 255, 0.98);
-  --ps-button-accent: #ffffff;
-  --ps-button-shadow-color: rgba(56, 111, 172, 0.18);
+  --ps-button-hover: var(--ps-button-base);
 }
 
-
+/* 共通のホバーは詳細度 (0,2,0) に抑え、基本の塗り (0,1,0) には勝ち、要素ごとのホバー（…メニュー、カードの操作ボタン、
+   モーダルの画像クリアなど (0,3,0) 以上）には譲る。
+   The shared hover stays at (0,2,0): it beats the base fill (0,1,0) but yields to per-element hover rules
+   (the ... menu, card actions, the modal's image clear button and so on, all (0,3,0) or higher). */
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
   .hero-action,
@@ -82,12 +58,8 @@
   .prompt-image-clear-btn,
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
-):hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: saturate(1.06);
-  box-shadow:
-    0 18px 30px color-mix(in srgb, var(--ps-button-shadow-color) 92%, transparent),
-    var(--cc-button-edge-highlight);
+):where(:not(:disabled)):hover {
+  background: var(--ps-button-hover);
 }
 
 .prompt-share-page :where(
