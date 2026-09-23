@@ -16,6 +16,8 @@ type ChatAttachmentDropzoneOptions = {
   attachedFiles: AttachedFile[];
   setAttachedFiles: Dispatch<SetStateAction<AttachedFile[]>>;
   isAttachmentDisabled: boolean;
+  /** 画像を読めるモデルを選んでいるか / Whether the selected model reads images */
+  allowImages: boolean;
   focusTargetRef: FocusTargetRef;
   notifyAttachmentError: (message: string) => void;
 };
@@ -28,6 +30,7 @@ export function useChatAttachmentDropzone({
   attachedFiles,
   setAttachedFiles,
   isAttachmentDisabled,
+  allowImages,
   focusTargetRef,
   notifyAttachmentError,
 }: ChatAttachmentDropzoneOptions) {
@@ -55,13 +58,13 @@ export function useChatAttachmentDropzone({
         return;
       }
 
-      void readSelectedChatAttachments(files, attachedFiles, notifyAttachmentError).then((selectedFiles) => {
+      void readSelectedChatAttachments(files, attachedFiles, notifyAttachmentError, { allowImages }).then((selectedFiles) => {
         if (selectedFiles.length === 0) return;
         setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
         focusTargetRef.current?.focus();
       });
     },
-    [attachedFiles, focusTargetRef, isAttachmentDisabled, locale, notifyAttachmentError, setAttachedFiles, t],
+    [allowImages, attachedFiles, focusTargetRef, isAttachmentDisabled, locale, notifyAttachmentError, setAttachedFiles, t],
   );
 
   const handleAttachmentDragEnter = useCallback(

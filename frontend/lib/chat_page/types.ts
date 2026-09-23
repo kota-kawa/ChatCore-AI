@@ -122,6 +122,24 @@ export type AttachedFile = {
   content?: string;
   mediaType?: string;
   dataBase64?: string;
+  /** 画像添付の縮小済みプレビュー（data URL） / Downscaled preview of an image attachment (data URL) */
+  previewUrl?: string;
+};
+
+/** 吹き出しに出す添付画像 / An attached image drawn in a message bubble */
+export type ChatAttachedImage = {
+  name: string;
+  src: string;
+  width?: number;
+  height?: number;
+};
+
+/** 履歴 API が返す添付画像の参照 / Attached image reference returned by the history API */
+export type ChatHistoryAttachedImage = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
 };
 
 export type UiChatMessage = {
@@ -139,6 +157,7 @@ export type UiChatMessage = {
   /** True when the server saved this answer as a partial one (SSE `incomplete`). */
   partial?: boolean;
   attachedFileNames?: string[];
+  attachedImages?: ChatAttachedImage[];
   /** Server-side chat_history id; present for persisted (DB-backed) messages. */
   serverId?: number;
   /** 1-based position of this version among its sibling branches. */
@@ -156,6 +175,7 @@ export type ChatHistoryMessagePayload = {
   sender?: string;
   timestamp?: string;
   attached_file_names?: string[];
+  attached_images?: ChatHistoryAttachedImage[];
   version_index?: number;
   version_count?: number;
   sibling_ids?: number[];

@@ -311,7 +311,11 @@ function ChatMessageRow({
           >
             {/* 【タスク】名と【状況・作業環境】は折り畳みの外に常時表示する。 */}
             {/* The task name and setup input always stay visible (outside the disclosure). */}
-            <UserMessageHtml text={message.text} attachedFileNames={message.attachedFileNames} />
+            <UserMessageHtml
+              text={message.text}
+              attachedFileNames={message.attachedFileNames}
+              attachedImages={message.attachedImages}
+            />
             {taskLaunch ? (
               <TaskPromptDisclosure
                 task={taskLookup.get(

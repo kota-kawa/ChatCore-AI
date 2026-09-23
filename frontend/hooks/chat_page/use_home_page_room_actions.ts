@@ -9,6 +9,7 @@ import {
 import type { KeyedMutator } from "swr";
 
 import { CHAT_ROOMS_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
+import { hasImageAttachments, IMAGE_INPUT_MODEL_ONLY_MESSAGE, modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import {
   removeChatRoomsById,
   updateChatRoomTitle,
@@ -178,6 +179,19 @@ export function useHomePageRoomActions({
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
+  // 画像を付けたまま画像を読めないモデルへ切り替えた場合は、送る前に止めて案内する。
+  // Stop and explain before sending when images stay attached after switching to a model that cannot read them.
+  const blocksImagesForSelectedModel = useCallback((): boolean => {
+    if (modelAcceptsImageInput(selectedModel) || !hasImageAttachments(attachedFiles)) return false;
+    showToast(
+      localize(
+        IMAGE_INPUT_MODEL_ONLY_MESSAGE,
+        "Only GPT-6 Luna can read images. Switch the model to GPT-6 Luna or remove the images.",
+      ),
+      { variant: "error" },
+    );
+    return true;
+  }, [attachedFiles, localize, selectedModel]);
   const accessChatInProgressRef = useRef(false);
   // 削除処理は確認モーダルと通信を挟むため、コールバック生成時ではなく実行時の
   // 表示状態を見る必要がある。
@@ -588,6 +602,7 @@ export function useHomePageRoomActions({
     async (task: NormalizedTask) => {
       if (isTaskOrderEditing) return;
       if (taskLaunchInProgressRef.current) return;
+      if (blocksImagesForSelectedModel()) return;
 
       taskLaunchInProgressRef.current = true;
       setLaunchingTaskName(task.name);
@@ -673,6 +688,7 @@ export function useHomePageRoomActions({
     },
     [
       attachedFiles,
+      blocksImagesForSelectedModel,
       closeOverlaySidebar,
       createNewChatRoom,
       generateResponse,
@@ -700,6 +716,7 @@ export function useHomePageRoomActions({
     const firstMessage = setupInfo.trim();
     if (!firstMessage) return;
     if (firstMessage.length > MAX_SETUP_INFO_LENGTH) return;
+    if (blocksImagesForSelectedModel()) return;
 
     taskLaunchInProgressRef.current = true;
 
@@ -753,6 +770,7 @@ export function useHomePageRoomActions({
     }
   }, [
     attachedFiles,
+    blocksImagesForSelectedModel,
     closeOverlaySidebar,
     createNewChatRoom,
     generateResponse,
@@ -783,6 +801,7 @@ export function useHomePageRoomActions({
     if (!message) return;
 
     if (message.length > MAX_CHAT_MESSAGE_LENGTH) return;
+    if (blocksImagesForSelectedModel()) return;
 
     const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
     if (overrideMessage === undefined) {
@@ -792,7 +811,16 @@ export function useHomePageRoomActions({
     void generateResponse(message, selectedModel, roomId, filesToSend, undefined, {
       unsentInputText: message,
     });
-  }, [attachedFiles, chatInput, generateResponse, isGenerating, selectedModel, setAttachedFiles, stopGeneration]);
+  }, [
+    attachedFiles,
+    blocksImagesForSelectedModel,
+    chatInput,
+    generateResponse,
+    isGenerating,
+    selectedModel,
+    setAttachedFiles,
+    stopGeneration,
+  ]);
 
   const handleRegenerateMessage = useCallback(() => {
     if (isGenerating) return;

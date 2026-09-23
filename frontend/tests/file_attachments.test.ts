@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CHAT_ATTACHMENT_ACCEPT,
+  chatAttachmentAccept,
   getAttachmentIconClass,
   isSupportedChatAttachment,
   mergeChatAttachments,
@@ -104,7 +105,7 @@ test("readSelectedChatAttachments rejects text content over the backend's charac
   assert.ok(file.size < 1_048_576);
 
   const errors: string[] = [];
-  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message));
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), { allowImages: false });
 
   assert.deepEqual(selected, []);
   assert.equal(errors.length, 1);
@@ -116,7 +117,7 @@ test("readSelectedChatAttachments accepts text content exactly at the backend's 
   const file = new File([content], "ok.log", { type: "text/plain" });
 
   const errors: string[] = [];
-  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message));
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), { allowImages: false });
 
   assert.equal(errors.length, 0);
   assert.equal(selected.length, 1);
@@ -128,9 +129,62 @@ test("readSelectedChatAttachments rejects file names over the backend's length l
   const file = new File(["short content"], longName, { type: "text/plain" });
 
   const errors: string[] = [];
-  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message));
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), { allowImages: false });
 
   assert.deepEqual(selected, []);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /ファイル名が256文字を超える/);
+});
+
+// 画像は GPT-6 Luna を選んでいるときだけ受け付け、ブラウザで縮小した結果を送る。
+// Images are accepted only while GPT-6 Luna is selected, and the browser-downscaled result is sent.
+const fakeDownscale = async () => ({ dataBase64: "UklGRg==", mediaType: "image/webp", size: 1234 });
+
+test("image formats are offered in the picker only while images are allowed", () => {
+  assert.doesNotMatch(chatAttachmentAccept(false), /\.png/);
+  for (const extension of [".png", ".jpg", ".jpeg", ".webp", ".gif"]) {
+    assert.ok(chatAttachmentAccept(true).split(",").includes(extension), extension);
+  }
+  assert.equal(getAttachmentIconClass("photo.JPG"), "bi-file-earmark-image");
+});
+
+test("readSelectedChatAttachments refuses images for a model that cannot read them", async () => {
+  const file = new File([new Uint8Array(10)], "photo.png", { type: "image/png" });
+  const errors: string[] = [];
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), {
+    allowImages: false,
+    readImage: fakeDownscale,
+  });
+
+  assert.deepEqual(selected, []);
+  assert.match(errors[0], /GPT-6 Luna だけ/);
+});
+
+test("readSelectedChatAttachments downscales images and keeps a preview", async () => {
+  // 1MB を超える写真でも、縮小後の大きさで判定する。 / Photos over 1MB are judged after downscaling.
+  const file = new File([new Uint8Array(4 * 1_048_576)], "photo.jpg", { type: "image/jpeg" });
+  const errors: string[] = [];
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), {
+    allowImages: true,
+    readImage: fakeDownscale,
+  });
+
+  assert.deepEqual(errors, []);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].name, "photo.jpg");
+  assert.equal(selected[0].size, 1234);
+  assert.equal(selected[0].dataBase64, "UklGRg==");
+  assert.equal(selected[0].previewUrl, "data:image/webp;base64,UklGRg==");
+});
+
+test("readSelectedChatAttachments rejects images still too large after downscaling", async () => {
+  const file = new File([new Uint8Array(10)], "noise.png", { type: "image/png" });
+  const errors: string[] = [];
+  const selected = await readSelectedChatAttachments([file], [], (message) => errors.push(message), {
+    allowImages: true,
+    readImage: async () => ({ dataBase64: "", mediaType: "image/webp", size: 3 * 1_048_576 + 1 }),
+  });
+
+  assert.deepEqual(selected, []);
+  assert.match(errors[0], /縮小しても3MBを超える/);
 });
