@@ -75,6 +75,7 @@ from services.request_models import (
     PromptAssistRequest,
     UpdateTasksOrderRequest,
 )
+from services.usage_limits import check_usage_limit, usage_limit_message
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -778,6 +779,15 @@ async def prompt_assist(
             ),
         )
 
+    # 料金ベースの利用上限。回数の上限を消費する前に判定する。
+    # Cost-based usage limits, checked before the request-count quota is consumed.
+    usage_block = await check_usage_limit()
+    if usage_block is not None:
+        return jsonify_rate_limited(
+            usage_limit_message(usage_block, get_request_locale(request)),
+            retry_after=usage_block.retry_after_seconds,
+        )
+
     # LLMの1日あたりの使用上限枠チェック
     # Check and consume LLM daily quota
     can_access_llm, _, daily_limit = await run_blocking(
@@ -900,6 +910,15 @@ async def ai_agent(
                 limit_message,
                 default=DEFAULT_RETRY_AFTER_SECONDS,
             ),
+        )
+
+    # 料金ベースの利用上限。回数の上限を消費する前に判定する。
+    # Cost-based usage limits, checked before the request-count quota is consumed.
+    usage_block = await check_usage_limit()
+    if usage_block is not None:
+        return jsonify_rate_limited(
+            usage_limit_message(usage_block, locale),
+            retry_after=usage_block.retry_after_seconds,
         )
 
     # 1ヶ月あたりのAIエージェントクォータ制限枠チェック（アクター単位）

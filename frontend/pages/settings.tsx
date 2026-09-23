@@ -31,6 +31,7 @@ import {
   LanguageSettingsSection
 } from "../components/settings/settings_sections";
 import { SettingsSidebar } from "../components/settings/settings_sidebar";
+import { UsageSettingsSection } from "../components/settings/usage_settings_section";
 import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
   DEFAULT_AVATAR_URL,
@@ -1323,6 +1324,8 @@ export default function UserSettingsPage() {
               onProfileInputChange={handleProfileInputChange}
               onProfileCancel={handleProfileCancel}
             />
+
+            <UsageSettingsSection isActive={isSectionActive("usage")} />
 
             <AppearanceSettingsSection
               isActive={isSectionActive("appearance")}

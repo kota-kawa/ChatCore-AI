@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 from starlette.responses import JSONResponse
 
@@ -82,6 +82,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             consume_llm_daily_quota=Mock(return_value=(True, 1, 300)),
             cleanup_unanswered_user_messages=Mock(),
             get_seconds_until_daily_reset=Mock(return_value=60),
+            check_usage_limit=AsyncMock(return_value=None),
             is_streaming_model=Mock(return_value=True),
             search_personal_knowledge=search_personal_knowledge,
             search_shared_prompts=search_shared_prompts or Mock(return_value={"status": "no_results"}),

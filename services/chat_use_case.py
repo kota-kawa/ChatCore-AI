@@ -78,6 +78,7 @@ from services.selected_reference_context import (
     augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import build_selected_reference_searchers
+from services.usage_limits import usage_limit_message
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
     WebSearchResult,
@@ -255,6 +256,7 @@ class ChatPostUseCase:
 
         for phase in (
             self._parse_request,
+            self._check_usage_limit,
             self._consume_guest_daily_limit,
             self._resolve_room_target,
             self._store_user_message,
@@ -738,6 +740,22 @@ class ChatPostUseCase:
                 status_code=409,
             )
         return None
+
+    async def _check_usage_limit(self, turn: _ChatPostTurn) -> Response | None:
+        """料金ベースの利用上限のチェック / Check the cost-based usage limits.
+
+        ゲストの回数枠の消費と発話の保存より前に判定するため、料金の上限で断る要求は
+        回数を減らさず、未回答の発話も残しません。
+        Runs before the guest request quota and before the message is stored, so a cost
+        refusal neither uses up a quota nor leaves an unanswered message behind.
+        """
+        block = await self.deps.limits.check_usage_limit()
+        if block is None:
+            return None
+        return self.deps.web.jsonify_rate_limited(
+            usage_limit_message(block, self.locale),
+            retry_after=block.retry_after_seconds,
+        )
 
     async def _consume_llm_daily_quota(self, turn: _ChatPostTurn) -> Response | None:
         """LLM利用クォータ制限のチェック / Check daily LLM usage quotas."""

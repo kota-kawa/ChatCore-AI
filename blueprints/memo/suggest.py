@@ -12,8 +12,10 @@ from services.error_messages import ERROR_LOGIN_REQUIRED
 from services.i18n import get_request_locale
 from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import MemoSuggestRequest
+from services.usage_limits import check_usage_limit, usage_limit_message
 from services.web import (
     jsonify,
+    jsonify_rate_limited,
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
@@ -59,6 +61,16 @@ async def api_suggest_memo(request: Request):
     )
     if validation_error is not None:
         return validation_error
+
+    # タイトル提案も LLM を呼ぶため、料金ベースの利用上限に従う。
+    # Title suggestions call the LLM, so they obey the cost-based usage limits too.
+    usage_block = await check_usage_limit()
+    if usage_block is not None:
+        return jsonify_rate_limited(
+            usage_limit_message(usage_block, get_request_locale(request)),
+            retry_after=usage_block.retry_after_seconds,
+            status="fail",
+        )
 
     try:
         # LLM等を用いて最適なタイトル候補を提案

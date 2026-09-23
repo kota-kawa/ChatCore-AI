@@ -258,6 +258,83 @@ body.settings-page,
   line-height: 1.6;
 }
 
+/* ── 利用状況 / Usage ──────────────────────────────────────────────
+   日・週の上限に対する割合をバーで示す。色はアクセント1色で、失敗色は使わない
+   Share of the daily and weekly limits as bars: one accent colour, never the error colour */
+:where(body.settings-page, .user-settings-page) .usage-settings {
+  display: grid;
+  gap: 1.5rem;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__label {
+  color: var(--settings-text-primary);
+  font-weight: 600;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__value {
+  color: var(--settings-text-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__track {
+  height: 10px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--settings-border-color);
+  border-radius: var(--radius-full);
+  background: var(--settings-surface-muted);
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--settings-accent);
+  transition: width var(--transition-fast);
+}
+
+:where(body.settings-page, .user-settings-page) .usage-meter__reset {
+  margin: 0.45rem 0 0;
+  color: var(--settings-text-muted);
+  font-size: 0.875rem;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-settings__notice {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--settings-border-color);
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-accent-soft);
+  color: var(--settings-text-primary);
+  line-height: 1.6;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-settings__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+:where(body.settings-page, .user-settings-page) .usage-settings__error p {
+  margin: 0;
+  color: var(--settings-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.settings-page, .user-settings-page) .usage-meter__fill {
+    transition: none;
+  }
+}
+
 /* 保存成功時: カードを一度だけ発光させ、光沢を左から右へ走らせる
    On save success: the card glows once and a sheen sweeps across it */
 :where(body.settings-page, .user-settings-page) .settings-card--save-success {

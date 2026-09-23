@@ -4,6 +4,7 @@ import threading
 import time
 import unittest
 from contextlib import ExitStack
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 from starlette.responses import StreamingResponse
@@ -58,6 +59,7 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
 )
 from services.url_fetcher import FetchedUrlDocument
+from services.usage_limits import UsageLimitBlock
 from services.web_search import (
     WEB_SEARCH_ERROR_REQUEST_FAILED,
     WEB_SEARCH_MAX_CONTEXT_CHARS,
@@ -3660,6 +3662,38 @@ class ChatStreamingTestCase(unittest.TestCase):
         # The reference order matches an ordinary send: URL body, attachments, then the request.
         self.assertLess(latest.index("リンク先の本文テキスト"), latest.index("PDF BODY"))
         self.assertLess(latest.index("PDF BODY"), latest.index("この記事を要約して"))
+
+    # 日本語: 料金ベースの上限に達していれば、回数の上限を消費せず LLM も呼ばずに 429 を返すことを検証します。
+    # English: Verify an exhausted cost limit returns 429 without using the request quota or the LLM.
+    def test_regenerate_refuses_when_the_usage_limit_is_reached(self):
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+            },
+            session={"user_id": 42},
+        )
+        block = UsageLimitBlock(reason="daily", resets_at=datetime.now(UTC), retry_after_seconds=120)
+
+        with ExitStack() as stack:
+            for patcher in self._regenerate_patches(user_message="質問です"):
+                stack.enter_context(patcher)
+            stack.enter_context(
+                patch("blueprints.chat.messages.check_usage_limit", new=AsyncMock(return_value=block))
+            )
+            consume_quota = stack.enter_context(
+                patch("blueprints.chat.messages.consume_llm_daily_quota")
+            )
+            get_llm_response = stack.enter_context(patch("blueprints.chat.messages.get_llm_response"))
+            response = asyncio.run(chat_regenerate(request))
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["retry-after"], "120")
+        self.assertIn("本日の利用上限", json.loads(response.body)["error"])
+        consume_quota.assert_not_called()
+        get_llm_response.assert_not_called()
 
     # 日本語: 再生成対象の発話に URL が無ければ、取得処理そのものが走らないことを検証します。
     # English: Verify a regenerated message without a URL never reaches the fetcher.

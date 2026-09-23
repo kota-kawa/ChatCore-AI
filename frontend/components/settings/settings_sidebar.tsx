@@ -17,7 +17,7 @@ export function SettingsSidebar({
 }) {
   const { t } = useTranslation();
   const labels: Record<SettingsSection, string> = {
-    profile: t("settings.profile"), appearance: t("settings.appearance"), language: t("settings.language"),
+    profile: t("settings.profile"), usage: t("settings.usage"), appearance: t("settings.appearance"), language: t("settings.language"),
     prompts: t("settings.prompts"), "liked-prompts": t("settings.likedPrompts"),
     notifications: t("settings.notifications"), security: t("settings.security")
   };

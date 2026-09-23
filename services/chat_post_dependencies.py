@@ -29,6 +29,7 @@ from services.api_errors import ApiServiceError
 from services.auth_limits import AuthLimitService
 from services.chat_generation import ChatGenerationJob, ChatGenerationService
 from services.chat_regeneration_pipeline import (
+    CheckUsageLimit,
     CleanupUnansweredUserMessages,
     ConsumeLlmDailyQuota,
     LoadTaskPromptData,
@@ -332,13 +333,14 @@ class ChatPostPromptDependencies:
 
 @dataclass(frozen=True)
 class ChatPostLimitDependencies:
-    """ゲスト上限とLLM日次クォータ / Guest limits and the daily LLM quota."""
+    """ゲスト上限・LLM日次クォータ・料金ベースの利用上限 / Guest limits, the daily LLM quota and the cost-based limits."""
 
     validate_model_name: Callable[[str], None]
     consume_guest_chat_daily_limit: ConsumeGuestChatDailyLimit
     get_seconds_until_tomorrow: Callable[[], int]
     consume_llm_daily_quota: ConsumeLlmDailyQuota
     get_seconds_until_daily_reset: Callable[[], int]
+    check_usage_limit: CheckUsageLimit
 
 
 @dataclass(frozen=True)

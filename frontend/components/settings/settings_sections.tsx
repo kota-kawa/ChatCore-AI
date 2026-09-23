@@ -35,7 +35,7 @@ import type { Locale } from "../../lib/i18n/config";
 // ヒーロー帯やアイコンバッジは使わず、カードの外に見出しを出して現在位置を読みやすくする。
 // Shared section header: h2 + one-line lead on the left, a short aside (e.g. a count) on the right.
 // No hero band or icon badge; the heading sits above the card so the current section reads at a glance.
-function SettingsSectionHeader({
+export function SettingsSectionHeader({
   title,
   lead,
   aside
