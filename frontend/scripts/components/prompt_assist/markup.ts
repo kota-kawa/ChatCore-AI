@@ -7,7 +7,9 @@ export function createPromptAssistMarkup(target: PromptAssistTarget) {
   return `
     <section class="prompt-assist" data-assist-target="${target}" aria-label="${localized("AIによるプロンプト作成", "Create a prompt with AI")}">
       <div class="prompt-assist__head">
-        <span class="prompt-assist__icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
+        <span class="prompt-assist__mascot" aria-hidden="true">
+          <img src="/static/ChacoPrompt.webp" alt="" width="48" height="51" />
+        </span>
         <div class="prompt-assist__head-copy">
           <strong class="prompt-assist__title" data-assist-title>${meta.title}</strong>
           <small class="prompt-assist__lead" data-assist-lead>${meta.lead}</small>
