@@ -44,6 +44,10 @@
   --ps-button-hover: var(--ps-button-base);
 }
 
+/* 共通のホバーは詳細度 (0,2,0) に抑え、基本の塗り (0,1,0) には勝ち、要素ごとのホバー（…メニュー、カードの操作ボタン、
+   モーダルの画像クリアなど (0,3,0) 以上）には譲る。
+   The shared hover stays at (0,2,0): it beats the base fill (0,1,0) but yields to per-element hover rules
+   (the ... menu, card actions, the modal's image clear button and so on, all (0,3,0) or higher). */
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
   .hero-action,
@@ -54,7 +58,7 @@
   .prompt-image-clear-btn,
   .submit-btn,
   .prompt-actions-dropdown .dropdown-item
-):hover:not(:disabled) {
+):where(:not(:disabled)):hover {
   background: var(--ps-button-hover);
 }
 
