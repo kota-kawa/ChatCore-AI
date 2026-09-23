@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.chat_context import estimate_token_count
-from services.chat_prompt import insert_after_leading_system_messages
+from services.chat_prompt import insert_before_latest_user_message
 
 TURN_STATE_MARKER = "<turn_state>"
 TURN_STATE_CLOSE_MARKER = "</turn_state>"
@@ -401,7 +401,9 @@ class TurnState:
                 .startswith(TURN_STATE_MARKER)
             )
         ]
-        return insert_after_leading_system_messages(
+        # 状態はステップごとに変わるため、キャッシュされる履歴の後ろに置く。
+        # The state changes every step, so it follows the cached history.
+        return insert_before_latest_user_message(
             prepared,
             {"role": "system", "content": self.render(max_tokens=max_tokens)},
         )

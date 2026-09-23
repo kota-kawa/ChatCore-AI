@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 from blueprints.chat.messages import chat
 from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
+    build_runtime_context_message,
 )
 from services.chat_prompt import (
     build_base_system_prompt as _build_base_system_prompt,
@@ -187,7 +188,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # 日本語: 実行時コンテキストが検索機能固有の制約だけを補足し、判断規則を重複させないことを検証します。
     # English: Verify that runtime context adds only capability constraints without duplicating judgment rules.
     def test_runtime_context_keeps_web_search_capability_rules_compact(self):
-        prompt = _build_base_system_prompt(locale="ja")
+        # 判断規則は基本プロンプト、検索能力の制約は実行時文脈にあり、両者で重複させない。
+        # Judgment rules live in the base prompt and capability limits in the runtime context;
+        # the two must not repeat each other.
+        prompt = f"{_build_base_system_prompt(locale='ja')}\n\n{build_runtime_context_message()['content']}"
 
         self.assertIn("real-time web search powered by Brave", prompt)
         # ステップ上限は環境変数で変わるため、プロンプトへ固定の数値を書かない。
@@ -352,7 +356,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
 
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
-        self.assertIn("<runtime_context>", conversation_messages[0]["content"])
+        # 現在時刻はキャッシュされる先頭側ではなく、最新の発話の直前に入る。
+        # The current time sits right before the latest message, not in the cached head.
+        self.assertNotIn("<runtime_context>", conversation_messages[0]["content"])
+        self.assertIn("<runtime_context>", conversation_messages[-2]["content"])
         self.assertIn("<task_contract>", conversation_messages[1]["content"])
         self.assertIn("<response_rules>", conversation_messages[1]["content"])
         self.assertIn("<output_format>", conversation_messages[1]["content"])
@@ -440,8 +447,9 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertFalse(any("<task_contract>" in message["content"] for message in conversation_messages))
-        self.assertIn("新製品リリース案内のメールを作りたい", conversation_messages[-3]["content"])
-        self.assertEqual(conversation_messages[-2]["content"], "了解しました。")
+        self.assertIn("新製品リリース案内のメールを作りたい", conversation_messages[-4]["content"])
+        self.assertEqual(conversation_messages[-3]["content"], "了解しました。")
+        self.assertTrue(conversation_messages[-2]["content"].startswith("<runtime_context>"))
         self.assertEqual(conversation_messages[-1]["content"], "示してあるよね？")
         self.assertNotIn("<task_input>", conversation_messages[-1]["content"])
 
@@ -507,11 +515,11 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         mock_log.assert_called_once()
 
         conversation_messages = mock_llm.call_args.args[0]
-        self.assertEqual(len(conversation_messages), 3)
+        self.assertEqual(len(conversation_messages), 4)
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertEqual(
             conversation_messages[0]["content"].strip(),
-            _build_base_system_prompt(fixed_time).strip(),
+            _build_base_system_prompt().strip(),
         )
         self.assertEqual(
             conversation_messages[1]["content"],
@@ -519,6 +527,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         self.assertEqual(
             conversation_messages[2]["content"],
+            build_runtime_context_message(fixed_time)["content"],
+        )
+        self.assertEqual(
+            conversation_messages[3]["content"],
             "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
         )
 

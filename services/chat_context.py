@@ -4,6 +4,7 @@ import html
 import math
 import re
 
+from services.chat_prompt import build_runtime_context_message, insert_before_latest_user_message
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     USER_SKILLS_TOKEN_BUDGET,
@@ -505,9 +506,10 @@ def build_context_messages(
         mandatory_messages.append(
             {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT}
         )
+    runtime_context_message = build_runtime_context_message()
     mandatory_tokens = sum(
         estimate_token_count(str(message.get("content", "")))
-        for message in mandatory_messages
+        for message in [*mandatory_messages, runtime_context_message]
     )
     # Reserve the recent-history window before optional system context. This
     # keeps prior turns available even when a project or task has long guidance.
@@ -564,10 +566,10 @@ def build_context_messages(
     if memory_message is not None:
         append_optional_system_message(memory_message["content"], MEMORY_TOKEN_BUDGET)
 
-    # タスク・プロフィール・プロジェクト指示などの可変システム文脈を読んだ後に、
+    # タスク・プロフィール・プロジェクト指示などのルームごとのシステム文脈を読んだ後に、
     # 生成UIの完了条件を短く再提示する。OpenAI Responses APIでは developer
     # message、Claude APIでは先頭のsystem promptとして同じ位置関係を保つ。
-    # Re-state the generative UI completion criteria after variable system
+    # Re-state the generative UI completion criteria after the per-room system
     # context. This becomes a developer message for OpenAI Responses and remains
     # a system prompt for the Claude API.
     messages = [mandatory_messages[0], *optional_messages]
@@ -578,7 +580,7 @@ def build_context_messages(
     # Calculate tokens used by system messages to determine the remaining budget for recent history
     reserved_tokens = sum(
         estimate_token_count(str(message.get("content", "")))
-        for message in messages
+        for message in [*messages, runtime_context_message]
     )
     remaining_tokens = min(CONTEXT_TOKEN_BUDGET - reserved_tokens, reserved_history_tokens)
     if remaining_tokens < 0:
@@ -587,4 +589,7 @@ def build_context_messages(
     # 予算内で直近のメッセージを追加する
     # Extend the messages with recent items within the calculated budget
     messages.extend(select_recent_messages(recent_messages, remaining_tokens))
-    return messages
+    # 現在時刻は毎回変わるため、キャッシュされる履歴の後ろ（最新の発話の直前）に置く。
+    # The current time changes on every request, so it follows the cached history and sits
+    # right before the latest message.
+    return insert_before_latest_user_message(messages, runtime_context_message)

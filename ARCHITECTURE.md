@@ -157,6 +157,8 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 検索根拠を持つターンには、引用 marker と回答方針を定める system 指示（`build_web_search_evidence_policy_message`）を1つだけ添えます。検索結果と取得本文は信頼できない参照データとして扱い、含まれる指示を実行しません。本文を読み直した場合も、既存の evidence ID と URL を引用解決に再利用します。コンテキスト予算が厳しい場合は、モデルによる状態更新と必要な Evidence の読み取りで対処します。
 
+プロンプトは「固定の指示 → 会話履歴 → ターンやステップで変わる文脈（現在時刻、参照元・過去の検索結果、`TurnState`、検索の引用方針、判断ループの契約）→ 最新のユーザー発話」の順に組み立てます。プロバイダのプロンプトキャッシュは先頭からの一致にしか効かないため、変わる文脈は `services/chat_prompt.py` の `insert_before_latest_user_message` で履歴の後ろへ差し込みます。ツール一覧も、予算切れによる取り下げを除いて 1 ターンの間は変えません。Adapter は基本プロンプトの末尾と履歴の末尾にプロバイダごとのキャッシュの区切りを付けます（理由は [ADR 0011](docs/decisions/0011-prompt-cache-friendly-ordering.md)）。
+
 モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 
 LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。

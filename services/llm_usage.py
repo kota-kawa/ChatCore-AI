@@ -44,6 +44,7 @@ def record_chat_completion_usage(model_name: str, usage: Any) -> bool:
         model_name,
         input_tokens=_count(usage, "prompt_tokens"),
         cached_input_tokens=_count(_field(usage, "prompt_tokens_details"), "cached_tokens"),
+        cache_write_input_tokens=_count(_field(usage, "prompt_tokens_details"), "cache_write_tokens"),
         output_tokens=_count(usage, "completion_tokens"),
     )
     return True
@@ -58,6 +59,7 @@ def record_responses_usage(model_name: str, usage: Any) -> bool:
         model_name,
         input_tokens=_count(usage, "input_tokens"),
         cached_input_tokens=_count(_field(usage, "input_tokens_details"), "cached_tokens"),
+        cache_write_input_tokens=_count(_field(usage, "input_tokens_details"), "cache_write_tokens"),
         output_tokens=_count(usage, "output_tokens"),
     )
     return True
@@ -67,20 +69,20 @@ def record_claude_usage(model_name: str, usage: Any) -> bool:
     """Record Anthropic usage. Returns False when absent.
 
     Anthropic は入力をキャッシュ読み出し・キャッシュ書き込み・それ以外に分けて返すため、
-    合計して入力とする。キャッシュ書き込みは割増だが本アプリは使っていない。
-    Anthropic splits input into cache reads, cache writes and the rest, so they are summed.
-    Cache writes carry a premium, but this app does not write to the cache.
+    合計して入力とし、書き込み分は割増の単価で数える。
+    Anthropic splits input into cache reads, cache writes and the rest; they are summed, and
+    the written portion is billed at the cache-write premium.
     """
 
     if usage is None:
         return False
     cache_read = _count(usage, "cache_read_input_tokens")
+    cache_write = _count(usage, "cache_creation_input_tokens")
     record_token_usage(
         model_name,
-        input_tokens=_count(usage, "input_tokens")
-        + _count(usage, "cache_creation_input_tokens")
-        + cache_read,
+        input_tokens=_count(usage, "input_tokens") + cache_write + cache_read,
         cached_input_tokens=cache_read,
+        cache_write_input_tokens=cache_write,
         output_tokens=_count(usage, "output_tokens"),
     )
     return True

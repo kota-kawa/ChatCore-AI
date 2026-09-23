@@ -14,6 +14,7 @@
 - [0008: ツールスキーマの検証をプロバイダに委ねない](0008-provider-safe-tool-schemas.md)
 - [0009: 通常チャットを単一 TurnState と単一判断ループで実行する](0009-single-turn-state-chat-loop.md)
 - [0010: Web 出典は抜粋を保存し、本文は必要時に読む](0010-on-demand-web-page-reading.md)
+- [0011: 変わる文脈を会話履歴の後ろに置き、プロンプトキャッシュを効かせる](0011-prompt-cache-friendly-ordering.md)
 
 ## 追加・更新の基準
 

@@ -67,7 +67,7 @@ from .chat_generation_turn import ChatTurnRunState, ModelDecision
 from .chat_input_budget import (
     estimate_messages_chars,
 )
-from .chat_prompt import insert_after_leading_system_messages
+from .chat_prompt import insert_before_latest_user_message
 from .chat_turn_state import (
     TurnStateUpdateFilter,
     build_turn_loop_messages,
@@ -1778,7 +1778,7 @@ class ChatGenerationJob:
             # system instruction; an ordinary chat turn never carries it.
             if not (state.web_search_results or self._prior_web_search_results):
                 return projection
-            return insert_after_leading_system_messages(
+            return insert_before_latest_user_message(
                 projection,
                 build_web_search_evidence_policy_message(),
             )
@@ -2243,15 +2243,34 @@ class ChatGenerationJob:
 
     @staticmethod
     def _available_agent_tools(state: ChatTurnRunState) -> list[dict[str, Any]]:
-        """Withdraw exhausted search/read tools independently."""
+        """Withdraw exhausted search/read tools independently.
+
+        根拠を増やせるツール（検索系）があるターンでは、読み取りツールを根拠が届く前から
+        提示する。ツール定義はプロンプトの先頭に置かれるため、根拠が届いた時点で一覧が
+        変わると、それ以降のステップのプロンプトキャッシュがすべて外れる。根拠が無いうちの
+        呼び出しは not_found を返す。検索系ツールが無いターンは根拠がターン中に増えない
+        ので、一覧は元から変わらず、根拠が無ければ読み取りツールも出さない。
+        When the turn has a tool that can add evidence (a search), read tools are offered
+        before any evidence arrives. Tool definitions sit at the very start of the prompt, so
+        changing the list once evidence appears would evict the prompt cache for every later
+        step; an early call simply returns not_found. Without a search tool the evidence cannot
+        grow during the turn, so the list is stable anyway and read tools stay hidden until
+        there is something to read.
+        """
+        read_tool_names = {GET_EVIDENCE_TOOL_NAME, READ_WEB_PAGE_TOOL_NAME}
+        can_gain_evidence = any(
+            tool["function"]["name"] not in read_tool_names for tool in state.configured_tools
+        )
         available = []
         for tool in state.configured_tools:
             name = tool["function"]["name"]
             if name == GET_EVIDENCE_TOOL_NAME:
-                if state.budget.reads_exhausted or not len(state.evidence_store):
+                if state.budget.reads_exhausted or not (can_gain_evidence or len(state.evidence_store)):
                     continue
             elif name == READ_WEB_PAGE_TOOL_NAME:
-                if state.budget.reads_exhausted or not state.evidence_store.has_web_records():
+                if state.budget.reads_exhausted or not (
+                    can_gain_evidence or state.evidence_store.has_web_records()
+                ):
                     continue
             elif state.budget.tool_calls_exhausted:
                 continue

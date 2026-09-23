@@ -837,6 +837,73 @@ def _prepare_openai_responses_input(
     return prepared_messages
 
 
+# プロンプトキャッシュの区切り。チャット層は「固定の指示 → 会話履歴 → 変わる文脈 → 最新の発話」
+# の順に並べるので、アダプタはその境目に各プロバイダの区切りを付ける。区切りは2か所まで:
+# 全利用者で共通の先頭の基本プロンプトと、会話履歴の末尾（変わる文脈の直前）。
+# Prompt cache breakpoints. The chat layer orders messages as fixed instructions, history,
+# per-turn context, then the latest message, so the adapters mark those seams. At most two:
+# the leading base prompt shared by every user, and the end of the history just before the
+# per-turn context.
+_SYSTEM_ROLES = frozenset({"system", "developer"})
+# 明示の区切りに対応するのは GPT-5.6 以降。Groq へ送るとリクエスト自体が拒否されうる。
+# Explicit breakpoints exist on GPT-5.6 and later only; Groq may reject the field outright.
+OPENAI_CACHE_BREAKPOINT_MODELS = frozenset({GPT_6_LUNA_MODEL})
+_OPENAI_CACHE_BREAKPOINT = {"mode": "explicit"}
+_CLAUDE_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def _prompt_cache_breakpoint_indexes(messages: ConversationMessages) -> list[int]:
+    """Return the indexes that end a prefix which stays identical across requests."""
+    indexes: list[int] = []
+    if messages and messages[0].get("role") in _SYSTEM_ROLES:
+        indexes.append(0)
+    latest_user = next(
+        (index for index in range(len(messages) - 1, -1, -1) if messages[index].get("role") == "user"),
+        None,
+    )
+    if latest_user is None:
+        return indexes
+    boundary = latest_user - 1
+    while boundary >= 0 and messages[boundary].get("role") in _SYSTEM_ROLES:
+        boundary -= 1
+    # 境目まで遡って system しか無ければ履歴の無い初回ターンで、先頭の区切りだけを使う。
+    # Only system messages before the latest message means a first turn without history.
+    if boundary >= 0 and boundary not in indexes:
+        indexes.append(boundary)
+    return indexes
+
+
+def _with_openai_cache_breakpoints(
+    model_name: str,
+    messages: ConversationMessages,
+    *,
+    responses_api: bool,
+) -> ConversationMessages:
+    """Mark the stable-prefix seams for OpenAI models that take explicit breakpoints."""
+    if model_name not in OPENAI_CACHE_BREAKPOINT_MODELS:
+        return messages
+    indexes = set()
+    for index in _prompt_cache_breakpoint_indexes(messages):
+        # Responses API は assistant の出力に区切りを置けないため、直前の入力側の発話へ寄せる。
+        # The Responses API rejects breakpoints on assistant output, so move to the prior input.
+        while responses_api and index > 0 and messages[index].get("role") == "assistant":
+            index -= 1
+        indexes.add(index)
+    marked = [dict(message) for message in messages]
+    part_type = "input_text" if responses_api else "text"
+    for index in indexes:
+        content = marked[index].get("content")
+        if isinstance(content, str) and content:
+            marked[index]["content"] = [
+                {
+                    "type": part_type,
+                    "text": content,
+                    "prompt_cache_breakpoint": dict(_OPENAI_CACHE_BREAKPOINT),
+                }
+            ]
+    return marked
+
+
 # Groq APIを呼び出してモデルからのテキスト応答または関数呼び出しデータを取得する
 # Call the Groq API to retrieve text responses or function-call details.
 # Groq APIを呼び出して応答を取得します（ツール定義がある場合は関数呼び出しデータを含むJSONを返すことがあります）。
@@ -931,7 +998,9 @@ def _get_openai_compatible_response_stream(
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
-            "messages": sanitized_messages,
+            "messages": _with_openai_cache_breakpoints(
+                model_name, sanitized_messages, responses_api=False
+            ),
             **_chat_completion_token_limit_kwargs(
                 model_name,
                 generation_phase=generation_phase,
@@ -1110,20 +1179,54 @@ def _append_claude_text_message(
     claude_messages[-1]["content"] = merged
 
 
+def _mark_claude_cache_breakpoint(message: dict[str, Any]) -> None:
+    """Put a cache breakpoint on the last content block of a converted Claude message."""
+    content = message.get("content")
+    if isinstance(content, str):
+        if content:
+            message["content"] = [
+                {"type": "text", "text": content, "cache_control": dict(_CLAUDE_CACHE_CONTROL)}
+            ]
+        return
+    if isinstance(content, list) and content and isinstance(content[-1], dict):
+        content[-1]["cache_control"] = dict(_CLAUDE_CACHE_CONTROL)
+
+
+# 先頭の system 群だけを Claude の system に渡し、それ以降（履歴の後ろに置かれた変わる文脈）は
+# 次のユーザーターンへ畳む。Claude のキャッシュは tools → system → messages の順に一致を見るため、
+# 変わる文脈を system に入れると会話履歴全体が毎回キャッシュから外れる。
+# Only the leading system block becomes Claude's system prompt; later system messages (the
+# per-turn context after the history) fold into the next user turn. Claude matches its cache
+# in tools -> system -> messages order, so changing text in system would evict the history.
 def _prepare_claude_messages(
     conversation_messages: ConversationMessages,
-) -> tuple[str | None, ConversationMessages]:
-    system_messages: list[str] = []
+) -> tuple[list[dict[str, Any]] | None, ConversationMessages]:
+    system_blocks: list[dict[str, Any]] = []
     claude_messages: ConversationMessages = []
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    breakpoints = set(_prompt_cache_breakpoint_indexes(sanitized_messages))
+    leading_system_count = 0
+    while (
+        leading_system_count < len(sanitized_messages)
+        and sanitized_messages[leading_system_count].get("role") in _SYSTEM_ROLES
+    ):
+        leading_system_count += 1
 
-    for message in _sanitize_conversation_messages(conversation_messages):
+    for index, message in enumerate(sanitized_messages):
         role = str(message.get("role", "user"))
         content = message.get("content")
         text_content = "" if content is None else str(content)
 
-        if role in {"system", "developer"}:
-            if text_content:
-                system_messages.append(text_content)
+        if role in _SYSTEM_ROLES:
+            if not text_content:
+                continue
+            if index < leading_system_count:
+                block: dict[str, Any] = {"type": "text", "text": text_content}
+                if index in breakpoints:
+                    block["cache_control"] = dict(_CLAUDE_CACHE_CONTROL)
+                system_blocks.append(block)
+            else:
+                _append_claude_text_message(claude_messages, "user", text_content)
             continue
 
         if role == "tool":
@@ -1144,6 +1247,8 @@ def _prepare_claude_messages(
                 claude_messages[-1]["content"].append(tool_result)
             else:
                 claude_messages.append({"role": "user", "content": [tool_result]})
+            if index in breakpoints:
+                _mark_claude_cache_breakpoint(claude_messages[-1])
             continue
 
         if role == "assistant" and message.get("tool_calls"):
@@ -1175,6 +1280,8 @@ def _prepare_claude_messages(
                 claude_messages[-1]["content"].extend(blocks)
             else:
                 claude_messages.append({"role": "assistant", "content": blocks})
+            if index in breakpoints:
+                _mark_claude_cache_breakpoint(claude_messages[-1])
             continue
 
         _append_claude_text_message(
@@ -1182,8 +1289,10 @@ def _prepare_claude_messages(
             "assistant" if role == "assistant" else "user",
             text_content,
         )
+        if index in breakpoints and claude_messages:
+            _mark_claude_cache_breakpoint(claude_messages[-1])
 
-    return ("\n\n".join(system_messages) or None), claude_messages
+    return (system_blocks or None), claude_messages
 
 
 # OpenAI形式の関数ツール定義をClaude形式へ変換する
@@ -1255,15 +1364,15 @@ def get_claude_response(
             model_name=model_name,
         )
 
-    system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
+    system_blocks, claude_messages = _prepare_claude_messages(conversation_messages)
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": claude_messages,
             "max_tokens": LLM_MAX_TOKENS,
         }
-        if system_prompt is not None:
-            request_kwargs["system"] = system_prompt
+        if system_blocks is not None:
+            request_kwargs["system"] = system_blocks
         claude_tools = _prepare_claude_tools(tools)
         if claude_tools:
             request_kwargs["tools"] = claude_tools
@@ -1298,7 +1407,7 @@ def get_claude_response_stream(
             model_name=model_name,
         )
 
-    system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
+    system_blocks, claude_messages = _prepare_claude_messages(conversation_messages)
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
@@ -1314,8 +1423,8 @@ def get_claude_response_stream(
             "max_tokens": max_output_tokens_for_model(model_name, generation_phase),
             "stream": True,
         }
-        if system_prompt is not None:
-            request_kwargs["system"] = system_prompt
+        if system_blocks is not None:
+            request_kwargs["system"] = system_blocks
         claude_tools = _prepare_claude_tools(tools)
         if claude_tools:
             request_kwargs["tools"] = claude_tools
@@ -1452,7 +1561,9 @@ def get_openai_response(
             # route only the tool usage turns to the Chat Completions API.
             request_kwargs: dict[str, Any] = {
                 "model": model_name,
-                "messages": sanitized_messages,
+                "messages": _with_openai_cache_breakpoints(
+                    model_name, sanitized_messages, responses_api=False
+                ),
                 **_chat_completion_token_limit_kwargs(
                     model_name,
                     generation_phase=generation_phase,
@@ -1487,7 +1598,7 @@ def get_openai_response(
 
         response = openai_client.responses.create(
             model=model_name,
-            input=sanitized_messages,
+            input=_with_openai_cache_breakpoints(model_name, sanitized_messages, responses_api=True),
             max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
             **_openai_responses_reasoning_kwargs(
                 model_name,
@@ -1554,7 +1665,9 @@ def get_openai_response_stream(
         try:
             with openai_client.responses.stream(
                 model=model_name,
-                input=sanitized_messages,
+                input=_with_openai_cache_breakpoints(
+                    model_name, sanitized_messages, responses_api=True
+                ),
                 max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
                 **_openai_responses_reasoning_kwargs(
                     model_name,
@@ -1756,7 +1869,7 @@ def _get_openai_responses_json_response(
     try:
         response = openai_client.responses.create(
             model=model_name,
-            input=sanitized_messages,
+            input=_with_openai_cache_breakpoints(model_name, sanitized_messages, responses_api=True),
             max_output_tokens=LLM_MAX_TOKENS,
             **_openai_responses_reasoning_kwargs(model_name),
             text={"format": {"type": "json_object"}},

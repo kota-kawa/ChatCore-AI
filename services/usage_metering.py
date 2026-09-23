@@ -97,12 +97,16 @@ def record_token_usage(
     input_tokens: int,
     output_tokens: int,
     cached_input_tokens: int = 0,
+    cache_write_input_tokens: int = 0,
 ) -> None:
     """Record one model call for the current billing subject."""
 
     input_tokens = max(int(input_tokens or 0), 0)
     output_tokens = max(int(output_tokens or 0), 0)
     cached_input_tokens = min(max(int(cached_input_tokens or 0), 0), input_tokens)
+    cache_write_input_tokens = min(
+        max(int(cache_write_input_tokens or 0), 0), input_tokens - cached_input_tokens
+    )
     _emit(
         UsageIncrement(
             subject_key=current_usage_subject(),
@@ -113,6 +117,7 @@ def record_token_usage(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
             ),
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
