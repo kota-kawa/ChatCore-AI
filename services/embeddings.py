@@ -18,6 +18,7 @@ import time
 from typing import Any
 
 from .llm import openai_client
+from .llm_usage import record_embedding_usage
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ def generate_embedding(text: str) -> list[float] | None:
             input=normalized,
             dimensions=EMBEDDING_DIMENSIONS,
         )
+        record_embedding_usage(EMBEDDING_MODEL, getattr(response, "usage", None))
         embedding = [float(value) for value in response.data[0].embedding]
     except Exception:
         logger.warning("Embedding generation failed.", exc_info=True)

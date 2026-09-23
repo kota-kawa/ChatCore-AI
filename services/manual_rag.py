@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from services.bm25 import tokenize_bm25
+from services.llm_usage import record_embedding_usage
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
             input=batch,
             dimensions=EMBEDDING_DIMS,
         )
+        record_embedding_usage(EMBEDDING_MODEL, getattr(response, "usage", None))
         sorted_data = sorted(response.data, key=lambda x: x.index)
         all_embeddings.extend(item.embedding for item in sorted_data)
     return np.array(all_embeddings, dtype=np.float32)
@@ -285,6 +287,7 @@ class ManualRagIndex:
                 input=query,
                 dimensions=EMBEDDING_DIMS,
             )
+            record_embedding_usage(EMBEDDING_MODEL, getattr(response, "usage", None))
             vec = np.array(response.data[0].embedding, dtype=np.float32)
             norm = np.linalg.norm(vec)
             return vec / max(norm, 1e-10)

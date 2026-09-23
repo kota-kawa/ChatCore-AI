@@ -59,6 +59,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "mcp_oauth_user_clients",
             "mcp_oauth_authorization_codes",
             "mcp_oauth_tokens",
+            "api_usage_daily",
         }
         self.assertEqual(set(Base.metadata.tables), expected_tables)
         self.assertNotIn("prompt_list_entries", Base.metadata.tables)

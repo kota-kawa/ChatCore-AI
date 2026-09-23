@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextvars
 import logging
 import threading
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator
@@ -114,9 +115,14 @@ async def run_blocking(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # Bind positional/keyword args via partial for uniform thread execution.
     bound = partial(func, *args, **kwargs) if kwargs else partial(func, *args)
     loop = asyncio.get_running_loop()
+    # run_in_executor は ContextVar を運ばない。使用量の計上先などをスレッド側でも
+    # 読めるよう、呼び出し時点のコンテキストの複製の中で実行する。
+    # run_in_executor does not carry ContextVars. Run inside a copy of the caller's context
+    # so values such as the usage billing subject stay readable on the worker thread.
+    context = contextvars.copy_context()
     # 専用エグゼキュータ上で関数を実行し、完了を非同期に待機する
     # Execute the function on the dedicated executor and await completion asynchronously.
-    return await loop.run_in_executor(get_blocking_executor(), bound)
+    return await loop.run_in_executor(get_blocking_executor(), context.run, bound)
 
 
 # 同期イテレータの終端をスレッド境界越しに伝えるためのセンチネル。
@@ -163,10 +169,13 @@ async def iterate_blocking(iterable: Iterable[T]) -> AsyncIterator[T]:
     iterator = iter(iterable)
     loop = asyncio.get_running_loop()
     executor = get_stream_executor()
+    # 各 next() は別スレッドで走りうるため、同じコンテキストの中で順に実行する。
+    # Each next() may land on a different thread, so run them all in one carried context.
+    context = contextvars.copy_context()
     pending: asyncio.Future[Any] | None = None
     try:
         while True:
-            pending = loop.run_in_executor(executor, _next_or_done, iterator)
+            pending = loop.run_in_executor(executor, context.run, _next_or_done, iterator)
             # クライアント切断でこのジェネレータが閉じられても、走り出したワーカースレッドは
             # 中断できない。shield で「呼び出し側のキャンセル」と「スレッドの完了」を分離し、
             # 実行中のイテレータを外から close して ValueError になるのを防ぐ。
@@ -179,7 +188,7 @@ async def iterate_blocking(iterable: Iterable[T]) -> AsyncIterator[T]:
                 return
             yield item
     finally:
-        _schedule_iterator_close(iterator, pending, executor)
+        _schedule_iterator_close(iterator, pending, executor, context)
 
 
 # ワーカースレッドが next() を抜けてから同期イテレータを閉じるよう予約する
@@ -188,12 +197,17 @@ def _schedule_iterator_close(
     iterator: Any,
     pending: asyncio.Future[Any] | None,
     executor: ThreadPoolExecutor,
+    context: contextvars.Context,
 ) -> None:
+    # close() でも generator の finally（使用量の記録など）が走るため、next() と同じ
+    # コンテキストの中で閉じる。
+    # close() runs the generator's finally block (usage metering, for one), so close it in
+    # the same context as next().
     if pending is None or pending.done():
         # スレッドは既に next() を抜けている。イテレータは yield 地点で停止しているので
         # ここで閉じてよい（generator の finally が同期実行される）。
         # The thread already left next(); the iterator is parked on a yield and is safe to close.
-        _close_iterator(iterator)
+        context.run(_close_iterator, iterator)
         return
 
     def _close_after_thread(future: asyncio.Future[Any]) -> None:
@@ -202,7 +216,7 @@ def _schedule_iterator_close(
         if not future.cancelled():
             future.exception()
         try:
-            executor.submit(_close_iterator, iterator)
+            executor.submit(context.run, _close_iterator, iterator)
         except RuntimeError:
             # 日本語: プロセス終了時などプール停止後は、GC による後始末に任せます。
             # English: After the pool is shut down (process exit) leave cleanup to the GC.

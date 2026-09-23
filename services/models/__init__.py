@@ -2,6 +2,7 @@
 
 from .base import Base
 from .entities import (
+    ApiUsageDaily,
     ChatHistory,
     ChatRoom,
     ChatRoomSummary,
@@ -37,6 +38,7 @@ from .entities import (
 from .types import Vector
 
 __all__ = [
+    "ApiUsageDaily",
     "Base",
     "ChatHistory",
     "ChatRoom",
