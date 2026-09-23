@@ -100,6 +100,12 @@ flowchart LR
 
 スキーマ変更は Alembic の新しい revision として追加します。適用済み revision の書き換えや、アプリ起動時だけの暗黙の ALTER は行いません。インデックスも例外ではなく、性能インデックスは `alembic/versions/` の revision で作成します。スキーマを Alembic と別の SQL ファイルで二重管理しません。
 
+### API 使用量と料金の計上
+
+LLM・埋め込み・Brave 検索の呼び出しは、プロバイダ応答の使用量を `services/usage_pricing.py` の単価で料金（整数のナノドル）へ換算し、`api_usage_daily` に（計上先, 日本時間の日付, モデルまたは API）ごとの合計として UPSERT で加算します。取り出しは `services/llm_usage.py`、換算と書き込みは `services/usage_metering.py` が担い、書き込みはバックグラウンドで行って応答経路を遅らせません。ストリームが使用量の届く前に閉じられた場合も課金はされているため、入力と出力の文字数からの見積もりで記録します。
+
+計上先はリクエストの入口で `services/usage_subject.py` の `UsageSubjectMiddleware` が ContextVar に載せます（ログイン中は `user:<id>`、未ログインは接続元 IP のハッシュ、セッションの無い MCP などは `system`）。LLM 呼び出しは別スレッドで走るため、`run_blocking`・`iterate_blocking`・`submit_background_task`・生成エグゼキュータはいずれも投入時のコンテキストの複製の中で処理を実行します。スレッドへ処理を渡す経路を新しく作るときも同じようにコンテキストを運んでください。運ばないと使用量が `system` に計上されます。
+
 ### Redis の役割
 
 Redis は設定されている環境で次の用途に使われます。

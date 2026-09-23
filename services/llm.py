@@ -55,6 +55,12 @@ except ImportError:  # pragma: no cover - depends on SDK version
 from services.env_settings import env_int
 from services.llm_model_limits import get_model_max_output_tokens
 from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
+from services.llm_usage import (
+    record_chat_completion_usage,
+    record_claude_usage,
+    record_estimated_usage,
+    record_responses_usage,
+)
 
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
@@ -864,6 +870,8 @@ def get_groq_response(
             **request_kwargs,
         )
         message = response.choices[0].message
+        if not record_chat_completion_usage(model_name, getattr(response, "usage", None)):
+            record_estimated_usage(model_name, sanitized_messages, str(message.content or ""), tools=tools)
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
             return json.dumps([
@@ -918,6 +926,8 @@ def _get_openai_compatible_response_stream(
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
+    stream_usage: Any = None
+    streamed_text: list[str] = []
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
@@ -933,12 +943,18 @@ def _get_openai_compatible_response_stream(
             ),
             **(reasoning_kwargs or {}),
             "stream": True,
+            # 使用量は最後の chunk にだけ載る。料金の計上に使う。
+            # Usage arrives only on the final chunk; it feeds cost metering.
+            "stream_options": {"include_usage": True},
             **_chat_completion_tool_kwargs(tools),
         }
         stream = client.chat.completions.create(
             **request_kwargs,
         )
         for chunk in stream:
+            chunk_usage = getattr(chunk, "usage", None) or _groq_chunk_usage(chunk)
+            if chunk_usage is not None:
+                stream_usage = chunk_usage
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
@@ -955,6 +971,7 @@ def _get_openai_compatible_response_stream(
                 output_limit_reason = "length"
             delta = choice.delta
             if getattr(delta, "content", None):
+                streamed_text.append(delta.content)
                 yield delta.content
 
             tool_calls = getattr(delta, "tool_calls", None)
@@ -988,6 +1005,7 @@ def _get_openai_compatible_response_stream(
                     arguments = getattr(function, "arguments", None)
                     if arguments:
                         part["function"]["arguments"] += arguments
+                        streamed_text.append(arguments)
 
         # 打ち切られたステップでも、すでに要求されたツール呼び出しは先に流す。
         # 例外を先に投げると、収集済みのツール呼び出しごと捨ててしまう。
@@ -1023,6 +1041,17 @@ def _get_openai_compatible_response_stream(
     finally:
         if stream is not None:
             stream.close()
+            if not record_chat_completion_usage(model_name, stream_usage):
+                record_estimated_usage(model_name, sanitized_messages, "".join(streamed_text), tools=tools)
+
+
+# Groq はストリームの最後の chunk の拡張フィールド `x_groq.usage` にも使用量を載せる。
+# Groq also reports usage in the `x_groq.usage` extension of the final stream chunk.
+def _groq_chunk_usage(chunk: Any) -> Any:
+    extension = getattr(chunk, "x_groq", None)
+    if isinstance(extension, dict):
+        return extension.get("usage")
+    return getattr(extension, "usage", None)
 
 
 # Groq APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
@@ -1239,7 +1268,7 @@ def get_claude_response(
         if claude_tools:
             request_kwargs["tools"] = claude_tools
         response = claude_client.messages.create(**request_kwargs)
-        return _claude_tool_calls(response.content) or _claude_response_text(response.content)
+        output = _claude_tool_calls(response.content) or _claude_response_text(response.content)
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1247,6 +1276,10 @@ def get_claude_response(
             fallback_message="Anthropic Claude API call failed.",
             model_name=model_name,
         )
+    else:
+        if not record_claude_usage(model_name, getattr(response, "usage", None)):
+            record_estimated_usage(model_name, claude_messages, output, tools=tools)
+        return output
 
 
 # Claude Messages APIを呼び出してストリーム形式でテキスト応答を逐次受け取る
@@ -1270,6 +1303,10 @@ def get_claude_response_stream(
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
     input_limit_reason: str | None = None
+    # 入力の使用量は message_start、出力の累計は message_delta で届く。
+    # Input usage arrives on message_start; the running output total on message_delta.
+    stream_usage: dict[str, int] | None = None
+    streamed_text: list[str] = []
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
@@ -1285,7 +1322,20 @@ def get_claude_response_stream(
         stream = claude_client.messages.create(**request_kwargs)
         for event in stream:
             event_type = getattr(event, "type", "")
-            if event_type == "content_block_start":
+            if event_type == "message_start":
+                start_usage = getattr(getattr(event, "message", None), "usage", None)
+                if start_usage is not None:
+                    stream_usage = {
+                        "input_tokens": int(getattr(start_usage, "input_tokens", 0) or 0),
+                        "cache_creation_input_tokens": int(
+                            getattr(start_usage, "cache_creation_input_tokens", 0) or 0
+                        ),
+                        "cache_read_input_tokens": int(
+                            getattr(start_usage, "cache_read_input_tokens", 0) or 0
+                        ),
+                        "output_tokens": int(getattr(start_usage, "output_tokens", 0) or 0),
+                    }
+            elif event_type == "content_block_start":
                 block = getattr(event, "content_block", None)
                 if getattr(block, "type", None) == "tool_use":
                     tool_call_parts[int(getattr(event, "index", 0))] = {
@@ -1300,14 +1350,19 @@ def get_claude_response_stream(
                 delta = getattr(event, "delta", None)
                 delta_type = getattr(delta, "type", "")
                 if delta_type == "text_delta" and getattr(delta, "text", None):
+                    streamed_text.append(delta.text)
                     yield delta.text
                 elif delta_type == "input_json_delta":
                     part = tool_call_parts.get(int(getattr(event, "index", 0)))
                     if part is not None:
-                        part["function"]["arguments"] += str(
-                            getattr(delta, "partial_json", "")
-                        )
+                        partial_json = str(getattr(delta, "partial_json", ""))
+                        part["function"]["arguments"] += partial_json
+                        streamed_text.append(partial_json)
             elif event_type == "message_delta":
+                delta_usage = getattr(event, "usage", None)
+                delta_output_tokens = getattr(delta_usage, "output_tokens", None)
+                if stream_usage is not None and delta_output_tokens is not None:
+                    stream_usage["output_tokens"] = int(delta_output_tokens)
                 delta = getattr(event, "delta", None)
                 stop_reason = getattr(delta, "stop_reason", None)
                 if stop_reason == "max_tokens":
@@ -1359,8 +1414,11 @@ def get_claude_response_stream(
             generation_phase=generation_phase,
         )
     finally:
-        if stream is not None and hasattr(stream, "close"):
-            stream.close()
+        if stream is not None:
+            if hasattr(stream, "close"):
+                stream.close()
+            if not record_claude_usage(model_name, stream_usage):
+                record_estimated_usage(model_name, claude_messages, "".join(streamed_text), tools=tools)
 
 
 # OpenAI Responses APIを呼び出してテキスト応答を取得する
@@ -1410,6 +1468,8 @@ def get_openai_response(
                 **request_kwargs,
             )
             message = response.choices[0].message
+            if not record_chat_completion_usage(model_name, getattr(response, "usage", None)):
+                record_estimated_usage(model_name, sanitized_messages, str(message.content or ""), tools=tools)
             tool_calls = getattr(message, "tool_calls", None)
             if tool_calls:
                 return json.dumps([
@@ -1434,6 +1494,8 @@ def get_openai_response(
                 generation_phase=generation_phase,
             ),
         )
+        if not record_responses_usage(model_name, getattr(response, "usage", None)):
+            record_estimated_usage(model_name, sanitized_messages, str(response.output_text or ""))
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1486,36 +1548,50 @@ def get_openai_response_stream(
             return
 
         output_limit_reason: str | None = None
-        with openai_client.responses.stream(
-            model=model_name,
-            input=sanitized_messages,
-            max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
-            **_openai_responses_reasoning_kwargs(
-                model_name,
-                generation_phase=generation_phase,
-            ),
-        ) as stream:
-            for event in stream:
-                if event.type == "response.output_text.delta":
-                    delta = event.delta
-                    if delta:
-                        yield delta
-                elif event.type == "response.incomplete":
-                    # 出力がトークン上限で打ち切られたことを記録する（生成UIのJSONが壊れる主因）。
-                    # Record that output was cut off at the token cap (a main cause of
-                    # broken generative UI JSON).
-                    logger.warning(
-                        "OpenAI Responses stream incomplete "
-                        "(model=%s, phase=%s, max_output_tokens=%s).",
-                        model_name,
-                        generation_phase,
-                        max_output_tokens_for_model(model_name, generation_phase),
-                    )
-                    response = getattr(event, "response", None)
-                    incomplete_details = getattr(response, "incomplete_details", None)
-                    output_limit_reason = str(
-                        getattr(incomplete_details, "reason", None) or "incomplete"
-                    )
+        stream_usage: Any = None
+        streamed_text: list[str] = []
+        stream_opened = False
+        try:
+            with openai_client.responses.stream(
+                model=model_name,
+                input=sanitized_messages,
+                max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
+                **_openai_responses_reasoning_kwargs(
+                    model_name,
+                    generation_phase=generation_phase,
+                ),
+            ) as stream:
+                stream_opened = True
+                for event in stream:
+                    # 完了・未完了のどちらのイベントにも最終的な使用量が付く。
+                    # Both the completed and the incomplete event carry the final usage.
+                    event_usage = getattr(getattr(event, "response", None), "usage", None)
+                    if event_usage is not None:
+                        stream_usage = event_usage
+                    if event.type == "response.output_text.delta":
+                        delta = event.delta
+                        if delta:
+                            streamed_text.append(delta)
+                            yield delta
+                    elif event.type == "response.incomplete":
+                        # 出力がトークン上限で打ち切られたことを記録する（生成UIのJSONが壊れる主因）。
+                        # Record that output was cut off at the token cap (a main cause of
+                        # broken generative UI JSON).
+                        logger.warning(
+                            "OpenAI Responses stream incomplete "
+                            "(model=%s, phase=%s, max_output_tokens=%s).",
+                            model_name,
+                            generation_phase,
+                            max_output_tokens_for_model(model_name, generation_phase),
+                        )
+                        response = getattr(event, "response", None)
+                        incomplete_details = getattr(response, "incomplete_details", None)
+                        output_limit_reason = str(
+                            getattr(incomplete_details, "reason", None) or "incomplete"
+                        )
+        finally:
+            if stream_opened and not record_responses_usage(model_name, stream_usage):
+                record_estimated_usage(model_name, sanitized_messages, "".join(streamed_text))
         if output_limit_reason in {"max_output_tokens", "max_tokens"}:
             raise LlmOutputLimitError(
                 f"OpenAI output reached the configured token limit for {model_name}.",
@@ -1645,7 +1721,7 @@ def _get_chat_completions_json_response(
         response = client.chat.completions.create(
             **request_kwargs,
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1653,6 +1729,10 @@ def _get_chat_completions_json_response(
             fallback_message=fallback_message,
             model_name=model_name,
         )
+    else:
+        if not record_chat_completion_usage(model_name, getattr(response, "usage", None)):
+            record_estimated_usage(model_name, sanitized_messages, str(content or ""))
+        return content
 
 
 # OpenAI Responses APIを利用してJSON形式のオブジェクト応答を取得する
@@ -1681,6 +1761,8 @@ def _get_openai_responses_json_response(
             **_openai_responses_reasoning_kwargs(model_name),
             text={"format": {"type": "json_object"}},
         )
+        if not record_responses_usage(model_name, getattr(response, "usage", None)):
+            record_estimated_usage(model_name, sanitized_messages, str(response.output_text or ""))
     except Exception as exc:
         _raise_provider_error(
             exc,

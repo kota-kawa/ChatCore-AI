@@ -7,7 +7,7 @@ kept separate from Pydantic request/response contracts.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -16,6 +16,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -812,4 +813,29 @@ class McpOAuthToken(Base):
         CheckConstraint("token_type IN ('access', 'refresh')", name="mcp_oauth_tokens_token_type_check"),
         Index("idx_mcp_oauth_tokens_active_grant", "grant_id", "token_type", "expires_at", postgresql_where=text("revoked_at IS NULL")),
         Index("idx_mcp_oauth_tokens_client_id", "client_id"),
+    )
+
+
+class ApiUsageDaily(Base):
+    """Daily API usage and cost per billing subject and resource (model or search API)."""
+
+    __tablename__ = "api_usage_daily"
+
+    subject_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    resource: Mapped[str] = mapped_column(String(100), primary_key=True)
+    cost_nano_usd: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    cached_input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    request_count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    __table_args__ = (
+        CheckConstraint(
+            "cost_nano_usd >= 0 AND input_tokens >= 0 AND cached_input_tokens >= 0 "
+            "AND output_tokens >= 0 AND request_count >= 0",
+            name="ck_api_usage_daily_non_negative",
+        ),
+        Index("idx_api_usage_daily_usage_date", "usage_date"),
     )

@@ -36,6 +36,7 @@ from services.url_fetcher import (
     fetch_url_document,
     url_for_logging,
 )
+from services.usage_metering import record_web_search_request
 from services.web_search_images import WebSearchImageCandidate
 
 # ロガーの設定
@@ -1765,6 +1766,9 @@ def search_brave_llm_context(
         params=params,
         timeout=env_float("BRAVE_SEARCH_TIMEOUT_SECONDS", WEB_SEARCH_DEFAULT_TIMEOUT_SECONDS),
     )
+    # 応答が返った時点で Brave 側の課金対象になるため、ステータスを見る前に計上する。
+    # Brave bills once it answers, so meter the request before checking the status.
+    record_web_search_request()
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
