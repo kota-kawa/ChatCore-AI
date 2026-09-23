@@ -85,9 +85,7 @@
   font-weight: var(--chat-font-heading-weight, 600);
   color: var(--success-strong, #134e4a);
   letter-spacing: var(--chat-font-label-tracking, 0);
-  /* 下余白はタイトル行（.setup-form-header）が持つ。見出しの既定余白は打ち消す */
-  /* The title row (.setup-form-header) owns the bottom spacing; cancel the heading's default margin */
-  margin: 0 !important;
+  margin: 0 0 var(--setup-title-margin-bottom) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
@@ -95,60 +93,6 @@
   height: 2rem;
   flex: 0 0 auto;
   object-fit: contain;
-}
-
-/* タイトル行: 左端に履歴ボタン、中央にタイトル、右端は同幅のスペーサー。
-   ボタンとスペーサーが同じ幅なので、タイトルは行全体に対して中央に置かれる */
-/* Title row: history button at the left edge, title in the middle, an equal-width spacer at the
-   right edge, so the title stays centred against the full row */
-:where(body.chat-page, .chat-page-shell) .setup-form-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: var(--setup-title-margin-bottom);
-}
-
-:where(body.chat-page, .chat-page-shell) .setup-form-header .setup-form-title {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-:where(body.chat-page, .chat-page-shell) .setup-form-header__spacer {
-  flex: 0 0 2.75rem;
-  height: 2.75rem;
-}
-
-/* チャット画面左上のサイドバー切替と同じゴースト表示のアイコンボタン（44px のタップ領域） */
-/* Ghost icon button styled like the chat view's top-left sidebar toggle (44px tap target) */
-:where(body.chat-page, .chat-page-shell) .setup-history-button {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm, 8px);
-  background: transparent;
-  color: var(--text-secondary, #6b7280);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background var(--transition-fast, 0.15s ease),
-    color var(--transition-fast, 0.15s ease);
-}
-
-:where(body.chat-page, .chat-page-shell) .setup-history-button:hover,
-:where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible {
-  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
-  color: var(--primary-dark, #0f7a51);
-}
-
-:where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 /* 入力欄直下の「最近のチャット」。1 行に収め、あふれたチップは横スクロールで見せる。
@@ -1190,6 +1134,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   :where(body.chat-page, .chat-page-shell) .setup-form-title {
+    margin-bottom: 0.1rem !important;
     padding-right: 3.2rem;
     justify-content: flex-start;
     text-align: left;
@@ -1201,17 +1146,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   :where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
     width: 1.7rem;
     height: 1.7rem;
-  }
-
-  /* スマホはタイトルが左揃えなので、中央揃え用のスペーサーは要らない */
-  /* The title is left-aligned on phones, so the centring spacer is not needed */
-  :where(body.chat-page, .chat-page-shell) .setup-form-header {
-    gap: 0.35rem;
-    margin-bottom: 0.1rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .setup-form-header__spacer {
-    display: none;
   }
 
   :where(body.chat-page, .chat-page-shell) .recent-chats {
@@ -1404,8 +1338,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 /* Form inputs */
 /* 濃色面ではリンク色に --primary-dark のコントラストが足りないので、明るい --primary-color を使う */
 /* On dark surfaces --primary-dark lacks contrast for text, so use the lighter --primary-color */
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-history-button:hover,
-[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-history-button:focus-visible,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__chip:hover,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__chip:focus-visible,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__pin,
