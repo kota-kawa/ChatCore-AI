@@ -1879,9 +1879,11 @@ html[data-cc-auth="in"] .memo-guest-intro {
   color: #f8fafc;
 }
 
+/* サイドバーも本文のカードと同じダークの面にする（紺の面だと、灰色系の本文と2種類のダーク配色が隣り合う） */
+/* The sidebar uses the same dark surface as the content cards; a navy panel would sit next to the charcoal page */
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-sidebar {
-  background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(148, 163, 184, 0.14);
+  background: var(--memo-card);
+  border-color: var(--memo-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.24);
 }
 
