@@ -1,5 +1,4 @@
 import "../styles/globals.css";
-import "../styles/bootstrap-compat.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "../public/static/css/base/variables.css";
 import "../public/static/css/base/animations.css";
