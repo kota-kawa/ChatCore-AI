@@ -24,7 +24,8 @@ async def create_shared_prompt(
     """Persist a validated public prompt in one transaction, then embed it off-request.
 
     With a caller-supplied session the embedding is scheduled before that caller commits;
-    if the worker runs first the row stays ``pending`` and the backfill picks it up.
+    if the worker runs first it finds no row, the prompt stays ``pending``, and the
+    backfill picks it up.
     """
     prompt_repository = repository or SharedContentRepository()
     resources = resource_repository or PromptResourceRepository()
@@ -57,11 +58,5 @@ async def create_shared_prompt(
             prompt_id = await operation(owned_session)
     else:
         prompt_id = await operation(session)
-    schedule_prompt_embedding(
-        prompt_id,
-        payload.title,
-        payload.description,
-        payload.content,
-        persisted_attributes,
-    )
+    schedule_prompt_embedding(prompt_id)
     return prompt_id

@@ -80,7 +80,7 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
         )
         self.assertEqual(prompt_repository.calls[0][1]["description"], "A reusable portable skill.")
 
-    def test_schedules_embedding_with_the_persisted_attributes(self):
+    def test_schedules_embedding_for_the_new_prompt(self):
         prompt_repository = RecordingPromptRepository(prompt_id=42)
         with patch.object(shared_prompt_service, "schedule_prompt_embedding") as schedule:
             asyncio.run(
@@ -93,9 +93,7 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
                 )
             )
 
-        schedule.assert_called_once()
-        self.assertEqual(schedule.call_args.args[0], 42)
-        self.assertEqual(schedule.call_args.args[4], {"skill_markdown": "# Portable skill"})
+        schedule.assert_called_once_with(42)
 
     def test_skips_embedding_when_the_insert_fails(self):
         with (

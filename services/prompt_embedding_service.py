@@ -1,9 +1,10 @@
 """Background embedding generation for public shared prompts.
 
-Prompts have no revision counter, so an edit that lands while an older embedding is still
-being generated can leave a stale vector marked ready. The edit path resets
-``embedding_status`` to ``pending`` before scheduling, and the backfill command treats
-``pending`` rows as work, so the stale vector is replaced on the next backfill run.
+The worker reads the prompt text itself instead of receiving it from the caller, so the
+text and the ``updated_at`` guard it is stored under always come from the same row
+version. If an edit lands while the vector is being generated, the guarded UPDATE
+matches nothing, the row keeps the ``pending`` status the edit set, and the edit's own
+worker (or the backfill) supplies the vector for the new text.
 """
 
 from __future__ import annotations
@@ -48,24 +49,36 @@ def build_prompt_embedding_text(
     return "\n".join(parts)[:EMBEDDING_MAX_INPUT_CHARS]
 
 
-async def store_prompt_embedding(prompt_id: int, embedding: list[float]) -> None:
-    """Persist one vector in a short-lived native async transaction."""
+async def embed_prompt(prompt_id: int) -> bool:
+    """Read the current text, embed it, and store the vector under the row's guard.
+
+    Returns True when a vector was stored. The provider SDK is synchronous, so the
+    generation runs on a thread while each database step stays native async.
+    """
+    async with session_scope() as session:
+        source = await PromptEmbeddingRepository(session).fetch_source(prompt_id)
+    if source is None:
+        return False
+    text = build_prompt_embedding_text(
+        str(source.get("title") or ""),
+        source.get("description"),
+        str(source.get("content") or ""),
+        source.get("attributes"),
+    )
+    if not text.strip():
+        return False
+    embedding = await asyncio.to_thread(generate_embedding, text)
     if not embedding:
-        return
+        return False
     async with session_scope() as session, session.begin():
-        await PromptEmbeddingRepository(session).store(prompt_id, embedding)
+        await PromptEmbeddingRepository(session).store(prompt_id, embedding, source.get("updated_at"))
+    return True
 
 
-def schedule_prompt_embedding(
-    prompt_id: int,
-    title: str,
-    description: str | None,
-    content: str,
-    attributes: dict[str, Any] | None = None,
-) -> None:
-    """Generate an embedding off the request path and store it asynchronously.
+def schedule_prompt_embedding(prompt_id: int) -> None:
+    """Embed a prompt off the request path.
 
-    Call this after the prompt row is committed: the worker writes through its own
+    Call this after the prompt row is committed: the worker reads through its own
     connection and would not see an uncommitted insert.
     """
     if not embeddings_available():
@@ -73,11 +86,7 @@ def schedule_prompt_embedding(
 
     def _task() -> None:
         try:
-            embedding = generate_embedding(
-                build_prompt_embedding_text(title, description, content, attributes)
-            )
-            if embedding:
-                asyncio.run(store_prompt_embedding(prompt_id, embedding))
+            asyncio.run(embed_prompt(prompt_id))
         except Exception:
             logger.warning("Failed to store embedding for prompt %s", prompt_id, exc_info=True)
 

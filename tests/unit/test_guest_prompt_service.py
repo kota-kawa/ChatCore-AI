@@ -58,9 +58,7 @@ class GuestPromptServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 session=AsyncMock(),
             )
 
-        schedule.assert_called_once()
-        self.assertEqual(schedule.call_args.args[0], 88)
-        self.assertEqual(schedule.call_args.args[1], "Guest text prompt")
+        schedule.assert_called_once_with(88)
 
     async def test_creation_leaves_caller_owned_transaction_open(self):
         repository = _Repository()

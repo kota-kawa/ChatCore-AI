@@ -489,7 +489,7 @@ class SharedContentService:
 
         updated = await self._write(session, operation)
         if updated:
-            schedule_prompt_embedding(prompt_id, title, description, content, attributes)
+            schedule_prompt_embedding(prompt_id)
         return updated
 
     async def delete_prompt(

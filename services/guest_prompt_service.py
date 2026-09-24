@@ -124,7 +124,7 @@ async def create_guest_shared_prompt(
             prompt_id = await operation(owned_session)
     else:
         prompt_id = await operation(session)
-    schedule_prompt_embedding(prompt_id, payload.title, payload.description, payload.content)
+    schedule_prompt_embedding(prompt_id)
     return prompt_id
 
 
