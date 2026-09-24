@@ -87,6 +87,7 @@ class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
         # Both term groups are required, and the rank counts title hits highest.
         self.assertIn(") AND (", sql)
         self.assertIn("THEN 3 WHEN", sql)
+        self.assertIn("ORDER BY lexical_rank DESC, semantic_distance ASC NULLS LAST", sql)
         self.assertIn("ORDER BY p.lexical_rank DESC, p.semantic_distance ASC NULLS LAST", sql)
 
     async def test_lexical_only_search_binds_no_vector(self):
@@ -133,7 +134,9 @@ class SharedContentRepositoryRecommendationTestCase(unittest.IsolatedAsyncioTest
         self.assertEqual(params["limit"], 3)
         self.assertGreater(params["semantic_max_distance"], 0)
         self.assertIn("WITH anchor AS", sql)
-        self.assertIn("p.embedding_vector <=> anchor.embedding_vector", sql)
+        # The distance is computed once in the CTE and capped in the outer select.
+        self.assertEqual(sql.count("p.embedding_vector <=> anchor.embedding_vector"), 1)
+        self.assertIn("WHEN ranked.anchor_distance <= :semantic_max_distance THEN ranked.anchor_distance", sql)
         self.assertIn(
             "ORDER BY semantic_distance ASC NULLS LAST, same_category DESC,\n                  view_count DESC, RANDOM()",
             sql,

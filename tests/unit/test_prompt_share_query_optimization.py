@@ -91,18 +91,20 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
 
         rows = self._rows()
         rows[0]["semantic_distance"] = 0.21
+        rows[0]["anchor_distance"] = 0.21
         rows[0]["same_category"] = True
         service = _Service(rows)
         with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
             prompts, basis = await _get_recommended_prompts(7, 3, "ja")
         self.assertEqual(basis, "similar")
         self.assertNotIn("semantic_distance", prompts[0])
+        self.assertNotIn("anchor_distance", prompts[0])
         self.assertNotIn("same_category", prompts[0])
 
     async def test_recommendations_fall_back_to_popular_when_any_row_is_far(self):
         from unittest.mock import patch
 
-        rows = self._rows() + [dict(self._rows()[0], id=2)]
+        rows = [*self._rows(), dict(self._rows()[0], id=2)]
         rows[0]["semantic_distance"] = 0.2
         rows[1]["semantic_distance"] = None
         service = _Service(rows)

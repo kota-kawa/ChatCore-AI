@@ -98,7 +98,7 @@ RECOMMENDED_PROMPT_LIMIT = 3
 # vector-distance ceiling of the prompt being read, "popular" otherwise.
 RECOMMENDATION_BASIS_SIMILAR = "similar"
 RECOMMENDATION_BASIS_POPULAR = "popular"
-RECOMMENDATION_RANKING_COLUMNS = ("semantic_distance", "same_category")
+RECOMMENDATION_RANKING_COLUMNS = ("semantic_distance", "anchor_distance", "same_category")
 PROMPT_FEED_DEFAULT_LIMIT = 24
 PROMPT_FEED_MAX_LIMIT = 100
 PROMPT_CREATE_RATE_WINDOW_SECONDS = 60 * 60

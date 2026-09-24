@@ -223,6 +223,11 @@ class SharedContentRepository:
         description or category hit, which outranks a body hit. With a query vector, rows
         whose stored vector lies within the semantic ceiling also qualify even without a
         word hit, and the vector distance breaks ties among equal word ranks.
+
+        The ORDER BY leads with the word rank, so PostgreSQL cannot answer this with the
+        HNSW index (that needs ``ORDER BY embedding <=> query`` alone) and scores every
+        matching row instead. Word hits outranking meaning is the point of the ranking, and
+        the public prompt table is small enough that the scan is cheap.
         """
         offset = (int(page) - 1) * int(per_page)
         axis_conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
@@ -332,8 +337,8 @@ class SharedContentRepository:
                   WHERE p.is_public = TRUE AND p.deleted_at IS NULL
                     AND {' AND '.join(axis_conditions)}
                     AND {matched_condition}
-                  ORDER BY {lexical_rank} DESC, {semantic_distance} ASC NULLS LAST,
-                    COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
+                  ORDER BY lexical_rank DESC, semantic_distance ASC NULLS LAST,
+                    view_count DESC, p.created_at DESC, p.id DESC
                   LIMIT :fetch_limit OFFSET :offset
                 )
                 SELECT p.*,
@@ -521,6 +526,10 @@ class SharedContentRepository:
         ``semantic_distance`` and fall back to same-category, then most-viewed order, so
         the caller can tell the reader which basis the section rests on. RANDOM() only
         breaks remaining ties.
+
+        The distance is wrapped in a CASE and followed by other sort keys, so the HNSW
+        index is not used here either; the query scores every visible prompt, which is
+        cheap at the table's size and keeps the popularity fallback in the same statement.
         """
         result = await session.execute(
             text(
@@ -545,10 +554,7 @@ class SharedContentRepository:
                     p.attributes,
                     p.attachments,
                     COALESCE(pvc.view_count, 0) AS view_count,
-                    CASE
-                      WHEN (p.embedding_vector <=> anchor.embedding_vector) <= :semantic_max_distance
-                        THEN (p.embedding_vector <=> anchor.embedding_vector)
-                    END AS semantic_distance,
+                    (p.embedding_vector <=> anchor.embedding_vector) AS anchor_distance,
                     COALESCE(p.category = anchor.category, FALSE) AS same_category,
                     COALESCE(
                       (
@@ -589,7 +595,11 @@ class SharedContentRepository:
                     AND (p.system_prompt_key IS NULL OR p.content_locale = :locale)
                     AND COALESCE(p.id <> :exclude_prompt_id, TRUE)
                 )
-                SELECT *
+                SELECT
+                  ranked.*,
+                  CASE
+                    WHEN ranked.anchor_distance <= :semantic_max_distance THEN ranked.anchor_distance
+                  END AS semantic_distance
                 FROM ranked
                 ORDER BY semantic_distance ASC NULLS LAST, same_category DESC,
                   view_count DESC, RANDOM()
