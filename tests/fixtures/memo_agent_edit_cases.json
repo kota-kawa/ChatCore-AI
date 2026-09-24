@@ -1,0 +1,172 @@
+{
+  "description": "Shared case table for applying memo agent partial edits. services/memo_agent_actions.py (apply_memo_edits) and frontend/lib/memo/agent_edits.ts (applyMemoEdits) must both satisfy every case. A string written as {\"repeat\": s, \"times\": n} stands for s repeated n times. expected.failure names the rule that rejects the edits.",
+  "cases": [
+    {
+      "name": "replaces a single passage",
+      "body": "今日は晴れです。明日は雨です。",
+      "edits": [{"old_string": "晴れ", "new_string": "曇り"}],
+      "expected": {"body": "今日は曇りです。明日は雨です。"}
+    },
+    {
+      "name": "locates every edit in the original body regardless of order",
+      "body": "A1 B2 C3",
+      "edits": [{"old_string": "C3", "new_string": "c"}, {"old_string": "A1", "new_string": "a"}],
+      "expected": {"body": "a B2 c"}
+    },
+    {
+      "name": "does not match text produced by another edit",
+      "body": "x y",
+      "edits": [{"old_string": "x", "new_string": "y"}, {"old_string": "y", "new_string": "z"}],
+      "expected": {"body": "y z"}
+    },
+    {
+      "name": "deletes a passage when new_string is empty",
+      "body": "残す。消す。残す2。",
+      "edits": [{"old_string": "消す。", "new_string": ""}],
+      "expected": {"body": "残す。残す2。"}
+    },
+    {
+      "name": "appends by repeating the anchor passage",
+      "body": "# 買い物\n- 牛乳",
+      "edits": [{"old_string": "- 牛乳", "new_string": "- 牛乳\n- 卵"}],
+      "expected": {"body": "# 買い物\n- 牛乳\n- 卵"}
+    },
+    {
+      "name": "accepts edits that touch without overlapping",
+      "body": "abcdef",
+      "edits": [{"old_string": "abc", "new_string": "X"}, {"old_string": "def", "new_string": "Y"}],
+      "expected": {"body": "XY"}
+    },
+    {
+      "name": "rejects an old_string that is not in the body",
+      "body": "abc",
+      "edits": [{"old_string": "xyz", "new_string": "q"}],
+      "expected": {"failure": "not_found"}
+    },
+    {
+      "name": "rejects an old_string that matches more than once",
+      "body": "りんご と りんご",
+      "edits": [{"old_string": "りんご", "new_string": "みかん"}],
+      "expected": {"failure": "ambiguous"}
+    },
+    {
+      "name": "counts overlapping occurrences as more than one match",
+      "body": "aaa",
+      "edits": [{"old_string": "aa", "new_string": "b"}],
+      "expected": {"failure": "ambiguous"}
+    },
+    {
+      "name": "rejects edits whose ranges overlap",
+      "body": "abcdef",
+      "edits": [{"old_string": "abcd", "new_string": "1"}, {"old_string": "cdef", "new_string": "2"}],
+      "expected": {"failure": "overlap"}
+    },
+    {
+      "name": "rejects an edit nested inside another edit",
+      "body": "abcdef",
+      "edits": [{"old_string": "bcd", "new_string": "1"}, {"old_string": "abcdef", "new_string": "2"}],
+      "expected": {"failure": "overlap"}
+    },
+    {
+      "name": "is atomic: one failing edit leaves the body unchanged",
+      "body": "abc",
+      "edits": [{"old_string": "a", "new_string": "A"}, {"old_string": "zzz", "new_string": "Z"}],
+      "expected": {"failure": "not_found"}
+    },
+    {
+      "name": "rejects an empty old_string",
+      "body": "abc",
+      "edits": [{"old_string": "", "new_string": "x"}],
+      "expected": {"failure": "empty_old_string"}
+    },
+    {
+      "name": "rejects an empty edit list",
+      "body": "abc",
+      "edits": [],
+      "expected": {"failure": "no_edits"}
+    },
+    {
+      "name": "matches a CRLF body with an LF old_string and returns LF",
+      "body": "一行目\r\n二行目\r\n三行目",
+      "edits": [{"old_string": "一行目\n二行目", "new_string": "1\n2"}],
+      "expected": {"body": "1\n2\n三行目"}
+    },
+    {
+      "name": "normalizes a CRLF old_string and new_string",
+      "body": "一行目\n二行目\n三行目",
+      "edits": [{"old_string": "二行目\r\n三行目", "new_string": "2\r\n3"}],
+      "expected": {"body": "一行目\n2\n3"}
+    },
+    {
+      "name": "treats a lone CR as a line break",
+      "body": "a\rb",
+      "edits": [{"old_string": "a\nb", "new_string": "ab"}],
+      "expected": {"body": "ab"}
+    },
+    {
+      "name": "decodes a JSON-encoded body before matching",
+      "body": "\"一行目\\n二行目\"",
+      "edits": [{"old_string": "二行目", "new_string": "2行目"}],
+      "expected": {"body": "一行目\n2行目"}
+    },
+    {
+      "name": "keeps a body that is JSON but not a JSON string as is",
+      "body": "{\"a\": 1}",
+      "edits": [{"old_string": "1", "new_string": "2"}],
+      "expected": {"body": "{\"a\": 2}"}
+    },
+    {
+      "name": "accepts the maximum number of edits",
+      "body": "[0][1][2][3][4][5][6][7][8][9][10][11][12][13][14][15][16][17][18][19]",
+      "edits": [
+        {"old_string": "[0]", "new_string": "<0>"}, {"old_string": "[1]", "new_string": "<1>"},
+        {"old_string": "[2]", "new_string": "<2>"}, {"old_string": "[3]", "new_string": "<3>"},
+        {"old_string": "[4]", "new_string": "<4>"}, {"old_string": "[5]", "new_string": "<5>"},
+        {"old_string": "[6]", "new_string": "<6>"}, {"old_string": "[7]", "new_string": "<7>"},
+        {"old_string": "[8]", "new_string": "<8>"}, {"old_string": "[9]", "new_string": "<9>"},
+        {"old_string": "[10]", "new_string": "<10>"}, {"old_string": "[11]", "new_string": "<11>"},
+        {"old_string": "[12]", "new_string": "<12>"}, {"old_string": "[13]", "new_string": "<13>"},
+        {"old_string": "[14]", "new_string": "<14>"}, {"old_string": "[15]", "new_string": "<15>"},
+        {"old_string": "[16]", "new_string": "<16>"}, {"old_string": "[17]", "new_string": "<17>"},
+        {"old_string": "[18]", "new_string": "<18>"}, {"old_string": "[19]", "new_string": "<19>"}
+      ],
+      "expected": {"body": "<0><1><2><3><4><5><6><7><8><9><10><11><12><13><14><15><16><17><18><19>"}
+    },
+    {
+      "name": "rejects more than the maximum number of edits",
+      "body": "x",
+      "edits": [
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}, {"old_string": "x", "new_string": "y"},
+        {"old_string": "x", "new_string": "y"}
+      ],
+      "expected": {"failure": "too_many_edits"}
+    },
+    {
+      "name": "accepts an edited body at the maximum length",
+      "body": "x",
+      "edits": [{"old_string": "x", "new_string": {"repeat": "y", "times": 60000}}],
+      "expected": {"body": {"repeat": "y", "times": 60000}}
+    },
+    {
+      "name": "rejects an edited body over the maximum length",
+      "body": "x",
+      "edits": [{"old_string": "x", "new_string": {"repeat": "y", "times": 60001}}],
+      "expected": {"failure": "too_long"}
+    },
+    {
+      "name": "counts the length in code points, not UTF-16 units",
+      "body": "x",
+      "edits": [{"old_string": "x", "new_string": {"repeat": "😀", "times": 60000}}],
+      "expected": {"body": {"repeat": "😀", "times": 60000}}
+    }
+  ]
+}

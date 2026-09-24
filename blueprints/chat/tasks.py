@@ -58,14 +58,14 @@ from services.llm_daily_limit import (
 )
 from services.manual_rag import search_manual
 from services.memo_agent_actions import (
-    build_memo_edit_messages,
+    MemoAgentContext,
     classify_memo_intent,
-    parse_memo_edit_response,
+    generate_memo_edit_plan,
+    normalize_memo_body,
 )
 from services.page_actions import build_action_messages, parse_action_response
 from services.page_context import get_page_context
 from services.prompt_assist import create_prompt_assist_payload
-from services.repositories.memo_helpers import parse_memo_text
 from services.repositories.memo_repository import fetch_memo_detail
 from services.request_models import (
     AddTaskRequest,
@@ -118,9 +118,8 @@ AI_AGENT_PER_ACTOR_LIMIT = 40
 AI_AGENT_MEMO_CONTEXT_MAX_LENGTH = 20000
 AI_AGENT_HISTORY_MAX_MESSAGES = 20
 
-# メモ本文が長すぎて切り詰められたことを示す注記。編集計画（全文置換）の生成可否の判定にも使う。
-# Notice appended when the memo body was truncated for context; also used to decide whether
-# a full-replacement edit plan can be generated safely.
+# メモ本文が長すぎて切り詰められたことを示す注記
+# Notice appended when the memo body was truncated for context
 MEMO_CONTEXT_TRUNCATED_NOTICE = "(part of the body was omitted because it is long)"
 
 # 日本語: 全ページ共通AIエージェントの役割、安全規則、読みやすい回答方法を定めるシステムプロンプト。
@@ -346,10 +345,12 @@ def _build_ai_agent_messages(
 
 # 指定されたメモのタイトルと本文をエージェント用コンテキストに組み立てる関数
 # Fetch and format a specific memo's title and content to be used as context for the AI agent.
-async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
+async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> MemoAgentContext:
     """
     指定されたメモの詳細を取得し、文字制限を考慮した上で、AIエージェントの背景知識となるテキスト情報に整形します。
-    Fetches the memo content, clamps to max length, and formats it for agent context.
+    編集計画はLLMに見せた範囲ではなく保存済みの全文で照合するため、全文と切り詰めの有無も返します。
+    Fetches the memo content, clamps to max length, and formats it for agent context. The stored body and
+    the truncation flag are returned as well, because edit plans are matched against the full stored body.
     """
     if not user_id:
         raise ResourceNotFoundError("メモが見つかりません。")
@@ -358,14 +359,18 @@ async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str
     # Fetch memo from database
     memo = await fetch_memo_detail(user_id, memo_id)
     title = (memo.get("title") or "Saved memo").strip()
-    memo_text = parse_memo_text(memo.get("ai_response") or "").strip()
+    stored_body = memo.get("ai_response") or ""
+    # 部分置換の照合と同じ本文（復号・改行LF）をLLMへ見せる
+    # Show the LLM the same normalized body (decoded, LF line breaks) that partial edits are matched against
+    memo_text = normalize_memo_body(stored_body).strip()
 
     # メモが上限サイズを超えている場合は切り捨て
     # Truncate content if it exceeds character limits
-    if len(memo_text) > AI_AGENT_MEMO_CONTEXT_MAX_LENGTH:
+    body_truncated = len(memo_text) > AI_AGENT_MEMO_CONTEXT_MAX_LENGTH
+    if body_truncated:
         memo_text = f"{memo_text[:AI_AGENT_MEMO_CONTEXT_MAX_LENGTH]}\n\n{MEMO_CONTEXT_TRUNCATED_NOTICE}"
 
-    return (
+    prompt_context = (
         "[Memo currently open]\n"
         "In this conversation, answer questions about, organize, and summarize the content of the "
         "memo the user has open.\n"
@@ -374,6 +379,7 @@ async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str
         "Body:\n"
         f"{memo_text or 'The body is empty.'}"
     )
+    return MemoAgentContext(prompt_context=prompt_context, stored_body=stored_body, body_truncated=body_truncated)
 
 
 # データベースからタスクリストを取得する関数（ログイン時は個別、未ログイン時は共通）
@@ -952,28 +958,27 @@ async def ai_agent(
             # Handle memo-focused requests: propose an edit plan or answer questions using the memo as context
             if payload.memo_id is not None:
                 yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.memo_loading", locale)})
-                rag_context = await _build_ai_agent_memo_context(user_id, payload.memo_id)
+                memo_context = await _build_ai_agent_memo_context(user_id, payload.memo_id)
+                rag_context = memo_context.prompt_context
 
                 # 編集依頼なら、実行ボタン付きの編集計画（アクションプラン）を提案する。
-                # ただし本文が切り詰められている場合、全文置換の計画は末尾を消してしまうため生成しない。
+                # 本文が切り詰められている場合は、末尾を消さないよう見えている範囲への部分置換だけを許す。
                 # For edit requests, propose an executable edit plan the user confirms with the run button.
-                # Skip plan generation when the body was truncated for context: a full-replacement
-                # plan built from a partial body would silently delete the tail of the memo.
+                # When the body was truncated for context, only partial edits within the visible part are
+                # allowed, so the unseen tail of the memo is never deleted.
                 memo_intent = await run_blocking(classify_memo_intent, last_user_message)
-                if memo_intent == "edit" and not rag_context.endswith(MEMO_CONTEXT_TRUNCATED_NOTICE):
+                if memo_intent == "edit":
                     yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.memo_edit", locale)})
-                    edit_messages = build_memo_edit_messages(
-                        rag_context,
+                    edit_plan = await run_blocking(
+                        generate_memo_edit_plan,
+                        memo_context,
                         [
                             {"role": m.role, "content": m.content}
                             for m in payload.messages[-AI_AGENT_HISTORY_MAX_MESSAGES:]
                         ],
                         locale=locale,
+                        model=GPT_OSS_120B_MODEL,
                     )
-                    response_text = await run_blocking(
-                        get_llm_response, edit_messages, GPT_OSS_120B_MODEL
-                    )
-                    edit_plan = parse_memo_edit_response(response_text or "")
                     if edit_plan:
                         yield _ai_agent_sse("action_plan", {**edit_plan, "model": GPT_OSS_120B_MODEL})
                         return

@@ -24,6 +24,15 @@ test("requires confirmation from typed action metadata instead of visible wordin
     requiresActionConfirmation({ action: "memo_edit", risk: "low", description: "内容を編集する", content: "本文" }),
     true,
   );
+  assert.equal(
+    requiresActionConfirmation({
+      action: "memo_edit",
+      risk: "low",
+      description: "一部を編集する",
+      edits: [{ old_string: "本文", new_string: "本文です" }],
+    }),
+    true,
+  );
 });
 
 test("describeActionStep exposes the command and parameters of a typed action", () => {
@@ -87,6 +96,43 @@ test("describeActionStep exposes the replacement body and title of a memo_edit s
   assert.equal(rows.get("新しいタイトル"), "会議メモ（修正版）");
   assert.equal(rows.get("編集後の本文"), "修正後の本文です。");
   assert.equal(details.find((detail) => detail.label === "編集後の本文")?.multiline, true);
+});
+
+test("describeActionStep lists each partial edit before and after", () => {
+  const details = describeActionStep({
+    action: "memo_edit",
+    edits: [
+      { old_string: "月よう日", new_string: "月曜日" },
+      { old_string: "不要な一文。", new_string: "" },
+    ],
+    risk: "low",
+    description: "誤字を直します",
+  });
+
+  assert.deepEqual(
+    details.map((detail) => [detail.label, detail.value]),
+    [
+      ["種類", "メモ編集"],
+      ["変更前 1", "月よう日"],
+      ["変更後 1", "月曜日"],
+      ["変更前 2", "不要な一文。"],
+      ["変更後 2", "（削除）"],
+      ["リスク", "低（元に戻しやすい操作）"],
+    ],
+  );
+  assert.equal(details.filter((detail) => detail.multiline).length, 4);
+  assert.equal(details.some((detail) => detail.label === "編集後の本文"), false);
+});
+
+test("describeActionStep leaves a single partial edit unnumbered and localizes it", () => {
+  const rows = new Map(describeActionStep({
+    action: "memo_edit",
+    edits: [{ old_string: "draft", new_string: "" }],
+    description: "Remove the draft note",
+  }, "en").map((detail) => [detail.label, detail.value]));
+
+  assert.equal(rows.get("Before"), "draft");
+  assert.equal(rows.get("After"), "(removed)");
 });
 
 test("describeActionStep renders check and wait specifics", () => {

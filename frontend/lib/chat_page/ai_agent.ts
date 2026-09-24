@@ -1,3 +1,5 @@
+import type { MemoTextEdit } from "../memo/agent_edits";
+
 export type ActionStep = {
   action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait" | "memo_edit";
   command?: string;
@@ -9,8 +11,10 @@ export type ActionStep = {
   timeout_ms?: number;
   risk?: "low" | "medium" | "high";
   description: string;
-  /** memo_edit: 編集後のメモ本文全文 / full replacement body for the open memo */
+  /** memo_edit（全文置換）: 編集後のメモ本文全文 / full replacement body for the open memo */
   content?: string;
+  /** memo_edit（部分置換）: 本文中の一節を置き換える編集の一覧 / passages of the open memo to replace */
+  edits?: MemoTextEdit[];
   /** memo_edit: 新しいタイトル（変更時のみ） / new memo title when the edit renames it */
   title?: string;
 };

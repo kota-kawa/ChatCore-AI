@@ -392,6 +392,7 @@ export const jaMessages = {
   "memo.crawlFeatureExport": "Markdown、JSON、CSV形式でエクスポート",
   "memo.crawlFeatureShare": "共有リンクで必要なメモだけ公開",
   "memo.emptyEditedBody": "編集後の本文が空のため適用できませんでした。",
+  "memo.agentEditConflict": "メモが変更されたため、この編集を適用できませんでした。もう一度編集を依頼してください。",
   "memo.titleAutoPlaceholder": "空欄なら回答1行目を採用",
   "memo.titleLabel": "タイトル",
   "memo.backgroundColor": "メモの背景色",

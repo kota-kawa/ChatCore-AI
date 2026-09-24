@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
 import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
-import type { MemoEditPayload } from "../../lib/chat_page/mini_chat_runtime";
+import { applyMemoEdits, type MemoEditPayload } from "../../lib/memo/agent_edits";
 import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
@@ -94,15 +94,33 @@ export function MemoDetailModal() {
   // Focus the panel itself on open instead of jumping to the first action button
   const getInitialFocus = useCallback(() => panelRef.current, []);
 
+  // 部分置換は実行した時点のエディタ本文へ当てる。提案を待つ間や確認中の手編集も拾えるよう、最新の本文を ref で持つ
+  // Partial edits apply to the editor body as of execution; a ref tracks the latest body so manual edits
+  // made while the proposal was pending or being confirmed are taken into account
+  const latestBodyRef = useRef(detailEditAiResponse);
+  useEffect(() => {
+    latestBodyRef.current = detailEditAiResponse;
+  }, [detailEditAiResponse]);
+
   // メモエージェントが提案した編集を編集中のタイトル・本文へ反映する（保存は既存の自動保存に任せる）
   // Applies an agent-proposed edit to the editing state; persistence is handled by the existing autosave
-  const applyAgentMemoEdit = useCallback(async ({ content, title }: MemoEditPayload): Promise<StepExecutionResult> => {
-    if (!content.trim()) {
+  const applyAgentMemoEdit = useCallback(async (edit: MemoEditPayload): Promise<StepExecutionResult> => {
+    const applied = edit.kind === "edits"
+      ? applyMemoEdits(latestBodyRef.current, edit.edits)
+      : { ok: true as const, body: edit.content };
+    // サーバーは LLM が読んだ時点の本文で検証済みなので、ここで当たらないのはその後に本文が変わったため。本文もタイトルも変えずに知らせる
+    // The server already validated these edits against the body the LLM read, so a failure here means the body
+    // changed since then; leave the body and title untouched
+    if (!applied.ok) {
+      return { ok: false, message: t("memo.agentEditConflict"), needsReplan: false };
+    }
+    if (!applied.body.trim()) {
       return { ok: false, message: t("memo.emptyEditedBody"), needsReplan: false };
     }
-    setDetailEditAiResponse(content);
-    if (title !== undefined) {
-      setDetailEditTitle(title.slice(0, 255));
+    latestBodyRef.current = applied.body;
+    setDetailEditAiResponse(applied.body);
+    if (edit.title !== undefined) {
+      setDetailEditTitle(edit.title.slice(0, 255));
     }
     return { ok: true };
   }, [setDetailEditAiResponse, setDetailEditTitle, t]);
