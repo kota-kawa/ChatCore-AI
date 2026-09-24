@@ -2067,7 +2067,10 @@ class ChatGenerationJob:
         if self._should_stop():
             return ModelDecision(outcome="stopped")
 
-        state.turn_state.apply_model_update(parse_turn_state_update(step_chunks))
+        turn_state_update = parse_turn_state_update(step_chunks)
+        if turn_state_update is None:
+            state.telemetry.missing_turn_state_updates += 1
+        state.turn_state.apply_model_update(turn_state_update)
         return ModelDecision(
             outcome="decided",
             tool_calls=[] if force_answer else tool_calls_buffer,

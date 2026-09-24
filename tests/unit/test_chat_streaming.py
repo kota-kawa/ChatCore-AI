@@ -1075,6 +1075,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("ready_to_answer", persisted[0])
         self.assertEqual(job._telemetry.empty_answer_recoveries, 1)
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
 
     # 日本語: やり直しでもタグ無しの封筒 JSON しか返らなければ、JSON もトレースも保存せず
     # 空回答のエラーで終えることを検証します。
@@ -1177,6 +1178,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(persisted, ["鎌倉の紅葉は12月上旬が見頃です。"])
         self.assertEqual(job._telemetry.empty_answer_recoveries, 0)
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 0)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
 
     # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。
     # English: Verify that stopping mid-generation persists the partial text and includes it in the aborted event.

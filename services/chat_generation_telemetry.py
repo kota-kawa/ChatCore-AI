@@ -57,6 +57,9 @@ class ChatGenerationTelemetry:
     # 最後の判断が本文を返さず、回答のみ要求で1度やり直した回数。
     # How often the final decision produced no user-facing answer and was retried answer-only.
     empty_answer_recoveries: int = 0
+    # 判断ステップの出力からタグ付きの状態封筒を読めなかった回数。
+    # How many decision steps produced no readable tagged state envelope.
+    missing_turn_state_updates: int = 0
     # タグの無い封筒 JSON だけの本文を封筒として扱い、回答にしなかった回数。
     # How often a body holding only an untagged envelope JSON was treated as the envelope.
     untagged_turn_state_recoveries: int = 0
@@ -153,6 +156,7 @@ class ChatGenerationTelemetry:
             "context_recovery_count": self.context_recovery_count,
             "tool_schema_recoveries": self.tool_schema_recoveries,
             "empty_answer_recoveries": self.empty_answer_recoveries,
+            "missing_turn_state_updates": self.missing_turn_state_updates,
             "untagged_turn_state_recoveries": self.untagged_turn_state_recoveries,
             "research_failure_recoveries": self.research_failure_recoveries,
             "salvaged_partial_answers": self.salvaged_partial_answers,
