@@ -71,13 +71,24 @@
 - 濃色面では白地用の線色や副次色はコントラストが取れません。濃色面専用のトークンを使い、白地用の値を流用しないでください。
 
 ## サブエージェントの指定
-`AGENTS.md` が要求するサブエージェントの指定です。Claude Code では、下の表に無い役割も含めて、起動するサブエージェントはすべて Sonnet 5 を指定します（モデルを省略すると親と同じモデルで動くため、必ず明示します）。ツールやモデルの名称が変わったら、この表だけを更新します。
+`AGENTS.md` が要求するサブエージェントの指定です。下の表に無い役割も含めて、起動するサブエージェントはすべて、Claude Code では Sonnet 5（effort high）、Codex では GPT-6 Luna（effort max）を使います。モデルや effort を省略すると親と同じ設定で動くため、必ず明示します。Claude Code では起動時に effort を渡せないので、`model` と `effort` を指定したサブエージェント定義（各自の `~/.claude/agents/`）を用意し、それを使って起動します。ツールやモデルの名称が変わったら、この段落・表・定義の例だけを更新します。
+
+Claude Code のサブエージェント定義の例（`~/.claude/agents/sonnet-high.md`）。`model: sonnet` は「最新の Sonnet」に解決されるため、Sonnet 5 を固定する ID で書きます。
+
+```markdown
+---
+name: sonnet-high
+description: General-purpose subagent pinned to Sonnet 5 with high effort.
+model: claude-sonnet-5
+effort: high
+---
+```
 
 | 役割 | 用途 | Codex | Claude Code |
 | --- | --- | --- | --- |
-| レビュー用サブエージェント | PR を作る前の独立レビュー（スコープ・差分・チェックリストだけを渡す） | luna max | Sonnet 5 |
-| LLM 代替サブエージェント | 「AI 出力の品質確認」で LLM API の代わりに応答を生成する | luna | Sonnet 5 |
-| その他のサブエージェント | 調査、設計、実装、実 API での計測など、上の 2 つ以外のすべて | 指定なし | Sonnet 5 |
+| レビュー用サブエージェント | PR を作る前の独立レビュー（スコープ・差分・チェックリストだけを渡す） | GPT-6 Luna（max） | Sonnet 5（high） |
+| LLM 代替サブエージェント | 「AI 出力の品質確認」で LLM API の代わりに応答を生成する | GPT-6 Luna（max） | Sonnet 5（high） |
+| その他のサブエージェント | 調査、設計、実装、実 API での計測など、上の 2 つ以外のすべて | GPT-6 Luna（max） | Sonnet 5（high） |
 
 ## AI 出力の品質確認
 - 対象は LLM に渡す内容や応答の扱いを変える変更です。例: プロンプト文言（`blueprints/chat/tasks.py`、`services/chat_prompt.py`、`services/prompt_assist.py`）、ツール定義（`services/llm_tool_schema.py`）、会話・コンテキストの組み立てと判断ループ（`services/chat_generation.py`）、モデル名・温度・出力上限などの設定。Web 検索の要否・クエリ生成・結果の選択・要約・引用を変える場合も対象です。
