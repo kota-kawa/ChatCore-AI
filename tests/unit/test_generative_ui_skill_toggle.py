@@ -18,7 +18,7 @@ _GENERATIVE_UI_TERMS = ("UI_MODE", "Artifact", "chatcore-artifact", "generated U
 
 
 def _assembled_prompt(user):
-    skills_prompt, enabled = build_chat_skills_context([], user, locale="ja")
+    skills_context = build_chat_skills_context([], user, locale="ja")
     messages = build_context_messages(
         base_system_prompt=build_base_system_prompt(locale="ja"),
         user_profile_prompt=None,
@@ -26,8 +26,8 @@ def _assembled_prompt(user):
         room_summary="",
         memory_facts=[],
         recent_messages=[{"role": "user", "content": "グラフで見せて"}],
-        user_skills_prompt=skills_prompt,
-        generative_ui_enabled=enabled,
+        user_skills_prompt=skills_context.prompt,
+        generative_ui_enabled=skills_context.generative_ui_enabled,
     )
     return "\n".join(str(message["content"]) for message in messages)
 

@@ -58,6 +58,13 @@ from services.interactive_buttons import (
 )
 from services.llm import LlmOutputLimitError, get_llm_json_response
 from services.message_parts_display import normalize_message_parts_for_display
+from services.tool_approval_parts import (
+    TOOL_APPROVAL_PART_TYPE,
+    ToolApprovalValidationError,
+    describe_tool_approval_for_context,
+    tool_approval_part,
+    validate_tool_approval_payload,
+)
 
 # 意図判定とモード注入は services/generative_ui_intent.py が担当する。呼び出し側が
 # 生成UIの入口をここだけに保てるよう、名前はこのモジュールからも公開する。
@@ -1504,6 +1511,13 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
             if status_part:
                 parts.append(status_part)
             continue
+        if part_type == TOOL_APPROVAL_PART_TYPE:
+            try:
+                approval = validate_tool_approval_payload(part.get("approval"))
+            except ToolApprovalValidationError:
+                continue
+            parts.append(tool_approval_part(approval))
+            continue
     normalized_parts = normalize_message_parts_for_display(parts)
     return normalized_parts or None
 
@@ -1515,7 +1529,7 @@ def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
 
 
 def build_message_parts_context(raw_parts: Any) -> str:
-    """Return a compact, code-free semantic summary of generated UI, choice-button and image parts.
+    """Return a compact, code-free summary of generated UI, choice-button, approval-card and image parts.
 
     The visible response deliberately stores artifacts separately from prose.
     Reintroducing their user-visible labels, title, and description lets later
@@ -1563,6 +1577,8 @@ def build_message_parts_context(raw_parts: Any) -> str:
             context_lines.append("</artifact>")
         elif part.get("type") == INTERACTIVE_BUTTONS_PART_TYPE:
             context_lines.extend(describe_interactive_buttons_for_context(part.get("buttons")))
+        elif part.get("type") == TOOL_APPROVAL_PART_TYPE:
+            context_lines.extend(describe_tool_approval_for_context(part.get("approval")))
         elif part.get("type") == "web_search_image":
             image = part.get("image")
             if not isinstance(image, dict):

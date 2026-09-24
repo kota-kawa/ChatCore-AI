@@ -68,6 +68,17 @@ OCCURRENCE_FIELDS = (
     "truncated_evidence_payloads",
     "artifact_repair_attempted",
     "artifact_repair_succeeded",
+    # 利用者のデータ（メモなど）のツール。承認待ちで締めたターン、外部の内容で自動承認を止めたターン、
+    # 引数の不備、提案・自動実行・読み取りがあったターンの割合。
+    # The user-data (memo) tools: turns closed on a pending approval, turns whose auto approval
+    # was held back by external content, argument rejections, and turns with proposals, auto
+    # runs or reads.
+    "approval_pending_turn",
+    "auto_approval_suppressed_by_untrusted_input",
+    "workspace_invalid_arguments",
+    "workspace_write_proposals",
+    "workspace_auto_executions",
+    "workspace_read_calls",
 )
 
 # 中央値で報告する分量の指標。
