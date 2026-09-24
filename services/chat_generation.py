@@ -248,6 +248,40 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
     }
 
 
+# 選択ボタンは検索画像と同じ返信に並ぶ。ボタンが確定した時点の更新を本文とボタンだけで送ると、
+# ストリーム中に出した画像が完了まで消えるため、露出済みの画像を露出した位置へ戻す。
+# 画像の位置は配信済みの本文（引用チップの除去後）に対するオフセットなので、生のチャンクではなく
+# その本文からボタンのフェンスを除いて組み直す。生成UIを含む更新は従来どおり画像を載せない。
+# Choice buttons share a reply with web-search images. Sending the update that settles the buttons
+# with only the prose and the buttons would hide the images revealed so far until completion, so the
+# revealed images return to their offsets. Those offsets index the streamed display text (chip markup
+# already stripped), so the layout is rebuilt from that text minus the button fence, not from the raw
+# chunks. An update with a generated UI stays image-free, as generated UI and images are exclusive.
+def _with_revealed_stream_images(
+    parts_update: dict[str, Any],
+    streamed_display_text: str,
+    revealed_image_parts: list[dict[str, Any]],
+    revealed_image_offsets: list[int],
+) -> dict[str, Any]:
+    if not revealed_image_parts or any(
+        part.get("type") in GENERATIVE_UI_PART_TYPES for part in parts_update["parts"]
+    ):
+        return parts_update
+    displayed_update = _build_streaming_parts_update(streamed_display_text)
+    if displayed_update is None:
+        return parts_update
+    inline_parts = build_web_search_image_parts_at_offsets(
+        displayed_update["response"],
+        revealed_image_parts,
+        revealed_image_offsets,
+        keep_empty_tail=True,
+    )
+    return {
+        "response": displayed_update["response"],
+        "parts": [*inline_parts, *(part for part in displayed_update["parts"] if part.get("type") != "text")],
+    }
+
+
 # 環境変数からLLMストリーミング接続の最大再試行回数を取得する
 # Retrieve the maximum retry limit for the LLM stream from environment variables
 def _get_llm_stream_max_retries() -> int:
@@ -1649,6 +1683,13 @@ class ChatGenerationJob:
                             for part in streaming_parts_update["parts"]
                         ],
                     }
+                stream_image_parts = build_web_search_image_parts(state.selected_web_search_images)
+                streaming_parts_update = _with_revealed_stream_images(
+                    streaming_parts_update,
+                    state.streamed_display_text,
+                    [stream_image_parts[index] for index in state.revealed_image_indices],
+                    state.revealed_image_offsets,
+                )
                 streaming_parts_signature = json.dumps(
                     streaming_parts_update,
                     ensure_ascii=False,
