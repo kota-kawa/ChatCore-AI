@@ -33,6 +33,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, CHAR, DOUBLE_PRECISION, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from services.tool_approval_parts import TOOL_APPROVAL_DECISIONS, TOOL_APPROVAL_STATUSES
+
 from .base import Base
 from .types import Vector
 
@@ -43,6 +45,13 @@ def _timestamp(*, timezone: bool = False, nullable: bool = True) -> Mapped[datet
         nullable=nullable,
         server_default=text("CURRENT_TIMESTAMP"),
     )
+
+
+# CHECK 制約の値の集合を、応答モデルの Literal から作った定数で組み立てる。
+# Builds a CHECK constraint's value set from constants derived from the response-model literals.
+def _in_values(column: str, values: tuple[str, ...]) -> str:
+    quoted = ", ".join(f"'{value}'" for value in values)
+    return f"{column} IN ({quoted})"
 
 
 class User(Base):
@@ -58,6 +67,7 @@ class User(Base):
     llm_profile_context: Mapped[str | None] = mapped_column(Text)
     context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
     generative_ui_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
+    memo_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     preferred_locale: Mapped[str | None] = mapped_column(String(16))
 
     __table_args__ = (
@@ -150,6 +160,78 @@ class SharedChatRoom(Base):
     # Both lookups (share_token for public reads, chat_room_id for owner writes) already
     # resolve to a single row through unique indexes, so no extra lifecycle index is added.
     __table_args__ = (Index("idx_shared_chat_rooms_token_created_at", "share_token", desc("created_at")),)
+
+
+class ChatToolApproval(Base):
+    """One approval card for a chat write tool: proposed, then run only after the user decides.
+
+    arguments は提案時の引数、preview はカードに出す変更内容、target_ref は提案時の対象
+    （メモの ID・版・共有中か）とターンの文脈（外部の内容を読んだか）。回答を保存するまで
+    assistant_message_id は NULL で、承認 API はその間の行を受け付けない。
+    arguments holds the proposed input, preview the change shown on the card, and target_ref
+    the target as proposed (memo id, revision, whether it was shared) plus the turn context
+    (whether external content was read). assistant_message_id stays NULL until the reply is
+    saved, and the approval API refuses rows in that state.
+    """
+
+    __tablename__ = "chat_tool_approvals"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    chat_room_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False
+    )
+    assistant_message_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("chat_history.id", ondelete="CASCADE")
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    preview: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    target_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    decision: Mapped[str | None] = mapped_column(String(16))
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(_in_values("status", TOOL_APPROVAL_STATUSES), name="ck_chat_tool_approvals_status"),
+        CheckConstraint(
+            f"decision IS NULL OR {_in_values('decision', TOOL_APPROVAL_DECISIONS)}",
+            name="ck_chat_tool_approvals_decision",
+        ),
+        Index("idx_chat_tool_approvals_room_pending", "chat_room_id", postgresql_where=text("status = 'pending'")),
+        Index("idx_chat_tool_approvals_message", "assistant_message_id"),
+        Index("idx_chat_tool_approvals_user_created_at", "user_id", desc("created_at")),
+    )
+
+
+class ChatToolAutoApproval(Base):
+    """A tool the user granted "always approve"; revoking deletes the row."""
+
+    __tablename__ = "chat_tool_auto_approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    source_approval_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_tool_approvals.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "tool_name", name="uq_chat_tool_auto_approvals_user_tool"),
+        Index(
+            "idx_chat_tool_auto_approvals_source",
+            "source_approval_id",
+            postgresql_where=text("source_approval_id IS NOT NULL"),
+        ),
+    )
 
 
 class ChatRoomSummary(Base):
