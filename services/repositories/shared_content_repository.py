@@ -398,30 +398,37 @@ class SharedContentRepository:
         author_id: int | None = None,
         locale: str = "ja",
     ) -> list[dict[str, Any]]:
-        """Fetch a feed page with flags and JSONB resource metadata in one query."""
-        conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
+        """Fetch a feed page with flags and JSONB resource metadata in one query.
+
+        Featured prompts lead the first page only, on top of the regular page: the first
+        page returns every featured row plus ``limit + 1`` regular rows, so the caller can
+        build the keyset cursor from the last regular row even when there are more featured
+        prompts than the page size. Later pages exclude featured rows, so the cursor (view
+        count, created_at, id) never repeats or skips a regular prompt.
+        """
+
+        def filters(alias: str) -> list[str]:
+            filter_conditions = [f"({alias}.system_prompt_key IS NULL OR {alias}.content_locale = :locale)"]
+            if category is not None:
+                filter_conditions.append(f"{alias}.category = :feed_category")
+            if content_format is not None:
+                filter_conditions.append(f"{alias}.content_format = :feed_content_format")
+            if media_type is not None:
+                filter_conditions.append(f"{alias}.media_type = :feed_media_type")
+            if author_id is not None:
+                filter_conditions.append(f"{alias}.user_id = :feed_author_id")
+            return filter_conditions
+
+        conditions = filters("p")
         params: dict[str, Any] = {
             "locale": locale,
             "actor_user_id": user_id,
             "fetch_limit": min(max(int(limit), 1), 100) + 1,
+            "feed_category": category,
+            "feed_content_format": content_format,
+            "feed_media_type": media_type,
+            "feed_author_id": author_id,
         }
-        if category is not None:
-            conditions.append("p.category = :feed_category")
-            params["feed_category"] = category
-        if content_format is not None:
-            conditions.append("p.content_format = :feed_content_format")
-            params["feed_content_format"] = content_format
-        if media_type is not None:
-            conditions.append("p.media_type = :feed_media_type")
-            params["feed_media_type"] = media_type
-        if author_id is not None:
-            conditions.append("p.user_id = :feed_author_id")
-            params["feed_author_id"] = author_id
-        # 運営ピックは最初のページの先頭にだけ出す。カーソルは閲覧数・作成日時・ID の
-        # キーセットなので、2 ページ目以降は運営ピックを除いて重複も欠落も起こさない。
-        # Featured prompts lead the first page only. The cursor is a keyset over view count,
-        # created_at and id, so later pages exclude featured rows instead of repeating or
-        # skipping them.
         if cursor is not None:
             conditions.append("p.featured_at IS NULL")
             conditions.append(
@@ -430,8 +437,17 @@ class SharedContentRepository:
             )
             params["feed_view_count"], params["feed_created_at"], params["feed_id"] = cursor
             featured_order = ""
+            fetch_limit = ":fetch_limit"
         else:
             featured_order = "(p.featured_at IS NOT NULL) DESC, p.featured_at DESC, "
+            fetch_limit = f"""(
+                    :fetch_limit + (
+                      SELECT COUNT(*) FROM prompts AS f
+                      WHERE f.is_public = TRUE AND f.deleted_at IS NULL
+                        AND f.featured_at IS NOT NULL
+                        AND {' AND '.join(filters('f'))}
+                    )
+                  )"""
 
         result = await session.execute(
             text(
@@ -492,7 +508,7 @@ class SharedContentRepository:
                     AND p.deleted_at IS NULL
                     AND {' AND '.join(conditions)}
                   ORDER BY {featured_order}COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
-                  LIMIT :fetch_limit
+                  LIMIT {fetch_limit}
                 )
                 SELECT
                     p.*,

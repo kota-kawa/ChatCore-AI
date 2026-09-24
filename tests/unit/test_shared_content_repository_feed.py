@@ -35,6 +35,24 @@ class SharedContentRepositoryFeedTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("COALESCE(lc.like_count, 0) AS like_count", sql)
         self.assertIn("SELECT COUNT(*) AS like_count", sql)
         self.assertNotIn("feed_view_count", params)
+        # The first page fetches every featured row on top of the regular page.
+        self.assertIn(":fetch_limit + (", sql)
+        self.assertIn("SELECT COUNT(*) FROM prompts AS f", sql)
+        self.assertIn("f.featured_at IS NOT NULL", sql)
+
+    async def test_featured_count_on_the_first_page_honours_the_same_filters(self):
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=_result())
+
+        await _feed(session, category="business", content_format="skill", author_id=42)
+
+        statement, params = session.execute.await_args.args
+        sql = str(statement)
+        self.assertIn("f.category = :feed_category", sql)
+        self.assertIn("f.content_format = :feed_content_format", sql)
+        self.assertIn("f.user_id = :feed_author_id", sql)
+        self.assertEqual(params["feed_category"], "business")
+        self.assertEqual(params["feed_author_id"], 42)
 
     async def test_later_pages_skip_featured_prompts_and_keep_the_keyset_order(self):
         session = MagicMock()
@@ -49,6 +67,8 @@ class SharedContentRepositoryFeedTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("< (:feed_view_count, :feed_created_at, :feed_id)", sql)
         self.assertNotIn("(p.featured_at IS NOT NULL) DESC", sql)
         self.assertIn("ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC", sql)
+        self.assertIn("LIMIT :fetch_limit\n", sql)
+        self.assertNotIn("SELECT COUNT(*) FROM prompts AS f", sql)
         self.assertEqual((params["feed_view_count"], params["feed_created_at"], params["feed_id"]), cursor)
 
 

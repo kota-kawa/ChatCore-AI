@@ -479,9 +479,7 @@ function PromptCardComponent({
           >
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
             {likeCount > 0 ? (
-              <span className="prompt-action-count" aria-label={t("promptShare.likeCountLabel", { count: likeCount })}>
-                {likeCount}
-              </span>
+              <span className="prompt-action-count">{likeCount}</span>
             ) : null}
           </button>
 

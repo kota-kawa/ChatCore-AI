@@ -385,15 +385,22 @@ async def _get_prompts_with_flags(
         locale=locale,
     )
     prompts = [_serialize_prompt_row(row) for row in rows]
-    has_next = len(prompts) > min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
     page_limit = min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
-    prompts = prompts[:page_limit]
+    # 運営ピックは最初のページに全件付くので、ページ送りの判定とカーソルは通常投稿だけで作る。
+    # 運営ピックの行からカーソルを作ると、その閲覧数より多い通常投稿が以後のページに出なくなる。
+    # Featured prompts ride along on the first page, so paging and the cursor are computed
+    # from regular rows only; a cursor taken from a featured row would hide every regular
+    # prompt with more views than it.
+    featured = [prompt for prompt in prompts if prompt.get("featured_at")]
+    regular = [prompt for prompt in prompts if not prompt.get("featured_at")]
+    has_next = len(regular) > page_limit
+    regular = regular[:page_limit]
     return {
-        "prompts": prompts,
+        "prompts": featured + regular,
         "pagination": {
             "limit": page_limit,
             "has_next": has_next,
-            "next_cursor": _encode_prompt_feed_cursor(prompts[-1]) if has_next and prompts else None,
+            "next_cursor": _encode_prompt_feed_cursor(regular[-1]) if has_next and regular else None,
         },
     }
 

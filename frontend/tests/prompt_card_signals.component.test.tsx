@@ -74,17 +74,17 @@ describe("PromptCard signals", () => {
   });
 
   it("shows the view count and the like count", () => {
-    renderCard({ view_count: 128, like_count: 5 });
+    const { container } = renderCard({ view_count: 128, like_count: 5 });
 
     expect(screen.getByLabelText("閲覧 128 回")).toHaveTextContent("128");
-    expect(screen.getByLabelText("いいね 5 件")).toHaveTextContent("5");
+    expect(container.querySelector(".like-btn .prompt-action-count")).toHaveTextContent("5");
   });
 
   it("hides the like count while nobody has liked the prompt", () => {
-    renderCard({ view_count: 0, like_count: 0 });
+    const { container } = renderCard({ view_count: 0, like_count: 0 });
 
     expect(screen.getByLabelText("閲覧 0 回")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/いいね \d+ 件/)).toBeNull();
+    expect(container.querySelector(".like-btn .prompt-action-count")).toBeNull();
   });
 
   it("marks operator-featured prompts with a staff pick badge", () => {
