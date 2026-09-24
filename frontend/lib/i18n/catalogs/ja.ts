@@ -709,6 +709,8 @@ export const jaMessages = {
   "promptShare.closeExpandedImage": "拡大表示を閉じる",
   "promptShare.commentTooltip": "コメントを見る・投稿する",
   "promptShare.likeTooltip": "このプロンプトにいいね",
+  "promptShare.viewCountLabel": "閲覧 {count} 回",
+  "promptShare.featuredPick": "運営ピック",
   "promptShare.removeFromChat": "チャットで使う設定を解除",
   "promptShare.useInChat": "チャットで使う",
   "promptShare.updatingChat": "チャット設定を更新中",

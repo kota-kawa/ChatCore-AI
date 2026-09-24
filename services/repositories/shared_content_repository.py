@@ -307,7 +307,7 @@ class SharedContentRepository:
                     p.id, p.title, p.category, p.content, p.description,
                     COALESCE(u.username, p.author, 'ユーザー') AS author,
                     p.input_examples, p.output_examples, p.content_format,
-                    p.media_type, p.attributes, p.attachments,
+                    p.media_type, p.attributes, p.attachments, p.featured_at,
                     COALESCE(pvc.view_count, 0) AS view_count,
                     {lexical_rank} AS lexical_rank,
                     {semantic_distance} AS semantic_distance,
@@ -343,6 +343,7 @@ class SharedContentRepository:
                 )
                 SELECT p.*,
                        COALESCE(pc.comment_count, 0) AS comment_count,
+                       COALESCE(lc.like_count, 0) AS like_count,
                        EXISTS (
                          SELECT 1 FROM prompt_likes AS pl
                          WHERE pl.user_id = :actor_user_id AND pl.prompt_id = p.id
@@ -365,6 +366,11 @@ class SharedContentRepository:
                   WHERE deleted_at IS NULL AND hidden_by_reports_at IS NULL
                     AND prompt_id = p.id
                 ) AS pc ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT COUNT(*) AS like_count
+                  FROM prompt_likes
+                  WHERE prompt_id = p.id
+                ) AS lc ON TRUE
                 ORDER BY p.lexical_rank DESC, p.semantic_distance ASC NULLS LAST,
                   p.view_count DESC, p.created_at DESC, p.id DESC
                 """
@@ -392,31 +398,56 @@ class SharedContentRepository:
         author_id: int | None = None,
         locale: str = "ja",
     ) -> list[dict[str, Any]]:
-        """Fetch a feed page with flags and JSONB resource metadata in one query."""
-        conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
+        """Fetch a feed page with flags and JSONB resource metadata in one query.
+
+        Featured prompts lead the first page only, on top of the regular page: the first
+        page returns every featured row plus ``limit + 1`` regular rows, so the caller can
+        build the keyset cursor from the last regular row even when there are more featured
+        prompts than the page size. Later pages exclude featured rows, so the cursor (view
+        count, created_at, id) never repeats or skips a regular prompt.
+        """
+
+        def filters(alias: str) -> list[str]:
+            filter_conditions = [f"({alias}.system_prompt_key IS NULL OR {alias}.content_locale = :locale)"]
+            if category is not None:
+                filter_conditions.append(f"{alias}.category = :feed_category")
+            if content_format is not None:
+                filter_conditions.append(f"{alias}.content_format = :feed_content_format")
+            if media_type is not None:
+                filter_conditions.append(f"{alias}.media_type = :feed_media_type")
+            if author_id is not None:
+                filter_conditions.append(f"{alias}.user_id = :feed_author_id")
+            return filter_conditions
+
+        conditions = filters("p")
         params: dict[str, Any] = {
             "locale": locale,
             "actor_user_id": user_id,
             "fetch_limit": min(max(int(limit), 1), 100) + 1,
+            "feed_category": category,
+            "feed_content_format": content_format,
+            "feed_media_type": media_type,
+            "feed_author_id": author_id,
         }
-        if category is not None:
-            conditions.append("p.category = :feed_category")
-            params["feed_category"] = category
-        if content_format is not None:
-            conditions.append("p.content_format = :feed_content_format")
-            params["feed_content_format"] = content_format
-        if media_type is not None:
-            conditions.append("p.media_type = :feed_media_type")
-            params["feed_media_type"] = media_type
-        if author_id is not None:
-            conditions.append("p.user_id = :feed_author_id")
-            params["feed_author_id"] = author_id
         if cursor is not None:
+            conditions.append("p.featured_at IS NULL")
             conditions.append(
                 "(COALESCE(pvc.view_count, 0), p.created_at, p.id) "
                 "< (:feed_view_count, :feed_created_at, :feed_id)"
             )
             params["feed_view_count"], params["feed_created_at"], params["feed_id"] = cursor
+            featured_order = ""
+            fetch_limit = ":fetch_limit"
+        else:
+            featured_order = "(p.featured_at IS NOT NULL) DESC, p.featured_at DESC, "
+            fetch_limit = f"""(
+                    :fetch_limit + (
+                      SELECT COUNT(*) FROM prompts AS f
+                      WHERE f.is_public = TRUE AND f.deleted_at IS NULL
+                        AND f.featured_at IS NOT NULL
+                        AND {' AND '.join(filters('f'))}
+                    )
+                  )"""
 
         result = await session.execute(
             text(
@@ -438,6 +469,7 @@ class SharedContentRepository:
                     p.media_type,
                     p.attributes,
                     p.attachments,
+                    p.featured_at,
                     COALESCE(pvc.view_count, 0) AS view_count,
                     COALESCE(
                       (
@@ -475,12 +507,13 @@ class SharedContentRepository:
                   WHERE p.is_public = TRUE
                     AND p.deleted_at IS NULL
                     AND {' AND '.join(conditions)}
-                  ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
-                  LIMIT :fetch_limit
+                  ORDER BY {featured_order}COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
+                  LIMIT {fetch_limit}
                 )
                 SELECT
                     p.*,
                     COALESCE(pc.comment_count, 0) AS comment_count,
+                    COALESCE(lc.like_count, 0) AS like_count,
                     EXISTS (
                       SELECT 1 FROM prompt_likes AS pl
                       WHERE pl.user_id = :actor_user_id AND pl.prompt_id = p.id
@@ -504,7 +537,12 @@ class SharedContentRepository:
                       AND hidden_by_reports_at IS NULL
                       AND prompt_id = p.id
                 ) AS pc ON TRUE
-                ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS like_count
+                    FROM prompt_likes
+                    WHERE prompt_id = p.id
+                ) AS lc ON TRUE
+                ORDER BY {featured_order}p.view_count DESC, p.created_at DESC, p.id DESC
                 """
             ),
             params,

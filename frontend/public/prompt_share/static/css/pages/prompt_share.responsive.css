@@ -295,7 +295,7 @@
   }
 
   .prompt-share-page .prompt-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
     column-gap: 0.12rem;
   }
 

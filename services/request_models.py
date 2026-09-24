@@ -39,6 +39,10 @@ from services.user_skills import (
     MAX_USER_SKILL_NAME_LENGTH,
 )
 
+# 1 リクエストで受け付ける表示回数の投稿 ID 数。フィード 1 ページ（最大 100 件）に合わせる。
+# Impression IDs accepted per request, matching the largest feed page (100 rows).
+MAX_PROMPT_IMPRESSIONS_PER_REQUEST = 100
+
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 TaskNameStr = Annotated[str, Field(min_length=1, max_length=255)]
 MAX_TASKS_PER_USER = 500
@@ -543,6 +547,12 @@ class PromptTaskCreateRequest(RequestPayloadModel):
 # English: Request payload for toggling/submitting a "like" on a prompt.
 class PromptLikeRequest(RequestPayloadModel):
     prompt_id: int
+
+
+# 日本語: 一覧でカードが画面に入った投稿 ID のまとめ送信。1 回の送信で 1 投稿につき 1 回だけ数える。
+# English: Batched IDs of prompt cards that entered the viewport; each ID counts once per request.
+class PromptImpressionRequest(RequestPayloadModel):
+    prompt_ids: list[int] = Field(min_length=1, max_length=MAX_PROMPT_IMPRESSIONS_PER_REQUEST)
 
 
 # 日本語: プロンプトに対して新しいコメントを投稿する際のリクエストペイロード。

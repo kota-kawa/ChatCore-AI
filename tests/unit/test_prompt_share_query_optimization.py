@@ -58,6 +58,34 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(payload["pagination"]["has_next"])
         self.assertEqual(service.feed_calls[0]["user_id"], 7)
 
+    async def test_first_page_keeps_every_featured_row_and_pages_by_regular_rows_only(self):
+        from unittest.mock import patch
+
+        base = self._rows()[0]
+        featured = [dict(base, id=100 + index, view_count=1, featured_at=datetime(2026, 9, 24)) for index in range(3)]
+        regular = [dict(base, id=index, view_count=50 - index) for index in range(3)]
+        service = _Service(featured + regular)
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
+            payload = await _get_prompts_with_flags(None, limit=2, locale="ja")
+
+        self.assertEqual([prompt["id"] for prompt in payload["prompts"]], [100, 101, 102, 0, 1])
+        self.assertTrue(payload["pagination"]["has_next"])
+        # The cursor comes from the last regular row, never from a featured one.
+        self.assertEqual(_decode_prompt_feed_cursor(payload["pagination"]["next_cursor"])[2], 1)
+
+    async def test_first_page_without_enough_regular_rows_has_no_next_page(self):
+        from unittest.mock import patch
+
+        base = self._rows()[0]
+        rows = [dict(base, id=100 + index, view_count=1, featured_at=datetime(2026, 9, 24)) for index in range(3)]
+        service = _Service(rows)
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
+            payload = await _get_prompts_with_flags(None, limit=2, locale="ja")
+
+        self.assertEqual(len(payload["prompts"]), 3)
+        self.assertFalse(payload["pagination"]["has_next"])
+        self.assertIsNone(payload["pagination"]["next_cursor"])
+
     async def test_feed_passes_cursor_and_filters_without_database_api_objects(self):
         from unittest.mock import patch
 

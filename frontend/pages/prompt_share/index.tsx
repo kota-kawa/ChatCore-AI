@@ -84,6 +84,7 @@ import { usePromptShareActionEffects } from "../../components/prompt_share/use_p
 import { usePromptShareAuth } from "../../components/prompt_share/use_prompt_share_auth";
 import { usePromptShareDialog } from "../../components/prompt_share/use_prompt_share_dialog";
 import { usePromptSharePageSetup } from "../../components/prompt_share/use_prompt_share_page_setup";
+import { usePromptImpressionTracker } from "../../components/prompt_share/use_prompt_impression_tracker";
 import { usePromptViewRecorder } from "../../components/prompt_share/use_prompt_view_recorder";
 import { useTranslation } from "../../contexts/locale_context";
 import {
@@ -503,6 +504,7 @@ export default function PromptSharePage({
   );
 
   const recordOpenedPromptView = usePromptViewRecorder({ updatePromptRecord });
+  const recordPromptImpression = usePromptImpressionTracker();
 
   // APIから指定条件の先頭ページを取得し、現在の一覧を置き換える。
   // Fetch the first API page for the selected filters and replace the current feed.
@@ -1284,6 +1286,7 @@ export default function PromptSharePage({
         onToggleLike={handleTogglePromptLike}
         onOpenAuthorProfile={openAuthorProfile}
         onEditPrompt={openPromptEditModal}
+        onImpression={recordPromptImpression}
       >
 
         {/* 本人のカードから開くインライン編集。設定画面と同じフォーム契約を再利用する。 */}

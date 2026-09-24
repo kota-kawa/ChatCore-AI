@@ -24,6 +24,7 @@ from services.error_messages import (
 from services.prompt_categories import category_keys_matching, normalize_category
 from services.prompt_embedding_service import schedule_prompt_embedding
 from services.prompt_types import CONTENT_FORMAT_SKILL, CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
+from services.repositories.prompt_impression_repository import PromptImpressionRepository
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
 from services.repositories.shared_content_repository import SharedContentRepository
@@ -111,6 +112,7 @@ class SharedContentService:
         self._repository = repository or SharedContentRepository()
         self._resource_repository = resource_repository or PromptResourceRepository()
         self._view_repository = PromptViewRepository()
+        self._impression_repository = PromptImpressionRepository()
 
     @staticmethod
     async def _read(
@@ -412,6 +414,17 @@ class SharedContentService:
         return await self._write(
             session,
             lambda active: self._view_repository.increment_public_view(active, prompt_id),
+        )
+
+    async def record_public_impressions(
+        self,
+        prompt_ids: list[int],
+        *,
+        session: AsyncSession | None = None,
+    ) -> int:
+        return await self._write(
+            session,
+            lambda active: self._impression_repository.increment_public_impressions(active, prompt_ids),
         )
 
     async def create_prompt(

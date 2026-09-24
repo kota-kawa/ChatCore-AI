@@ -268,6 +268,14 @@
   border: 1px solid #b7cbff;
 }
 
+/* 運営が選んだ投稿。他のバッジと同じ形で、アプリ共通の緑を薄い面と濃い文字で使う */
+/* Operator-featured post: same pill shape, the app's green as a soft surface with dark text */
+.prompt-share-page .prompt-card__type-pill--featured {
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
+}
+
 .prompt-share-page .prompt-card__type-pill i {
   flex: 0 0 auto;
   font-size: 0.72rem;
@@ -401,7 +409,9 @@
 
 .prompt-share-page .prompt-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 先頭の列は閲覧数（自然幅）、残り 3 列を操作ボタンで等分する */
+  /* First column holds the view count at its natural width; the three action buttons share the rest */
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
   align-items: center;
   justify-items: center;
   column-gap: 0.2rem;
@@ -432,6 +442,23 @@
   position: relative;
   isolation: isolate;
   overflow: visible;
+}
+
+/* 閲覧数。操作ではないので操作ボタンより小さく、副次テキストの色で並べる */
+/* View count: not an action, so it sits smaller than the action buttons in the secondary text color */
+.prompt-share-page .prompt-action-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 44px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.prompt-share-page .prompt-action-stat i {
+  font-size: 0.9rem;
 }
 
 .prompt-share-page .prompt-action-count {

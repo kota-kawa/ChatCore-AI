@@ -63,6 +63,7 @@ from services.prompt_types import (
 from services.request_models import (
     PromptCommentCreateRequest,
     PromptCommentReportRequest,
+    PromptImpressionRequest,
     PromptLikeRequest,
     PromptTaskCreateRequest,
     SharedPromptCreateRequest,
@@ -262,6 +263,10 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt.pop("resource_python_script", None)
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     prompt["view_count"] = int(prompt.get("view_count") or 0)
+    prompt["like_count"] = int(prompt.get("like_count") or 0)
+    featured_at = prompt.get("featured_at")
+    if hasattr(featured_at, "isoformat"):
+        prompt["featured_at"] = featured_at.isoformat()
     if "liked" in prompt:
         prompt["liked"] = bool(prompt["liked"])
     if "used_in_chat" in prompt:
@@ -380,15 +385,22 @@ async def _get_prompts_with_flags(
         locale=locale,
     )
     prompts = [_serialize_prompt_row(row) for row in rows]
-    has_next = len(prompts) > min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
     page_limit = min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
-    prompts = prompts[:page_limit]
+    # 運営ピックは最初のページに全件付くので、ページ送りの判定とカーソルは通常投稿だけで作る。
+    # 運営ピックの行からカーソルを作ると、その閲覧数より多い通常投稿が以後のページに出なくなる。
+    # Featured prompts ride along on the first page, so paging and the cursor are computed
+    # from regular rows only; a cursor taken from a featured row would hide every regular
+    # prompt with more views than it.
+    featured = [prompt for prompt in prompts if prompt.get("featured_at")]
+    regular = [prompt for prompt in prompts if not prompt.get("featured_at")]
+    has_next = len(regular) > page_limit
+    regular = regular[:page_limit]
     return {
-        "prompts": prompts,
+        "prompts": featured + regular,
         "pagination": {
             "limit": page_limit,
             "has_next": has_next,
-            "next_cursor": _encode_prompt_feed_cursor(prompts[-1]) if has_next and prompts else None,
+            "next_cursor": _encode_prompt_feed_cursor(regular[-1]) if has_next and regular else None,
         },
     }
 
@@ -501,6 +513,25 @@ async def record_prompt_view(prompt_id: int):
         return jsonify({"status": "success", "view_count": int(view_count)})
     except Exception:
         return log_and_internal_server_error(logger, "Failed to record public prompt view.")
+
+
+@prompt_share_api_bp.post("/prompts/impressions", name="prompt_share_api.record_prompt_impressions")
+async def record_prompt_impressions(request: Request):
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        PromptImpressionRequest,
+        error_message="表示回数を記録する投稿 ID が不正です。",
+    )
+    if validation_error is not None:
+        return validation_error
+    try:
+        counted = await _service().record_public_impressions(payload.prompt_ids)
+        return jsonify({"status": "success", "counted": int(counted)})
+    except Exception:
+        return log_and_internal_server_error(logger, "Failed to record public prompt impressions.")
 
 
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
