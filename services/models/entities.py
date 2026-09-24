@@ -330,8 +330,18 @@ class Prompt(Base):
     system_prompt_key: Mapped[str | None] = mapped_column(String(64))
     content_locale: Mapped[str | None] = mapped_column(String(16))
     description: Mapped[str | None] = mapped_column(String(300), server_default=text("NULL::character varying"))
+    embedding_vector: Mapped[list[float] | None] = mapped_column(Vector(768))
+    embedding_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'pending'"),
+    )
 
     __table_args__ = (
+        CheckConstraint(
+            "embedding_status IN ('pending', 'ready')",
+            name="ck_prompts_embedding_status",
+        ),
         Index("idx_prompts_public_created_at", "is_public", desc("created_at")),
         Index("idx_prompts_user_created_at", "user_id", desc("created_at")),
         Index("idx_prompts_active_public_created_at", "is_public", desc("created_at"), postgresql_where=text("deleted_at IS NULL")),
@@ -353,6 +363,8 @@ class Prompt(Base):
               postgresql_using="gin",
               postgresql_ops={"(COALESCE(attributes ->> 'skill_markdown', ''))": "gin_trgm_ops"},
               postgresql_where=text("is_public = TRUE AND deleted_at IS NULL AND content_format = 'skill'")),
+        Index("idx_prompts_embedding_hnsw", "embedding_vector", postgresql_using="hnsw",
+              postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
     )
 
 

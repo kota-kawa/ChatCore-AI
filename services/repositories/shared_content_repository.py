@@ -725,6 +725,10 @@ class SharedContentRepository:
         prompt.input_examples = input_examples
         prompt.output_examples = output_examples
         prompt.updated_at = func.now()
+        # 本文が変わったので既存のベクトルは古い。再生成が終わるまで backfill の対象に戻す。
+        # The text changed, so the stored vector is stale; keep the row in the backfill
+        # queue until the regeneration lands.
+        prompt.embedding_status = "pending"
         await session.flush()
         return True
 

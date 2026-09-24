@@ -22,6 +22,7 @@ from services.error_messages import (
     MESSAGE_SHARED_SKILL_ALREADY_ADDED,
 )
 from services.prompt_categories import category_keys_matching, normalize_category
+from services.prompt_embedding_service import schedule_prompt_embedding
 from services.prompt_types import CONTENT_FORMAT_SKILL, CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.prompt_view_repository import PromptViewRepository
@@ -486,7 +487,10 @@ class SharedContentService:
                 await self._resource_repository.replace_for_prompt(active, prompt_id, resources)
             return updated
 
-        return await self._write(session, operation)
+        updated = await self._write(session, operation)
+        if updated:
+            schedule_prompt_embedding(prompt_id, title, description, content, attributes)
+        return updated
 
     async def delete_prompt(
         self,

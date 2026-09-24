@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.db import session_scope
 from services.error_messages import ERROR_GUEST_PROMPT_LIMIT_REACHED
+from services.prompt_embedding_service import schedule_prompt_embedding
 from services.repositories.shared_content_repository import SharedContentRepository
 from services.request_models import SharedPromptCreateRequest
 from services.runtime_config import get_session_secret_key
@@ -120,8 +121,11 @@ async def create_guest_shared_prompt(
 
     if session is None:
         async with session_scope() as owned_session, owned_session.begin():
-            return await operation(owned_session)
-    return await operation(session)
+            prompt_id = await operation(owned_session)
+    else:
+        prompt_id = await operation(session)
+    schedule_prompt_embedding(prompt_id, payload.title, payload.description, payload.content)
+    return prompt_id
 
 
 async def claim_guest_prompts_for_user(

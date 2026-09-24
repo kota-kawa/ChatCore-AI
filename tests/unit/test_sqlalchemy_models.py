@@ -74,6 +74,8 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(TaskVersion.snapshot.nullable)
         self.assertFalse(MemoEntry.embedding_status.nullable)
         self.assertFalse(ContextFact.embedding_status.nullable)
+        self.assertFalse(Prompt.embedding_status.nullable)
+        self.assertTrue(Prompt.embedding_vector.nullable)
         self.assertFalse(UserSkill.is_enabled.nullable)
         self.assertTrue(UserSkill.source_prompt_id.nullable)
         self.assertFalse(User.generative_ui_skill_enabled.nullable)
@@ -92,6 +94,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertIsInstance(Prompt.attributes.type, JSONB)
         self.assertIsInstance(MemoEntry.embedding_vector.type, Vector)
         self.assertEqual(MemoEntry.embedding_vector.type.compile(dialect=postgresql_dialect()), "vector(768)")
+        self.assertEqual(Prompt.embedding_vector.type.compile(dialect=postgresql_dialect()), "vector(768)")
 
         index_sql = {
             str(CreateIndex(index).compile(dialect=postgresql_dialect()))
