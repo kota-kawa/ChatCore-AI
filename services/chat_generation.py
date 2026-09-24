@@ -71,6 +71,7 @@ from .chat_prompt import insert_before_latest_user_message
 from .chat_turn_state import (
     TurnStateUpdateFilter,
     build_turn_loop_messages,
+    parse_bare_turn_state_update,
     parse_turn_state_update,
     strip_turn_state_update,
     strip_turn_state_update_chunks,
@@ -816,6 +817,13 @@ class ChatGenerationJob:
             # 調査ステップの途中で終わった場合、内部メモが本文として残らないよう取り除く。
             # An end during a research step must not leave internal notes in the saved body.
             pending_text = strip_turn_state_update("".join(self._pending_stream_chunks))
+            # タグを落とした封筒 JSON だけが残っていても、それは回答ではない。
+            # An envelope JSON that lost its tags is not an answer either.
+            if self._untagged_turn_state_update(self._pending_stream_chunks, pending_text) is not None:
+                self._telemetry.untagged_turn_state_recoveries += 1
+                self._pending_stream_chunks = []
+                self._pending_stream_is_rewrite = False
+                return ""
             existing_text = "".join(self._chunks)
             # 競合で書き直しフラグを読む前に停止しても、既存本文の末尾を先に錨として
             # 探す。通常の継続の境界重複にも同じ処理が効き、短い本文だけは従来の窓で補う。
@@ -835,6 +843,17 @@ class ChatGenerationJob:
             self._pending_stream_chunks = []
             self._pending_stream_is_rewrite = False
         return pending_text
+
+    # タグ付きの封筒が読めず、除去後の本文がタグの無い封筒 JSON だけならその内容を返す。
+    # Return the update when no tagged envelope was readable and the stripped body is only an
+    # untagged envelope JSON.
+    def _untagged_turn_state_update(self, chunks: list[str], visible_text: str) -> dict[str, Any] | None:
+        if not visible_text or parse_turn_state_update(chunks) is not None:
+            return None
+        return parse_bare_turn_state_update(
+            visible_text,
+            latest_user_message=_latest_user_message_text(self._conversation_messages),
+        )
 
     # 自プロセス・他プロセスのいずれかから停止が要求されたかを判定する
     # Report whether a stop was requested from this process or from another one
@@ -2072,16 +2091,26 @@ class ChatGenerationJob:
         # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
         # Keep the model's own boundaries and drop only the internal envelope.
         visible_chunks = strip_turn_state_update_chunks(step_chunks)
+        untagged_update = self._untagged_turn_state_update(step_chunks, "".join(visible_chunks))
+        if untagged_update is not None:
+            # タグを落とした封筒は状態の更新として読み、本文は空として扱う。回答として
+            # 保存すると内部 JSON がそのまま done になり、空回答の回復も働かない。
+            # Read an envelope that lost its tags as the state update and treat the body as
+            # empty. Saving it as the answer would finish the turn as done with internal JSON
+            # and bypass the empty-answer recovery.
+            state.turn_state.apply_model_update(untagged_update)
+            telemetry.untagged_turn_state_recoveries += 1
+            visible_chunks = []
         if (
             not visible_chunks
             and not state.chunks
             and not state.empty_answer_recovery_attempted
             and not self._cancelled
         ):
-            # 封筒のみ・無出力・出力上限で本文ゼロは「回答なし」。ここで抜けると
-            # 画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
+            # 封筒のみ（タグの有無を問わない）・無出力・出力上限で本文ゼロは「回答なし」。
+            # ここで抜けると画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
             # 回答のみ要求で1度だけやり直す。
-            # Envelope-only, empty, or cut off before any body text means no
+            # Envelope-only (tagged or not), empty, or cut off before any body text means no
             # answer. Breaking here would finish the turn as an image-only or
             # trace-only reply, so retry the same decision once, answer-only.
             state.empty_answer_recovery_attempted = True
