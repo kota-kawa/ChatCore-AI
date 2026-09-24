@@ -2,7 +2,8 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
-from blueprints.prompt_share.prompt_search import _search_public_prompts
+from blueprints.prompt_share import prompt_search
+from blueprints.prompt_share.prompt_search import _embed_search_query, _search_public_prompts
 
 
 class StubSharedContentService:
@@ -45,16 +46,19 @@ class PromptSearchTestCase(unittest.TestCase):
 
     def test_search_maps_service_rows_and_pagination(self):
         service = StubSharedContentService(
-            {"rows": [self._row()], "total": 55, "has_next": True}
+            {"rows": [self._row(lexical_rank=3, semantic_distance=0.2)], "total": 55, "has_next": True}
         )
 
-        with patch(
-            "blueprints.prompt_share.prompt_search.SharedContentService",
-            return_value=service,
+        with (
+            patch("blueprints.prompt_share.prompt_search.SharedContentService", return_value=service),
+            patch.object(prompt_search, "_embed_search_query", return_value=[0.5]),
         ):
             payload = asyncio.run(_search_public_prompts("sample", 2, 20, 9))
 
         prompt = payload["prompts"][0]
+        self.assertNotIn("lexical_rank", prompt)
+        self.assertNotIn("semantic_distance", prompt)
+        self.assertEqual(service.calls[0]["query_embedding"], [0.5])
         self.assertEqual(prompt["id"], 11)
         self.assertTrue(prompt["liked"])
         self.assertTrue(prompt["used_in_chat"])
@@ -107,6 +111,38 @@ class PromptSearchTestCase(unittest.TestCase):
             asyncio.run(_search_public_prompts("プログラミング", 1, 10, 9))
 
         self.assertEqual(service.calls[0]["matching_category_keys"], ["coding"])
+
+    def test_search_stays_lexical_without_an_embedding(self):
+        service = StubSharedContentService({"rows": [], "total": 0, "has_next": False})
+        with (
+            patch("blueprints.prompt_share.prompt_search.SharedContentService", return_value=service),
+            patch.object(prompt_search, "embeddings_available", return_value=False),
+        ):
+            asyncio.run(_search_public_prompts("sample", 1, 10, 9))
+
+        self.assertIsNone(service.calls[0]["query_embedding"])
+
+    def test_query_embedding_skips_single_characters_and_disabled_providers(self):
+        with patch.object(prompt_search, "embeddings_available", return_value=True), patch.object(
+            prompt_search, "generate_embedding"
+        ) as generate:
+            self.assertIsNone(asyncio.run(_embed_search_query(" a ")))
+        generate.assert_not_called()
+
+        with patch.object(prompt_search, "embeddings_available", return_value=False), patch.object(
+            prompt_search, "generate_embedding"
+        ) as generate:
+            self.assertIsNone(asyncio.run(_embed_search_query("議事録")))
+        generate.assert_not_called()
+
+    def test_query_embedding_runs_the_provider_off_the_event_loop(self):
+        with patch.object(prompt_search, "embeddings_available", return_value=True), patch.object(
+            prompt_search, "generate_embedding", return_value=[0.1, 0.2]
+        ) as generate:
+            embedding = asyncio.run(_embed_search_query("  議事録 要約 "))
+
+        self.assertEqual(embedding, [0.1, 0.2])
+        generate.assert_called_once_with("議事録 要約")
 
     def test_blank_search_avoids_service_and_returns_empty_payload(self):
         with patch("blueprints.prompt_share.prompt_search.SharedContentService") as service_factory:

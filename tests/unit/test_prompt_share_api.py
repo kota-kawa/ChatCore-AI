@@ -69,7 +69,7 @@ class PromptShareApiTestCase(unittest.TestCase):
         sample_prompts = [{"id": 21, "title": "おすすめプロンプト", "content": "内容"}]
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_recommended_prompts",
-            new=AsyncMock(return_value=sample_prompts),
+            new=AsyncMock(return_value=(sample_prompts, "similar")),
         ) as recommended:
             request = build_request(
                 method="GET",
@@ -78,7 +78,9 @@ class PromptShareApiTestCase(unittest.TestCase):
             )
             response = asyncio.run(get_recommended_prompts(request, exclude_id=12))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.body.decode())["prompts"], sample_prompts)
+        body = json.loads(response.body.decode())
+        self.assertEqual(body["prompts"], sample_prompts)
+        self.assertEqual(body["basis"], "similar")
         recommended.assert_awaited_once_with(12, 3, "en")
 
     def test_author_profile_awaits_async_helper(self):

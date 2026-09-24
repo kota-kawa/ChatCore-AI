@@ -56,10 +56,16 @@ type SharedPromptPayload = {
   error?: string;
 };
 
+// おすすめ欄の根拠。similar は閲覧中の投稿と意味が近い投稿、popular は人気順の穴埋め。
+// What the recommendation section rests on: "similar" means semantically close to the
+// prompt being read, "popular" means a most-viewed fallback.
+type RecommendationBasis = "similar" | "popular";
+
 // おすすめカードに必要なプロンプト一覧のAPIレスポンス
 // API response for the prompts needed by recommendation cards.
 type RecommendedPromptsPayload = {
   prompts?: SharedPrompt[];
+  basis?: RecommendationBasis;
 };
 
 // SSRで事前サニタイズ済みの各セクションHTML（クローラにも本文が見えるようにするため）
@@ -77,6 +83,7 @@ type SharedPromptHtml = {
 type SharedPromptPageProps = {
   payload: SharedPromptPayload;
   recommendedPrompts: SharedPrompt[];
+  recommendationBasis: RecommendationBasis | null;
   promptHtml: SharedPromptHtml;
   pageUrl: string;
   defaultOgImageUrl: string;
@@ -201,6 +208,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
 
   let payload: SharedPromptPayload;
   let recommendedPrompts: SharedPrompt[] = [];
+  let recommendationBasis: RecommendationBasis | null = null;
 
   try {
     const [res, recommendedRes] = await Promise.all([
@@ -223,6 +231,8 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
       payload.error = `共有プロンプトの取得に失敗しました (${res.status})`;
     }
     recommendedPrompts = Array.isArray(recommendedData.prompts) ? recommendedData.prompts : [];
+    recommendationBasis =
+      recommendedData.basis === "similar" || recommendedData.basis === "popular" ? recommendedData.basis : null;
   } catch {
     context.res.statusCode = 500;
     payload = { error: "共有プロンプトの取得に失敗しました。" };
@@ -270,6 +280,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     props: {
       payload,
       recommendedPrompts,
+      recommendationBasis,
       promptHtml,
       pageUrl,
       defaultOgImageUrl
@@ -282,6 +293,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
 export default function SharedPromptPage({
   payload,
   recommendedPrompts,
+  recommendationBasis,
   promptHtml,
   pageUrl,
   defaultOgImageUrl
@@ -532,7 +544,11 @@ export default function SharedPromptPage({
                   <div>
                     <p>{english ? "Discover more" : "さらに探す"}</p>
                     <h2 id="shared-prompt-recommendations-title">
-                      <i className="bi bi-stars" aria-hidden="true" /> {english ? "Recommended prompts" : "おすすめのプロンプト"}
+                      <i className="bi bi-stars" aria-hidden="true" /> {recommendationBasis === "similar"
+                        ? (english ? "Prompts close to this one" : "この投稿に近いプロンプト")
+                        : recommendationBasis === "popular"
+                          ? (english ? "Popular prompts" : "人気のプロンプト")
+                          : (english ? "Recommended prompts" : "おすすめのプロンプト")}
                     </h2>
                   </div>
                   <Link href="/prompt_share">{english ? "View all" : "すべて見る"} <i className="bi bi-arrow-right" aria-hidden="true" /></Link>

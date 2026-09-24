@@ -6,8 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import SharedPromptPage from "../pages/shared/prompt/[id]/[[...slug]]";
 import { LocaleProvider } from "../contexts/locale_context";
 
-test("shared prompt page renders links to random prompt recommendations", () => {
-  const html = renderToStaticMarkup(
+function renderWithRecommendations(recommendationBasis: "similar" | "popular" | null) {
+  return renderToStaticMarkup(
     React.createElement(SharedPromptPage, {
       payload: {
         prompt: {
@@ -29,6 +29,7 @@ test("shared prompt page renders links to random prompt recommendations", () => 
           media_type: "text"
         }
       ],
+      recommendationBasis,
       promptHtml: {
         content: "<p>このプロンプトの本文です。</p>",
         inputExamples: "",
@@ -40,10 +41,20 @@ test("shared prompt page renders links to random prompt recommendations", () => 
       defaultOgImageUrl: "https://chatcore-ai.com/static/img.jpg"
     })
   );
+}
+
+test("shared prompt page renders links to prompt recommendations", () => {
+  const html = renderWithRecommendations(null);
 
   assert.match(html, /おすすめのプロンプト/);
   assert.match(html, /おすすめの会議メモ要約/);
   assert.match(html, /href="\/shared\/prompt\/21/);
+});
+
+test("shared prompt page names the recommendation basis in the heading", () => {
+  assert.match(renderWithRecommendations("similar"), /この投稿に近いプロンプト/);
+  assert.match(renderWithRecommendations("popular"), /人気のプロンプト/);
+  assert.doesNotMatch(renderWithRecommendations("popular"), /この投稿に近いプロンプト/);
 });
 
 test("shared skill page renders multiple named resources with copy actions", () => {
@@ -74,6 +85,7 @@ test("shared skill page renders multiple named resources with copy actions", () 
         }
       },
       recommendedPrompts: [],
+      recommendationBasis: null,
       promptHtml: {
         content: "",
         inputExamples: "",
@@ -108,6 +120,7 @@ test("shared prompt page renders labels in the requested locale during SSR", () 
       }
     },
     recommendedPrompts: [],
+    recommendationBasis: null,
     promptHtml: {
       content: "<p>Body text.</p>",
       inputExamples: "",
@@ -152,6 +165,7 @@ test("shared prompt page demotes body headings so the page keeps a single h1", (
         }
       },
       recommendedPrompts: [],
+      recommendationBasis: null,
       promptHtml: {
         content: "<h1>本文の見出し</h1><h2>本文の小見出し</h2>",
         inputExamples: "",
