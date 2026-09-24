@@ -47,6 +47,15 @@ from services.generative_ui_status import (
     artifact_status_payload,
     normalize_artifact_status_part,
 )
+from services.interactive_buttons import (
+    INTERACTIVE_BUTTONS_BLOCK_RE,
+    INTERACTIVE_BUTTONS_PART_TYPE,
+    MAX_INTERACTIVE_BUTTON_BLOCKS_PER_MESSAGE,
+    InteractiveButtonsValidationError,
+    describe_interactive_buttons_for_context,
+    interactive_buttons_parts,
+    validate_interactive_buttons_payload,
+)
 from services.llm import LlmOutputLimitError, get_llm_json_response
 from services.message_parts_display import normalize_message_parts_for_display
 
@@ -85,11 +94,6 @@ ARTIFACT_OPEN_FENCE_RE = re.compile(
 MALFORMED_ARTIFACT_FENCE_RE = re.compile(
     r"```[^\n`]*(?:chatcore[\s_-]*artifact|generative[\s_-]*ui|ui[\s_-]*artifact)"
     r"[^\n`]*(?:\n[\s\S]*?(?:```|\Z))",
-    re.IGNORECASE,
-)
-INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
-    r"```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
-    r"(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
 )
 GENERIC_JSON_BLOCK_RE = re.compile(
@@ -376,25 +380,6 @@ def decide_generative_ui_mode(
 class _ArtifactCandidate:
     raw_json: str
     span: tuple[int, int]
-
-
-# バージョン1のインタラクティブボタン（Yes/No、複数選択など）のスキーマを定義するPydanticモデルクラスです。
-# Pydantic model class defining the schema for version 1 interactive buttons.
-class InteractiveButtonsV1(BaseModel):
-    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
-    type: Literal["yes_no", "multiple_choice"]
-    question: str = Field(min_length=1, max_length=500)
-    options: list[str] | None = Field(default=None, max_length=10)
-
-    # 選択タイプが「複数選択」の場合に、optionsリストが空でないことを検証します。
-    # Validate that options are provided and non-empty when the button type is multiple_choice.
-    @model_validator(mode="after")
-    def _validate_options(self) -> InteractiveButtonsV1:
-        if self.type == "multiple_choice" and not self.options:
-            raise ValueError("options is required for multiple_choice")
-        if self.options:
-            self.options = [opt for opt in self.options if opt.strip()]
-        return self
 
 
 # 生成UIのサンドボックスアーティファクト（HTML、CSS、JS）のスキーマを定義し、検証するPydanticモデルクラスです。
@@ -1435,18 +1420,6 @@ def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     return artifact.model_dump(exclude_none=True)
 
 
-# インタラクティブボタンの定義データをバリデーションして返します。
-# Validate interactive buttons structure using Pydantic model.
-def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
-    try:
-        buttons = InteractiveButtonsV1.model_validate(payload)
-    except ValidationError as exc:
-        raise GenerativeUiValidationError(str(exc)) from exc
-    except ValueError as exc:
-        raise GenerativeUiValidationError(str(exc)) from exc
-    return buttons.model_dump(exclude_none=True)
-
-
 def validate_web_search_image_payload(payload: Any) -> dict[str, Any]:
     """Validate a server-selected external image before it reaches the browser."""
     if not isinstance(payload, dict):
@@ -1512,12 +1485,12 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
                 continue
             parts.append({"type": "sandbox_artifact", "artifact": artifact})
             continue
-        if part_type == "interactive_buttons":
+        if part_type == INTERACTIVE_BUTTONS_PART_TYPE:
             try:
                 buttons = validate_interactive_buttons_payload(part.get("buttons"))
-            except GenerativeUiValidationError:
+            except InteractiveButtonsValidationError:
                 continue
-            parts.append({"type": "interactive_buttons", "buttons": buttons})
+            parts.extend(interactive_buttons_parts([buttons]))
             continue
         if part_type == "web_search_image":
             try:
@@ -1542,7 +1515,7 @@ def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
 
 
 def build_message_parts_context(raw_parts: Any) -> str:
-    """Return a compact, code-free semantic summary of generated UI parts.
+    """Return a compact, code-free semantic summary of generated UI, choice-button and image parts.
 
     The visible response deliberately stores artifacts separately from prose.
     Reintroducing their user-visible labels, title, and description lets later
@@ -1588,24 +1561,8 @@ def build_message_parts_context(raw_parts: Any) -> str:
             if isinstance(libraries, list) and "three" in libraries:
                 context_lines.append("<capability>Three.js 3D view</capability>")
             context_lines.append("</artifact>")
-        elif part.get("type") == "interactive_buttons":
-            buttons = part.get("buttons")
-            if not isinstance(buttons, dict):
-                continue
-            question = _coerce_string(buttons.get("question")).strip()
-            if question:
-                options = buttons.get("options")
-                context_lines.append("<interactive_buttons>")
-                context_lines.append(f"<question>{escape_html(question)}</question>")
-                if isinstance(options, list):
-                    safe_options = [
-                        _coerce_string(option).strip() for option in options if _coerce_string(option).strip()
-                    ]
-                    if safe_options:
-                        context_lines.append(
-                            f"<options>{escape_html(' | '.join(safe_options))}</options>"
-                        )
-                context_lines.append("</interactive_buttons>")
+        elif part.get("type") == INTERACTIVE_BUTTONS_PART_TYPE:
+            context_lines.extend(describe_interactive_buttons_for_context(part.get("buttons")))
         elif part.get("type") == "web_search_image":
             image = part.get("image")
             if not isinstance(image, dict):
@@ -1639,8 +1596,6 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
     return json.dumps(normalized, ensure_ascii=False)
 
 
-# 応答テキストから生成UIとボタンの構成要素を抽出・分離し、ユーザーに見せるテキストと構造化パーツリストに分割します。
-# Parse the raw response prose to isolate UI blocks and buttons, returning a normalized text and parts list.
 def _validation_reason_code(error: str) -> str:
     """Fold one validation error message into the fixed reason vocabulary."""
     return (
@@ -1648,6 +1603,45 @@ def _validation_reason_code(error: str) -> str:
         if "json" in error.lower() or "expecting" in error.lower()
         else REASON_ARTIFACT_VALIDATION_FAILED
     )
+
+
+# 選択ボタンのフェンスを本文から切り出して検証する。生成UIの Skill・モード判定・利用者の
+# 「UI不要」に関係なく実行し、検証を通らないブロックは本文から取り除いて捨てるだけにする。
+# その失敗は生成UIの検証エラーに混ぜないため、Artifact の状態や修復の判断は変わらない。
+# Split choice-button fences off the prose and validate them. This runs whatever the
+# generated-UI Skill, the mode decision, or a user's "no UI" says; a block that fails
+# validation is only removed from the prose. Its failure stays out of the generated-UI
+# validation errors, so it never changes the artifact status or triggers a repair.
+def _split_interactive_buttons(text: str) -> tuple[str, list[dict[str, Any]]]:
+    matches = list(INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text))
+    if not matches:
+        return text, []
+    buttons_list: list[dict[str, Any]] = []
+    for match in matches[:MAX_INTERACTIVE_BUTTON_BLOCKS_PER_MESSAGE]:
+        try:
+            payload = _loads_artifact_json(match.group("json"))
+            buttons_list.append(validate_interactive_buttons_payload(payload))
+        except (json.JSONDecodeError, InteractiveButtonsValidationError) as exc:
+            logger.info("Discarded an interactive buttons block (%s).", type(exc).__name__)
+    spans = [_ArtifactCandidate(raw_json="", span=match.span()) for match in matches]
+    return _remove_candidate_spans(text, spans), buttons_list
+
+
+# 選択ボタンを、正規化済みの応答の末尾の部品として足す。ボタンは回答を締めくくる約束なので
+# 本文と生成UIの後ろに並べる。本文が空のときだけ案内文を入れる。
+# Append choice buttons as the trailing parts of a normalized response. Buttons close the
+# reply by contract, so they follow the prose and any generated UI; only an empty prose gets
+# the prompt text.
+def _with_interactive_buttons(
+    normalized: NormalizedGenerativeResponse,
+    buttons_list: list[dict[str, Any]],
+) -> NormalizedGenerativeResponse:
+    if not buttons_list:
+        return normalized
+    text = normalized.text or "ボタンを選択してください。"
+    parts = list(normalized.parts or [{"type": "text", "text": text}])
+    parts.extend(interactive_buttons_parts(buttons_list))
+    return dataclass_replace(normalized, text=text, parts=parts)
 
 
 def normalize_response_with_artifacts(
@@ -1658,6 +1652,35 @@ def normalize_response_with_artifacts(
     ui_mode: GenerativeUiMode | str | None = None,
     explicit_ui_opt_out: bool = False,
 ) -> NormalizedGenerativeResponse:
+    """Split choice buttons off the prose, then extract sandbox artifacts from the rest.
+
+    選択ボタンはチャット標準の部品なので、生成UIの判定や拒否に関係なく残す。
+    Choice buttons are a standard chat part, so they survive any generated-UI decision
+    or refusal; only the artifact extraction below depends on them.
+    """
+    # Kept as a public keyword for older callers. Fallback UI synthesis was
+    # intentionally removed, so its value no longer changes behavior.
+    _ = allow_fallback
+    text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
+    prose, buttons_list = _split_interactive_buttons(text)
+    normalized = _normalize_artifacts(
+        prose,
+        recover_truncated=recover_truncated,
+        ui_mode=ui_mode,
+        explicit_ui_opt_out=explicit_ui_opt_out,
+    )
+    return _with_interactive_buttons(normalized, buttons_list)
+
+
+# 選択ボタンを除いた本文から生成UIを抽出・分離し、見せる本文と構造化パーツに分ける。
+# Extract generated UI from the button-free prose, splitting it into visible text and parts.
+def _normalize_artifacts(
+    text: str,
+    *,
+    recover_truncated: bool,
+    ui_mode: GenerativeUiMode | str | None,
+    explicit_ui_opt_out: bool,
+) -> NormalizedGenerativeResponse:
     """Extract sandbox artifacts and report why one is absent.
 
     判定モデルの NONE では、検証を通ったArtifactを捨てない。判定の偽陰性がそのまま
@@ -1665,10 +1688,6 @@ def normalize_response_with_artifacts(
     A classifier's NONE never discards an artifact that passed validation: that would turn
     every false negative into a failure. Only an explicit user refusal suppresses one.
     """
-    # Kept as a public keyword for older callers. Fallback UI synthesis was
-    # intentionally removed, so its value no longer changes behavior.
-    _ = allow_fallback
-    text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
     normalized_ui_mode = _coerce_generative_ui_mode(ui_mode)
     requested_artifact = normalized_ui_mode in {"2D", "3D"}
     candidates = _extract_artifact_candidates(
@@ -1676,19 +1695,12 @@ def normalize_response_with_artifacts(
         recover_truncated=recover_truncated,
         recover_explicit_output_variants=requested_artifact,
     )
-
-    button_candidates: list[_ArtifactCandidate] = [
-        _ArtifactCandidate(raw_json=match.group("json"), span=match.span())
-        for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text)
-    ]
-
-    all_candidates = sorted(candidates + button_candidates, key=lambda c: c.span)
     malformed_fence_spans = _extract_malformed_artifact_fence_spans(
         text,
-        [candidate.span for candidate in all_candidates],
+        [candidate.span for candidate in candidates],
     )
     user_opted_out = bool(explicit_ui_opt_out)
-    if not candidates and not button_candidates and not malformed_fence_spans:
+    if not candidates and not malformed_fence_spans:
         return NormalizedGenerativeResponse(
             text=text,
             parts=None,
@@ -1702,7 +1714,6 @@ def normalize_response_with_artifacts(
         )
 
     artifacts: list[dict[str, Any]] = []
-    buttons_list: list[dict[str, Any]] = []
     validation_errors: list[str] = []
     if not user_opted_out:
         for candidate in candidates[:MAX_ARTIFACTS_PER_MESSAGE]:
@@ -1712,20 +1723,13 @@ def normalize_response_with_artifacts(
             except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
                 validation_errors.append(str(exc))
 
-        for candidate in button_candidates[:MAX_ARTIFACTS_PER_MESSAGE]:
-            try:
-                payload = _loads_artifact_json(candidate.raw_json)
-                buttons_list.append(validate_interactive_buttons_payload(payload))
-            except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
-                validation_errors.append(str(exc))
-
     visible_candidates = [
-        *all_candidates,
+        *candidates,
         *(_ArtifactCandidate(raw_json="", span=span) for span in malformed_fence_spans),
     ]
     visible_text = _remove_candidate_spans(text, visible_candidates)
 
-    if not artifacts and not buttons_list:
+    if not artifacts:
         if user_opted_out:
             status, reason_codes = ARTIFACT_STATUS_SUPPRESSED, [REASON_EXPLICIT_OPT_OUT]
         elif validation_errors:
@@ -1746,23 +1750,16 @@ def normalize_response_with_artifacts(
         )
 
     if not visible_text:
-        visible_text = "生成UIを作成しました。" if artifacts else "ボタンを選択してください。"
+        visible_text = "生成UIを作成しました。"
 
     parts: list[dict[str, Any]] = [{"type": "text", "text": visible_text}]
     parts.extend({"type": "sandbox_artifact", "artifact": artifact} for artifact in artifacts)
-    parts.extend({"type": "interactive_buttons", "buttons": button} for button in buttons_list)
-    if artifacts:
-        status, reason_codes = ARTIFACT_STATUS_VALID, []
-    elif requested_artifact:
-        status, reason_codes = ARTIFACT_STATUS_MISSING, [REASON_REQUIRED_ARTIFACT_MISSING]
-    else:
-        status, reason_codes = ARTIFACT_STATUS_NOT_REQUESTED, []
     return NormalizedGenerativeResponse(
         text=visible_text,
         parts=parts,
         validation_errors=validation_errors,
-        artifact_status=status,
-        artifact_reason_codes=reason_codes,
+        artifact_status=ARTIFACT_STATUS_VALID,
+        artifact_reason_codes=[],
     )
 
 
@@ -1872,10 +1869,41 @@ def normalize_response_with_artifact_retry(
     or incomplete repair as a failure instead of a success. The conversation is only used to
     fall back to the user's request text.
     """
-    source_text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
+    raw_source = raw_text if isinstance(raw_text, str) else str(raw_text or "")
+    # 選択ボタンは修復の前に切り出し、修復の結果に関係なく元の回答のものを付け直す。
+    # 修復用プロンプトは Artifact だけを作り直すため、ボタンを渡すと失われる。
+    # Choice buttons are split off before any repair and reattached from the original
+    # answer afterwards: the repair prompt rebuilds only the Artifact and would drop them.
+    source_text, buttons_list = _split_interactive_buttons(raw_source)
+    return _with_interactive_buttons(
+        _normalize_artifacts_with_retry(
+            source_text,
+            conversation_messages=conversation_messages,
+            model=model,
+            generate_response=generate_response,
+            user_request=user_request,
+            ui_mode=ui_mode,
+            explicit_ui_opt_out=explicit_ui_opt_out,
+        ),
+        buttons_list,
+    )
+
+
+# 選択ボタンを除いた本文で、要求された生成UIを検証し、必要なら1回だけ修復する。
+# Validate the requested generated UI in the button-free prose and repair it once if needed.
+def _normalize_artifacts_with_retry(
+    source_text: str,
+    *,
+    conversation_messages: list[dict[str, Any]],
+    model: str,
+    generate_response: Callable[[list[dict[str, Any]], str], str | None],
+    user_request: str | None,
+    ui_mode: GenerativeUiMode | str | None,
+    explicit_ui_opt_out: bool,
+) -> NormalizedGenerativeResponse:
     intent_text = user_request or _latest_user_request(conversation_messages)
     normalized_ui_mode = _coerce_generative_ui_mode(ui_mode)
-    normalized = normalize_response_with_artifacts(
+    normalized = _normalize_artifacts(
         source_text,
         recover_truncated=True,
         ui_mode=normalized_ui_mode,
@@ -1914,10 +1942,14 @@ def normalize_response_with_artifact_retry(
     if not repaired_text:
         return _repair_failure(normalized, reason_codes, REASON_REPAIR_INVALID)
 
-    repaired = normalize_response_with_artifacts(
-        repaired_text,
+    # 修復結果に選択ボタンが混ざっても本文へ漏らさず捨てる。付けるのは元の回答のボタンだけ。
+    # Buttons in the repair output are dropped rather than leaked; only the original's are kept.
+    repaired_prose, _ = _split_interactive_buttons(repaired_text)
+    repaired = _normalize_artifacts(
+        repaired_prose,
         recover_truncated=True,
         ui_mode=normalized_ui_mode,
+        explicit_ui_opt_out=False,
     )
     repaired_issues = requested_artifact_quality_issues(repaired, mode)
     if not repaired_issues:

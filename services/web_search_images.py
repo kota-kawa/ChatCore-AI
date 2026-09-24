@@ -8,6 +8,7 @@ from html import escape
 from typing import Any
 from urllib.parse import urlsplit
 
+from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
 from services.llm import get_llm_json_response
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
@@ -714,13 +715,19 @@ def place_web_search_image_parts(
         part for part in normalized_parts if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE
     ]
     text_parts = [part for part in other_parts if part.get("type") == "text"]
+    # 本文と画像を組み直しても選択ボタンは失わない。回答を締めくくる部品なので末尾に置く。
+    # Rebuilding prose and images must not lose the choice buttons; they close the reply, so
+    # they stay at the end.
+    button_parts = [
+        part for part in other_parts if part.get("type") == INTERACTIVE_BUTTONS_PART_TYPE
+    ]
     answer_text = "".join(str(part.get("text") or "") for part in text_parts)
     if not answer_text and fallback_text:
         answer_text = fallback_text
     if not all_images:
         return normalized_parts or (parts if parts is not None else None)
     if not answer_text:
-        return all_images
+        return [*all_images, *button_parts]
 
     ordered_images, offsets = _final_image_layout(answer_text, all_images)
     inline_parts = build_web_search_image_parts_at_offsets(
@@ -729,7 +736,9 @@ def place_web_search_image_parts(
         offsets,
         keep_empty_tail=keep_empty_tail,
     )
-    return inline_parts or (parts if parts is not None else None)
+    if not inline_parts:
+        return parts if parts is not None else None
+    return [*inline_parts, *button_parts]
 
 
 def append_web_search_image_parts(
