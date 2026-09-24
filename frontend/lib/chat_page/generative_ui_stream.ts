@@ -5,19 +5,25 @@ import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 // are still hidden from streamed prose below so malformed model output does not
 // expose its raw payload, but they are never treated as a UI being generated.
 const ARTIFACT_FENCE_NAME = "chatcore-artifact";
-const HIDDEN_GENERATIVE_UI_FENCE_NAMES = [
+const PROBABLE_ARTIFACT_FENCE_NAMES = [
   "chatcore[\\s_-]*artifact",
   "generative[\\s_-]*ui",
   "ui[\\s_-]*artifact",
+].join("|");
+// 選択ボタンは生成UIではないためローダーの対象にしないが、JSON を本文に見せないよう同じく隠す。
+// Choice buttons are not a generated UI, so they never drive the loader, but their JSON is
+// hidden from the prose all the same.
+const CHOICE_BUTTONS_FENCE_NAMES = [
   "chatcore[\\s_-]*buttons",
   "interactive[\\s_-]*buttons",
 ].join("|");
-const COMPLETE_GENERATIVE_UI_FENCE_RE = new RegExp(
-  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
+const HIDDEN_FENCE_NAMES = `${PROBABLE_ARTIFACT_FENCE_NAMES}|${CHOICE_BUTTONS_FENCE_NAMES}`;
+const COMPLETE_HIDDEN_FENCE_RE = new RegExp(
+  "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
   "gi",
 );
-const HIDDEN_GENERATIVE_UI_FENCE_START_RE = new RegExp(
-  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+const HIDDEN_FENCE_START_RE = new RegExp(
+  "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "gi",
 );
 const ARTIFACT_FENCE_START_RE = new RegExp(
@@ -25,17 +31,17 @@ const ARTIFACT_FENCE_START_RE = new RegExp(
   "i",
 );
 const PROBABLE_FENCE_START_RE = new RegExp(
-  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+  "```[ \\t]*(?:" + PROBABLE_ARTIFACT_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "i",
 );
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  let stripped = normalized.replace(COMPLETE_GENERATIVE_UI_FENCE_RE, "\n\n");
+  let stripped = normalized.replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n");
 
   let incompleteFenceStart = -1;
-  HIDDEN_GENERATIVE_UI_FENCE_START_RE.lastIndex = 0;
+  HIDDEN_FENCE_START_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = HIDDEN_GENERATIVE_UI_FENCE_START_RE.exec(stripped)) !== null) {
+  while ((match = HIDDEN_FENCE_START_RE.exec(stripped)) !== null) {
     incompleteFenceStart = match.index;
   }
 

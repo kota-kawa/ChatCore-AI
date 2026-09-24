@@ -2,11 +2,13 @@ import type { ChatMessagePart } from "./types";
 
 // アシスタントメッセージのパーツ表示順を決める規約。services/message_parts_display.py と
 // 同じ規則を保つ: 生成UIとWeb検索画像は1ターン内で排他、画像は最大5枚まで保持し、
-// 画像パーツの挿入位置は周囲のテキストとの順序を保つ。
+// 画像パーツの挿入位置は周囲のテキストとの順序を保つ。選択ボタンは生成UIではないので
+// この排他に加わらない。
 // The display ordering contract for assistant message parts, mirroring
 // services/message_parts_display.py: a generated UI and web-search images are
 // mutually exclusive within one turn, up to five images preserve their authored
-// inline position relative to the surrounding text.
+// inline position relative to the surrounding text. Choice buttons are not a
+// generated UI and take no part in that exclusivity.
 export const ANSWER_TRACE_DETAILS_CLASS = "web-search-sources web-search-sources--trace";
 export const MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5;
 
@@ -16,7 +18,7 @@ const TRACE_BLOCK_START = `<details class="${ANSWER_TRACE_DETAILS_CLASS}"`;
 const DETAILS_TAG_PATTERN = "<details\\b|</details\\s*>";
 
 function isGenerativeUiPart(part: ChatMessagePart) {
-  return part.type === "sandbox_artifact" || part.type === "interactive_buttons";
+  return part.type === "sandbox_artifact";
 }
 
 // 先頭にある回答トレースブロックを本文から切り離す

@@ -1687,6 +1687,93 @@ class ChatStreamingTestCase(unittest.TestCase):
         mock_image.assert_called_once()
         self.assertEqual(mock_image.call_args.kwargs["model"], "openai/gpt-oss-120b")
 
+    # 日本語: 選択ボタンが確定したストリーム中の更新でも、先に出した検索画像が消えないことを検証します。
+    # English: Verify the streaming update that settles choice buttons keeps the image revealed earlier.
+    def test_streaming_choice_buttons_keep_the_revealed_web_search_image(self):
+        persisted_records = []
+        search_result = WebSearchResult(
+            query="京都の紅葉",
+            searched_at="2026-08-19T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/kyoto",
+                    title="京都の紅葉ガイド",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                    image_candidates=(
+                        WebSearchImageCandidate(
+                            url="https://cdn.example.com/maple.jpg",
+                            alt="紅葉の写真",
+                            kind="og:image",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        buttons = {"type": "multiple_choice", "question": "どちらを詳しく知りたいですか？", "options": ["東福寺", "永観堂"]}
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted_records.append({"response": response, "message_parts": message_parts})
+
+        with (
+            patch("services.chat_generation.search_brave_llm_context", return_value=search_result),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=_search_then_answer_stream(
+                    "京都の紅葉",
+                    "京都の紅葉名所は東福寺と永観堂です。",
+                    f"\n\n```chatcore-buttons\n{json.dumps(buttons, ensure_ascii=False)}\n```",
+                ),
+            ),
+            patch(
+                "services.chat_generation.choose_web_search_images",
+                return_value=[
+                    {
+                        "url": "https://cdn.example.com/maple.jpg",
+                        "alt": "京都の紅葉の写真",
+                        "source_url": "https://example.com/kyoto",
+                        "source_title": "京都の紅葉ガイド",
+                        "placement": "after_subject",
+                        "placement_anchor": "京都の紅葉",
+                    }
+                ],
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-image-buttons:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉を教えて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+            )
+            events = list(_iter_llm_stream_events(job))
+
+        parts_updates = [
+            json.loads(line.removeprefix("data: "))
+            for event in events
+            if b"event: response_parts_updated" in event
+            for line in event.decode("utf-8").splitlines()
+            if line.startswith("data: ")
+        ]
+        # 画像の露出と、ボタンの確定の2回。後者でも画像は同じ位置に残る。
+        # One update reveals the image, the next settles the buttons and still carries the image.
+        self.assertEqual(len(parts_updates), 2)
+        revealed, settled = parts_updates
+        self.assertEqual(
+            [part["type"] for part in settled["parts"]],
+            ["text", "text", "web_search_image", "text", "interactive_buttons"],
+        )
+        self.assertEqual(settled["parts"][:3], revealed["parts"][:3])
+        self.assertEqual(settled["parts"][4]["buttons"], buttons)
+        self.assertNotIn("chatcore-buttons", settled["response"])
+        self.assertNotIn("chatcore-buttons", "".join(part.get("text", "") for part in settled["parts"]))
+        # 完了時の保存は従来どおり、画像とボタンの両方を持つ。
+        # The persisted answer keeps both, as before.
+        self.assertEqual(len(persisted_records), 1)
+        persisted_types = [part["type"] for part in persisted_records[0]["message_parts"]]
+        self.assertIn("web_search_image", persisted_types)
+        self.assertEqual(persisted_types[-1], "interactive_buttons")
+
     def test_background_generation_job_appends_selected_reference_steps(self):
         persisted_messages = []
         selected_trace = [

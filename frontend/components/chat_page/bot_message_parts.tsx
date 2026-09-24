@@ -15,11 +15,23 @@ type BotMessagePartsProps = {
   // 生成中かどうか。末尾のテキストパートだけが単語フェードインの対象になる
   // Whether generation is in flight; only the last text part fades words in
   streaming?: boolean;
+  // 選択ボタンで選んだ選択肢を次の発話として送る
+  // Sends the option chosen on the choice buttons as the next message
+  onChoiceSubmit?: (text: string) => void;
+  // 回答済みや生成中で、選択ボタンを押せない状態
+  // The choice buttons cannot be pressed because they were answered or a reply is generating
+  choicesDisabled?: boolean;
 };
 
-// ボットメッセージを構成するパーツ（テキスト / サンドボックスアーティファクト / インタラクティブボタン）を順番に描画するコンポーネント
-// Component that renders the parts of a bot message in order (text / sandbox artifact / interactive buttons)
-function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: BotMessagePartsProps) {
+// ボットメッセージを構成するパーツ（テキスト / サンドボックスアーティファクト / 選択ボタン）を順番に描画するコンポーネント
+// Component that renders the parts of a bot message in order (text / sandbox artifact / choice buttons)
+function BotMessagePartsComponent({
+  fallbackText,
+  parts,
+  streaming = false,
+  onChoiceSubmit,
+  choicesDisabled = false,
+}: BotMessagePartsProps) {
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty
   const renderParts = parts && parts.length > 0 ? parts : [{ type: "text" as const, text: fallbackText }];
@@ -50,7 +62,7 @@ function BotMessagePartsComponent({ fallbackText, parts, streaming = false }: Bo
         if (part.type === "interactive_buttons") {
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
-              <InteractiveButtons buttons={part.buttons} />
+              <InteractiveButtons buttons={part.buttons} onSubmit={onChoiceSubmit} disabled={choicesDisabled} />
             </div>
           );
         }

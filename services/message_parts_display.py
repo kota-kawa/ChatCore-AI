@@ -1,19 +1,22 @@
-# アシスタントメッセージのパーツ（テキスト／生成UI／Web検索画像）の表示順を決める。
+# アシスタントメッセージのパーツ（テキスト／生成UI／選択ボタン／Web検索画像）の表示順を決める。
 # 生成UIとWeb検索画像は1ターン内で排他であり、画像は本文パーツの指定位置に挿入する。
+# 選択ボタンは生成UIではないため、この排他に加わらず、どちらとも同じ返信に並ぶ。
 # 旧形式でトレース前に保存された画像だけは「回答までのステップ」の直下へ移す。
 # Owns the display ordering contract for assistant message parts (text /
-# generated UI / web-search images). A generated UI and web-search images are
-# mutually exclusive within one turn. Inline images preserve their authored
-# position; legacy images before the answer trace move below that trace.
+# generated UI / choice buttons / web-search images). A generated UI and web-search
+# images are mutually exclusive within one turn. Choice buttons are not a generated UI,
+# so they take no part in that exclusivity and can sit beside either. Inline images
+# preserve their authored position; legacy images before the answer trace move below it.
 
 from __future__ import annotations
 
 import re
 from typing import Any
 
-# 生成UIとして同じ視覚スロットを占めるパーツ種別。
-# Part types that occupy the generated-UI visual slot.
-GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact", "interactive_buttons"})
+# 生成UIとして同じ視覚スロットを占めるパーツ種別。選択ボタンはチャット標準の部品なので含めない。
+# Part types that occupy the generated-UI visual slot. Choice buttons are a standard chat part
+# and are not among them.
+GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact"})
 WEB_SEARCH_IMAGE_PART_TYPE = "web_search_image"
 TEXT_PART_TYPE = "text"
 MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5
