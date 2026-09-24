@@ -87,6 +87,24 @@ export function isGenerativeUiPending(text: string, parts?: ChatMessagePart[]) {
   return !parts?.some((part) => part.type !== "text");
 }
 
+// 確定済みのテキストパーツが全文の先頭に順に並んでいれば、その直後の位置を返す。
+// パーツはトレースと本文の間の改行や空白だけの区間を落として届くため、パーツの境目に
+// ある全文側の空白は読み飛ばして照合する。
+// Return the offset right after the committed text parts when they lead the full
+// text in order. Parts arrive without the newlines between the trace and the answer
+// or whitespace-only spans, so full-text whitespace at each part boundary is skipped.
+function findCommittedTextEnd(text: string, committedSegments: string[]): number | null {
+  let cursor = 0;
+  for (const segment of committedSegments) {
+    if (!text.startsWith(segment, cursor)) {
+      while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+      if (!text.startsWith(segment, cursor)) return null;
+    }
+    cursor += segment.length;
+  }
+  return cursor;
+}
+
 export function updateStreamingTextPart(
   parts: ChatMessagePart[] | undefined,
   text: string,
@@ -105,14 +123,11 @@ export function updateStreamingTextPart(
     // Text before an image is already committed. Update only the final text
     // segment with the suffix of the current full response so image positions
     // remain stable while the stream grows.
-    const committedText = textIndices
+    const committedSegments = textIndices
       .slice(0, -1)
-      .map((index) => cloned[index].type === "text" ? cloned[index].text : "")
-      .join("");
-    let nextText = text;
-    if (committedText && text.startsWith(committedText)) {
-      nextText = text.slice(committedText.length).replace(/^\n+/, "");
-    }
+      .map((index) => cloned[index].type === "text" ? cloned[index].text : "");
+    const committedEnd = committedSegments.join("") ? findCommittedTextEnd(text, committedSegments) : null;
+    const nextText = committedEnd === null ? text : text.slice(committedEnd).replace(/^\n+/, "");
     cloned[lastTextIndex] = { type: "text", text: nextText };
     return normalizeMessagePartsForDisplay(cloned);
   }
