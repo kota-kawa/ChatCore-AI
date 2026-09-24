@@ -336,12 +336,15 @@ class Prompt(Base):
         nullable=False,
         server_default=text("'pending'"),
     )
+    featured_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     __table_args__ = (
         CheckConstraint(
             "embedding_status IN ('pending', 'ready')",
             name="ck_prompts_embedding_status",
         ),
+        Index("idx_prompts_featured", desc("featured_at"), desc("id"),
+              postgresql_where=text("featured_at IS NOT NULL AND is_public = TRUE AND deleted_at IS NULL")),
         Index("idx_prompts_public_created_at", "is_public", desc("created_at")),
         Index("idx_prompts_user_created_at", "user_id", desc("created_at")),
         Index("idx_prompts_active_public_created_at", "is_public", desc("created_at"), postgresql_where=text("deleted_at IS NULL")),
@@ -719,6 +722,17 @@ class PromptViewCount(Base):
     __table_args__ = (
         CheckConstraint("view_count >= 0", name="ck_prompt_view_counts_non_negative"),
         Index("idx_prompt_view_counts_popular", desc("view_count"), desc("prompt_id")),
+    )
+
+
+class PromptImpressionCount(Base):
+    __tablename__ = "prompt_impression_counts"
+
+    prompt_id: Mapped[int] = mapped_column(Integer, ForeignKey("prompts.id", ondelete="CASCADE"), primary_key=True)
+    impression_count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+
+    __table_args__ = (
+        CheckConstraint("impression_count >= 0", name="ck_prompt_impression_counts_non_negative"),
     )
 
 

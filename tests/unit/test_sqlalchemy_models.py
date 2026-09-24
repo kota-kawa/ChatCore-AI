@@ -15,6 +15,7 @@ from services.models import (
     McpOAuthGrant,
     MemoEntry,
     Prompt,
+    PromptImpressionCount,
     PromptVersion,
     SharedChatRoom,
     TaskVersion,
@@ -54,6 +55,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "prompt_resources",
             "guest_prompt_submissions",
             "prompt_view_counts",
+            "prompt_impression_counts",
             "mcp_oauth_clients",
             "mcp_oauth_grants",
             "mcp_oauth_user_clients",
@@ -76,6 +78,8 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(ContextFact.embedding_status.nullable)
         self.assertFalse(Prompt.embedding_status.nullable)
         self.assertTrue(Prompt.embedding_vector.nullable)
+        self.assertTrue(Prompt.featured_at.nullable)
+        self.assertFalse(PromptImpressionCount.impression_count.nullable)
         self.assertFalse(UserSkill.is_enabled.nullable)
         self.assertTrue(UserSkill.source_prompt_id.nullable)
         self.assertFalse(User.generative_ui_skill_enabled.nullable)

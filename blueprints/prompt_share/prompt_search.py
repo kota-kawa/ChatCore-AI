@@ -66,6 +66,10 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt["added_to_skills"] = bool(prompt.get("added_to_skills"))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     prompt["view_count"] = int(prompt.get("view_count") or 0)
+    prompt["like_count"] = int(prompt.get("like_count") or 0)
+    featured_at = prompt.get("featured_at")
+    if hasattr(featured_at, "isoformat"):
+        prompt["featured_at"] = featured_at.isoformat()
     for column in SEARCH_RANKING_COLUMNS:
         prompt.pop(column, None)
     return prompt

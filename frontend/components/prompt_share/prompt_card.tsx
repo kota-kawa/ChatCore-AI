@@ -1,4 +1,4 @@
-import { memo, useState, type MouseEvent } from "react";
+import { memo, useEffect, useRef, useState, type MouseEvent } from "react";
 import Image from "next/image";
 
 import MarkdownContent from "../MarkdownContent";
@@ -55,7 +55,14 @@ type PromptCardProps = {
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
   onEdit?: (prompt: PromptRecord) => void;
+  // カードの半分以上が画面に入ったときに 1 回だけ呼ばれる（表示回数の計測用）
+  // Called once when at least half of the card has entered the viewport (impression counting)
+  onImpression?: (prompt: PromptRecord) => void;
 };
+
+// この割合以上が見えたら「表示された」と数える。端が少し覗いただけの状態は数えない。
+// A card counts as shown once this share of it is visible, so a sliver at the edge does not count.
+const IMPRESSION_VISIBLE_RATIO = 0.5;
 
 // アバター画像の読み込みに失敗した場合、デフォルト画像へ差し替える
 // Falls back to the default image when the avatar fails to load
@@ -96,8 +103,35 @@ function PromptCardComponent({
   onToggleLike,
   onOpenAuthorProfile,
   onEdit,
+  onImpression,
 }: PromptCardProps) {
   const { locale, t } = useTranslation();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  // 呼び出し側の再レンダーで observer を作り直さないよう、最新のハンドラだけ参照で持つ
+  // Keep the latest handler in a ref so re-renders of the parent do not recreate the observer
+  const onImpressionRef = useRef(onImpression);
+  onImpressionRef.current = onImpression;
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element || !onImpressionRef.current || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) {
+          return;
+        }
+        observer.disconnect();
+        onImpressionRef.current?.(prompt);
+      },
+      { threshold: IMPRESSION_VISIBLE_RATIO }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+    // 1 枚のカードにつき 1 回数えればよいので、投稿 ID が変わったときだけ観測をやり直す
+    // One count per card is enough, so only re-observe when the card shows a different prompt
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt.id]);
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
@@ -110,6 +144,9 @@ function PromptCardComponent({
   const safeCategory = getCategoryLabelOrFallback(prompt.category, undefined, locale);
   const safeCreatedAt = formatPromptDate(prompt.created_at) || t("promptShare.dateUnavailable");
   const commentCount = Number(prompt.comment_count || 0);
+  const viewCount = Number(prompt.view_count || 0);
+  const likeCount = Number(prompt.like_count || 0);
+  const isFeatured = Boolean(prompt.featured_at);
   const isUsedInChat = Boolean(prompt.used_in_chat);
   const isSkillFormat = contentFormatValue === "skill";
   const isAddedToSkills = Boolean(prompt.added_to_skills);
@@ -172,6 +209,7 @@ function PromptCardComponent({
 
   return (
     <div
+      ref={rootRef}
       className={`prompt-card cc-press${isDropdownOpen ? " menu-open" : ""}`}
       data-category={prompt.category || ""}
       role="button"
@@ -193,6 +231,14 @@ function PromptCardComponent({
     >
       <div className="prompt-card__header">
         <div className="prompt-card__badges">
+          {/* 運営が選んだ投稿は一覧の先頭に固定されるので、なぜ上にあるかが分かるようバッジで示す */}
+          {/* Featured posts are pinned to the top of the feed, so the badge explains why they lead */}
+          {isFeatured ? (
+            <span className="prompt-card__type-pill prompt-card__type-pill--featured">
+              <i className="bi bi-star-fill"></i>
+              <span>{t("promptShare.featuredPick")}</span>
+            </span>
+          ) : null}
           <span className="prompt-card__category-pill">
             <i className="bi bi-hash"></i>
             <span>{safeCategory}</span>
@@ -392,6 +438,12 @@ function PromptCardComponent({
 
       <div className="prompt-meta">
         <div className="prompt-actions">
+          {/* 閲覧数は操作ではなく指標。並び順（閲覧数順）の根拠が見えるようカードに出す */}
+          {/* The view count is a signal, not an action; showing it makes the feed's popularity order visible */}
+          <span className="prompt-action-stat" aria-label={t("promptShare.viewCountLabel", { count: viewCount })}>
+            <i className="bi bi-eye" aria-hidden="true"></i>
+            <span>{viewCount}</span>
+          </span>
           <button
             className="prompt-action-btn comment-btn cc-press"
             type="button"
@@ -426,6 +478,11 @@ function PromptCardComponent({
             }}
           >
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
+            {likeCount > 0 ? (
+              <span className="prompt-action-count" aria-label={t("promptShare.likeCountLabel", { count: likeCount })}>
+                {likeCount}
+              </span>
+            ) : null}
           </button>
 
           {/* 共有プロンプトの主操作も二重送信を防ぐ */}

@@ -63,6 +63,7 @@ from services.prompt_types import (
 from services.request_models import (
     PromptCommentCreateRequest,
     PromptCommentReportRequest,
+    PromptImpressionRequest,
     PromptLikeRequest,
     PromptTaskCreateRequest,
     SharedPromptCreateRequest,
@@ -262,6 +263,10 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt.pop("resource_python_script", None)
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     prompt["view_count"] = int(prompt.get("view_count") or 0)
+    prompt["like_count"] = int(prompt.get("like_count") or 0)
+    featured_at = prompt.get("featured_at")
+    if hasattr(featured_at, "isoformat"):
+        prompt["featured_at"] = featured_at.isoformat()
     if "liked" in prompt:
         prompt["liked"] = bool(prompt["liked"])
     if "used_in_chat" in prompt:
@@ -501,6 +506,25 @@ async def record_prompt_view(prompt_id: int):
         return jsonify({"status": "success", "view_count": int(view_count)})
     except Exception:
         return log_and_internal_server_error(logger, "Failed to record public prompt view.")
+
+
+@prompt_share_api_bp.post("/prompts/impressions", name="prompt_share_api.record_prompt_impressions")
+async def record_prompt_impressions(request: Request):
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        PromptImpressionRequest,
+        error_message="表示回数を記録する投稿 ID が不正です。",
+    )
+    if validation_error is not None:
+        return validation_error
+    try:
+        counted = await _service().record_public_impressions(payload.prompt_ids)
+        return jsonify({"status": "success", "counted": int(counted)})
+    except Exception:
+        return log_and_internal_server_error(logger, "Failed to record public prompt impressions.")
 
 
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")

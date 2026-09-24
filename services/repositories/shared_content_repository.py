@@ -307,7 +307,7 @@ class SharedContentRepository:
                     p.id, p.title, p.category, p.content, p.description,
                     COALESCE(u.username, p.author, 'ユーザー') AS author,
                     p.input_examples, p.output_examples, p.content_format,
-                    p.media_type, p.attributes, p.attachments,
+                    p.media_type, p.attributes, p.attachments, p.featured_at,
                     COALESCE(pvc.view_count, 0) AS view_count,
                     {lexical_rank} AS lexical_rank,
                     {semantic_distance} AS semantic_distance,
@@ -343,6 +343,7 @@ class SharedContentRepository:
                 )
                 SELECT p.*,
                        COALESCE(pc.comment_count, 0) AS comment_count,
+                       COALESCE(lc.like_count, 0) AS like_count,
                        EXISTS (
                          SELECT 1 FROM prompt_likes AS pl
                          WHERE pl.user_id = :actor_user_id AND pl.prompt_id = p.id
@@ -365,6 +366,11 @@ class SharedContentRepository:
                   WHERE deleted_at IS NULL AND hidden_by_reports_at IS NULL
                     AND prompt_id = p.id
                 ) AS pc ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT COUNT(*) AS like_count
+                  FROM prompt_likes
+                  WHERE prompt_id = p.id
+                ) AS lc ON TRUE
                 ORDER BY p.lexical_rank DESC, p.semantic_distance ASC NULLS LAST,
                   p.view_count DESC, p.created_at DESC, p.id DESC
                 """
@@ -411,12 +417,21 @@ class SharedContentRepository:
         if author_id is not None:
             conditions.append("p.user_id = :feed_author_id")
             params["feed_author_id"] = author_id
+        # 運営ピックは最初のページの先頭にだけ出す。カーソルは閲覧数・作成日時・ID の
+        # キーセットなので、2 ページ目以降は運営ピックを除いて重複も欠落も起こさない。
+        # Featured prompts lead the first page only. The cursor is a keyset over view count,
+        # created_at and id, so later pages exclude featured rows instead of repeating or
+        # skipping them.
         if cursor is not None:
+            conditions.append("p.featured_at IS NULL")
             conditions.append(
                 "(COALESCE(pvc.view_count, 0), p.created_at, p.id) "
                 "< (:feed_view_count, :feed_created_at, :feed_id)"
             )
             params["feed_view_count"], params["feed_created_at"], params["feed_id"] = cursor
+            featured_order = ""
+        else:
+            featured_order = "(p.featured_at IS NOT NULL) DESC, p.featured_at DESC, "
 
         result = await session.execute(
             text(
@@ -438,6 +453,7 @@ class SharedContentRepository:
                     p.media_type,
                     p.attributes,
                     p.attachments,
+                    p.featured_at,
                     COALESCE(pvc.view_count, 0) AS view_count,
                     COALESCE(
                       (
@@ -475,12 +491,13 @@ class SharedContentRepository:
                   WHERE p.is_public = TRUE
                     AND p.deleted_at IS NULL
                     AND {' AND '.join(conditions)}
-                  ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
+                  ORDER BY {featured_order}COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
                   LIMIT :fetch_limit
                 )
                 SELECT
                     p.*,
                     COALESCE(pc.comment_count, 0) AS comment_count,
+                    COALESCE(lc.like_count, 0) AS like_count,
                     EXISTS (
                       SELECT 1 FROM prompt_likes AS pl
                       WHERE pl.user_id = :actor_user_id AND pl.prompt_id = p.id
@@ -504,7 +521,12 @@ class SharedContentRepository:
                       AND hidden_by_reports_at IS NULL
                       AND prompt_id = p.id
                 ) AS pc ON TRUE
-                ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS like_count
+                    FROM prompt_likes
+                    WHERE prompt_id = p.id
+                ) AS lc ON TRUE
+                ORDER BY {featured_order}p.view_count DESC, p.created_at DESC, p.id DESC
                 """
             ),
             params,

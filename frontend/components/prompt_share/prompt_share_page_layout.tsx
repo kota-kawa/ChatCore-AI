@@ -61,6 +61,7 @@ type PromptSharePageLayoutProps = {
   onToggleLike: (prompt: PromptRecord) => void;
   onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
   onEditPrompt: (prompt: PromptRecord) => void;
+  onImpression?: (prompt: PromptRecord) => void;
   // モーダルなど追加UIを差し込める拡張スロット
   // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
@@ -150,6 +151,7 @@ export function PromptSharePageLayout({
   onToggleLike,
   onOpenAuthorProfile,
   onEditPrompt,
+  onImpression,
   children
 }: PromptSharePageLayoutProps) {
   const { locale, t } = useTranslation();
@@ -448,6 +450,7 @@ export function PromptSharePageLayout({
                   onToggleLike={onToggleLike}
                   onOpenAuthorProfile={onOpenAuthorProfile}
                   onEdit={onEditPrompt}
+                  onImpression={onImpression}
                 />
               );
             })}

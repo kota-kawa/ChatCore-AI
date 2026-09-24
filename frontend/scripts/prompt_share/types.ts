@@ -75,6 +75,10 @@ export type PromptData = {
   added_to_skills?: boolean;
   comment_count?: number;
   view_count?: number;
+  like_count?: number;
+  // 運営が選んだ投稿の日時。値があればカードに「運営ピック」を出し、一覧の先頭に固定される。
+  // When an operator featured the prompt; a value shows the staff-pick badge and pins it to the top of the feed.
+  featured_at?: string | null;
   created_at?: string;
 };
 
@@ -100,6 +104,12 @@ export type PromptFeedResponse = {
 export type PromptViewResponse = {
   status?: string;
   view_count?: number;
+  error?: string;
+};
+
+export type PromptImpressionResponse = {
+  status?: string;
+  counted?: number;
   error?: string;
 };
 

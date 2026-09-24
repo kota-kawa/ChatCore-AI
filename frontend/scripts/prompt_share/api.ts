@@ -6,6 +6,7 @@ import type {
   PromptCreateResponse,
   PromptData,
   PromptFeedResponse,
+  PromptImpressionResponse,
   PromptViewResponse,
   PromptType
 } from "./types";
@@ -70,6 +71,24 @@ export function recordPromptView(promptId: string | number) {
     {
       method: "POST",
       credentials: "same-origin"
+    },
+    {
+      defaultMessage: promptShareText("promptShare.loadFailed")
+    }
+  ).then(({ payload }) => payload);
+}
+
+// 画面に入ったカードの ID をまとめて送る。離脱直前の送信も届くよう keepalive を付ける。
+// Send the IDs of cards that entered the viewport in one batch; keepalive lets a flush on page exit complete.
+export function recordPromptImpressions(promptIds: Array<string | number>) {
+  return promptShareFetchJsonOrThrow<PromptImpressionResponse>(
+    "/prompt_share/api/prompts/impressions",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_ids: promptIds.map((promptId) => Number(promptId)) })
     },
     {
       defaultMessage: promptShareText("promptShare.loadFailed")

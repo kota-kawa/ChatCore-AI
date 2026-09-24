@@ -85,6 +85,33 @@ python3 scripts/backfill_embeddings.py --target prompts
 本番デプロイ後には dry-run の件数を自動出力します。provider が復旧した後に
 backfill を実行し、`--fail-on-pending` が成功することを運用完了条件にします。
 
+## 運営ピックとクリック率
+
+`prompts.featured_at` に日時が入った公開投稿は、プロンプト共有の一覧（`/prompt_share/api/prompts`）の
+最初のページの先頭に新しい順で並び、カードに「運営ピック」バッジが付きます。2 ページ目以降には
+出ません。管理画面は無く、運営が SQL で設定・解除します。
+
+```sql
+UPDATE prompts SET featured_at = CURRENT_TIMESTAMP WHERE id = 123;  -- 固定する
+UPDATE prompts SET featured_at = NULL WHERE id = 123;               -- 解除する
+```
+
+一覧でカードの半分以上が画面に入ると、フロントエンドが投稿 ID をまとめて
+`POST /prompt_share/api/prompts/impressions` に送り、`prompt_impression_counts` が 1 ページ表示につき
+1 投稿 1 回だけ増えます。詳細を開いた回数 `prompt_view_counts` と並べるとクリック率が出ます。
+
+```sql
+SELECT p.id, p.title,
+       COALESCE(i.impression_count, 0) AS impressions,
+       COALESCE(v.view_count, 0) AS views,
+       ROUND(COALESCE(v.view_count, 0)::numeric / NULLIF(i.impression_count, 0), 3) AS ctr
+FROM prompts AS p
+LEFT JOIN prompt_impression_counts AS i ON i.prompt_id = p.id
+LEFT JOIN prompt_view_counts AS v ON v.prompt_id = p.id
+WHERE p.is_public = TRUE AND p.deleted_at IS NULL
+ORDER BY impressions DESC;
+```
+
 ## スケール時の制約
 
 - Uvicorn worker ごとに DB pool が作られます。`WEB_CONCURRENCY * DB_POOL_MAX_CONN`（Blue/Green の同時稼働中は両色分）が PostgreSQL の `max_connections` を超えないようにします。

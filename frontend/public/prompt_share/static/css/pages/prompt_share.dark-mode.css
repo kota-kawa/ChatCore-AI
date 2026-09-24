@@ -184,6 +184,12 @@
   color: #fcd34d;
 }
 
+[data-theme="dark"] .prompt-share-page .prompt-card__type-pill--featured {
+  background: var(--primary-alpha-16);
+  border-color: var(--primary-border);
+  color: var(--primary-color);
+}
+
 [data-theme="dark"] .prompt-share-page .prompt-card__type-pill--skill {
   background: rgba(59, 130, 246, 0.2);
   border-color: rgba(96, 165, 250, 0.32);

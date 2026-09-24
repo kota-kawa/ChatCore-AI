@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 7102ec0a3c05be6944f58a58306d9313c39a9fb62ad5111f2ff15c7de61d4b2a
+// Schema fingerprint: 8bbfb747d02d9b897551151bc5a357aaa0e8ed6c8f990db7891b7306a95d4655
 
 import { z } from "zod";
 
@@ -64,6 +64,9 @@ export type SharedPromptCreateRequest = z.infer<typeof SharedPromptCreateRequest
 
 export const PromptTaskCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
 export type PromptTaskCreateRequest = z.infer<typeof PromptTaskCreateRequestSchema>;
+
+export const PromptImpressionRequestSchema = z.object({ "prompt_ids": z.array(z.number().int()).min(1).max(100) });
+export type PromptImpressionRequest = z.infer<typeof PromptImpressionRequestSchema>;
 
 export const PromptUpdateRequestSchema = z.object({ "title": z.string().min(1).max(255), "category": z.string().default(""), "content": z.string().max(256000).default(""), "description": z.string().max(300).default(""), "content_format": z.string().default("prompt"), "media_type": z.string().default("text"), "attributes": z.record(z.string(), z.string()).optional(), "resources": z.union([z.array(z.object({ "path": z.string(), "role": z.enum(["script","reference","config","other"]).default("other"), "language": z.string().max(64).default(""), "content": z.string(), "media_type": z.string().max(128).default("") }).strict()).max(50), z.null()]).default(null), "input_examples": z.string().max(256000).default(""), "output_examples": z.string().max(256000).default("") });
 export type PromptUpdateRequest = z.infer<typeof PromptUpdateRequestSchema>;
