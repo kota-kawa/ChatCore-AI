@@ -377,6 +377,7 @@ class SharedContentService:
         include_total: bool,
         locale: str,
         matching_category_keys: list[str],
+        query_embedding: list[float] | None = None,
         session: AsyncSession | None = None,
     ) -> dict[str, Any]:
         if not query:
@@ -398,6 +399,7 @@ class SharedContentService:
                 include_total=include_total,
                 locale=locale,
                 matching_category_keys=matching_category_keys,
+                query_embedding=query_embedding,
             ),
         )
 

@@ -93,6 +93,12 @@ PROMPT_COMMENT_LIST_LIMIT = 200
 PROMPT_COMMENT_AUTO_HIDE_REPORT_THRESHOLD = 3
 PROMPT_COMMENT_MAX_URLS = 3
 RECOMMENDED_PROMPT_LIMIT = 3
+# おすすめ欄の根拠。similar は全件が閲覧中の投稿とベクトル距離の上限内、popular はそれ以外。
+# What the recommendation section rests on: "similar" when every row lies within the
+# vector-distance ceiling of the prompt being read, "popular" otherwise.
+RECOMMENDATION_BASIS_SIMILAR = "similar"
+RECOMMENDATION_BASIS_POPULAR = "popular"
+RECOMMENDATION_RANKING_COLUMNS = ("semantic_distance", "same_category")
 PROMPT_FEED_DEFAULT_LIMIT = 24
 PROMPT_FEED_MAX_LIMIT = 100
 PROMPT_CREATE_RATE_WINDOW_SECONDS = 60 * 60
@@ -387,17 +393,30 @@ async def _get_prompts_with_flags(
     }
 
 
+def _recommendation_basis(rows: list[dict[str, Any]]) -> str:
+    if rows and all(row.get("semantic_distance") is not None for row in rows):
+        return RECOMMENDATION_BASIS_SIMILAR
+    return RECOMMENDATION_BASIS_POPULAR
+
+
+def _serialize_recommended_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
+    prompt = _serialize_prompt_row(row)
+    for column in RECOMMENDATION_RANKING_COLUMNS:
+        prompt.pop(column, None)
+    return prompt
+
+
 async def _get_recommended_prompts(
     exclude_prompt_id: int | None,
     limit: int = RECOMMENDED_PROMPT_LIMIT,
     locale: str = "ja",
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], str]:
     rows = await _service().get_recommended_prompts(
         exclude_prompt_id=exclude_prompt_id,
         limit=limit,
         locale=locale,
     )
-    return [_serialize_prompt_row(row) for row in rows]
+    return [_serialize_recommended_prompt_row(row) for row in rows], _recommendation_basis(rows)
 
 
 async def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
@@ -463,12 +482,12 @@ async def get_prompts(request: Request, author_id: int | None = None):
 @prompt_share_api_bp.get("/prompts/recommended", name="prompt_share_api.get_recommended_prompts")
 async def get_recommended_prompts(request: Request, exclude_id: int | None = None):
     try:
-        prompts = await _get_recommended_prompts(
+        prompts, basis = await _get_recommended_prompts(
             exclude_id,
             RECOMMENDED_PROMPT_LIMIT,
             get_request_locale(request),
         )
-        return jsonify({"status": "success", "prompts": prompts})
+        return jsonify({"status": "success", "prompts": prompts, "basis": basis})
     except Exception:
         return log_and_internal_server_error(logger, "Failed to load recommended shared prompts.")
 

@@ -32,6 +32,7 @@ describe("shared prompt view tracking", () => {
         }
       },
       recommendedPrompts: [],
+      recommendationBasis: null,
       promptHtml: {
         content: "<p>本文</p>",
         inputExamples: "",

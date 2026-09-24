@@ -81,9 +81,34 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
 
         service = _Service(self._rows())
         with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
-            prompts = await _get_recommended_prompts(7, 3, "ja")
+            prompts, basis = await _get_recommended_prompts(7, 3, "ja")
         self.assertEqual(prompts[0]["id"], 1)
+        self.assertEqual(basis, "popular")
         self.assertEqual(service.recommendation_calls[0]["exclude_prompt_id"], 7)
+
+    async def test_recommendations_report_similar_basis_and_hide_ranking_columns(self):
+        from unittest.mock import patch
+
+        rows = self._rows()
+        rows[0]["semantic_distance"] = 0.21
+        rows[0]["same_category"] = True
+        service = _Service(rows)
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
+            prompts, basis = await _get_recommended_prompts(7, 3, "ja")
+        self.assertEqual(basis, "similar")
+        self.assertNotIn("semantic_distance", prompts[0])
+        self.assertNotIn("same_category", prompts[0])
+
+    async def test_recommendations_fall_back_to_popular_when_any_row_is_far(self):
+        from unittest.mock import patch
+
+        rows = self._rows() + [dict(self._rows()[0], id=2)]
+        rows[0]["semantic_distance"] = 0.2
+        rows[1]["semantic_distance"] = None
+        service = _Service(rows)
+        with patch("blueprints.prompt_share.prompt_share_api._service", return_value=service):
+            _, basis = await _get_recommended_prompts(7, 3, "ja")
+        self.assertEqual(basis, "popular")
 
     def test_feed_cursor_round_trip(self):
         value = _encode_prompt_feed_cursor(

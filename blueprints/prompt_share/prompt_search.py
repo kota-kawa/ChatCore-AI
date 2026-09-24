@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
+from services.async_utils import run_blocking
+from services.embeddings import embeddings_available, generate_embedding
 from services.i18n import get_request_locale
 from services.prompt_categories import category_keys_matching
 from services.prompt_types import (
@@ -25,6 +27,12 @@ SEARCH_DEFAULT_PAGE = 1
 SEARCH_DEFAULT_PER_PAGE = 20
 SEARCH_MAX_PER_PAGE = 100
 SEARCH_PROMPT_TYPES = {"text", "image", "skill"}
+# 1 文字の検索語は意味を持たないので埋め込みを作らず、文字一致だけで探す。
+# A single character carries no meaning to embed; those searches stay lexical.
+SEARCH_SEMANTIC_MIN_QUERY_CHARS = 2
+# 検索結果の並び替えにだけ使う列。API の応答には出さない。
+# Columns used only to order results; never part of the API response.
+SEARCH_RANKING_COLUMNS = ("lexical_rank", "semantic_distance")
 
 
 def _parse_positive_int(raw_value: str | None, default: int) -> int:
@@ -58,7 +66,21 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt["added_to_skills"] = bool(prompt.get("added_to_skills"))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     prompt["view_count"] = int(prompt.get("view_count") or 0)
+    for column in SEARCH_RANKING_COLUMNS:
+        prompt.pop(column, None)
     return prompt
+
+
+async def _embed_search_query(query: str) -> list[float] | None:
+    """Turn the query into a vector off the event loop, or None to stay lexical.
+
+    ``generate_embedding`` already logs and latches provider failures, so a None here
+    simply means the search falls back to word matching for this request.
+    """
+    normalized = query.strip()
+    if len(normalized) < SEARCH_SEMANTIC_MIN_QUERY_CHARS or not embeddings_available():
+        return None
+    return await run_blocking(generate_embedding, normalized)
 
 
 def _normalize_prompt_type_filter(value: str | None) -> str | None:
@@ -120,6 +142,7 @@ async def _search_public_prompts(
         include_total=include_total,
         locale=locale,
         matching_category_keys=category_keys_matching(query),
+        query_embedding=await _embed_search_query(query),
     )
     rows = data["rows"]
     total = data["total"]

@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.avatar_storage import normalize_avatar_url
+from services.embeddings import get_semantic_max_distance
 from services.models import (
     GuestPromptSubmission,
     Prompt,
@@ -36,6 +37,7 @@ from services.models import (
     Task,
     User,
 )
+from services.models.types import Vector
 from services.prompt_types import normalize_content_format, normalize_media_type
 from services.search_terms import build_like_pattern, split_search_terms
 
@@ -212,13 +214,20 @@ class SharedContentRepository:
         include_total: bool,
         locale: str,
         matching_category_keys: list[str],
+        query_embedding: list[float] | None = None,
     ) -> dict[str, Any]:
-        """Search public prompts with page-first JSONB/interaction aggregation."""
+        """Search public prompts by word hits first, then by meaning.
+
+        Every term has to hit somewhere (title, body, description, category, author, or
+        skill markdown). Rows are ranked by where the terms hit: a title hit outranks a
+        description or category hit, which outranks a body hit. With a query vector, rows
+        whose stored vector lies within the semantic ceiling also qualify even without a
+        word hit, and the vector distance breaks ties among equal word ranks.
+        """
         offset = (int(page) - 1) * int(per_page)
         axis_conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
         params: dict[str, Any] = {
             "locale": locale,
-            "search_term": build_like_pattern(query),
             "category_keys": matching_category_keys,
             "fetch_limit": int(per_page) + 1,
             "offset": offset,
@@ -230,14 +239,45 @@ class SharedContentRepository:
         if media_type is not None:
             axis_conditions.append("p.media_type = :search_media_type")
             params["search_media_type"] = media_type
-        matched_condition = """(
-            p.title ILIKE :search_term ESCAPE '\\' OR
-            p.content ILIKE :search_term ESCAPE '\\' OR
-            p.description ILIKE :search_term ESCAPE '\\' OR
-            p.category = ANY(:category_keys) OR
-            p.author ILIKE :search_term ESCAPE '\\' OR
-            u.username ILIKE :search_term ESCAPE '\\'
-        )"""
+
+        terms = split_search_terms(query) or [query]
+        term_conditions: list[str] = []
+        rank_terms: list[str] = []
+        for index, term in enumerate(terms):
+            key = f"search_term_{index}"
+            params[key] = build_like_pattern(term)
+            title_hit = f"p.title ILIKE :{key} ESCAPE '\\'"
+            summary_hit = f"(p.description ILIKE :{key} ESCAPE '\\' OR p.category = ANY(:category_keys))"
+            body_hit = f"""(
+                p.content ILIKE :{key} ESCAPE '\\'
+                OR p.author ILIKE :{key} ESCAPE '\\'
+                OR u.username ILIKE :{key} ESCAPE '\\'
+                OR (
+                    p.content_format = 'skill'
+                    AND COALESCE(p.attributes->>'skill_markdown', '') ILIKE :{key} ESCAPE '\\'
+                )
+            )"""
+            term_conditions.append(f"({title_hit} OR {summary_hit} OR {body_hit})")
+            rank_terms.append(
+                f"CASE WHEN {title_hit} THEN 3 WHEN {summary_hit} THEN 2 WHEN {body_hit} THEN 1 ELSE 0 END"
+            )
+        lexical_match = "(" + " AND ".join(term_conditions) + ")"
+        lexical_rank = "(" + " + ".join(rank_terms) + ")"
+
+        bind_params = [bindparam("category_keys", type_=ARRAY(String))]
+        if query_embedding is not None:
+            params["query_embedding"] = [float(value) for value in query_embedding]
+            params["semantic_max_distance"] = get_semantic_max_distance()
+            bind_params.append(bindparam("query_embedding", type_=Vector(768)))
+            semantic_distance = "(p.embedding_vector <=> :query_embedding)"
+            matched_condition = f"""(
+                {lexical_match}
+                OR (p.embedding_vector IS NOT NULL AND {semantic_distance} <= :semantic_max_distance)
+            )"""
+        else:
+            semantic_distance = "NULL::double precision"
+            matched_condition = lexical_match
+
         count = None
         if include_total:
             count_result = await session.execute(
@@ -250,7 +290,7 @@ class SharedContentRepository:
                       AND {' AND '.join(axis_conditions)}
                       AND {matched_condition}
                     """
-                ).bindparams(bindparam("category_keys", type_=ARRAY(String))),
+                ).bindparams(*bind_params),
                 params,
             )
             count = int(count_result.scalar_one() or 0)
@@ -264,6 +304,8 @@ class SharedContentRepository:
                     p.input_examples, p.output_examples, p.content_format,
                     p.media_type, p.attributes, p.attachments,
                     COALESCE(pvc.view_count, 0) AS view_count,
+                    {lexical_rank} AS lexical_rank,
+                    {semantic_distance} AS semantic_distance,
                     COALESCE(
                       (
                         SELECT jsonb_agg(
@@ -290,7 +332,8 @@ class SharedContentRepository:
                   WHERE p.is_public = TRUE AND p.deleted_at IS NULL
                     AND {' AND '.join(axis_conditions)}
                     AND {matched_condition}
-                  ORDER BY COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
+                  ORDER BY {lexical_rank} DESC, {semantic_distance} ASC NULLS LAST,
+                    COALESCE(pvc.view_count, 0) DESC, p.created_at DESC, p.id DESC
                   LIMIT :fetch_limit OFFSET :offset
                 )
                 SELECT p.*,
@@ -317,9 +360,10 @@ class SharedContentRepository:
                   WHERE deleted_at IS NULL AND hidden_by_reports_at IS NULL
                     AND prompt_id = p.id
                 ) AS pc ON TRUE
-                ORDER BY p.view_count DESC, p.created_at DESC, p.id DESC
+                ORDER BY p.lexical_rank DESC, p.semantic_distance ASC NULLS LAST,
+                  p.view_count DESC, p.created_at DESC, p.id DESC
                 """
-            ).bindparams(bindparam("category_keys", type_=ARRAY(String))),
+            ).bindparams(*bind_params),
             params,
         )
         rows = _rows(result)
@@ -470,11 +514,24 @@ class SharedContentRepository:
         limit: int,
         locale: str = "ja",
     ) -> list[dict[str, Any]]:
-        """Return a bounded random sample of visible public prompts."""
+        """Return prompts related to the one being read, then popular ones.
+
+        When the anchor prompt has a stored vector, rows within the semantic ceiling come
+        first by distance. Rows beyond the ceiling or without a vector report a NULL
+        ``semantic_distance`` and fall back to same-category, then most-viewed order, so
+        the caller can tell the reader which basis the section rests on. RANDOM() only
+        breaks remaining ties.
+        """
         result = await session.execute(
             text(
                 """
-                SELECT
+                WITH anchor AS (
+                  SELECT embedding_vector, category
+                  FROM prompts
+                  WHERE id = :exclude_prompt_id
+                ),
+                ranked AS (
+                  SELECT
                     p.id,
                     p.title,
                     p.category,
@@ -488,6 +545,11 @@ class SharedContentRepository:
                     p.attributes,
                     p.attachments,
                     COALESCE(pvc.view_count, 0) AS view_count,
+                    CASE
+                      WHEN (p.embedding_vector <=> anchor.embedding_vector) <= :semantic_max_distance
+                        THEN (p.embedding_vector <=> anchor.embedding_vector)
+                    END AS semantic_distance,
+                    COALESCE(p.category = anchor.category, FALSE) AS same_category,
                     COALESCE(
                       (
                         SELECT jsonb_agg(
@@ -518,20 +580,26 @@ class SharedContentRepository:
                       ''
                     ) AS resource_python_script,
                     p.created_at
-                FROM prompts AS p
-                LEFT JOIN users AS u ON u.id = p.user_id
-                LEFT JOIN prompt_view_counts AS pvc ON pvc.prompt_id = p.id
-                WHERE p.is_public = TRUE
-                  AND p.deleted_at IS NULL
-                  AND (p.system_prompt_key IS NULL OR p.content_locale = :locale)
-                  AND COALESCE(p.id <> :exclude_prompt_id, TRUE)
-                ORDER BY RANDOM()
+                  FROM prompts AS p
+                  LEFT JOIN users AS u ON u.id = p.user_id
+                  LEFT JOIN prompt_view_counts AS pvc ON pvc.prompt_id = p.id
+                  LEFT JOIN anchor ON TRUE
+                  WHERE p.is_public = TRUE
+                    AND p.deleted_at IS NULL
+                    AND (p.system_prompt_key IS NULL OR p.content_locale = :locale)
+                    AND COALESCE(p.id <> :exclude_prompt_id, TRUE)
+                )
+                SELECT *
+                FROM ranked
+                ORDER BY semantic_distance ASC NULLS LAST, same_category DESC,
+                  view_count DESC, RANDOM()
                 LIMIT :limit
                 """
             ),
             {
                 "locale": locale,
                 "exclude_prompt_id": exclude_prompt_id,
+                "semantic_max_distance": get_semantic_max_distance(),
                 "limit": int(limit),
             },
         )
