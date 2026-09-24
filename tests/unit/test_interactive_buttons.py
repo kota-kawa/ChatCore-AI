@@ -11,6 +11,8 @@ import json
 import unittest
 from typing import Any
 
+from services.chat_context import build_context_messages
+from services.chat_prompt import BASE_SYSTEM_PROMPT, build_base_system_prompt
 from services.generative_ui import (
     build_message_parts_context,
     decode_message_parts,
@@ -25,6 +27,7 @@ from services.interactive_buttons import (
     validate_interactive_buttons_payload,
 )
 from services.message_parts_display import normalize_message_parts_for_display
+from services.user_skills import build_chat_skills_context
 from services.web_search_images import append_web_search_image_parts
 
 # 品質ゲートを通る生成UI。選択ボタンとの共存と、修復後もボタンが残ることの確認に使う。
@@ -332,6 +335,44 @@ class InteractiveButtonsStoredPartsTests(unittest.TestCase):
         self.assertIn('<interactive_buttons type="multiple_select">', context)
         self.assertIn("<question>レポートに含める章を選んでください</question>", context)
         self.assertIn("<options>概要 | 費用 | リスク | 日程</options>", context)
+
+
+class InteractiveButtonsPromptContractTests(unittest.TestCase):
+    def test_prompt_describes_every_type_and_the_enforced_limits(self):
+        section = BASE_SYSTEM_PROMPT.split("## Choice buttons\n", 1)[1].split("\n## ", 1)[0]
+
+        self.assertIn("```chatcore-buttons", section)
+        for button_type in ("yes_no", "multiple_choice", "multiple_select"):
+            with self.subTest(button_type=button_type):
+                self.assertIn(f'"type":"{button_type}"', section)
+        self.assertIn(f"2 to {MAX_INTERACTIVE_BUTTON_OPTIONS} short", section)
+        self.assertIn(f"at most {MAX_INTERACTIVE_BUTTONS_QUESTION_CHARS} characters", section)
+
+    def test_prompt_example_passes_the_validator(self):
+        section = BASE_SYSTEM_PROMPT.split("## Choice buttons\n", 1)[1].split("\n## ", 1)[0]
+        example = section.split("```chatcore-buttons\n", 1)[1].split("\n```", 1)[0]
+
+        validate_interactive_buttons_payload(json.loads(example))
+
+    def test_buttons_stay_in_the_prompt_when_the_generated_ui_skill_is_off(self):
+        skills_prompt, enabled = build_chat_skills_context(
+            [],
+            {"id": 1, "generative_ui_skill_enabled": False},
+            locale="ja",
+        )
+        messages = build_context_messages(
+            base_system_prompt=build_base_system_prompt(locale="ja"),
+            user_profile_prompt=None,
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[{"role": "user", "content": "どれにするか選ばせて"}],
+            user_skills_prompt=skills_prompt,
+            generative_ui_enabled=enabled,
+        )
+
+        self.assertFalse(enabled)
+        self.assertIn("## Choice buttons", "\n".join(str(message["content"]) for message in messages))
 
 
 if __name__ == "__main__":
