@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.db import session_scope
+from services.prompt_embedding_service import schedule_prompt_embedding
 from services.prompt_types import SKILL_PYTHON_SCRIPT_KEY
 from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.shared_content_repository import SharedContentRepository
@@ -20,7 +21,12 @@ async def create_shared_prompt(
     repository: SharedContentRepository | None = None,
     session: AsyncSession | None = None,
 ) -> int:
-    """Persist a validated public prompt in one transaction."""
+    """Persist a validated public prompt in one transaction, then embed it off-request.
+
+    With a caller-supplied session the embedding is scheduled before that caller commits;
+    if the worker runs first it finds no row, the prompt stays ``pending``, and the
+    backfill picks it up.
+    """
     prompt_repository = repository or SharedContentRepository()
     resources = resource_repository or PromptResourceRepository()
     persisted_attributes = dict(payload.attributes or {})
@@ -49,5 +55,8 @@ async def create_shared_prompt(
 
     if session is None:
         async with session_scope() as owned_session, owned_session.begin():
-            return await operation(owned_session)
-    return await operation(session)
+            prompt_id = await operation(owned_session)
+    else:
+        prompt_id = await operation(session)
+    schedule_prompt_embedding(prompt_id)
+    return prompt_id

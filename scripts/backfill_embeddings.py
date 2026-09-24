@@ -1,4 +1,4 @@
-"""Backfill memo and My Context embedding vectors.
+"""Backfill memo, My Context, and public prompt embedding vectors.
 
 Rows written while the embedding provider was broken have `embedding_vector IS NULL`,
 and semantic search skips them entirely — fixing the provider alone leaves those rows
@@ -42,6 +42,7 @@ from services.embeddings import (  # noqa: E402
 )
 from services.logging_config import configure_logging  # noqa: E402
 from services.memo_ai import build_memo_embedding_text  # noqa: E402
+from services.prompt_embedding_service import build_prompt_embedding_text  # noqa: E402
 from services.repositories.embedding_backfill_repository import (  # noqa: E402
     EmbeddingBackfillRepository,
 )
@@ -205,11 +206,21 @@ def _fact_text(row: tuple[Any, ...]) -> str:
     )
 
 
+def _prompt_text(row: tuple[Any, ...]) -> str:
+    _, title, description, content, attributes = row
+    return build_prompt_embedding_text(
+        str(title or ""),
+        str(description or ""),
+        str(content or ""),
+        attributes if isinstance(attributes, dict) else None,
+    )
+
+
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--target",
-        choices=("all", "memos", "facts"),
+        choices=("all", "memos", "facts", "prompts"),
         default="all",
         help="Which table to backfill (default: all).",
     )
@@ -276,6 +287,16 @@ async def _async_main(argv: list[str] | None = None) -> int:
                 columns="fact_type, title, content",
                 build_text=_fact_text,
                 store=lambda row_id, embedding: _store_embedding("context_facts", row_id, embedding),
+            )
+        )
+    if args.target in ("all", "prompts"):
+        targets.append(
+            BackfillTarget(
+                label="prompts",
+                table="prompts",
+                columns="title, description, content, attributes",
+                build_text=_prompt_text,
+                store=lambda row_id, embedding: _store_embedding("prompts", row_id, embedding),
             )
         )
 

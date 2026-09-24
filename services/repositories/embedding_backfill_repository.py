@@ -8,17 +8,25 @@ from typing import Any, ClassVar
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.models import ContextFact, MemoEntry
+from services.models import ContextFact, MemoEntry, Prompt
 
 
 class EmbeddingBackfillRepository:
     """Read missing vectors and persist regenerated values."""
 
-    _TABLE_SPECS: ClassVar[dict[str, tuple[Any, tuple[Any, ...]]]] = {
-        "memo_entries": (MemoEntry, (MemoEntry.title, MemoEntry.ai_response)),
+    # (entity, text columns, row filter). Only public, live prompts are ever searched, so
+    # private and soft-deleted rows are left out instead of paying for vectors nobody reads.
+    _TABLE_SPECS: ClassVar[dict[str, tuple[Any, tuple[Any, ...], tuple[Any, ...]]]] = {
+        "memo_entries": (MemoEntry, (MemoEntry.title, MemoEntry.ai_response), ()),
         "context_facts": (
             ContextFact,
             (ContextFact.fact_type, ContextFact.title, ContextFact.content),
+            (),
+        ),
+        "prompts": (
+            Prompt,
+            (Prompt.title, Prompt.description, Prompt.content, Prompt.attributes),
+            (Prompt.is_public.is_(True), Prompt.deleted_at.is_(None)),
         ),
     }
 
@@ -40,10 +48,10 @@ class EmbeddingBackfillRepository:
         include_existing: bool,
         batch_size: int,
     ) -> list[tuple[Any, ...]]:
-        model, fields = self._table_spec(table)
+        model, fields, row_filter = self._table_spec(table)
         statement = (
             select(model.id, *fields)
-            .where(model.id > after_id)
+            .where(model.id > after_id, *row_filter)
             .order_by(model.id)
             .limit(batch_size)
         )
@@ -58,8 +66,8 @@ class EmbeddingBackfillRepository:
         return [tuple(row) for row in result.all()]
 
     async def count_pending(self, table: str, *, include_existing: bool) -> int:
-        model, _ = self._table_spec(table)
-        statement = select(func.count()).select_from(model)
+        model, _, row_filter = self._table_spec(table)
+        statement = select(func.count()).select_from(model).where(*row_filter)
         if not include_existing:
             statement = statement.where(
                 or_(
@@ -70,7 +78,7 @@ class EmbeddingBackfillRepository:
         return int(await self.session.scalar(statement) or 0)
 
     async def store_embedding(self, table: str, row_id: int, embedding: list[float]) -> None:
-        model, _ = self._table_spec(table)
+        model, _, _ = self._table_spec(table)
         values: dict[str, Any] = {
             "embedding_vector": [float(value) for value in embedding],
             "embedding_status": "ready",

@@ -1,7 +1,8 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
+from services import shared_prompt_service
 from services.request_models import SharedPromptCreateRequest
 from services.shared_prompt_service import create_shared_prompt
 
@@ -78,6 +79,38 @@ class SharedPromptCreationResourcesTestCase(unittest.TestCase):
             {"skill_markdown": "# Portable skill"},
         )
         self.assertEqual(prompt_repository.calls[0][1]["description"], "A reusable portable skill.")
+
+    def test_schedules_embedding_for_the_new_prompt(self):
+        prompt_repository = RecordingPromptRepository(prompt_id=42)
+        with patch.object(shared_prompt_service, "schedule_prompt_embedding") as schedule:
+            asyncio.run(
+                create_shared_prompt(
+                    7,
+                    self._payload(),
+                    repository=prompt_repository,
+                    resource_repository=RecordingResourceRepository(),
+                    session=AsyncMock(),
+                )
+            )
+
+        schedule.assert_called_once_with(42)
+
+    def test_skips_embedding_when_the_insert_fails(self):
+        with (
+            patch.object(shared_prompt_service, "schedule_prompt_embedding") as schedule,
+            self.assertRaises(RuntimeError),
+        ):
+            asyncio.run(
+                create_shared_prompt(
+                    7,
+                    self._payload(),
+                    repository=RecordingPromptRepository(),
+                    resource_repository=RecordingResourceRepository(error=RuntimeError("insert failed")),
+                    session=AsyncMock(),
+                )
+            )
+
+        schedule.assert_not_called()
 
     def test_rolls_back_when_resource_insert_fails(self):
         session = AsyncMock()

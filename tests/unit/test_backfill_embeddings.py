@@ -106,6 +106,13 @@ class BackfillTextBuildersTestCase(unittest.TestCase):
         self.assertIn("エディタ", text)
         self.assertIn("vim を使う", text)
 
+    def test_prompt_text_falls_back_to_skill_markdown(self):
+        text = backfill_embeddings._prompt_text((1, "Skill", "説明", "", {"skill_markdown": "# 手順"}))
+
+        self.assertIn("Skill", text)
+        self.assertIn("説明", text)
+        self.assertIn("# 手順", text)
+
 
 class BackfillMainTestCase(unittest.TestCase):
     def test_exits_non_zero_when_embeddings_are_unavailable(self):

@@ -1,6 +1,7 @@
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
+from services import guest_prompt_service
 from services.guest_prompt_service import (
     GuestPromptLimitExceededError,
     claim_guest_prompts_for_user,
@@ -45,6 +46,19 @@ class GuestPromptServiceTestCase(unittest.IsolatedAsyncioTestCase):
         token = get_or_create_guest_prompt_token(session)
         self.assertGreaterEqual(len(token), 32)
         self.assertEqual(get_or_create_guest_prompt_token(session), token)
+
+    async def test_creation_schedules_embedding_for_the_new_prompt(self):
+        repository = _Repository(prompt_id=88)
+        with patch.object(guest_prompt_service, "schedule_prompt_embedding") as schedule:
+            await create_guest_shared_prompt(
+                "guest-token-which-is-long-enough-to-be-valid",
+                "203.0.113.10",
+                self._payload(),
+                repository=repository,
+                session=AsyncMock(),
+            )
+
+        schedule.assert_called_once_with(88)
 
     async def test_creation_leaves_caller_owned_transaction_open(self):
         repository = _Repository()

@@ -67,15 +67,19 @@ pre-deploy の upgrade に含められません。データ backfill が必要�
 
 ## Embedding の復旧と監視
 
-`memo_entries.embedding_status` と `context_facts.embedding_status` は、
+`memo_entries.embedding_status`、`context_facts.embedding_status`、`prompts.embedding_status` は、
 `pending`（未生成・再生成待ち）または `ready`（現在の vector が保存済み）を表します。
 旧 migration が不正な JSON／次元の embedding を NULL として無視した行も、
 `scripts/backfill_embeddings.py --dry-run` で件数を確認できます。
+公開プロンプトは投稿・編集時にバックグラウンドで vector を生成しますが、列を追加した
+migration の適用直後は既存投稿が全て `pending` のため、一度 `--target prompts` を流してください。
+対象は公開中かつ未削除の投稿だけです。
 
 ```sh
 python3 scripts/backfill_embeddings.py --dry-run
 python3 scripts/backfill_embeddings.py --fail-on-pending
 python3 scripts/backfill_embeddings.py --target memos --limit 500
+python3 scripts/backfill_embeddings.py --target prompts
 ```
 
 本番デプロイ後には dry-run の件数を自動出力します。provider が復旧した後に
