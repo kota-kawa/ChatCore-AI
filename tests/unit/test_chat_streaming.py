@@ -39,6 +39,7 @@ from services.chat_turn_state import (
     TURN_STATE_UPDATE_MAX_CHARS,
     TURN_STATE_UPDATE_OPEN_TAG,
     build_turn_loop_messages,
+    parse_bare_turn_state_update,
     parse_turn_state_update,
     strip_turn_state_update,
     strip_turn_state_update_chunks,
@@ -241,6 +242,47 @@ def _turn_state_update(**overrides):
     )
 
 
+def _bare_turn_state(**overrides):
+    """Return the envelope JSON a model emitted without its tags."""
+    payload = {
+        "objective": "京都の紅葉の見頃を答える",
+        "unresolved_questions": [],
+        "facts": [{"statement": "見頃は11月下旬", "evidence_ids": []}],
+        "evidence_ids": [],
+        "ready_to_answer": True,
+    }
+    payload.update(overrides)
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _web_search_tool_call_chunk(query):
+    return json.dumps(
+        [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "web_search", "arguments": json.dumps({"query": query})},
+            }
+        ]
+    )
+
+
+def _kyoto_search_result():
+    return WebSearchResult(
+        query="京都の紅葉",
+        searched_at="2026-08-19T00:00:00+00:00",
+        sources=(
+            WebSearchSource(
+                url="https://example.com/kyoto",
+                title="京都の紅葉ガイド",
+                hostname="example.com",
+                age="",
+                snippets=("見頃は11月下旬",),
+            ),
+        ),
+    )
+
+
 def _direct_answer_stream(*answer_chunks, state=None):
     """Return one agent stream containing a state replacement and the final answer."""
     return iter([_turn_state_update(**(state or {})), *answer_chunks])
@@ -349,6 +391,43 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIsNone(
             parse_turn_state_update(
                 [f"{TURN_STATE_UPDATE_OPEN_TAG}{oversized}{TURN_STATE_UPDATE_CLOSE_TAG}"]
+            )
+        )
+
+    # 日本語: タグの無い封筒 JSON は、本文全体がそれだけのときに限り封筒として読みます。
+    # English: An untagged envelope JSON is read as the envelope only when it is the whole body.
+    def test_parse_bare_turn_state_update_accepts_only_a_whole_body_envelope(self):
+        request = "京都の紅葉の見頃は？"
+        bare = _bare_turn_state()
+        self.assertEqual(
+            parse_bare_turn_state_update(f"\n{bare}\n", latest_user_message=request),
+            json.loads(bare),
+        )
+        self.assertEqual(
+            parse_bare_turn_state_update(f"```json\n{bare}\n```", latest_user_message=request),
+            json.loads(bare),
+        )
+
+        rejected = {
+            "extra_key": _bare_turn_state(answer="見頃は11月下旬です。"),
+            "no_objective": json.dumps({"facts": [], "ready_to_answer": True}),
+            "blank_objective": _bare_turn_state(objective="  "),
+            "non_boolean_ready": _bare_turn_state(ready_to_answer="true"),
+            "array": json.dumps([json.loads(bare)], ensure_ascii=False),
+            "mixed_with_prose": f"状態は次のとおりです。\n{bare}",
+            "oversized": _bare_turn_state(objective="x" * TURN_STATE_UPDATE_MAX_CHARS),
+        }
+        for label, text in rejected.items():
+            with self.subTest(label=label):
+                self.assertIsNone(parse_bare_turn_state_update(text, latest_user_message=request))
+
+    # 日本語: 利用者が内部キー名を挙げた発話では、JSON の回答を求めている可能性があるので判定しません。
+    # English: When the user names the internal keys, a JSON answer may be what was asked for.
+    def test_parse_bare_turn_state_update_skips_requests_naming_internal_keys(self):
+        self.assertIsNone(
+            parse_bare_turn_state_update(
+                _bare_turn_state(),
+                latest_user_message="objective と ready_to_answer を持つ JSON を作って",
             )
         )
 
@@ -935,6 +1014,171 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("回答までのステップ", body)
         self.assertEqual(persisted, [])
         self.assertEqual(len(cleanup_calls), 1)
+
+    # 日本語: 検索後の判断がタグ無しの封筒 JSON だけを返したら、その JSON で状態を更新し、
+    # 回答のみ要求で1度やり直して、回答だけを保存することを検証します。
+    # English: When the decision after a search returns only an untagged envelope JSON, the job
+    # updates the state from it, retries once answer-only, and persists only the answer.
+    def test_untagged_envelope_after_a_tool_result_is_retried_answer_only(self):
+        persisted = []
+        requests = []
+
+        def stream_side_effect(messages, _model, *, tools=None, generation_phase="default"):
+            requests.append({"messages": messages, "tools": tools})
+            if len(requests) == 1:
+                return iter(
+                    [
+                        _turn_state_update(ready_to_answer=False),
+                        _web_search_tool_call_chunk("京都の紅葉"),
+                    ]
+                )
+            if len(requests) == 2:
+                return iter([_bare_turn_state()])
+            return iter([_turn_state_update(), "京都の紅葉の見頃は11月下旬です。"])
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=_kyoto_search_result(),
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-untagged-envelope:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉の見頃は？"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(requests), 3)
+        self.assertIsNone(requests[2]["tools"])
+        recovery_system_contents = [
+            message["content"]
+            for message in requests[2]["messages"]
+            if message.get("role") == "system"
+        ]
+        self.assertIn(TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT, recovery_system_contents)
+        turn_state_contents = [
+            content for content in recovery_system_contents if content.startswith("<turn_state>")
+        ]
+        self.assertEqual(len(turn_state_contents), 1)
+        self.assertIn("京都の紅葉の見頃を答える", turn_state_contents[0])
+        self.assertIn("event: done", body)
+        self.assertNotIn("ready_to_answer", body)
+        self.assertEqual(len(persisted), 1)
+        self.assertIn("京都の紅葉の見頃は11月下旬です。", persisted[0])
+        self.assertNotIn("ready_to_answer", persisted[0])
+        self.assertEqual(job._telemetry.empty_answer_recoveries, 1)
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
+
+    # 日本語: やり直しでもタグ無しの封筒 JSON しか返らなければ、JSON もトレースも保存せず
+    # 空回答のエラーで終えることを検証します。
+    # English: If the retry also returns only an untagged envelope JSON, neither the JSON nor
+    # a trace is persisted and the turn ends with the empty-answer error.
+    def test_repeated_untagged_envelope_ends_with_the_empty_answer_error(self):
+        persisted = []
+        cleanup_calls = []
+        requests = []
+
+        def stream_side_effect(_messages, _model, *, tools=None, generation_phase="default"):
+            requests.append(tools)
+            if len(requests) == 1:
+                return iter(
+                    [
+                        _turn_state_update(ready_to_answer=False),
+                        _web_search_tool_call_chunk("京都の紅葉"),
+                    ]
+                )
+            return iter([f"```json\n{_bare_turn_state()}\n```"])
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=stream_side_effect,
+            ),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=_kyoto_search_result(),
+            ),
+            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+        ):
+            job = start_generation_job(
+                "guest:sid-untagged-envelope-twice:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉の見頃は？"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted.append(response),
+                on_error=lambda: cleanup_calls.append(True),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(requests), 3)
+        self.assertIn("event: error", body)
+        self.assertIn(ERROR_CHAT_EMPTY_RESPONSE, body)
+        self.assertNotIn("event: done", body)
+        self.assertNotIn("ready_to_answer", body)
+        self.assertNotIn("回答までのステップ", body)
+        self.assertEqual(persisted, [])
+        self.assertEqual(len(cleanup_calls), 1)
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 2)
+
+    # 日本語: 利用者が内部キー名を挙げて JSON を求めた場合は、その JSON を回答として保存します。
+    # English: When the user names the internal keys and asks for JSON, that JSON is the answer.
+    def test_untagged_envelope_shaped_answer_is_kept_when_the_user_asked_for_it(self):
+        persisted = []
+        requested_json = _bare_turn_state(objective="サンプル")
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=lambda *_args, **_kwargs: iter([requested_json]),
+        ):
+            job = start_generation_job(
+                "guest:sid-requested-json:default",
+                conversation_messages=[
+                    {
+                        "role": "user",
+                        "content": "objective・facts・ready_to_answer を持つ JSON の例だけを出して",
+                    }
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: done", body)
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(json.loads(persisted[0]), json.loads(requested_json))
+        self.assertEqual(job._telemetry.empty_answer_recoveries, 0)
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 0)
+
+    # 日本語: タグの無い普通の回答は、これまでどおりそのまま保存し、封筒の欠落だけを数えます。
+    # English: An ordinary answer without an envelope is still saved as is; only the missing
+    # envelope is counted.
+    def test_plain_answer_without_an_envelope_is_saved_as_before(self):
+        persisted = []
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=lambda *_args, **_kwargs: iter(["鎌倉の紅葉は12月上旬が見頃です。"]),
+        ):
+            job = start_generation_job(
+                "guest:sid-plain-answer:default",
+                conversation_messages=[{"role": "user", "content": "鎌倉の紅葉を教えて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: done", body)
+        self.assertEqual(persisted, ["鎌倉の紅葉は12月上旬が見頃です。"])
+        self.assertEqual(job._telemetry.empty_answer_recoveries, 0)
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 0)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
 
     # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。
     # English: Verify that stopping mid-generation persists the partial text and includes it in the aborted event.

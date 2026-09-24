@@ -24,6 +24,19 @@ from services.llm import (
     LlmUpstreamServiceError,
 )
 
+# タグを付けずに本文として届いた TurnState の封筒。
+# A TurnState envelope that arrived as the body without its tags.
+UNTAGGED_ENVELOPE = json.dumps(
+    {
+        "objective": "説明する",
+        "unresolved_questions": [],
+        "facts": [],
+        "evidence_ids": [],
+        "ready_to_answer": True,
+    },
+    ensure_ascii=False,
+)
+
 
 def tool_call(name, **arguments):
     return {
@@ -219,6 +232,54 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertEqual(offered_tools, [True, True, False])
         self.assertEqual(budget.llm_turns, 3)
         saved.assert_called_once()
+
+    # 日本語: バッファにタグ無しの封筒 JSON しか無いまま落ちたターンは、それを回答として救出しません。
+    # English: A turn that fails holding only an untagged envelope JSON does not salvage it.
+    def test_failure_does_not_salvage_an_untagged_envelope(self):
+        def stream(_messages, _model, **_kwargs):
+            yield UNTAGGED_ENVELOPE
+            raise LlmUpstreamServiceError("Groq API reported a mid-stream failure.")
+
+        job, saved, on_error = self.make_job()
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "error")
+        on_error.assert_called_once()
+        saved.assert_not_called()
+        self.assertEqual(job._telemetry.salvaged_partial_answers, 0)
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+
+    # 日本語: 停止時の未配信バッファがタグ無しの封筒 JSON だけなら、保存せず中断だけを通知します。
+    # English: On a stop, an undelivered buffer holding only an untagged envelope JSON is not
+    # persisted; only the abort is signalled.
+    def test_cancel_does_not_persist_an_untagged_envelope(self):
+        job, saved, _on_error = self.make_job()
+        job._pending_stream_chunks = [UNTAGGED_ENVELOPE]
+
+        job.cancel()
+
+        self.assertEqual(terminal_event(job).event, "aborted")
+        self.assertEqual(terminal_event(job).payload, {})
+        saved.assert_not_called()
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+
+
+    # 日本語: 停止が先にバッファを取り出した判断は、回答ステップ側でタグ無し封筒を数え直しません。
+    # English: When a stop already took the buffer, the answer step does not count the same
+    # untagged envelope again.
+    def test_untagged_envelope_taken_by_cancel_is_counted_once(self):
+        job, saved, _on_error = self.make_job()
+        state = job._build_turn_run_state()
+        step_chunks = [UNTAGGED_ENVELOPE]
+        job._pending_stream_chunks = step_chunks
+
+        job.cancel()
+        job._finish_answer_step(state, [], None, step_chunks)
+
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+        self.assertEqual(state.turn_state.objective, "説明して")
+        self.assertEqual(state.chunks, [])
+        saved.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -740,6 +740,8 @@ class GeneratedUiTelemetryTests(unittest.TestCase):
             "continuation_count",
             "input_limit_recoveries",
             "empty_answer_recoveries",
+            "missing_turn_state_updates",
+            "untagged_turn_state_recoveries",
         ):
             with self.subTest(existing_key=existing_key):
                 self.assertIn(existing_key, payload)

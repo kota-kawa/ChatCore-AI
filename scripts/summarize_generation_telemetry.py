@@ -58,6 +58,8 @@ OCCURRENCE_FIELDS = (
     "llm_turn_budget_exhausted",
     "tools_withdrawn_by_budget",
     "empty_answer_recoveries",
+    "missing_turn_state_updates",
+    "untagged_turn_state_recoveries",
     "tool_schema_recoveries",
     "research_failure_recoveries",
     "salvaged_partial_answers",

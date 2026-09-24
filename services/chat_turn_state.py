@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -21,6 +22,16 @@ _TURN_STATE_FIELDS = frozenset(
         "ready_to_answer",
     }
 )
+
+# モデルが開始・終了タグを付けずに封筒の JSON だけを本文として返すことがある（実測）。
+# 本文全体がこの形のときだけ封筒とみなし、説明文と混ざった JSON には触れない。
+# Models were observed returning the envelope JSON as the body without its tags. Only a body
+# that is entirely this shape counts as an envelope; JSON mixed with prose is left alone.
+_FENCED_JSON_PATTERN = re.compile(r"^```(?:json)?[ \t]*\n(.*)\n[ \t]*```$", re.DOTALL | re.IGNORECASE)
+
+# 利用者がこれらの内部キー名を挙げているなら、その JSON は求められた回答でありうる。
+# When the user names these internal keys, a JSON body may be exactly what was asked for.
+_TURN_STATE_KEY_MENTIONS = ("unresolved_questions", "evidence_ids", "ready_to_answer", "turn_state")
 
 TURN_LOOP_SYSTEM_PROMPT = f"""
 The current TurnState is the only semantic state; use one loop, no separate planning or summary.
@@ -115,6 +126,40 @@ def parse_turn_state_update(chunks: Sequence[str]) -> dict[str, Any] | None:
         return None
     update = {key: value for key, value in parsed.items() if key in _TURN_STATE_FIELDS}
     return update or None
+
+
+def parse_bare_turn_state_update(text: str, *, latest_user_message: str) -> dict[str, Any] | None:
+    """Return the update when ``text`` is nothing but an untagged state envelope.
+
+    封筒の欠落を回答と取り違えないための厳密な判定。本文全体が JSON オブジェクトで、
+    キーが封筒のフィールドだけ、objective が空でない文字列、ready_to_answer が真偽値の
+    ときだけ当たる。利用者が内部キー名を挙げた発話では判定しない。
+    A strict check so a lost envelope is never mistaken for the answer. It matches only when
+    the whole body is one JSON object whose keys are all envelope fields, with a non-empty
+    string objective and a boolean ready_to_answer. It never matches when the user named the
+    internal keys.
+    """
+    lowered_request = latest_user_message.lower()
+    if any(key in lowered_request for key in _TURN_STATE_KEY_MENTIONS):
+        return None
+    payload = text.strip()
+    fenced = _FENCED_JSON_PATTERN.match(payload)
+    if fenced:
+        payload = fenced.group(1).strip()
+    if not payload.startswith("{") or len(payload) > TURN_STATE_UPDATE_MAX_CHARS:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict) or not parsed.keys() <= _TURN_STATE_FIELDS:
+        return None
+    objective = parsed.get("objective")
+    if not isinstance(objective, str) or not objective.strip():
+        return None
+    if not isinstance(parsed.get("ready_to_answer"), bool):
+        return None
+    return parsed
 
 
 def _held_back_tail_length(text: str) -> int:
@@ -256,6 +301,7 @@ __all__ = [
     "TURN_STATE_UPDATE_OPEN_TAG",
     "TurnStateUpdateFilter",
     "build_turn_loop_messages",
+    "parse_bare_turn_state_update",
     "parse_turn_state_update",
     "strip_turn_state_update",
     "strip_turn_state_update_chunks",

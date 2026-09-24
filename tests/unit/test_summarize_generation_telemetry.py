@@ -102,6 +102,22 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         self.assertEqual(summary["occurrence_rates"]["tool_schema_recoveries"]["rate"], round(1 / 3, 4))
         self.assertEqual(summary["medians"]["continuation_count"], 0.0)
 
+    def test_turn_state_envelope_counters_are_reported_as_rates(self):
+        """
+        TurnState の封筒の欠落とタグ無し封筒の回復が、ターン単位の発生率として数えられることを検証します。
+        Verify missing and untagged TurnState envelopes are reported as per-turn rates.
+        """
+        lines = [
+            *_completed_turn("req-1", missing_turn_state_updates=2, untagged_turn_state_recoveries=1),
+            *_completed_turn("req-2"),
+        ]
+
+        rates = self._summary_of(lines)["occurrence_rates"]
+
+        self.assertEqual(rates["missing_turn_state_updates"]["turns"], 1)
+        self.assertEqual(rates["untagged_turn_state_recoveries"]["turns"], 1)
+        self.assertEqual(rates["untagged_turn_state_recoveries"]["rate"], 0.5)
+
     def test_lines_without_telemetry_are_ignored(self):
         """
         テレメトリを含まないログ行が集計対象にならないことを検証します。

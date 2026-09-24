@@ -101,6 +101,7 @@
 - 出力の劣化は文章を読むだけでは判定できないため、変更前後で同じ入力を流し、`services/chat_generation_telemetry.py` が記録する指標を並べます。指標は構造化ログ（既定で `logs/app.log`）の JSON 行に `request_id` とともに出力されるので、該当ターンの行から次のキーを取り出して PR 本文に書きます。
   - 打ち切りと作り直し: `first_pass_finish_reason`、`continuation_count`、`continuation_stalled`、`continuation_restart_trimmed`
   - 失敗からの縮退: `empty_answer_recoveries`、`tool_schema_recoveries`、`research_failure_recoveries`、`salvaged_partial_answers`
+  - TurnState の封筒: `missing_turn_state_updates`、`untagged_turn_state_recoveries`
   - 予算の使い切り: `llm_turn_budget_exhausted`、`tools_withdrawn_by_budget`、`truncated_evidence_payloads`
   - 生成 UI: `artifact_status`、`artifact_reason_codes`、`artifact_repair_attempted`、`artifact_repair_succeeded`
   - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`
