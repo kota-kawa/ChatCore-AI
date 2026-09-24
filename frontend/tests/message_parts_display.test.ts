@@ -111,3 +111,15 @@ test("updateStreamingTextPart keeps inline images while extending the trailing t
     { type: "text", text: " 説明です。" },
   ]);
 });
+
+test("choice buttons never suppress web-search images", () => {
+  const parts: ChatMessagePart[] = [
+    { type: "text", text: "明月院" },
+    IMAGE_PART,
+    { type: "text", text: "どちらを詳しく知りたいですか。" },
+    { type: "interactive_buttons", buttons: { type: "multiple_choice", question: "どちらにしますか？", options: ["明月院", "東慶寺"] } },
+  ];
+
+  assert.deepEqual(applyVisualPartContract(parts), parts);
+  assert.deepEqual(normalizeMessagePartsForDisplay(parts), parts);
+});

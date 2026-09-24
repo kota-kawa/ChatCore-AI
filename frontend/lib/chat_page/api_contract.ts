@@ -156,22 +156,21 @@ function normalizeArtifact(raw: unknown): NormalizedArtifact {
 function normalizeInteractiveButtons(rawButtons: unknown): InteractiveButtonsV1 | undefined {
   const record = asRecord(rawButtons);
   const type = optionalString(record.type);
-  if (type !== "yes_no" && type !== "multiple_choice") return undefined;
+  if (type !== "yes_no" && type !== "multiple_choice" && type !== "multiple_select") return undefined;
 
   const question = optionalString(record.question);
   if (!question) return undefined;
+  if (type === "yes_no") return { type, question };
 
-  const rawOptions = record.options;
-  const options =
-    Array.isArray(rawOptions)
-      ? (rawOptions.filter((o) => typeof o === "string").map((o) => o as string))
-      : undefined;
-
-  return {
-    type,
-    question,
-    ...(options && options.length > 0 ? { options } : {}),
-  };
+  // 選択肢の無い単一選択・複数選択は押せるボタンが無いため、部品ごと表示しない。
+  // A single or multiple choice without options has nothing to press, so it is not shown.
+  const rawOptions = Array.isArray(record.options) ? record.options : [];
+  const options = rawOptions
+    .filter((option): option is string => typeof option === "string")
+    .map((option) => option.trim())
+    .filter(Boolean);
+  if (options.length === 0) return undefined;
+  return { type, question, options };
 }
 
 // 日本語: Web 検索画像もバックエンドの Pydantic レスポンスモデルではない追加キーのため、

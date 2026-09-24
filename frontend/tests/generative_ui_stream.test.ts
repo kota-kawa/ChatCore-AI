@@ -84,6 +84,25 @@ test("legacy artifact aliases are hidden but still show that a UI is being produ
   assert.equal(generativeUiFenceKind("ただのテキストです。"), null);
 });
 
+test("choice-button fences are hidden from the prose without driving the generated-UI loader", () => {
+  const incomplete = ["移行すると3列が削除されます。", "```chatcore-buttons", '{"type":"yes_no","question":"実行'].join("\n");
+  const complete = [
+    "移行すると3列が削除されます。",
+    "```chatcore-buttons",
+    '{"type":"yes_no","question":"実行しますか？"}',
+    "```",
+  ].join("\n");
+
+  // 選択ボタンは生成UIではないため「生成UIを読み込み中」を出さない。JSON は本文に見せない。
+  // Choice buttons are not a generated UI, so no loader appears, and their JSON stays out of the prose.
+  for (const text of [incomplete, complete]) {
+    assert.equal(getStreamingGenerativeUiDisplayText(text), "移行すると3列が削除されます。");
+    assert.equal(generativeUiFenceKind(text), null);
+    assert.equal(isGenerativeUiPending(text), false);
+  }
+  assert.equal(generativeUiFenceKind("```interactive-buttons\n{"), null);
+});
+
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
   const text = [
     "```chatcore-artifact",

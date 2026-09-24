@@ -98,8 +98,12 @@ export type SandboxArtifactRuntimeState =
   | "timeout"
   | "navigation_blocked";
 
+// チャット標準の選択ボタン。yes_no は選択肢を持たず、multiple_choice は1つ、
+// multiple_select は複数を選んで1つの発話として送る。
+// Standard chat choice buttons. yes_no carries no options, multiple_choice sends one
+// option, and multiple_select sends the ticked options together as one message.
 export type InteractiveButtonsV1 = {
-  type: "yes_no" | "multiple_choice";
+  type: "yes_no" | "multiple_choice" | "multiple_select";
   question: string;
   options?: string[];
 };

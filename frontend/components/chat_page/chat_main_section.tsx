@@ -586,6 +586,7 @@ function ChatMainSectionComponent() {
             messages={messages}
             onRegenerate={handleRegenerateMessage}
             onContinue={handleContinuePartialAnswer}
+            onChoiceSubmit={handleSendMessage}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}
             tasks={tasks}

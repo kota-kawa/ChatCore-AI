@@ -1,8 +1,8 @@
 import { memo } from "react";
 
-import { useTranslation } from "../../contexts/locale_context";
-import type { ChatMessagePart, InteractiveButtonsV1 } from "../../lib/chat_page/types";
+import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "../chat_page/bot_message_html";
+import { InteractiveButtons } from "../chat_page/interactive_buttons";
 import { SandboxArtifactFrame } from "../chat_page/sandbox_artifact_frame";
 import { WebSearchImagePart } from "../chat_page/web_search_image_part";
 import { GenerativeUiStatusNotice } from "../chat_page/generative_ui_status_notice";
@@ -16,16 +16,7 @@ type SharedChatMessagePartsProps = {
   parts?: ChatMessagePart[];
 };
 
-// yes_no 形式は固定の 2 択、それ以外は AI が提示した選択肢をそのまま並べる
-// The yes_no format always offers the same two choices; other formats list the AI's options
-function resolveButtonLabels(buttons: InteractiveButtonsV1) {
-  if (buttons.type === "yes_no") return ["Yes", "No"];
-  return buttons.options ?? [];
-}
-
 function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMessagePartsProps) {
-  const { locale } = useTranslation();
-  const english = locale === "en";
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty
   const renderParts = parts && parts.length > 0 ? parts : [{ type: "text" as const, text: fallbackText }];
@@ -48,28 +39,11 @@ function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMess
           );
         }
         if (part.type === "interactive_buttons") {
-          // 共有ページからは返信を送れないため、見た目はそのままに操作だけ封じる
-          // Replies cannot be sent from the shared page, so keep the look but block interaction
+          // 共有ページからは返信を送れないため、送信先を渡さず読み取り専用で描く
+          // Replies cannot be sent from the shared page, so render read-only without a send target
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
-              <div className="interactive-buttons-container">
-                <div className="interactive-buttons-question">{part.buttons.question}</div>
-                <div className="interactive-buttons-actions">
-                  {resolveButtonLabels(part.buttons).map((label, optionIndex) => (
-                    <button
-                      key={`${label}-${optionIndex}`}
-                      type="button"
-                      className={`interactive-button ${optionIndex === 0 ? "primary" : "secondary"}`}
-                      disabled
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="interactive-buttons-readonly-note">
-                  {english ? "Interactive buttons are unavailable in shared views." : "対話型ボタンは共有画面では動作しません。"}
-                </p>
-              </div>
+              <InteractiveButtons buttons={part.buttons} />
             </div>
           );
         }

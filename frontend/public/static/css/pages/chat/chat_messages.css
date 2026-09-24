@@ -1439,22 +1439,40 @@
   }
 }
 
-/* Interactive Buttons */
+/* 選択ボタン（Yes/No・単一選択・複数選択）。チャット標準の部品として、面は罫線と余白で分け、
+   選択肢は白地に罫線のピル（最近のチャットのチップと同じ輪郭）、塗りの緑は複数選択の送信だけに使う。
+   押す部品はすべて 44px 以上。ボタンには box-shadow が効かないため、フォーカスは outline で示す。 */
+/* Choice buttons (yes/no, single choice, multiple select), a standard chat part. The panel is set
+   apart by a border and spacing; options are bordered pills on a white face (the recent-chat chip
+   outline), and solid green is kept for the multiple-select send. Every control is at least 44px,
+   and focus uses outline because box-shadow is stripped from buttons globally. */
 :where(body.chat-page, .chat-page-shell) .interactive-buttons-container {
-  margin-top: var(--space-4, 1rem);
-  padding: var(--space-4, 1rem);
-  background: var(--surface-secondary, #f8fafc);
-  border: 1px solid var(--border-subtle, #e2e8f0);
-  border-radius: var(--radius-md, 12px);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 0.75rem);
+  padding: var(--space-4, 1rem);
+  background: var(--surface-secondary, #f9fafb);
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm, 8px);
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 0.25rem);
 }
 
 :where(body.chat-page, .chat-page-shell) .interactive-buttons-question {
-  font-weight: 500;
-  color: var(--text-dark, #0f172a);
-  font-size: 0.95rem;
+  color: var(--text-dark, #1a1a1a);
+  font-size: var(--text-base, 0.9375rem);
+  font-weight: 600;
+  line-height: var(--leading-normal, 1.5);
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-hint {
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: var(--leading-normal, 1.5);
 }
 
 :where(body.chat-page, .chat-page-shell) .interactive-buttons-actions {
@@ -1464,38 +1482,108 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .interactive-button {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-full, 9999px);
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  max-width: 100%;
+  min-height: var(--tap-target-min, 44px);
+  padding: 0.5rem 1.1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+  font-family: inherit;
+  font-size: var(--text-sm, 0.875rem);
   font-weight: 500;
+  line-height: var(--leading-tight, 1.4);
+  text-align: left;
+  overflow-wrap: anywhere;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
 }
 
-:where(body.chat-page, .chat-page-shell) .interactive-button:disabled {
-  opacity: 0.6;
+:where(body.chat-page, .chat-page-shell) .interactive-button:hover:not(:disabled, .interactive-button--disabled) {
+  border-color: var(--primary-border, rgba(25, 195, 125, 0.18));
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-button--checked {
+  border-color: var(--primary-color, #19c37d);
+  background: var(--primary-alpha-12, rgba(25, 195, 125, 0.12));
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-button__checkbox {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--primary-dark, #0f7a51);
+  cursor: inherit;
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-button:focus-visible,
+:where(body.chat-page, .chat-page-shell) .interactive-button--checkbox:has(.interactive-button__checkbox:focus-visible),
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-submit:focus-visible {
+  outline: 2px solid var(--primary-dark, #0f7a51);
+  outline-offset: 2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-button__checkbox:focus-visible {
+  outline: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-footer {
+  display: flex;
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-submit {
+  min-height: var(--tap-target-min, 44px);
+  padding: 0.5rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full, 999px);
+  background: var(--primary-dark, #0f7a51);
+  color: var(--text-light, #ffffff);
+  font-family: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  line-height: var(--leading-tight, 1.4);
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-submit:hover:not(:disabled) {
+  background: var(--primary-dark-hover, #0d6945);
+}
+
+:where(body.chat-page, .chat-page-shell) .interactive-button:disabled,
+:where(body.chat-page, .chat-page-shell) .interactive-button--disabled,
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-submit:disabled {
+  opacity: var(--disabled-opacity, 0.6);
   cursor: not-allowed;
 }
 
-:where(body.chat-page, .chat-page-shell) .interactive-button.primary {
-  background: var(--primary-main, #0f766e);
-  color: white;
+/* 濃色面では白地用の --primary-dark だと文字と輪郭が沈むため、明るい --primary-color に替える */
+/* On the dark surface --primary-dark sinks for text and outlines, so switch to --primary-color */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .interactive-button:hover:not(:disabled, .interactive-button--disabled) {
+  color: var(--primary-color, #19c37d);
 }
 
-:where(body.chat-page, .chat-page-shell) .interactive-button.primary:hover:not(:disabled) {
-  background: var(--primary-hover, #115e59);
+/* 未チェックの枠がブラウザ既定の白地のまま浮かないよう、ダークの配色で描かせる */
+/* Draw the native checkbox in dark colours so an unticked box does not glare white */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .interactive-button__checkbox {
+  accent-color: var(--primary-color, #19c37d);
+  color-scheme: dark;
 }
 
-:where(body.chat-page, .chat-page-shell) .interactive-button.secondary {
-  background: var(--surface-primary, #fff);
-  color: var(--text-secondary, #475569);
-  border-color: var(--border-base, #cbd5e1);
-}
-
-:where(body.chat-page, .chat-page-shell) .interactive-button.secondary:hover:not(:disabled) {
-  background: var(--surface-hover, #f1f5f9);
-  color: var(--text-dark, #0f172a);
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .interactive-button:focus-visible,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .interactive-button--checkbox:has(.interactive-button__checkbox:focus-visible),
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .interactive-buttons-submit:focus-visible {
+  outline-color: var(--primary-color, #19c37d);
 }
 
 /* タスク起動メッセージの「裏側のタスクプロンプト」を折り畳みで表示する。 */

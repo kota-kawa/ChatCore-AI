@@ -249,6 +249,28 @@ test("normalizers keep generated UI and web-search image parts mutually exclusiv
   ]);
 });
 
+test("normalizers keep every choice-button type and drop ones with nothing to press", () => {
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [
+      { type: "text", text: "answer" },
+      { type: "interactive_buttons", buttons: { type: "yes_no", question: "続けますか？", options: ["Yes", "No"] } },
+      {
+        type: "interactive_buttons",
+        buttons: { type: "multiple_select", question: "含める章は？", options: [" 概要 ", "", 3, "費用"] },
+      },
+      { type: "interactive_buttons", buttons: { type: "multiple_choice", question: "どれ？", options: ["  "] } },
+      { type: "interactive_buttons", buttons: { type: "checkbox", question: "未知の型", options: ["a"] } },
+    ],
+  });
+
+  assert.deepEqual(response.parts, [
+    { type: "text", text: "answer" },
+    { type: "interactive_buttons", buttons: { type: "yes_no", question: "続けますか？" } },
+    { type: "interactive_buttons", buttons: { type: "multiple_select", question: "含める章は？", options: ["概要", "費用"] } },
+  ]);
+});
+
 test("normalizers keep the three library declaration and drop unknown ones", () => {
   const artifact = {
     version: 1,

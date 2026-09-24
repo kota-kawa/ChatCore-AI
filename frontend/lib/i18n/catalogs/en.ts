@@ -86,6 +86,8 @@ export const enMessages = {
   "chat.generatedUiUnavailableHint": "The model output was incomplete, so only the text answer is shown.",
   "chat.generatedUiBlank": "The generated UI loaded but had nothing to display.",
   "chat.generatedUiNavigationBlocked": "The generated UI tried to navigate to another page, so it was stopped for safety.",
+  "chat.choiceMultipleHint": "Select all that apply", "chat.choiceSubmit": "Send selection",
+  "chat.choiceSeparator": ", ", "chat.choiceReadOnlyNote": "Interactive buttons are unavailable in shared views.",
   "chat.attachmentUnavailable": "Files cannot be attached while the chat is being prepared.",
   "chat.deleteTaskConfirm": "Delete this task?", "chat.titleRequired": "Enter a title.",
   "chat.taskLoadFailed": "Could not load tasks.", "chat.taskUpdateFailed": "Could not update the task.",

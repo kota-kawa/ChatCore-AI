@@ -162,6 +162,19 @@ export function isLastActionableAssistantMessage(
   );
 }
 
+// 後ろにユーザーの発話が続くアシスタント行は、その選択ボタンがすでに答えられている。
+// 仮想リストは画面外の行を破棄するため、押したかどうかは行の状態ではなく一覧の並びから決める。
+// An assistant row followed by a user message has had its choice buttons answered. The virtual
+// list drops off-screen rows, so "answered" comes from the list order, not from row state.
+export function hasLaterUserMessage(
+  rows: ReadonlyArray<ChatMessageListRow>,
+  index: number,
+): boolean {
+  return rows.slice(index + 1).some(
+    (candidate) => candidate.kind === "message" && candidate.message.sender === "user",
+  );
+}
+
 // ChatMessageRow に渡す共有プロパティ群。react-window の rowProps 経由で全行に届く。
 // Shared props passed to every ChatMessageRow via react-window's rowProps mechanism.
 type ChatMessageRowProps = {
@@ -171,6 +184,7 @@ type ChatMessageRowProps = {
   loadOlderChatHistory: () => Promise<void>;
   onRegenerate: () => void;
   onContinue: () => void;
+  onChoiceSubmit: (text: string) => void;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
@@ -202,6 +216,7 @@ function ChatMessageRow({
   loadOlderChatHistory,
   onRegenerate,
   onContinue,
+  onChoiceSubmit,
   editingMessageId,
   onEditStart,
   onEditCancel,
@@ -364,6 +379,9 @@ function ChatMessageRow({
   // Hide action buttons during active streaming to prevent accidental interactions.
   const isActivelyStreaming = Boolean(message.streaming && isGenerating);
   const actionVisibilityStyle = isActivelyStreaming ? { visibility: "hidden" as const } : undefined;
+  // 生成中の送信は停止として扱われるため、選択ボタンは生成中と回答済みのあいだ押せなくする。
+  // Sending during generation acts as "stop", so choices stay disabled while generating or once answered.
+  const choicesDisabled = isGenerating || hasLaterUserMessage(rows, index);
 
   return (
     <div {...ariaAttributes} className={rowClassName} style={style}>
@@ -371,7 +389,13 @@ function ChatMessageRow({
         className={`message-wrapper bot-message-wrapper ${isActivelyStreaming ? "message-wrapper--streaming" : ""}`.trim()}
       >
         <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
-          <BotMessageParts fallbackText={message.text} parts={message.parts} streaming={isActivelyStreaming} />
+          <BotMessageParts
+            fallbackText={message.text}
+            parts={message.parts}
+            streaming={isActivelyStreaming}
+            onChoiceSubmit={onChoiceSubmit}
+            choicesDisabled={choicesDisabled}
+          />
           {/* 生成UIのフェンスをストリーミング中は、無表示にならないよう組み立てローダーを見せる。 */}
           {/* While a generative UI fence is streaming, show the assembly loader so the screen never looks stalled. */}
           {isActivelyStreaming && message.generativeUiPending ? <GenerativeUiLoader /> : null}
@@ -436,6 +460,7 @@ type ChatMessageListProps = {
   messages: UiChatMessage[];
   onRegenerate: () => void;
   onContinue: () => void;
+  onChoiceSubmit: (text: string) => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   tasks: NormalizedTask[];
@@ -458,6 +483,7 @@ function ChatMessageListComponent({
   messages,
   onRegenerate,
   onContinue,
+  onChoiceSubmit,
   onEditAndRegenerate,
   onSwitchBranch,
   tasks,
@@ -556,6 +582,7 @@ function ChatMessageListComponent({
       loadOlderChatHistory,
       onRegenerate,
       onContinue,
+      onChoiceSubmit,
       editingMessageId,
       onEditStart: handleEditStart,
       onEditCancel: handleEditCancel,
@@ -570,6 +597,7 @@ function ChatMessageListComponent({
       loadOlderChatHistory,
       onRegenerate,
       onContinue,
+      onChoiceSubmit,
       editingMessageId,
       handleEditStart,
       handleEditCancel,
