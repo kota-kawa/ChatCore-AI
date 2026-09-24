@@ -16,6 +16,7 @@
 - [0010: Web 出典は抜粋を保存し、本文は必要時に読む](0010-on-demand-web-page-reading.md)
 - [0011: 変わる文脈を会話履歴の後ろに置き、プロンプトキャッシュを効かせる](0011-prompt-cache-friendly-ordering.md)
 - [0012: チャット画像は非公開の保存先に置き、画像を読めるモデルにだけ送る](0012-private-chat-image-input.md)
+- [0013: チャットからの書き込みはサーバーに保存した承認待ちアクションを経由する](0013-chat-writes-through-stored-approvals.md)
 
 ## 追加・更新の基準
 
