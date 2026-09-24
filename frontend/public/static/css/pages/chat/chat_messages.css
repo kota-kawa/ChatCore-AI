@@ -1586,6 +1586,225 @@
   outline-color: var(--primary-color, #19c37d);
 }
 
+/* 承認カード（チャットの書き込みツール）。選択ボタンの面・見出し・ピルをそのまま使い、
+   ここではプレビュー・警告・決定後の状態だけを足す。警告は失敗ではないので失敗色を使わず、
+   罫線とアイコンと副次色で示す。失敗の状態だけアイコンに失敗色を使う。 */
+/* Approval card for chat write tools. It reuses the choice buttons' panel, heading and pills and only
+   adds the preview, the warnings and the settled state. Warnings are not failures, so they use a
+   border, an icon and the secondary text colour rather than the error colour; only the failed state
+   tints its icon with the error colour. */
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__title i {
+  flex: 0 0 auto;
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: var(--leading-normal, 1.5);
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__warning i {
+  flex: 0 0 auto;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+  min-width: 0;
+  margin: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 0.25rem);
+  min-width: 0;
+}
+
+/* 部分置換は変更前から次の編集が始まるので、2件目以降の編集の前に少し余白を足す */
+/* Each partial edit starts at its "before" field, so a little extra space precedes the second and later edits */
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__field--before ~ .tool-approval-preview__field--before {
+  margin-top: var(--space-2, 0.5rem);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__label {
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 600;
+  line-height: var(--leading-normal, 1.5);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__value {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-dark, #1a1a1a);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-normal, 1.5);
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__text {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-primary, #ffffff);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 全文を開いたら抜粋は重複するので隠す */
+/* Once the full text is open the excerpt would repeat it, so hide the excerpt */
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__value:has(> .tool-approval-preview__details[open]) > .tool-approval-preview__text--excerpt {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  min-height: var(--tap-target-min, 44px);
+  color: var(--primary-dark, #0f7a51);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__summary:focus-visible {
+  outline: 2px solid var(--primary-dark, #0f7a51);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__chevron {
+  font-size: 0.78em;
+  transition: transform var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__details[open] .tool-approval-preview__chevron {
+  transform: rotate(90deg);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+  color: var(--text-dark, #1a1a1a);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-normal, 1.5);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__status > i {
+  flex: 0 0 auto;
+  color: var(--text-secondary, #6b7280);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card[data-status="succeeded"] .tool-approval-card__status > i {
+  color: var(--success-color, #15803d);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card[data-status="failed"] .tool-approval-card__status > i {
+  color: var(--danger-color, #dc2626);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__status-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__status-text {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__status-detail {
+  display: block;
+  color: var(--text-secondary, #6b7280);
+  font-weight: 400;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__result-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-2, 0.5rem);
+  max-width: 100%;
+  min-height: var(--tap-target-min, 44px);
+  color: var(--primary-dark, #0f7a51);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__result-link:hover {
+  text-decoration: underline;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__result-link:focus-visible {
+  outline: 2px solid var(--primary-dark, #0f7a51);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__result-title {
+  color: var(--text-dark, #1a1a1a);
+  font-weight: 500;
+}
+
+/* 濃色面では白地用の --primary-dark が沈むため、明るい --primary-color に替える */
+/* On the dark surface --primary-dark sinks, so switch to the brighter --primary-color */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(
+  .tool-approval-card__title i,
+  .tool-approval-preview__summary,
+  .tool-approval-card__result-link
+) {
+  color: var(--primary-color, #19c37d);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(
+  .tool-approval-preview__summary,
+  .tool-approval-card__result-link
+):focus-visible {
+  outline-color: var(--primary-color, #19c37d);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .tool-approval-preview__chevron {
+    transition: none;
+  }
+}
+
 /* タスク起動メッセージの「裏側のタスクプロンプト」を折り畳みで表示する。 */
 /* Collapsible disclosure for the underlying task prompt of a task-launch message. */
 :where(body.chat-page, .chat-page-shell) .task-prompt-disclosure {

@@ -20,9 +20,9 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 
 | URL | ページ入口 | 主な UI／状態 | 主な Backend 境界 |
 | --- | --- | --- | --- |
-| `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE |
+| `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE、`/api/chat/tool-approvals/{id}/decision` |
 | `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `pages/register.tsx`, `pages/oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `components/auth/auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
-| `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like` |
+| `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like`、`/api/chat/tool-auto-approvals` |
 | `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
 | `/prompt_share` | `pages/prompt_share/index.tsx` | `components/prompt_share/`、プロンプト共有 hook 群 | `/prompt_share/api/*`、`/search/prompts`、`/api/*` |
 | `/prompt_share/category/[category]` | `pages/prompt_share/category/[category].tsx` | SSRカテゴリガイド、カテゴリ固有SEOコピー、公開プロンプトへのクロール可能なリンク | `/prompt_share/api/prompts?category={category}` |
@@ -40,7 +40,8 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 - `scripts/core/resilient_fetch.ts`: timeout、再試行、ネットワーク切り替え時のリクエストを吸収する一般 fetch 境界です。
 - `lib/data/swr_fetcher.ts`: GET の JSON 取得、HTTP エラー正規化、SWR 既定値をまとめます。
 - `scripts/core/csrf.ts`: `/api/csrf-token` を使って状態変更リクエストへ CSRF ヘッダーを付けます。
-- `lib/chat_page/api_contract.ts`: チャット履歴・生成 UI パーツ・検索画像などの実行時正規化を担当します。
+- `lib/chat_page/api_contract.ts`: チャット履歴・生成 UI パーツ・検索画像・承認カードなどの実行時正規化を担当します。承認カード（`tool_approval` パーツ）は生成スキーマ `ToolApprovalApiSchema` で検証し、描けないカードは捨てます。
+- `components/chat_page/tool_approval_card.tsx` ＋ `components/chat_page/tool_approval_previews/` ＋ `lib/chat_page/tool_approvals.ts` ＋ `hooks/chat_page/use_chat_tool_approvals.ts`: チャットの書き込みツールの承認カード。見た目と無効条件（生成中・後ろに利用者の発言がある）は選択ボタンに揃え、決定は承認 API へ送り、応答のカードでパーツを差し替えます。最新の回答のカードがすべて決まり 1 件以上成功したら、`chat.toolApproval.continuePrompt` を通常の送信経路で送ります。共有表示では伏せ字化された読み取り専用のカードとして状態だけを見せます。「常に承認」の一覧と取り消しは設定画面の `components/settings/chat_tool_permissions_section.tsx` です。
 - `types/generated/api_schemas.ts`: Backend Pydantic model から生成される契約です。直接編集しません。
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。
 - `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。

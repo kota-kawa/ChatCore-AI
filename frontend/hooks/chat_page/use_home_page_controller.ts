@@ -30,6 +30,8 @@ import {
   mergeUniqueChatRooms,
 } from "../../lib/chat_page/home_page_controller_utils";
 import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
+import { replaceToolApprovalInMessages } from "../../lib/chat_page/tool_approvals";
+import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 import {
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
@@ -563,6 +565,12 @@ export function useHomePageController() {
     pendingProjectIdRef,
     clearPendingProject,
   });
+
+  // 承認 API が返した最新のカードで、表示中のメッセージの承認カードを差し替える。
+  // Replace the displayed approval card with the latest one returned by the approval API.
+  const applyToolApproval = useCallback((approval: ToolApprovalApi) => {
+    setMessages((previous) => replaceToolApprovalInMessages(previous, approval));
+  }, [setMessages]);
 
   const resetNewPromptComposer = useCallback(() => {
     setIsPromptSubmitting(false);
@@ -1346,6 +1354,7 @@ export function useHomePageController() {
     handleRegenerateMessage,
     handleEditAndRegenerateMessage,
     handleSwitchBranch,
+    applyToolApproval,
     taskDetail,
     isPromptSubmitting,
     guardrailEnabled,
