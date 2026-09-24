@@ -346,3 +346,136 @@ class ContextDigestResponse(ResponsePayloadModel):
     omitted_count: int = 0
     truncated: bool = False
     groups: list[ContextDigestGroup] = Field(default_factory=list)
+
+
+# 日本語: チャットの承認カードで使う値の集合。DB の CHECK 制約・パーツ検証・フロントの型（生成 Zod）がここを正本にする。
+#         ツールとプレビューの種類は PR ごとに増やす。
+# English: Value sets used by chat approval cards. DB CHECK constraints, part validation and the frontend
+#          types (generated Zod) all take them from here. Tools and preview kinds grow PR by PR.
+ToolApprovalToolName = Literal["memo_create", "memo_append", "memo_edit"]
+ToolApprovalFamily = Literal["memo"]
+ToolApprovalStatus = Literal["pending", "succeeded", "failed", "denied", "expired", "superseded", "cancelled"]
+ToolApprovalDecision = Literal["once", "always", "auto", "deny"]
+ToolApprovalWarning = Literal["shared_memo", "private_text_in_public_post", "untrusted_input_in_turn"]
+
+
+# 日本語: 承認カードの部品の基底。メッセージに保存したパーツの検証にも使うため、未知のキーは通さず落とす。
+#         本文の空白は差分の一部なので除去しない。
+# English: Base of approval-card pieces. They also validate parts stored on messages, so unknown keys are
+#          dropped rather than passed through, and whitespace is kept because it is part of the diff.
+class ToolApprovalModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+# 日本語: 新しいメモの作成案。
+# English: Proposal to create a new memo.
+class MemoCreatePreviewApi(ToolApprovalModel):
+    kind: Literal["memo_create"]
+    title: str = ""
+    content: str
+
+
+# 日本語: 既存メモへの追記案。
+# English: Proposal to append text to an existing memo.
+class MemoAppendPreviewApi(ToolApprovalModel):
+    kind: Literal["memo_append"]
+    memo_id: int = Field(ge=1)
+    memo_title: str = ""
+    text: str
+    separator: str = ""
+
+
+# 日本語: メモの部分置換の1か所（変更前と変更後）。
+# English: One replacement in a partial memo edit (before and after).
+class MemoEditChangeApi(ToolApprovalModel):
+    before: str
+    after: str
+
+
+# 日本語: 既存メモの書き換え案。mode が edits なら部分置換、content なら全文置換。
+#         base_revision は提案時の版で、承認時に版が変わっていれば実行しない。
+# English: Proposal to rewrite an existing memo: partial replacements for mode "edits", the whole body for
+#          mode "content". base_revision is the revision the proposal was made against; approval does not
+#          run when the memo has moved on.
+class MemoEditPreviewApi(ToolApprovalModel):
+    kind: Literal["memo_edit"]
+    memo_id: int = Field(ge=1)
+    memo_title: str = ""
+    new_title: str | None = None
+    mode: Literal["edits", "content"]
+    edits: list[MemoEditChangeApi] = Field(default_factory=list)
+    content: str | None = None
+    base_revision: int = Field(ge=1)
+
+    # 日本語: mode と中身が食い違う案はカードに出せないので受け付けない。
+    # English: A proposal whose mode disagrees with its payload cannot be shown on a card, so reject it.
+    @model_validator(mode="after")
+    def _require_payload_for_mode(self) -> MemoEditPreviewApi:
+        if self.mode == "edits" and not self.edits:
+            raise ValueError("memo_edit preview in edits mode needs at least one edit")
+        if self.mode == "content" and self.content is None:
+            raise ValueError("memo_edit preview in content mode needs content")
+        return self
+
+
+# 日本語: 実行結果。成功なら対象、失敗なら理由のコード（表示文言はフロントの i18n が持つ）。
+# English: Outcome of running the tool: the target on success, a reason code on failure
+#          (display text lives in the frontend i18n).
+class ToolApprovalResultApi(ToolApprovalModel):
+    target_id: int | None = None
+    target_title: str | None = None
+    error_code: str | None = None
+
+
+# 日本語: 承認カード1枚。メッセージの tool_approval パーツの approval と承認 API の応答が同じ形を使う。
+#         共有表示では readonly にし、preview・result・warnings を持たない。
+# English: One approval card. The approval of a message's tool_approval part and the approval API response
+#          share this shape. Shared views mark it readonly and carry no preview, result or warnings.
+class ToolApprovalApi(ToolApprovalModel):
+    id: str = Field(min_length=1)
+    tool: ToolApprovalToolName
+    family: ToolApprovalFamily
+    status: ToolApprovalStatus
+    decision: ToolApprovalDecision | None = None
+    always_allowed: bool = False
+    preview: MemoCreatePreviewApi | MemoAppendPreviewApi | MemoEditPreviewApi | None = None
+    warnings: list[ToolApprovalWarning] = Field(default_factory=list)
+    expires_at: str | None = None
+    result: ToolApprovalResultApi | None = None
+    readonly: bool = False
+
+    # 日本語: 操作できるカードは何を実行するかを示せなければならない。プレビューの種類はツールと一致させる。
+    # English: An actionable card must show what it will run, and its preview kind must match the tool.
+    @model_validator(mode="after")
+    def _require_matching_preview(self) -> ToolApprovalApi:
+        if self.preview is None:
+            if not self.readonly:
+                raise ValueError("tool approval needs a preview unless it is readonly")
+            return self
+        if self.preview.kind != self.tool:
+            raise ValueError("tool approval preview kind must match its tool")
+        return self
+
+
+# 日本語: 承認・拒否の結果として更新後のカードを返す応答。
+# English: Response carrying the updated card after an approve or deny decision.
+class ToolApprovalDecisionResponse(ResponsePayloadModel):
+    approval: ToolApprovalApi
+
+
+# 日本語: 「常に承認」を付与済みのツール1件。
+# English: One tool the user has granted "always approve" to.
+class ToolAutoApprovalApi(ResponsePayloadModel):
+    tool_name: ToolApprovalToolName
+    family: ToolApprovalFamily
+    created_at: str
+
+
+class ToolAutoApprovalsResponse(ResponsePayloadModel):
+    grants: list[ToolAutoApprovalApi] = Field(default_factory=list)
+
+
+# 日本語: 取り消し結果。付与が無かった場合も成功とし revoked を false にする（冪等）。
+# English: Revocation result. A missing grant still succeeds with revoked false (idempotent).
+class ToolAutoApprovalRevokeResponse(ResponsePayloadModel):
+    revoked: bool
