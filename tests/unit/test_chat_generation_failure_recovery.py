@@ -264,5 +264,23 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
 
 
+    # 日本語: 停止が先にバッファを取り出した判断は、回答ステップ側でタグ無し封筒を数え直しません。
+    # English: When a stop already took the buffer, the answer step does not count the same
+    # untagged envelope again.
+    def test_untagged_envelope_taken_by_cancel_is_counted_once(self):
+        job, saved, _on_error = self.make_job()
+        state = job._build_turn_run_state()
+        step_chunks = [UNTAGGED_ENVELOPE]
+        job._pending_stream_chunks = step_chunks
+
+        job.cancel()
+        job._finish_answer_step(state, [], None, step_chunks)
+
+        self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
+        self.assertEqual(state.turn_state.objective, "説明して")
+        self.assertEqual(state.chunks, [])
+        saved.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

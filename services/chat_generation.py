@@ -2091,10 +2091,21 @@ class ChatGenerationJob:
         with self._chunks_lock:
             self._pending_stream_chunks = []
             self._pending_stream_is_rewrite = False
+            # 停止済みかはバッファを空にするのと同じロックの下で読む。cancel() はこのロックの
+            # 下でバッファを取り出して判定するので、停止済みならこのステップの本文は cancel()
+            # の持ち分であり、ここでタグ無し封筒を読むと同じ出力を二重に数える。判定全体を
+            # ロック下に置く案より、ロックを短く保てるこちらを選んだ。
+            # Read the stop flag under the same lock that empties the buffer. cancel() takes and
+            # judges the buffer under this lock, so once stopped this step's text belongs to
+            # cancel(), and reading the untagged envelope here too would count the same output
+            # twice. Chosen over running the whole check under the lock to keep the lock short.
+            cancelled = self._cancelled
         # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
         # Keep the model's own boundaries and drop only the internal envelope.
         visible_chunks = strip_turn_state_update_chunks(step_chunks)
-        untagged_update = self._untagged_turn_state_update(step_chunks, "".join(visible_chunks))
+        untagged_update = (
+            None if cancelled else self._untagged_turn_state_update(step_chunks, "".join(visible_chunks))
+        )
         if untagged_update is not None:
             # タグを落とした封筒は状態の更新として読み、本文は空として扱う。回答として
             # 保存すると内部 JSON がそのまま done になり、空回答の回復も働かない。
