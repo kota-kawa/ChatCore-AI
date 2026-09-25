@@ -24,8 +24,10 @@ from services.llm import (
     LlmAuthenticationError,
     LlmOutputLimitError,
     LlmRateLimitError,
+    LlmToolSchemaError,
     LlmUpstreamServiceError,
 )
+from services.mcp_memo_service import McpMemoDetail, McpMemoListResult, McpMemoSummary
 
 # タグを付けずに本文として届いた TurnState の封筒。
 # A TurnState envelope that arrived as the body without its tags.
@@ -408,6 +410,60 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                     self.assertNotIn("web_search", offered_tool_names)
                     self.assertNotIn("read_web_page", offered_tool_names)
                     self.assertNotIn("get_evidence", offered_tool_names)
+
+    # 日本語: メモ一覧の後の呼び出しが1度拒否されても、ツール付きの引き直しで本文を読みに行き、
+    # 拒否の診断（理由・ツール名・提示していたツール）だけを記録することを検証します。
+    # English: Verify a call rejected once after listing memos is resampled with tools and still
+    # reads the body, and that only the diagnosis (reason, tool, offered tools) is recorded.
+    def test_rejected_memo_call_is_resampled_with_tools_and_reads_the_body(self):
+        memo = McpMemoDetail(
+            id=105,
+            title="新製品の準備メモ",
+            revision=1,
+            content="新製品の発売予定日は2026年10月12日。",
+        )
+        listing = McpMemoListResult(total=1, memos=[McpMemoSummary(id=105, title=memo.title, revision=1)])
+        offered: list[bool] = []
+
+        def stream(messages, _model, *, tools=None, **_kwargs):
+            offered.append(bool(tools))
+            step = len(offered)
+            if step == 1:
+                yield json.dumps([tool_call("memo_list")])
+            elif step == 2:
+                raise LlmToolSchemaError(
+                    "Groq API rejected the model's tool call against the tool schema.",
+                    reason="schema_mismatch",
+                    tool_name="memo_read",
+                )
+            elif step == 3:
+                yield json.dumps([tool_call("memo_read", memo_id=105)])
+            else:
+                read_results = [m["content"] for m in messages if m.get("role") == "tool"]
+                self.assertTrue(any("2026年10月12日" in content for content in read_results))
+                yield "発売予定日は2026年10月12日です。"
+
+        job, saved, _on_error = self.make_memo_job("私のメモを日本語で要約してください。")
+        with (
+            patch("services.chat_workspace_tools.memo.list_memos", return_value=listing),
+            patch("services.chat_workspace_tools.memo.get_memo", return_value=memo),
+        ):
+            self.run_job(job, stream)
+
+        self.assertEqual(offered, [True, True, True, True])
+        self.assertEqual(terminal_event(job).event, "done")
+        self.assertIn("2026年10月12日", saved.call_args.args[0])
+        telemetry = job._telemetry
+        self.assertEqual(telemetry.tool_schema_retries, 1)
+        self.assertEqual(telemetry.tool_schema_recoveries, 0)
+        self.assertEqual(telemetry.workspace_tool_results, ["memo_list:ok", "memo_read:ok"])
+        self.assertEqual(len(telemetry.tool_schema_rejections), 1)
+        rejection = telemetry.tool_schema_rejections[0]
+        self.assertEqual(rejection["reason"], "schema_mismatch")
+        self.assertEqual(rejection["tool"], "memo_read")
+        self.assertTrue(rejection["tool_offered"])
+        self.assertIn("memo_read", rejection["offered_tools"])
+        self.assertNotIn("2026", json.dumps(telemetry.as_log_extra(), ensure_ascii=False))
 
     # 日本語: 本文を1文字も書けなかった失敗は、これまで通りエラーとして通知されることを検証します。
     # English: Verify a failure that produced no body at all is still reported as an error.

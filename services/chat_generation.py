@@ -1346,9 +1346,12 @@ class ChatGenerationJob:
         max_retries = _get_llm_stream_max_retries()
         attempt = 0
         self._last_stream_output_limited = False
-        # プロバイダがツール呼び出しを拒否したときだけ、ツールなしで同じステップをやり直す。
-        # Only a provider-side tool-call rejection replays the same step without tools.
+        # プロバイダがツール呼び出しを拒否したときだけ、同じステップをツール付きで1度引き直し、
+        # それでも拒否されたらツールなしでやり直す。
+        # Only a provider-side tool-call rejection resamples the same step once with its tools,
+        # then replays it without tools if it is rejected again.
         current_tools = tools
+        tool_schema_retried = False
         while True:
             emitted = False
             attempt_chunks: list[str] = []
@@ -1411,12 +1414,6 @@ class ChatGenerationJob:
                     yield from buffered
                 return
             except LlmToolSchemaError as exc:
-                # プロバイダがモデルのツール呼び出しをスキーマ検証で拒否した場合、同じ要求を
-                # 再送しても同じ拒否になる。ツールを外して1度だけやり直し、ターン全体を
-                # 落とさずに手持ちの情報で回答へ進む。
-                # A provider that rejected the model's tool call rejects the identical request
-                # again. Replay the step once without tools so the turn degrades to an answer
-                # from what is already known instead of failing outright.
                 self._telemetry.record_tool_schema_rejection(
                     reason=exc.reason,
                     tool_name=exc.tool_name,
@@ -1430,6 +1427,31 @@ class ChatGenerationJob:
                     or self._cancelled
                 ):
                     raise
+                # 拒否はモデルが1回のサンプルで崩れたツール呼び出しを出したことを示すだけで、
+                # ストリームは温度を固定しないため、引き直せば正しい呼び出しになりうる。
+                # ツールを外すと、そのステップ以降はメモや根拠をもう読めないので、先に1度だけ
+                # 同じツールで引き直す。
+                # A rejection only means one sample produced a malformed call. Streams do not pin
+                # the temperature, so a resample can come back well formed. Dropping the tools
+                # ends any further reading for the turn, so resample once with the same tools first.
+                if not tool_schema_retried:
+                    tool_schema_retried = True
+                    self._telemetry.tool_schema_retries += 1
+                    logger.warning(
+                        "Provider rejected a tool call; resampling the step with its tools "
+                        "(model=%s, phase=%s, reason=%s).",
+                        self._model,
+                        generation_phase,
+                        exc.reason,
+                    )
+                    if discard_partial_on_retry:
+                        with self._chunks_lock:
+                            self._pending_stream_chunks.clear()
+                    continue
+                # 2度目の拒否では、ツールを外して1度だけやり直し、ターン全体を落とさずに
+                # 手持ちの情報で回答へ進む。
+                # On a second rejection, replay the step once without tools so the turn degrades
+                # to an answer from what is already known instead of failing outright.
                 logger.warning(
                     "Provider rejected a tool call; replaying the step without tools "
                     "(model=%s, phase=%s): %s",

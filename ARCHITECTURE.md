@@ -161,7 +161,7 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 
-LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
+LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツール付きで1度だけ引き直し、再び拒否されたらツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
 
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 

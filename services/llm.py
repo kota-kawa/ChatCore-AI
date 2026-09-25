@@ -320,11 +320,13 @@ class LlmToolSchemaError(LlmProviderError):
     """The provider refused the model's tool call instead of returning it.
 
     Groq などはツール引数をサーバー側でスキーマ検証し、違反をストリーム途中のエラーとして
-    返す。同じ要求を再送しても同じ拒否になりやすいため retryable ではない。回復手段は
-    「ツールを外して同じステップをやり直す」ことであり、呼び出し側がそれを担う。
+    返す。一時的な障害ではないので汎用の再試行（retryable）には載せない。回復は呼び出し側が
+    担い、同じステップをツール付きで1度だけ引き直し、それでも拒否されたらツールを外して
+    やり直す。
     Providers such as Groq validate tool arguments server-side and surface a violation as a
-    mid-stream error. Re-sending the same request reproduces it, so this is not retryable;
-    the recovery is to replay the step without tools, which the caller performs.
+    mid-stream error. It is not a transient outage, so it stays off the generic retry path
+    (not retryable). The caller recovers: it resamples the same step with tools once, and on a
+    second rejection replays it without tools.
 
     ``reason`` は固定語彙の拒否理由、``tool_name`` は拒否文に現れたツール名（名前の形をした
     トークンだけ）。モデルの出力や引数の値は持たないので、そのままテレメトリへ記録できる。
