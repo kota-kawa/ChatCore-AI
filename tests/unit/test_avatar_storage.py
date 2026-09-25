@@ -143,6 +143,7 @@ class AvatarStorageTestCase(unittest.TestCase):
             avatar_url="/static/uploads/avatar_abc123.png",
             llm_profile_context="",
             generative_ui_skill_enabled=False,
+            memo_tools_skill_enabled=True,
             preferred_locale="ja",
         )
         self.assertEqual(
