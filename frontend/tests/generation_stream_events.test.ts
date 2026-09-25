@@ -249,6 +249,80 @@ test("search failures and the generation start move the thinking status on", () 
   });
 });
 
+// メモの読み取りは検索と同じ段階、書き込みは承認待ちを作るだけなので回答の準備に戻る。
+// Memo reads share the lookup phase; writes only prepare a pending approval, so the status returns to
+// preparing the answer.
+test("workspace tool events map reads to the lookup phase and writes to preparing the answer", () => {
+  assert.deepEqual(interpret("workspace_tool_started", { tool: "memo_search" }), {
+    kind: "thinking_status",
+    text: "メモを探しています",
+    phase: "web-search",
+  });
+  assert.deepEqual(interpret("workspace_tool_started", { tool: "memo_read" }), {
+    kind: "thinking_status",
+    text: "メモを読んでいます",
+    phase: "web-search",
+  });
+  assert.deepEqual(interpret("workspace_tool_completed", { tool: "memo_list" }), {
+    kind: "thinking_status",
+    text: "読み込んだメモを確認しています",
+    phase: "web-search",
+  });
+  assert.deepEqual(interpret("workspace_tool_started", { tool: "memo_edit" }), {
+    kind: "thinking_status",
+    text: "メモの変更案を用意しています",
+    phase: "generating",
+  });
+  assert.deepEqual(interpret("workspace_tool_completed", { tool: "memo_append" }, "", localizeEn), {
+    kind: "thinking_status",
+    text: "Updated the memo. Preparing an answer",
+    phase: "generating",
+  });
+  assert.deepEqual(interpret("workspace_tool_failed", { tool: "memo_read" }), {
+    kind: "thinking_status",
+    text: "メモの操作に失敗しました。思考中",
+    phase: "generating",
+  });
+  assert.deepEqual(interpret("tool_approval_prepared", { tool: "memo_create", approval_id: "a1" }, "", localizeEn), {
+    kind: "thinking_status",
+    text: "A change is waiting for your approval. Preparing an answer",
+    phase: "generating",
+  });
+});
+
+test("a workspace tool event for an unknown tool still moves the status on generically", () => {
+  assert.deepEqual(interpret("workspace_tool_started", {}), {
+    kind: "thinking_status",
+    text: "作業を進めています",
+    phase: "generating",
+  });
+  assert.deepEqual(interpret("workspace_tool_failed", { tool: "later_tool" }), {
+    kind: "thinking_status",
+    text: "作業に失敗しました。思考中",
+    phase: "generating",
+  });
+});
+
+test("a done event carrying only an approval card is a real answer", () => {
+  const action = interpret("done", {
+    response: "",
+    parts: [{
+      type: "tool_approval",
+      approval: {
+        id: "a1",
+        tool: "memo_create",
+        family: "memo",
+        status: "pending",
+        preview: { kind: "memo_create", title: "", content: "牛乳" },
+      },
+    }],
+  });
+
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.equal(action.parts?.[0]?.type, "tool_approval");
+});
+
 // 壊れたイベントブロックは parse 段階で捨てられ、解釈まで届かない。
 // A malformed event block is dropped while parsing and never reaches interpretation.
 test("malformed event blocks are rejected before interpretation", () => {

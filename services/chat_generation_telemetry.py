@@ -72,6 +72,20 @@ class ChatGenerationTelemetry:
     # モデル判断の上限に達してループを打ち切ったか。
     # Whether the loop stopped because the model-decision budget ran out.
     llm_turn_budget_exhausted: bool = False
+    # 利用者のデータを読み書きするツール（メモなど）の利用。読み取りの回数、書き込みの提案数、
+    # 「常に承認」でその場で実行した数、引数の不備で差し戻した数。
+    # Use of the tools that read and write the user's data (memos and so on): reads, write
+    # proposals, proposals run on the spot through "always approve", and argument rejections.
+    workspace_read_calls: int = 0
+    workspace_write_proposals: int = 0
+    workspace_auto_executions: int = 0
+    workspace_invalid_arguments: int = 0
+    # 承認待ちのカードを残したターンか。ツールを外した回答で締めたことを表す。
+    # Whether the turn left a pending approval card and so closed with a tool-free answer.
+    approval_pending_turn: bool = False
+    # 「常に承認」を付与済みでも、外部の内容を読んだターンなので手動のカードにしたか。
+    # Whether an "always approve" grant was held back because the turn had read external content.
+    auto_approval_suppressed_by_untrusted_input: bool = False
     # 生成UIの5段階（判定・注入・抽出／検証・修復・実行）を、モデル別の成功率として
     # 集計できるようにする。理由コードは services/generative_ui_status.py の固定語彙のみ。
     # Makes the five generated-UI stages (decision, injection, extraction/validation, repair,
@@ -161,6 +175,12 @@ class ChatGenerationTelemetry:
             "research_failure_recoveries": self.research_failure_recoveries,
             "salvaged_partial_answers": self.salvaged_partial_answers,
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
+            "workspace_read_calls": self.workspace_read_calls,
+            "workspace_write_proposals": self.workspace_write_proposals,
+            "workspace_auto_executions": self.workspace_auto_executions,
+            "workspace_invalid_arguments": self.workspace_invalid_arguments,
+            "approval_pending_turn": self.approval_pending_turn,
+            "auto_approval_suppressed_by_untrusted_input": self.auto_approval_suppressed_by_untrusted_input,
             "ui_mode": self.ui_mode,
             "ui_mode_decision_status": self.ui_mode_decision_status,
             "explicit_ui_opt_out": self.explicit_ui_opt_out,

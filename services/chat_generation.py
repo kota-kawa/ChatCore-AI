@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -23,12 +24,15 @@ from services.generative_ui import (
 )
 from services.generative_ui_repair import with_answer_output_budget
 from services.generative_ui_status import ARTIFACT_STATUS_PART_TYPE
+from services.i18n import infer_response_language
+from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
     WEB_SEARCH_IMAGE_PART_TYPE,
     normalize_message_parts_for_display,
 )
+from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE, tool_approval_part
 
 from .chat_agent_budget import (
     AgentStepBudget,
@@ -88,6 +92,8 @@ from .chat_web_page_reader import (
     WebPageReader,
     read_web_page_tool_definition,
 )
+from .chat_workspace_tools.registry import ChatWorkspaceToolbox
+from .chat_workspace_tools.runner import WorkspaceToolRunner
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -212,13 +218,18 @@ def _has_user_facing_answer(
 ) -> bool:
     """Return whether a finished turn carries an answer the user can read.
 
-    モデルが本文を書いたか（正規化前の生テキスト）、または生成UIがあるかで判定する。
+    モデルが本文を書いたか（正規化前の生テキスト）、生成UIがあるか、承認カードがあるかで判定する。
     正規化で本文が消えた場合は、テキストと検索画像以外のパーツがあるときだけ回答扱いにする。
-    Answered means the model wrote body text (raw, before normalization) or produced a
-    generated UI. If normalization emptied the body, only parts other than text and
-    web-search images keep the turn answered.
+    Answered means the model wrote body text (raw, before normalization), produced a generated
+    UI, or left an approval card. If normalization emptied the body, only parts other than text
+    and web-search images keep the turn answered.
     """
     parts = [part for part in (message_parts or []) if isinstance(part, dict)]
+    # 承認カードは利用者が決める対象そのものなので、本文が無くても回答として残す。
+    # An approval card is itself what the user must decide on, so it stands as an answer even
+    # without body text.
+    if any(part.get("type") == TOOL_APPROVAL_PART_TYPE for part in parts):
+        return True
     has_generative_ui = any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in parts)
     if not model_text.strip() and not has_generative_ui:
         return False
@@ -227,6 +238,208 @@ def _has_user_facing_answer(
     return any(
         part.get("type") not in (WEB_SEARCH_IMAGE_PART_TYPE, ARTIFACT_STATUS_PART_TYPE, "text")
         for part in parts
+    )
+
+
+# 自動承認で実行済みの書き込みがあるか。取り消せない変更なので、そのカードは必ず残す。
+# Whether an auto-approved write already ran; that change cannot be undone, so its card stays.
+def _has_executed_approval(approval_cards: Sequence[dict[str, Any]]) -> bool:
+    return any(card.get("decision") == "auto" for card in approval_cards)
+
+
+_MEMO_CHANGE_CLAIM_JA = re.compile(
+    r"^[ \t]*(?:[^\n。！？]{0,100}メモ[^\n。！？]{0,100}"
+    r"(?:追記|追加|修正|編集|作成|保存|更新|登録)しました|"
+    r"[^\n。！？]{0,100}メモ[^\n。！？]{0,100}(?:置換|置き換え)ました|追記が完了しました)"
+    r"(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_PASSIVE_CLAIM_JA = re.compile(
+    r"^[ \t]*[^\n。！？]{0,100}メモ[^\n。！？]{0,100}(?:"
+    r"(?:追記|追加|修正|編集|作成|保存|更新|登録)(?:されました|が完了しました|済みです)|"
+    r"置換されました|置き換えられました)"
+    r"(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_PROPOSAL_CLAIM_JA = re.compile(
+    r"^[ \t]*[^\n。！？]{0,100}(?:メモ|この変更|その変更|編集案)[^\n。！？]{0,100}"
+    r"(?:提案を(?:(?:作成|提出)し|出し)(?:ました|ています)|提案(?:しました|しています)|"
+    r"承認待ち(?:です|となっています))(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_CHANGE_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?I(?:['’]ve| have) "
+    r"(?:created|saved|added|edited|updated|corrected) "
+    r"(?:an? |the |your )?(?:draft )?(?:memo|note)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PASSIVE_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?(?:(?:Done|Completed)[ \t]*[,—–:-][ \t]*)?"
+    r"(?:The|Your|This) "
+    r"(?:[A-Za-z0-9][A-Za-z0-9'_-]*[ \t]+){0,8}(?:memo|note) "
+    r"(?:(?:has|have) been|was|is(?: now)?) "
+    r"(?:created|saved|added to|edited|updated|corrected|replaced)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PROPOSAL_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?I(?:['’]ve| have) "
+    r"proposed (?:creating|adding to|editing|updating|correcting|saving) "
+    r"(?:an? |the |your )?(?:memo|note)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PENDING_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:It(?:['’]s| is) waiting for your approval|"
+    r"(?:(?:The|Your|This) )?(?:memo|note)(?:[ \t]+(?:update|change|edit|proposal))? "
+    r"is(?: now)? (?:waiting for (?:your )?approval|pending approval|awaiting (?:your )?approval)|"
+    r"(?:The|Your|This) (?:change|proposal) is waiting for your approval)"
+    r"(?=[.!?]|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _is_memo_only_request(latest_user_message: str) -> bool:
+    """Whether this memo-related request lacks an explicit external lookup request."""
+    request = re.sub(r"```.*?```", "", latest_user_message, flags=re.DOTALL)
+    request = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", request)
+    request = request.casefold()
+    if "メモ" not in request and not re.search(r"\b(?:memo|notes?)\b", request):
+        return False
+    external_request_markers = (
+        "web search", "search the web", "browse the web", "internet", "online", "external information",
+        "public sources", "current price", "current weather", "latest news", "today's weather",
+        "web検索", "ウェブ検索", "インターネット", "ネットで", "外部情報", "最新のニュース",
+        "最新の価格", "今日の天気", "現在の価格", "現在の天気", "出典", "引用",
+    )
+    return not any(marker in request for marker in external_request_markers)
+
+
+def _matching_memo_claim_card(
+    statement: str,
+    latest_user_message: str,
+    approval_cards: Sequence[dict[str, Any]],
+) -> dict[str, Any] | None:
+    # A single card with a visible target is required; another card's status cannot
+    # substantiate a claim about this memo.
+    if len(approval_cards) != 1:
+        return None
+    card = approval_cards[0]
+    preview = card.get("preview")
+    if not isinstance(preview, dict) or preview.get("kind") != card.get("tool"):
+        return None
+    claim = statement.casefold()
+    if re.search(r"追記|追加|\b(?:added to|adding to)\b", claim):
+        expected_tool = "memo_append"
+    elif re.search(r"修正|編集|\b(?:edited|editing|corrected|correcting)\b", claim):
+        expected_tool = "memo_edit"
+    elif re.search(r"作成|\b(?:created|creating)\b", claim):
+        expected_tool = "memo_create"
+    else:
+        expected_tool = None
+    if expected_tool is not None and card.get("tool") != expected_tool:
+        return None
+    title = preview.get("title") if card.get("tool") == "memo_create" else preview.get("memo_title")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    title = title.strip()
+    statement_folded = statement.casefold()
+    title_folded = title.casefold()
+    if title_folded in statement_folded:
+        return card
+    # Generic statements can refer to the sole requested memo. A different named
+    # memo, or a missing target in the request, leaves the claim unverified.
+    if title_folded not in latest_user_message.casefold():
+        return None
+    named_memos = re.findall(r"[^\s、。！？「」『』：:]{2,50}メモ", statement)
+    if any(name not in {"新しいメモ", "このメモ", "そのメモ", "対象メモ"} for name in named_memos):
+        return None
+    if re.search(r"\b(?:the|your|this) [A-Za-z0-9][A-Za-z0-9' _-]{0,48} (?:memo|note)\b", statement, re.IGNORECASE):
+        return None
+    if re.search(r"\bcalled\b", statement, re.IGNORECASE):
+        return None
+    return card
+
+
+def _unconfirmed_memo_change_fallback(
+    text: str,
+    latest_user_message: str,
+    approval_cards: Sequence[dict[str, Any]] = (),
+) -> str | None:
+    """Replace direct memo write claims unsupported by this turn's card status."""
+    # Quoted examples and code are data, not claims made by the assistant.
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    prose = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", prose)
+    for line in prose.splitlines():
+        statements = [part for part in re.split(r"(?<=[。！？!?])|(?<=\.)[ \t]+", line) if part.strip()]
+        for index, statement in enumerate(statements):
+            lead = statement.lstrip()
+            if lead.startswith((">", "'", "もし", "仮に", "例えば", "例：", "例:", "If ", "When ")):
+                continue
+            # A quoted status can be followed by an explanatory 「と表示」 even without quotes.
+            if index + 1 < len(statements) and statements[index + 1].lstrip().startswith("と表示"):
+                continue
+            proposal = _MEMO_PROPOSAL_CLAIM_JA.match(statement) or _MEMO_PROPOSAL_CLAIM_EN.match(statement)
+            pending = _MEMO_PENDING_CLAIM_EN.match(statement) or (proposal and "承認待ち" in proposal.group())
+            completed = (
+                _MEMO_CHANGE_CLAIM_JA.match(statement)
+                or _MEMO_CHANGE_CLAIM_EN.match(statement)
+                or _MEMO_PASSIVE_CLAIM_JA.match(statement)
+                or _MEMO_PASSIVE_CLAIM_EN.match(statement)
+            )
+            if not (proposal or pending or completed):
+                continue
+            card = _matching_memo_claim_card(statement, latest_user_message, approval_cards)
+            status = card.get("status") if card else None
+            if pending and status == "pending":
+                continue
+            if proposal and not pending and status in {"pending", "succeeded"}:
+                continue
+            if completed and status == "succeeded" and not proposal:
+                continue
+            if infer_response_language(latest_user_message) == "en":
+                if approval_cards:
+                    return "This description does not match the approval card status. Please check the card."
+                return "The memo change was not submitted, and no approval card was created. Please try again."
+            if approval_cards:
+                return "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+            return "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+    return None
+
+
+# 承認カードを本文・画像の後ろに付ける。カードがある回答では、利用者の判断をカードに一本化する
+# ため選択ボタンを外す。
+# Append approval cards after the body and images. A reply carrying cards drops its choice
+# buttons so the user decides in one place, the card.
+def _with_tool_approval_parts(
+    message_parts: list[dict[str, Any]] | None,
+    text: str,
+    approval_cards: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    if not approval_cards:
+        return message_parts
+    base_parts = message_parts if message_parts else ([{"type": "text", "text": text}] if text else [])
+    return [
+        *(part for part in base_parts if part.get("type") != INTERACTIVE_BUTTONS_PART_TYPE),
+        *(tool_approval_part(card) for card in approval_cards),
+    ]
+
+
+# 外部の内容を読むツール。呼んだターンでは「常に承認」でも書き込みを自動では実行しない。
+# Tools that read external content; a turn that calls one never runs writes on its own, even
+# under "always approve".
+_EXTERNAL_CONTENT_TOOL_NAMES = frozenset({"web_search", READ_WEB_PAGE_TOOL_NAME, SHARED_PROMPT_TOOL_NAME})
+# 利用者自身のデータの根拠。get_evidence でこれ以外を読み直したら外部の内容を読んだとみなす。
+# Evidence from the user's own data; re-reading anything else through get_evidence counts as
+# reading external content.
+_OWN_DATA_EVIDENCE_TYPES = frozenset({"memo", PERSONAL_KNOWLEDGE_SOURCE})
+
+
+def _includes_external_evidence(payload: dict[str, Any]) -> bool:
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, list):
+        return False
+    return any(
+        isinstance(record, dict) and record.get("source_type") not in _OWN_DATA_EVIDENCE_TYPES
+        for record in evidence
     )
 
 
@@ -576,6 +789,7 @@ class ChatGenerationJob:
         explicit_ui_opt_out: bool = False,
         renew_active_job_lock: Callable[[], bool] | None = None,
         renew_active_job_lock_interval_seconds: float = 0.0,
+        workspace_tools: ChatWorkspaceToolbox | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -609,6 +823,17 @@ class ChatGenerationJob:
         # Public prompt lookup. The data is public, so guests can have it too; None means off.
         self._shared_prompt_search = shared_prompt_search
         self._selected_reference_trace = list(selected_reference_trace or [])
+        # 利用者のデータ（メモなど）を読み書きするツール。書き込みは承認カードを経由する。
+        # None のときは機能そのものが無効（ゲスト・一時ルーム・既定スキルが OFF）。
+        # Tools that read and write the user's data (memos and so on); writes go through
+        # approval cards. None means the feature is off (guest, temporary room, Skill off).
+        self._workspace_tools = workspace_tools
+        self._workspace_tool_runner = (
+            WorkspaceToolRunner(workspace_tools, publish=self._publish) if workspace_tools is not None else None
+        )
+        # このターンで作った承認カード。停止時にも保存できるよう、ターン状態と同じリストを共有する。
+        # Approval cards made this turn, shared with the turn state so a stop can still save them.
+        self._tool_approval_parts: list[dict[str, Any]] = []
         self._persist_response = persist_response
         self._on_finished = on_finished
         self._on_finished_called = False
@@ -682,6 +907,7 @@ class ChatGenerationJob:
         response: str,
         message_parts: list[dict[str, Any]] | None,
         web_search_context: list[dict[str, Any]] | None = None,
+        tool_approval_ids: list[str] | None = None,
     ) -> dict[str, Any] | None:
         try:
             signature = inspect.signature(self._persist_response)
@@ -694,15 +920,23 @@ class ChatGenerationJob:
             accepts_web_search_context = (
                 "web_search_context" in parameters or has_var_keyword
             )
+            accepts_tool_approval_ids = "tool_approval_ids" in parameters or has_var_keyword
         except (TypeError, ValueError):
             accepts_message_parts = False
             accepts_web_search_context = False
+            accepts_tool_approval_ids = False
 
         kwargs: dict[str, Any] = {}
         if accepts_message_parts:
             kwargs["message_parts"] = message_parts
         if accepts_web_search_context and web_search_context:
             kwargs["web_search_context"] = web_search_context
+        # 承認行は回答の保存と同じトランザクションで回答へ結び付ける。結び付くまで承認 API は
+        # その行を受け付けない。
+        # Approval rows are tied to the reply in the same transaction that saves it; until then
+        # the approval API refuses them.
+        if accepts_tool_approval_ids and tool_approval_ids:
+            kwargs["tool_approval_ids"] = tool_approval_ids
         return self._persist_response(response, **kwargs)
 
     # 応答の永続化を一度だけ実行する（完了とキャンセルの二重保存を防ぐ）
@@ -712,6 +946,7 @@ class ChatGenerationJob:
         response: str,
         message_parts: list[dict[str, Any]] | None,
         web_search_context: list[dict[str, Any]] | None = None,
+        approval_cards: Sequence[dict[str, Any]] = (),
     ) -> dict[str, Any] | None:
         with self._finalize_lock:
             if self._response_persisted:
@@ -721,6 +956,7 @@ class ChatGenerationJob:
             response,
             message_parts,
             web_search_context=web_search_context,
+            tool_approval_ids=[str(card["id"]) for card in approval_cards],
         )
 
     # ジョブの非同期処理をスレッドプール上で開始する
@@ -795,9 +1031,23 @@ class ChatGenerationJob:
             if pending_text:
                 self._chunks.append(pending_text)
             partial_text = "".join(self._chunks)
+            if self._workspace_tools is not None:
+                fallback = _unconfirmed_memo_change_fallback(
+                    partial_text,
+                    _latest_user_message_text(self._conversation_messages),
+                    self._tool_approval_parts,
+                )
+                if fallback is not None:
+                    self._chunks[:] = [fallback]
+                    partial_text = fallback
+                    pending_text = fallback
         if pending_text:
             self._publish("chunk", {"text": pending_text})
-        if not partial_text.strip():
+        approval_cards = self._settle_approvals_after_interruption()
+        # 自動承認で実行済みの書き込みは取り消せないので、本文が無くてもカードを残す。
+        # A write already run through auto approval cannot be undone, so its card is kept even
+        # without body text.
+        if not partial_text.strip() and not _has_executed_approval(approval_cards):
             # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
             # No body yet: skip persisting an empty reply and only signal the abort.
             self._publish("aborted", {}, done=True)
@@ -819,11 +1069,12 @@ class ChatGenerationJob:
             )
             if message_parts:
                 message_parts = normalize_message_parts_for_display(message_parts) or None
+        message_parts = _with_tool_approval_parts(message_parts, bot_reply, approval_cards)
         self.response = bot_reply
 
         persist_metadata: dict[str, Any] | None = None
         try:
-            persist_metadata = self._persist_once(bot_reply, message_parts)
+            persist_metadata = self._persist_once(bot_reply, message_parts, approval_cards=approval_cards)
         except Exception:
             logger.exception("Failed to persist partial chat response on cancel.")
 
@@ -833,6 +1084,16 @@ class ChatGenerationJob:
         if isinstance(persist_metadata, dict):
             aborted_payload.update(persist_metadata)
         self._publish("aborted", aborted_payload, done=True)
+
+    # 停止・失敗したターンの承認カードを確定する。未実行の承認待ちは取り消し、カードも合わせる。
+    # Settle the approval cards of a stopped or failed turn: pending ones are cancelled, and the
+    # cards follow.
+    def _settle_approvals_after_interruption(self) -> list[dict[str, Any]]:
+        if self._workspace_tool_runner is None or not self._tool_approval_parts:
+            return list(self._tool_approval_parts)
+        settled = self._workspace_tool_runner.settle_after_interruption(list(self._tool_approval_parts))
+        self._tool_approval_parts[:] = settled
+        return settled
 
     # 未配信バッファを本文として取り出し、バッファを空にする。
     # 停止も失敗も「モデルが書いたのに配信していない本文」を抱えたまま終わるため、
@@ -1445,6 +1706,11 @@ class ChatGenerationJob:
             selected_web_search_images=self._selected_web_search_images,
             continuation_state_filter=TurnStateUpdateFilter(),
             web_search_trace_steps=selected_reference_steps(self._selected_reference_trace),
+            workspace_tools=self._workspace_tools,
+            # 停止時に保存できるよう、インスタンス側の承認カードのリストを共有する。
+            # Share the instance card list so a stop can persist the cards too.
+            tool_approval_parts=self._tool_approval_parts,
+            untrusted_input_ingested=self._starts_with_external_input(),
         )
         self._register_pasted_url_pages(state)
         for prior_result in self._prior_web_search_results:
@@ -1469,6 +1735,18 @@ class ChatGenerationJob:
                 status=str(selected_trace.payload.get("status") or "ok"),
             )
         return state
+
+    # ターンの開始時点で外部の内容を読んでいるか。貼り付け URL の本文、他人の公開投稿の事前検索、
+    # 呼び出し側が伝える添付などが該当する。自分のメモを読んだだけなら当たらない。
+    # Whether the turn starts having read external content: pasted page bodies, a prefetch of
+    # other people's public posts, or attachments the caller reports. Reading one's own memos
+    # does not count.
+    def _starts_with_external_input(self) -> bool:
+        if self._pasted_url_pages:
+            return True
+        if any(trace.source == SHARED_PROMPT_SOURCE for trace in self._selected_reference_trace):
+            return True
+        return bool(self._workspace_tools and self._workspace_tools.external_input_in_turn)
 
     # 貼り付けURLの本文を、検索結果とは別経路で根拠に載せる。抜粋は既に発話へ前置済みなので、
     # ここで登録するのは「続きを分割して読むための入口」である。
@@ -1633,6 +1911,12 @@ class ChatGenerationJob:
         state: ChatTurnRunState,
         step_chunks: list[str],
     ) -> None:
+        if self._workspace_tools is not None:
+            fallback = _unconfirmed_memo_change_fallback(
+                "".join(step_chunks), state.latest_user_message, state.tool_approval_parts
+            )
+            if fallback is not None:
+                step_chunks = [fallback]
         chunks = state.chunks
         for raw_chunk in step_chunks:
             chunk = raw_chunk
@@ -1746,6 +2030,8 @@ class ChatGenerationJob:
         state: ChatTurnRunState,
         answer_messages: list[dict[str, Any]],
         published_text: str,
+        *,
+        memo_tail_start: int | None = None,
     ) -> BaseException | None:
         """Continue an answer the provider cut off at its output cap.
 
@@ -1760,6 +2046,17 @@ class ChatGenerationJob:
             "The answer stream stopped at the model output limit.",
             reason="max_output_tokens",
         )
+
+        def publish_continuation_chunk(chunk: str) -> None:
+            if memo_tail_start is None:
+                self._publish_answer_chunk(state, chunk)
+                return
+            visible = state.continuation_state_filter.feed(chunk)
+            if visible:
+                with self._chunks_lock:
+                    if not self._cancelled:
+                        state.chunks.append(visible)
+
         try:
             result = stream_final_answer_with_recovery(
                 answer_messages,
@@ -1769,7 +2066,7 @@ class ChatGenerationJob:
                     tools=None,
                     generation_phase=phase,
                 ),
-                publish_chunk=lambda chunk: self._publish_answer_chunk(state, chunk),
+                publish_chunk=publish_continuation_chunk,
                 publish_event=self._publish,
                 should_stop=self._should_stop,
                 adopt_buffer=self._adopt_continuation_buffer,
@@ -1789,7 +2086,21 @@ class ChatGenerationJob:
                 self._pending_stream_is_rewrite = False
         trailing = state.continuation_state_filter.flush()
         if trailing:
-            self._publish_completed_answer_step(state, [trailing])
+            if memo_tail_start is None:
+                self._publish_completed_answer_step(state, [trailing])
+            else:
+                with self._chunks_lock:
+                    if not self._cancelled:
+                        state.chunks.append(trailing)
+        if memo_tail_start is not None:
+            # The first pass may end in the middle of a memo status sentence. Keep only
+            # that unfinished tail and its continuation off the wire until it is complete.
+            with self._chunks_lock:
+                if not self._cancelled:
+                    completed_tail = "".join(state.chunks[memo_tail_start:])
+                    del state.chunks[memo_tail_start:]
+                    if completed_tail:
+                        self._publish_completed_answer_step(state, [completed_tail])
         state.continuation_count = result.continuation_count
         telemetry.continuation_count = result.continuation_count
         for reason in result.reasons:
@@ -1825,6 +2136,10 @@ class ChatGenerationJob:
         telemetry = state.telemetry
         phase = "agent"
         context_budget = get_context_budget(self._model, phase, tools)
+        # 承認待ちで締める回答では、ツール結果が落ちる代わりにサーバーの要約を渡す。
+        # A reply closing on pending approvals gets the server's summary in place of the dropped
+        # tool results.
+        approval_pending_summaries = state.approval_pending_summaries if state.approval_pending else ()
         state_tokens = min(
             6_000,
             max(1_000, context_budget.available_input_tokens // 3),
@@ -1858,6 +2173,7 @@ class ChatGenerationJob:
                 ],
                 force_answer=force_answer,
                 empty_answer_recovery=empty_answer_recovery,
+                approval_pending_summaries=approval_pending_summaries,
             )
             if request_fits_context(candidate, self._model, phase, tools):
                 telemetry.context_projection_count += 1
@@ -1877,6 +2193,7 @@ class ChatGenerationJob:
             ],
             force_answer=force_answer,
             empty_answer_recovery=empty_answer_recovery,
+            approval_pending_summaries=approval_pending_summaries,
         )
         if request_fits_context(minimal_candidate, self._model, phase, tools):
             telemetry.context_projection_count += 1
@@ -1887,6 +2204,10 @@ class ChatGenerationJob:
     # モデルへ提示するツール定義を決めるフェーズ。
     # The phase that decides which tool definitions the model is offered.
     def _configure_agent_tools(self, state: ChatTurnRunState) -> None:
+        suppress_external_lookup_tools = (
+            self._workspace_tools is not None
+            and _is_memo_only_request(state.latest_user_message)
+        )
         web_search_tool = get_web_search_tool_definition()
         personal_knowledge_tool = (
             get_personal_knowledge_tool_definition()
@@ -1903,14 +2224,21 @@ class ChatGenerationJob:
         # Memo lookup does not depend on the web search settings, so either tool alone
         # is still offered to the model.
         configured_tools: list[dict[str, Any]] = []
-        if is_web_search_enabled():
+        if is_web_search_enabled() and not suppress_external_lookup_tools:
             configured_tools.append(web_search_tool)
         if personal_knowledge_tool is not None:
             configured_tools.append(personal_knowledge_tool)
         if shared_prompt_tool is not None:
             configured_tools.append(shared_prompt_tool)
-        configured_tools.append(get_evidence_tool_definition())
-        configured_tools.append(read_web_page_tool_definition())
+        # 利用者のデータを読み書きするツールは、検索系の後・読み直しツールの前に固定の順で並べる。
+        # ターンの途中で一覧を変えない（ADR 0011）。
+        # The tools for the user's own data go after the searches and before the re-read tools,
+        # in a fixed order that does not change mid-turn (ADR 0011).
+        if self._workspace_tools is not None:
+            configured_tools.extend(self._workspace_tools.definitions())
+        if not suppress_external_lookup_tools:
+            configured_tools.append(get_evidence_tool_definition())
+            configured_tools.append(read_web_page_tool_definition())
         state.configured_tools = configured_tools
         state.telemetry.research_phase_used = bool(self._selected_reference_trace)
 
@@ -1949,7 +2277,10 @@ class ChatGenerationJob:
             # accounted separately from budget exhaustion.
             force_answer = tools_withdrawn or state.empty_answer_recovery_attempted
             active_tools = None if force_answer else available_tools
-            if tools_withdrawn and not state.tools_disabled_after_failure:
+            # 承認待ちでツールを外すのは予算切れではないので、予算枯渇としては数えない。
+            # Withdrawing tools for a pending approval is not budget exhaustion, so it is not
+            # counted as such.
+            if tools_withdrawn and not state.tools_disabled_after_failure and not state.approval_pending:
                 telemetry.tools_withdrawn_by_budget = True
             turn_messages = self._prepare_turn_messages(
                 state,
@@ -2191,8 +2522,31 @@ class ChatGenerationJob:
             "max_output_tokens" if output_limited else "stop"
         )
         if visible_chunks:
-            self._publish_completed_answer_step(state, visible_chunks)
-            if output_limited:
+            visible_text = "".join(visible_chunks)
+            if output_limited and self._workspace_tools is not None:
+                fallback = _unconfirmed_memo_change_fallback(
+                    visible_text, state.latest_user_message, state.tool_approval_parts
+                )
+                if fallback is not None:
+                    self._publish_completed_answer_step(state, [fallback])
+                    return False
+                sentence_boundaries = list(re.finditer(r"[。！？!?]|\.(?=[ \t\n]|$)", visible_text))
+                split_at = sentence_boundaries[-1].end() if sentence_boundaries else 0
+                if split_at:
+                    self._publish_completed_answer_step(state, [visible_text[:split_at]])
+                with self._chunks_lock:
+                    memo_tail_start = len(state.chunks)
+                    if split_at < len(visible_text):
+                        state.chunks.append(visible_text[split_at:])
+                state.final_answer_incomplete = self._continue_interrupted_answer(
+                    state,
+                    turn_messages,
+                    visible_text,
+                    memo_tail_start=memo_tail_start,
+                )
+            else:
+                self._publish_completed_answer_step(state, visible_chunks)
+            if output_limited and self._workspace_tools is None:
                 # 出力上限で切れた回答は成功完了にしない。同じ回答の続きだけを
                 # 限定回数で取り直す。
                 # An answer cut off at the output cap is not a success: fetch
@@ -2232,6 +2586,18 @@ class ChatGenerationJob:
             }
             if func_name not in available_names:
                 self._record_unsupported_tool_call(state, tc, func_name)
+                continue
+            if func_name in _EXTERNAL_CONTENT_TOOL_NAMES:
+                # 外部の内容を読むツール。以後この回答の書き込みは「常に承認」でも自動では実行しない。
+                # A tool that reads external content; from here on no write in this reply runs
+                # on its own, even under "always approve".
+                state.untrusted_input_ingested = True
+            if self._workspace_tool_runner is not None and self._workspace_tools is not None and (
+                self._workspace_tools.handles(func_name)
+            ):
+                state.current_messages.append(
+                    _tool_result_message(tc, self._workspace_tool_runner.run(state, tc))
+                )
                 continue
             if (
                 func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
@@ -2283,6 +2649,13 @@ class ChatGenerationJob:
 
             self._run_web_search_tool_call(state, tc)
 
+        # 同じ判断の中の提案はまとめて受け付け、承認待ちが残ったら次の判断をツールなしの回答にする。
+        # Proposals within one decision are all accepted; if any awaits approval, the next
+        # decision is a tool-free answer.
+        if state.approval_pending_summaries and not state.approval_pending:
+            state.approval_pending = True
+            state.telemetry.approval_pending_turn = True
+
     # 失敗した調査ステップを、ツールなしの回答へ縮退させてよいかを判定する。
     # Decide whether a failed research step may degrade into a tool-free answer.
     def _can_degrade_to_answer(
@@ -2317,6 +2690,12 @@ class ChatGenerationJob:
         # from the budget-exhaustion telemetry because the reason is not the budget.
         if state.tools_disabled_after_failure:
             return []
+        # 書き込みの提案が承認待ちなら、ツールを外した回答で締める。新しい終了条件は作らず、
+        # 次の判断が force_answer になる（ADR 0009）。
+        # A write proposal awaiting approval closes the turn with a tool-free answer: no new
+        # ending condition, the next decision is simply force_answer (ADR 0009).
+        if state.approval_pending:
+            return []
         # 最後のモデル判断は必ずツールなしの回答へ予約する。ここを空にすると
         # force_answer が立ち、次の1回が本文を書くステップになる。
         # Reserve the last model decision for a tool-free answer: returning nothing here
@@ -2345,6 +2724,7 @@ class ChatGenerationJob:
         can_gain_evidence = any(
             tool["function"]["name"] not in read_tool_names for tool in state.configured_tools
         )
+        toolbox = state.workspace_tools
         available = []
         for tool in state.configured_tools:
             name = tool["function"]["name"]
@@ -2355,6 +2735,12 @@ class ChatGenerationJob:
                 if state.budget.reads_exhausted or not (
                     can_gain_evidence or state.evidence_store.has_web_records()
                 ):
+                    continue
+            elif toolbox is not None and toolbox.is_write(name):
+                if state.budget.write_proposals_exhausted or state.approval_pending:
+                    continue
+            elif toolbox is not None and toolbox.uses_read_budget(name):
+                if state.budget.reads_exhausted:
                     continue
             elif state.budget.tool_calls_exhausted:
                 continue
@@ -2393,6 +2779,8 @@ class ChatGenerationJob:
                 payload = state.evidence_store.execute_get_evidence(
                     arguments, max_chars=budget.read_message_limit,
                 )
+                if _includes_external_evidence(payload):
+                    state.untrusted_input_ingested = True
             budget.consume_read_chars(len(json.dumps(payload, ensure_ascii=False)))
             state.telemetry.evidence_read_count = budget.read_calls
             state.telemetry.read_budget_consumed = budget.read_chars
@@ -3041,6 +3429,7 @@ class ChatGenerationJob:
                 bot_reply,
                 message_parts,
                 web_search_context=serialized_web_search or None,
+                approval_cards=state.tool_approval_parts,
             )
         except Exception:
             logger.exception("Failed to persist background chat response.")
@@ -3136,6 +3525,16 @@ class ChatGenerationJob:
             model_text,
             latest_user_message,
         )
+        if self._workspace_tools is not None:
+            fallback = _unconfirmed_memo_change_fallback(
+                normalized_response.text, latest_user_message, state.tool_approval_parts
+            )
+            if fallback is not None:
+                normalized_response = normalize_response_with_artifacts(
+                    fallback,
+                    ui_mode=self._ui_mode,
+                    explicit_ui_opt_out=self._explicit_ui_opt_out,
+                )
         self._record_generated_ui_outcome(normalized_response)
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
@@ -3148,7 +3547,6 @@ class ChatGenerationJob:
             bot_reply,
             message_parts,
         )
-
         # 画像は検索結果を取得した時点で選定済み。引用解決後は、選定LLMが返した
         # 配置計画を本文へ反映し、ストリーム中に表示した順序と保存内容を一致させる。
         # Image selection already happened when each search result arrived. After
@@ -3165,6 +3563,9 @@ class ChatGenerationJob:
         # Finalize the trace split while preserving inline image positions.
         if message_parts:
             message_parts = normalize_message_parts_for_display(message_parts) or None
+        # 承認カードは本文と画像の後ろ、回答の最後に置く。
+        # Approval cards close the reply, after the body and the images.
+        message_parts = _with_tool_approval_parts(message_parts, bot_reply, state.tool_approval_parts)
 
         self.response = bot_reply
 
@@ -3260,7 +3661,12 @@ class ChatGenerationJob:
             return False
         try:
             self._salvage_pending_answer_text(state)
-            if not "".join(state.chunks).strip():
+            # 失敗したターンでも、未実行の承認待ちは取り消す。自動承認で実行済みの書き込みは
+            # 取り消せないので、本文が無くてもそのカードを保存する。
+            # A failed turn still cancels its pending approvals. A write already run through auto
+            # approval cannot be undone, so its card is saved even without body text.
+            self._settle_approvals_after_interruption()
+            if not "".join(state.chunks).strip() and not _has_executed_approval(state.tool_approval_parts):
                 return False
             self._flush_streaming_citation_buffer(state)
             # 途中終了の印を立てると、仕上げは生成UIの再試行（追加のLLM呼び出し）を
@@ -3578,6 +3984,7 @@ class ChatGenerationService:
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
+        workspace_tools: ChatWorkspaceToolbox | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -3622,6 +4029,7 @@ class ChatGenerationService:
                     else None
                 ),
                 renew_active_job_lock_interval_seconds=self._active_job_lock_renew_interval_seconds,
+                workspace_tools=workspace_tools,
             )
             self._jobs[job_key] = job
 
@@ -3776,6 +4184,7 @@ def start_generation_job(
     selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
     ui_mode: GenerativeUiMode | str | None = None,
     explicit_ui_opt_out: bool = False,
+    workspace_tools: ChatWorkspaceToolbox | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -3797,4 +4206,5 @@ def start_generation_job(
         selected_reference_trace=selected_reference_trace,
         ui_mode=ui_mode,
         explicit_ui_opt_out=explicit_ui_opt_out,
+        workspace_tools=workspace_tools,
     )

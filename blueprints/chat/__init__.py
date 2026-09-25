@@ -87,6 +87,7 @@ from . import (  # noqa: F401, E402
     rooms,
     skills,
     tasks,
+    tool_approvals,
     usage,
     views,
 )

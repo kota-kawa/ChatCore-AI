@@ -1,9 +1,11 @@
 import { memo } from "react";
 
+import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
+import { ToolApprovalCard } from "./tool_approval_card";
 import { WebSearchImagePart } from "./web_search_image_part";
 import { GenerativeUiStatusNotice } from "./generative_ui_status_notice";
 
@@ -21,16 +23,23 @@ type BotMessagePartsProps = {
   // 回答済みや生成中で、選択ボタンを押せない状態
   // The choice buttons cannot be pressed because they were answered or a reply is generating
   choicesDisabled?: boolean;
+  // 承認カードの決定を送る / Sends the decision made on an approval card
+  onToolApprovalDecide?: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
+  // 生成中や後ろに利用者の発言があるなど、承認カードを決められない状態
+  // The approval cards cannot be decided because a reply is generating or the user wrote after them
+  approvalsDisabled?: boolean;
 };
 
-// ボットメッセージを構成するパーツ（テキスト / サンドボックスアーティファクト / 選択ボタン）を順番に描画するコンポーネント
-// Component that renders the parts of a bot message in order (text / sandbox artifact / choice buttons)
+// ボットメッセージを構成するパーツ（テキスト / サンドボックスアーティファクト / 選択ボタン / 承認カード）を順番に描画するコンポーネント
+// Component that renders the parts of a bot message in order (text / sandbox artifact / choice buttons / approval cards)
 function BotMessagePartsComponent({
   fallbackText,
   parts,
   streaming = false,
   onChoiceSubmit,
   choicesDisabled = false,
+  onToolApprovalDecide,
+  approvalsDisabled = false,
 }: BotMessagePartsProps) {
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty
@@ -63,6 +72,13 @@ function BotMessagePartsComponent({
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
               <InteractiveButtons buttons={part.buttons} onSubmit={onChoiceSubmit} disabled={choicesDisabled} />
+            </div>
+          );
+        }
+        if (part.type === "tool_approval") {
+          return (
+            <div key={`tool-approval-${part.approval.id}`} className="bot-message-part bot-message-part--tool-approval">
+              <ToolApprovalCard approval={part.approval} onDecide={onToolApprovalDecide} disabled={approvalsDisabled} />
             </div>
           );
         }

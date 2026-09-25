@@ -1,9 +1,10 @@
 """Async SQLAlchemy persistence boundary for user Skills.
 
-This repository owns the user_skills rows and the users.generative_ui_skill_enabled
-column.  The generative UI Skill is defined in code and cannot be edited or
-deleted, so only its per-user on/off state is stored, and it is kept here
-because it is Skill state rather than profile state.
+This repository owns the user_skills rows and the users columns that hold the
+built-in Skills' on/off state (generative_ui_skill_enabled, memo_tools_skill_enabled).
+The built-in Skills are defined in code and cannot be edited or deleted, so only
+their per-user on/off state is stored, and it is kept here because it is Skill
+state rather than profile state.
 """
 
 from __future__ import annotations
@@ -26,14 +27,22 @@ from services.error_messages import (
 from services.models import User, UserSkill
 from services.share_common import is_unique_violation
 from services.user_skills import (
+    GENERATIVE_UI_SYSTEM_SKILL_KEY,
     MAX_USER_SKILL_NAME_LENGTH,
     MAX_USER_SKILLS,
+    MEMO_TOOLS_SYSTEM_SKILL_KEY,
     normalize_user_skill_instructions,
     normalize_user_skill_name,
 )
 
 USER_SKILL_WRITE_LOCK_NAMESPACE = 1_413_567_308
 DEFAULT_IMPORTED_SKILL_NAME = "共有Skill"
+# 既定スキルの鍵と、その ON/OFF を持つ users の列。
+# Built-in Skill keys and the users column holding each one's on/off state.
+_SYSTEM_SKILL_COLUMNS = {
+    GENERATIVE_UI_SYSTEM_SKILL_KEY: User.generative_ui_skill_enabled,
+    MEMO_TOOLS_SYSTEM_SKILL_KEY: User.memo_tools_skill_enabled,
+}
 
 
 class UserSkillRepository:
@@ -188,25 +197,30 @@ class UserSkillRepository:
         await self.session.delete(skill)
         await self.session.flush()
 
-    # Default generative UI Skill -------------------------------------------
+    # Built-in Skills ---------------------------------------------------------
 
-    async def get_generative_ui_skill_enabled(self, user_id: int) -> bool:
-        enabled = await self.session.scalar(
-            select(User.generative_ui_skill_enabled).where(User.id == int(user_id))
-        )
-        if enabled is None:
+    async def get_system_skill_states(self, user_id: int) -> dict[str, bool]:
+        """Return every built-in Skill's on/off state for one user, keyed by Skill key."""
+        row = (
+            await self.session.execute(
+                select(*_SYSTEM_SKILL_COLUMNS.values()).where(User.id == int(user_id))
+            )
+        ).one_or_none()
+        if row is None:
             raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)
-        return bool(enabled)
+        return {key: bool(value) for key, value in zip(_SYSTEM_SKILL_COLUMNS, row, strict=True)}
 
-    async def set_generative_ui_skill_enabled(
+    async def set_system_skill_enabled(
         self,
         user_id: int,
+        key: str,
         is_enabled: bool,
     ) -> bool:
+        column = _SYSTEM_SKILL_COLUMNS[key]
         result = await self.session.execute(
             update(User)
             .where(User.id == int(user_id))
-            .values(generative_ui_skill_enabled=bool(is_enabled))
+            .values({column.key: bool(is_enabled)})
         )
         if not result.rowcount:
             raise ResourceNotFoundError(ERROR_SKILL_NOT_FOUND)

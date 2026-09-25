@@ -7,6 +7,7 @@ import type { Locale } from "../../../lib/i18n/config";
 export type SettingsSection =
   | "profile"
   | "usage"
+  | "chat-permissions"
   | "appearance"
   | "language"
   | "prompts"
