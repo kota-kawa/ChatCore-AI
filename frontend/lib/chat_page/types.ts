@@ -1,3 +1,5 @@
+import type { ToolApprovalApi } from "../../types/generated/api_schemas";
+
 export type ChatRoomMode = "normal" | "temporary";
 
 export type NormalizedTask = {
@@ -120,7 +122,10 @@ export type ChatMessagePart =
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
   | { type: "artifact_status"; status: GenerativeUiArtifactStatusV1 }
   | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 }
-  | { type: "web_search_image"; image: WebSearchImageV1 };
+  | { type: "web_search_image"; image: WebSearchImageV1 }
+  // 書き込みツールの承認カード。形は生成スキーマ（ToolApprovalApi）が正本
+  // Approval card for a write tool; its shape is owned by the generated schema (ToolApprovalApi)
+  | { type: "tool_approval"; approval: ToolApprovalApi };
 
 export type AttachedFile = {
   id: string;

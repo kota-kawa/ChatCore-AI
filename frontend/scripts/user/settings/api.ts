@@ -14,6 +14,11 @@ import {
   type UsageLimits
 } from "./types";
 import { normalizeLocale, type Locale } from "../../../lib/i18n/config";
+import {
+  ToolAutoApprovalRevokeResponseSchema,
+  ToolAutoApprovalsResponseSchema,
+  type ToolAutoApprovalApi,
+} from "../../../types/generated/api_schemas";
 
 export function settingsFetchJsonOrThrow<TPayload>(
   input: RequestInfo | URL,
@@ -60,6 +65,30 @@ export async function updateLocalePreference(locale: Locale): Promise<Locale> {
   const savedLocale = normalizeLocale(payload.locale);
   if (!savedLocale) throw new Error("Unsupported locale returned by preferences API");
   return savedLocale;
+}
+
+// チャットで「常に承認」にしたツールの一覧。/ Tools the user set to "always approve" in chat.
+export async function loadToolAutoApprovals(defaultMessage: string): Promise<ToolAutoApprovalApi[]> {
+  const { payload } = await settingsFetchJsonOrThrow<unknown>(
+    "/api/chat/tool-auto-approvals",
+    { credentials: "same-origin" },
+    { defaultMessage }
+  );
+  const parsed = ToolAutoApprovalsResponseSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(defaultMessage);
+  return parsed.data.grants ?? [];
+}
+
+// 「常に承認」を取り消す。付与が無くても成功する（冪等）。/ Revoke "always approve"; succeeds even without a grant (idempotent).
+export async function revokeToolAutoApproval(toolName: string, defaultMessage: string): Promise<boolean> {
+  const { payload } = await settingsFetchJsonOrThrow<unknown>(
+    `/api/chat/tool-auto-approvals/${encodeURIComponent(toolName)}`,
+    { method: "DELETE", credentials: "same-origin" },
+    { defaultMessage }
+  );
+  const parsed = ToolAutoApprovalRevokeResponseSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(defaultMessage);
+  return parsed.data.revoked;
 }
 
 export class McpOAuthApiError extends Error {

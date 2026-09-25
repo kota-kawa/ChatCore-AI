@@ -292,9 +292,33 @@ class LlmServiceTestCase(unittest.TestCase):
         )
 
         self.assertIsInstance(mapped, llm.LlmToolSchemaError)
-        # 同じ要求を送り直しても同じ拒否になるため、汎用の再試行対象にはしない。
-        # Re-sending the identical request reproduces the rejection, so it is not retryable.
+        # 一時的な障害ではないので、汎用の再試行対象にはしない。
+        # It is not a transient outage, so it stays off the generic retry path.
         self.assertFalse(mapped.retryable)
+        self.assertEqual((mapped.reason, mapped.tool_name), ("schema_mismatch", "web_search"))
+
+    # 日本語: 拒否の理由を固定語彙へ分け、拒否文にあるツール名だけを取り出すことを検証します。
+    # English: Verify rejections sort into a fixed vocabulary and keep only the named tool.
+    def test_tool_call_rejection_details_use_a_fixed_vocabulary(self):
+        cases = (
+            (
+                "tool call validation failed: attempted to call tool 'memo.read' which was not in request.tools",
+                ("unknown_tool", "memo.read"),
+            ),
+            ("Tool choice is none, but model called a tool", ("tool_choice_none", "")),
+            ("Failed to call a function. Please adjust your prompt.", ("unparsable_call", "")),
+            ("tool_use_failed", ("other", "")),
+        )
+        for message, expected in cases:
+            with self.subTest(message=message):
+                mapped = llm._map_provider_exception(
+                    Exception(message),
+                    provider_name="Groq",
+                    fallback_message="Groq streaming API call failed.",
+                )
+                self.assertIsInstance(mapped, llm.LlmToolSchemaError)
+                self.assertEqual((mapped.reason, mapped.tool_name), expected)
+                self.assertNotIn(message, str(mapped))
 
     # 日本語: エラーコードだけで届く tool_use_failed も同じ分類になることを検証します。
     # English: Verify a tool_use_failed carried only in the error code maps the same way.

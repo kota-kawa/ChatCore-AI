@@ -2608,9 +2608,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        # 拒否された調査ステップは、同じ内容をツールなしで1度だけやり直す。
-        # The rejected research step is replayed exactly once without tools.
-        self.assertEqual(stream_tools[:2], [True, False])
+        # 拒否された調査ステップは、ツール付きで1度だけ引き直し、再び拒否されたらツールなしで
+        # 1度だけやり直す。
+        # The rejected research step is resampled once with its tools, then replayed exactly once
+        # without tools after the second rejection.
+        self.assertEqual(stream_tools[:3], [True, True, False])
+        self.assertEqual(job._telemetry.tool_schema_retries, 1)
+        self.assertEqual(job._telemetry.tool_schema_recoveries, 1)
         self.assertIn("ツールなしで回答しました。", body)
         self.assertNotIn('"error"', body)
         self.assertTrue(persisted_messages)

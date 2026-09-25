@@ -15,6 +15,8 @@ from typing import Any
 # never reach the logs.
 CONTINUATION_REASON_MAX_ITEMS = 8
 ARTIFACT_REASON_CODE_MAX_ITEMS = 8
+TOOL_SCHEMA_REJECTION_MAX_ITEMS = 8
+WORKSPACE_TOOL_RESULT_MAX_ITEMS = 16
 
 
 @dataclass
@@ -54,6 +56,14 @@ class ChatGenerationTelemetry:
     # プロバイダがツール呼び出しを拒否し、ツールなしでやり直して回復した回数。
     # How often a provider rejected a tool call and the step recovered without tools.
     tool_schema_recoveries: int = 0
+    # 拒否されたステップを、ツールを外す前にツール付きで引き直した回数。
+    # How often a rejected step was resampled with its tools before they were dropped.
+    tool_schema_retries: int = 0
+    # 拒否ごとの診断。理由は固定語彙、ツール名は拒否文に現れた名前と提示していた名前だけで、
+    # モデルの出力・引数・プロバイダの生の文面は持たない。
+    # One diagnosis per rejection: a fixed-vocabulary reason, the tool the rejection named and
+    # the names offered at that step. No model output, arguments or raw provider text.
+    tool_schema_rejections: list[dict[str, Any]] = field(default_factory=list)
     # 最後の判断が本文を返さず、回答のみ要求で1度やり直した回数。
     # How often the final decision produced no user-facing answer and was retried answer-only.
     empty_answer_recoveries: int = 0
@@ -72,6 +82,23 @@ class ChatGenerationTelemetry:
     # モデル判断の上限に達してループを打ち切ったか。
     # Whether the loop stopped because the model-decision budget ran out.
     llm_turn_budget_exhausted: bool = False
+    # 利用者のデータを読み書きするツール（メモなど）の利用。読み取りの回数、書き込みの提案数、
+    # 「常に承認」でその場で実行した数、引数の不備で差し戻した数。
+    # Use of the tools that read and write the user's data (memos and so on): reads, write
+    # proposals, proposals run on the spot through "always approve", and argument rejections.
+    workspace_read_calls: int = 0
+    workspace_write_proposals: int = 0
+    workspace_auto_executions: int = 0
+    workspace_invalid_arguments: int = 0
+    # 呼んだ順の「ツール名:結果の status」。どこで手順が止まったかを本文なしで追える。
+    # "tool:status" in call order, so where a sequence stalled can be traced without any body.
+    workspace_tool_results: list[str] = field(default_factory=list)
+    # 承認待ちのカードを残したターンか。ツールを外した回答で締めたことを表す。
+    # Whether the turn left a pending approval card and so closed with a tool-free answer.
+    approval_pending_turn: bool = False
+    # 「常に承認」を付与済みでも、外部の内容を読んだターンなので手動のカードにしたか。
+    # Whether an "always approve" grant was held back because the turn had read external content.
+    auto_approval_suppressed_by_untrusted_input: bool = False
     # 生成UIの5段階（判定・注入・抽出／検証・修復・実行）を、モデル別の成功率として
     # 集計できるようにする。理由コードは services/generative_ui_status.py の固定語彙のみ。
     # Makes the five generated-UI stages (decision, injection, extraction/validation, repair,
@@ -100,6 +127,23 @@ class ChatGenerationTelemetry:
         if len(self.continuation_reasons) >= CONTINUATION_REASON_MAX_ITEMS:
             return
         self.continuation_reasons.append(normalized)
+
+    def record_tool_schema_rejection(self, *, reason: str, tool_name: str, offered_tool_names: list[str]) -> None:
+        if len(self.tool_schema_rejections) >= TOOL_SCHEMA_REJECTION_MAX_ITEMS:
+            return
+        self.tool_schema_rejections.append(
+            {
+                "reason": str(reason or "other")[:32],
+                "tool": str(tool_name or "")[:64],
+                "tool_offered": bool(tool_name) and tool_name in offered_tool_names,
+                "offered_tools": [str(name)[:64] for name in offered_tool_names],
+            }
+        )
+
+    def record_workspace_tool_result(self, tool_name: str, status: Any) -> None:
+        if len(self.workspace_tool_results) >= WORKSPACE_TOOL_RESULT_MAX_ITEMS:
+            return
+        self.workspace_tool_results.append(f"{str(tool_name)[:64]}:{str(status or 'unknown')[:32]}")
 
     def record_evidence_payload(self, *, empty: bool, truncated: bool) -> None:
         if empty:
@@ -155,12 +199,21 @@ class ChatGenerationTelemetry:
             "context_compaction_count": self.context_compaction_count,
             "context_recovery_count": self.context_recovery_count,
             "tool_schema_recoveries": self.tool_schema_recoveries,
+            "tool_schema_retries": self.tool_schema_retries,
+            "tool_schema_rejections": [dict(entry) for entry in self.tool_schema_rejections],
             "empty_answer_recoveries": self.empty_answer_recoveries,
             "missing_turn_state_updates": self.missing_turn_state_updates,
             "untagged_turn_state_recoveries": self.untagged_turn_state_recoveries,
             "research_failure_recoveries": self.research_failure_recoveries,
             "salvaged_partial_answers": self.salvaged_partial_answers,
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
+            "workspace_read_calls": self.workspace_read_calls,
+            "workspace_write_proposals": self.workspace_write_proposals,
+            "workspace_auto_executions": self.workspace_auto_executions,
+            "workspace_invalid_arguments": self.workspace_invalid_arguments,
+            "workspace_tool_results": list(self.workspace_tool_results),
+            "approval_pending_turn": self.approval_pending_turn,
+            "auto_approval_suppressed_by_untrusted_input": self.auto_approval_suppressed_by_untrusted_input,
             "ui_mode": self.ui_mode,
             "ui_mode_decision_status": self.ui_mode_decision_status,
             "explicit_ui_opt_out": self.explicit_ui_opt_out,

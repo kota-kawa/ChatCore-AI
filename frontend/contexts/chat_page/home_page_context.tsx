@@ -106,6 +106,7 @@ type HomePageChatContextValue = Pick<
   | "handleRegenerateMessage"
   | "handleEditAndRegenerateMessage"
   | "handleSwitchBranch"
+  | "applyToolApproval"
 >;
 
 type HomePageSetupChatContextValue = Pick<
@@ -311,6 +312,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       handleRegenerateMessage: controller.handleRegenerateMessage,
       handleEditAndRegenerateMessage: controller.handleEditAndRegenerateMessage,
       handleSwitchBranch: controller.handleSwitchBranch,
+      applyToolApproval: controller.applyToolApproval,
     }),
     [
       controller.handleAccessChat,
@@ -357,6 +359,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.handleRegenerateMessage,
       controller.handleEditAndRegenerateMessage,
       controller.handleSwitchBranch,
+      controller.applyToolApproval,
     ],
   );
 

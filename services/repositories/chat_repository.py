@@ -43,6 +43,7 @@ from services.share_common import (
     generate_share_token,
     is_unique_violation,
 )
+from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE, tool_approval_part
 
 DB_WRITE_MAX_ATTEMPTS = 3
 # Keep the old repository-level name for callers that imported it while using
@@ -285,6 +286,44 @@ class ChatRepository:
             "messages": self._path_to_llm_messages(active_path),
             "web_search_contexts": self._path_to_web_search_contexts(active_path),
         }
+
+    # 承認カードの状態が変わったとき、保存済みの回答にある同じ ID のカードを差し替える。
+    # 履歴を読み直したときと承認 API の応答が同じカードを見せるため。
+    # When an approval card changes state, replace the card with the same id in the saved reply
+    # so a history reload shows exactly what the approval API returned.
+    async def update_tool_approval_part(
+        self,
+        chat_room_id: str,
+        message_id: int,
+        approval: dict[str, Any],
+    ) -> bool:
+        record = (
+            await self.session.execute(
+                select(ChatHistory)
+                .where(ChatHistory.id == message_id, ChatHistory.chat_room_id == chat_room_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if record is None:
+            return False
+        parts = decode_message_parts(record.message_parts) or []
+        replaced = False
+        updated_parts: list[dict[str, Any]] = []
+        for part in parts:
+            if (
+                part.get("type") == TOOL_APPROVAL_PART_TYPE
+                and isinstance(part.get("approval"), dict)
+                and part["approval"].get("id") == approval.get("id")
+            ):
+                updated_parts.append(tool_approval_part(approval))
+                replaced = True
+            else:
+                updated_parts.append(part)
+        if not replaced:
+            return False
+        record.message_parts = _jsonb_value(encode_message_parts(updated_parts))
+        await self.session.flush()
+        return True
 
     async def copy_messages_into_room(self, chat_room_id: str, messages: list[dict[str, Any]]) -> int:
         parent_id: int | None = None

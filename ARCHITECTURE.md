@@ -72,7 +72,7 @@ flowchart LR
 - `services/`: 複数のルートから使う業務処理、外部連携、共通エラー、セキュリティ、キャッシュ、バックグラウンド処理を担当します。ルートから直接呼ぶ必要がある場合も、処理をサービスへ寄せてハンドラを薄く保ちます。
 - `services/repositories/`: 複数機能で共有する DB アクセスの配置先です（メモの DB アクセスも `services/repositories/memo_repository.py` にあります）。機能配下にデータアクセスが残っている場合も、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
 - `services/repositories/auth_identity_repository.py`: メール・Google・Passkey認証が参照するユーザーと認証プロバイダーの専用永続化境界です。一般ユーザー機能のRepositoryへ認証情報の読み書きを追加しません。
-- チャット周辺の永続化は機能ごとにRepositoryを分けています。`chat_repository.py` はルーム・履歴・分岐・共有・ルーム内メモリ、`project_repository.py` はプロジェクトと部屋の所属、`task_repository.py` はタスクテンプレート、`user_skill_repository.py` は `user_skills` と `users.generative_ui_skill_enabled`、`user_repository.py` は `users` のプロフィール・メール・言語設定とアカウント削除を所有します。別機能の行をこれらへ追加しないでください。
+- チャット周辺の永続化は機能ごとにRepositoryを分けています。`chat_repository.py` はルーム・履歴・分岐・共有・ルーム内メモリ、`project_repository.py` はプロジェクトと部屋の所属、`task_repository.py` はタスクテンプレート、`user_skill_repository.py` は `user_skills` と既定スキルの ON/OFF（`users.generative_ui_skill_enabled`、`users.memo_tools_skill_enabled`）、`user_repository.py` は `users` のプロフィール・メール・言語設定とアカウント削除、`chat_tool_approval_repository.py` は承認カード（`chat_tool_approvals`）と「常に承認」の付与（`chat_tool_auto_approvals`）を所有します。別機能の行をこれらへ追加しないでください。
 - `services/repositories/chat_room_access.py`: `chat_rooms` の所有者確認とルームのシリアライズを、チャットとプロジェクトの双方から使う共通境界です。ロックとエラー契約を重複実装しないでください。
 - `services/request_models.py` / `services/response_models.py`: API 契約を定義します。フロントエンドの型を手書きで先行変更しないでください。
 - `services/api_errors.py` / `services/error_messages.py`: API エラーの型と利用者向け文言を集約します。
@@ -161,9 +161,13 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 
-LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
+LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップをツール付きで1度だけ引き直し、再び拒否されたらツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
 
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
+
+### チャットの書き込みツールと承認カード
+
+利用者自身のデータ（現在はメモのみ）を読み書きするツールは `services/chat_workspace_tools/` にファミリー単位でまとまり、対応する既定スキル（「メモ」、`users.memo_tools_skill_enabled`）が ON のログイン利用者の通常ルーム・ストリーミング生成にだけ渡します。読み取りは検索・根拠読み取りツールと同じくその場で実行しますが、書き込み（作成・追記・書き換え）は生成中に実行せず、`services/chat_tool_approval_service.py` が `chat_tool_approvals` へ承認待ちの行を保存し、回答へ `tool_approval` パーツ（カード）を付けて締めます。承認は `blueprints/chat/tool_approvals.py` の決定 API を通り、実行は利用者が承認した後にサーバーが行います。ツールごとの「常に承認」（`chat_tool_auto_approvals`）は、そのターンが外部の内容を読んでいなければ提案の時点で実行しますが、外部の内容を読んだターンでは常に通常の承認待ちへ戻します。設計の理由は [ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md) に、判断ループとの結び付きは `docs/architecture/system_design_deep_dive.md` の第9.8節にあります。
 
 ### 添付ファイル
 
@@ -213,6 +217,7 @@ npm --prefix frontend run generate:api-schemas
 | --- | --- | --- |
 | API の入出力 | 対応する `blueprints/` と `services/*_models.py` | 生成 Zod、フロントの API 正規化、ルートテスト |
 | チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_turn_state.py`、`services/research_state.py`、`services/chat_evidence_store.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
+| チャットの書き込みツールと承認カード | `services/chat_workspace_tools/`、`services/chat_tool_approval_service.py` | `blueprints/chat/tool_approvals.py`、`services/repositories/chat_tool_approval_repository.py`、`services/tool_approval_parts.py`、[ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md)、`tests/unit/test_chat_workspace_tools.py`、`tests/unit/test_chat_tool_approval_api.py` |
 | 認証・セッション・CSRF | `blueprints/auth*`、`services/repositories/auth_identity_repository.py`、`services/session_middleware.py`、`services/csrf.py` | `user_auth_providers`契約、Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |
 | プロンプト画像 | `services/prompt_attachment_processing.py` と storage | `docs/architecture/prompt_attachment_storage.md`、添付テスト |

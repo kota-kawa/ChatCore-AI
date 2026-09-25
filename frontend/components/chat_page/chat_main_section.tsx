@@ -16,6 +16,7 @@ import { modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
+import { useChatToolApprovals } from "../../hooks/chat_page/use_chat_tool_approvals";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
@@ -90,6 +91,7 @@ function ChatMainSectionComponent() {
     handleRegenerateMessage,
     handleEditAndRegenerateMessage,
     handleSwitchBranch,
+    applyToolApproval,
   } = useHomePageChatContext();
 
   // DOM 要素への直接参照。入力欄のフォーカス・高さ調整、ファイル選択ダイアログ、
@@ -178,6 +180,16 @@ function ChatMainSectionComponent() {
   const handleContinuePartialAnswer = useCallback(() => {
     handleSendMessage(t("chat.continueAnswerPrompt"));
   }, [handleSendMessage, t]);
+
+  // 承認カードの決定を送り、全部決まって1件以上成功したら通常の送信経路で会話を続ける。
+  // Send approval-card decisions and, once all are settled with at least one success, continue the
+  // conversation through the ordinary send path.
+  const { handleToolApprovalDecide } = useChatToolApprovals({
+    messages,
+    isGenerating,
+    applyToolApproval,
+    sendMessage: handleSendMessage,
+  });
 
   // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
@@ -587,6 +599,7 @@ function ChatMainSectionComponent() {
             onRegenerate={handleRegenerateMessage}
             onContinue={handleContinuePartialAnswer}
             onChoiceSubmit={handleSendMessage}
+            onToolApprovalDecide={handleToolApprovalDecide}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}
             tasks={tasks}

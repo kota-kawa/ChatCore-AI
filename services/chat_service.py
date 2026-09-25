@@ -32,9 +32,11 @@ from .repositories.task_repository import TaskRepository
 from .repositories.user_repository import UserRepository
 from .repositories.user_skill_repository import UserSkillRepository
 from .share_common import serialize_token_share_lifecycle
+from .tool_approval_parts import TOOL_APPROVAL_PART_TYPE, redact_tool_approval_for_share, tool_approval_part
 from .user_skills import (
-    build_generative_ui_system_skill,
-    is_generative_ui_skill_id,
+    SYSTEM_SKILL_KEYS,
+    build_system_skill,
+    system_skill_key_for_id,
 )
 
 T = TypeVar("T")
@@ -321,12 +323,33 @@ async def revoke_shared_chat_token(
     return _serialize_chat_share_state(row)
 
 
+# 共有表示と fork では承認カードを読み取り専用の最小限にする。提案の中身（非公開のメモ本文や差分）・
+# 結果・警告を見せず、他人のカードを操作させないため。
+# Shared views and forks reduce approval cards to a readonly minimum, so viewers never see the
+# proposal (private memo text or diffs), its result or warnings, and cannot act on the card.
+def _redact_shared_messages(payload: dict[str, Any]) -> dict[str, Any]:
+    messages = payload.get("messages") if isinstance(payload, dict) else None
+    if not isinstance(messages, list):
+        return payload
+    for message in messages:
+        parts = message.get("message_parts") if isinstance(message, dict) else None
+        if not isinstance(parts, list):
+            continue
+        message["message_parts"] = [
+            tool_approval_part(redact_tool_approval_for_share(part["approval"]))
+            if part.get("type") == TOOL_APPROVAL_PART_TYPE and isinstance(part.get("approval"), dict)
+            else part
+            for part in parts
+        ]
+    return payload
+
+
 async def get_shared_chat_room_payload(
     token: str,
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
-    return await _read(lambda repo: repo.get_shared_chat_room_payload(token), session)
+    return _redact_shared_messages(await _read(lambda repo: repo.get_shared_chat_room_payload(token), session))
 
 
 async def fork_shared_chat_into_db_room(
@@ -339,7 +362,7 @@ async def fork_shared_chat_into_db_room(
     """Copy a shared conversation in one transaction owned by the caller."""
 
     async def operation(repo: ChatRepository) -> dict[str, Any]:
-        payload = await repo.get_shared_chat_room_payload(token)
+        payload = _redact_shared_messages(await repo.get_shared_chat_room_payload(token))
         room = payload.get("room") if isinstance(payload, dict) else None
         title = str((room or {}).get("title") or "共有チャット").strip() or "共有チャット"
         messages = [
@@ -489,10 +512,10 @@ async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession
 
 async def list_user_skills(user_id: int, *, session: AsyncSession | None = None):
     async def operation(repo: UserSkillRepository):
-        is_enabled = await repo.get_generative_ui_skill_enabled(user_id)
+        states = await repo.get_system_skill_states(user_id)
         personal_skills = await repo.list_user_skills(user_id)
         return [
-            build_generative_ui_system_skill(is_enabled=is_enabled),
+            *(build_system_skill(key, is_enabled=states[key]) for key in SYSTEM_SKILL_KEYS),
             *personal_skills,
         ]
 
@@ -528,14 +551,15 @@ async def set_user_skill_enabled(
     *,
     session: AsyncSession | None = None,
 ):
-    if is_generative_ui_skill_id(skill_id):
+    system_key = system_skill_key_for_id(skill_id)
+    if system_key is not None:
         next_enabled = bool(is_enabled)
         stored_enabled = await _write(
-            lambda repo: repo.set_generative_ui_skill_enabled(user_id, next_enabled),
+            lambda repo: repo.set_system_skill_enabled(user_id, system_key, next_enabled),
             session,
             repository=UserSkillRepository,
         )
-        return build_generative_ui_system_skill(is_enabled=stored_enabled)
+        return build_system_skill(system_key, is_enabled=stored_enabled)
     return await _write(
         lambda repo: repo.set_user_skill_enabled(user_id, skill_id, is_enabled),
         session,
@@ -549,7 +573,7 @@ async def delete_user_skill(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    if is_generative_ui_skill_id(skill_id):
+    if system_skill_key_for_id(skill_id) is not None:
         raise ForbiddenOperationError(
             ERROR_DEFAULT_SKILL_IMMUTABLE,
             code="default_skill_immutable",

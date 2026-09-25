@@ -61,6 +61,7 @@ OCCURRENCE_FIELDS = (
     "missing_turn_state_updates",
     "untagged_turn_state_recoveries",
     "tool_schema_recoveries",
+    "tool_schema_retries",
     "research_failure_recoveries",
     "salvaged_partial_answers",
     "input_limit_recoveries",
@@ -68,6 +69,17 @@ OCCURRENCE_FIELDS = (
     "truncated_evidence_payloads",
     "artifact_repair_attempted",
     "artifact_repair_succeeded",
+    # 利用者のデータ（メモなど）のツール。承認待ちで締めたターン、外部の内容で自動承認を止めたターン、
+    # 引数の不備、提案・自動実行・読み取りがあったターンの割合。
+    # The user-data (memo) tools: turns closed on a pending approval, turns whose auto approval
+    # was held back by external content, argument rejections, and turns with proposals, auto
+    # runs or reads.
+    "approval_pending_turn",
+    "auto_approval_suppressed_by_untrusted_input",
+    "workspace_invalid_arguments",
+    "workspace_write_proposals",
+    "workspace_auto_executions",
+    "workspace_read_calls",
 )
 
 # 中央値で報告する分量の指標。
@@ -218,6 +230,16 @@ def summarize(turns: list[Turn], uncorrelated_lines: int = 0) -> dict[str, Any]:
                 if isinstance(reason, str)
             )
         ),
+        # ツール呼び出しの拒否を「理由:拒否文にあったツール名」で数える。
+        # Tool-call rejections counted as "reason:tool the rejection named".
+        "tool_schema_rejections": dict(
+            Counter(
+                f"{entry.get('reason') or 'other'}:{entry.get('tool') or '(none)'}"
+                for turn in turns
+                for entry in turn.payload.get("tool_schema_rejections", [])
+                if isinstance(entry, dict)
+            )
+        ),
         "occurrence_rates": {},
         "medians": {},
     }
@@ -269,6 +291,7 @@ def render_text(summary: dict[str, Any]) -> str:
     lines += _format_counter("生成UIの状態", summary["artifact_status"], total)
     lines += _format_counter("生成UIの理由コード", summary["artifact_reason_codes"], total)
     lines += _format_counter("継続生成の理由", summary["continuation_reasons"], total)
+    lines += _format_counter("ツール呼び出しの拒否", summary.get("tool_schema_rejections", {}), total)
 
     lines.append("発生率（1ターンに1回でも起きた割合）:")
     for name, stats in summary["occurrence_rates"].items():

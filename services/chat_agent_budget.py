@@ -22,6 +22,10 @@ DEFAULT_MAX_READ_CALLS = 12
 DEFAULT_MAX_READ_CHARS = 48_000
 READ_MESSAGE_MAX_CHARS = 4_000
 READ_MESSAGE_MIN_CHARS = 512
+# 1ターンで作れる書き込みの提案（承認カード）の上限。利用者が1つの回答で判断できる数に抑える。
+# Upper bound on write proposals (approval cards) per turn, kept to what one reply can ask of
+# the user.
+DEFAULT_MAX_WRITE_PROPOSALS = 3
 
 
 def _get_clamped_int_env(name: str, default: int, *, maximum: int) -> int:
@@ -87,6 +91,8 @@ class AgentStepBudget:
     max_read_chars: int = DEFAULT_MAX_READ_CHARS
     read_calls: int = 0
     read_chars: int = 0
+    max_write_proposals: int = DEFAULT_MAX_WRITE_PROPOSALS
+    write_proposals: int = 0
 
     @classmethod
     def from_environment(cls) -> AgentStepBudget:
@@ -118,6 +124,13 @@ class AgentStepBudget:
 
     def consume_read_chars(self, size: int) -> None:
         self.read_chars += max(0, size)
+
+    @property
+    def write_proposals_exhausted(self) -> bool:
+        return self.write_proposals >= self.max_write_proposals
+
+    def start_write_proposal(self) -> None:
+        self.write_proposals += 1
 
     @property
     def tool_calls_exhausted(self) -> bool:
