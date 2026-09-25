@@ -154,25 +154,32 @@ class WorkspaceToolRunner:
                 "status": "step_limit_reached",
                 "message": "The limit of proposed changes for this reply has been reached.",
             }
-        budget.start_write_proposal()
-        telemetry.workspace_write_proposals += 1
-        progress = {"tool": spec.name, "step": budget.step, "max_steps": budget.max_steps}
-        self._publish("workspace_tool_started", progress)
+        # 読んでいないメモへの追記・書き換えは提案にならないので、提案の予算も件数も使わせない。
+        # An append or edit on an unread memo never becomes a proposal, so it spends neither the
+        # proposal budget nor the proposal count.
         try:
             arguments = parse_tool_arguments(raw_arguments)
-            unread_memo_id = self._unread_memo_id(spec, arguments)
-            if unread_memo_id is not None:
-                message = "Read the target memo with memo_read before proposing an append or edit."
-                state.turn_state.record_search(
-                    tool_name=spec.name,
-                    query=f"memo:{unread_memo_id}",
-                    status="read_required",
-                )
-                self._publish(
-                    "workspace_tool_completed",
-                    {**progress, "status": "read_required"},
-                )
-                return {"status": "read_required", "message": message}
+        except WorkspaceToolArgumentError:
+            arguments = None
+        progress = {"tool": spec.name, "step": budget.step, "max_steps": budget.max_steps}
+        self._publish("workspace_tool_started", progress)
+        unread_memo_id = self._unread_memo_id(spec, arguments) if arguments is not None else None
+        if unread_memo_id is not None:
+            state.turn_state.record_search(
+                tool_name=spec.name,
+                query=f"memo:{unread_memo_id}",
+                status="read_required",
+            )
+            self._publish("workspace_tool_completed", {**progress, "status": "read_required"})
+            return {
+                "status": "read_required",
+                "message": "Read the target memo with memo_read before proposing an append or edit.",
+            }
+        budget.start_write_proposal()
+        telemetry.workspace_write_proposals += 1
+        try:
+            if arguments is None:
+                arguments = parse_tool_arguments(raw_arguments)
             assert spec.propose is not None
             proposal = asyncio.run(spec.propose(self._toolbox.user_id, arguments))
         except WorkspaceToolArgumentError as exc:

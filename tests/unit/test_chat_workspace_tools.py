@@ -405,9 +405,15 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
             "message": "Read the target memo with memo_read before proposing an append or edit.",
         })
 
+        # 拒否は提案ではないので、提案の予算と件数を使わない。
+        # A refusal is not a proposal, so it spends neither the proposal budget nor the count.
+        self.assertEqual(state.budget.write_proposals, 0)
+        self.assertEqual(state.telemetry.workspace_write_proposals, 0)
+
         runner.run(state, _tool_call(MEMO_READ_TOOL_NAME, memo_id=42))
         result = runner.run(state, _tool_call(MEMO_EDIT_TOOL_NAME, memo_id=43, edits=[]))
         self.assertEqual(result["status"], "read_required")
+        self.assertEqual(state.telemetry.workspace_write_proposals, 0)
 
         with patch(
             "services.chat_workspace_tools.runner.create_pending_approval",
@@ -430,6 +436,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
                 "tool_approval_prepared",
             ],
         )
+        self.assertEqual(state.telemetry.workspace_write_proposals, 1)
 
     def test_propose_reports_step_limit_when_the_write_budget_is_exhausted(self):
         spec = _fake_write_spec()
