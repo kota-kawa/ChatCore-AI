@@ -115,7 +115,6 @@ export const enMessages = {
   "chat.toolApproval.openMemo": "Open memos",
   "chat.toolApproval.warning.shared_memo": "This memo is shared. Changing it also changes what people with the link see.",
   "chat.toolApproval.warning.untrusted_input_in_turn": "This reply read outside content (web pages, attachments and so on). Make sure the change is one you intended.",
-  "chat.toolApproval.warning.private_text_in_public_post": "Private content may be included in a post that will be public.",
   "chat.toolApproval.preview.title": "Title",
   "chat.toolApproval.preview.untitled": "(Untitled)",
   "chat.toolApproval.preview.content": "Body",

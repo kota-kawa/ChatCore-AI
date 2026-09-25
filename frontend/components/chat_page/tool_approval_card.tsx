@@ -27,7 +27,6 @@ const TITLE_ICONS: Record<Tool, string> = {
 const WARNING_KEYS: Record<Warning, MessageKey> = {
   shared_memo: "chat.toolApproval.warning.shared_memo",
   untrusted_input_in_turn: "chat.toolApproval.warning.untrusted_input_in_turn",
-  private_text_in_public_post: "chat.toolApproval.warning.private_text_in_public_post",
 };
 
 const STATUS_KEYS: Record<Status, MessageKey> = {

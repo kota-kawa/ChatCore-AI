@@ -356,7 +356,7 @@ ToolApprovalToolName = Literal["memo_create", "memo_append", "memo_edit"]
 ToolApprovalFamily = Literal["memo"]
 ToolApprovalStatus = Literal["pending", "succeeded", "failed", "denied", "expired", "superseded", "cancelled"]
 ToolApprovalDecision = Literal["once", "always", "auto", "deny"]
-ToolApprovalWarning = Literal["shared_memo", "private_text_in_public_post", "untrusted_input_in_turn"]
+ToolApprovalWarning = Literal["shared_memo", "untrusted_input_in_turn"]
 
 
 # 日本語: 承認カードの部品の基底。メッセージに保存したパーツの検証にも使うため、未知のキーは通さず落とす。

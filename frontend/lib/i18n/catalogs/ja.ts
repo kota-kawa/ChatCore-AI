@@ -195,7 +195,6 @@ export const jaMessages = {
   "chat.toolApproval.openMemo": "メモを開く",
   "chat.toolApproval.warning.shared_memo": "このメモは共有中です。変更すると共有リンクの表示も変わります。",
   "chat.toolApproval.warning.untrusted_input_in_turn": "この回答は外部の内容（Webページや添付など）を読んでいます。意図しない変更でないか確かめてください。",
-  "chat.toolApproval.warning.private_text_in_public_post": "非公開の内容が公開される投稿に含まれている可能性があります。",
   "chat.toolApproval.preview.title": "題名",
   "chat.toolApproval.preview.untitled": "（題名なし）",
   "chat.toolApproval.preview.content": "本文",
