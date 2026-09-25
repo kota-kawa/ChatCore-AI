@@ -68,9 +68,9 @@ class WorkspaceToolRunner:
         function = tool_call.get("function") or {}
         spec = self._toolbox.spec(str(function.get("name")))
         raw_arguments = function.get("arguments", "{}")
-        if spec.is_write:
-            return self._propose(state, spec, raw_arguments)
-        return self._read(state, spec, raw_arguments)
+        result = self._propose(state, spec, raw_arguments) if spec.is_write else self._read(state, spec, raw_arguments)
+        state.telemetry.record_workspace_tool_result(spec.name, result.get("status"))
+        return result
 
     # Reads -------------------------------------------------------------------
 

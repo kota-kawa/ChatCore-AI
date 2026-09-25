@@ -437,6 +437,15 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
             ],
         )
         self.assertEqual(state.telemetry.workspace_write_proposals, 1)
+        self.assertEqual(
+            state.telemetry.workspace_tool_results,
+            [
+                f"{MEMO_APPEND_TOOL_NAME}:read_required",
+                f"{MEMO_READ_TOOL_NAME}:ok",
+                f"{MEMO_EDIT_TOOL_NAME}:read_required",
+                f"{MEMO_APPEND_TOOL_NAME}:awaiting_user_approval",
+            ],
+        )
 
     def test_propose_reports_step_limit_when_the_write_budget_is_exhausted(self):
         spec = _fake_write_spec()

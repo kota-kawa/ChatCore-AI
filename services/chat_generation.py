@@ -1417,6 +1417,13 @@ class ChatGenerationJob:
                 # A provider that rejected the model's tool call rejects the identical request
                 # again. Replay the step once without tools so the turn degrades to an answer
                 # from what is already known instead of failing outright.
+                self._telemetry.record_tool_schema_rejection(
+                    reason=exc.reason,
+                    tool_name=exc.tool_name,
+                    offered_tool_names=[
+                        str((tool.get("function") or {}).get("name") or "") for tool in current_tools or []
+                    ],
+                )
                 if (
                     current_tools is None
                     or (emitted and not discard_partial_on_retry)
