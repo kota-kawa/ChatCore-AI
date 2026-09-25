@@ -175,7 +175,9 @@ describe("ToolApprovalCard", () => {
   it("renders a readonly card from another view without buttons, with a note while pending", () => {
     render(<ToolApprovalCard approval={approval({ readonly: true })} onDecide={vi.fn()} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.getByText("承認カードは共有画面では操作できません。")).toBeInTheDocument();
+    const note = screen.getByText("このカードは共有された会話のもので、ここからは操作できません。");
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveClass("interactive-buttons-readonly-note");
   });
 });
 
@@ -270,5 +272,22 @@ describe("approval cards inside messages", () => {
     expect(screen.getByRole("status")).toHaveTextContent("実行しました");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  // 共有チャットを自分のルームへ取り込む（fork）と、redact 済みのカードは通常チャットの
+  // BotMessageParts に載る。共有画面専用の CSS が当たらないため、ここでも読み取り専用の
+  // 注記の文言とクラスが揃っていることを確かめる。
+  // Forking a shared chat into the viewer's own room lands the redacted card on the normal
+  // chat's BotMessageParts, which the shared view's own CSS never reaches. This confirms the
+  // readonly note's wording and class hold there too.
+  it("keeps the readonly note on a redacted, still-pending card forked into a normal chat", () => {
+    const redacted = normalizeToolApproval({ id: "a1", tool: "memo_create", family: "memo", status: "pending", readonly: true });
+    if (!redacted) throw new Error("redacted card must be valid");
+    render(<BotMessageParts fallbackText="" parts={[{ type: "tool_approval", approval: redacted }]} onToolApprovalDecide={vi.fn()} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const note = screen.getByText("このカードは共有された会話のもので、ここからは操作できません。");
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveClass("interactive-buttons-readonly-note");
   });
 });

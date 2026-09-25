@@ -126,7 +126,7 @@ export const enMessages = {
   "chat.toolApproval.preview.removed": "(removed)",
   "chat.toolApproval.preview.editedContent": "Edited memo",
   "chat.toolApproval.preview.showFull": "Show the full text",
-  "chat.toolApproval.readOnlyNote": "Approval cards cannot be used in shared views.",
+  "chat.toolApproval.readOnlyNote": "This card belongs to a shared conversation; it cannot be used from here.",
   "chat.toolApproval.decisionFailed": "Could not process your decision.",
   "chat.toolApproval.continuePrompt": "The action I approved has run. Please continue from the result.",
   "chat.attachmentUnavailable": "Files cannot be attached while the chat is being prepared.",

@@ -1782,6 +1782,17 @@
   font-weight: 500;
 }
 
+/* 読み取り専用のカード（共有チャットを自分のルームへ取り込んだ後など）は押せない。その理由を添える。
+   選択ボタンの読み取り専用の注記とクラスを共有する。 */
+/* A readonly card (e.g. after a shared chat was forked into the viewer's own room) cannot be
+   pressed; explain why. Shares its class with the choice buttons' own readonly note. */
+:where(body.chat-page, .chat-page-shell) .interactive-buttons-readonly-note {
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.5;
+}
+
 /* 濃色面では白地用の --primary-dark が沈むため、明るい --primary-color に替える */
 /* On the dark surface --primary-dark sinks, so switch to the brighter --primary-color */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(

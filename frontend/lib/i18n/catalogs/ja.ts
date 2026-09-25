@@ -206,7 +206,7 @@ export const jaMessages = {
   "chat.toolApproval.preview.removed": "（削除）",
   "chat.toolApproval.preview.editedContent": "書き換え後の本文",
   "chat.toolApproval.preview.showFull": "全文を表示",
-  "chat.toolApproval.readOnlyNote": "承認カードは共有画面では操作できません。",
+  "chat.toolApproval.readOnlyNote": "このカードは共有された会話のもので、ここからは操作できません。",
   "chat.toolApproval.decisionFailed": "承認を処理できませんでした。",
   "chat.toolApproval.continuePrompt": "承認した操作が実行されました。結果を踏まえて続けてください。",
   "chat.attachmentUnavailable": "チャットの準備中はファイルを添付できません。",
