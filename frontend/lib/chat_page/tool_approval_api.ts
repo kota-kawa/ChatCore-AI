@@ -12,16 +12,22 @@ type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 export type ToolApprovalDecision = ToolApprovalDecisionRequest["decision"];
 
 // 承認 API の失敗。画面は code で分岐する（期限切れならカードを期限切れにする、など）。
-// A failed approval API call; the screen branches on code (an expired card is shown as expired, etc.).
+// approval_already_decided は、別タブなどで先に決めた誰かのカードの最新状態を応答に持つので、
+// あれば画面はそれでカードを差し替える。
+// A failed approval API call; the screen branches on code (an expired card is shown as expired,
+// etc.). approval_already_decided carries the card's latest state — settled elsewhere, e.g.
+// another tab — when present, so the screen swaps its card with it.
 export class ToolApprovalDecisionError extends Error {
   public readonly code: string;
   public readonly status: number;
+  public readonly approval?: ToolApprovalApi;
 
-  public constructor(message: string, code: string, status: number) {
+  public constructor(message: string, code: string, status: number, approval?: ToolApprovalApi) {
     super(message);
     this.name = "ToolApprovalDecisionError";
     this.code = code;
     this.status = status;
+    this.approval = approval;
   }
 }
 
@@ -47,10 +53,12 @@ export async function decideToolApproval(
   );
   if (!response.ok) {
     const code = isRecord(payload) && typeof payload.code === "string" ? payload.code : "";
+    const approval = isRecord(payload) ? normalizeToolApproval(payload.approval) : undefined;
     throw new ToolApprovalDecisionError(
       extractApiErrorMessage(payload, fallbackMessage, response.status),
       code,
       response.status,
+      approval,
     );
   }
   const parsed = ToolApprovalDecisionResponseSchema.safeParse(payload);

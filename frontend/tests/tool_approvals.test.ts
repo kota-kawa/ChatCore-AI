@@ -185,6 +185,33 @@ test("the decision API surfaces the server's error code and message", async () =
   });
 });
 
+test("the decision API attaches the settled card from an approval_already_decided conflict", async () => {
+  const fetchImpl = async () =>
+    jsonResponse(409, {
+      error: "既に決定されています。",
+      code: "approval_already_decided",
+      approval: rawApproval({ status: "denied", decision: "deny" }),
+    });
+
+  await assert.rejects(decideToolApproval("a1", "approve_once", "失敗", fetchImpl), (error: unknown) => {
+    assert.ok(error instanceof ToolApprovalDecisionError);
+    assert.equal(error.code, "approval_already_decided");
+    assert.equal(error.approval?.status, "denied");
+    assert.equal(error.approval?.decision, "deny");
+    return true;
+  });
+});
+
+test("the decision API leaves the card undefined when the conflict response carries none", async () => {
+  const fetchImpl = async () => jsonResponse(409, { error: "既に決定されています。", code: "approval_already_decided" });
+
+  await assert.rejects(decideToolApproval("a1", "approve_once", "失敗", fetchImpl), (error: unknown) => {
+    assert.ok(error instanceof ToolApprovalDecisionError);
+    assert.equal(error.approval, undefined);
+    return true;
+  });
+});
+
 test("the decision API rejects a response whose card breaks the contract", async () => {
   const fetchImpl = async () => jsonResponse(200, { approval: rawApproval({ preview: null }) });
 

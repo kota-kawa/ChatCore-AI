@@ -53,11 +53,18 @@ export function useChatToolApprovals({
         decidedApprovalIdRef.current = approval.id;
         applyToolApproval(approval);
       } catch (error) {
-        // 期限切れはサーバーが expired に更新済みなので、カードも同じ状態にそろえる
-        // The server has already marked an expired card, so align the card with it
-        if (error instanceof ToolApprovalDecisionError && error.code === "approval_expired") {
-          const current = findToolApproval(messagesRef.current, approvalId);
-          if (current) applyToolApproval({ ...current, status: "expired" });
+        if (error instanceof ToolApprovalDecisionError) {
+          if (error.code === "approval_expired") {
+            // 期限切れはサーバーが expired に更新済みなので、カードも同じ状態にそろえる
+            // The server has already marked an expired card, so align the card with it
+            const current = findToolApproval(messagesRef.current, approvalId);
+            if (current) applyToolApproval({ ...current, status: "expired" });
+          } else if (error.code === "approval_already_decided" && error.approval) {
+            // 別タブなどで先に決まったカードの最新状態が応答に載っているので、それに差し替える
+            // The response carries the card's latest state, settled elsewhere (another tab, say);
+            // swap the card with it
+            applyToolApproval(error.approval);
+          }
         }
         showToast(error instanceof Error ? error.message : t("chat.toolApproval.decisionFailed"), { variant: "error" });
       } finally {

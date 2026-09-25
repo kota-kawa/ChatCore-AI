@@ -31,6 +31,7 @@ from services.api_errors import ApiServiceError
 from services.auth_limits import AuthLimitService, get_auth_limit_service
 from services.chat_tool_approval_service import (
     ChatToolRateLimitedError,
+    ToolApprovalConflictError,
     cancel_unattached_approvals,
     create_pending_approval,
     decide_tool_approval,
@@ -358,11 +359,16 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
 
     def test_a_different_decision_on_a_settled_row_conflicts(self):
         row = self._seed_pending()
-        self._decide(row, "deny")
+        settled = self._decide(row, "deny")
         with self.assertRaises(ApiServiceError) as ctx:
             self._decide(row, "approve_once")
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.code, "approval_already_decided")
+        # 応答には、別タブなどで先に決めた誰かのカードの最新状態が載る。
+        # The response carries the card's latest state, settled elsewhere (another tab, say).
+        self.assertIsInstance(ctx.exception, ToolApprovalConflictError)
+        payload = ctx.exception.to_payload()
+        self.assertEqual(payload["approval"], settled)
 
     # Expiry ---------------------------------------------------------------------------------------
 
@@ -600,6 +606,31 @@ class ChatToolApprovalRouteTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "approval_already_decided")
+
+    async def test_decide_carries_the_settled_card_on_an_already_decided_conflict(self):
+        app = self._app()
+        card = {
+            "id": str(uuid4()),
+            "tool": TOOL_NAME,
+            "family": "memo",
+            "status": "denied",
+            "decision": "deny",
+            "preview": _preview(),
+        }
+        async with self._authenticated_client(app) as client:
+            with patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval",
+                AsyncMock(side_effect=ToolApprovalConflictError(card)),
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "approve_once"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(body["code"], "approval_already_decided")
+        self.assertEqual({key: body["approval"][key] for key in card}, card)
 
     async def test_decide_is_throttled_by_the_routes_own_rate_limit(self):
         app = self._app()

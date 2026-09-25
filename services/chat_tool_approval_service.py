@@ -43,6 +43,7 @@ from services.error_messages import (
 from services.models import ChatToolApproval
 from services.repositories.chat_repository import ChatRepository
 from services.repositories.chat_tool_approval_repository import ChatToolApprovalRepository
+from services.response_models import ToolApprovalConflictResponse
 from services.tool_approval_parts import validate_tool_approval_payload
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,25 @@ class ChatToolRateLimitedError(ApiServiceError):
             code="chat_tool_rate_limited",
         )
         self.retry_after = retry_after
+
+
+# 別タブなど、先にこのカードを決めた誰かと衝突したときの 409。カードは既に決まった最新状態を
+# 持つので、応答にそのまま載せて呼び出し側が表示中のカードを同期し直せるようにする。
+# 409 for a conflict with a decision that already settled this card elsewhere (another tab, say).
+# The row already holds the card's latest, settled state, so the response carries it as is and
+# the caller can resync whatever card it is showing.
+class ToolApprovalConflictError(ApiServiceError):
+    """Another decision already settled the card; the payload carries its current state."""
+
+    def __init__(self, approval: dict[str, Any]) -> None:
+        super().__init__(ERROR_TOOL_APPROVAL_ALREADY_DECIDED, 409, code="approval_already_decided")
+        self.approval = approval
+
+    def to_payload(self) -> dict[str, Any]:
+        base = super().to_payload()
+        return ToolApprovalConflictResponse.model_validate({**base, "approval": self.approval}).model_dump(
+            exclude_none=True
+        )
 
 
 class _ApprovalAlreadySettledError(Exception):
@@ -379,9 +399,10 @@ async def cancel_unattached_approvals(approval_ids: Sequence[str], user_id: int)
 def _settled_card(row: ChatToolApproval, decision: str) -> dict[str, Any]:
     if row.status == "expired":
         raise ApiServiceError(ERROR_TOOL_APPROVAL_EXPIRED, 409, code="approval_expired")
+    card = approval_card(row)
     if row.decision == decision:
-        return approval_card(row)
-    raise ApiServiceError(ERROR_TOOL_APPROVAL_ALREADY_DECIDED, 409, code="approval_already_decided")
+        return card
+    raise ToolApprovalConflictError(card)
 
 
 def _approval_not_found() -> ResourceNotFoundError:

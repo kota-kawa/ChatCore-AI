@@ -463,6 +463,14 @@ class ToolApprovalDecisionResponse(ResponsePayloadModel):
     approval: ToolApprovalApi
 
 
+# 日本語: 承認 API が 409（決定済みの衝突）を返すときの応答。別タブなどで先に決まったカードの
+#         最新状態を持たせ、フロントがそれでカードを差し替えられるようにする。
+# English: Response for the approval API's 409 conflict (already decided). It carries the card's
+#          latest state, settled elsewhere (e.g. another tab), so the frontend can resync its card.
+class ToolApprovalConflictResponse(ApiErrorPayload):
+    approval: ToolApprovalApi | None = None
+
+
 # 日本語: 「常に承認」を付与済みのツール1件。
 # English: One tool the user has granted "always approve" to.
 class ToolAutoApprovalApi(ResponsePayloadModel):

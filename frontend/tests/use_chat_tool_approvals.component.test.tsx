@@ -141,4 +141,33 @@ describe("useChatToolApprovals", () => {
     expect(applyToolApproval).not.toHaveBeenCalled();
     expect(showToastMock).toHaveBeenCalledWith("しばらく待ってください。", { variant: "error" });
   });
+
+  it("syncs the card to another tab's decision on a 409 conflict that carries it", async () => {
+    const { ToolApprovalDecisionError } = await import("../lib/chat_page/tool_approval_api");
+    const settledElsewhere = approval({ status: "denied", decision: "deny" });
+    decideToolApprovalMock.mockRejectedValue(
+      new ToolApprovalDecisionError("既に決定されています。", "approval_already_decided", 409, settledElsewhere),
+    );
+    const { decide, sendMessage, getMessages } = renderApprovals(conversation([approval()]));
+
+    await decide("a1", "approve_once");
+
+    const card = getMessages()[1].parts?.find((part) => part.type === "tool_approval");
+    expect(card?.type === "tool_approval" ? card.approval.status : null).toBe("denied");
+    expect(showToastMock).toHaveBeenCalledWith("既に決定されています。", { variant: "error" });
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("leaves the card as is on a 409 conflict without a card in the response", async () => {
+    const { ToolApprovalDecisionError } = await import("../lib/chat_page/tool_approval_api");
+    decideToolApprovalMock.mockRejectedValue(
+      new ToolApprovalDecisionError("既に決定されています。", "approval_already_decided", 409),
+    );
+    const { decide, applyToolApproval } = renderApprovals(conversation([approval()]));
+
+    await decide("a1", "approve_once");
+
+    expect(applyToolApproval).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith("既に決定されています。", { variant: "error" });
+  });
 });
