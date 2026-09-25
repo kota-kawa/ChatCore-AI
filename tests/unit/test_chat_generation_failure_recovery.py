@@ -18,8 +18,11 @@ from unittest.mock import Mock, patch
 
 from services.chat_agent_budget import AgentStepBudget
 from services.chat_generation import ChatGenerationJob
+from services.chat_workspace_tools import build_workspace_toolbox
+from services.generative_ui import NormalizedGenerativeResponse
 from services.llm import (
     LlmAuthenticationError,
+    LlmOutputLimitError,
     LlmRateLimitError,
     LlmUpstreamServiceError,
 )
@@ -58,14 +61,27 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
     def make_job(self, **kwargs):
         saved = Mock(return_value=None)
         on_error = Mock()
+        conversation_messages = kwargs.pop("conversation_messages", [{"role": "user", "content": "説明して"}])
         job = ChatGenerationJob(
-            conversation_messages=[{"role": "user", "content": "説明して"}],
+            conversation_messages=conversation_messages,
             model="openai/gpt-oss-120b",
             persist_response=saved,
             on_error=on_error,
             **kwargs,
         )
         return job, saved, on_error
+
+    def make_memo_job(self, user_request):
+        toolbox = build_workspace_toolbox(
+            user_id=1,
+            chat_room_id="room-1",
+            memo_tools_enabled=True,
+            external_input_in_turn=False,
+        )
+        return self.make_job(
+            conversation_messages=[{"role": "user", "content": user_request}],
+            workspace_tools=toolbox,
+        )
 
     # 再試行の待機でテストを遅くしないため、既定では再試行を無効にして走らせる。
     # Run without retries by default so the backoff never slows the tests down.
@@ -102,6 +118,296 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         saved.assert_called_once()
         self.assertIn("ここまでは書けています。", saved.call_args.args[0])
         self.assertEqual(job._telemetry.salvaged_partial_answers, 1)
+
+    def test_unconfirmed_memo_change_claims_are_replaced_before_stream_and_save(self):
+        cases = (
+            (
+                "旅行メモに追記してください",
+                "旅行メモに次の項目を追記しました：\n- 10月12日 10:30 京都駅で友人と合流",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "旅行メモに追記してください",
+                "追記が完了しました。以下の内容が旅行メモに追加されました：",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "出張メモの誤字を修正してください",
+                "出張メモの『recieve』を『receive』に修正しました。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "出張メモにある “recieve” の誤字を “receive” に直してください。",
+                "出張メモの本文中にある **“recieve”** を **“receive”** に置き換えました。これで誤字が修正されています。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "Create a memo called Weekend routine",
+                "</think>\nI've proposed creating a memo called Weekend routine.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+            (
+                "Create a memo called Weekend routine",
+                "The memo is waiting for your approval.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+            (
+                "新しいメモを作ってください",
+                "新しいメモの作成提案を作成しました。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "新しいメモを作ってください",
+                "新しいメモに内容を追加する提案を作成しています。クリックで承認すると保存されます。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "出張メモの誤字を修正してください",
+                "この変更は承認待ちです。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "Create a memo called Weekend routine",
+                "- I've created a draft memo called Weekend routine.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+            (
+                "Update the travel memo.",
+                "Your memo update is pending approval.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+            (
+                "Update the travel memo.",
+                "Done — your memo is updated.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+        )
+        for request, model_reply, expected in cases:
+            with self.subTest(model_reply=model_reply):
+                job, saved, _on_error = self.make_memo_job(request)
+                midpoint = len(model_reply) // 2
+                self.run_job(job, lambda *_args, reply=model_reply, split=midpoint, **_kwargs: iter((reply[:split], reply[split:])))
+
+                streamed = "".join(
+                    event.payload["text"] for event in job._events if event.event == "chunk"
+                )
+                self.assertEqual(streamed, expected)
+                self.assertEqual(terminal_event(job).payload["response"], expected)
+                self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_memo_claim_guard_leaves_negations_examples_and_hypotheticals_alone(self):
+        replies = (
+            "旅行メモには追記していません。",
+            "追記は完了していません。",
+            "新しいメモの提案を作成していません。",
+            "もし旅行メモに追記しました。その場合はカードが表示されます。",
+            "もし新しいメモの提案を作成しています。その場合はカードを確認します。",
+            "旅行メモに追記しましたという表示は、承認後に出ます。",
+            "追記が完了しましたという表示は、承認後に出ます。",
+            "新しいメモの提案を作成していますという表示は、承認前に出ます。",
+            "例：旅行メモに追記しました。",
+            "A memo will be waiting for your approval after it is proposed.",
+            "\"I've proposed creating a memo\" is an example of a status message.",
+            "操作手順を説明します。\nメモを作成しました。と表示されたら、カードを確認します。",
+        )
+        for reply in replies:
+            with self.subTest(reply=reply):
+                job, saved, _on_error = self.make_memo_job("メモの操作について説明して")
+                self.run_job(job, lambda *_args, answer=reply, **_kwargs: iter((answer,)))
+
+                self.assertEqual(terminal_event(job).payload["response"], reply)
+                self.assertEqual(saved.call_args.args[0], reply)
+
+    def test_memo_claim_guard_checks_later_lines(self):
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        self.run_job(job, lambda *_args, **_kwargs: iter(("承知しました。\n旅行メモに追記しました。",)))
+
+        expected = "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+        self.assertEqual(terminal_event(job).payload["response"], expected)
+        self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_memo_claim_guard_checks_approval_card_status(self):
+        reply = "旅行メモに次の項目を追記しました：予定を追加します。"
+        for status, decision in (("pending", None), ("succeeded", "auto"), ("failed", "auto")):
+            with self.subTest(status=status):
+                job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+                job._tool_approval_parts.append(
+                    {
+                        "id": "card-1", "tool": "memo_append", "status": status, "decision": decision,
+                        "preview": {"kind": "memo_append", "memo_id": 1, "memo_title": "旅行メモ"},
+                    }
+                )
+
+                self.run_job(job, lambda *_args, **_kwargs: iter((reply,)))
+
+                expected = (
+                    reply if status == "succeeded"
+                    else "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+                )
+                self.assertEqual(terminal_event(job).payload["response"], expected)
+                self.assertEqual(saved.call_args.args[0], expected)
+
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        job._tool_approval_parts.append(
+            {
+                "id": "card-2", "tool": "memo_append", "status": "pending", "decision": None,
+                "preview": {"kind": "memo_append", "memo_id": 1, "memo_title": "旅行メモ"},
+            }
+        )
+        proposal_reply = "旅行メモへの追記を提案しました。"
+        self.run_job(job, lambda *_args, **_kwargs: iter((proposal_reply,)))
+        self.assertEqual(terminal_event(job).payload["response"], proposal_reply)
+        self.assertEqual(saved.call_args.args[0], proposal_reply)
+
+    def test_memo_claim_guard_rejects_passive_completion_without_matching_card(self):
+        cases = (
+            (
+                "旅行メモを更新してください",
+                "旅行メモが更新されました。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
+                "Update the travel memo",
+                "The memo has been updated.",
+                "The memo change was not submitted, and no approval card was created. Please try again.",
+            ),
+        )
+        for request, reply, expected in cases:
+            with self.subTest(reply=reply):
+                job, saved, _on_error = self.make_memo_job(request)
+                self.run_job(job, lambda *_args, answer=reply, **_kwargs: iter((answer,)))
+                self.assertEqual(terminal_event(job).payload["response"], expected)
+                self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_memo_claim_guard_does_not_use_another_cards_success(self):
+        other_memo = {
+            "id": "card-other", "tool": "memo_append", "status": "succeeded", "decision": "auto",
+            "preview": {"kind": "memo_append", "memo_id": 2, "memo_title": "仕事メモ"},
+        }
+        requested_memo = {
+            "id": "card-requested", "tool": "memo_append", "status": "pending", "decision": None,
+            "preview": {"kind": "memo_append", "memo_id": 1, "memo_title": "旅行メモ"},
+        }
+        wrong_action = {
+            "id": "card-edit", "tool": "memo_edit", "status": "succeeded", "decision": "auto",
+            "preview": {"kind": "memo_edit", "memo_id": 1, "memo_title": "旅行メモ"},
+        }
+        for cards in ((other_memo,), (other_memo, requested_memo), (wrong_action,)):
+            with self.subTest(cards=cards):
+                job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+                job._tool_approval_parts.extend(cards)
+                self.run_job(job, lambda *_args, **_kwargs: iter(("旅行メモに追記しました。",)))
+                expected = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+                self.assertEqual(terminal_event(job).payload["response"], expected)
+                self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_memo_claim_guard_checks_a_claim_split_across_continuation(self):
+        def stream(_messages, _model, *, generation_phase, **_kwargs):
+            if generation_phase == "agent":
+                yield "承知しました。旅行メモに"
+                raise LlmOutputLimitError("limit", reason="max_output_tokens")
+            yield "追記しました。"
+
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        self.run_job(job, stream)
+
+        streamed = "".join(event.payload["text"] for event in job._events if event.event == "chunk")
+        self.assertNotIn("追記しました", streamed)
+        expected = "承知しました。メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+        self.assertEqual(streamed, expected)
+        self.assertEqual(
+            terminal_event(job).payload["response"],
+            expected,
+        )
+        self.assertEqual(saved.call_args.args[0], terminal_event(job).payload["response"])
+
+    def test_memo_claim_guard_checks_final_normalization(self):
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        repaired = NormalizedGenerativeResponse(
+            text="旅行メモに追記しました。",
+            parts=[{"type": "text", "text": "旅行メモに追記しました。"}],
+            validation_errors=[],
+        )
+        with patch("services.chat_generation.normalize_response_with_artifact_retry", return_value=repaired):
+            self.run_job(job, lambda *_args, **_kwargs: iter(("承知しました。",)))
+
+        expected = "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+        self.assertEqual(terminal_event(job).payload["response"], expected)
+        self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_cancel_replaces_an_unconfirmed_memo_claim_before_stream_and_save(self):
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        job._pending_stream_chunks = ["旅行メモに次の項目を追記しました："]
+
+        job.cancel()
+
+        expected = "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+        self.assertEqual(terminal_event(job).payload["response"], expected)
+        self.assertEqual(saved.call_args.args[0], expected)
+        self.assertEqual(
+            "".join(event.payload["text"] for event in job._events if event.event == "chunk"),
+            expected,
+        )
+
+    def test_failed_stream_replaces_an_unconfirmed_memo_claim_before_salvage(self):
+        def stream(_messages, _model, **_kwargs):
+            yield "旅行メモに次の項目を追記しました："
+            raise LlmUpstreamServiceError("The provider disconnected.")
+
+        job, saved, _on_error = self.make_memo_job("旅行メモに追記してください")
+        self.run_job(job, stream)
+
+        expected = "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+        self.assertEqual(terminal_event(job).event, "incomplete")
+        self.assertEqual(terminal_event(job).payload["response"], expected)
+        self.assertEqual(saved.call_args.args[0], expected)
+        self.assertEqual(
+            "".join(event.payload["text"] for event in job._events if event.event == "chunk"),
+            expected,
+        )
+
+    def test_memo_claim_guard_does_not_change_a_turn_without_memo_tools(self):
+        reply = "旅行メモに次の項目を追記しました："
+        job, saved, _on_error = self.make_job()
+
+        self.run_job(job, lambda *_args, **_kwargs: iter((reply,)))
+
+        self.assertEqual(terminal_event(job).payload["response"], reply)
+        self.assertEqual(saved.call_args.args[0], reply)
+
+    def test_memo_only_turn_withholds_external_lookup_tools_but_explicit_search_keeps_them(self):
+        cases = (
+            ("私のメモを日本語で要約してください。", False),
+            ("最新のメモを要約してください。", False),
+            ("私のメモを要約し、最新の外部情報をWeb検索して出典を付けてください。", True),
+        )
+        for request, expect_external_tools in cases:
+            with self.subTest(request=request):
+                job, _saved, _on_error = self.make_memo_job(request)
+                offered_tool_names: list[str] = []
+
+                def stream(
+                    _messages,
+                    _model,
+                    *,
+                    tools=None,
+                    captured_names=offered_tool_names,
+                    **_kwargs,
+                ):
+                    captured_names.extend(
+                        tool["function"]["name"] for tool in (tools or [])
+                    )
+                    yield "回答します。"
+
+                self.run_job(job, stream, web_search=True)
+
+                if expect_external_tools:
+                    self.assertIn("web_search", offered_tool_names)
+                    self.assertIn("read_web_page", offered_tool_names)
+                else:
+                    self.assertNotIn("web_search", offered_tool_names)
+                    self.assertNotIn("read_web_page", offered_tool_names)
+                    self.assertNotIn("get_evidence", offered_tool_names)
 
     # 日本語: 本文を1文字も書けなかった失敗は、これまで通りエラーとして通知されることを検証します。
     # English: Verify a failure that produced no body at all is still reported as an error.

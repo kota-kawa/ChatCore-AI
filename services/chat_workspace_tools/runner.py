@@ -27,6 +27,7 @@ from services.chat_tool_approval_service import (
     has_auto_approval,
 )
 
+from .memo import MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME, MEMO_READ_TOOL_NAME
 from .registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -61,6 +62,7 @@ class WorkspaceToolRunner:
     ) -> None:
         self._toolbox = toolbox
         self._publish = publish
+        self._read_memo_ids: set[int] = set()
 
     def run(self, state: ChatTurnRunState, tool_call: dict[str, Any]) -> dict[str, Any]:
         function = tool_call.get("function") or {}
@@ -111,6 +113,17 @@ class WorkspaceToolRunner:
         else:
             payload = result.payload
             query = result.query
+            if spec.name == MEMO_READ_TOOL_NAME and payload.get("status") == "ok":
+                memos = payload.get("memos")
+                if isinstance(memos, list):
+                    self._read_memo_ids.update(
+                        memo_id
+                        for memo in memos
+                        if isinstance(memo, dict)
+                        and isinstance((memo_id := memo.get("id")), int)
+                        and not isinstance(memo_id, bool)
+                        and memo_id > 0
+                    )
             evidence_refs = state.evidence_store.add_reference_payload(
                 payload,
                 source_type=spec.family,
@@ -147,6 +160,19 @@ class WorkspaceToolRunner:
         self._publish("workspace_tool_started", progress)
         try:
             arguments = parse_tool_arguments(raw_arguments)
+            unread_memo_id = self._unread_memo_id(spec, arguments)
+            if unread_memo_id is not None:
+                message = "Read the target memo with memo_read before proposing an append or edit."
+                state.turn_state.record_search(
+                    tool_name=spec.name,
+                    query=f"memo:{unread_memo_id}",
+                    status="read_required",
+                )
+                self._publish(
+                    "workspace_tool_completed",
+                    {**progress, "status": "read_required"},
+                )
+                return {"status": "read_required", "message": message}
             assert spec.propose is not None
             proposal = asyncio.run(spec.propose(self._toolbox.user_id, arguments))
         except WorkspaceToolArgumentError as exc:
@@ -217,6 +243,24 @@ class WorkspaceToolRunner:
         if card["status"] == "succeeded":
             return {"status": "executed", "result": result}
         return self._error_payload(str(result.get("error_code") or "execution_failed"))
+
+    def _unread_memo_id(self, spec: ToolSpec, arguments: dict[str, Any]) -> int | None:
+        if spec.name not in {MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME}:
+            return None
+        raw_memo_id = arguments.get("memo_id")
+        if isinstance(raw_memo_id, bool):
+            return None
+        if isinstance(raw_memo_id, int):
+            memo_id = raw_memo_id
+        elif isinstance(raw_memo_id, str) and raw_memo_id.strip().isdecimal():
+            memo_id = int(raw_memo_id.strip())
+        elif isinstance(raw_memo_id, float) and raw_memo_id.is_integer():
+            memo_id = int(raw_memo_id)
+        else:
+            return None
+        if memo_id <= 0 or memo_id in self._read_memo_ids:
+            return None
+        return memo_id
 
     # 「常に承認」を付与済みで、対象が共有中でなく、このターンで外部の内容を読んでおらず、
     # 書き込みの上限にも達していないときだけ、提案の時点で実行する。

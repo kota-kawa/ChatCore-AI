@@ -88,6 +88,17 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertTrue(offered.memo_tools_enabled)
         self.assertIn("## メモ", offered.prompt or "")
         self.assertIn(MEMO_TOOLS_SKILL_INSTRUCTIONS, offered.prompt or "")
+        self.assertIn("call the matching memo tool before answering", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("pending approval only when the tool result confirms it and a card exists", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("say it was not submitted", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("never that it is in progress", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("Use only tool names offered in this turn", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("they do not replace memo_read", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("Use memo_append to add new information to an existing memo", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("Web Search is separate", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("include only the information the user asked about", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("latest substantive user message", MEMO_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("preserve the language of the user-provided facts or source text", MEMO_TOOLS_SKILL_INSTRUCTIONS)
         # 一時ルームや非ストリーミングでは、渡らないツールの説明をプロンプトへ入れない。
         # A temporary room or the non-streaming path never describes tools it does not offer.
         self.assertFalse(not_offered.memo_tools_enabled)

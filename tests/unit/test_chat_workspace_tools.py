@@ -88,36 +88,50 @@ def _make_state(**overrides) -> ChatTurnRunState:
     return ChatTurnRunState(**defaults)
 
 
-def _fake_read_spec(*, allows_always: bool = False) -> ToolSpec:
+def _fake_read_spec(
+    *,
+    allows_always: bool = False,
+    name: str = "fake_read",
+    memo_ids: tuple[int, ...] = (),
+) -> ToolSpec:
     async def read(user_id: int, arguments: dict, max_chars: int) -> ReadResult:
-        return ReadResult(payload={"status": "ok", "echo": arguments}, query="fake-query")
+        return ReadResult(
+            payload={"status": "ok", "echo": arguments, "memos": [{"id": memo_id} for memo_id in memo_ids]},
+            query="fake-query",
+        )
 
     return ToolSpec(
-        name="fake_read",
+        name=name,
         family="memo",
-        definition={"type": "function", "function": {"name": "fake_read"}},
+        definition={"type": "function", "function": {"name": name}},
         budget="reads",
         read=read,
         allows_always=allows_always,
     )
 
 
-def _fake_write_spec(*, allows_always: bool = True, shared: bool = False, raise_error: Exception | None = None):
+def _fake_write_spec(
+    *,
+    allows_always: bool = True,
+    shared: bool = False,
+    raise_error: Exception | None = None,
+    name: str = "fake_write",
+):
     async def propose(user_id: int, arguments: dict) -> Proposal:
         if raise_error is not None:
             raise raise_error
         return Proposal(
             arguments=dict(arguments),
-            preview={"kind": "fake_write", **arguments},
+            preview={"kind": name, **arguments},
             target_ref={"shared": shared},
             target_title="Target",
             shared=shared,
         )
 
     return ToolSpec(
-        name="fake_write",
+        name=name,
         family="memo",
-        definition={"type": "function", "function": {"name": "fake_write"}},
+        definition={"type": "function", "function": {"name": name}},
         budget="write_proposals",
         propose=propose,
         allows_always=allows_always,
@@ -279,8 +293,9 @@ def _expand_repeats(value):
 
 
 class WorkspaceToolRunnerTests(unittest.TestCase):
-    def _runner(self, spec: ToolSpec) -> tuple[WorkspaceToolRunner, list]:
-        toolbox = ChatWorkspaceToolbox([spec], user_id=7, chat_room_id="room-7")
+    def _runner(self, spec: ToolSpec | list[ToolSpec]) -> tuple[WorkspaceToolRunner, list]:
+        specs = spec if isinstance(spec, list) else [spec]
+        toolbox = ChatWorkspaceToolbox(specs, user_id=7, chat_room_id="room-7")
         published: list[tuple[str, dict]] = []
         runner = WorkspaceToolRunner(toolbox, publish=lambda event, payload: published.append((event, payload)))
         return runner, published
@@ -376,6 +391,45 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         summary = json.loads(state.approval_pending_summaries[0])
         self.assertEqual(summary, {"tool": "fake_write", "target": "Target"})
         self.assertEqual([event for event, _ in published], ["workspace_tool_started", "tool_approval_prepared"])
+
+    def test_memo_append_and_edit_require_reading_the_same_target_first(self):
+        read = _fake_read_spec(name=MEMO_READ_TOOL_NAME, memo_ids=(42,))
+        append = _fake_write_spec(allows_always=False, name=MEMO_APPEND_TOOL_NAME)
+        edit = _fake_write_spec(allows_always=False, name=MEMO_EDIT_TOOL_NAME)
+        runner, published = self._runner([read, append, edit])
+        state = _make_state()
+
+        result = runner.run(state, _tool_call(MEMO_APPEND_TOOL_NAME, memo_id=42, text="new"))
+        self.assertEqual(result, {
+            "status": "read_required",
+            "message": "Read the target memo with memo_read before proposing an append or edit.",
+        })
+
+        runner.run(state, _tool_call(MEMO_READ_TOOL_NAME, memo_id=42))
+        result = runner.run(state, _tool_call(MEMO_EDIT_TOOL_NAME, memo_id=43, edits=[]))
+        self.assertEqual(result["status"], "read_required")
+
+        with patch(
+            "services.chat_workspace_tools.runner.create_pending_approval",
+            AsyncMock(return_value={"id": "a1", "status": "pending", "tool": MEMO_APPEND_TOOL_NAME}),
+        ) as create:
+            result = runner.run(state, _tool_call(MEMO_APPEND_TOOL_NAME, memo_id=42, text="new"))
+
+        create.assert_awaited_once()
+        self.assertEqual(result["status"], "awaiting_user_approval")
+        self.assertEqual(
+            [event for event, _ in published],
+            [
+                "workspace_tool_started",
+                "workspace_tool_completed",
+                "workspace_tool_started",
+                "workspace_tool_completed",
+                "workspace_tool_started",
+                "workspace_tool_completed",
+                "workspace_tool_started",
+                "tool_approval_prepared",
+            ],
+        )
 
     def test_propose_reports_step_limit_when_the_write_budget_is_exhausted(self):
         spec = _fake_write_spec()

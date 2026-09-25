@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -23,6 +24,7 @@ from services.generative_ui import (
 )
 from services.generative_ui_repair import with_answer_output_budget
 from services.generative_ui_status import ARTIFACT_STATUS_PART_TYPE
+from services.i18n import infer_response_language
 from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
@@ -243,6 +245,164 @@ def _has_user_facing_answer(
 # Whether an auto-approved write already ran; that change cannot be undone, so its card stays.
 def _has_executed_approval(approval_cards: Sequence[dict[str, Any]]) -> bool:
     return any(card.get("decision") == "auto" for card in approval_cards)
+
+
+_MEMO_CHANGE_CLAIM_JA = re.compile(
+    r"^[ \t]*(?:[^\n。！？]{0,100}メモ[^\n。！？]{0,100}"
+    r"(?:追記|追加|修正|編集|作成|保存|更新|登録)しました|"
+    r"[^\n。！？]{0,100}メモ[^\n。！？]{0,100}(?:置換|置き換え)ました|追記が完了しました)"
+    r"(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_PASSIVE_CLAIM_JA = re.compile(
+    r"^[ \t]*[^\n。！？]{0,100}メモ[^\n。！？]{0,100}(?:"
+    r"(?:追記|追加|修正|編集|作成|保存|更新|登録)(?:されました|が完了しました|済みです)|"
+    r"置換されました|置き換えられました)"
+    r"(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_PROPOSAL_CLAIM_JA = re.compile(
+    r"^[ \t]*[^\n。！？]{0,100}(?:メモ|この変更|その変更|編集案)[^\n。！？]{0,100}"
+    r"(?:提案を(?:(?:作成|提出)し|出し)(?:ました|ています)|提案(?:しました|しています)|"
+    r"承認待ち(?:です|となっています))(?=[。！!：:]|$)",
+    re.MULTILINE,
+)
+_MEMO_CHANGE_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?I(?:['’]ve| have) "
+    r"(?:created|saved|added|edited|updated|corrected) "
+    r"(?:an? |the |your )?(?:draft )?(?:memo|note)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PASSIVE_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?(?:(?:Done|Completed)[ \t]*[,—–:-][ \t]*)?"
+    r"(?:The|Your|This) "
+    r"(?:[A-Za-z0-9][A-Za-z0-9'_-]*[ \t]+){0,8}(?:memo|note) "
+    r"(?:(?:has|have) been|was|is(?: now)?) "
+    r"(?:created|saved|added to|edited|updated|corrected|replaced)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PROPOSAL_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?I(?:['’]ve| have) "
+    r"proposed (?:creating|adding to|editing|updating|correcting|saving) "
+    r"(?:an? |the |your )?(?:memo|note)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+_MEMO_PENDING_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:It(?:['’]s| is) waiting for your approval|"
+    r"(?:(?:The|Your|This) )?(?:memo|note)(?:[ \t]+(?:update|change|edit|proposal))? "
+    r"is(?: now)? (?:waiting for (?:your )?approval|pending approval|awaiting (?:your )?approval)|"
+    r"(?:The|Your|This) (?:change|proposal) is waiting for your approval)"
+    r"(?=[.!?]|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _is_memo_only_request(latest_user_message: str) -> bool:
+    """Whether this memo-related request lacks an explicit external lookup request."""
+    request = re.sub(r"```.*?```", "", latest_user_message, flags=re.DOTALL)
+    request = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", request)
+    request = request.casefold()
+    if "メモ" not in request and not re.search(r"\b(?:memo|notes?)\b", request):
+        return False
+    external_request_markers = (
+        "web search", "search the web", "browse the web", "internet", "online", "external information",
+        "public sources", "current price", "current weather", "latest news", "today's weather",
+        "web検索", "ウェブ検索", "インターネット", "ネットで", "外部情報", "最新のニュース",
+        "最新の価格", "今日の天気", "現在の価格", "現在の天気", "出典", "引用",
+    )
+    return not any(marker in request for marker in external_request_markers)
+
+
+def _matching_memo_claim_card(
+    statement: str,
+    latest_user_message: str,
+    approval_cards: Sequence[dict[str, Any]],
+) -> dict[str, Any] | None:
+    # A single card with a visible target is required; another card's status cannot
+    # substantiate a claim about this memo.
+    if len(approval_cards) != 1:
+        return None
+    card = approval_cards[0]
+    preview = card.get("preview")
+    if not isinstance(preview, dict) or preview.get("kind") != card.get("tool"):
+        return None
+    claim = statement.casefold()
+    if re.search(r"追記|追加|\b(?:added to|adding to)\b", claim):
+        expected_tool = "memo_append"
+    elif re.search(r"修正|編集|\b(?:edited|editing|corrected|correcting)\b", claim):
+        expected_tool = "memo_edit"
+    elif re.search(r"作成|\b(?:created|creating)\b", claim):
+        expected_tool = "memo_create"
+    else:
+        expected_tool = None
+    if expected_tool is not None and card.get("tool") != expected_tool:
+        return None
+    title = preview.get("title") if card.get("tool") == "memo_create" else preview.get("memo_title")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    title = title.strip()
+    statement_folded = statement.casefold()
+    title_folded = title.casefold()
+    if title_folded in statement_folded:
+        return card
+    # Generic statements can refer to the sole requested memo. A different named
+    # memo, or a missing target in the request, leaves the claim unverified.
+    if title_folded not in latest_user_message.casefold():
+        return None
+    named_memos = re.findall(r"[^\s、。！？「」『』：:]{2,50}メモ", statement)
+    if any(name not in {"新しいメモ", "このメモ", "そのメモ", "対象メモ"} for name in named_memos):
+        return None
+    if re.search(r"\b(?:the|your|this) [A-Za-z0-9][A-Za-z0-9' _-]{0,48} (?:memo|note)\b", statement, re.IGNORECASE):
+        return None
+    if re.search(r"\bcalled\b", statement, re.IGNORECASE):
+        return None
+    return card
+
+
+def _unconfirmed_memo_change_fallback(
+    text: str,
+    latest_user_message: str,
+    approval_cards: Sequence[dict[str, Any]] = (),
+) -> str | None:
+    """Replace direct memo write claims unsupported by this turn's card status."""
+    # Quoted examples and code are data, not claims made by the assistant.
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    prose = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", prose)
+    for line in prose.splitlines():
+        statements = [part for part in re.split(r"(?<=[。！？!?])|(?<=\.)[ \t]+", line) if part.strip()]
+        for index, statement in enumerate(statements):
+            lead = statement.lstrip()
+            if lead.startswith((">", "'", "もし", "仮に", "例えば", "例：", "例:", "If ", "When ")):
+                continue
+            # A quoted status can be followed by an explanatory 「と表示」 even without quotes.
+            if index + 1 < len(statements) and statements[index + 1].lstrip().startswith("と表示"):
+                continue
+            proposal = _MEMO_PROPOSAL_CLAIM_JA.match(statement) or _MEMO_PROPOSAL_CLAIM_EN.match(statement)
+            pending = _MEMO_PENDING_CLAIM_EN.match(statement) or (proposal and "承認待ち" in proposal.group())
+            completed = (
+                _MEMO_CHANGE_CLAIM_JA.match(statement)
+                or _MEMO_CHANGE_CLAIM_EN.match(statement)
+                or _MEMO_PASSIVE_CLAIM_JA.match(statement)
+                or _MEMO_PASSIVE_CLAIM_EN.match(statement)
+            )
+            if not (proposal or pending or completed):
+                continue
+            card = _matching_memo_claim_card(statement, latest_user_message, approval_cards)
+            status = card.get("status") if card else None
+            if pending and status == "pending":
+                continue
+            if proposal and not pending and status in {"pending", "succeeded"}:
+                continue
+            if completed and status == "succeeded" and not proposal:
+                continue
+            if infer_response_language(latest_user_message) == "en":
+                if approval_cards:
+                    return "This description does not match the approval card status. Please check the card."
+                return "The memo change was not submitted, and no approval card was created. Please try again."
+            if approval_cards:
+                return "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+            return "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+    return None
 
 
 # 承認カードを本文・画像の後ろに付ける。カードがある回答では、利用者の判断をカードに一本化する
@@ -871,6 +1031,16 @@ class ChatGenerationJob:
             if pending_text:
                 self._chunks.append(pending_text)
             partial_text = "".join(self._chunks)
+            if self._workspace_tools is not None:
+                fallback = _unconfirmed_memo_change_fallback(
+                    partial_text,
+                    _latest_user_message_text(self._conversation_messages),
+                    self._tool_approval_parts,
+                )
+                if fallback is not None:
+                    self._chunks[:] = [fallback]
+                    partial_text = fallback
+                    pending_text = fallback
         if pending_text:
             self._publish("chunk", {"text": pending_text})
         approval_cards = self._settle_approvals_after_interruption()
@@ -1741,6 +1911,12 @@ class ChatGenerationJob:
         state: ChatTurnRunState,
         step_chunks: list[str],
     ) -> None:
+        if self._workspace_tools is not None:
+            fallback = _unconfirmed_memo_change_fallback(
+                "".join(step_chunks), state.latest_user_message, state.tool_approval_parts
+            )
+            if fallback is not None:
+                step_chunks = [fallback]
         chunks = state.chunks
         for raw_chunk in step_chunks:
             chunk = raw_chunk
@@ -1854,6 +2030,8 @@ class ChatGenerationJob:
         state: ChatTurnRunState,
         answer_messages: list[dict[str, Any]],
         published_text: str,
+        *,
+        memo_tail_start: int | None = None,
     ) -> BaseException | None:
         """Continue an answer the provider cut off at its output cap.
 
@@ -1868,6 +2046,17 @@ class ChatGenerationJob:
             "The answer stream stopped at the model output limit.",
             reason="max_output_tokens",
         )
+
+        def publish_continuation_chunk(chunk: str) -> None:
+            if memo_tail_start is None:
+                self._publish_answer_chunk(state, chunk)
+                return
+            visible = state.continuation_state_filter.feed(chunk)
+            if visible:
+                with self._chunks_lock:
+                    if not self._cancelled:
+                        state.chunks.append(visible)
+
         try:
             result = stream_final_answer_with_recovery(
                 answer_messages,
@@ -1877,7 +2066,7 @@ class ChatGenerationJob:
                     tools=None,
                     generation_phase=phase,
                 ),
-                publish_chunk=lambda chunk: self._publish_answer_chunk(state, chunk),
+                publish_chunk=publish_continuation_chunk,
                 publish_event=self._publish,
                 should_stop=self._should_stop,
                 adopt_buffer=self._adopt_continuation_buffer,
@@ -1897,7 +2086,21 @@ class ChatGenerationJob:
                 self._pending_stream_is_rewrite = False
         trailing = state.continuation_state_filter.flush()
         if trailing:
-            self._publish_completed_answer_step(state, [trailing])
+            if memo_tail_start is None:
+                self._publish_completed_answer_step(state, [trailing])
+            else:
+                with self._chunks_lock:
+                    if not self._cancelled:
+                        state.chunks.append(trailing)
+        if memo_tail_start is not None:
+            # The first pass may end in the middle of a memo status sentence. Keep only
+            # that unfinished tail and its continuation off the wire until it is complete.
+            with self._chunks_lock:
+                if not self._cancelled:
+                    completed_tail = "".join(state.chunks[memo_tail_start:])
+                    del state.chunks[memo_tail_start:]
+                    if completed_tail:
+                        self._publish_completed_answer_step(state, [completed_tail])
         state.continuation_count = result.continuation_count
         telemetry.continuation_count = result.continuation_count
         for reason in result.reasons:
@@ -2001,6 +2204,10 @@ class ChatGenerationJob:
     # モデルへ提示するツール定義を決めるフェーズ。
     # The phase that decides which tool definitions the model is offered.
     def _configure_agent_tools(self, state: ChatTurnRunState) -> None:
+        suppress_external_lookup_tools = (
+            self._workspace_tools is not None
+            and _is_memo_only_request(state.latest_user_message)
+        )
         web_search_tool = get_web_search_tool_definition()
         personal_knowledge_tool = (
             get_personal_knowledge_tool_definition()
@@ -2017,7 +2224,7 @@ class ChatGenerationJob:
         # Memo lookup does not depend on the web search settings, so either tool alone
         # is still offered to the model.
         configured_tools: list[dict[str, Any]] = []
-        if is_web_search_enabled():
+        if is_web_search_enabled() and not suppress_external_lookup_tools:
             configured_tools.append(web_search_tool)
         if personal_knowledge_tool is not None:
             configured_tools.append(personal_knowledge_tool)
@@ -2029,8 +2236,9 @@ class ChatGenerationJob:
         # in a fixed order that does not change mid-turn (ADR 0011).
         if self._workspace_tools is not None:
             configured_tools.extend(self._workspace_tools.definitions())
-        configured_tools.append(get_evidence_tool_definition())
-        configured_tools.append(read_web_page_tool_definition())
+        if not suppress_external_lookup_tools:
+            configured_tools.append(get_evidence_tool_definition())
+            configured_tools.append(read_web_page_tool_definition())
         state.configured_tools = configured_tools
         state.telemetry.research_phase_used = bool(self._selected_reference_trace)
 
@@ -2314,8 +2522,31 @@ class ChatGenerationJob:
             "max_output_tokens" if output_limited else "stop"
         )
         if visible_chunks:
-            self._publish_completed_answer_step(state, visible_chunks)
-            if output_limited:
+            visible_text = "".join(visible_chunks)
+            if output_limited and self._workspace_tools is not None:
+                fallback = _unconfirmed_memo_change_fallback(
+                    visible_text, state.latest_user_message, state.tool_approval_parts
+                )
+                if fallback is not None:
+                    self._publish_completed_answer_step(state, [fallback])
+                    return False
+                sentence_boundaries = list(re.finditer(r"[。！？!?]|\.(?=[ \t\n]|$)", visible_text))
+                split_at = sentence_boundaries[-1].end() if sentence_boundaries else 0
+                if split_at:
+                    self._publish_completed_answer_step(state, [visible_text[:split_at]])
+                with self._chunks_lock:
+                    memo_tail_start = len(state.chunks)
+                    if split_at < len(visible_text):
+                        state.chunks.append(visible_text[split_at:])
+                state.final_answer_incomplete = self._continue_interrupted_answer(
+                    state,
+                    turn_messages,
+                    visible_text,
+                    memo_tail_start=memo_tail_start,
+                )
+            else:
+                self._publish_completed_answer_step(state, visible_chunks)
+            if output_limited and self._workspace_tools is None:
                 # 出力上限で切れた回答は成功完了にしない。同じ回答の続きだけを
                 # 限定回数で取り直す。
                 # An answer cut off at the output cap is not a success: fetch
@@ -3294,6 +3525,16 @@ class ChatGenerationJob:
             model_text,
             latest_user_message,
         )
+        if self._workspace_tools is not None:
+            fallback = _unconfirmed_memo_change_fallback(
+                normalized_response.text, latest_user_message, state.tool_approval_parts
+            )
+            if fallback is not None:
+                normalized_response = normalize_response_with_artifacts(
+                    fallback,
+                    ui_mode=self._ui_mode,
+                    explicit_ui_opt_out=self._explicit_ui_opt_out,
+                )
         self._record_generated_ui_outcome(normalized_response)
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
@@ -3306,7 +3547,6 @@ class ChatGenerationJob:
             bot_reply,
             message_parts,
         )
-
         # 画像は検索結果を取得した時点で選定済み。引用解決後は、選定LLMが返した
         # 配置計画を本文へ反映し、ストリーム中に表示した順序と保存内容を一致させる。
         # Image selection already happened when each search result arrived. After
