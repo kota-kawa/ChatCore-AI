@@ -704,14 +704,14 @@ def _openai_reasoning_kwargs(
     GPT-6 Luna rejects function tools combined with non-``none`` reasoning on
     the Chat Completions endpoint.  Tool-bearing turns stay on that endpoint
     because their existing message history uses the Chat Completions shape, so
-    those requests must explicitly use ``none``.  Tool-free turns continue to
-    use the phase-specific reasoning budget.
+    those requests must explicitly use ``none``.  Tool-free answers use low
+    effort to reduce latency and token usage; auxiliary calls retain medium.
     """
     if model_name == GPT_6_LUNA_MODEL:
         if has_tool_context:
             return {"reasoning_effort": "none"}
         return {
-            "reasoning_effort": "high" if generation_phase == "final_answer" else "medium"
+            "reasoning_effort": "low" if generation_phase in ANSWER_GENERATION_PHASES else "medium"
         }
     return {}
 
@@ -725,7 +725,7 @@ def _openai_responses_reasoning_kwargs(
     if model_name == GPT_6_LUNA_MODEL:
         return {
             "reasoning": {
-                "effort": "high" if generation_phase == "final_answer" else "medium"
+                "effort": "low" if generation_phase in ANSWER_GENERATION_PHASES else "medium"
             }
         }
     return {}
@@ -735,6 +735,8 @@ def _groq_reasoning_kwargs(
     model_name: str,
     *,
     generation_phase: str = "default",
+    has_tool_context: bool = False,
+    has_conversation_history: bool = False,
     reasoning_effort: Literal["low", "medium", "high"] | None = None,
     reasoning_format: Literal["hidden", "parsed"] | None = None,
 ) -> dict[str, Any]:
@@ -755,9 +757,12 @@ def _groq_reasoning_kwargs(
                 "reasoning_format": reasoning_format or "parsed",
             }
         elif is_answer_phase:
-            # Keep every GPT-OSS answer phase at medium or higher; only the final answer uses high.
-            # GPT-OSS の回答フェーズはすべて medium 以上にし、最終回答だけ high にします。
-            reasoning_effort = "high" if generation_phase == "final_answer" else "medium"
+            # Keep multi-turn, tool orchestration and auxiliary 20B budgets.
+            # 会話の継続・ツール判断・補助処理20Bでは従来の推論量を維持します。
+            reasoning_effort = (
+                "low" if model_name == GPT_OSS_120B_MODEL and not has_tool_context and not has_conversation_history
+                else "high" if generation_phase == "final_answer" else "medium"
+            )
             reasoning_options = {
                 "reasoning_effort": reasoning_effort,
                 "reasoning_format": "hidden",
@@ -1261,6 +1266,8 @@ def get_groq_response_stream(
         reasoning_kwargs=_groq_reasoning_kwargs(
             model_name,
             generation_phase=generation_phase,
+            has_tool_context=bool(tools) or _conversation_has_tool_history(conversation_messages),
+            has_conversation_history=sum(message.get("role") == "user" for message in conversation_messages) > 1,
         ),
         generation_phase=generation_phase,
     )

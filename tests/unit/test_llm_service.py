@@ -471,9 +471,9 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(len(emitted), 1)
         self.assertEqual(json.loads(emitted[0])[0]["function"]["name"], "web_search")
 
-    # 日本語: 調査を伴うターンの回答フェーズでは、思考量を最小へ落とさないことを検証します。
-    # English: Verify the answer phase of a research turn does not run on the smallest budget.
-    def test_deep_answer_phase_keeps_a_larger_groq_reasoning_budget(self):
+    # 日本語: 調査後の回答にも会話用の低い推論量を適用します。
+    # English: Apply the lower chat reasoning effort to answers after research as well.
+    def test_deep_answer_phase_uses_low_groq_reasoning_effort(self):
         mock_groq = MagicMock()
         mock_groq.chat.completions.create.return_value = _MockStream(
             _mock_stream_chunk("answer")
@@ -489,7 +489,7 @@ class LlmServiceTestCase(unittest.TestCase):
             )
 
         extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
-        self.assertEqual(extra_body["reasoning_effort"], "medium")
+        self.assertEqual(extra_body["reasoning_effort"], "low")
 
     # 日本語: JSONタスクが明示したGPT-OSSのreasoning effortをGroq APIへ渡すことを検証します。
     # English: Verify JSON tasks can explicitly pass a GPT-OSS reasoning effort to Groq.
@@ -688,6 +688,98 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(request_kwargs["reasoning_effort"], "none")
         self.assertEqual(request_kwargs["tool_choice"], "auto")
         mock_openai.responses.create.assert_not_called()
+
+    def test_luna_reasoning_preserves_tool_and_auxiliary_boundaries(self):
+        for phase in (*sorted(llm.ANSWER_GENERATION_PHASES), "default", "research"):
+            with self.subTest(phase=phase):
+                expected = "low" if phase in llm.ANSWER_GENERATION_PHASES else "medium"
+                self.assertEqual(
+                    llm._openai_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=phase),
+                    {"reasoning_effort": expected},
+                )
+                self.assertEqual(
+                    llm._openai_responses_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=phase),
+                    {"reasoning": {"effort": expected}},
+                )
+                self.assertEqual(
+                    llm._openai_reasoning_kwargs(
+                        llm.GPT_6_LUNA_MODEL, generation_phase=phase, has_tool_context=True,
+                    ),
+                    {"reasoning_effort": "none"},
+                )
+
+    def test_lower_chat_effort_preserves_groq_auxiliary_and_explicit_settings(self):
+        for phase in (*sorted(llm.ANSWER_GENERATION_PHASES), "default", "research"):
+            with self.subTest(phase=phase):
+                expected = (
+                    {"reasoning_effort": "high" if phase == "final_answer" else "medium", "reasoning_format": "hidden"}
+                    if phase in llm.ANSWER_GENERATION_PHASES else {"include_reasoning": False}
+                )
+                self.assertEqual(
+                    llm._groq_reasoning_kwargs(llm.GPT_OSS_20B_MODEL, generation_phase=phase),
+                    {"extra_body": expected},
+                )
+                for model in llm.GPT_OSS_MODELS:
+                    for effort in ("low", "medium", "high"):
+                        self.assertEqual(
+                            llm._groq_reasoning_kwargs(model, generation_phase=phase, reasoning_effort=effort),
+                            {"extra_body": {"reasoning_effort": effort, "reasoning_format": "parsed"}},
+                        )
+        for phase in ("default", "research"):
+            with self.subTest(phase=phase):
+                self.assertEqual(
+                    llm._groq_reasoning_kwargs(llm.GPT_OSS_120B_MODEL, generation_phase=phase),
+                    {"extra_body": {"include_reasoning": False}},
+                )
+                self.assertEqual(
+                    llm._groq_reasoning_kwargs(llm.QWEN_3_8_27B_MODEL, generation_phase=phase),
+                    {"extra_body": {"reasoning_effort": "default", "reasoning_format": "hidden"}},
+                )
+
+    def test_gpt_oss_tool_context_preserves_reasoning_after_tools_are_withdrawn(self):
+        tool = {"type": "function", "function": {"name": "memo_read"}}
+        tool_history = [
+            {"role": "user", "content": "Read memo 101."},
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call-1", "type": "function", "function": {"name": "memo_read", "arguments": '{"memo_id":101}'}},
+            ]},
+            {"role": "tool", "tool_call_id": "call-1", "content": "Memo content."},
+        ]
+        for phase in llm.ANSWER_GENERATION_PHASES:
+            for messages, tools in ((tool_history[:1], [tool]), (tool_history, None)):
+                with self.subTest(phase=phase, has_tools=bool(tools)):
+                    mock_groq = MagicMock()
+                    mock_groq.chat.completions.create.return_value = _MockStream(_mock_stream_chunk("answer"))
+                    with patch.object(llm, "groq_client", mock_groq):
+                        list(llm.get_groq_response_stream(
+                            messages, llm.GPT_OSS_120B_MODEL, tools=tools, generation_phase=phase,
+                        ))
+                    self.assertEqual(
+                        mock_groq.chat.completions.create.call_args.kwargs["extra_body"],
+                        {"reasoning_effort": "high" if phase == "final_answer" else "medium", "reasoning_format": "hidden"},
+                    )
+
+    def test_groq_followup_answers_preserve_reasoning_for_conversation_constraints(self):
+        messages = [
+            {"role": "user", "content": "Plan a 75-minute workshop."},
+            {"role": "assistant", "content": "Use the paper bridge activity."},
+            {"role": "user", "content": "Keep the duration and include five minutes of cleanup."},
+        ]
+        for model in (llm.GPT_OSS_120B_MODEL, llm.QWEN_3_8_27B_MODEL):
+            for phase in llm.ANSWER_GENERATION_PHASES:
+                with self.subTest(model=model, phase=phase):
+                    mock_groq = MagicMock()
+                    mock_groq.chat.completions.create.return_value = _MockStream(_mock_stream_chunk("answer"))
+                    with patch.object(llm, "groq_client", mock_groq):
+                        list(llm.get_groq_response_stream(messages, model, generation_phase=phase))
+                    expected = (
+                        "default" if model == llm.QWEN_3_8_27B_MODEL
+                        else "high" if phase == "final_answer" else "medium"
+                    )
+                    self.assertEqual(
+                        mock_groq.chat.completions.create.call_args.kwargs["extra_body"],
+                        {"reasoning_effort": expected, "reasoning_format": "hidden"},
+                    )
 
     def test_get_llm_response_rejects_invalid_model(self):
         """
@@ -1077,7 +1169,7 @@ class LlmServiceTestCase(unittest.TestCase):
                 self.assertEqual(extra_body["reasoning_effort"], "default")
                 self.assertEqual(extra_body["reasoning_format"], "hidden")
 
-    def test_final_answer_phase_uses_high_groq_reasoning_budget(self):
+    def test_final_answer_phase_uses_low_groq_reasoning_effort(self):
         mock_groq = MagicMock()
         mock_groq.chat.completions.create.return_value = _MockStream(
             _mock_stream_chunk("answer")
@@ -1093,10 +1185,10 @@ class LlmServiceTestCase(unittest.TestCase):
             )
 
         extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
-        self.assertEqual(extra_body["reasoning_effort"], "high")
+        self.assertEqual(extra_body["reasoning_effort"], "low")
         self.assertEqual(extra_body["reasoning_format"], "hidden")
 
-    def test_groq_non_final_answer_phases_use_at_least_medium_reasoning(self):
+    def test_groq_non_final_answer_phases_use_low_reasoning(self):
         for generation_phase in (
             "agent",
             "continuation",
@@ -1108,7 +1200,7 @@ class LlmServiceTestCase(unittest.TestCase):
                     llm.GROQ_MODEL,
                     generation_phase=generation_phase,
                 )["extra_body"]
-                self.assertEqual(extra_body["reasoning_effort"], "medium")
+                self.assertEqual(extra_body["reasoning_effort"], "low")
 
     def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
         """
@@ -1173,7 +1265,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["groq", "-stream"])
         mock_stream.assert_called_once_with(messages, llm.GROQ_MODEL, tools=tools)
 
-    def test_get_openai_response_stream_uses_high_reasoning_for_final_answer(self):
+    def test_get_openai_response_stream_uses_low_reasoning_for_final_answer(self):
         """
         OpenAIのレスポンスAPIを用いたストリーミング時に、差分テキストが正しく抽出・出力されることを検証します。
         Verify that OpenAI responses.stream correctly yields text deltas.
@@ -1211,7 +1303,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["openai", "-stream"])
         mock_openai.responses.stream.assert_called_once()
         stream_kwargs = mock_openai.responses.stream.call_args.kwargs
-        self.assertEqual(stream_kwargs["reasoning"], {"effort": "high"})
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "low"})
         passed_messages = stream_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         [leading_part] = passed_messages[0]["content"]
