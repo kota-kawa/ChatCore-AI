@@ -98,7 +98,7 @@ test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", ()
 
   const html = formatLLMOutput(response);
 
-  assert.match(html, /<h2>結論<\/h2>/);
+  assert.match(html, /<p>結論<br>/);
   assert.match(html, /<span class="math-inline">p_0<\/span>/);
   assert.match(html, /<div class="math-display">/);
   assert.match(html, /∑_\{k=0\}\^\{m-1\}/);
@@ -107,6 +107,27 @@ test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", ()
   assert.doesNotMatch(html, /\\left/);
   assert.doesNotMatch(html, /\\begin\{cases\}/);
   assert.doesNotMatch(html, /\\\[6pt\]/);
+});
+
+test("plain standalone lines remain body text while Markdown headings stay headings", () => {
+  const streaming = formatLLMOutput("計画の概要");
+  const completed = formatLLMOutput("計画の概要\n\n次の手順を確認します。");
+  const conclusion = formatLLMOutput("結論");
+  const quoted = formatLLMOutput("「短いタイトル」");
+  const explicit = formatLLMOutput("## 計画の概要");
+
+  for (const html of [streaming, completed, conclusion, quoted]) {
+    assert.doesNotMatch(html, /<h[1-6][\s>]/);
+  }
+  assert.match(streaming, /<p>計画の概要<\/p>/);
+  assert.match(completed, /<p>計画の概要<\/p>/);
+  assert.match(explicit, /<h2>計画の概要<\/h2>/);
+});
+
+test("memo previews keep plain lines as body text and explicit Markdown headings", () => {
+  assert.match(formatMemoOutput("計画の概要"), /<p>計画の概要<\/p>/);
+  assert.doesNotMatch(formatMemoOutput("結論"), /<h[1-6][\s>]/);
+  assert.match(formatMemoOutput("## 計画の概要"), /<h2>計画の概要<\/h2>/);
 });
 
 test("formatMemoOutput preserves consecutive blank lines in memo preview", () => {
