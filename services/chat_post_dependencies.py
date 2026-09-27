@@ -234,6 +234,7 @@ class StartGenerationJob(Protocol):
         #          a partial of EphemeralChatStore.append_message for temporary ones), so it
         #          stays variadic exactly as production start_generation_job declares it.
         persist_response: Callable[..., dict[str, Any] | None],
+        locale: str = "ja",
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
         service: ChatGenerationService | None = None,
