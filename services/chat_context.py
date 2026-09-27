@@ -69,12 +69,18 @@ RECENT_HISTORY_TOKEN_BUDGET = 7400
 PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 2600
 USER_PROFILE_TOKEN_BUDGET = 2200
 TASK_PROMPT_TOKEN_BUDGET = 2600
+FOLLOW_UP_CONTINUITY_TOKEN_BUDGET = 180
 RECENT_HISTORY_MAX_MESSAGES = 16
 GUARANTEED_RECENT_MESSAGE_COUNT = 3
 ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_RECENT_TOKEN_BUDGET = RECENT_HISTORY_TOKEN_BUDGET
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 260
+_FOLLOW_UP_CONTINUITY_INSTRUCTIONS = """For follow-ups, preserve the chosen option, order, and numbers unless changed. For a fixed-total
+schedule, do not add setup, breaks, transitions, or closing as separate items. Check the total and
+all timed substeps. If any substep sum cannot be verified, omit all timed substeps.
+
+追質問では、変更依頼がなければ選択案・順序・数値を維持してください。合計固定の進行表には準備・休憩・移動・締めを別枠で足さず、全体と全ての時間付き内訳の合計を確認してください。内訳の合計を検算できないものが一つでもあれば、時間付き内訳を全て省いてください。"""
 
 # テキストのトークン数を概算（簡易見積もり）する
 # Roughly estimate the token count of a given text
@@ -569,6 +575,13 @@ def build_context_messages(
     # 予算の優先順を維持しつつ、ターンごとに選ぶスキルは履歴の後ろへ置く。
     # Keep budget priority, but place per-turn selected Skills after the cached history.
     append_optional_system_message(user_skills_prompt, USER_SKILLS_TOKEN_BUDGET, dynamic=True)
+
+    if sum(message.get("role") == "user" for message in recent_messages) > 1:
+        append_optional_system_message(
+            _FOLLOW_UP_CONTINUITY_INSTRUCTIONS,
+            FOLLOW_UP_CONTINUITY_TOKEN_BUDGET,
+            dynamic=True,
+        )
 
     # タスクテンプレートプロンプトを追加
     # Add task template prompt if specified

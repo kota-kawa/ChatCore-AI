@@ -130,7 +130,6 @@ class ChatSkillSelectionTests(unittest.TestCase):
 
     def test_empty_selection_keeps_none_mode_and_does_not_mark_ui_selected(self):
         context = _context(user_skills=[{"id": 3, "name": "個人", "instructions": "専門用語を避ける"}])
-
         result = select_chat_skills(
             context,
             [{"role": "user", "content": "短く説明して"}],
@@ -142,6 +141,111 @@ class ChatSkillSelectionTests(unittest.TestCase):
         self.assertIsNone(result.context.prompt)
         self.assertTrue(result.context.generative_ui_enabled)
         self.assertFalse(result.context.generative_ui_selected)
+        self.assertFalse(result.context.memo_tools_enabled)
+
+    def test_unconditional_response_style_survives_when_the_rest_of_a_skill_is_irrelevant(self):
+        style = "いつもは簡潔で明確な日本語で回答してください。質問の主旨に直接答えてください。"
+        instructions = f"{style}\n\nOrchidの公開前確認は火曜日に行います。"
+        context = _context(
+            user_skills=[{"id": 2200, "name": "全体の回答スタイルと背景", "instructions": instructions}],
+            ui_enabled=False,
+            memo_enabled=False,
+        )
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "オンボーディングメモを検索してください"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision()),
+        )
+
+        self.assertEqual(result.telemetry["selected_skill_ids"], [2200])
+        self.assertEqual(result.telemetry["always_applicable_skill_ids"], [2200])
+        self.assertIn(style, result.context.prompt or "")
+        self.assertNotIn("Orchid", result.context.prompt or "")
+
+    def test_task_scoped_skill_is_not_retained_as_a_global_response_preference(self):
+        context = _context(
+            user_skills=[
+                {
+                    "id": 2202,
+                    "name": "家族ゲーム",
+                    "instructions": "家族ゲームの計画にだけ適用します。いつも準備物を表にしてください。",
+                }
+            ],
+            ui_enabled=False,
+            memo_enabled=False,
+        )
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "HTTP 401と403の違いを説明して"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision()),
+        )
+
+        self.assertIsNone(result.context.prompt)
+        self.assertEqual(result.telemetry["always_applicable_skill_ids"], [])
+
+    def test_global_prefix_does_not_retain_topic_scoped_response_preferences(self):
+        context = _context(
+            user_skills=[
+                {"id": 2203, "name": "障害報告", "instructions": "Always answer bug report questions in a table."},
+                {"id": 2204, "name": "旅行計画", "instructions": "いつも旅行計画の回答は表にしてください。"},
+                {"id": 2205, "name": "Orchid", "instructions": "Always answer in Japanese when discussing Orchid."},
+                {"id": 2207, "name": "障害報告", "instructions": "Always answer in Japanese for bug reports."},
+                {"id": 2210, "name": "全障害報告", "instructions": "Always answer in Japanese for all bug reports."},
+                {"id": 2216, "name": "利用者の障害報告", "instructions": "Always answer in Japanese for all user bug reports."},
+                {"id": 2208, "name": "会議", "instructions": "いつも会議のときは回答を箇条書きにしてください。"},
+            ],
+            ui_enabled=False,
+            memo_enabled=False,
+        )
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "HTTP 401と403の違いを説明して"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision()),
+        )
+
+        self.assertIsNone(result.context.prompt)
+        self.assertEqual(result.telemetry["always_applicable_skill_ids"], [])
+
+    def test_all_answers_prefix_is_kept_when_it_has_no_topic_scope(self):
+        context = _context(
+            user_skills=[
+                {"id": 2206, "name": "全体の回答スタイル", "instructions": "すべての回答は簡潔な日本語でお願いします。"},
+                {"id": 2209, "name": "日本語の回答スタイル", "instructions": "いつも日本語の回答をしてください。"},
+                {"id": 2211, "name": "全質問の回答スタイル", "instructions": "Always answer in Japanese for all questions."},
+                {"id": 2212, "name": "全回答の形式", "instructions": "Always answer in Japanese for all answers."},
+                {"id": 2213, "name": "全応答の形式", "instructions": "Always answer in Japanese for all responses."},
+                {"id": 2214, "name": "全依頼の形式", "instructions": "Always answer in Japanese for all requests."},
+                {"id": 2215, "name": "利用者向けの形式", "instructions": "Always answer in Japanese for all users."},
+                {"id": 2217, "name": "全回答単数形", "instructions": "For every answer, use Japanese."},
+                {"id": 2218, "name": "全応答単数形", "instructions": "For every response, use Japanese."},
+                {"id": 2219, "name": "利用者の全質問", "instructions": "Always answer in Japanese for all user questions."},
+                {"id": 2220, "name": "全利用者質問の形式", "instructions": "For all user questions, answer in Japanese."},
+                {"id": 2221, "name": "全質問の形式", "instructions": "Always answer questions in Japanese."},
+                {"id": 2222, "name": "全質問への回答形式", "instructions": "Always answer all questions in Japanese."},
+            ],
+            ui_enabled=False,
+            memo_enabled=False,
+        )
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "予定をまとめてください"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision()),
+        )
+
+        self.assertEqual(
+            result.telemetry["always_applicable_skill_ids"],
+            [2206, 2209, 2211, 2212, 2213, 2214, 2215, 2217, 2218, 2219, 2220, 2221, 2222],
+        )
+        self.assertIn("すべての回答は簡潔な日本語でお願いします。", result.context.prompt or "")
+        self.assertIn("いつも日本語の回答をしてください。", result.context.prompt or "")
 
     def test_consistent_three_dimensional_decision_selects_ui_skill(self):
         context = _context()

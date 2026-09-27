@@ -59,14 +59,14 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertEqual(context_messages[3]["content"], "task")
         self.assertIn("summary text", context_messages[4]["content"])
         self.assertIn("Kota", context_messages[5]["content"])
-        self.assertEqual(context_messages[8]["role"], "system")
-        self.assertEqual(
-            context_messages[8]["content"],
-            GENERATIVE_UI_EXECUTION_CONTRACT,
+        contract_index = next(
+            index for index, message in enumerate(context_messages)
+            if message["content"] == GENERATIVE_UI_EXECUTION_CONTRACT
         )
+        self.assertEqual(context_messages[contract_index]["role"], "system")
         self.assertIn(
             "An answer that ends with explanation alone is incomplete",
-            context_messages[8]["content"],
+            context_messages[contract_index]["content"],
         )
         self.assertEqual(context_messages[-1]["content"], "third")
 
@@ -103,7 +103,14 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         contents = [message["content"] for message in selected]
         history_end = contents.index("previous answer") + 1
         self.assertEqual(selected[:history_end], omitted[:history_end])
-        self.assertEqual(contents[history_end:history_end + 2], ["selected skill", GENERATIVE_UI_EXECUTION_CONTRACT])
+        self.assertEqual(
+            contents[history_end:history_end + 3],
+            [
+                "selected skill",
+                next(content for content in contents if "preserve the chosen option" in content),
+                GENERATIVE_UI_EXECUTION_CONTRACT,
+            ],
+        )
         self.assertEqual(contents[-1], "latest")
 
     # 日本語: 毎回変わる現在時刻が会話履歴の後ろ（最新の発話の直前）に置かれ、
@@ -127,8 +134,40 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
         contents = [message["content"] for message in context_messages]
         self.assertEqual(contents[:4], ["base", "profile", "earlier question", "earlier answer"])
-        self.assertTrue(contents[4].startswith("<runtime_context>"))
-        self.assertEqual(contents[5], "latest question")
+        self.assertIn("preserve the chosen option", contents[4])
+        self.assertTrue(contents[5].startswith("<runtime_context>"))
+        self.assertEqual(contents[6], "latest question")
+
+    def test_follow_up_constraints_are_added_only_when_prior_user_turns_exist(self):
+        follow_up = build_context_messages(
+            base_system_prompt="base",
+            user_profile_prompt=None,
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[
+                {"role": "user", "content": "案を二つください"},
+                {"role": "assistant", "content": "案1、案2"},
+                {"role": "user", "content": "二つ目を具体化して"},
+            ],
+            generative_ui_enabled=False,
+        )
+        first_turn = build_context_messages(
+            base_system_prompt="base",
+            user_profile_prompt=None,
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[{"role": "user", "content": "案を二つください"}],
+            generative_ui_enabled=False,
+        )
+
+        follow_up_contents = [message["content"] for message in follow_up]
+        first_turn_contents = [message["content"] for message in first_turn]
+        self.assertTrue(any("preserve the chosen option" in content for content in follow_up_contents))
+        self.assertTrue(any("timed substeps" in content for content in follow_up_contents))
+        self.assertFalse(any("preserve the chosen option" in content for content in first_turn_contents))
+        self.assertEqual(follow_up_contents[-1], "二つ目を具体化して")
 
     def test_latest_user_request_survives_long_fetched_url_context(self):
         question = "この資料を読んで、最も重要な結論を3点で教えてください。"
