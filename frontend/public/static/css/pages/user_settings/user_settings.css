@@ -331,6 +331,23 @@ body.settings-page,
   color: var(--settings-danger);
 }
 
+/* ── チャットの権限 / Chat permissions ──────────────────────────────
+   「常に承認」の一覧は連携の一覧と同じ行を使う。取り消しは失敗ではないので失敗色を使わない
+   The "always approve" list reuses the connection rows; revoking is not a failure, so no error colour */
+:where(body.settings-page, .user-settings-page) .chat-permissions-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.settings-page, .user-settings-page) .chat-permissions-item {
+  align-items: center;
+}
+
+:where(body.settings-page, .user-settings-page) .chat-permissions-item__revoke {
+  flex: 0 0 auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :where(body.settings-page, .user-settings-page) .usage-meter__fill {
     transition: none;
@@ -2057,6 +2074,10 @@ body.settings-page,
   :where(body.settings-page, .user-settings-page) .passkey-item .delete-passkey-btn {
     width: 100%;
     margin-top: 0.25rem;
+  }
+
+  :where(body.settings-page, .user-settings-page) .chat-permissions-item__revoke {
+    width: 100%;
   }
 
   :where(body.settings-page, .user-settings-page) .prompt-grid {

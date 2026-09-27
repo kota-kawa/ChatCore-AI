@@ -3,14 +3,17 @@ import { memo } from "react";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "../chat_page/bot_message_html";
 import { InteractiveButtons } from "../chat_page/interactive_buttons";
+import { ToolApprovalCard } from "../chat_page/tool_approval_card";
 import { SandboxArtifactFrame } from "../chat_page/sandbox_artifact_frame";
 import { WebSearchImagePart } from "../chat_page/web_search_image_part";
 import { GenerativeUiStatusNotice } from "../chat_page/generative_ui_status_notice";
 
 // 共有ページ用のアシスタントメッセージ本体。通常チャットの BotMessageParts と
 // 同じクラス構成・同じレンダラーを使い、送信を伴う対話型ボタンだけ無効化する。
+// 承認カードはサーバーが中身を伏せた読み取り専用の形で届き、状態だけを見せる。
 // Assistant message body for the shared page. It mirrors the class names and renderers of
 // the regular chat's BotMessageParts, and only disables the send-triggering interactive buttons.
+// Approval cards arrive redacted and readonly from the server, and only their status is shown.
 type SharedChatMessagePartsProps = {
   fallbackText: string;
   parts?: ChatMessagePart[];
@@ -44,6 +47,13 @@ function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMess
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
               <InteractiveButtons buttons={part.buttons} />
+            </div>
+          );
+        }
+        if (part.type === "tool_approval") {
+          return (
+            <div key={`tool-approval-${part.approval.id}`} className="bot-message-part bot-message-part--tool-approval">
+              <ToolApprovalCard approval={part.approval} />
             </div>
           );
         }

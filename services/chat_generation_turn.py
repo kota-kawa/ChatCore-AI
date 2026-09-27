@@ -20,6 +20,7 @@ from .chat_evidence_store import EvidenceStore
 from .chat_generation_telemetry import ChatGenerationTelemetry
 from .chat_turn_state import TurnStateUpdateFilter
 from .chat_web_page_reader import WebPageReader
+from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .research_state import TurnState
 from .web_search import (
     WebEvidenceContextBudget,
@@ -115,9 +116,12 @@ class ChatTurnRunState:
     # ツールスキーマ拒否からの再構築を1度だけに限るフラグ。
     # Limits the tool-schema rejection recovery to a single replay.
     tool_schema_recovery_attempted: bool = False
-    # 本文ゼロの判断に対する回答のみ再試行を1度だけに限るフラグ。
-    # Limits the answer-only retry after an empty decision to a single replay.
+    # 本文ゼロの判断に対する再試行を1度だけに限るフラグ。
+    # Limits recovery after an empty decision to a single replay.
     empty_answer_recovery_attempted: bool = False
+    # カードのない変更済み・提案済み説明を、ツール付きで一度だけ訂正させる。
+    # Retry an unsupported memo action claim once while tools remain available.
+    workspace_action_recovery_attempted: bool = False
     # 調査ステップがプロバイダ障害で落ちたあと、ツールを外して回答へ縮退したことを示す。
     # 立つとツールは以後1つも提示されず、次の判断は手持ちの情報だけで回答する。
     # Set once a provider failure during a research step degraded the turn to an answer.
@@ -126,6 +130,25 @@ class ChatTurnRunState:
     # 上のツール取り下げを1度だけに限るフラグ（縮退した回答がまた落ちたら諦める）。
     # Limits that degradation to a single attempt: a degraded answer that fails again gives up.
     research_failure_recovery_attempted: bool = False
+    # 利用者のデータを読み書きするツール一式（ログイン利用者の通常ルームで既定スキルが ON のときだけ）。
+    # The tools that read and write the user's data; present only for a signed-in user's normal
+    # room with the matching built-in Skill on.
+    workspace_tools: ChatWorkspaceToolbox | None = None
+    # このターンで作った承認カード（ジョブ側のリストと同一オブジェクトを共有し、停止時にも保存できる）。
+    # Approval cards created this turn; the same list object the job holds so a stop can save them.
+    tool_approval_parts: list[dict[str, Any]] = field(default_factory=list)
+    # 承認待ちのカードが残っているか。立つとツールを1つも出さず、次の判断は回答だけになる。
+    # Whether a pending card remains. Once set no tool is offered, so the next decision answers.
+    approval_pending: bool = False
+    # 承認待ちの回答へ渡す、サーバーが作った要約（ツール名と対象の題名の JSON）。
+    # Server-built summaries (JSON of tool name and target title) handed to the pending answer.
+    approval_pending_summaries: list[str] = field(default_factory=list)
+    # 外部の内容（Web 検索・ページ本文・貼り付け URL・添付・他人の公開投稿）を読んだか。
+    # 立つと「常に承認」でも自動では実行せず、カードに理由を出す。
+    # Whether external content (web search, page bodies, pasted URLs, attachments, other people's
+    # public posts) was read. Once set, "always approve" no longer runs writes on its own and the
+    # card says why.
+    untrusted_input_ingested: bool = False
 
 
 # 1回のモデル判断ストリームの結末。停止・再試行・判断確定の3つだけを表す。

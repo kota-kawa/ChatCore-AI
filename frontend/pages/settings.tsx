@@ -32,6 +32,7 @@ import {
 } from "../components/settings/settings_sections";
 import { SettingsSidebar } from "../components/settings/settings_sidebar";
 import { UsageSettingsSection } from "../components/settings/usage_settings_section";
+import { ChatToolPermissionsSection } from "../components/settings/chat_tool_permissions_section";
 import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
   DEFAULT_AVATAR_URL,
@@ -1326,6 +1327,8 @@ export default function UserSettingsPage() {
             />
 
             <UsageSettingsSection isActive={isSectionActive("usage")} />
+
+            <ChatToolPermissionsSection isActive={isSectionActive("chat-permissions")} />
 
             <AppearanceSettingsSection
               isActive={isSectionActive("appearance")}

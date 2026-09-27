@@ -19,6 +19,7 @@
 | LLM の提案 ↔ 画面操作 | LLM が提案した操作計画 | カタログとホワイトリスト照合、危険操作は確認モーダル、機微な入力値は LLM へ渡さない | 画面操作エージェント（`blueprints/chat/` と `frontend/`） | [deep dive 14.6〜14.7](system_design_deep_dive.md#146-危険な操作への追加確認) |
 | 外部 AI クライアント ↔ MCP | 接続元の身元と要求権限 | OAuth 同意とスコープ、短命で一度だけの認可コード、トークンの暗号化保存、登録・認可・操作ごとのレート制限 | `services/mcp_oauth.py`、`services/mcp_request_protection.py` | [deep dive 15.2](system_design_deep_dive.md#152-認証と同意)、[15.4](system_design_deep_dive.md#154-mcpの安全性) |
 | 外部データ ↔ プロンプト | 検索結果、URL 取得本文、公開コンテンツ、MCP 経由で返す本文 | 命令ではなく利用者提供のデータとして扱い、システム指示の上書きを認めない | `services/chat_url_context.py`、`services/chat_prompt.py` | [deep dive 8.6](system_design_deep_dive.md#86-aiへ送るデータの扱い)、[18.4](system_design_deep_dive.md#184-web検索とurl取得)、[ADR 0010](../decisions/0010-on-demand-web-page-reading.md) |
+| LLM のツール呼び出し ↔ 利用者データの書き込み | モデルが提案した書き込み（メモの作成・追記・書き換え） | 生成中に実行せず、承認待ちの行をサーバーへ保存して利用者の確認後にのみ実行。「常に承認」は外部の内容を読んだターンでは自動実行しない | `services/chat_tool_approval_service.py`、`services/chat_workspace_tools/`、`blueprints/chat/tool_approvals.py` | [deep dive 9.8](system_design_deep_dive.md#98-チャットの書き込みツールと承認カード)、[ADR 0013](../decisions/0013-chat-writes-through-stored-approvals.md) |
 
 ## プロンプトインジェクションへの方針
 
@@ -29,6 +30,7 @@ LLM の出力も、外部から取得した本文も、「LLM が作った」「
 - 画面操作エージェントは「読む・下書きする・移動する」だけの操作を確認不要とし、送信・保存・削除など取り消しにくい操作はすべて確認必須です（deep dive 14.6）。
 - MCP の権限はスコープ単位で、同意画面で確認した範囲だけを許可します（deep dive 15.2）。
 - 生成 UI の JavaScript は、外部通信や遷移を試みる記述を検査で落とします（deep dive 9.6）。
+- チャットの書き込みツールは、読み取り（一覧・検索・全文読み取り）だけ確認不要でその場に実行し、書き込み（作成・追記・書き換え）は取り消しにくい操作として必ず承認カードを経由します。「常に承認」で確認を省いた場合も、そのターンが外部の内容を読んでいれば自動実行を止めます（deep dive 9.8、ADR 0013）。
 - 新しいツールや操作を追加するときは、上のいずれかの分類に当てはめ、当てはまらない場合は確認必須側に置いてください。
 
 ## シークレット
@@ -38,6 +40,6 @@ LLM の出力も、外部から取得した本文も、「LLM が作った」「
 
 ## 検証
 
-- 単体テスト: `tests/unit/test_csrf_protection.py`、`test_security.py`、`test_auth_session.py`、`test_mcp_session_bypass.py`、`test_mcp_oauth.py`、`test_mcp_oauth_routes.py`、`test_generated_ui_reliability.py`。
+- 単体テスト: `tests/unit/test_csrf_protection.py`、`test_security.py`、`test_auth_session.py`、`test_mcp_session_bypass.py`、`test_mcp_oauth.py`、`test_mcp_oauth_routes.py`、`test_generated_ui_reliability.py`、`test_chat_tool_approval_api.py`（所有者確認・CSRF・レート制限・承認カードの状態遷移）、`test_chat_workspace_tools.py`（外部の内容を読んだターンでの自動承認の抑止）。
 - CI: `.github/workflows/tests.yml` の `dependency_audit` ジョブが依存パッケージの既知の脆弱性を検査し、`deploy` ジョブは全検査の成功を前提にします。
 - 変更時: 状態を変更するルートを追加したら CSRF 適用を確認し、LLM へ渡すデータや LLM の出力を実行する経路を追加したら、上の信頼境界の表に行を足してください。

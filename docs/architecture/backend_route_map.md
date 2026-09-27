@@ -18,7 +18,7 @@
 | --- | --- | --- | --- |
 | `auth_bp` | `/login`, `/register`, `/logout`, `/api/current_user`, `/api/auth/*`, `/api/passkeys/*`, `/google-*` | `blueprints/auth.py`, `auth_account.py`, `auth_email.py`, `auth_google.py`, `auth_passkeys.py` | メール、Google、Passkey 認証とアカウント操作 |
 | `verification_bp` | `/api/send_verification_email`, `/api/verify_registration_code` | `blueprints/verification.py` | 登録メール確認コード |
-| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences,usage,avatar_media}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定、利用状況、アバター画像配信 |
+| `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences,usage,avatar_media,tool_approvals}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定、利用状況、アバター画像配信、チャットの書き込みツール承認カード |
 | `prompt_share_bp` | `/prompt_share/*` | `blueprints/prompt_share/__init__.py` | Next.js のプロンプト共有画面へのリダイレクト |
 | `prompt_share_api_bp` | `/prompt_share/api/*` | `blueprints/prompt_share/prompt_share_api.py` | 公開プロンプト、詳細、おすすめ、閲覧数・表示回数の記録、投稿、コメント、いいね、メディア、チャット用タスク／Skillへの取り込み |
 | `search_bp` | `/search/prompts` | `blueprints/prompt_share/prompt_search.py` | 公開プロンプト検索 |
@@ -55,6 +55,14 @@
 所有者確認は `load_owned_room` を通り、未保存（temporary）のチャットは対象外です。
 `GET /api/get_chat_rooms` はピン留めした部屋を `rooms` のページングから外し、
 カーソルなしの最初のページでだけ `pinned_rooms` として返します。
+
+チャットの書き込みツール（現在はメモの作成・追記・書き換え）が生成中に作る承認カードは、
+`POST /api/chat/tool-approvals/{approval_id}/decision` で承認・拒否を決定し、
+`GET /api/chat/tool-auto-approvals` で「常に承認」の一覧、
+`DELETE /api/chat/tool-auto-approvals/{tool_name}` で取り消しを行います。
+決定・実行は `services/chat_tool_approval_service.py` が持ち、ルートは認証・入力・
+レート制限・応答の形だけを扱います。設計の理由は
+[ADR 0013](../decisions/0013-chat-writes-through-stored-approvals.md) にあります。
 
 ## 共通のルート境界
 

@@ -27,7 +27,8 @@ class RepositoryOwnershipTestCase(unittest.TestCase):
                 "list_user_skills",
                 "create_user_skill",
                 "import_user_skill",
-                "get_generative_ui_skill_enabled",
+                "get_system_skill_states",
+                "set_system_skill_enabled",
             },
             UserRepository: {
                 "get_user_by_id",

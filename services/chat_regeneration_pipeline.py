@@ -48,6 +48,7 @@ from services.chat_url_context import (
     collect_earlier_pasted_urls,
     fetch_pasted_url_context,
 )
+from services.chat_workspace_tools import build_workspace_toolbox
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
     artifact_status_part,
@@ -205,6 +206,10 @@ class ChatRegenerationDependencies:
     get_chat_room_messages: Callable[[str], Awaitable[list[dict[str, Any]]]]
     rebuild_room_summary: RebuildRoomSummary
     cleanup_unanswered_user_messages: CleanupUnansweredUserMessages
+    # 日本語: 承認カードの境界。絞り込んだ単体テストの代役が構築を続けられるよう既定値を持たせる。
+    # English: Approval-card boundaries, defaulted so focused unit-test doubles keep constructing.
+    supersede_pending_tool_approvals: Callable[[str, int], Awaitable[int]] | None = None
+    save_assistant_message_with_approvals: Callable[..., Awaitable[int | None]] | None = None
 
 
 # 共有パイプラインの入力（各エンドポイントの前処理が確定させた状態）
@@ -311,6 +316,15 @@ def _latest_user_content(messages: list[dict[str, Any]]) -> str:
     )
 
 
+# 最新のユーザー発話に添付（文書・画像）があるか。外部の内容を読んだターンとして扱う。
+# Whether the latest user message carries attachments; such a turn counts as reading external content.
+def _latest_user_has_attachments(messages: list[dict[str, Any]]) -> bool:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            return bool(message.get("attached_file_contents") or message.get("attached_images"))
+    return False
+
+
 # 再生成ターンのプロンプトを組み立て、生成を開始（またはエラーを返す）する共有パイプライン
 # Shared pipeline that builds the regeneration prompt and starts generation (or returns an error).
 async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRegenerationOutcome:
@@ -386,11 +400,17 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         except Exception:
             logger.warning(log_messages.user_profile_load_failed)
 
-    user_skills_prompt, generative_ui_enabled = build_chat_skills_context(
+    is_normal_user_room = user_id is not None and room_mode == "normal"
+    skills_context = build_chat_skills_context(
         enabled_user_skills,
         user,
         locale=request_locale,
+        # 利用者のデータを読み書きするツールは、ログイン利用者の通常ルームのストリーミング生成だけで渡す。
+        # The data tools are offered only to a signed-in user's normal room on the streaming path.
+        workspace_tools_available=is_normal_user_room and deps.is_streaming_model(model),
     )
+    user_skills_prompt = skills_context.prompt
+    generative_ui_enabled = skills_context.generative_ui_enabled
 
     project_instructions = await deps.load_project_context_for_room(
         user_id, room_mode, chat_room_id
@@ -503,7 +523,27 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
 
     if deps.is_streaming_model(model):
         on_finished = None
+        workspace_tools = None
         if user_id is not None and room_mode == "normal":
+            # 再生成の前に、このルームの承認待ちカードを無効にする。
+            # Supersede the room's pending approval cards before regenerating.
+            if deps.supersede_pending_tool_approvals is not None:
+                try:
+                    await deps.supersede_pending_tool_approvals(chat_room_id, user_id)
+                except Exception:
+                    logger.warning("Failed to supersede pending tool approvals; continuing.", exc_info=True)
+            workspace_tools = build_workspace_toolbox(
+                user_id=user_id,
+                chat_room_id=chat_room_id,
+                memo_tools_enabled=skills_context.memo_tools_enabled,
+                external_input_in_turn=bool(
+                    pasted_url_pages
+                    or pipeline_input.use_shared_prompts
+                    or _latest_user_has_attachments(all_messages)
+                ),
+            )
+            save_with_approvals = deps.save_assistant_message_with_approvals
+
             # 生成された回答テキストをDBまたは一時ストアに保存する内部ヘルパー
             # Save generated response text into DB or ephemeral store.
             def persist_response(
@@ -511,7 +551,24 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 *,
                 message_parts: list[dict[str, Any]] | None = None,
                 web_search_context: list[dict[str, Any]] | None = None,
+                tool_approval_ids: list[str] | None = None,
             ) -> None:
+                if tool_approval_ids and save_with_approvals is not None:
+                    # 承認カードのある回答は、承認行への回答 ID の結び付けと同じトランザクションで保存する。
+                    # A reply with approval cards is saved in the same transaction that ties the
+                    # approval rows to it.
+                    _run_async_callback(
+                        lambda: save_with_approvals(
+                            chat_room_id=chat_room_id,
+                            user_id=user_id,
+                            message=response,
+                            parent_id=assistant_parent_id,
+                            message_parts=message_parts,
+                            web_search_context=web_search_context,
+                            approval_ids=tool_approval_ids,
+                        )
+                    )
+                    return
                 _run_async_callback(
                     lambda: deps.save_message_to_db(
                         chat_room_id,
@@ -575,6 +632,9 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,
+                # ツールボックスがあるときだけ渡し、無いときの呼び出しは従来の形のままにする。
+                # Passed only when there is a toolbox; otherwise the call keeps its old shape.
+                **({"workspace_tools": workspace_tools} if workspace_tools else {}),
             )
         except ChatGenerationAlreadyRunningError:
             return ChatRegenerationRejected(

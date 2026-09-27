@@ -98,6 +98,10 @@ from services.chat_state import (
     rebuild_room_summary,
     remember_facts_from_message,
 )
+from services.chat_tool_approval_service import (
+    save_assistant_message_with_approvals,
+    supersede_pending_approvals,
+)
 from services.chat_use_case import ChatPostUseCase
 from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
@@ -667,6 +671,8 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 rebuild_room_summary=rebuild_room_summary,
                 cleanup_unanswered_user_messages=_cleanup_unanswered_user_messages,
                 load_project_context=get_project_context,
+                supersede_pending_tool_approvals=supersede_pending_approvals,
+                save_assistant_message_with_approvals=save_assistant_message_with_approvals,
             ),
             prompts=ChatPostPromptDependencies(
                 normalize_messages_for_llm=normalize_messages_for_llm,
@@ -795,6 +801,8 @@ def _build_regeneration_dependencies() -> ChatRegenerationDependencies:
         get_chat_room_messages=get_chat_room_messages,
         rebuild_room_summary=rebuild_room_summary,
         cleanup_unanswered_user_messages=_cleanup_unanswered_user_messages,
+        supersede_pending_tool_approvals=supersede_pending_approvals,
+        save_assistant_message_with_approvals=save_assistant_message_with_approvals,
     )
 
 

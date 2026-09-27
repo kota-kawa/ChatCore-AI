@@ -118,6 +118,22 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         self.assertEqual(rates["untagged_turn_state_recoveries"]["turns"], 1)
         self.assertEqual(rates["untagged_turn_state_recoveries"]["rate"], 0.5)
 
+    def test_tool_call_rejections_are_counted_by_reason_and_tool(self):
+        """
+        ツール呼び出しの拒否が「理由:ツール名」で数えられ、引き直しが発生率に入ることを検証します。
+        Verify tool-call rejections are counted by reason and tool, and resamples become a rate.
+        """
+        rejection = {"reason": "schema_mismatch", "tool": "memo_read", "tool_offered": True, "offered_tools": ["memo_read"]}
+        lines = [
+            *_completed_turn("req-1", tool_schema_retries=1, tool_schema_rejections=[rejection]),
+            *_completed_turn("req-2"),
+        ]
+
+        summary = self._summary_of(lines)
+
+        self.assertEqual(summary["tool_schema_rejections"], {"schema_mismatch:memo_read": 1})
+        self.assertEqual(summary["occurrence_rates"]["tool_schema_retries"]["turns"], 1)
+
     def test_lines_without_telemetry_are_ignored(self):
         """
         テレメトリを含まないログ行が集計対象にならないことを検証します。

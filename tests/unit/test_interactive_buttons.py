@@ -355,11 +355,12 @@ class InteractiveButtonsPromptContractTests(unittest.TestCase):
         validate_interactive_buttons_payload(json.loads(example))
 
     def test_buttons_stay_in_the_prompt_when_the_generated_ui_skill_is_off(self):
-        skills_prompt, enabled = build_chat_skills_context(
+        skills_context = build_chat_skills_context(
             [],
             {"id": 1, "generative_ui_skill_enabled": False},
             locale="ja",
         )
+        skills_prompt, enabled = skills_context.prompt, skills_context.generative_ui_enabled
         messages = build_context_messages(
             base_system_prompt=build_base_system_prompt(locale="ja"),
             user_profile_prompt=None,

@@ -18,6 +18,7 @@ from services.message_parts_display import (
     normalize_message_parts_for_display,
     split_answer_trace_block,
 )
+from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -715,11 +716,13 @@ def place_web_search_image_parts(
         part for part in normalized_parts if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE
     ]
     text_parts = [part for part in other_parts if part.get("type") == "text"]
-    # 本文と画像を組み直しても選択ボタンは失わない。回答を締めくくる部品なので末尾に置く。
-    # Rebuilding prose and images must not lose the choice buttons; they close the reply, so
-    # they stay at the end.
+    # 本文と画像を組み直しても選択ボタンと承認カードは失わない。回答を締めくくる部品なので
+    # 末尾に置き、承認カードを最後にする。
+    # Rebuilding prose and images must not lose the choice buttons or the approval cards; they
+    # close the reply, so they stay at the end with the approval cards last.
     button_parts = [
-        part for part in other_parts if part.get("type") == INTERACTIVE_BUTTONS_PART_TYPE
+        *(part for part in other_parts if part.get("type") == INTERACTIVE_BUTTONS_PART_TYPE),
+        *(part for part in other_parts if part.get("type") == TOOL_APPROVAL_PART_TYPE),
     ]
     answer_text = "".join(str(part.get("text") or "") for part in text_parts)
     if not answer_text and fallback_text:

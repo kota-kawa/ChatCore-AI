@@ -62,6 +62,8 @@ from services.chat_url_context import (
     collect_earlier_pasted_urls,
     fetch_pasted_url_context,
 )
+from services.chat_workspace_tools import build_workspace_toolbox
+from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE, ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED
 from services.generative_ui import (
     GenerativeUiMode,
@@ -183,6 +185,9 @@ class _ChatPostTurn:
     user_profile_prompt: str | None = None
     user_skills_prompt: str | None = None
     generative_ui_enabled: bool = True
+    # 既定スキル「メモ」が ON で、このターンにメモのツールを渡すか。
+    # Whether the built-in Memo Skill is on and this turn offers the memo tools.
+    memo_tools_enabled: bool = False
     project_instructions: str | None = None
     room_summary: str = ""
     memory_facts: list[str] = field(default_factory=list)
@@ -459,6 +464,7 @@ class ChatPostUseCase:
         """DB保存ルームへ発話を保存し、初回ターンかどうかを判定します / Store the message in a DB-backed room and detect a first turn."""
         deps = self.deps
 
+        await self._supersede_pending_tool_approvals(turn)
         attached_file_name_list = turn.attached_file_names()
         # 保存と文脈読み出しを1トランザクションへまとめる。新しい発話は能動枝の末尾へ繋がるため、
         # 親の決定・LLM履歴・過去ターンの検索結果はすべて同じ1回のツリー読み出しから導ける。
@@ -485,6 +491,25 @@ class ChatPostUseCase:
         turn.should_auto_title_room = bool(context.get("is_first_turn"))
         turn.all_messages = list(context.get("messages") or [])
         turn.room_web_search_contexts = list(context.get("web_search_contexts") or [])
+
+    async def _supersede_pending_tool_approvals(self, turn: _ChatPostTurn) -> None:
+        """
+        新しい発言の前に、このルームの承認待ちカードを無効にします。履歴を読む前に行うので、
+        モデルへ渡す過去のカードも無効の状態になります。
+        Supersede the room's pending approval cards before a new message. It runs before the
+        history is read, so the earlier cards reach the model already superseded.
+        """
+        deps = self.deps
+        supersede = deps.persistence.supersede_pending_tool_approvals
+        if supersede is None or turn.user_id is None:
+            return
+        try:
+            await _maybe_await(supersede(turn.chat_room_id, turn.user_id))
+        except Exception:
+            # 無効化に失敗しても発言は受け付ける。古いカードは次の発言か期限で無効になる。
+            # A failed supersede does not block the message; old cards retire on the next
+            # message or at their expiry.
+            deps.logger.warning("Failed to supersede pending tool approvals; continuing.", exc_info=True)
 
     async def _store_guest_user_message(self, turn: _ChatPostTurn) -> None:
         """未ログインの一時ルームへ発話を保存します / Store the message in a guest's temporary room."""
@@ -645,12 +670,20 @@ class ChatPostUseCase:
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
 
-        turn.user_skills_prompt, turn.generative_ui_enabled = build_chat_skills_context(
+        skills_context = build_chat_skills_context(
             enabled_user_skills,
             user,
             locale=self.locale,
             prompt_builder=deps.prompts.build_user_skills_prompt,
+            # 利用者のデータを読み書きするツールは、ログイン利用者の通常ルームのストリーミング生成だけで渡す。
+            # The data tools are offered only to a signed-in user's normal room on the streaming path.
+            workspace_tools_available=(
+                turn.targets_normal_room() and deps.generation.is_streaming_model(turn.model)
+            ),
         )
+        turn.user_skills_prompt = skills_context.prompt
+        turn.generative_ui_enabled = skills_context.generative_ui_enabled
+        turn.memo_tools_enabled = skills_context.memo_tools_enabled
 
     async def _load_project_instructions(self, turn: _ChatPostTurn) -> None:
         """
@@ -912,6 +945,10 @@ class ChatPostUseCase:
                 "assistant",
             )
 
+        # ツールボックスがあるターンだけ引数を渡し、無いターンの呼び出しは従来の形のままにする。
+        # Only a turn with a toolbox passes it; other turns call the job exactly as before.
+        workspace_tools = self._build_workspace_toolbox(turn)
+        generation_kwargs: dict[str, Any] = {"workspace_tools": workspace_tools} if workspace_tools else {}
         try:
             job = deps.generation.start_generation_job(
                 turn.generation_key,
@@ -938,6 +975,7 @@ class ChatPostUseCase:
                 selected_reference_trace=turn.selected_reference_trace,
                 ui_mode=turn.ui_mode,
                 explicit_ui_opt_out=turn.explicit_ui_opt_out,
+                **generation_kwargs,
             )
         except ChatGenerationAlreadyRunningError:
             return deps.web.jsonify(
@@ -951,6 +989,27 @@ class ChatPostUseCase:
             )
 
         return deps.web.build_llm_stream_response(deps.web.iter_llm_stream_events(job))
+
+    def _build_workspace_toolbox(self, turn: _ChatPostTurn) -> ChatWorkspaceToolbox | None:
+        """
+        メモなどのツール一式を組み立てます。添付・貼り付け URL・公開投稿の参照を読んだターンは、
+        外部の内容を読んだターンとして扱います。
+        Build the data toolbox. A turn that carries attachments, pasted URLs or public-post
+        references counts as having read external content.
+        """
+        if not turn.memo_tools_enabled or turn.user_id is None:
+            return None
+        return build_workspace_toolbox(
+            user_id=turn.user_id,
+            chat_room_id=turn.chat_room_id,
+            memo_tools_enabled=turn.memo_tools_enabled,
+            external_input_in_turn=bool(
+                turn.prepared_attached_files
+                or turn.prepared_attached_images
+                or turn.pasted_url_pages
+                or turn.use_shared_prompts
+            ),
+        )
 
     def _build_normal_room_stream_callbacks(
         self,
@@ -975,26 +1034,47 @@ class ChatPostUseCase:
             task_launch_request=turn.active_task_request,
         )
 
+        save_with_approvals = deps.persistence.save_assistant_message_with_approvals
+
         def persist_response(
             response: str,
             *,
             message_parts: list[dict[str, Any]] | None = None,
             web_search_context: list[dict[str, Any]] | None = None,
+            tool_approval_ids: list[str] | None = None,
         ) -> dict[str, Any] | None:
-            assistant_message_id = _run_async_callback(
-                lambda: _maybe_await(
-                    deps.persistence.save_message_to_db(
-                        chat_room_id,
-                        response,
-                        "assistant",
-                        None,
-                        saved_user_message_id,
-                        message_parts,
-                        None,
-                        web_search_context,
+            if tool_approval_ids and save_with_approvals is not None and user_id is not None:
+                # 承認カードのある回答は、承認行への回答 ID の結び付けと同じトランザクションで保存する。
+                # A reply with approval cards is saved in the same transaction that ties the
+                # approval rows to it.
+                assistant_message_id = _run_async_callback(
+                    lambda: _maybe_await(
+                        save_with_approvals(
+                            chat_room_id=chat_room_id,
+                            user_id=user_id,
+                            message=response,
+                            parent_id=saved_user_message_id,
+                            message_parts=message_parts,
+                            web_search_context=web_search_context,
+                            approval_ids=tool_approval_ids,
+                        )
                     )
                 )
-            )
+            else:
+                assistant_message_id = _run_async_callback(
+                    lambda: _maybe_await(
+                        deps.persistence.save_message_to_db(
+                            chat_room_id,
+                            response,
+                            "assistant",
+                            None,
+                            saved_user_message_id,
+                            message_parts,
+                            None,
+                            web_search_context,
+                        )
+                    )
+                )
             if assistant_message_id is None:
                 # A missing id means the persistence boundary did not commit the reply. Do not
                 # let on_finished summarize a turn that is absent from the room history.

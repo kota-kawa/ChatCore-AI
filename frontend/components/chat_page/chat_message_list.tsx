@@ -15,6 +15,7 @@ import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window"
 import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { parseTaskLaunchMessage } from "../../lib/chat_page/task_utils";
+import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { stripCopyBlockFences } from "../../scripts/chat/copy_block_markdown";
 import { stripWebSearchArtifacts } from "../../scripts/chat/memo_text";
@@ -185,6 +186,7 @@ type ChatMessageRowProps = {
   onRegenerate: () => void;
   onContinue: () => void;
   onChoiceSubmit: (text: string) => void;
+  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
@@ -217,6 +219,7 @@ function ChatMessageRow({
   onRegenerate,
   onContinue,
   onChoiceSubmit,
+  onToolApprovalDecide,
   editingMessageId,
   onEditStart,
   onEditCancel,
@@ -380,7 +383,9 @@ function ChatMessageRow({
   const isActivelyStreaming = Boolean(message.streaming && isGenerating);
   const actionVisibilityStyle = isActivelyStreaming ? { visibility: "hidden" as const } : undefined;
   // 生成中の送信は停止として扱われるため、選択ボタンは生成中と回答済みのあいだ押せなくする。
+  // 承認カードも同じ条件で押せなくする（後ろに発言があればサーバー側でも無効化済み）。
   // Sending during generation acts as "stop", so choices stay disabled while generating or once answered.
+  // Approval cards lock on the same condition (the server has already superseded them after a new message).
   const choicesDisabled = isGenerating || hasLaterUserMessage(rows, index);
 
   return (
@@ -395,6 +400,8 @@ function ChatMessageRow({
             streaming={isActivelyStreaming}
             onChoiceSubmit={onChoiceSubmit}
             choicesDisabled={choicesDisabled}
+            onToolApprovalDecide={onToolApprovalDecide}
+            approvalsDisabled={choicesDisabled}
           />
           {/* 生成UIのフェンスをストリーミング中は、無表示にならないよう組み立てローダーを見せる。 */}
           {/* While a generative UI fence is streaming, show the assembly loader so the screen never looks stalled. */}
@@ -461,6 +468,7 @@ type ChatMessageListProps = {
   onRegenerate: () => void;
   onContinue: () => void;
   onChoiceSubmit: (text: string) => void;
+  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   tasks: NormalizedTask[];
@@ -484,6 +492,7 @@ function ChatMessageListComponent({
   onRegenerate,
   onContinue,
   onChoiceSubmit,
+  onToolApprovalDecide,
   onEditAndRegenerate,
   onSwitchBranch,
   tasks,
@@ -583,6 +592,7 @@ function ChatMessageListComponent({
       onRegenerate,
       onContinue,
       onChoiceSubmit,
+      onToolApprovalDecide,
       editingMessageId,
       onEditStart: handleEditStart,
       onEditCancel: handleEditCancel,
@@ -598,6 +608,7 @@ function ChatMessageListComponent({
       onRegenerate,
       onContinue,
       onChoiceSubmit,
+      onToolApprovalDecide,
       editingMessageId,
       handleEditStart,
       handleEditCancel,

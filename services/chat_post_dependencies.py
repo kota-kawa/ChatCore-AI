@@ -37,6 +37,7 @@ from services.chat_regeneration_pipeline import (
     SaveMessageToDb,
 )
 from services.chat_url_context import PastedUrlPage
+from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import GenerativeUiMode
 from services.selected_reference_context import SelectedReferenceLookupTrace
@@ -125,6 +126,22 @@ class StoreUserMessageAndLoadTurnContext(Protocol):
         attached_file_contents: list[Any] | None = None,
         attached_images: list[Any] | None = None,
     ) -> MaybeAwaitable[dict[str, Any]]: ...
+
+
+class SaveAssistantMessageWithApprovals(Protocol):
+    # 日本語: 回答の保存と、承認行への回答 ID の結び付けを1トランザクションで行う境界。
+    # English: Saves the reply and ties the approval rows to it in one transaction.
+    def __call__(
+        self,
+        *,
+        chat_room_id: str,
+        user_id: int,
+        message: str,
+        parent_id: int | None,
+        message_parts: list[dict[str, Any]] | None,
+        web_search_context: list[dict[str, Any]] | None,
+        approval_ids: Sequence[str],
+    ) -> MaybeAwaitable[int | None]: ...
 
 
 class RememberFactsFromMessage(Protocol):
@@ -227,6 +244,7 @@ class StartGenerationJob(Protocol):
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
+        workspace_tools: ChatWorkspaceToolbox | None = None,
     ) -> ChatGenerationJob: ...
 
 
@@ -312,6 +330,10 @@ class ChatPostPersistenceDependencies:
     rebuild_room_summary: RebuildRoomSummary
     cleanup_unanswered_user_messages: CleanupUnansweredUserMessages
     load_project_context: Callable[[str], MaybeAwaitable[dict[str, Any] | None]]
+    # 日本語: 承認カードの境界。絞り込んだ単体テストの代役が構築を続けられるよう既定値を持たせ末尾へ置く。
+    # English: Approval-card boundaries; defaulted and last so focused unit-test doubles keep constructing.
+    supersede_pending_tool_approvals: Callable[[str, int], MaybeAwaitable[int]] | None = None
+    save_assistant_message_with_approvals: SaveAssistantMessageWithApprovals | None = None
 
 
 @dataclass(frozen=True)

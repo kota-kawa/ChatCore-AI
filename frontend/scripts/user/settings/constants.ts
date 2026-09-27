@@ -47,6 +47,7 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "usage", iconClass: "bi bi-speedometer2", label: "利用状況" },
+  { section: "chat-permissions", iconClass: "bi bi-shield-check", label: "チャットの権限" },
   { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
   { section: "language", iconClass: "bi bi-translate", label: "言語 / Language" },
   { section: "prompts", iconClass: "bi bi-shield-lock", label: "投稿したプロンプト" },

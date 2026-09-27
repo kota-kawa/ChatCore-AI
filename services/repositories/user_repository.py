@@ -216,5 +216,6 @@ class UserRepository:
             "avatar_url": normalize_avatar_url(user.avatar_url),
             "llm_profile_context": user.llm_profile_context,
             "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
+            "memo_tools_skill_enabled": user.memo_tools_skill_enabled,
             "preferred_locale": user.preferred_locale,
         }

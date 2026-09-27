@@ -24,6 +24,7 @@ import {
   readChatJsonResponseFields,
   readShareChatRoomResponseFields,
 } from "./generated_contract";
+import { ToolApprovalApiSchema, type ToolApprovalApi } from "../../types/generated/api_schemas";
 import { mergeUniqueChatRooms } from "./home_page_controller_utils";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 import { asRecord } from "../utils";
@@ -201,6 +202,27 @@ function normalizeWebSearchImage(rawImage: unknown): WebSearchImageV1 | undefine
   };
 }
 
+// 日本語: 承認カードは応答モデル ToolApprovalApi の生成スキーマで検証する。生成 Zod に載らない
+//         モデル検証（操作できるカードはプレビュー必須、プレビューの種類はツールと一致、部分置換は
+//         1件以上・全文置換は本文あり）もここで確かめ、描けないカードは部品ごと捨てる。
+// English: Approval cards are validated with the generated schema of the ToolApprovalApi response model.
+//          The model validators the generated Zod cannot carry (an actionable card needs a preview, the
+//          preview kind matches the tool, edits mode has at least one edit and content mode has a body)
+//          are checked here too, and a card that cannot be drawn is dropped whole.
+export function normalizeToolApproval(rawApproval: unknown): ToolApprovalApi | undefined {
+  const parsed = ToolApprovalApiSchema.safeParse(rawApproval);
+  if (!parsed.success) return undefined;
+  const approval = parsed.data;
+  const { preview } = approval;
+  if (!preview) return approval.readonly ? approval : undefined;
+  if (preview.kind !== approval.tool) return undefined;
+  if (preview.kind === "memo_edit") {
+    if (preview.mode === "edits" && !preview.edits?.length) return undefined;
+    if (preview.mode === "content" && preview.content === null) return undefined;
+  }
+  return approval;
+}
+
 // 日本語: `message_parts` / `parts` はバックエンドの Pydantic レスポンスモデル
 //         （`ChatHistoryMessage` / `ChatJsonResponse`）に宣言されていない追加キーで、
 //         生成 Zod スキーマの対応物がありません。表示順の並べ替えもフロント固有です。
@@ -239,6 +261,11 @@ export function normalizeChatMessageParts(
     if (part.type === "web_search_image") {
       const image = normalizeWebSearchImage(part.image);
       if (image) parts.push({ type: "web_search_image", image });
+      return;
+    }
+    if (part.type === "tool_approval") {
+      const approval = normalizeToolApproval(part.approval);
+      if (approval) parts.push({ type: "tool_approval", approval });
       return;
     }
   });

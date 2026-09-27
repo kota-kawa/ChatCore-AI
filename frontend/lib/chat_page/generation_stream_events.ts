@@ -163,6 +163,66 @@ function interpretWebSearchEvent(
   return null;
 }
 
+// チャットから読み書きするツール（メモなど）の進み具合。読み取りは検索と同じ段階として見せ、
+// 書き込みは実行せず承認待ちを作るだけなので、回答の準備に戻ったことを伝える。
+// Progress of the chat workspace tools (memos and so on). Reads show as the lookup phase like a
+// search; writes never run on the spot but prepare a pending approval, so the status returns to
+// preparing the answer.
+const WORKSPACE_READ_TOOLS = new Set(["memo_list", "memo_search", "memo_read"]);
+const WORKSPACE_WRITE_TOOLS = new Set(["memo_create", "memo_append", "memo_edit"]);
+
+function interpretWorkspaceToolEvent(
+  event: string,
+  data: Record<string, unknown>,
+  localize: StreamLocalize,
+): GenerationStreamAction | null {
+  const tool = typeof data.tool === "string" ? data.tool : "";
+
+  if (event === "workspace_tool_started") {
+    if (tool === "memo_read") {
+      return thinkingStatus(localize("メモを読んでいます", "Reading a memo"), "web-search");
+    }
+    if (WORKSPACE_READ_TOOLS.has(tool)) {
+      return thinkingStatus(localize("メモを探しています", "Looking through your memos"), "web-search");
+    }
+    if (WORKSPACE_WRITE_TOOLS.has(tool)) {
+      return thinkingStatus(localize("メモの変更案を用意しています", "Preparing a memo change"), "generating");
+    }
+    return thinkingStatus(localize("作業を進めています", "Working on your request"), "generating");
+  }
+
+  if (event === "workspace_tool_completed") {
+    if (WORKSPACE_READ_TOOLS.has(tool)) {
+      return thinkingStatus(localize("読み込んだメモを確認しています", "Going through the memos read"), "web-search");
+    }
+    // 書き込みの完了は「常に承認」で自動実行したときだけ届く
+    // A write only completes here when "always approve" ran it automatically
+    if (WORKSPACE_WRITE_TOOLS.has(tool)) {
+      return thinkingStatus(localize("メモを更新しました。思考中", "Updated the memo. Preparing an answer"), "generating");
+    }
+    return thinkingStatus(localize("思考中", "Preparing an answer"), "generating");
+  }
+
+  if (event === "workspace_tool_failed") {
+    if (WORKSPACE_READ_TOOLS.has(tool) || WORKSPACE_WRITE_TOOLS.has(tool)) {
+      return thinkingStatus(
+        localize("メモの操作に失敗しました。思考中", "The memo step failed. Preparing an answer"),
+        "generating",
+      );
+    }
+    return thinkingStatus(localize("作業に失敗しました。思考中", "A step failed. Preparing an answer"), "generating");
+  }
+
+  if (event === "tool_approval_prepared") {
+    return thinkingStatus(
+      localize("承認待ちの変更を用意しました。思考中", "A change is waiting for your approval. Preparing an answer"),
+      "generating",
+    );
+  }
+
+  return null;
+}
+
 function interpretDoneEvent(
   data: Record<string, unknown>,
   context: GenerationStreamEventContext,
@@ -234,11 +294,12 @@ export function interpretGenerationStreamEvent(
     };
   }
 
-  const searchStatus =
+  const progressStatus =
     interpretSharedPromptSearchEvent(parsed.event, data, localize) ??
     interpretPersonalKnowledgeSearchEvent(parsed.event, data, localize) ??
-    interpretWebSearchEvent(parsed.event, data, localize);
-  if (searchStatus) return searchStatus;
+    interpretWebSearchEvent(parsed.event, data, localize) ??
+    interpretWorkspaceToolEvent(parsed.event, data, localize);
+  if (progressStatus) return progressStatus;
 
   if (parsed.event === "response_generation_started") {
     return thinkingStatus(localize("思考中", "Preparing an answer"), "generating");

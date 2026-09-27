@@ -11,6 +11,8 @@ from services.models import (
     Base,
     ChatHistory,
     ChatRoom,
+    ChatToolApproval,
+    ChatToolAutoApproval,
     ContextFact,
     McpOAuthGrant,
     MemoEntry,
@@ -33,6 +35,8 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "user_passkeys",
             "chat_rooms",
             "chat_history",
+            "chat_tool_approvals",
+            "chat_tool_auto_approvals",
             "shared_chat_rooms",
             "chat_room_summaries",
             "memory_facts",
@@ -83,6 +87,12 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(UserSkill.is_enabled.nullable)
         self.assertTrue(UserSkill.source_prompt_id.nullable)
         self.assertFalse(User.generative_ui_skill_enabled.nullable)
+        self.assertFalse(User.memo_tools_skill_enabled.nullable)
+        # 承認カードは回答の保存まで回答 ID を持たない。期限は必ず持つ。
+        # An approval card has no reply id until the reply is saved, but always has an expiry.
+        self.assertTrue(ChatToolApproval.assistant_message_id.nullable)
+        self.assertFalse(ChatToolApproval.expires_at.nullable)
+        self.assertTrue(ChatToolApproval.expires_at.type.timezone)
         self.assertFalse(ChatRoom.last_activity_at.nullable)
         # 共有チャットの失効・期限は expand のみで追加したため NULL 許容のまま。
         # Chat share lifecycle columns were added expand-only, so both stay nullable.
@@ -121,9 +131,32 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "idx_mcp_oauth_grants_client_id",
             "idx_mcp_oauth_codes_client_id",
             "idx_mcp_oauth_tokens_client_id",
+            "idx_chat_tool_approvals_message",
+            "idx_chat_tool_auto_approvals_source",
         ):
             with self.subTest(index=index_name):
                 self.assertTrue(any(index_name in statement for statement in index_sql))
+
+    def test_chat_tool_approval_checks_come_from_the_contract_literals(self):
+        # CHECK 制約の値は応答モデルの Literal から作る。ずれるとカードの状態を保存できない。
+        # The CHECK values come from the response-model literals; drift would reject card states.
+        from services.tool_approval_parts import TOOL_APPROVAL_DECISIONS, TOOL_APPROVAL_STATUSES
+
+        checks = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in ChatToolApproval.__table__.constraints
+            if constraint.name and constraint.name.startswith("ck_")
+        }
+        for status in TOOL_APPROVAL_STATUSES:
+            self.assertIn(f"'{status}'", checks["ck_chat_tool_approvals_status"])
+        for decision in TOOL_APPROVAL_DECISIONS:
+            self.assertIn(f"'{decision}'", checks["ck_chat_tool_approvals_decision"])
+        unique = {
+            constraint.name
+            for constraint in ChatToolAutoApproval.__table__.constraints
+            if constraint.name
+        }
+        self.assertIn("uq_chat_tool_auto_approvals_user_tool", unique)
 
     def test_mcp_oauth_client_id_columns_reference_the_client_table(self):
         # 20260713_01 は user_id / grant_id にだけ REFERENCES を付け、client_id を素の TEXT の

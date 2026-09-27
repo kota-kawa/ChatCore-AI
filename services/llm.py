@@ -320,12 +320,25 @@ class LlmToolSchemaError(LlmProviderError):
     """The provider refused the model's tool call instead of returning it.
 
     Groq などはツール引数をサーバー側でスキーマ検証し、違反をストリーム途中のエラーとして
-    返す。同じ要求を再送しても同じ拒否になりやすいため retryable ではない。回復手段は
-    「ツールを外して同じステップをやり直す」ことであり、呼び出し側がそれを担う。
+    返す。一時的な障害ではないので汎用の再試行（retryable）には載せない。回復は呼び出し側が
+    担い、同じステップをツール付きで1度だけ引き直し、それでも拒否されたらツールを外して
+    やり直す。
     Providers such as Groq validate tool arguments server-side and surface a violation as a
-    mid-stream error. Re-sending the same request reproduces it, so this is not retryable;
-    the recovery is to replay the step without tools, which the caller performs.
+    mid-stream error. It is not a transient outage, so it stays off the generic retry path
+    (not retryable). The caller recovers: it resamples the same step with tools once, and on a
+    second rejection replays it without tools.
+
+    ``reason`` は固定語彙の拒否理由、``tool_name`` は拒否文に現れたツール名（名前の形をした
+    トークンだけ）。モデルの出力や引数の値は持たないので、そのままテレメトリへ記録できる。
+    ``reason`` is the rejection reason from a fixed vocabulary and ``tool_name`` the tool the
+    rejection names (a name-shaped token only). Neither carries model output or argument values,
+    so both can go to telemetry as they are.
     """
+
+    def __init__(self, message: str, *, reason: str = "other", tool_name: str = "") -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.tool_name = tool_name
 
 
 
@@ -414,6 +427,40 @@ _TOOL_CALL_REJECTION_PATTERN = re.compile(
 )
 
 
+# 拒否の理由を固定語彙へ分ける。上から順に照合し、最初に当たったものを採る。
+# Sort a rejection into a fixed vocabulary, taking the first pattern that matches.
+_TOOL_REJECTION_REASON_PATTERNS = (
+    ("tool_choice_none", re.compile(r"tool[_ ]choice\s*(?:is|=)\s*none", re.IGNORECASE)),
+    ("unknown_tool", re.compile(r"not in request\.tools|unknown (?:tool|function)", re.IGNORECASE)),
+    ("schema_mismatch", re.compile(r"did not match schema", re.IGNORECASE)),
+    ("unparsable_call", re.compile(r"failed to (?:parse|call a function)|invalid json", re.IGNORECASE)),
+)
+# 拒否文に現れるツール名。名前の形をしたトークンだけを拾い、周りの文は捨てる。
+# The tool a rejection names; only a name-shaped token is kept, never the surrounding text.
+_REJECTED_TOOL_NAME_PATTERN = re.compile(
+    r"(?:call tool|parameters for tool|tool)\s+[`'\"]?([A-Za-z][A-Za-z0-9_.-]{0,63})[`'\"]?\s+"
+    r"(?:which was not|did not match)",
+    re.IGNORECASE,
+)
+
+
+def _tool_rejection_details(exc: BaseException) -> tuple[str, str]:
+    candidates = _error_text_candidates(exc)
+    reason = next(
+        (
+            name
+            for name, pattern in _TOOL_REJECTION_REASON_PATTERNS
+            if any(pattern.search(candidate) for candidate in candidates)
+        ),
+        "other",
+    )
+    tool_name = next(
+        (match.group(1) for candidate in candidates if (match := _REJECTED_TOOL_NAME_PATTERN.search(candidate))),
+        "",
+    )
+    return reason, tool_name
+
+
 def _error_text_candidates(exc: BaseException) -> list[str]:
     candidates: list[str] = [str(exc)]
     for attribute in ("message", "code", "body"):
@@ -484,8 +531,11 @@ def _map_provider_exception(
     # a 400. Classify it before the status-code branches so it is not buried in a generic
     # provider failure that the caller cannot recover from.
     if _looks_like_tool_call_rejection(exc):
+        reason, tool_name = _tool_rejection_details(exc)
         return LlmToolSchemaError(
-            f"{provider_name} API rejected the model's tool call against the tool schema."
+            f"{provider_name} API rejected the model's tool call against the tool schema.",
+            reason=reason,
+            tool_name=tool_name,
         )
     status_code = getattr(exc, "status_code", None)
     if (

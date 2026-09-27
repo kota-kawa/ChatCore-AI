@@ -915,3 +915,11 @@ class MemoCollectionUpdateRequest(RequestPayloadModel):
     # Input payload for memo collection update.
     name: str | None = Field(default=None, min_length=1, max_length=100)
     color: str | None = Field(default=None, max_length=20)
+
+
+# 日本語: 承認カードで利用者が選んだ操作。
+# English: Action the user picked on an approval card.
+class ToolApprovalDecisionRequest(RequestPayloadModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    decision: Literal["approve_once", "approve_always", "deny"]
