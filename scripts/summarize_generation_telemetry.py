@@ -77,6 +77,7 @@ OCCURRENCE_FIELDS = (
     "approval_pending_turn",
     "auto_approval_suppressed_by_untrusted_input",
     "workspace_invalid_arguments",
+    "workspace_action_recoveries",
     "workspace_write_proposals",
     "workspace_auto_executions",
     "workspace_read_calls",

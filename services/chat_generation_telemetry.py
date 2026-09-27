@@ -90,6 +90,9 @@ class ChatGenerationTelemetry:
     workspace_write_proposals: int = 0
     workspace_auto_executions: int = 0
     workspace_invalid_arguments: int = 0
+    # 本文だけでメモ変更を主張した判断を、ツール付きでやり直した回数。
+    # Decisions retried with tools after an unsupported memo action claim.
+    workspace_action_recoveries: int = 0
     # 呼んだ順の「ツール名:結果の status」。どこで手順が止まったかを本文なしで追える。
     # "tool:status" in call order, so where a sequence stalled can be traced without any body.
     workspace_tool_results: list[str] = field(default_factory=list)
@@ -211,6 +214,7 @@ class ChatGenerationTelemetry:
             "workspace_write_proposals": self.workspace_write_proposals,
             "workspace_auto_executions": self.workspace_auto_executions,
             "workspace_invalid_arguments": self.workspace_invalid_arguments,
+            "workspace_action_recoveries": self.workspace_action_recoveries,
             "workspace_tool_results": list(self.workspace_tool_results),
             "approval_pending_turn": self.approval_pending_turn,
             "auto_approval_suppressed_by_untrusted_input": self.auto_approval_suppressed_by_untrusted_input,

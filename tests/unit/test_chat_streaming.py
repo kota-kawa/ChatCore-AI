@@ -465,10 +465,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("choose exactly one action", system_contents)
         self.assertNotIn("call one appropriate tool", system_contents)
 
-    # 日本語: 空回答の回復メモは回答のみ契約の直後にだけ入り、通常の判断要求には入りません。
-    # English: The empty-answer recovery note sits right behind the answer-only contract and
-    # never appears in an ordinary decision request.
-    def test_turn_loop_messages_add_recovery_note_only_when_requested(self):
+    # 空回答の再試行で封筒のみを繰り返さないよう、通常契約を本文のみの要求で置き換える。
+    # Replace the contract for empty-answer recovery so it cannot demand another envelope.
+    def test_turn_loop_messages_replace_contract_for_empty_answer_recovery(self):
         messages = [
             {"role": "system", "content": "base"},
             {"role": "user", "content": "鎌倉の紅葉を教えて"},
@@ -479,9 +478,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         system_contents = [
             message["content"] for message in recovery if message.get("role") == "system"
         ]
-        self.assertEqual(len(system_contents), 3)
-        self.assertIn("tool budgets for this turn have been exhausted", system_contents[1])
-        self.assertEqual(system_contents[2], TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT)
+        self.assertEqual(system_contents, ["base", TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT])
+        self.assertNotIn("emit exactly one internal JSON envelope", "\n".join(system_contents))
+        self.assertIn("omit the internal state", system_contents[1])
         self.assertEqual(recovery[-1], {"role": "user", "content": "鎌倉の紅葉を教えて"})
 
         plain = build_turn_loop_messages(messages, force_answer=True)

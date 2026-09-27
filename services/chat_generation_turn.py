@@ -116,9 +116,12 @@ class ChatTurnRunState:
     # ツールスキーマ拒否からの再構築を1度だけに限るフラグ。
     # Limits the tool-schema rejection recovery to a single replay.
     tool_schema_recovery_attempted: bool = False
-    # 本文ゼロの判断に対する回答のみ再試行を1度だけに限るフラグ。
-    # Limits the answer-only retry after an empty decision to a single replay.
+    # 本文ゼロの判断に対する再試行を1度だけに限るフラグ。
+    # Limits recovery after an empty decision to a single replay.
     empty_answer_recovery_attempted: bool = False
+    # カードのない変更済み・提案済み説明を、ツール付きで一度だけ訂正させる。
+    # Retry an unsupported memo action claim once while tools remain available.
+    workspace_action_recovery_attempted: bool = False
     # 調査ステップがプロバイダ障害で落ちたあと、ツールを外して回答へ縮退したことを示す。
     # 立つとツールは以後1つも提示されず、次の判断は手持ちの情報だけで回答する。
     # Set once a provider failure during a research step degraded the turn to an answer.

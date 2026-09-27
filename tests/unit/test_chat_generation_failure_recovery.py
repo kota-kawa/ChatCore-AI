@@ -14,7 +14,7 @@ an answer, and that exactly one terminal event always reaches the client.
 
 import json
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from services.chat_agent_budget import AgentStepBudget
 from services.chat_generation import ChatGenerationJob
@@ -169,6 +169,11 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
             ),
             (
+                "旅行メモに追記してください",
+                "この追記は現在保留中です。承認いただければ、メモへ反映させます。",
+                "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。",
+            ),
+            (
                 "Create a memo called Weekend routine",
                 "- I've created a draft memo called Weekend routine.",
                 "The memo change was not submitted, and no approval card was created. Please try again.",
@@ -196,6 +201,58 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.assertEqual(streamed, expected)
                 self.assertEqual(terminal_event(job).payload["response"], expected)
                 self.assertEqual(saved.call_args.args[0], expected)
+
+    def _assert_memo_proposal_recovery(self, first_reply, expected_note, *, empty_recovery=False):
+        job, saved, _on_error = self.make_memo_job("Create a memo called Groceries with the text Milk.")
+        calls = []
+        card = {
+            "id": "card-recovered", "tool": "memo_create", "family": "memo", "status": "pending",
+            "decision": None, "always_allowed": True, "expires_at": "2026-12-01T00:00:00Z",
+            "preview": {"kind": "memo_create", "title": "Groceries", "content": "Milk"},
+        }
+
+        def stream(messages, _model, *, tools=None, **_kwargs):
+            calls.append(bool(tools))
+            if len(calls) == 1:
+                yield first_reply
+            elif len(calls) == 2:
+                self.assertTrue(any(expected_note in str(m.get("content")) for m in messages))
+                yield json.dumps([tool_call("memo_create", title="Groceries", content="Milk")])
+            else:
+                self.assertFalse(any(expected_note in str(m.get("content")) for m in messages))
+                yield "The memo is waiting for your approval."
+
+        with (
+            patch("services.chat_workspace_tools.runner.has_auto_approval", new=AsyncMock(return_value=False)),
+            patch("services.chat_workspace_tools.runner.create_pending_approval", new=AsyncMock(return_value=card)) as propose,
+        ):
+            self.run_job(job, stream)
+
+        self.assertEqual(calls, [True, True, False])
+        propose.assert_awaited_once()
+        self.assertEqual(job._telemetry.workspace_action_recoveries, 0 if empty_recovery else 1)
+        self.assertEqual(job._telemetry.empty_answer_recoveries, int(empty_recovery))
+        self.assertEqual(job._telemetry.workspace_write_proposals, 1)
+        self.assertEqual(terminal_event(job).event, "done")
+        self.assertEqual(saved.call_args.args[0], "The memo is waiting for your approval.")
+        self.assertNotIn("I propose saving", "".join(
+            event.payload["text"] for event in job._events if event.event == "chunk"
+        ))
+
+    def test_unsubmitted_memo_claim_retries_once_and_creates_a_real_proposal(self):
+        self._assert_memo_proposal_recovery("I propose saving a memo called Groceries.", "Nothing was submitted")
+
+    def test_empty_workspace_decision_keeps_tools_for_the_requested_action(self):
+        self._assert_memo_proposal_recovery("", "neither a user-facing answer", empty_recovery=True)
+
+    def test_unsubmitted_memo_claim_retry_is_bounded_and_still_reports_failure(self):
+        job, saved, _on_error = self.make_memo_job("Create a memo called Groceries.")
+        stream = Mock(side_effect=lambda *_args, **_kwargs: iter(("I've created a memo.",)))
+        self.run_job(job, stream)
+        self.assertEqual(stream.call_count, 2)
+        self.assertEqual(job._telemetry.workspace_action_recoveries, 1)
+        self.assertEqual(job._telemetry.workspace_write_proposals, 0)
+        self.assertIn("not submitted", saved.call_args.args[0])
 
     def test_memo_claim_guard_leaves_negations_examples_and_hypotheticals_alone(self):
         replies = (
@@ -280,6 +337,32 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.run_job(job, lambda *_args, answer=reply, **_kwargs: iter((answer,)))
                 self.assertEqual(terminal_event(job).payload["response"], expected)
                 self.assertEqual(saved.call_args.args[0], expected)
+
+    def test_memo_claim_guard_matches_quoted_generated_titles_in_the_same_statement(self):
+        from services.chat_generation import _unconfirmed_memo_change_fallback
+
+        card = {
+            "tool": "memo_create", "status": "pending",
+            "preview": {"kind": "memo_create", "title": "買い物リスト"},
+        }
+        request = "牛乳を買うことを新しいメモに保存してください。"
+        for reply in (
+            "新しいメモ「買い物リスト」は承認待ちです。",
+            "新しいメモ『買い物リスト』の提案を作成しました。",
+        ):
+            with self.subTest(reply=reply):
+                self.assertIsNone(_unconfirmed_memo_change_fallback(reply, request, [card]))
+        for reply in (
+            "新しいメモ「別の題名」は承認待ちです。",
+            "買い物リストについて説明します。新しいメモ「別の題名」は承認待ちです。",
+            "新しいメモ「買い物リスト」を作成しました。",
+        ):
+            with self.subTest(reply=reply):
+                self.assertIsNotNone(_unconfirmed_memo_change_fallback(reply, request, [card]))
+        card["preview"]["title"] = "修正・追記の作業メモ"
+        self.assertIsNone(_unconfirmed_memo_change_fallback(
+            "新しいメモ「修正・追記の作業メモ」の提案を作成しました。", request, [card]
+        ))
 
     def test_memo_claim_guard_does_not_use_another_cards_success(self):
         other_memo = {
@@ -437,6 +520,13 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                     tool_name="memo_read",
                 )
             elif step == 3:
+                correction = next(
+                    m["content"] for m in messages
+                    if m.get("role") == "system" and "previous tool call was rejected" in m.get("content", "")
+                )
+                self.assertIn("memo_read", correction)
+                self.assertIn("assistant text, not a function", correction)
+                self.assertNotIn("Groq", correction)
                 yield json.dumps([tool_call("memo_read", memo_id=105)])
             else:
                 read_results = [m["content"] for m in messages if m.get("role") == "tool"]

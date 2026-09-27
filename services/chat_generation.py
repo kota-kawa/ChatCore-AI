@@ -74,6 +74,7 @@ from .chat_input_budget import (
 from .chat_prompt import insert_before_latest_user_message
 from .chat_turn_state import (
     TurnStateUpdateFilter,
+    build_tool_rejection_messages,
     build_turn_loop_messages,
     parse_bare_turn_state_update,
     parse_turn_state_update,
@@ -262,9 +263,9 @@ _MEMO_PASSIVE_CLAIM_JA = re.compile(
     re.MULTILINE,
 )
 _MEMO_PROPOSAL_CLAIM_JA = re.compile(
-    r"^[ \t]*[^\n。！？]{0,100}(?:メモ|この変更|その変更|編集案)[^\n。！？]{0,100}"
+    r"^[ \t]*[^\n。！？]{0,100}(?:メモ|この変更|その変更|編集案|この追記|この修正)[^\n。！？]{0,100}"
     r"(?:提案を(?:(?:作成|提出)し|出し)(?:ました|ています)|提案(?:しました|しています)|"
-    r"承認待ち(?:です|となっています))(?=[。！!：:]|$)",
+    r"(?:承認待ち|保留中)(?:です|となっています))(?=[。！!：:]|$)",
     re.MULTILINE,
 )
 _MEMO_CHANGE_CLAIM_EN = re.compile(
@@ -282,8 +283,8 @@ _MEMO_PASSIVE_CLAIM_EN = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _MEMO_PROPOSAL_CLAIM_EN = re.compile(
-    r"^[ \t]*(?:[-*][ \t]+)?I(?:['’]ve| have) "
-    r"proposed (?:creating|adding to|editing|updating|correcting|saving) "
+    r"^[ \t]*(?:[-*][ \t]+)?I(?:(?:['’]ve| have) proposed| propose) "
+    r"(?:creating|adding to|editing|updating|correcting|saving) "
     r"(?:an? |the |your )?(?:memo|note)\b",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -326,7 +327,7 @@ def _matching_memo_claim_card(
     preview = card.get("preview")
     if not isinstance(preview, dict) or preview.get("kind") != card.get("tool"):
         return None
-    claim = statement.casefold()
+    claim = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", statement).casefold()
     if re.search(r"追記|追加|\b(?:added to|adding to)\b", claim):
         expected_tool = "memo_append"
     elif re.search(r"修正|編集|\b(?:edited|editing|corrected|correcting)\b", claim):
@@ -367,18 +368,27 @@ def _unconfirmed_memo_change_fallback(
     """Replace direct memo write claims unsupported by this turn's card status."""
     # Quoted examples and code are data, not claims made by the assistant.
     prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
-    prose = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", prose)
     for line in prose.splitlines():
-        statements = [part for part in re.split(r"(?<=[。！？!?])|(?<=\.)[ \t]+", line) if part.strip()]
-        for index, statement in enumerate(statements):
+        # 引用した説明は判定せず、引用した題名はカードとの照合に残す。
+        # Mask quoted claims while preserving offsets to match quoted memo titles to cards.
+        masked = re.sub(
+            r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`',
+            lambda match: " " * len(match.group()),
+            line,
+        )
+        statements = list(re.finditer(r".+?(?:[。！？!?]|\.[ \t]+|$)", masked))
+        for index, match in enumerate(statements):
+            statement = match.group()
             lead = statement.lstrip()
             if lead.startswith((">", "'", "もし", "仮に", "例えば", "例：", "例:", "If ", "When ")):
                 continue
             # A quoted status can be followed by an explanatory 「と表示」 even without quotes.
-            if index + 1 < len(statements) and statements[index + 1].lstrip().startswith("と表示"):
+            if index + 1 < len(statements) and statements[index + 1].group().lstrip().startswith("と表示"):
                 continue
             proposal = _MEMO_PROPOSAL_CLAIM_JA.match(statement) or _MEMO_PROPOSAL_CLAIM_EN.match(statement)
-            pending = _MEMO_PENDING_CLAIM_EN.match(statement) or (proposal and "承認待ち" in proposal.group())
+            pending = _MEMO_PENDING_CLAIM_EN.match(statement) or (
+                proposal and any(status in proposal.group() for status in ("承認待ち", "保留中"))
+            )
             completed = (
                 _MEMO_CHANGE_CLAIM_JA.match(statement)
                 or _MEMO_CHANGE_CLAIM_EN.match(statement)
@@ -387,7 +397,7 @@ def _unconfirmed_memo_change_fallback(
             )
             if not (proposal or pending or completed):
                 continue
-            card = _matching_memo_claim_card(statement, latest_user_message, approval_cards)
+            card = _matching_memo_claim_card(line[match.start():match.end()], latest_user_message, approval_cards)
             status = card.get("status") if card else None
             if pending and status == "pending":
                 continue
@@ -1351,6 +1361,7 @@ class ChatGenerationJob:
         # Only a provider-side tool-call rejection resamples the same step once with its tools,
         # then replays it without tools if it is rejected again.
         current_tools = tools
+        rejection_base_messages = current_messages
         tool_schema_retried = False
         while True:
             emitted = False
@@ -1437,6 +1448,10 @@ class ChatGenerationJob:
                 if not tool_schema_retried:
                     tool_schema_retried = True
                     self._telemetry.tool_schema_retries += 1
+                    current_messages = build_tool_rejection_messages(
+                        rejection_base_messages,
+                        [tool["function"]["name"] for tool in current_tools],
+                    )
                     logger.warning(
                         "Provider rejected a tool call; resampling the step with its tools "
                         "(model=%s, phase=%s, reason=%s).",
@@ -1461,6 +1476,7 @@ class ChatGenerationJob:
                 )
                 self._telemetry.tool_schema_recoveries += 1
                 current_tools = None
+                current_messages = build_tool_rejection_messages(rejection_base_messages, ())
                 if discard_partial_on_retry:
                     with self._chunks_lock:
                         self._pending_stream_chunks.clear()
@@ -2158,9 +2174,9 @@ class ChatGenerationJob:
         ``minimal`` rebuilds after a provider-side rejection: the raw tool result is
         dropped and the same decision is retried with TurnState and the recent exchange.
         ``empty_answer_recovery`` は直前の判断が本文を返さなかった回復用で、
-        回答のみ契約に短いメモを添える。
+        内部封筒を要求しない回復契約に置き換える。
         ``empty_answer_recovery`` marks the retry after a decision that produced no
-        user-facing answer; it adds a short note to the answer-only contract.
+        user-facing answer; it replaces the contract without requiring another state envelope.
         """
         telemetry = state.telemetry
         phase = "agent"
@@ -2202,6 +2218,9 @@ class ChatGenerationJob:
                 ],
                 force_answer=force_answer,
                 empty_answer_recovery=empty_answer_recovery,
+                workspace_action_recovery=(
+                    state.workspace_action_recovery_attempted and not state.tool_approval_parts and not force_answer
+                ),
                 approval_pending_summaries=approval_pending_summaries,
             )
             if request_fits_context(candidate, self._model, phase, tools):
@@ -2222,6 +2241,9 @@ class ChatGenerationJob:
             ],
             force_answer=force_answer,
             empty_answer_recovery=empty_answer_recovery,
+            workspace_action_recovery=(
+                state.workspace_action_recovery_attempted and not state.tool_approval_parts and not force_answer
+            ),
             approval_pending_summaries=approval_pending_summaries,
         )
         if request_fits_context(minimal_candidate, self._model, phase, tools):
@@ -2301,10 +2323,13 @@ class ChatGenerationJob:
 
             available_tools = self._offered_agent_tools(state)
             tools_withdrawn = not available_tools
-            # 空回答の回復もツールなしの回答要求だが、予算枯渇とは別に記録する。
-            # Empty-answer recovery is also a tool-free answer request, but it is
-            # accounted separately from budget exhaustion.
-            force_answer = tools_withdrawn or state.empty_answer_recovery_attempted
+            # 未提出のメモ操作を空回答で打ち切らない。カード作成前は既存のツールと
+            # 直近の結果を残して一度やり直し、それ以外は従来の回答のみ回復にする。
+            # Keep tools and the last result for unsubmitted workspace actions during recovery.
+            force_answer = tools_withdrawn or (
+                state.empty_answer_recovery_attempted
+                and (self._workspace_tools is None or bool(state.tool_approval_parts))
+            )
             active_tools = None if force_answer else available_tools
             # 承認待ちでツールを外すのは予算切れではないので、予算枯渇としては数えない。
             # Withdrawing tools for a pending approval is not budget exhaustion, so it is not
@@ -2469,7 +2494,7 @@ class ChatGenerationJob:
             return ModelDecision(outcome="stopped")
 
         turn_state_update = parse_turn_state_update(step_chunks)
-        if turn_state_update is None:
+        if turn_state_update is None and not state.empty_answer_recovery_attempted:
             state.telemetry.missing_turn_state_updates += 1
         state.turn_state.apply_model_update(turn_state_update)
         return ModelDecision(
@@ -2478,8 +2503,8 @@ class ChatGenerationJob:
             step_chunks=step_chunks,
         )
 
-    # ツール要求の無い判断を回答として締めるフェーズ。回答のみ再試行が必要なら True を返す。
-    # The phase that closes a tool-free decision as the answer; True asks for one answer-only retry.
+    # ツール要求の無い判断を締める。回復が必要なら配信せず、True を返して同じループを続ける。
+    # Close a decision without tool calls; True requests recovery before publishing its answer.
     def _finish_answer_step(
         self,
         state: ChatTurnRunState,
@@ -2517,6 +2542,22 @@ class ChatGenerationJob:
             telemetry.untagged_turn_state_recoveries += 1
             visible_chunks = []
         if (
+            visible_chunks
+            and self._workspace_tools is not None
+            and active_tools
+            and not state.tool_approval_parts
+            and not state.workspace_action_recovery_attempted
+            and not cancelled
+            and not output_limited
+            and _unconfirmed_memo_change_fallback("".join(visible_chunks), state.latest_user_message) is not None
+        ):
+            # 訂正も通常ループの判断予算を使う。結果や承認を捏造せず、同じツールで再判断させる。
+            # Use the normal decision budget; let the model submit through the existing tools.
+            state.workspace_action_recovery_attempted = True
+            telemetry.workspace_action_recoveries += 1
+            state.suppress_next_generation_started = True
+            return True
+        if (
             not visible_chunks
             and not state.chunks
             and not state.empty_answer_recovery_attempted
@@ -2524,15 +2565,15 @@ class ChatGenerationJob:
         ):
             # 封筒のみ（タグの有無を問わない）・無出力・出力上限で本文ゼロは「回答なし」。
             # ここで抜けると画像だけ／トレースだけの応答が完了扱いになるため、同じ判断を
-            # 回答のみ要求で1度だけやり直す。
+            # 1度だけやり直す。未提出のメモ操作がありうる場合はツールを残す。
             # Envelope-only (tagged or not), empty, or cut off before any body text means no
             # answer. Breaking here would finish the turn as an image-only or
-            # trace-only reply, so retry the same decision once, answer-only.
+            # trace-only reply, so retry once, retaining tools for unsubmitted workspace actions.
             state.empty_answer_recovery_attempted = True
             telemetry.empty_answer_recoveries += 1
             logger.warning(
                 "Final decision produced no user-facing answer; retrying once "
-                "as an answer-only request.",
+                "with the applicable recovery contract.",
                 extra={
                     **telemetry.as_log_extra(),
                     "output_limited": output_limited,
