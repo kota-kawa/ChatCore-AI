@@ -491,6 +491,47 @@ class LlmServiceTestCase(unittest.TestCase):
         extra_body = mock_groq.chat.completions.create.call_args.kwargs["extra_body"]
         self.assertEqual(extra_body["reasoning_effort"], "medium")
 
+    # 日本語: JSONタスクが明示したGPT-OSSのreasoning effortをGroq APIへ渡すことを検証します。
+    # English: Verify JSON tasks can explicitly pass a GPT-OSS reasoning effort to Groq.
+    def test_get_llm_json_response_uses_explicit_gpt_oss_reasoning_effort(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _mock_openai_response('{"ok": true}')
+
+        with patch.object(llm, "groq_client", mock_groq):
+            response = llm.get_llm_json_response(
+                [{"role": "user", "content": "Return JSON."}],
+                llm.GPT_OSS_20B_MODEL,
+                reasoning_effort="high",
+            )
+
+        self.assertEqual(response, '{"ok": true}')
+        request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
+        self.assertEqual(request_kwargs["model"], llm.GPT_OSS_20B_MODEL)
+        self.assertEqual(
+            request_kwargs["extra_body"],
+            {"reasoning_effort": "high", "reasoning_format": "parsed"},
+        )
+        self.assertEqual(request_kwargs["response_format"], {"type": "json_object"})
+
+    def test_get_llm_json_response_preserves_default_groq_reasoning_settings(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _mock_openai_response('{"ok": true}')
+
+        with patch.object(llm, "groq_client", mock_groq):
+            for model_name, expected_reasoning in (
+                (llm.GPT_OSS_120B_MODEL, {"include_reasoning": False}),
+                (
+                    llm.QWEN_3_8_27B_MODEL,
+                    {"reasoning_effort": "default", "reasoning_format": "hidden"},
+                ),
+            ):
+                with self.subTest(model_name=model_name):
+                    llm.get_llm_json_response(
+                        [{"role": "user", "content": "Return JSON."}], model_name
+                    )
+                    request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
+                    self.assertEqual(request_kwargs["extra_body"], expected_reasoning)
+
     def test_model_constants_ignore_model_environment_variables(self):
         with patch.dict(
             llm.os.environ,

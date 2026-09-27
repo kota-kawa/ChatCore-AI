@@ -1696,7 +1696,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("回答までのステップ", persisted_parts[3]["text"])
         self.assertIn("名所です。", persisted_parts[3]["text"])
         mock_image.assert_called_once()
-        self.assertEqual(mock_image.call_args.kwargs["model"], "openai/gpt-oss-120b")
+        self.assertNotIn("model", mock_image.call_args.kwargs)
 
     # 日本語: 選択ボタンが確定したストリーム中の更新でも、先に出した検索画像が消えないことを検証します。
     # English: Verify the streaming update that settles choice buttons keeps the image revealed earlier.

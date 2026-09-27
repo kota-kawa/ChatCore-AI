@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from anthropic import Anthropic
@@ -68,6 +68,7 @@ GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
 # 軽量な補助タスクは会話で選択されたモデルに依存させず、Groq の20Bへ固定する。
 # Keep lightweight auxiliary tasks independent from the chat model selected by the user.
 LIGHTWEIGHT_TASK_MODEL = GPT_OSS_20B_MODEL
+LIGHTWEIGHT_TASK_REASONING_EFFORT: Literal["low", "medium", "high"] = "high"
 QWEN_3_8_27B_MODEL = "qwen/qwen3.8-27b"
 GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
@@ -734,6 +735,8 @@ def _groq_reasoning_kwargs(
     model_name: str,
     *,
     generation_phase: str = "default",
+    reasoning_effort: Literal["low", "medium", "high"] | None = None,
+    reasoning_format: Literal["hidden", "parsed"] | None = None,
 ) -> dict[str, Any]:
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
@@ -744,7 +747,14 @@ def _groq_reasoning_kwargs(
             "reasoning_format": "hidden",
         }
     elif model_name in GPT_OSS_MODELS:
-        if is_answer_phase:
+        if reasoning_effort is not None:
+            # JSON mode validates message content; keep explicit reasoning in its parsed field.
+            # JSON modeはmessage.contentを検証するため、明示した推論をparsed fieldへ分けます。
+            reasoning_options = {
+                "reasoning_effort": reasoning_effort,
+                "reasoning_format": reasoning_format or "parsed",
+            }
+        elif is_answer_phase:
             # Keep every GPT-OSS answer phase at medium or higher; only the final answer uses high.
             # GPT-OSS の回答フェーズはすべて medium 以上にし、最終回答だけ high にします。
             reasoning_effort = "high" if generation_phase == "final_answer" else "medium"
@@ -1917,6 +1927,8 @@ def _get_chat_completions_json_response(
     provider_name: str,
     missing_key_message: str,
     fallback_message: str,
+    reasoning_effort: Literal["low", "medium", "high"] | None = None,
+    reasoning_format: Literal["hidden", "parsed"] | None = None,
 ) -> str | None:
     if client is None:
         _raise_configuration_error(
@@ -1931,7 +1943,15 @@ def _get_chat_completions_json_response(
             "model": model_name,
             "messages": _openai_request_messages(model_name, sanitized_messages, responses_api=False),
             **_chat_completion_token_limit_kwargs(model_name),
-            **(_groq_reasoning_kwargs(model_name) if provider_name == "Groq" else {}),
+            **(
+                _groq_reasoning_kwargs(
+                    model_name,
+                    reasoning_effort=reasoning_effort,
+                    reasoning_format=reasoning_format,
+                )
+                if provider_name == "Groq"
+                else {}
+            ),
             **_openai_reasoning_kwargs(model_name),
             "temperature": 0,
             "response_format": {"type": "json_object"},
@@ -1997,11 +2017,24 @@ def _get_openai_responses_json_response(
 # 指定されたモデルでJSONオブジェクト形式の応答を取得します。
 # Retrieve a JSON object response from the LLM based on the selected model name.
 def get_llm_json_response(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    reasoning_effort: Literal["low", "medium", "high"] | None = None,
+    reasoning_format: Literal["hidden", "parsed"] | None = None,
 ) -> str | None:
     # JSONオブジェクト形式の出力を強制してLLMから応答を取得します。失敗時は LlmServiceError を送出します。
     # Request and retrieve a chat completion response formatted strictly as a JSON object, raising LlmServiceError on failure.
     validate_model_name(model_name)
+    if reasoning_effort is not None or reasoning_format is not None:
+        if model_name not in GPT_OSS_MODELS:
+            raise ValueError("Explicit reasoning options are only supported for GPT-OSS models.")
+        if reasoning_format is not None and reasoning_effort is None:
+            raise ValueError("A GPT-OSS reasoning format requires an explicit reasoning effort.")
+        if reasoning_effort is not None and reasoning_effort not in {"low", "medium", "high"}:
+            raise ValueError("GPT-OSS reasoning effort must be low, medium, or high.")
+        if reasoning_format is not None and reasoning_format not in {"hidden", "parsed"}:
+            raise ValueError("GPT-OSS reasoning format must be hidden or parsed.")
     if is_claude_model(model_name):
         return get_claude_response(conversation_messages, model_name)
     if is_groq_model(model_name):
@@ -2012,6 +2045,8 @@ def get_llm_json_response(
             provider_name="Groq",
             missing_key_message="GROQ_API_KEY が未設定です。",
             fallback_message="Groq JSON API call failed.",
+            reasoning_effort=reasoning_effort,
+            reasoning_format=reasoning_format,
         )
     if is_openai_model(model_name):
         return _get_openai_responses_json_response(conversation_messages, model_name)

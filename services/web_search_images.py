@@ -9,7 +9,11 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
-from services.llm import get_llm_json_response
+from services.llm import (
+    LIGHTWEIGHT_TASK_MODEL,
+    LIGHTWEIGHT_TASK_REASONING_EFFORT,
+    get_llm_json_response,
+)
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
@@ -25,6 +29,9 @@ logger = logging.getLogger(__name__)
 MAX_IMAGE_CANDIDATES = 18
 MAX_IMAGE_ALT_CHARS = 180
 MAX_IMAGE_SOURCE_TITLE_CHARS = 160
+# JSON modeで推論を本文から分離し、GroqのJSON検証エラーを避ける。
+# Keep reasoning separate from JSON content to avoid Groq JSON validation errors.
+IMAGE_SELECTION_REASONING_FORMAT = "parsed"
 MIN_STREAMING_IMAGE_GAP_CHARS = 64
 _IMAGE_PLACEMENT_POSITIONS = frozenset(
     {"start", "after_subject", "after_paragraph"}
@@ -337,10 +344,9 @@ def choose_web_search_images(
     user_question: str,
     result: Any,
     *,
-    model: str,
     answer_text: str = "",
 ) -> list[dict[str, str]]:
-    """Ask the selected conversation model which images to show and where they belong."""
+    """Ask the lightweight task model which images to show and where they belong."""
     rows = _candidate_rows(result)
     if not rows or not str(user_question or "").strip():
         return []
@@ -376,7 +382,12 @@ def choose_web_search_images(
         },
     ]
     try:
-        raw_response = get_llm_json_response(messages, model)
+        raw_response = get_llm_json_response(
+            messages,
+            LIGHTWEIGHT_TASK_MODEL,
+            reasoning_effort=LIGHTWEIGHT_TASK_REASONING_EFFORT,
+            reasoning_format=IMAGE_SELECTION_REASONING_FORMAT,
+        )
     except Exception:
         logger.warning("Web search image selection failed; continuing without an image.", exc_info=True)
         return []
