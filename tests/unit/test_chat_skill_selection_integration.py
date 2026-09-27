@@ -6,8 +6,6 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from services.chat_skill_selection import select_chat_skills
-
 from services.chat_context import build_context_messages
 from services.chat_regeneration_pipeline import (
     ChatRegenerationDependencies,
@@ -16,6 +14,7 @@ from services.chat_regeneration_pipeline import (
     ChatRegenerationStreamStarted,
     run_chat_regeneration,
 )
+from services.chat_skill_selection import select_chat_skills
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT, MEMO_TOOLS_SKILL_INSTRUCTIONS
 from tests.unit import test_chat_use_case_lookup_flags as post_helpers
 

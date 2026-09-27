@@ -6,7 +6,6 @@ from functools import partial
 from typing import Any
 
 from fastapi import Depends, Request
-from services.chat_skill_selection import select_chat_skills
 from starlette.responses import StreamingResponse
 
 from services.api_errors import ApiServiceError
@@ -93,6 +92,7 @@ from services.chat_service import (
     switch_chat_branch,
     validate_room_owner,
 )
+from services.chat_skill_selection import select_chat_skills
 from services.chat_state import (
     get_room_summary,
     list_room_memory_facts,
