@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from services.i18n import get_current_locale
@@ -247,10 +248,25 @@ def build_system_skill(
 # 1ターンのスキル文脈。prompt はシステム文脈へ入れる本文、残りは既定スキルごとの有効状態。
 # One turn's Skill context: prompt is the system text, the rest are the built-in Skills' states.
 @dataclass(frozen=True)
+class SkillCandidate:
+    """One enabled Skill eligible for a chat turn's selection decision."""
+
+    id: int
+    name: str
+    instructions: str
+
+
+@dataclass(frozen=True)
 class ChatSkillsContext:
     prompt: str | None
     generative_ui_enabled: bool
     memo_tools_enabled: bool
+    candidates: tuple[SkillCandidate, ...] = ()
+    generative_ui_selected: bool = False
+    _prompt_builder: Callable[[list[dict[str, Any]]], str | None] | None = field(
+        default=None, repr=False, compare=False
+    )
+    _prompt_skills_by_id: tuple[tuple[int, dict[str, Any]], ...] = field(default=(), repr=False, compare=False)
 
 
 def build_chat_skills_context(
@@ -280,17 +296,85 @@ def build_chat_skills_context(
     if memo_tools_enabled:
         system_skills.append(build_system_skill(MEMO_TOOLS_SYSTEM_SKILL_KEY, is_enabled=True, locale=locale))
     builder = prompt_builder or build_enabled_user_skills_prompt
+    eligible_skills = _eligible_skill_records(system_skills, user_skills)
+    candidates = tuple(
+        SkillCandidate(
+            id=skill_id,
+            name=normalize_user_skill_name(skill.get("name")),
+            instructions=normalize_user_skill_instructions(skill.get("instructions")),
+        )
+        for skill_id, skill in eligible_skills
+    )
     return ChatSkillsContext(
-        prompt=builder([*system_skills, *user_skills]),
+        prompt=builder([skill for _, skill in eligible_skills]),
         generative_ui_enabled=generative_ui_enabled,
         memo_tools_enabled=memo_tools_enabled,
+        candidates=candidates,
+        generative_ui_selected=generative_ui_enabled,
+        _prompt_builder=builder,
+        _prompt_skills_by_id=tuple(eligible_skills),
+    )
+
+
+def _eligible_skill_records(
+    system_skills: list[dict[str, Any]],
+    personal_skills: list[dict[str, Any]],
+) -> list[tuple[int, dict[str, Any]]]:
+    """Keep valid built-ins and unique, well-formed personal Skills in canonical order."""
+    records: list[tuple[int, dict[str, Any]]] = []
+    for skill in system_skills:
+        if skill.get("is_enabled", True) is not False and _has_skill_content(skill):
+            skill_id = skill.get("id")
+            if type(skill_id) is int and skill_id in {GENERATIVE_UI_SYSTEM_SKILL_ID, MEMO_TOOLS_SYSTEM_SKILL_ID}:
+                records.append((skill_id, dict(skill)))
+
+    valid_personal_ids = [
+        skill.get("id")
+        for skill in personal_skills
+        if skill.get("is_enabled", True) is not False
+        and type(skill.get("id")) is int
+        and skill["id"] > 0
+    ]
+    duplicate_personal_ids = {skill_id for skill_id, count in Counter(valid_personal_ids).items() if count > 1}
+    for skill in personal_skills:
+        if skill.get("is_enabled", True) is False:
+            continue
+        skill_id = skill.get("id")
+        if (
+            type(skill_id) is not int
+            or skill_id <= 0
+            or skill_id in duplicate_personal_ids
+        ):
+            # Personal Skills use positive PostgreSQL identities; reserved IDs belong only
+            # to server-built system Skills and cannot be supplied by personal rows.
+            continue
+        if _has_skill_content(skill):
+            records.append((skill_id, dict(skill)))
+    return records
+
+
+def _has_skill_content(skill: dict[str, Any]) -> bool:
+    return bool(
+        normalize_user_skill_name(skill.get("name"))
+        and normalize_user_skill_instructions(skill.get("instructions"))
     )
 
 
 def build_enabled_user_skills_prompt(skills: list[dict[str, Any]]) -> str | None:
     """Build one bounded system-context block from enabled account Skills."""
     sections: list[str] = []
-    for skill in skills:
+    system_skills = [
+        skill
+        for skill in skills
+        if skill.get("system_skill_key") in _SYSTEM_SKILLS
+        and type(skill.get("id")) is int
+        and skill.get("id") == _SYSTEM_SKILLS[skill["system_skill_key"]].skill_id
+    ]
+    personal_skills = [skill for skill in skills if skill not in system_skills]
+    eligible_skills = _eligible_skill_records(system_skills, personal_skills)
+    for _, skill in eligible_skills:
+        if skill.get("is_enabled", True) is False:
+            continue
         name = normalize_user_skill_name(skill.get("name"))
         instructions = normalize_user_skill_instructions(skill.get("instructions"))
         if not name or not instructions:

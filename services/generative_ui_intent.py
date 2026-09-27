@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.chat_prompt import insert_before_latest_user_message
+
 # 「UI・図を作らない」と読める表現だけを拾う。UIについて説明を求める文とは区別する。
 # Match only phrasings that refuse a visual, never a request to explain one.
 _UI_NOUN = r"(?:生成\s*UI|UI|ユーザーインターフェース|図|図解|グラフ|チャート|ビジュアル|可視化|アニメーション|3\s*D)"
@@ -87,7 +89,8 @@ def inject_generative_ui_mode_instruction(
     normalized_mode = str(mode or "").strip().upper()
     if normalized_mode not in _INJECTABLE_MODES:
         return messages
-    messages.append(
+    return insert_before_latest_user_message(
+        messages,
         {
             "role": "system",
             "content": _MODE_INSTRUCTION.format(
@@ -96,4 +99,3 @@ def inject_generative_ui_mode_instruction(
             ),
         }
     )
-    return messages

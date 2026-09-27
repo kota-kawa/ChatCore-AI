@@ -7,6 +7,7 @@
 - `docs/knowledge/development_conventions.md` はプロジェクト構成、ビルド・テストコマンド、スキーマ同期、実装規約、命名規則、責務分割、テスト方針、サブエージェントの指定をまとめた開発規約です。コードを変更する作業では着手前に必ず読んでください。
 - `docs/knowledge/README.md` は再利用可能な知見の索引です。デバッグ手順は `docs/knowledge/debugging.md`、API契約とマイグレーションの注意点は `docs/knowledge/contracts-and-migrations.md`、worktree を分けた後の運用手順は `docs/knowledge/parallel_work.md` を参照してください。作業ログや一時的な状態は追加しません。
 - `docs/knowledge/system_design_interview_notes.md` はシステムデザイン面接向けの準備メモです。容量見積もりや将来の発展案は現在の実装ではないため、実装判断の根拠として引用しないでください。
+- `docs/decisions/0015-preselect-enabled-skills.md` は設計判断の記録です。関連する実装の境界や採用条件を確認するときに参照してください。
 - `docs/decisions/README.md` は重要な技術判断（ADR）の索引です。判断を変更・追加するときは、既存 ADR を確認して理由と影響を更新・記録してください。
 - `docs/manual/` は利用者向けマニュアルであり、実装の責務や内部挙動を確認する資料ではありません。
 - `frontend/STYLING_STRATEGY.md` は Next.js 側の CSS 配置・カスケード・レガシー互換方針です。UI の変更時は `ARCHITECTURE.md` のフロントエンド章と併せて参照してください。

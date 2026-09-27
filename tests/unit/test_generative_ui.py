@@ -4,7 +4,6 @@ import unittest
 from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
-    decide_generative_ui_mode,
     decode_message_parts,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
@@ -1010,68 +1009,6 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         )
 
         self.assertIsNone(normalized.parts)
-
-    def test_ui_mode_decision_comes_from_selected_model_json(self):
-        calls = []
-
-        def decide(messages, model):
-            calls.append((messages, model))
-            return '{"ui_mode":"3d"}'
-
-        mode = decide_generative_ui_mode(
-            [{"role": "user", "content": "Three.jsで回転するデモを作って"}],
-            "selected-conversation-model",
-            llm_json_response=decide,
-        )
-
-        self.assertEqual(mode, "3D")
-        self.assertEqual(calls[0][1], "selected-conversation-model")
-        self.assertIn(
-            "do not decide from keyword",
-            next(message["content"] for message in calls[0][0] if message["role"] == "system"),
-        )
-
-    def test_ui_mode_decision_omits_tool_protocol_messages(self):
-        captured = []
-
-        mode = decide_generative_ui_mode(
-            [
-                {"role": "system", "content": "base prompt"},
-                {"role": "user", "content": "前の質問"},
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [{"id": "call-1", "function": {"name": "web_search"}}],
-                },
-                {"role": "tool", "content": "検索結果"},
-                {"role": "user", "content": "この結果を図解して"},
-            ],
-            "selected-conversation-model",
-            llm_json_response=lambda messages, _model: captured.append(messages)
-            or '{"ui_mode":"2D"}',
-        )
-
-        self.assertEqual(mode, "2D")
-        self.assertEqual([message["role"] for message in captured[0]], ["system", "user", "user"])
-        self.assertEqual(captured[0][-1]["content"], "この結果を図解して")
-
-    def test_malformed_ui_mode_decision_does_not_fallback_to_user_text(self):
-        mode = decide_generative_ui_mode(
-            [{"role": "user", "content": "生成UIで見せて"}],
-            "selected-conversation-model",
-            llm_json_response=lambda *_args: '{"ui_mode":"maybe"}',
-        )
-
-        self.assertIsNone(mode)
-
-    def test_ui_mode_decision_recovers_json_wrapped_in_provider_prose(self):
-        mode = decide_generative_ui_mode(
-            [{"role": "user", "content": "比較を図解して"}],
-            "selected-conversation-model",
-            llm_json_response=lambda *_args: '判定結果: {"ui_mode":"2D"}',
-        )
-
-        self.assertEqual(mode, "2D")
 
     def test_quality_gate_accepts_a_complete_polished_2d_artifact(self):
         raw = (

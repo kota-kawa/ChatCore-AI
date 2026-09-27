@@ -69,12 +69,18 @@ RECENT_HISTORY_TOKEN_BUDGET = 7400
 PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 2600
 USER_PROFILE_TOKEN_BUDGET = 2200
 TASK_PROMPT_TOKEN_BUDGET = 2600
+FOLLOW_UP_CONTINUITY_TOKEN_BUDGET = 180
 RECENT_HISTORY_MAX_MESSAGES = 16
 GUARANTEED_RECENT_MESSAGE_COUNT = 3
 ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_RECENT_TOKEN_BUDGET = RECENT_HISTORY_TOKEN_BUDGET
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 260
+_FOLLOW_UP_CONTINUITY_INSTRUCTIONS = """For follow-ups, preserve the chosen option, order, and numbers unless changed. For a fixed-total
+schedule, do not add setup, breaks, transitions, or closing as separate items. Check the total and
+all timed substeps. If any substep sum cannot be verified, omit all timed substeps.
+
+追質問では、変更依頼がなければ選択案・順序・数値を維持してください。合計固定の進行表には準備・休憩・移動・締めを別枠で足さず、全体と全ての時間付き内訳の合計を確認してください。内訳の合計を検算できないものが一つでもあれば、時間付き内訳を全て省いてください。"""
 
 # テキストのトークン数を概算（簡易見積もり）する
 # Roughly estimate the token count of a given text
@@ -540,8 +546,9 @@ def build_context_messages(
         0,
     )
     optional_messages: list[dict[str, str]] = []
+    dynamic_messages: list[dict[str, str]] = []
 
-    def append_optional_system_message(content: str | None, limit: int) -> None:
+    def append_optional_system_message(content: str | None, limit: int, *, dynamic: bool = False) -> None:
         nonlocal optional_tokens_remaining
         if not content or optional_tokens_remaining <= 0:
             return
@@ -549,7 +556,8 @@ def build_context_messages(
         trimmed = trim_text_to_token_budget(content, allowed_tokens)
         if not trimmed:
             return
-        optional_messages.append({"role": "system", "content": trimmed})
+        target = dynamic_messages if dynamic else optional_messages
+        target.append({"role": "system", "content": trimmed})
         optional_tokens_remaining -= estimate_token_count(trimmed)
 
     # ユーザープロフィールプロンプトを追加
@@ -564,9 +572,16 @@ def build_context_messages(
             project_instructions_message["content"], PROJECT_INSTRUCTIONS_TOKEN_BUDGET
         )
 
-    # ユーザーが有効化したSkillをプロジェクト指示とタスク定義の間に追加する。
-    # Add enabled user skills between project instructions and task guidance.
-    append_optional_system_message(user_skills_prompt, USER_SKILLS_TOKEN_BUDGET)
+    # 予算の優先順を維持しつつ、ターンごとに選ぶスキルは履歴の後ろへ置く。
+    # Keep budget priority, but place per-turn selected Skills after the cached history.
+    append_optional_system_message(user_skills_prompt, USER_SKILLS_TOKEN_BUDGET, dynamic=True)
+
+    if sum(message.get("role") == "user" for message in recent_messages) > 1:
+        append_optional_system_message(
+            _FOLLOW_UP_CONTINUITY_INSTRUCTIONS,
+            FOLLOW_UP_CONTINUITY_TOKEN_BUDGET,
+            dynamic=True,
+        )
 
     # タスクテンプレートプロンプトを追加
     # Add task template prompt if specified
@@ -584,21 +599,17 @@ def build_context_messages(
     if memory_message is not None:
         append_optional_system_message(memory_message["content"], MEMORY_TOKEN_BUDGET)
 
-    # タスク・プロフィール・プロジェクト指示などのルームごとのシステム文脈を読んだ後に、
-    # 生成UIの完了条件を短く再提示する。OpenAI Responses APIでは developer
-    # message、Claude APIでは先頭のsystem promptとして同じ位置関係を保つ。
-    # Re-state the generative UI completion criteria after the per-room system
-    # context. This becomes a developer message for OpenAI Responses and remains
-    # a system prompt for the Claude API.
+    # 選択された生成UIの指示と実行契約は同じ動的なまとまりに保つ。
+    # Keep the selected UI instructions and execution contract in the same dynamic block.
     messages = [mandatory_messages[0], *optional_messages]
     if generative_ui_enabled:
-        messages.append(mandatory_messages[1])
+        dynamic_messages.append(mandatory_messages[1])
 
     # システムメッセージ群で使用されたトークン数を算出して直近履歴に使えるトークン予算を決定する
     # Calculate tokens used by system messages to determine the remaining budget for recent history
     reserved_tokens = sum(
         estimate_token_count(str(message.get("content", "")))
-        for message in [*messages, runtime_context_message]
+        for message in [*messages, *dynamic_messages, runtime_context_message]
     )
     remaining_tokens = min(CONTEXT_TOKEN_BUDGET - reserved_tokens, reserved_history_tokens)
     if remaining_tokens < 0:
@@ -607,6 +618,8 @@ def build_context_messages(
     # 予算内で直近のメッセージを追加する
     # Extend the messages with recent items within the calculated budget
     messages.extend(select_recent_messages(recent_messages, remaining_tokens))
+    for dynamic_message in dynamic_messages:
+        messages = insert_before_latest_user_message(messages, dynamic_message)
     # 現在時刻は毎回変わるため、キャッシュされる履歴の後ろ（最新の発話の直前）に置く。
     # The current time changes on every request, so it follows the cached history and sits
     # right before the latest message.

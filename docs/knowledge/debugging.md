@@ -68,6 +68,8 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 1件のターンではなく傾向を見たいときは `python3 scripts/summarize_generation_telemetry.py logs/app.log` を使います。同じ `request_id` の複数行を1ターンに畳み（`request_id` が付いていない古いログでは、ターンを閉じた行だけを1ターンとして数え、その旨を出力の先頭に出します）、結果（`done` / `incomplete` / 終了イベントを出さずに終わった `error`）、初回パスの終了理由、生成 UI の状態と理由コード、継続・縮退・予算切れの発生率、分量の中央値を出します。チャットの出力に関わる変更では、変更前後で同じ入力を流し、`--baseline 変更前のログ` を付けて差分を見ます。率の差はポイント表示で、変更前後とも0件の指標は省略されます（`--all` で表示）。1つのログに複数回の試行が混ざる場合は `--since 2026-09-22T00:00:00` で範囲を絞ります。集計値だけを扱うため、本文・検索結果・ユーザー入力はこの出力に含まれません。
 
+Skill が適用されない場合は、同じ `request_id` の `event=skill_selection` を確認します。`candidate_count` は当該経路で利用できる有効な Skill 数、`selected_skill_ids` と `selected_count` は本体へ渡す選択です。`fallback=true` の `reason` は `uncertain`、`invalid_response`、`llm_error`、`overflow`、`budget_error` のいずれかで、利用できる全候補へ戻したことを示します。`no_candidates` は候補が無くAIを呼ばなかった状態です。`duration_ms` と `input_tokens` は選択器の時間と入力見積もりです。生成本体の指標と混ぜず、リクエスト単位で併記してください。本文や生のプロバイダエラーはこのイベントへ追加しません。
+
 ## API 契約・フロント同期エラー
 
 レスポンスのフィールドが実行時に欠ける、または TypeScript の型だけが古い場合は、`docs/knowledge/contracts-and-migrations.md` の同期手順を使います。生成ファイルを直接修正して一時的に型エラーを隠さないでください。

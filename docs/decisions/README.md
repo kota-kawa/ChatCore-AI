@@ -18,6 +18,7 @@
 - [0012: チャット画像は非公開の保存先に置き、画像を読めるモデルにだけ送る](0012-private-chat-image-input.md)
 - [0013: チャットからの書き込みはサーバーに保存した承認待ちアクションを経由する](0013-chat-writes-through-stored-approvals.md)
 - [0014: 有効な Skill はすべて渡し、ターンごとの動的選択は採用しない](0014-no-per-turn-skill-selection.md)
+- [0015: 有効な Skill を回答前に選択する](0015-preselect-enabled-skills.md)
 
 ## 追加・更新の基準
 

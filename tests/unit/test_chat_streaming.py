@@ -5,6 +5,7 @@ import time
 import unittest
 from contextlib import ExitStack
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from starlette.responses import StreamingResponse
@@ -312,6 +313,17 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Clear running temporary job state before starting each test.
     def setUp(self):
         clear_generation_job_state(cancel_running=True)
+        # The real selection protocol is covered separately; route tests never call providers.
+        for target in (
+            "blueprints.chat.messages.select_chat_skills",
+            "services.chat_regeneration_pipeline.select_chat_skills",
+        ):
+            self.enterContext(patch(
+                target,
+                side_effect=lambda context, *_args, **_kwargs: SimpleNamespace(
+                    context=context, ui_mode=None if context.generative_ui_enabled else "NONE",
+                ),
+            ))
         self._project_context_patch = patch(
             "blueprints.chat.messages.get_project_context",
             return_value=None,

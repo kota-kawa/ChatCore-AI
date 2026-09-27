@@ -92,6 +92,7 @@ from services.chat_service import (
     switch_chat_branch,
     validate_room_owner,
 )
+from services.chat_skill_selection import select_chat_skills
 from services.chat_state import (
     get_room_summary,
     list_room_memory_facts,
@@ -107,9 +108,6 @@ from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
 from services.error_messages import (
     ERROR_CHAT_ROOM_NOT_FOUND,
-)
-from services.generative_ui import (
-    decide_generative_ui_mode,
 )
 from services.i18n import get_request_locale
 from services.llm import (
@@ -700,7 +698,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 is_streaming_model=is_streaming_model,
                 start_generation_job=start_generation_job,
                 get_llm_response=get_llm_response,
-                decide_generative_ui_mode=decide_generative_ui_mode,
+                select_chat_skills=select_chat_skills,
                 is_retryable_llm_error=is_retryable_llm_error,
                 search_personal_knowledge=search_personal_knowledge_for_tool,
                 search_shared_prompts=search_shared_prompts_for_tool,
@@ -753,9 +751,6 @@ _REGENERATE_LOG_MESSAGES = ChatRegenerationLogMessages(
     user_profile_load_failed="Failed to load user profile context for regenerate; proceeding without it.",
     room_summary_load_failed="Failed to load room summary for regenerate; proceeding without it.",
     memory_facts_load_failed="Failed to load memory facts for regenerate; proceeding without them.",
-    generative_ui_mode_failed=(
-        "Failed to decide generative UI mode for regeneration; continuing without intent recovery."
-    ),
     room_summary_rebuild_failed="Failed to rebuild room summary after regeneration for %s.",
 )
 
@@ -765,9 +760,6 @@ _EDIT_AND_REGENERATE_LOG_MESSAGES = ChatRegenerationLogMessages(
     user_profile_load_failed="Failed to load user profile for edit_and_regenerate; proceeding without it.",
     room_summary_load_failed="Failed to load room summary for edit_and_regenerate; proceeding without it.",
     memory_facts_load_failed="Failed to load memory facts for edit_and_regenerate; proceeding without them.",
-    generative_ui_mode_failed=(
-        "Failed to decide generative UI mode for edit_and_regenerate; continuing without intent recovery."
-    ),
     room_summary_rebuild_failed="Failed to rebuild room summary after edit_and_regenerate for %s.",
 )
 
