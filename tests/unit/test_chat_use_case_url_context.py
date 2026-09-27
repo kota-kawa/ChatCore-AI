@@ -115,7 +115,9 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             build_llm_stream_response=Mock(),
             iter_llm_stream_events=Mock(),
             get_llm_response=Mock(return_value="assistant reply"),
-            decide_generative_ui_mode=Mock(return_value="2D"),
+            select_chat_skills=Mock(side_effect=lambda context, *_args, **_kwargs: SimpleNamespace(
+                context=context, ui_mode="2D" if context.generative_ui_enabled else "NONE",
+            )),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
             should_extract_context=Mock(return_value=False),

@@ -56,7 +56,7 @@ from services.interactive_buttons import (
     interactive_buttons_parts,
     validate_interactive_buttons_payload,
 )
-from services.llm import LlmOutputLimitError, get_llm_json_response
+from services.llm import LlmOutputLimitError
 from services.message_parts_display import normalize_message_parts_for_display
 from services.tool_approval_parts import (
     TOOL_APPROVAL_PART_TYPE,
@@ -74,7 +74,6 @@ __all__ = [
     "GenerativeUiValidationError",
     "artifact_status_part",
     "artifact_status_payload",
-    "decide_generative_ui_mode",
     "decode_message_parts",
     "encode_message_parts",
     "inject_generative_ui_mode_instruction",
@@ -266,119 +265,6 @@ def _coerce_generative_ui_mode(value: Any) -> GenerativeUiMode | None:
     if normalized not in GENERATIVE_UI_MODES:
         return None
     return normalized  # type: ignore[return-value]
-
-
-class GenerativeUiDecision(BaseModel):
-    """Structured semantic decision returned by the selected conversation model."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    ui_mode: GenerativeUiMode
-
-    @field_validator("ui_mode", mode="before")
-    @classmethod
-    def _validate_ui_mode(cls, value: Any) -> GenerativeUiMode:
-        normalized = _coerce_generative_ui_mode(value)
-        if normalized is None:
-            raise ValueError("ui_mode must be one of NONE, 2D, or 3D")
-        return normalized
-
-
-# The semantic decision is deliberately made by the selected conversation model.
-# This prompt is separate from artifact parsing so protocol/safety validation remains
-# deterministic while user intent is interpreted in the user's language and context.
-GENERATIVE_UI_DECISION_PROMPT = """
-You are the semantic UI-mode decision pass for a normal chat response.
-Read the entire conversation and prioritize the latest user request. Understand the
-request in its language and conversational context; do not decide from keyword or
-regular-expression matches. Distinguish discussing a UI, diagram, 3D, or code from
-asking the assistant to create and show a visual result.
-
-Return exactly one JSON object with the key `ui_mode` and no Markdown.
-The value must be one of "NONE", "2D", or "3D". Example: {"ui_mode":"NONE"}
-
-Choose NONE when the user wants an explanation, code/sample, comparison, calculation,
-or text-only answer, or when a visual is merely discussed. Choose 3D for a requested
-working 3D/spatial/Three.js visual. Choose 2D for a requested generated UI, diagram,
-chart, flow, timeline, visualization, simulation, or interactive visual that is not 3D.
-Honor explicit negation and the latest turn over older requests.
-""".strip()
-
-
-def _parse_generative_ui_decision(raw: str | None) -> GenerativeUiMode | None:
-    """Parse provider-compatible JSON without interpreting user text."""
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    candidate = raw.strip()
-    # Claude may wrap a JSON response in a Markdown fence even though the prompt
-    # requests plain JSON. Removing the fence is protocol recovery, not intent
-    # classification.
-    if candidate.startswith("```"):
-        opening_end = candidate.find("\n")
-        closing_start = candidate.rfind("```")
-        if opening_end >= 0 and closing_start > opening_end:
-            candidate = candidate[opening_end + 1 : closing_start].strip()
-    try:
-        payload = json.loads(candidate)
-    except (TypeError, json.JSONDecodeError):
-        # Some providers add a short explanation around the requested object.
-        # Recover only the JSON object shape; never inspect the user's text here.
-        start = candidate.find("{")
-        end = candidate.rfind("}")
-        if start < 0 or end <= start:
-            return None
-        try:
-            payload = json.loads(candidate[start : end + 1])
-        except (TypeError, json.JSONDecodeError):
-            return None
-    if not isinstance(payload, dict):
-        return None
-    try:
-        return GenerativeUiDecision.model_validate(payload).ui_mode
-    except ValidationError:
-        return None
-
-
-def decide_generative_ui_mode(
-    conversation_messages: list[dict[str, Any]],
-    model: str,
-    *,
-    llm_json_response: Callable[[list[dict[str, Any]], str], str | None] | None = None,
-) -> GenerativeUiMode | None:
-    """Ask the selected conversation model for the structured UI mode.
-
-    A failed or malformed decision is represented by ``None``. Callers must not
-    infer a mode from the user's text in that case; explicit artifacts can still
-    undergo their normal deterministic safety validation.
-    """
-    # The decision call uses a JSON endpoint, which does not accept the tool-call
-    # history shape used by some OpenAI Responses requests. UI intent only needs
-    # the conversational text, so omit protocol/tool messages and keep the
-    # decision instruction as the sole system message. This also keeps untrusted
-    # selected-reference payloads from becoming a competing system instruction.
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": GENERATIVE_UI_DECISION_PROMPT}
-    ]
-    for message in conversation_messages:
-        role = str(message.get("role") or "")
-        if role not in {"user", "assistant"}:
-            continue
-        if message.get("tool_calls"):
-            continue
-        content = message.get("content")
-        if content is None:
-            continue
-        messages.append({"role": role, "content": str(content)})
-    invoke = llm_json_response or get_llm_json_response
-    try:
-        raw = invoke(messages, model)
-    except Exception:
-        logger.warning(
-            "Generative UI mode decision failed; skipping intent-based recovery.",
-            exc_info=True,
-        )
-        return None
-    return _parse_generative_ui_decision(raw)
 
 
 # 応答から抽出された、生成UIアーティファクトの候補となる生JSONと位置情報を保持するデータクラスです。

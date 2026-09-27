@@ -36,12 +36,13 @@ from services.chat_regeneration_pipeline import (
     RebuildRoomSummary,
     SaveMessageToDb,
 )
+from services.chat_skill_selection import ChatSkillSelection
 from services.chat_url_context import PastedUrlPage
 from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import GenerativeUiMode
 from services.selected_reference_context import SelectedReferenceLookupTrace
-from services.user_skills import build_enabled_user_skills_prompt
+from services.user_skills import ChatSkillsContext, build_enabled_user_skills_prompt
 from services.web_search import WebSearchResult
 
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
@@ -248,12 +249,17 @@ class StartGenerationJob(Protocol):
     ) -> ChatGenerationJob: ...
 
 
-class DecideGenerativeUiMode(Protocol):
+class SelectChatSkills(Protocol):
     def __call__(
         self,
+        context: ChatSkillsContext,
         conversation_messages: list[dict[str, Any]],
-        model: str,
-    ) -> GenerativeUiMode | None: ...
+        model_name: str,
+        *,
+        project_instructions: str | None = None,
+        task_prompt: str | None = None,
+        generative_ui_forbidden: bool = False,
+    ) -> ChatSkillSelection: ...
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +381,7 @@ class ChatPostGenerationDependencies:
     is_streaming_model: Callable[[str], bool]
     start_generation_job: StartGenerationJob
     get_llm_response: Callable[[list[dict[str, Any]], str], str | None]
-    decide_generative_ui_mode: DecideGenerativeUiMode
+    select_chat_skills: SelectChatSkills
     is_retryable_llm_error: Callable[[BaseException], bool]
     search_personal_knowledge: Callable[[int, str], Awaitable[dict[str, Any]]]
     search_shared_prompts: Callable[[str], Awaitable[dict[str, Any]]]

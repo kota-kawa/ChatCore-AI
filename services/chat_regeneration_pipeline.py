@@ -43,6 +43,7 @@ from services.chat_prompt import (
     build_task_prompt,
     build_user_profile_prompt,
 )
+from services.chat_skill_selection import select_chat_skills
 from services.chat_url_context import (
     PastedUrlPage,
     collect_earlier_pasted_urls,
@@ -52,7 +53,6 @@ from services.chat_workspace_tools import build_workspace_toolbox
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
     artifact_status_part,
-    decide_generative_ui_mode,
     inject_generative_ui_mode_instruction,
     is_explicit_generative_ui_opt_out,
     normalize_response_with_artifact_retry,
@@ -179,7 +179,6 @@ class ChatRegenerationLogMessages:
     user_profile_load_failed: str
     room_summary_load_failed: str
     memory_facts_load_failed: str
-    generative_ui_mode_failed: str
     room_summary_rebuild_failed: str
 
 
@@ -345,6 +344,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     request_locale = pipeline_input.locale
 
     normalized_all_messages = normalize_messages_for_llm(all_messages)
+    # Snapshot the conversation before external documents and task markers are added.
+    skill_selection_history = [dict(message) for message in normalized_all_messages]
     # 添付本文を前置する前のテキストを検索クエリに使う（前置後は添付本文が混ざる）。
     # Derive the query before attachments are prepended, so it stays the user's own text.
     selected_reference_query = pipeline_input.selected_reference_query
@@ -409,8 +410,6 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         # The data tools are offered only to a signed-in user's normal room on the streaming path.
         workspace_tools_available=is_normal_user_room and deps.is_streaming_model(model),
     )
-    user_skills_prompt = skills_context.prompt
-    generative_ui_enabled = skills_context.generative_ui_enabled
 
     project_instructions = await deps.load_project_context_for_room(
         user_id, room_mode, chat_room_id
@@ -426,18 +425,6 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             memory_facts = await deps.list_room_memory_facts(chat_room_id)
         except Exception:
             logger.warning(log_messages.memory_facts_load_failed)
-
-    conversation_messages = build_context_messages(
-        base_system_prompt=build_base_system_prompt(locale=request_locale),
-        user_profile_prompt=user_profile_prompt,
-        task_prompt=task_prompt,
-        room_summary=room_summary,
-        memory_facts=memory_facts,
-        recent_messages=normalized_all_messages,
-        project_instructions=project_instructions,
-        user_skills_prompt=user_skills_prompt,
-        generative_ui_enabled=generative_ui_enabled,
-    )
 
     # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
     # Load prior-turn search results so regeneration also re-injects them as reference context.
@@ -478,6 +465,29 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             retry_after=get_seconds_until_daily_reset(),
         )
 
+    selection = await run_blocking(
+        select_chat_skills,
+        skills_context,
+        skill_selection_history,
+        model,
+        project_instructions=project_instructions,
+        task_prompt=task_prompt,
+        generative_ui_forbidden=is_explicit_generative_ui_opt_out(latest_user_message_text),
+    )
+    skills_context = selection.context
+    ui_mode = selection.ui_mode
+    conversation_messages = build_context_messages(
+        base_system_prompt=build_base_system_prompt(locale=request_locale),
+        user_profile_prompt=user_profile_prompt,
+        task_prompt=task_prompt,
+        room_summary=room_summary,
+        memory_facts=memory_facts,
+        recent_messages=normalized_all_messages,
+        project_instructions=project_instructions,
+        user_skills_prompt=skills_context.prompt,
+        generative_ui_enabled=skills_context.generative_ui_selected,
+    )
+
     selected_references = build_selected_reference_searchers(
         user_id=user_id,
         use_personal_knowledge=pipeline_input.use_personal_knowledge,
@@ -500,21 +510,9 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     # NONE では、検証を通ったArtifactを捨てない。
     # Only a disabled feature or a refusal the user wrote counts as an opt-out; a classifier
     # NONE never discards a validated artifact.
-    explicit_ui_opt_out = not generative_ui_enabled or is_explicit_generative_ui_opt_out(
-        _latest_user_content(conversation_messages)
+    explicit_ui_opt_out = not skills_context.generative_ui_enabled or is_explicit_generative_ui_opt_out(
+        latest_user_message_text
     )
-    if generative_ui_enabled:
-        try:
-            ui_mode = await run_blocking(
-                decide_generative_ui_mode,
-                conversation_messages,
-                model,
-            )
-        except Exception:
-            logger.warning(log_messages.generative_ui_mode_failed, exc_info=True)
-            ui_mode = None
-    else:
-        ui_mode = "NONE"
 
     # 確定したモードは本体生成のプロンプトへ渡し、同じモデルに再判断させない。
     # Hand the decided mode to the answering prompt instead of letting it decide again.

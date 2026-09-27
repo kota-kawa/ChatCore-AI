@@ -51,22 +51,22 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             project_instructions="project",
         )
 
-        # 日本語: 順序がベース→プロフィール→プロジェクト→タスク→要約→記憶→生成UI契約→最新であることを確認します。
-        # English: Confirm base -> profile -> project -> task -> summary -> memory -> UI contract -> recent.
+        # 固定指示と履歴の後ろに、ターンごとのUI契約を配置する。
+        # The per-turn UI contract follows fixed instructions and prior conversation.
         self.assertEqual(context_messages[0]["content"], "base")
         self.assertEqual(context_messages[1]["content"], "profile")
         self.assertIn("project", context_messages[2]["content"])
         self.assertEqual(context_messages[3]["content"], "task")
         self.assertIn("summary text", context_messages[4]["content"])
         self.assertIn("Kota", context_messages[5]["content"])
-        self.assertEqual(context_messages[6]["role"], "system")
+        self.assertEqual(context_messages[8]["role"], "system")
         self.assertEqual(
-            context_messages[6]["content"],
+            context_messages[8]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
         )
         self.assertIn(
             "An answer that ends with explanation alone is incomplete",
-            context_messages[6]["content"],
+            context_messages[8]["content"],
         )
         self.assertEqual(context_messages[-1]["content"], "third")
 
@@ -87,6 +87,24 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertEqual(context_messages[0]["content"], "base")
         self.assertTrue(context_messages[1]["content"].startswith("<runtime_context>"))
         self.assertEqual(context_messages[2]["content"], "question")
+
+    def test_selected_skills_and_ui_contract_follow_cached_history(self):
+        kwargs = {
+            "base_system_prompt": "base", "user_profile_prompt": "profile", "task_prompt": "task",
+            "room_summary": "", "memory_facts": [],
+            "recent_messages": [
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "previous answer"},
+                {"role": "user", "content": "latest"},
+            ],
+        }
+        selected = build_context_messages(**kwargs, user_skills_prompt="selected skill", generative_ui_enabled=True)
+        omitted = build_context_messages(**kwargs, user_skills_prompt=None, generative_ui_enabled=False)
+        contents = [message["content"] for message in selected]
+        history_end = contents.index("previous answer") + 1
+        self.assertEqual(selected[:history_end], omitted[:history_end])
+        self.assertEqual(contents[history_end:history_end + 2], ["selected skill", GENERATIVE_UI_EXECUTION_CONTRACT])
+        self.assertEqual(contents[-1], "latest")
 
     # 日本語: 毎回変わる現在時刻が会話履歴の後ろ（最新の発話の直前）に置かれ、
     # 固定の指示と履歴がプロンプトの先頭側にまとまることを検証します。

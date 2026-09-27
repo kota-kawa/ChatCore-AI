@@ -166,9 +166,15 @@ LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ
 
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 
+### ターンごとの Skill 選択
+
+`services/user_skills.py` が利用者の ON/OFF と経路上の利用可否から候補を作り、`services/chat_skill_selection.py` が回答開始前に選択します。通常送信と再生成は同じ判定を使い、会話モデルへの1回の構造化要求で Skill ID と生成UIモードを決めます。設定が有効であることと今回選ばれたことは別の状態です。選択用の履歴は添付・URL本文の前置前に確保し、外部本文を選択命令へ昇格させません。
+
+判定失敗・判断不能・候補外ID・入力超過では利用可能な全候補へ戻します。選択はターン中固定し、メモの指示とツール、生成UIの指示と契約を一緒に組み立てます。動的な指示と契約は履歴の後ろ、最新発話の前に置きます。利用制限の確認後に判定し、使用量は既存の計測へ含めます。選択のメタデータは本文を含まない構造化ログで確認できます。判断と評価条件は [ADR 0015](docs/decisions/0015-preselect-enabled-skills.md) にあります。
+
 ### チャットの書き込みツールと承認カード
 
-利用者自身のデータ（現在はメモのみ）を読み書きするツールは `services/chat_workspace_tools/` にファミリー単位でまとまり、対応する既定スキル（「メモ」、`users.memo_tools_skill_enabled`）が ON のログイン利用者の通常ルーム・ストリーミング生成にだけ渡します。読み取りは検索・根拠読み取りツールと同じくその場で実行しますが、書き込み（作成・追記・書き換え）は生成中に実行せず、`services/chat_tool_approval_service.py` が `chat_tool_approvals` へ承認待ちの行を保存し、回答へ `tool_approval` パーツ（カード）を付けて締めます。承認は `blueprints/chat/tool_approvals.py` の決定 API を通り、実行は利用者が承認した後にサーバーが行います。ツールごとの「常に承認」（`chat_tool_auto_approvals`）は、そのターンが外部の内容を読んでいなければ提案の時点で実行しますが、外部の内容を読んだターンでは常に通常の承認待ちへ戻します。設計の理由は [ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md) に、判断ループとの結び付きは `docs/architecture/system_design_deep_dive.md` の第9.8節にあります。
+利用者自身のデータ（現在はメモのみ）を読み書きするツールは `services/chat_workspace_tools/` にファミリー単位でまとまり、対応する既定スキル（「メモ」、`users.memo_tools_skill_enabled`）が ON のログイン利用者の通常ルーム・ストリーミング生成で、当該ターンに選択された場合にだけ渡します。読み取りは検索・根拠読み取りツールと同じくその場で実行しますが、書き込み（作成・追記・書き換え）は生成中に実行せず、`services/chat_tool_approval_service.py` が `chat_tool_approvals` へ承認待ちの行を保存し、回答へ `tool_approval` パーツ（カード）を付けて締めます。承認は `blueprints/chat/tool_approvals.py` の決定 API を通り、実行は利用者が承認した後にサーバーが行います。ツールごとの「常に承認」（`chat_tool_auto_approvals`）は、そのターンが外部の内容を読んでいなければ提案の時点で実行しますが、外部の内容を読んだターンでは常に通常の承認待ちへ戻します。設計の理由は [ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md) に、判断ループとの結び付きは `docs/architecture/system_design_deep_dive.md` の第9.8節にあります。
 
 ### 添付ファイル
 

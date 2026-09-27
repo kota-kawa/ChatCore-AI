@@ -90,7 +90,9 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             build_llm_stream_response=Mock(return_value=JSONResponse({"streaming": True})),
             iter_llm_stream_events=Mock(return_value=iter(())),
             get_llm_response=Mock(return_value="assistant reply"),
-            decide_generative_ui_mode=Mock(return_value="2D"),
+            select_chat_skills=Mock(side_effect=lambda context, *_args, **_kwargs: SimpleNamespace(
+                context=context, ui_mode="2D" if context.generative_ui_enabled else "NONE",
+            )),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
             should_extract_context=Mock(return_value=False),
@@ -140,7 +142,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         self.assertIsNotNone(lookup)
         self.assertEqual(deps.start_generation_job.call_args.kwargs["ui_mode"], "2D")
-        deps.decide_generative_ui_mode.assert_called_once()
+        deps.select_chat_skills.assert_called_once()
         search.assert_called_once_with(42, "去年の沖縄旅行の予算は？")
         trace = deps.start_generation_job.call_args.kwargs["selected_reference_trace"]
         self.assertEqual(len(trace), 1)
@@ -163,13 +165,13 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
         self.assertIsNone(lookup)
 
-    def test_disabled_generative_ui_skill_skips_mode_decision(self):
+    def test_disabled_generative_ui_skill_keeps_ui_mode_none(self):
         deps = self._build_deps(Mock())
         deps.get_user_by_id.return_value = {"generative_ui_skill_enabled": False}
 
         self._run(deps, body_extra={}, session={"user_id": 42})
 
-        deps.decide_generative_ui_mode.assert_not_called()
+        deps.select_chat_skills.assert_called_once()
         self.assertEqual(deps.start_generation_job.call_args.kwargs["ui_mode"], "NONE")
 
     # 日本語: メモは本人のデータなので、ゲストにはフラグがあっても渡しません。

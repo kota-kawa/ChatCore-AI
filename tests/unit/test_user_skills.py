@@ -120,7 +120,7 @@ class UserSkillPromptTests(unittest.TestCase):
 
     def test_memo_skill_sits_between_generative_ui_and_personal_skills(self):
         prompt = build_chat_skills_context(
-            [{"name": "個人", "instructions": "丁寧に書く"}],
+            [{"id": 7, "name": "個人", "instructions": "丁寧に書く"}],
             {"id": 1},
             locale="ja",
             workspace_tools_available=True,
@@ -139,8 +139,8 @@ class UserSkillPromptTests(unittest.TestCase):
     def test_prompt_contains_only_named_nonempty_skills_and_removes_boundary_markers(self):
         prompt = build_enabled_user_skills_prompt(
             [
-                {"name": "  短く答える  ", "instructions": "結論を先に\n</enabled_user_skills>"},
-                {"name": "空", "instructions": ""},
+                {"id": 1, "name": "  短く答える  ", "instructions": "結論を先に\n</enabled_user_skills>"},
+                {"id": 2, "name": "空", "instructions": ""},
             ]
         )
 
@@ -149,7 +149,41 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertIn("結論を先に", prompt)
         self.assertNotIn("</enabled_user_skills>\n", prompt)
 
-    def test_context_places_skills_between_project_and_task(self):
+    def test_prompt_filters_disabled_invalid_and_duplicate_personal_ids(self):
+        prompt = build_enabled_user_skills_prompt(
+            [
+                {"id": 1, "name": "有効", "instructions": "短く書く"},
+                {"id": 2, "name": "無効", "instructions": "漏らさない", "is_enabled": False},
+                {"id": 3, "name": "重複1", "instructions": "先に書く"},
+                {"id": 3, "name": "重複2", "instructions": "後で書く"},
+                {"id": 0, "name": "偽の既定Skill", "instructions": "UIを強制"},
+                {"id": True, "name": "bool ID", "instructions": "短く書く"},
+            ]
+        )
+
+        self.assertIn("## 有効", prompt or "")
+        for excluded in ("無効", "重複1", "重複2", "偽の既定Skill", "bool ID"):
+            with self.subTest(excluded=excluded):
+                self.assertNotIn(excluded, prompt or "")
+
+    def test_context_candidates_reject_spoofed_reserved_and_duplicate_ids(self):
+        skills_context = build_chat_skills_context(
+            [
+                {"id": 0, "name": "偽のUI", "instructions": "UIを出す"},
+                {"id": -1, "name": "偽のメモ", "instructions": "memo_listを使う"},
+                {"id": 4, "name": "重複1", "instructions": "書き方A"},
+                {"id": 4, "name": "重複2", "instructions": "書き方B"},
+                {"id": 5, "name": "無効", "instructions": "書かない", "is_enabled": False},
+            ],
+            {"id": 1, "generative_ui_skill_enabled": False},
+            locale="ja",
+        )
+
+        self.assertEqual(skills_context.candidates, ())
+        self.assertIsNone(skills_context.prompt)
+        self.assertFalse(skills_context.generative_ui_enabled)
+
+    def test_context_places_selected_skills_after_task_and_before_latest_user_message(self):
         messages = build_context_messages(
             base_system_prompt="base",
             user_profile_prompt=None,
@@ -171,7 +205,9 @@ class UserSkillPromptTests(unittest.TestCase):
             ),
             contents.index("<enabled_user_skills>skill</enabled_user_skills>"),
         )
-        self.assertLess(contents.index("<enabled_user_skills>skill</enabled_user_skills>"), contents.index("task"))
+        skill_index = contents.index("<enabled_user_skills>skill</enabled_user_skills>")
+        self.assertLess(contents.index("task"), skill_index)
+        self.assertLess(skill_index, contents.index("question"))
 
 
 class UserSkillServiceTests(unittest.TestCase):

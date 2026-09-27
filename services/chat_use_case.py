@@ -89,7 +89,7 @@ from services.selected_reference_context import (
 )
 from services.selected_reference_sources import build_selected_reference_searchers
 from services.usage_limits import usage_limit_message
-from services.user_skills import build_chat_skills_context
+from services.user_skills import ChatSkillsContext, build_chat_skills_context
 from services.web_search import (
     WebSearchResult,
     combine_web_search_results,
@@ -183,7 +183,10 @@ class _ChatPostTurn:
     active_task_request: dict[str, Any] | None = None
     task_prompt: str | None = None
     user_profile_prompt: str | None = None
+    skills_context: ChatSkillsContext | None = None
+    skill_selection_history: list[dict[str, Any]] = field(default_factory=list)
     user_skills_prompt: str | None = None
+    generative_ui_selected: bool = True
     generative_ui_enabled: bool = True
     # 既定スキル「メモ」が ON で、このターンにメモのツールを渡すか。
     # Whether the built-in Memo Skill is on and this turn offers the memo tools.
@@ -290,7 +293,6 @@ class ChatPostUseCase:
 
         await self._build_llm_history(turn)
         await self._load_prompt_context(turn)
-        self._build_conversation_messages(turn)
         await self._load_prior_web_search_results(turn)
 
         for guard in (self._reject_active_generation, self._consume_llm_daily_quota):
@@ -298,8 +300,10 @@ class ChatPostUseCase:
             if early_response is not None:
                 return early_response
 
+        await self._select_skills_for_turn(turn)
+        self._build_conversation_messages(turn)
         await self._augment_with_selected_references(turn)
-        await self._decide_generative_ui_mode(turn)
+        self._apply_generative_ui_mode(turn)
 
         # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
         # Start a background generation job if the model supports streaming
@@ -540,6 +544,9 @@ class ChatPostUseCase:
         # メッセージ履歴を LLM 向けに正規化
         # Normalize message history for LLM compatibility
         turn.normalized_all_messages = self.deps.prompts.normalize_messages_for_llm(turn.all_messages)
+        # 選択器には取得した外部本文を渡さず、利用者と助手の元の会話だけを渡す。
+        # Capture the original conversation before external reference augmentation.
+        turn.skill_selection_history = [dict(message) for message in turn.normalized_all_messages]
         # 過去ターンのURLは、参照ブロックを前置する前の生の発話からだけ集める。前置後に拾うと、
         # 外部ページや添付本文に含まれるリンクまでユーザーが貼ったものとして扱ってしまう。
         # Earlier URLs are collected from the raw messages, before any reference block is
@@ -681,6 +688,7 @@ class ChatPostUseCase:
                 turn.targets_normal_room() and deps.generation.is_streaming_model(turn.model)
             ),
         )
+        turn.skills_context = skills_context
         turn.user_skills_prompt = skills_context.prompt
         turn.generative_ui_enabled = skills_context.generative_ui_enabled
         turn.memo_tools_enabled = skills_context.memo_tools_enabled
@@ -772,7 +780,7 @@ class ChatPostUseCase:
             recent_messages=turn.normalized_all_messages,
             project_instructions=turn.project_instructions,
             user_skills_prompt=turn.user_skills_prompt,
-            generative_ui_enabled=turn.generative_ui_enabled,
+            generative_ui_enabled=turn.generative_ui_selected,
         )
 
     async def _load_prior_web_search_results(self, turn: _ChatPostTurn) -> None:
@@ -887,39 +895,30 @@ class ChatPostUseCase:
             trace_results=turn.selected_reference_trace,
         )
 
-    async def _decide_generative_ui_mode(self, turn: _ChatPostTurn) -> None:
-        """生成UIのモードをモデルへ問い合わせます / Ask the model for the generative UI mode."""
-        deps = self.deps
+    async def _select_skills_for_turn(self, turn: _ChatPostTurn) -> None:
+        """有効スキルと生成UIモードを一度だけ判定する / Select Skills and UI mode once."""
+        assert turn.skills_context is not None
+        selection = await run_blocking(
+            self.deps.generation.select_chat_skills,
+            turn.skills_context,
+            turn.skill_selection_history,
+            turn.model,
+            project_instructions=turn.project_instructions,
+            task_prompt=turn.task_prompt,
+            generative_ui_forbidden=is_explicit_generative_ui_opt_out(turn.user_message),
+        )
+        turn.skills_context = selection.context
+        turn.user_skills_prompt = selection.context.prompt
+        turn.generative_ui_enabled = selection.context.generative_ui_enabled
+        turn.generative_ui_selected = selection.context.generative_ui_selected
+        turn.memo_tools_enabled = selection.context.memo_tools_enabled
+        turn.ui_mode = selection.ui_mode
 
-        # 生成UI設定を切った利用者と、UI不要と書いた利用者だけが明示的な拒否。
-        # Only a user who turned the feature off, or wrote that no UI is wanted, opts out.
+    def _apply_generative_ui_mode(self, turn: _ChatPostTurn) -> None:
+        """選択漏れと明示的な拒否を区別する / Keep non-selection distinct from an opt-out."""
         turn.explicit_ui_opt_out = not turn.generative_ui_enabled or is_explicit_generative_ui_opt_out(
             turn.user_message
         )
-
-        # UI_MODE is a structured semantic decision made by the selected
-        # conversation model. Do not infer it from the user's text here.
-        if turn.generative_ui_enabled:
-            try:
-                turn.ui_mode = await run_blocking(
-                    deps.generation.decide_generative_ui_mode,
-                    turn.conversation_messages,
-                    turn.model,
-                )
-            except Exception:
-                deps.logger.warning(
-                    "Failed to decide generative UI mode; continuing without intent recovery.",
-                    exc_info=True,
-                )
-                turn.ui_mode = None
-        else:
-            turn.ui_mode = "NONE"
-
-        # 確定したモードは本体生成のプロンプトへ渡す。判定と本体で二重に推測させると
-        # 「判定は2D・本文は散文」という食い違いが起き、後段が本文ごと捨てることになる。
-        # The decided mode is handed to the answering prompt: letting the classifier and the
-        # answer guess independently produces "classified 2D, answered in prose", which the
-        # later stages can only resolve by discarding the answer.
         if not turn.explicit_ui_opt_out:
             turn.conversation_messages = inject_generative_ui_mode_instruction(
                 turn.conversation_messages,

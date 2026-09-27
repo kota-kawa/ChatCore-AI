@@ -3,6 +3,7 @@ import json
 import re
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.messages import chat
@@ -35,6 +36,13 @@ def make_request(json_body, session=None):
 # 日本語: Task Launch Promptingの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Task Launch Prompting.
 class TaskLaunchPromptingTestCase(unittest.TestCase):
+    def setUp(self):
+        # Selection semantics are covered separately; retain all eligible Skills here.
+        self.enterContext(patch(
+            "blueprints.chat.messages.select_chat_skills",
+            side_effect=lambda context, *_args, **_kwargs: SimpleNamespace(context=context, ui_mode=None),
+        ))
+
     def test_base_system_prompt_uses_saved_locale_only_as_language_fallback(self):
         prompt = _build_base_system_prompt(locale="en")
 
@@ -368,12 +376,12 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("<runtime_context>", conversation_messages[-2]["content"])
         # ゲストでも生成UIの Skill が有効なら、ログイン利用者と同じ Skill の指示が入る。
         # A guest with the Generative UI Skill enabled gets the same Skill instructions.
-        self.assertIn(GENERATIVE_UI_SKILL_INSTRUCTIONS, conversation_messages[1]["content"])
-        self.assertIn("<task_contract>", conversation_messages[2]["content"])
-        self.assertIn("<response_rules>", conversation_messages[2]["content"])
-        self.assertIn("<output_format>", conversation_messages[2]["content"])
-        self.assertIn("actual source material to process", conversation_messages[2]["content"])
-        self.assertIn("do not ask the user to provide that same input again", conversation_messages[2]["content"])
+        self.assertTrue(any(GENERATIVE_UI_SKILL_INSTRUCTIONS in message["content"] for message in conversation_messages))
+        self.assertIn("<task_contract>", conversation_messages[1]["content"])
+        self.assertIn("<response_rules>", conversation_messages[1]["content"])
+        self.assertIn("<output_format>", conversation_messages[1]["content"])
+        self.assertIn("actual source material to process", conversation_messages[1]["content"])
+        self.assertIn("do not ask the user to provide that same input again", conversation_messages[1]["content"])
         self.assertEqual(
             conversation_messages[-1]["content"],
             "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
@@ -456,8 +464,9 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         conversation_messages = mock_llm.call_args.args[0]
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertFalse(any("<task_contract>" in message["content"] for message in conversation_messages))
-        self.assertIn("新製品リリース案内のメールを作りたい", conversation_messages[-4]["content"])
-        self.assertEqual(conversation_messages[-3]["content"], "了解しました。")
+        history = [message for message in conversation_messages if message["role"] != "system"]
+        self.assertIn("新製品リリース案内のメールを作りたい", history[0]["content"])
+        self.assertEqual(history[1]["content"], "了解しました。")
         self.assertTrue(conversation_messages[-2]["content"].startswith("<runtime_context>"))
         self.assertEqual(conversation_messages[-1]["content"], "示してあるよね？")
         self.assertNotIn("<task_input>", conversation_messages[-1]["content"])
@@ -530,7 +539,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             conversation_messages[0]["content"].strip(),
             _build_base_system_prompt().strip(),
         )
-        self.assertIn(GENERATIVE_UI_SKILL_INSTRUCTIONS, conversation_messages[1]["content"])
+        self.assertTrue(any(GENERATIVE_UI_SKILL_INSTRUCTIONS in message["content"] for message in conversation_messages))
         self.assertEqual(
             conversation_messages[2]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
