@@ -619,6 +619,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                locale=request_locale,
                 on_finished=on_finished,
                 on_error=on_error,
                 service=pipeline_input.chat_generation_service,

@@ -24,7 +24,7 @@ from services.generative_ui import (
 )
 from services.generative_ui_repair import with_answer_output_budget
 from services.generative_ui_status import ARTIFACT_STATUS_PART_TYPE
-from services.i18n import infer_response_language
+from services.i18n import infer_response_language, normalize_locale, translate_text
 from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
@@ -785,6 +785,7 @@ class ChatGenerationJob:
         conversation_messages: list[dict[str, Any]],
         model: str,
         persist_response: Callable[..., dict[str, Any] | None],
+        locale: str = "ja",
         on_finished: Callable[[], None] | None = None,
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
@@ -803,6 +804,7 @@ class ChatGenerationJob:
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
+        self._locale = normalize_locale(locale, default="ja") or "ja"
         self._ui_mode = ui_mode
         # 判定モデルの NONE ではなく、ユーザー自身がUI不要と書いた場合だけ検証済み
         # Artifact を破棄してよい。
@@ -1305,7 +1307,9 @@ class ChatGenerationJob:
         *,
         invoke_error_callback: bool = False,
     ) -> None:
-        self.error_message = message
+        localized_message = translate_text(message, self._locale)
+        self.error_message = localized_message
+        payload = {**payload, "message": localized_message}
         # 後片付けは done=True の配信より前に完了させる。SSE の消費側は終端イベントを
         # 受け取った時点で履歴の再取得などへ進むため、順序が逆だと未回答のユーザー発話が
         # まだ残った状態を読んでしまう。
@@ -3277,7 +3281,7 @@ class ChatGenerationJob:
                 "Chat generation stopped due to an LLM configuration error.",
                 extra=self._telemetry.as_log_extra(),
             )
-            error_message = str(exc) or "LLM設定エラーが発生しました。"
+            error_message = "LLM設定エラーが発生しました。"
             self._handle_error(
                 error_message,
                 {"message": error_message, "retryable": False},
@@ -3455,24 +3459,25 @@ class ChatGenerationJob:
 
     # 途中終了の理由をユーザー向け文言へ変換する。
     # Translate why the answer ended early into a user-facing sentence.
-    @staticmethod
-    def _partial_answer_message(error: BaseException) -> str:
+    def _partial_answer_message(self, error: BaseException) -> str:
         if isinstance(error, FinalAnswerContinuationStalledError):
-            return "回答の続きを生成できず、途中までの回答を保存しました。"
-        if isinstance(error, LlmOutputLimitError):
-            return "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
-        if isinstance(error, LlmInputLimitError):
-            return (
+            message = "回答の続きを生成できず、途中までの回答を保存しました。"
+        elif isinstance(error, LlmOutputLimitError):
+            message = "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。"
+        elif isinstance(error, LlmInputLimitError):
+            message = (
                 "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。"
                 "途中までの回答を保存しました。"
             )
-        if isinstance(error, LlmRateLimitError):
-            return "AI提供元が混み合っているため中断しました。途中までの回答を保存しました。"
-        if isinstance(error, LlmRetryableProviderError):
-            return "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
-        if isinstance(error, LlmServiceError):
-            return "生成が途中で終了しました。途中までの回答を保存しました。"
-        return "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+        elif isinstance(error, LlmRateLimitError):
+            message = "AI提供元が混み合っているため中断しました。途中までの回答を保存しました。"
+        elif isinstance(error, LlmRetryableProviderError):
+            message = "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+        elif isinstance(error, LlmServiceError):
+            message = "生成が途中で終了しました。途中までの回答を保存しました。"
+        else:
+            message = "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。"
+        return translate_text(message, self._locale)
 
     # 応答を履歴へ保存し、done / incomplete の終端イベントを発行するフェーズ。
     # The phase that persists the reply and publishes the terminal done / incomplete event.
@@ -4043,6 +4048,7 @@ class ChatGenerationService:
         conversation_messages: list[dict[str, Any]],
         model: str,
         persist_response: Callable[..., dict[str, Any] | None],
+        locale: str = "ja",
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
@@ -4076,6 +4082,7 @@ class ChatGenerationService:
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                locale=locale,
                 on_finished=lambda: self._finalize_job(
                     job_key,
                     lock_token,
@@ -4242,6 +4249,7 @@ def start_generation_job(
     conversation_messages: list[dict[str, Any]],
     model: str,
     persist_response: Callable[..., dict[str, Any] | None],
+    locale: str = "ja",
     on_finished: Callable[[], None] | None = None,
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
@@ -4265,6 +4273,7 @@ def start_generation_job(
         conversation_messages=conversation_messages,
         model=model,
         persist_response=persist_response,
+        locale=locale,
         on_finished=on_finished,
         on_error=on_error,
         prior_web_search_results=prior_web_search_results,

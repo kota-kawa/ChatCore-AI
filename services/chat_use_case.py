@@ -954,6 +954,7 @@ class ChatPostUseCase:
                 conversation_messages=turn.conversation_messages,
                 model=turn.model,
                 persist_response=persist_response,
+                locale=self.locale,
                 on_finished=on_finished,
                 on_error=partial(
                     _run_async_callback,
