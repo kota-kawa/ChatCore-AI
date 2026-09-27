@@ -2,7 +2,9 @@ import unittest
 from unittest.mock import patch
 
 from services import web_search
+from services.llm import LIGHTWEIGHT_TASK_MODEL, LIGHTWEIGHT_TASK_REASONING_EFFORT
 from services.web_search_images import (
+    IMAGE_SELECTION_REASONING_FORMAT,
     WebSearchImageCandidate,
     _is_non_photo_image_url,
     append_web_search_image_parts,
@@ -11,13 +13,11 @@ from services.web_search_images import (
     find_next_streaming_image_insertion,
 )
 
-SELECTED_MODEL = "claude-haiku-4-5-20251001"
-
 
 # 日本語: 単数形の旧 API は削除したので、テストからは実運用の複数形 API を直接叩く。
 # English: The singular legacy API is gone, so drive the plural production API directly.
-def choose_web_search_image(user_question, result, *, model):
-    selections = choose_web_search_images(user_question, result, model=model)
+def choose_web_search_image(user_question, result):
+    selections = choose_web_search_images(user_question, result)
     return selections[0] if selections else None
 
 
@@ -138,7 +138,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             selection = choose_web_search_image(
                 "京都の紅葉名所を画像付きで教えて",
                 _result(),
-                model=SELECTED_MODEL,
             )
 
         self.assertEqual(
@@ -169,7 +168,15 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertIn("non-duplication", system_prompt)
         self.assertIn("large watermarks", system_prompt)
         self.assertIn("any language or script", system_prompt)
-        self.assertEqual(mock_llm.call_args.args[1], SELECTED_MODEL)
+        self.assertEqual(mock_llm.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
+        self.assertEqual(
+            mock_llm.call_args.kwargs["reasoning_effort"],
+            LIGHTWEIGHT_TASK_REASONING_EFFORT,
+        )
+        self.assertEqual(
+            mock_llm.call_args.kwargs["reasoning_format"],
+            IMAGE_SELECTION_REASONING_FORMAT,
+        )
 
     def test_llm_can_select_up_to_five_relevant_images(self):
         with patch(
@@ -183,7 +190,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             selections = choose_web_search_images(
                 "京都の紅葉を画像付きで教えて",
                 _result(),
-                model=SELECTED_MODEL,
             )
 
         self.assertEqual(len(selections), 5)
@@ -214,7 +220,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             selections = choose_web_search_images(
                 "请展示北京故宫的照片",
                 _result(),
-                model=SELECTED_MODEL,
             )
 
         self.assertEqual(len(selections), 1)
@@ -232,7 +237,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             choose_web_search_image(
                 "京都の紅葉名所を教えて",
                 _result(),
-                model=SELECTED_MODEL,
             )
 
         prompt = mock_llm.call_args.args[0][1]["content"]
@@ -249,7 +253,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             choose_web_search_image(
                 "京都の紅葉名所を教えて",
                 _result(),
-                model=SELECTED_MODEL,
             )
 
         system_prompt = mock_llm.call_args.args[0][0]["content"]
@@ -267,7 +270,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 choose_web_search_image(
                     "京都の紅葉の見頃を教えて",
                     _result(),
-                    model=SELECTED_MODEL,
                 )
             )
 
@@ -280,7 +282,6 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 choose_web_search_image(
                     "画像を見せて",
                     _result(),
-                    model=SELECTED_MODEL,
                 )
             )
 
