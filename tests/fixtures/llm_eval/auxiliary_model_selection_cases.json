@@ -1,0 +1,133 @@
+{
+  "dataset_id": "auxiliary-model-selection-v1",
+  "source_notice": "All image search URLs and metadata are synthetic .example.invalid fixtures, not real sources.",
+  "evaluation_scope": {
+    "image_selection_baselines": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "gpt-6-luna"],
+    "target_model": "openai/gpt-oss-20b",
+    "excluded_model": "claude-haiku-4-5-20251001",
+    "exclusion_reason": "Claude is not currently offered or used by this application, so it is outside this comparison."
+  },
+  "web_image_selection": {
+    "cases": [
+      {
+        "case_id": "web_01",
+        "locale": "ja-JP",
+        "query": "NoriTab Air 8 2025 front view product photo",
+        "question": "NoriTab Air 8（2025年モデル）の見た目が知りたいです。画像も見せてください。",
+        "answer_text": "NoriTab Air 8（2025年モデル）は、薄型の8インチタブレットです。以下に外観写真を示します。",
+        "sources": [
+          {"url": "https://fixture.example.invalid/web01/result-01", "title": "NoriTab Air 8 (2025) front view", "images": [{"label": "web01_noritab_air8_2025", "url": "https://fixture.example.invalid/web01/assets/noritab-air8-2025-front.jpg", "title": "NoriTab Air 8 (2025) front view", "alt": "Front view of the 2025 NoriTab Air 8 tablet, silver body and 8-inch display", "kind": "product_photo"}]},
+          {"url": "https://fixture.example.invalid/web01/result-02", "title": "NoriTab Air 8 2024 edition", "images": [{"label": "web01_noritab_air8_2024", "url": "https://fixture.example.invalid/web01/assets/noritab-air8-2024-front.jpg", "title": "NoriTab Air 8 2024 edition", "alt": "Front view of the 2024 NoriTab Air 8 tablet with a thick black bezel", "kind": "product_photo"}]},
+          {"url": "https://fixture.example.invalid/web01/result-03", "title": "NoriTab Store header", "images": [{"label": "web01_noritab_store_logo", "url": "https://fixture.example.invalid/web01/assets/noritab-store-header-logo.png", "title": "NoriTab Store header", "alt": "NoriTab Store navigation logo", "kind": "site_logo"}]},
+          {"url": "https://fixture.example.invalid/web01/result-04", "title": "Image unavailable", "images": [{"label": "web01_noimage", "url": "https://fixture.example.invalid/web01/assets/no-image-available.svg", "title": "Image unavailable", "alt": "No image available", "kind": "placeholder_noimage"}]}
+        ],
+        "expected": {"should_display": true, "allowed_candidate_labels": ["web01_noritab_air8_2025"], "placement_condition": "2025年モデルの説明文の直後に1枚配置する。", "prohibited_candidate_labels": ["web01_noritab_air8_2024", "web01_noritab_store_logo", "web01_noimage"]},
+        "evaluation_criteria": ["日本語の質問に対して英語メタデータでも正しい候補を選ぶ。", "型番と年式が一致する候補だけを許可する。", "明示要求に応じ、対象の説明に沿って配置する。", "サイト部品とプレースホルダーを除外する。"]
+      },
+      {
+        "case_id": "web_02",
+        "locale": "en-US",
+        "query": "Himeji Castle south gate night photo",
+        "question": "Could you show me a photo of Himeji Castle at night, viewed from the south gate?",
+        "answer_text": "Himeji Castle is a historic Japanese castle complex. The south gate offers a view toward the illuminated main keep.",
+        "sources": [
+          {"url": "https://fixture.example.invalid/web02/result-01", "title": "姫路城 南門から望む夜景", "images": [{"label": "web02_himeji_south_gate_night", "url": "https://fixture.example.invalid/web02/assets/himeji-south-gate-night.jpg", "title": "姫路城 南門から望む夜景", "alt": "夜間にライトアップされた姫路城を南門側から撮影した写真", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web02/result-02", "title": "姫路城 東側からの昼景", "images": [{"label": "web02_himeji_east_day", "url": "https://fixture.example.invalid/web02/assets/himeji-day-east-view.jpg", "title": "姫路城 東側からの昼景", "alt": "昼間の姫路城を東側から撮影した写真", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web02/result-03", "title": "大阪城の夜景", "images": [{"label": "web02_osaka_castle_night", "url": "https://fixture.example.invalid/web02/assets/osaka-castle-night.jpg", "title": "大阪城の夜景", "alt": "夜間にライトアップされた大阪城の写真", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web02/result-04", "title": "文化財案内サイトのメニュー", "images": [{"label": "web02_navigation_icon", "url": "https://fixture.example.invalid/web02/assets/heritage-site-menu-icon.svg", "title": "文化財案内サイトのメニュー", "alt": "サイトナビゲーション用の三本線アイコン", "kind": "navigation_icon"}]}
+        ],
+        "expected": {"should_display": true, "allowed_candidate_labels": ["web02_himeji_south_gate_night"], "placement_condition": "姫路城の説明文の直後に1枚配置する。撮影方向、時間帯、対象がすべて一致する候補に限る。", "prohibited_candidate_labels": ["web02_himeji_east_day", "web02_osaka_castle_night", "web02_navigation_icon"]},
+        "evaluation_criteria": ["英語の質問に対して日本語メタデータでも正しい候補を選ぶ。", "撮影方向、時間帯、対象の条件をすべて満たす。", "類似する別の城やサイトアイコンを除外する。", "明示された画像要求を満たす。"]
+      },
+      {
+        "case_id": "web_03",
+        "locale": "ja-JP",
+        "query": "1.5 liters milliliters water image",
+        "question": "1.5リットルは何ミリリットルですか？",
+        "answer_text": "1リットルは1,000ミリリットルなので、1.5リットルは1,500ミリリットルです。",
+        "sources": [
+          {"url": "https://fixture.example.invalid/web03/result-01", "title": "水滴のストック写真", "images": [{"label": "web03_water_droplet", "url": "https://fixture.example.invalid/web03/assets/water-droplet-stock.jpg", "title": "水滴のストック写真", "alt": "青い背景に浮かぶ水滴の接写", "kind": "stock_photo"}]},
+          {"url": "https://fixture.example.invalid/web03/result-02", "title": "単位変換ツールのボタン", "images": [{"label": "web03_converter_button", "url": "https://fixture.example.invalid/web03/assets/unit-converter-button.svg", "title": "単位変換ツールのボタン", "alt": "変換ページの装飾アイコン", "kind": "site_component"}]},
+          {"url": "https://fixture.example.invalid/web03/result-03", "title": "サムネイルなし", "images": [{"label": "web03_noimage", "url": "https://fixture.example.invalid/web03/assets/no-result-thumbnail.png", "title": "サムネイルなし", "alt": "No thumbnail", "kind": "placeholder_noimage"}]}
+        ],
+        "expected": {"should_display": false, "allowed_candidate_labels": [], "placement_condition": "画像は配置しない。単位換算を文章だけで回答する。", "prohibited_candidate_labels": ["web03_water_droplet", "web03_converter_button", "web03_noimage"]},
+        "evaluation_criteria": ["質問に画像が不要と判断する。", "話題に関連するだけの写真を無理に表示しない。", "サイト部品やnoimageを表示しない。"]
+      },
+      {
+        "case_id": "web_04",
+        "locale": "ja-JP",
+        "query": "東京タワー 1958年 開業当時 完成直後 記録写真",
+        "question": "東京タワーの1958年開業当時の写真を見せてください。現在の姿ではなく、完成直後のものを探しています。",
+        "answer_text": "東京タワーは1958年に完成し、同年12月に開業しました。開業当時の写真では、周囲の街並みも現在とは大きく異なります。",
+        "sources": [
+          {"url": "https://fixture.example.invalid/web04/result-01", "title": "1958年 東京タワー完成直後の記録写真", "images": [{"label": "web04_tokyo_tower_1958", "url": "https://fixture.example.invalid/web04/assets/tokyo-tower-1958-opening-archive.jpg", "title": "1958年 東京タワー完成直後の記録写真", "alt": "開業した1958年ごろ、周囲に低層の街並みが広がる東京タワーを撮影した記録写真", "kind": "historical_archive_photo"}]},
+          {"url": "https://fixture.example.invalid/web04/result-02", "title": "現在の東京タワー夜景", "images": [{"label": "web04_tokyo_tower_current", "url": "https://fixture.example.invalid/web04/assets/tokyo-tower-current-night.jpg", "title": "現在の東京タワー夜景", "alt": "現代の高層ビル群に囲まれ、夜間にライトアップされた東京タワー", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web04/result-03", "title": "東京スカイツリーのレトロ風写真", "images": [{"label": "web04_tokyo_skytree_edited", "url": "https://fixture.example.invalid/web04/assets/tokyo-skytree-1958-theme.jpg", "title": "東京スカイツリーのレトロ風写真", "alt": "東京スカイツリーを昔の写真風に加工した画像", "kind": "edited_photo"}]},
+          {"url": "https://fixture.example.invalid/web04/result-04", "title": "写真資料館ヘッダー", "images": [{"label": "web04_archive_site_header", "url": "https://fixture.example.invalid/web04/assets/archive-site-header.png", "title": "写真資料館ヘッダー", "alt": "資料館サイトのヘッダーバナーとロゴ", "kind": "site_component"}]},
+          {"url": "https://fixture.example.invalid/web04/result-05", "title": "画像データなし", "images": [{"label": "web04_noimage", "url": "https://fixture.example.invalid/web04/assets/blank-image.png", "title": "画像データなし", "alt": "画像ファイルが登録されていません", "kind": "placeholder_noimage"}]}
+        ],
+        "expected": {"should_display": true, "allowed_candidate_labels": ["web04_tokyo_tower_1958"], "placement_condition": "開業年と当時の街並みを説明する段落の直後に1枚配置する。", "prohibited_candidate_labels": ["web04_tokyo_tower_current", "web04_tokyo_skytree_edited", "web04_archive_site_header", "web04_noimage"]},
+        "evaluation_criteria": ["対象名が似た別候補でなく、東京タワーの1958年当時の写真を選ぶ。", "ユーザーが明示した時期の条件を守る。", "サイト部品やnoimageを除外する。", "該当する説明に画像を配置する。"]
+      },
+      {
+        "case_id": "web_05",
+        "locale": "ja-JP",
+        "query": "さっぽろ雪まつり 大通会場 雪像 写真",
+        "question": "さっぽろ雪まつりの大通会場で、雪像が並んでいる様子の写真を見せてください。",
+        "answer_text": "さっぽろ雪まつりの大通会場では、大通公園に大小さまざまな雪像が並びます。会場の様子が分かる写真を示します。",
+        "sources": [
+          {"url": "https://fixture.example.invalid/web05/result-01", "title": "Odori Park snow statues during Sapporo Snow Festival", "images": [{"label": "web05_odori_snow_statues", "url": "https://fixture.example.invalid/web05/assets/sapporo-odori-snow-statues.jpg", "title": "Odori Park snow statues during Sapporo Snow Festival", "alt": "Large snow sculptures lined along Odori Park during the Sapporo Snow Festival", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web05/result-02", "title": "すすきの会場の氷像", "images": [{"label": "web05_susukino_ice_sculptures", "url": "https://fixture.example.invalid/web05/assets/sapporo-susukino-ice-sculptures.jpg", "title": "すすきの会場の氷像", "alt": "すすきの会場に並ぶ透明な氷の彫刻", "kind": "content_photo"}]},
+          {"url": "https://fixture.example.invalid/web05/result-03", "title": "冬イベント情報サイトのトップ画像", "images": [{"label": "web05_festival_site_hero", "url": "https://fixture.example.invalid/web05/assets/festival-blog-hero.jpg", "title": "冬イベント情報サイトのトップ画像", "alt": "雪の結晶を重ねたサイトの装飾用ヒーロー画像", "kind": "site_component"}]},
+          {"url": "https://fixture.example.invalid/web05/result-04", "title": "写真未登録", "images": [{"label": "web05_noimage", "url": "https://fixture.example.invalid/web05/assets/festival-noimage.svg", "title": "写真未登録", "alt": "写真はありません", "kind": "placeholder_noimage"}]}
+        ],
+        "expected": {"should_display": true, "allowed_candidate_labels": ["web05_odori_snow_statues"], "placement_condition": "大通会場の雪像について述べた段落の直後に1枚配置する。", "prohibited_candidate_labels": ["web05_susukino_ice_sculptures", "web05_festival_site_hero", "web05_noimage"]},
+        "evaluation_criteria": ["大通会場の雪像という場所と対象の条件を満たす候補を選ぶ。", "関連イベントの別会場にある氷像を混同しない。", "英語メタデータでも関連写真を選ぶ。", "サイト装飾やnoimageを除外する。"]
+      }
+    ]
+  },
+  "context_extraction": {
+    "cases": [
+      {
+        "case_id": "context_01",
+        "locale": "ja-JP",
+        "user_message": "今後の献立提案で覚えておいてください。私は菜食主義で、肉・魚は食べません。豆類と乳製品は食べられます。",
+        "assistant_response": "承知しました。今後の献立提案では、肉や魚を含めず、豆類や乳製品を使う選択肢を考えます。",
+        "expected": {"candidate_presence": true, "acceptable_facts": ["菜食主義で、肉と魚を食べない。豆類と乳製品は食べられる。"], "required_evidence_substrings": ["私は菜食主義で、肉・魚は食べません。豆類と乳製品は食べられます。"], "prohibited_items": ["食事制限を病気やアレルギーと推測しない。", "Assistantの言い換えだけを根拠にしない。", "利用者が述べていない献立の好みを追加しない。"]},
+        "evaluation_criteria": ["明示された継続的な食事方針を候補にする。", "採用可能な事実にuser_message内の根拠を付ける。", "事実の範囲を発話内容に限定する。"]
+      },
+      {
+        "case_id": "context_02",
+        "locale": "ja-JP",
+        "user_message": "来週末に一度だけ京都へ旅行します。旅行中に食べる湯豆腐のお店を探していますが、普段から京都に行くわけではありません。",
+        "assistant_response": "来週末の旅行向けに、湯豆腐のお店をいくつか紹介します。",
+        "expected": {"candidate_presence": false, "acceptable_facts": [], "required_evidence_substrings": [], "prohibited_items": ["京都に住んでいると記録しない。", "京都へ頻繁に旅行すると推測しない。", "湯豆腐を長期的に好むと推測しない。", "来週末の旅行予定を長期的な個人コンテキストとして候補にしない。"]},
+        "evaluation_criteria": ["一度限りの旅行予定と店探しを長期的な事実にしない。", "一時的な関心から居住地や継続的な好みを推測しない。", "候補を作らない。"]
+      },
+      {
+        "case_id": "context_03",
+        "locale": "ja-JP",
+        "user_message": "今週は出張で札幌にいます。明日の昼に駅の近くで食べられる店を教えてください。帰りの便は夜なので、空港へ移動しやすい場所だと助かります。ところで、仕事では短い動画を確認することが多いです。私は聴覚障害があり、動画には字幕が必要です。今回の出張だけの情報と、今後も役立つ情報を分けて考えてください。",
+        "assistant_response": "札幌駅周辺で、明日営業していて空港へ移動しやすい昼食候補を探します。動画を確認する際は字幕付きのものを優先します。",
+        "expected": {"candidate_presence": true, "acceptable_facts": ["聴覚障害があり、動画には字幕が必要。"], "required_evidence_substrings": ["私は聴覚障害があり、動画には字幕が必要です。"], "prohibited_items": ["札幌への今週の出張を長期的な事実として保存しない。", "明日の昼食や帰りの便など一時的な予定を候補にしない。", "短い動画を見る情報だけから職業や役職を推測しない。", "Assistantの言い換えだけを根拠にしない。"]},
+        "evaluation_criteria": ["長い発話から、明確で将来も役立つ個人情報を抽出する。", "出張や食事の一時情報を永続情報と分ける。", "根拠としてuser_message中の必須部分文字列を含める。"]
+      },
+      {
+        "case_id": "context_04",
+        "locale": "ja-JP",
+        "user_message": "来月の大阪出張で使うホテルを探すのを手伝ってください。駅から近く、静かな部屋が希望です。",
+        "assistant_response": "以前から伺っている内容として、あなたは札幌在住で猫を2匹飼っているため、出張中のペットホテルも必要ですね。ホテル候補と合わせて調べます。",
+        "expected": {"candidate_presence": false, "acceptable_facts": [], "required_evidence_substrings": [], "prohibited_items": ["札幌在住や猫を飼っているというassistant_response内だけの主張を候補にしない。", "assistant_responseをuser_messageの証拠として扱わない。", "大阪出張やホテルの希望を長期的な事実として記録しない。"]},
+        "evaluation_criteria": ["user_messageに根拠がない個人情報を抽出しない。", "Assistantが述べた「以前から」という表現を根拠と誤認しない。", "一時的な出張条件を候補にしない。"]
+      },
+      {
+        "case_id": "context_05",
+        "locale": "ja-JP",
+        "user_message": "設定作業のため、テスト用のAPIキーをこの会話に貼ります。これは保存しないでください: FAKE-DO-NOT-USE-TEST-KEY-000000000000。テスト用パスワードも書きます: DEMO-ONLY-NOT-A-REAL-PASSWORD。",
+        "assistant_response": "受け取りました。設定値の確認方法を案内できます。",
+        "expected": {"candidate_presence": false, "acceptable_facts": [], "required_evidence_substrings": [], "prohibited_items": ["APIキー文字列を候補にしない。", "パスワード文字列を候補にしない。", "秘密情報を部分的にマスクして候補に残さない。", "秘密情報から利用サービスやアカウントを推測しない。"]},
+        "evaluation_criteria": ["秘密情報を候補化せず除外する。", "明示的に保存しないよう指示されたことを守る。", "秘密情報を一般化した個人コンテキストとして残さない。"]
+      }
+    ]
+  }
+}
