@@ -31,12 +31,17 @@ const HIDDEN_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "gi",
 );
+// 閉じタグは単数形・複数形のどちらでも閉じたとみなし、次の開きタグはまたがない（バックエンドと同じ）。
+// 開きタグは ">" が届く前から隠す。
+// Either closing tag name ends a block and a block never crosses another opening tag, as on
+// the backend. An opening tag is hidden even before its ">" arrives.
 const COMPLETE_HIDDEN_TAG_RE = new RegExp(
-  "<(" + CHOICE_BUTTONS_TAG_NAME + ")\\b[^>]*>[\\s\\S]*?</\\1>",
+  "<" + CHOICE_BUTTONS_TAG_NAME + ">(?:(?!<" + CHOICE_BUTTONS_TAG_NAME + ">)[\\s\\S])*?</" +
+    CHOICE_BUTTONS_TAG_NAME + ">",
   "gi",
 );
 const HIDDEN_TAG_START_RE = new RegExp(
-  "<(?:" + CHOICE_BUTTONS_TAG_NAME + ")\\b[^>]*>",
+  "<" + CHOICE_BUTTONS_TAG_NAME + "\\b[^>]*(?:>|$)",
   "gi",
 );
 const ARTIFACT_FENCE_START_RE = new RegExp(

@@ -222,18 +222,39 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
         self.assertEqual(normalized.validation_errors, [])
         self.assertEqual(normalized.artifact_status, "not_requested")
 
-    def test_mismatched_tag_pair_is_left_in_the_prose(self):
-        # 開閉タグ名が一致しない不正な形は、フェンスが閉じられなかった場合と同様に
-        # ブロックとして認識せず、本文にそのまま残す。
-        # A mismatched open/close pair is not recognized as a block at all, the same way an
-        # unterminated fence is left untouched in the prose.
-        block = _buttons_tag_block(YES_NO, open_tag="chatcore_buttons", close_tag="chatcore_button")
-        raw = f"本文\n\n{block}"
+    def test_singular_and_plural_closing_tags_both_close_a_tag_block(self):
+        # 単数形と複数形の取り違えは閉じたとみなす。後ろの本文や別のブロックを
+        # 1つのJSONとして飲み込まない。
+        # A singular/plural mix-up still closes the block, and it never swallows the
+        # prose or a later block after it as one JSON value.
+        first = _buttons_tag_block(YES_NO, open_tag="chatcore_button", close_tag="chatcore_buttons")
+        second = _buttons_tag_block(SINGLE, open_tag="chatcore_button")
+        raw = f"本文開始。\n\n{first}\n\n残したい中間の説明文。\n\n{second}\n\n末尾の文章。"
 
         normalized = normalize_response_with_artifacts(raw)
 
-        self.assertIn("chatcore_buttons", normalized.text)
-        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+        self.assertIn("残したい中間の説明文。", normalized.text)
+        self.assertIn("末尾の文章。", normalized.text)
+        self.assertNotIn("chatcore_button", normalized.text)
+        self.assertEqual(len(_parts_of_type(normalized.parts, "interactive_buttons")), 2)
+
+    def test_an_unclosed_tag_does_not_capture_the_next_tag_block(self):
+        # 閉じタグの無い開きタグは次の開きタグをまたがず、後ろの正しいブロックだけを拾う。
+        # An opening tag without a closing tag never reaches across the next opening tag, so
+        # only the well-formed block after it is taken.
+        raw = (
+            "本文\n\n<chatcore_button>\n"
+            + json.dumps(YES_NO, ensure_ascii=False)
+            + "\n\n説明文\n\n"
+            + _buttons_tag_block(SINGLE)
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertIn("説明文", normalized.text)
+        parts = _parts_of_type(normalized.parts, "interactive_buttons")
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0]["buttons"]["type"], SINGLE["type"])
 
     def test_buttons_follow_a_generated_ui_in_the_same_reply(self):
         raw = f"比較しました。\n\n{_artifact_block()}\n\n{_buttons_block(SINGLE)}"

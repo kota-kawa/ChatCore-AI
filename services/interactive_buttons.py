@@ -17,16 +17,19 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 INTERACTIVE_BUTTONS_PART_TYPE = "interactive_buttons"
 # 旧来の別名（interactive-buttons / interactive_buttons）も読み、本文へJSONを漏らさない。
 # 一部モデル（実測: Qwen 3.8 27B）はフェンスの代わりに <chatcore_button>/<chatcore_buttons>
-# タグでJSONを包むことがあるため、開閉タグが対応している場合も同じ "json" 群で拾う。
+# タグでJSONを包むことがあるため、タグで開いたブロックも同じ "json" 群で拾う。閉じタグは
+# 単数形・複数形のどちらでも閉じたとみなし、JSON は次の開きタグをまたがない。閉じタグ名の
+# 取り違えで、後ろの本文や別のブロックまで1つの JSON として飲み込まないようにするため。
 # Legacy aliases are still read so their JSON never leaks into the prose. Some models
 # (observed: Qwen 3.8 27B) wrap the JSON in <chatcore_button>/<chatcore_buttons> tags
-# instead of a fence; a matching opening/closing tag pair is captured into the same
-# "json" group so it is validated and stripped the same way as the fenced form.
+# instead of a fence; a tag-opened block is captured into the same "json" group. Either
+# closing tag name ends it and the JSON never crosses another opening tag, so a mixed-up
+# closing tag cannot swallow the prose or a later block as one JSON value.
 INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"(?:```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
-    r"|<(?P<tag>chatcore_buttons?)>\s*)"
-    r"(?P<json>\{[\s\S]*?\})\s*"
-    r"(?:```|</(?P=tag)>)",
+    r"|(?P<tag><chatcore_buttons?>)\s*)"
+    r"(?P<json>\{(?:(?!<chatcore_buttons?>)[\s\S])*?\})\s*"
+    r"(?(tag)</chatcore_buttons?>|```)",
     re.IGNORECASE,
 )
 # 上限はモデルに見せる説明（services/chat_prompt.py の「Choice buttons」）と揃える。

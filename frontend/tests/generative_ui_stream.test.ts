@@ -133,19 +133,26 @@ test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from th
   }
 });
 
-test("a choice-button tag with a mismatched closing tag is left for the final render to resolve", () => {
-  // 開閉タグ名が一致しない不正な形は、ストリーミング中は開始位置から隠すが、
-  // 最終描画時にバックエンドが除去しない場合と整合させるためここでは断定しない。
-  // A malformed pair with mismatched tag names is still hidden from the start while
-  // streaming, mirroring how an unterminated fence is hidden defensively.
-  const mismatched = [
+test("a choice-button tag closed by the other tag name does not hide the prose after it", () => {
+  // 単数形と複数形の取り違えも閉じたとみなし、後ろの本文は隠さない（バックエンドと同じ）。
+  // A singular/plural mix-up still closes the block, so the prose after it stays visible,
+  // matching the backend.
+  const mixed = [
     "内容を確定します。",
     "<chatcore_buttons>",
     '{"type":"yes_no","question":"実行しますか？"}',
     "</chatcore_button>",
+    "続きの説明です。",
   ].join("\n");
 
-  assert.equal(getStreamingGenerativeUiDisplayText(mismatched), "内容を確定します。");
+  const shown = getStreamingGenerativeUiDisplayText(mixed);
+  assert.match(shown, /内容を確定します。/);
+  assert.match(shown, /続きの説明です。/);
+  assert.doesNotMatch(shown, /chatcore_button|yes_no/);
+});
+
+test("a choice-button opening tag is hidden before its closing bracket arrives", () => {
+  assert.equal(getStreamingGenerativeUiDisplayText("Pick one.\n<chatcore_button"), "Pick one.");
 });
 
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
