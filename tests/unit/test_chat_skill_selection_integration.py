@@ -125,7 +125,10 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
     def test_regeneration_fallback_still_excludes_ineligible_memo_tools(self):
         for room_mode in ("normal", "temporary"):
             with self.subTest(room_mode=room_mode):
-                pipeline_input = self._regeneration_input(room_mode=room_mode, user={"id": 42, "memo_tools_skill_enabled": False})
+                pipeline_input = self._regeneration_input(
+                    room_mode=room_mode,
+                    user={"id": 42, "memo_tools_skill_enabled": False, "prompt_tools_skill_enabled": False},
+                )
                 with (
                     patch("services.chat_regeneration_pipeline.fetch_pasted_url_context", return_value=((), "")),
                     patch("services.chat_regeneration_pipeline.has_active_generation", return_value=False),

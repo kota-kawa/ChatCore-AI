@@ -465,7 +465,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         state = _make_state()
         result = runner.run(state, _tool_call("fake_write", text="x"))
         self.assertEqual(result["error_code"], "target_not_found")
-        self.assertIn("memo_id", result["message"])
+        self.assertIn("Re-check the id", result["message"])
         state.turn_state.record_search.assert_called_once()
         self.assertEqual(state.turn_state.record_search.call_args.kwargs["status"], "target_not_found")
 
