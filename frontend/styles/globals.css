@@ -78,7 +78,6 @@ body {
 
 .cc-share-modal__field:focus-within {
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .cc-share-modal__field input {
@@ -1327,7 +1326,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 .global-ai-agent-modal .mini-chat-input-wrapper:focus-within {
   border-color: rgba(103, 232, 249, 0.58);
   background: rgba(6, 22, 34, 0.9);
-  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1), 0 0 24px rgba(34, 211, 238, 0.12);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.12);
 }
 
 .global-ai-agent-modal .mini-chat-input {
@@ -1925,7 +1924,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-input-wrapper:focus-within {
   border-color: rgba(96, 165, 250, 0.5);
   background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.12);
+  box-shadow: none;
 }
 
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-input::placeholder {
@@ -2316,7 +2315,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 .global-ai-agent-modal .mini-chat-input-wrapper:focus-within {
   border-color: rgba(237, 116, 107, 0.58);
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(237, 116, 107, 0.12), 0 7px 18px rgba(109, 75, 61, 0.08);
+  box-shadow: 0 7px 18px rgba(109, 75, 61, 0.08);
 }
 
 .global-ai-agent-modal .mini-chat-input {
@@ -2588,7 +2587,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-input-wrapper:focus-within {
   border-color: rgba(241, 138, 120, 0.58);
   background: rgba(41, 53, 52, 0.98);
-  box-shadow: 0 0 0 4px rgba(241, 138, 120, 0.12);
+  box-shadow: none;
 }
 
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-input::placeholder {

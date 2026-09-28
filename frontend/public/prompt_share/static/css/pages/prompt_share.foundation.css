@@ -295,7 +295,6 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
 :where(body.prompt-share-page, .prompt-share-page) .search-box:focus-within {
   background: var(--ps-surface);
   border-color: rgba(26, 115, 232, 0.55);
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.14);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .search-box input {

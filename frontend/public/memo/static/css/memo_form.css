@@ -741,7 +741,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
 
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search:focus-within {
   border-color: rgba(217, 119, 6, 0.42);
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
   background: #fff;
 }
 
@@ -2002,7 +2001,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__search:focus-within {
   background: rgba(15, 23, 42, 0.84);
   border-color: rgba(251, 191, 36, 0.42);
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn.is-active,
@@ -2562,7 +2560,6 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search:focus-within {
   background: #fff;
   border-color: rgba(217, 119, 6, 0.55);
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.14);
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search > i{
@@ -3329,7 +3326,6 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-select.is-open .memo-select__trigger,
 :where(body.memo-page, .memo-page-shell) .memo-control:focus {
   border-color: #fbbc04;
-  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.18);
   outline: none;
 }
 
@@ -3761,7 +3757,6 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select.is-open .memo-select__trigger {
   border-color: rgba(251, 188, 4, 0.56);
   background: #272d36;
-  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.12);
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__search > i,
@@ -4006,7 +4001,7 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__search:focus-within {
   border-color: rgba(251, 188, 4, 0.56);
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.14);
+  box-shadow: none;
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__count {
@@ -4765,7 +4760,6 @@ body.memo-page {
 .memo-modal-scope .memo-context-portability__file input:focus {
   outline: none;
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .memo-modal-scope textarea {
@@ -4902,7 +4896,6 @@ body.memo-page {
   outline: none;
   border-color: var(--modal-accent);
   background: var(--modal-surface);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .memo-modal .memo-modal__title-input::placeholder {
@@ -5174,7 +5167,6 @@ body.memo-page {
 }
 
 .memo-modal .memo-modal__preview-pane--editable:focus-visible {
-  box-shadow: var(--modal-focus-ring);
 }
 
 .memo-modal .memo-modal__edit-hint {
@@ -5764,7 +5756,6 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-panel .mini-chat-input-wrapper:focus-within {
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-input {

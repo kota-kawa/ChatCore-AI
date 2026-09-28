@@ -61,7 +61,6 @@
 
 :where(body.chat-page, .chat-page-shell) .input-wrapper:focus-within {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring);
 }
 
 :where(body.chat-page, .chat-page-shell) #user-input {
@@ -111,7 +110,6 @@
 
 :where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper:focus-within {
   border-color: rgba(234, 88, 12, 0.55);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
 }
 
 /* プレースホルダーは通常のグレーだとオレンジの下地に埋もれるので、
@@ -268,7 +266,6 @@
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary .input-wrapper:focus-within {
   border-color: rgba(251, 146, 60, 0.6);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container--temporary #user-input::placeholder {

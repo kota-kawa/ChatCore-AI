@@ -286,10 +286,9 @@
 /* The textarea draws no frame, so the shell carries the focus indicator. Later
    rules restyle the shell per breakpoint and per theme, so this selector adds
    #setup-container: at equal specificity the last rule would win and the focus
-   ring would silently disappear. */
+   border would silently disappear. */
 :where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   background: var(--surface-primary);
 }
 
@@ -435,7 +434,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .setup-form textarea:focus,
 :where(body.chat-page, .chat-page-shell) .setup-form select:focus {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
   background: #ffffff;
 }
@@ -490,7 +488,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .model-select.is-open .model-select-trigger,
 :where(body.chat-page, .chat-page-shell) .model-select-trigger:focus {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
   background: #ffffff;
 }
@@ -1371,7 +1368,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #setup-container .setup-info-field-shell:focus-within {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell.chat-attachment-dropzone--active {

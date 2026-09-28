@@ -59,7 +59,6 @@
 :where(body.chat-page, .chat-page-shell) .custom-form-control:focus {
   outline: none;
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 :where(body.chat-page, .chat-page-shell) .custom-form-text {

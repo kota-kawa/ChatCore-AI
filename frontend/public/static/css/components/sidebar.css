@@ -178,7 +178,6 @@
 
 :where(body.chat-page, .chat-page-shell) .chat-room-search__input:focus {
   border-color: rgba(25, 195, 125, 0.5);
-  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
 }
 
 /* ブラウザ標準の検索クリアアイコンを隠し、独自ボタンと重複させない */
@@ -682,7 +681,6 @@
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__input:focus {
   border-color: rgba(94, 234, 212, 0.5);
-  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.14);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__clear:hover,

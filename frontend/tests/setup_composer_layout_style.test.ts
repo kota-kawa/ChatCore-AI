@@ -104,7 +104,7 @@ test("setup textarea reserves no gutter for the action buttons", () => {
 // buttons, but it also removes the focus indicator, so the shell's :focus-within
 // restores it. Later breakpoint and theme rules restyle the shell, so the focus
 // selector has to out-specify them (it includes #setup-container).
-test("setup composer is one seamless field whose focus ring survives the cascade", () => {
+test("setup composer is one seamless field whose focus border survives the cascade", () => {
   assert.match(
     baseSetupCss,
     /#setup-info\s*\{[^}]*?border-color:\s*transparent\s*;[^}]*?background:\s*transparent\s*;/,
@@ -133,7 +133,7 @@ test("setup composer is one seamless field whose focus ring survives the cascade
     assert.match(
       setupCss,
       focusRule,
-      `the ${label} focus ring must out-specify the later shell rules`,
+      `the ${label} focus border must out-specify the later shell rules`,
     );
   }
 });

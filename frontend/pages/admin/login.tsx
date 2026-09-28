@@ -110,7 +110,7 @@ export default function AdminLogin() {
                   id="password"
                   name="password"
                   required
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />

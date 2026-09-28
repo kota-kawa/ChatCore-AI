@@ -232,7 +232,6 @@
 .cc-alert-modal__input:focus {
   outline: none;
   border-color: var(--cc-modal-accent);
-  box-shadow: var(--cc-modal-focus-ring);
 }
 
 /* ---------- actions ---------- */

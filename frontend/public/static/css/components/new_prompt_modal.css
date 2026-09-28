@@ -115,7 +115,6 @@
 :where(body.chat-page, .chat-page-shell) .new-post-form .form-group select:focus {
   outline: none;
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 /* 送信状態の文言。フッターの注記（cc-modal__footer-note）として置き、エラー時だけ見せる。

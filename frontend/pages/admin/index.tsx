@@ -197,7 +197,7 @@ export default function AdminDashboard() {
     "rounded-3xl border border-white/70 bg-white/80 p-6 shadow-xl shadow-indigo-100/40 backdrop-blur";
   const labelClass = "text-sm font-semibold text-slate-700";
   const inputClass =
-    "w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100";
+    "w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none";
   const buttonClass =
     "cc-texture-btn cc-texture-btn--indigo cc-press rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
 
