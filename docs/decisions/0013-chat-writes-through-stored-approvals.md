@@ -27,3 +27,17 @@
 - 画面操作エージェント（第14節）や MCP（第15節）と混同しないでください。前者はチャット外の画面操作専用の契約、後者は外部クライアントの事前同意が前提で、どちらもこの承認カードの仕組みを再利用しません。
 - 承認待ちのまま応答が終わるターンが増えるため、テレメトリ（`workspace_write_proposals`・`workspace_auto_executions`・`approval_pending_turn`・`auto_approval_suppressed_by_untrusted_input`）で実際の承認率・自動承認の抑止頻度を追えるようにしています。抑止が多すぎる、または少なすぎる場合はこの判断を見直してください。
 - 本人以外の書き込みが起きないよう、承認 API・実行ハンドラのすべてのクエリは利用者 ID で絞ります。新しいツールの実行ハンドラも同じ境界を通してください。
+
+### 改訂: 対象をメモ以外（公開 Prompt・自分用 Prompt・個人 Skill）へ広げる（2026-09）
+
+PR2 で、既定スキル「プロンプト共有と設定」（`users.prompt_tools_skill_enabled`）と、その配下のツール（`shared_prompt_read`・`my_prompt_list`・`my_skill_list` の読み取り、`publish_prompt`・`my_prompt_save`・`my_skill_save` の書き込み）を追加しました。基本の設計判断（生成中は実行しない、承認カード経由、既定スキルとセットで出し入れ）は変えていません。以下は追加した対象に固有の扱いです。
+
+- **公開 Prompt の作成**: `publish_prompt` はテキスト Prompt の新規作成のみで、SKILL 投稿・画像・Resources・既存投稿の編集や削除には対応しません。承認前は `prompts` テーブルへ何も保存せず、下書きは承認行の `arguments`／`preview` にだけ持ちます。承認実行時に Web 投稿フォーム（`blueprints/prompt_share/prompt_share_api.py`）と同じレート制限（8件/ユーザー/時、12件/IP/時、15秒のユーザー別クールダウン）を共有モジュール `services/prompt_create_limits.py` 経由で適用し、チャット全体の書き込み上限（`chat_tool:write:user`）にも重ねて従います。MCP 経由の投稿（`services/mcp_config.py`）は別の上限のままです。`publish_prompt` は「常に承認」を許可しません（`allows_always=False`）。
+- **自分用 Prompt（Task）・個人 Skill の作成／編集**: `my_prompt_save`・`my_skill_save` は、ID を省けば新規作成、指定すれば既存の自分の行を編集します。編集は提案時に読んだ `updated_at` を版として承認実行時に再確認し、その間に別画面で更新されていれば `target_changed` として失敗させます（メモの `revision` と同じ役割を、Task／個人 Skill では更新時刻で代替）。両ツールとも「常に承認」を許可しますが、対象を編集する提案はその対象を事前に一覧ツール（`my_prompt_list`／`my_skill_list`、いずれも本文を全件返す）で読んでいることを前提にし、ON/OFF の切り替えと削除はツールを用意していません。
+- **非公開内容の混入警告**: `publish_prompt` の提案内容が、そのターンで読んだ非公開のテキスト（メモ本文・抜粋、自分の Task／個人 Skill 本文、`llm_profile_context`）と 50 文字以上そのまま一致した場合、`services/chat_workspace_tools/private_overlap.py` の突き合わせでカードに警告（`private_text_in_public_post`）と一致箇所を出します。ブロックはせず、利用者が確認チェック（`ToolApprovalDecisionRequest.acknowledge_warnings`）を入れるまで承認 API 側で 400 を返して先へ進めません。
+- **外部内容の扱い**: 他人の公開投稿を読む `shared_prompt_search`（既存の事前検索ツールを流用し、対応スキルが ON かつ `use_shared_prompts` が未選択のターンにだけ検索クロージャを補う）と `shared_prompt_read` は、どちらも `services/chat_generation.py` の外部内容ツール集合に含め、読んだターンは「常に承認」があっても手動カードへ戻します。一方、自分の Task／個人 Skill の読み取りはメモと同じく「自分自身のデータ」として扱い、`get_evidence` の再読み取り判定でも外部内容にしません。
+
+## 影響（改訂分）
+
+- 新しい対象を1つ広げるたびに、所有者確認・提案時の版比較・「常に承認」の除外条件を既存の対象と揃えてください。特に公開投稿を伴うツールは、既存の投稿経路（Web／MCP）のレート制限と重複なく・矛盾なく適用できるかを確認します。
+- 非公開内容の混入検出は簡易な文字列一致（`difflib` によるブロック一致、50 文字以上）であり、言い換えや要約された引用は検出できません。誤検知・見逃しのどちらもあり得る前提の「確認を促す警告」であり、公開の可否を機械的に判定するものではありません。
