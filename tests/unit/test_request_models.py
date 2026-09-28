@@ -422,6 +422,19 @@ class RequestModelsTestCase(unittest.TestCase):
         self.assertEqual(payload.attached_files[0].name, "document.pdf")
         self.assertEqual(payload.attached_files[0].data_base64, "QUJD")
 
+    def test_chat_message_accepts_only_supported_browser_theme_preferences(self):
+        payload = _validate(
+            ChatMessageRequest,
+            {"message": "今のテーマを教えて", "theme_preference": "auto"},
+        )
+
+        self.assertEqual(payload.theme_preference, "auto")
+        with self.assertRaises(ValidationError):
+            _validate(
+                ChatMessageRequest,
+                {"message": "今のテーマを教えて", "theme_preference": "system"},
+            )
+
     # チャットルームIDリスト送信リクエストで、空のリストが拒否されることを検証します。
     # Verify that chat room IDs request requires a non-empty room list.
     def test_chat_room_ids_requires_non_empty_list(self):

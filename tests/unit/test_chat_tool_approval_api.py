@@ -613,6 +613,53 @@ class ChatToolApprovalRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({key: approval[key] for key in card}, card)
         decide.assert_awaited_once()
 
+    async def test_approved_profile_locale_updates_the_locale_cookie(self):
+        app = self._app()
+        card = {
+            "id": str(uuid4()),
+            "tool": "profile_settings_update",
+            "family": "profile",
+            "status": "succeeded",
+            "decision": "once",
+            "preview": {"kind": "profile_settings_update", "preferred_locale": "en"},
+        }
+        async with self._authenticated_client(app) as client:
+            with patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval", AsyncMock(return_value=card)
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "approve_once"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("chatcore_locale=en", response.headers.get("set-cookie", ""))
+
+    async def test_settled_profile_locale_conflict_still_syncs_the_locale_cookie(self):
+        app = self._app()
+        card = {
+            "id": str(uuid4()),
+            "tool": "profile_settings_update",
+            "family": "profile",
+            "status": "succeeded",
+            "decision": "once",
+            "preview": {"kind": "profile_settings_update", "preferred_locale": "en"},
+        }
+        async with self._authenticated_client(app) as client:
+            with patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval",
+                AsyncMock(side_effect=ToolApprovalConflictError(card)),
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "deny"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("chatcore_locale=en", response.headers.get("set-cookie", ""))
+
     async def test_decide_maps_a_service_conflict_to_its_status_code(self):
         app = self._app()
         async with self._authenticated_client(app) as client:

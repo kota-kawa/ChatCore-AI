@@ -7,6 +7,7 @@ import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api
 import { isToolApprovalDecidable, isToolApprovalExpired } from "../../lib/chat_page/tool_approvals";
 import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 import { MemoApprovalPreview } from "./tool_approval_previews/memo";
+import { ProfileSettingsApprovalPreview } from "./tool_approval_previews/profile_settings";
 import { PromptsApprovalPreview } from "./tool_approval_previews/prompts";
 
 type Tool = ToolApprovalApi["tool"];
@@ -14,6 +15,7 @@ type Status = ToolApprovalApi["status"];
 type Warning = NonNullable<ToolApprovalApi["warnings"]>[number];
 type Preview = NonNullable<ToolApprovalApi["preview"]>;
 type PromptsPreview = Extract<Preview, { kind: "publish_prompt" | "my_prompt_save" | "my_skill_save" }>;
+type ProfileSettingsPreview = Extract<Preview, { kind: "profile_settings_update" }>;
 
 const TITLE_KEYS: Record<Tool, MessageKey> = {
   memo_create: "chat.toolApproval.title.memo_create",
@@ -22,6 +24,7 @@ const TITLE_KEYS: Record<Tool, MessageKey> = {
   publish_prompt: "chat.toolApproval.title.publish_prompt",
   my_prompt_save: "chat.toolApproval.title.my_prompt_save",
   my_skill_save: "chat.toolApproval.title.my_skill_save",
+  profile_settings_update: "chat.toolApproval.title.profile_settings_update",
 };
 
 const TITLE_ICONS: Record<Tool, string> = {
@@ -31,6 +34,7 @@ const TITLE_ICONS: Record<Tool, string> = {
   publish_prompt: "bi-megaphone",
   my_prompt_save: "bi-file-earmark-text",
   my_skill_save: "bi-stars",
+  profile_settings_update: "bi-person-gear",
 };
 
 // 実行結果を開くリンク先。ツールごとの対象画面へ導く。
@@ -42,6 +46,7 @@ const RESULT_LINKS: Record<Tool, { href: string; labelKey: MessageKey }> = {
   publish_prompt: { href: "/prompt_share", labelKey: "chat.toolApproval.openPromptShare" },
   my_prompt_save: { href: "/#task-selection", labelKey: "chat.toolApproval.openMyPrompts" },
   my_skill_save: { href: "/#skill-selection-title", labelKey: "chat.toolApproval.openMySkills" },
+  profile_settings_update: { href: "/settings", labelKey: "chat.toolApproval.openProfileSettings" },
 };
 
 const WARNING_KEYS: Record<Warning, MessageKey> = {
@@ -60,6 +65,10 @@ function isPromptsPreview(preview: Preview): preview is PromptsPreview {
   return preview.kind === "publish_prompt"
     || preview.kind === "my_prompt_save"
     || preview.kind === "my_skill_save";
+}
+
+function isProfileSettingsPreview(preview: Preview): preview is ProfileSettingsPreview {
+  return preview.kind === "profile_settings_update";
 }
 
 const STATUS_KEYS: Record<Status, MessageKey> = {
@@ -181,7 +190,8 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
     displayStatus === "failed"
       ? t(ERROR_KEYS.get(result?.error_code ?? "") ?? "chat.toolApproval.error.unknown")
       : "";
-  const showResultLink = displayStatus === "succeeded" && typeof result?.target_id === "number";
+  const showResultLink = displayStatus === "succeeded"
+    && (approval.tool === "profile_settings_update" || typeof result?.target_id === "number");
   const resultLink = RESULT_LINKS[approval.tool];
 
   return (
@@ -214,6 +224,8 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
       {approval.preview ? (
         isPromptsPreview(approval.preview) ? (
           <PromptsApprovalPreview preview={approval.preview} />
+        ) : isProfileSettingsPreview(approval.preview) ? (
+          <ProfileSettingsApprovalPreview preview={approval.preview} />
         ) : (
           <MemoApprovalPreview preview={approval.preview} />
         )

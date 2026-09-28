@@ -5,11 +5,16 @@ import {
 } from "../../types/generated/api_schemas";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { extractApiErrorMessage, fetchJson, isRecord } from "../../scripts/core/runtime_validation";
+import { normalizeLocale, type Locale } from "../i18n/config";
 import { normalizeToolApproval } from "./api_contract";
 
 type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type ToolApprovalDecision = ToolApprovalDecisionRequest["decision"];
+export type ToolApprovalDecisionResult = {
+  approval: ToolApprovalApi;
+  currentPreferredLocale: Locale | null;
+};
 
 // 承認 API の失敗。画面は code で分岐する（期限切れならカードを期限切れにする、など）。
 // approval_already_decided は、別タブなどで先に決めた誰かのカードの最新状態を応答に持つので、
@@ -21,13 +26,21 @@ export class ToolApprovalDecisionError extends Error {
   public readonly code: string;
   public readonly status: number;
   public readonly approval?: ToolApprovalApi;
+  public readonly currentPreferredLocale: Locale | null;
 
-  public constructor(message: string, code: string, status: number, approval?: ToolApprovalApi) {
+  public constructor(
+    message: string,
+    code: string,
+    status: number,
+    approval?: ToolApprovalApi,
+    currentPreferredLocale: Locale | null = null,
+  ) {
     super(message);
     this.name = "ToolApprovalDecisionError";
     this.code = code;
     this.status = status;
     this.approval = approval;
+    this.currentPreferredLocale = currentPreferredLocale;
   }
 }
 
@@ -41,7 +54,7 @@ export async function decideToolApproval(
   fallbackMessage: string,
   fetchImpl: FetchImpl = resilientFetch,
   acknowledgeWarnings = false,
-): Promise<ToolApprovalApi> {
+): Promise<ToolApprovalDecisionResult> {
   const { response, payload } = await fetchJson<unknown>(
     `/api/chat/tool-approvals/${encodeURIComponent(approvalId)}/decision`,
     {
@@ -55,15 +68,17 @@ export async function decideToolApproval(
   if (!response.ok) {
     const code = isRecord(payload) && typeof payload.code === "string" ? payload.code : "";
     const approval = isRecord(payload) ? normalizeToolApproval(payload.approval) : undefined;
+    const currentPreferredLocale = isRecord(payload) ? normalizeLocale(payload.current_preferred_locale) : null;
     throw new ToolApprovalDecisionError(
       extractApiErrorMessage(payload, fallbackMessage, response.status),
       code,
       response.status,
       approval,
+      currentPreferredLocale,
     );
   }
   const parsed = ToolApprovalDecisionResponseSchema.safeParse(payload);
   const approval = parsed.success ? normalizeToolApproval(parsed.data.approval) : undefined;
   if (!approval) throw new ToolApprovalDecisionError(fallbackMessage, "invalid_response", response.status);
-  return approval;
+  return { approval, currentPreferredLocale: parsed.data.current_preferred_locale ?? null };
 }

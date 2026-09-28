@@ -7,15 +7,30 @@ import { replaceToolApprovalInMessages } from "../lib/chat_page/tool_approvals";
 import type { UiChatMessage } from "../lib/chat_page/types";
 import type { ToolApprovalApi } from "../types/generated/api_schemas";
 
-const { decideToolApprovalMock, showToastMock } = vi.hoisted(() => ({
+const { decideToolApprovalMock, showToastMock, routerReplaceMock, setLocaleMock } = vi.hoisted(() => ({
   decideToolApprovalMock: vi.fn(),
   showToastMock: vi.fn(),
+  routerReplaceMock: vi.fn(),
+  setLocaleMock: vi.fn(),
 }));
 
 vi.mock("../lib/chat_page/tool_approval_api", async (importOriginal) => {
   const original = await importOriginal<typeof import("../lib/chat_page/tool_approval_api")>();
   return { ...original, decideToolApproval: decideToolApprovalMock };
 });
+vi.mock("../contexts/locale_context", () => ({
+  useTranslation: () => ({
+    setLocale: setLocaleMock,
+    t: (key: string) => {
+      if (key === "chat.toolApproval.decisionFailed") return "承認を処理できませんでした。";
+      if (key === "chat.toolApproval.continuePrompt") return "承認した操作が実行されました。結果を踏まえて続けてください。";
+      return key;
+    },
+  }),
+}));
+vi.mock("next/router", () => ({
+  useRouter: () => ({ asPath: "/chat/room?x=1", replace: routerReplaceMock }),
+}));
 vi.mock("../scripts/core/toast", () => ({ showToast: showToastMock }));
 
 function approval(overrides: Record<string, unknown> = {}): ToolApprovalApi {
@@ -31,6 +46,30 @@ function approval(overrides: Record<string, unknown> = {}): ToolApprovalApi {
   });
   if (!normalized) throw new Error("fixture must be a valid approval");
   return normalized;
+}
+
+function profileApproval(overrides: Partial<ToolApprovalApi> = {}): ToolApprovalApi {
+  return {
+    id: "profile-a1",
+    tool: "profile_settings_update",
+    family: "profile",
+    status: "pending",
+    decision: null,
+    always_allowed: false,
+    preview: {
+      kind: "profile_settings_update",
+      display_name: null,
+      bio: null,
+      llm_profile_context: null,
+      preferred_locale: "en",
+      theme: "dark",
+    },
+    warnings: [],
+    expires_at: "2999-01-01T00:00:00Z",
+    result: null,
+    readonly: false,
+    ...overrides,
+  };
 }
 
 function conversation(approvals: ToolApprovalApi[]): UiChatMessage[] {
@@ -77,6 +116,10 @@ function renderApprovals(initialMessages: UiChatMessage[], isGenerating = false)
 beforeEach(() => {
   decideToolApprovalMock.mockReset();
   showToastMock.mockReset();
+  routerReplaceMock.mockReset().mockResolvedValue(true);
+  setLocaleMock.mockReset();
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
 });
 
 describe("useChatToolApprovals", () => {
@@ -90,6 +133,45 @@ describe("useChatToolApprovals", () => {
     expect(applyToolApproval).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith("承認した操作が実行されました。結果を踏まえて続けてください。");
+  });
+
+  it("applies locale and theme preferences only after a successful profile update", async () => {
+    decideToolApprovalMock.mockResolvedValue(profileApproval({ status: "succeeded", decision: "once" }));
+    const { decide } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).toHaveBeenCalledWith("en");
+    expect(routerReplaceMock).toHaveBeenCalledWith("/chat/room?x=1", "/chat/room?x=1", { locale: "en" });
+    expect(window.localStorage.getItem("chatcore-theme")).toBe("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
+  it.each(["denied", "failed", "pending"] as const)("does not apply profile preferences when the returned card is %s", async (status) => {
+    decideToolApprovalMock.mockResolvedValue(profileApproval({ status }));
+    const { decide } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).not.toHaveBeenCalled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("chatcore-theme")).toBeNull();
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
+  });
+
+  it("does not apply profile preferences when the returned preview kind does not match", async () => {
+    decideToolApprovalMock.mockResolvedValue(profileApproval({
+      status: "succeeded",
+      preview: { kind: "memo_append", memo_id: 4, memo_title: "読書メモ", text: "要点", separator: "" },
+    }));
+    const { decide } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).not.toHaveBeenCalled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("chatcore-theme")).toBeNull();
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
   });
 
   it("forwards the warning acknowledgment to the decision API", async () => {

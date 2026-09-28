@@ -3940,6 +3940,34 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12)),
         )
 
+    def test_regenerate_forwards_valid_browser_theme_preference_to_pipeline(self):
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "model": "claude-haiku-4-5-20251001",
+                "theme_preference": "dark",
+            },
+            session={"user_id": 42},
+        )
+        with ExitStack() as stack:
+            for patcher in self._regenerate_patches(user_message="今のテーマ設定を教えて"):
+                stack.enter_context(patcher)
+            run_pipeline = stack.enter_context(
+                patch(
+                    "blueprints.chat.messages.run_chat_regeneration",
+                    new=AsyncMock(return_value=object()),
+                )
+            )
+            stack.enter_context(
+                patch("blueprints.chat.messages._render_regeneration_outcome", return_value="ok")
+            )
+            asyncio.run(chat_regenerate(request))
+
+        pipeline_input = run_pipeline.await_args.args[0]
+        self.assertEqual(pipeline_input.theme_preference, "dark")
+
     # 日本語: 再生成でも、発話に貼られた URL の本文を取得し直してプロンプトへ前置することを検証します。
     # English: Verify regeneration refetches a pasted URL and prepends its body to the prompt.
     def test_regenerate_refetches_pasted_url_into_llm_context(self):

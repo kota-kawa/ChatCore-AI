@@ -168,6 +168,7 @@ class _ChatPostTurn:
     chat_room_id: str = ""
     model: str = ""
     attached_files: list[Any] = field(default_factory=list)
+    theme_preference: str | None = None
     use_personal_knowledge: bool = False
     use_shared_prompts: bool = False
     formatted_user_message: str = ""
@@ -340,6 +341,7 @@ class ChatPostUseCase:
         turn.chat_room_id = payload.chat_room_id
         turn.model = payload.model or self.default_model
         turn.attached_files = payload.attached_files or []
+        turn.theme_preference = payload.theme_preference
         turn.use_personal_knowledge = bool(payload.use_personal_knowledge)
         turn.use_shared_prompts = bool(payload.use_shared_prompts)
 
@@ -1008,12 +1010,16 @@ class ChatPostUseCase:
 
     def _build_workspace_toolbox(self, turn: _ChatPostTurn) -> ChatWorkspaceToolbox | None:
         """
-        メモなどのツール一式を組み立てます。添付・貼り付け URL・公開投稿の参照を読んだターンは、
-        外部の内容を読んだターンとして扱います。
-        Build the data toolbox. A turn that carries attachments, pasted URLs or public-post
-        references counts as having read external content.
+        本人のプロフィールツールと、ON の既定スキルに対応するツールを組み立てます。
+        添付・貼り付け URL・公開投稿の参照を読んだターンは外部内容を読んだものとして扱います。
+        Build the profile tools and the tools for enabled built-in Skills. A turn that carries
+        attachments, pasted URLs or public-post references counts as having read external content.
         """
-        if turn.user_id is None or not (turn.memo_tools_enabled or turn.prompt_tools_enabled):
+        if (
+            turn.user_id is None
+            or not turn.targets_normal_room()
+            or not self.deps.generation.is_streaming_model(turn.model)
+        ):
             return None
         return build_workspace_toolbox(
             user_id=turn.user_id,
@@ -1021,6 +1027,7 @@ class ChatPostUseCase:
             memo_tools_enabled=turn.memo_tools_enabled,
             prompt_tools_enabled=turn.prompt_tools_enabled,
             llm_profile_context=turn.user_profile_prompt or "",
+            browser_theme_preference=turn.theme_preference,
             external_input_in_turn=bool(
                 turn.prepared_attached_files
                 or turn.prepared_attached_images
