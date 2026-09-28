@@ -73,6 +73,14 @@ function stripChoiceTagsForStreaming(text: string): string {
       const nextOpen = /(?:^|\n)[ \t]*<chatcore_buttons?>/gi;
       nextOpen.lastIndex = COMPLETE_TAG_OPEN_RE.lastIndex;
       const later = nextOpen.exec(text);
+      const close = /<\/chatcore_buttons?>/i.exec(text.slice(COMPLETE_TAG_OPEN_RE.lastIndex));
+      const closeEnd = close ? COMPLETE_TAG_OPEN_RE.lastIndex + close.index + close[0].length : -1;
+      if (closeEnd >= 0 && (!later || closeEnd < later.index + later[0].lastIndexOf("<"))) {
+        cursor = closeEnd;
+        stripped += "\n\n";
+        COMPLETE_TAG_OPEN_RE.lastIndex = closeEnd;
+        continue;
+      }
       if (!later) return stripped;
       const nextTag = later.index + later[0].lastIndexOf("<");
       cursor = nextTag;
@@ -80,7 +88,10 @@ function stripChoiceTagsForStreaming(text: string): string {
       while (lineStart > 0 && lineStart < nextTag) {
         const lineEnd = text.indexOf("\n", lineStart);
         const line = text.slice(lineStart, lineEnd < 0 ? nextTag : Math.min(lineEnd, nextTag)).trim();
-        if (line && !/^[{}\[\],:]|^"|^(?:true|false|null|-?\d+(?:\.\d+)?)\s*[,}\]]?$/.test(line)) {
+        const looksLikeJsonLine =
+          ["{", "}", "[", "]", ",", ":", '"'].some((prefix) => line.startsWith(prefix)) ||
+          /^(?:true|false|null|-?\d+(?:\.\d+)?)\s*[,}\]]?$/.test(line);
+        if (line && !looksLikeJsonLine) {
           cursor = lineStart;
           break;
         }

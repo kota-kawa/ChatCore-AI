@@ -155,6 +155,22 @@ test("a broken multiline JSON tag does not expose its fields before resynchroniz
   assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
 });
 
+test("a closing tag ends malformed multiline JSON and keeps the following prose", () => {
+  const text = [
+    "Intro",
+    "<chatcore_button>",
+    "{",
+    '"type":"yes_no",',
+    '"question":"Broken',
+    "</chatcore_button>",
+    "Follow-up prose.",
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
+});
+
 test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
   const incompleteSingular = [
     "続きに進みますか？",
