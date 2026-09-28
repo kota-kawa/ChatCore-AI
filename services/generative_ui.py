@@ -17,6 +17,7 @@ from services.generative_ui_escaping import repair_over_escaped_sources
 from services.generative_ui_intent import (
     inject_generative_ui_mode_instruction,
     is_explicit_generative_ui_opt_out,
+    requests_interactive_operation,
 )
 from services.generative_ui_javascript import (
     javascript_structure_error,
@@ -200,6 +201,20 @@ _JS_RENDERS_DOM_RE = re.compile(
 )
 _APP_LOOKUP_RE = re.compile(
     r"""getElementById\s*\(\s*['"]app['"]|querySelector(?:All)?\s*\(\s*['"]#app['"]""",
+)
+# 操作を求める依頼なのに、押せる部品はあるが配線が無い状態を拾う。ボタンやレンジ入力を
+# 何度操作しても状態が変わらない「見た目だけのUI」は、描画はできても要求を満たさない。
+# Catches a requested-operation artifact whose pressable controls are unwired: pressing a
+# button or dragging a range never changes anything. It renders fine but does not satisfy
+# what was asked, which is why this is a quality issue rather than a validation failure.
+_OPERABLE_CONTROL_RE = re.compile(
+    r"<button\b|<input\b[^>]*\btype\s*=\s*[\"']?range\b|<select\b",
+    re.IGNORECASE,
+)
+_JS_EVENT_WIRING_RE = re.compile(
+    r"addEventListener\s*\(|\bon(?:click|change|input|pointerdown|pointerup|pointermove|"
+    r"mousedown|mouseup|touchstart|touchend|keydown|keyup|submit|drag|dragstart|dragend)\s*=",
+    re.IGNORECASE,
 )
 _DOCUMENT_SCAFFOLD_RE = re.compile(
     r"<!doctype[^>]*>|<\s*/?\s*(?:html|body)\b[^>]*>",
@@ -1668,8 +1683,18 @@ def _normalize_artifacts(
 def requested_artifact_quality_issues(
     normalized: NormalizedGenerativeResponse,
     mode: Literal["2D", "3D"],
+    *,
+    user_request: str | None = None,
 ) -> list[str]:
-    """Return severe completeness/quality issues that justify one model repair pass."""
+    """Return severe completeness/quality issues that justify one model repair pass.
+
+    ``user_request`` は省略可能。渡された場合だけ、操作を求める依頼に対して
+    押せる部品はあるが配線が無い状態を追加で検出する。省略時はこの検出をせず、
+    既存呼び出し元の挙動は変えない。
+    ``user_request`` is optional. Only when it is given, this additionally detects a requested
+    operation whose pressable controls have no script or event handlers wired to them. Omitting
+    it skips that check, keeping existing callers' behavior unchanged.
+    """
     artifacts = [
         part.get("artifact")
         for part in (normalized.parts or [])
@@ -1720,6 +1745,17 @@ def requested_artifact_quality_issues(
                 issues.append("2D presentation styling is too sparse")
         if len(html) + len(css) + len(js) < 500:
             issues.append("2D implementation is too small to be a polished UI")
+        if (
+            requests_interactive_operation(user_request)
+            and _OPERABLE_CONTROL_RE.search(html)
+            and not _JS_EVENT_WIRING_RE.search(js)
+            # 安全なインラインハンドラ（onclick等）はサニタイズを生き残るため、
+            # htmlにそれが残っていれば別途の配線とみなす。
+            # A safe inline handler (onclick, etc.) survives sanitization, so its
+            # presence in html counts as wiring even without a separate js.
+            and not _EVENT_ATTR_RE.search(html)
+        ):
+            issues.append("2D artifact has operable controls but no script or event handlers")
     return issues
 
 
@@ -1815,7 +1851,7 @@ def _normalize_artifacts_with_retry(
     if mode is None or explicit_ui_opt_out:
         return normalized
 
-    issues = requested_artifact_quality_issues(normalized, mode)
+    issues = requested_artifact_quality_issues(normalized, mode, user_request=intent_text)
     if not issues:
         return normalized
 
@@ -1853,7 +1889,7 @@ def _normalize_artifacts_with_retry(
         ui_mode=normalized_ui_mode,
         explicit_ui_opt_out=False,
     )
-    repaired_issues = requested_artifact_quality_issues(repaired, mode)
+    repaired_issues = requested_artifact_quality_issues(repaired, mode, user_request=intent_text)
     if not repaired_issues:
         logger.info("Repaired a requested %s generative UI response.", mode)
         return dataclass_replace(repaired, repair_attempted=True)
