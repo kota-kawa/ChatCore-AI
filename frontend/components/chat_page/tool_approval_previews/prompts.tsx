@@ -6,7 +6,7 @@ import type { ToolApprovalApi } from "../../../types/generated/api_schemas";
 import { ExpandableText, PreviewField, PreviewText } from "./shared";
 
 type AnyPreview = NonNullable<ToolApprovalApi["preview"]>;
-type PromptsPreview = Extract<AnyPreview, { kind: "publish_prompt" | "public_prompt_edit" | "my_prompt_save" | "my_skill_save" }>;
+type PromptsPreview = Extract<AnyPreview, { kind: "publish_prompt" | "my_prompt_save" | "my_skill_save" }>;
 type MyPromptPreview = Extract<PromptsPreview, { kind: "my_prompt_save" }>;
 type ClearedField = NonNullable<MyPromptPreview["clear_fields"]>[number];
 
@@ -77,26 +77,6 @@ function PromptsApprovalPreviewComponent({ preview }: { preview: PromptsPreview 
           <PreviewField label={t("chat.toolApproval.preview.aiModel")}>{preview.ai_model}</PreviewField>
         ) : null}
         <PrivateOverlapExcerpts excerpts={excerpts} />
-      </dl>
-    );
-  }
-
-  if (preview.kind === "public_prompt_edit") {
-    return (
-      <dl className="tool-approval-preview">
-        <PreviewField label={t("chat.toolApproval.preview.beforeTitle")}>
-          {preview.before_title.trim() || untitled}
-        </PreviewField>
-        <PreviewField label={t("chat.toolApproval.preview.afterTitle")}>
-          {preview.title.trim() || untitled}
-        </PreviewField>
-        <PreviewField label={t("chat.toolApproval.preview.beforeContent")}>
-          <ExpandableText text={preview.before_content} />
-        </PreviewField>
-        <PreviewField label={t("chat.toolApproval.preview.afterContent")}>
-          <ExpandableText text={preview.content} />
-        </PreviewField>
-        <PrivateOverlapExcerpts excerpts={preview.private_overlap_excerpts ?? []} />
       </dl>
     );
   }

@@ -5,7 +5,6 @@ import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import { isToolApprovalDecidable, isToolApprovalExpired } from "../../lib/chat_page/tool_approvals";
-import { buildPromptPath } from "../../lib/promptSlug";
 import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 import { MemoApprovalPreview } from "./tool_approval_previews/memo";
 import { PromptsApprovalPreview } from "./tool_approval_previews/prompts";
@@ -14,14 +13,13 @@ type Tool = ToolApprovalApi["tool"];
 type Status = ToolApprovalApi["status"];
 type Warning = NonNullable<ToolApprovalApi["warnings"]>[number];
 type Preview = NonNullable<ToolApprovalApi["preview"]>;
-type PromptsPreview = Extract<Preview, { kind: "publish_prompt" | "public_prompt_edit" | "my_prompt_save" | "my_skill_save" }>;
+type PromptsPreview = Extract<Preview, { kind: "publish_prompt" | "my_prompt_save" | "my_skill_save" }>;
 
 const TITLE_KEYS: Record<Tool, MessageKey> = {
   memo_create: "chat.toolApproval.title.memo_create",
   memo_append: "chat.toolApproval.title.memo_append",
   memo_edit: "chat.toolApproval.title.memo_edit",
   publish_prompt: "chat.toolApproval.title.publish_prompt",
-  public_prompt_edit: "chat.toolApproval.title.public_prompt_edit",
   my_prompt_save: "chat.toolApproval.title.my_prompt_save",
   my_skill_save: "chat.toolApproval.title.my_skill_save",
 };
@@ -31,7 +29,6 @@ const TITLE_ICONS: Record<Tool, string> = {
   memo_append: "bi-journal-arrow-down",
   memo_edit: "bi-pencil-square",
   publish_prompt: "bi-megaphone",
-  public_prompt_edit: "bi-pencil-square",
   my_prompt_save: "bi-file-earmark-text",
   my_skill_save: "bi-stars",
 };
@@ -43,7 +40,6 @@ const RESULT_LINKS: Record<Tool, { href: string; labelKey: MessageKey }> = {
   memo_append: { href: "/memo", labelKey: "chat.toolApproval.openMemo" },
   memo_edit: { href: "/memo", labelKey: "chat.toolApproval.openMemo" },
   publish_prompt: { href: "/prompt_share", labelKey: "chat.toolApproval.openPromptShare" },
-  public_prompt_edit: { href: "/prompt_share", labelKey: "chat.toolApproval.openPublicPrompt" },
   my_prompt_save: { href: "/#task-selection", labelKey: "chat.toolApproval.openMyPrompts" },
   my_skill_save: { href: "/#skill-selection-title", labelKey: "chat.toolApproval.openMySkills" },
 };
@@ -62,23 +58,8 @@ const ACKNOWLEDGMENT_REQUIRED_WARNING: Warning = "private_text_in_public_post";
 // Narrows on preview.kind to tell a prompts-family preview from a memo one.
 function isPromptsPreview(preview: Preview): preview is PromptsPreview {
   return preview.kind === "publish_prompt"
-    || preview.kind === "public_prompt_edit"
     || preview.kind === "my_prompt_save"
     || preview.kind === "my_skill_save";
-}
-
-function resultLinkFor(approval: ToolApprovalApi): { href: string; labelKey: MessageKey } {
-  if (approval.tool !== "public_prompt_edit") return RESULT_LINKS[approval.tool];
-
-  const preview = approval.preview?.kind === "public_prompt_edit" ? approval.preview : null;
-  const promptId = preview?.prompt_id ?? approval.result?.target_id;
-  if (typeof promptId !== "number") return RESULT_LINKS.public_prompt_edit;
-
-  const title = preview?.title ?? approval.result?.target_title;
-  return {
-    href: buildPromptPath(promptId, title),
-    labelKey: "chat.toolApproval.openPublicPrompt",
-  };
 }
 
 const STATUS_KEYS: Record<Status, MessageKey> = {
@@ -201,7 +182,7 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
       ? t(ERROR_KEYS.get(result?.error_code ?? "") ?? "chat.toolApproval.error.unknown")
       : "";
   const showResultLink = displayStatus === "succeeded" && typeof result?.target_id === "number";
-  const resultLink = resultLinkFor(approval);
+  const resultLink = RESULT_LINKS[approval.tool];
 
   return (
     <div

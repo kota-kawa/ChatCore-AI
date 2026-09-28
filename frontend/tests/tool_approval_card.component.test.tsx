@@ -210,20 +210,6 @@ describe("ToolApprovalCard", () => {
 
   it.each([
     ["publish_prompt", "プロンプト共有を開く", "/prompt_share", { kind: "publish_prompt", title: "公開案", content: "本文" }, "本文"],
-    [
-      "public_prompt_edit",
-      "公開プロンプトを開く",
-      "/shared/prompt/12/edited-prompt",
-      {
-        kind: "public_prompt_edit",
-        prompt_id: 12,
-        before_title: "旧タイトル",
-        before_content: "旧本文",
-        title: "Edited prompt",
-        content: "新しい本文",
-      },
-      "新しい本文",
-    ],
     ["my_prompt_save", "自分用プロンプトを開く", "/#task-selection", { kind: "my_prompt_save", task_id: 3, current_title: "検索", clear_fields: [], title: "検索", prompt_content: "検索する" }, "検索する"],
     ["my_skill_save", "個人Skillを開く", "/#skill-selection-title", { kind: "my_skill_save", skill_id: 4, name: "校正", instructions: "誤字を直す" }, "誤字を直す"],
   ])("shows the %s preview and result link", (tool, label, href, preview, previewText) => {
@@ -239,35 +225,6 @@ describe("ToolApprovalCard", () => {
 
     expect(screen.getByRole("group")).toHaveTextContent(previewText);
     expect(screen.getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", href);
-  });
-
-  it("shows before and after values and private overlap excerpts for a public prompt edit", () => {
-    render(
-      <ToolApprovalCard
-        approval={approval({
-          tool: "public_prompt_edit",
-          family: "prompts",
-          preview: {
-            kind: "public_prompt_edit",
-            prompt_id: 12,
-            before_title: "旧タイトル",
-            before_content: "旧本文",
-            title: "新タイトル",
-            content: "新本文",
-            private_overlap_excerpts: ["非公開メモと一致した箇所"],
-          },
-        })}
-      />,
-    );
-
-    const card = screen.getByRole("group", { name: "公開プロンプトを編集します" });
-    const labels = Array.from(card.querySelectorAll("dt")).map((node) => node.textContent);
-    expect(labels).toEqual(["変更前の題名", "変更後の題名", "変更前の本文", "変更後の本文", "一致した箇所"]);
-    expect(card).toHaveTextContent("旧タイトル");
-    expect(card).toHaveTextContent("新タイトル");
-    expect(card).toHaveTextContent("旧本文");
-    expect(card).toHaveTextContent("新本文");
-    expect(card).toHaveTextContent("非公開メモと一致した箇所");
   });
 
   it("identifies the existing Skill when only its instructions are edited", () => {
