@@ -125,15 +125,6 @@ class DescribeToolApprovalForContextTests(unittest.TestCase):
     def test_prompt_and_skill_summaries_keep_the_target_but_not_the_proposed_body(self) -> None:
         cases = (
             ("publish_prompt", {"kind": "publish_prompt", "title": "Public <title>", "content": "private body"}),
-            (
-                "public_prompt_edit",
-                {
-                    "kind": "public_prompt_edit",
-                    "title": "Edited <title>",
-                    "before_content": "private old body",
-                    "content": "private body",
-                },
-            ),
             ("my_prompt_save", {"kind": "my_prompt_save", "title": "Saved <title>", "prompt_content": "private body"}),
             (
                 "my_skill_save",

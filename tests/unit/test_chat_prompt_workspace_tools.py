@@ -4,22 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.chat_workspace_tools.private_overlap import PrivateTextTracker, extract_private_texts
 from services.chat_workspace_tools.prompts import (
     PROMPTS_TOOL_SPECS,
     _execute_my_prompt_save,
     _execute_my_skill_save,
-    _execute_public_prompt_edit,
     _execute_publish_prompt,
     _propose_my_prompt_save,
     _propose_my_skill_save,
-    _propose_public_prompt_edit,
     _propose_publish_prompt,
     _read_my_prompt,
     _read_my_prompt_list,
@@ -27,7 +23,6 @@ from services.chat_workspace_tools.prompts import (
     _read_my_skill_list,
 )
 from services.chat_workspace_tools.registry import WorkspaceToolError
-from services.repositories.shared_content_repository import SharedContentRepository
 
 
 class PromptWorkspaceToolTests(unittest.TestCase):
@@ -253,88 +248,6 @@ class PromptWorkspaceToolTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "target_changed")
         self.assertEqual((task.name, task.prompt_template), ("Original", "Old body"))
         session.flush.assert_not_awaited()
-
-    def test_public_prompt_edit_is_approval_only_and_uses_the_owned_revision(self):
-        session = SimpleNamespace()
-
-        @asynccontextmanager
-        async def fake_session_scope():
-            yield session
-
-        with (
-            patch("services.chat_workspace_tools.prompts.session_scope", fake_session_scope),
-            patch.object(SharedContentRepository, "get_owned_public_text_prompt", new_callable=AsyncMock) as get_prompt,
-        ):
-            get_prompt.return_value = {"title": "Old", "content": "Old body", "updated_at": "v1"}
-            proposal = asyncio.run(
-                _propose_public_prompt_edit(7, {"prompt_id": 42, "title": "New", "content": "New body"})
-            )
-        get_prompt.assert_awaited_once_with(session, user_id=7, prompt_id=42)
-        self.assertEqual(proposal.preview["before_content"], "Old body")
-        self.assertEqual(proposal.target_ref, {"prompt_id": 42, "base_revision": "v1"})
-        self.assertFalse(next(spec for spec in PROMPTS_TOOL_SPECS if spec.name == "public_prompt_edit").allows_always)
-
-        with patch.object(SharedContentRepository, "update_owned_public_text_prompt", new_callable=AsyncMock) as update:
-            outcome = asyncio.run(_execute_public_prompt_edit(session, 7, proposal.arguments, proposal.target_ref))
-        update.assert_awaited_once_with(
-            session, user_id=7, prompt_id=42, title="New", content="New body", expected_updated_at="v1"
-        )
-        self.assertEqual(outcome.target_id, 42)
-
-    def test_public_prompt_edit_rejects_a_swapped_id(self):
-        with patch.object(SharedContentRepository, "update_owned_public_text_prompt", new_callable=AsyncMock) as update:
-            with self.assertRaises(WorkspaceToolError) as raised:
-                asyncio.run(
-                    _execute_public_prompt_edit(
-                        None, 7, {"prompt_id": 99, "title": "New", "content": "Body"}, {"prompt_id": 42}
-                    )
-                )
-        self.assertEqual(raised.exception.code, "target_changed")
-        update.assert_not_awaited()
-
-    def test_public_prompt_repository_scopes_owner_visibility_format_and_revision(self):
-        session = SimpleNamespace(scalar=AsyncMock(), flush=AsyncMock())
-        repository = SharedContentRepository()
-        session.scalar.return_value = None
-        with self.assertRaises(ResourceNotFoundError):
-            asyncio.run(repository.get_owned_public_text_prompt(session, user_id=7, prompt_id=42))
-        query = str(session.scalar.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-        for required in (
-            "prompts.user_id = 7",
-            "prompts.id = 42",
-            "prompts.is_public IS true",
-            "prompts.deleted_at IS NULL",
-            "prompts.content_format = 'prompt'",
-            "prompts.media_type = 'text'",
-        ):
-            self.assertIn(required, query)
-
-        prompt = SimpleNamespace(
-            id=42,
-            title="Old",
-            content="Old body",
-            updated_at=datetime(2026, 9, 28, tzinfo=UTC),
-            embedding_status="completed",
-        )
-        session.scalar.return_value = prompt
-        with self.assertRaises(ApiServiceError) as raised:
-            asyncio.run(
-                repository.update_owned_public_text_prompt(
-                    session, user_id=7, prompt_id=42, title="New", content="Body", expected_updated_at="stale"
-                )
-            )
-        self.assertEqual(raised.exception.code, "target_changed")
-        self.assertEqual(prompt.title, "Old")
-        session.flush.assert_not_awaited()
-
-        revision = datetime(2026, 9, 28, tzinfo=UTC).isoformat()
-        asyncio.run(
-            repository.update_owned_public_text_prompt(
-                session, user_id=7, prompt_id=42, title="New", content="Body", expected_updated_at=revision
-            )
-        )
-        self.assertEqual((prompt.title, prompt.content, prompt.embedding_status), ("New", "Body", "pending"))
-        session.flush.assert_awaited_once()
 
     def test_edit_personal_skill_captures_and_checks_the_owned_revision(self):
         with patch("services.chat_workspace_tools.prompts.get_user_skill", new_callable=AsyncMock) as get_skill:

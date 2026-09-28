@@ -147,7 +147,7 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertIn("## プロンプト共有と設定", offered.prompt or "")
         self.assertIn(PROMPT_TOOLS_SKILL_INSTRUCTIONS, offered.prompt or "")
         self.assertIn(
-            "publish_prompt and public_prompt_edit can never be set to always approve",
+            "publish_prompt can never be set to always approve",
             PROMPT_TOOLS_SKILL_INSTRUCTIONS,
         )
         self.assertIn("never include the user's memo content", PROMPT_TOOLS_SKILL_INSTRUCTIONS)

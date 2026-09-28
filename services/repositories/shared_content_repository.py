@@ -26,11 +26,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.avatar_storage import normalize_avatar_url
-from services.datetime_serialization import serialize_datetime_iso
 from services.embeddings import get_semantic_max_distance
-from services.error_messages import ERROR_PROMPT_CHANGED_ELSEWHERE, ERROR_PROMPT_NOT_FOUND
 from services.models import (
     GuestPromptSubmission,
     Prompt,
@@ -41,7 +38,7 @@ from services.models import (
     User,
 )
 from services.models.types import Vector
-from services.prompt_types import CONTENT_FORMAT_PROMPT, MEDIA_TYPE_TEXT, normalize_content_format, normalize_media_type
+from services.prompt_types import normalize_content_format, normalize_media_type
 from services.search_terms import build_like_pattern, split_search_terms
 
 SNIPPET_SOURCE_MAX_LENGTH = 1000
@@ -806,64 +803,6 @@ class SharedContentRepository:
         session.add(prompt)
         await session.flush()
         return int(prompt.id)
-
-    async def get_owned_public_text_prompt(
-        self,
-        session: AsyncSession,
-        *,
-        user_id: int,
-        prompt_id: int,
-    ) -> dict[str, Any]:
-        prompt = await session.scalar(
-            select(Prompt).where(
-                Prompt.id == prompt_id,
-                Prompt.user_id == user_id,
-                Prompt.is_public.is_(True),
-                Prompt.deleted_at.is_(None),
-                Prompt.content_format == CONTENT_FORMAT_PROMPT,
-                Prompt.media_type == MEDIA_TYPE_TEXT,
-            )
-        )
-        if prompt is None:
-            raise ResourceNotFoundError(ERROR_PROMPT_NOT_FOUND, code="prompt_not_found")
-        return {
-            "id": prompt.id,
-            "title": prompt.title,
-            "content": prompt.content,
-            "updated_at": serialize_datetime_iso(prompt.updated_at),
-        }
-
-    async def update_owned_public_text_prompt(
-        self,
-        session: AsyncSession,
-        *,
-        user_id: int,
-        prompt_id: int,
-        title: str,
-        content: str,
-        expected_updated_at: str | None,
-    ) -> None:
-        prompt = await session.scalar(
-            select(Prompt)
-            .where(
-                Prompt.id == prompt_id,
-                Prompt.user_id == user_id,
-                Prompt.is_public.is_(True),
-                Prompt.deleted_at.is_(None),
-                Prompt.content_format == CONTENT_FORMAT_PROMPT,
-                Prompt.media_type == MEDIA_TYPE_TEXT,
-            )
-            .with_for_update()
-        )
-        if prompt is None:
-            raise ResourceNotFoundError(ERROR_PROMPT_NOT_FOUND, code="prompt_not_found")
-        if serialize_datetime_iso(prompt.updated_at) != expected_updated_at:
-            raise ApiServiceError(ERROR_PROMPT_CHANGED_ELSEWHERE, 409, code="target_changed")
-        prompt.title = title
-        prompt.content = content
-        prompt.updated_at = func.now()
-        prompt.embedding_status = "pending"
-        await session.flush()
 
     async def update_prompt_for_user(
         self,

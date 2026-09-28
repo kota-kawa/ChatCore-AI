@@ -83,7 +83,7 @@ def _target_title(preview: Any) -> str:
     if not isinstance(preview, dict):
         return ""
     kind = preview.get("kind")
-    if kind in {"memo_create", "publish_prompt", "public_prompt_edit", "my_prompt_save"}:
+    if kind in {"memo_create", "publish_prompt", "my_prompt_save"}:
         title = preview.get("title")
     elif kind == "my_skill_save":
         title = preview.get("name") or preview.get("current_name")

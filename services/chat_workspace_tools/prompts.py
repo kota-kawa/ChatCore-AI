@@ -32,12 +32,9 @@ from services.chat_service import (
     list_personal_user_skills,
     update_user_skill,
 )
-from services.db import session_scope
 from services.i18n import get_current_locale
 from services.prompt_categories import CATEGORY_UNSET, normalize_category
 from services.prompt_create_limits import consume_prompt_create_limits
-from services.prompt_embedding_service import schedule_prompt_embedding
-from services.repositories.shared_content_repository import SharedContentRepository
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
     MAX_SHARED_PROMPT_DESCRIPTION_LENGTH,
@@ -81,7 +78,6 @@ MY_PROMPT_READ_TOOL_NAME = "my_prompt_read"
 MY_SKILL_LIST_TOOL_NAME = "my_skill_list"
 MY_SKILL_READ_TOOL_NAME = "my_skill_read"
 PUBLISH_PROMPT_TOOL_NAME = "publish_prompt"
-PUBLIC_PROMPT_EDIT_TOOL_NAME = "public_prompt_edit"
 MY_PROMPT_SAVE_TOOL_NAME = "my_prompt_save"
 MY_SKILL_SAVE_TOOL_NAME = "my_skill_save"
 
@@ -438,73 +434,6 @@ async def _execute_publish_prompt(
     return ExecutionOutcome(target_id=prompt_id, target_title=payload.title)
 
 
-class PublicPromptEditArguments(_ToolArguments):
-    prompt_id: int = Field(ge=1)
-    title: str = Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)
-    content: str = Field(min_length=1, max_length=PUBLISH_PROMPT_MAX_CONTENT_LENGTH)
-
-    @model_validator(mode="after")
-    def _normalize(self) -> PublicPromptEditArguments:
-        self.title = self.title.strip()
-        if not self.title or not self.content.strip():
-            raise ValueError("title and content must not be blank")
-        return self
-
-
-async def _propose_public_prompt_edit(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(PublicPromptEditArguments, arguments)
-    async with session_scope() as db:
-        try:
-            current = await SharedContentRepository().get_owned_public_text_prompt(
-                db, user_id=user_id, prompt_id=params.prompt_id
-            )
-        except ResourceNotFoundError:
-            raise WorkspaceToolError("target_not_found") from None
-    return Proposal(
-        arguments={"prompt_id": params.prompt_id, "title": params.title, "content": params.content},
-        preview={
-            "kind": PUBLIC_PROMPT_EDIT_TOOL_NAME,
-            "prompt_id": params.prompt_id,
-            "before_title": current["title"],
-            "before_content": current["content"],
-            "title": params.title,
-            "content": params.content,
-        },
-        target_ref={"prompt_id": params.prompt_id, "base_revision": current["updated_at"]},
-        target_title=params.title,
-    )
-
-
-async def _execute_public_prompt_edit(
-    session: Any,
-    user_id: int,
-    arguments: dict[str, Any],
-    target_ref: dict[str, Any],
-) -> ExecutionOutcome:
-    try:
-        params = _validated(PublicPromptEditArguments, arguments)
-    except WorkspaceToolArgumentError as exc:
-        raise WorkspaceToolError("invalid_content") from exc
-    if params.prompt_id != target_ref.get("prompt_id"):
-        raise WorkspaceToolError("target_changed")
-    try:
-        await SharedContentRepository().update_owned_public_text_prompt(
-            session,
-            user_id=user_id,
-            prompt_id=params.prompt_id,
-            title=params.title,
-            content=params.content,
-            expected_updated_at=target_ref.get("base_revision"),
-        )
-    except (ResourceNotFoundError, ApiServiceError) as exc:
-        raise WorkspaceToolError(_map_repository_error(exc)) from exc
-    return ExecutionOutcome(
-        target_id=params.prompt_id,
-        target_title=params.title,
-        after_commit=lambda: schedule_prompt_embedding(params.prompt_id),
-    )
-
-
 class MyPromptSaveArguments(_ToolArguments):
     task_id: int | None = Field(default=None, ge=1)
     title: str = Field(min_length=1, max_length=MY_PROMPT_NAME_MAX_LENGTH)
@@ -822,20 +751,6 @@ PUBLISH_PROMPT_DEFINITION = _function(
     ["title", "content"],
 )
 
-PUBLIC_PROMPT_EDIT_DEFINITION = _function(
-    PUBLIC_PROMPT_EDIT_TOOL_NAME,
-    "Propose editing the title and body of an existing public text prompt this user owns. "
-    "Nothing changes until the user approves the card. Use a prompt_id from a prior "
-    "shared_prompt_search result, never invent one. Include the complete replacement body. "
-    "This cannot edit SKILL or image posts, and cannot delete or unpublish a post.",
-    {
-        "prompt_id": {"type": "integer", "description": "The owned public text prompt's id."},
-        "title": {"type": "string", "description": "The new title."},
-        "content": {"type": "string", "description": "The complete new prompt body."},
-    },
-    ["prompt_id", "title", "content"],
-)
-
 MY_PROMPT_SAVE_DEFINITION = _function(
     MY_PROMPT_SAVE_TOOL_NAME,
     f"Propose creating a new saved prompt (Task), or editing one the user owns. {_PROPOSAL_NOTE} "
@@ -917,15 +832,6 @@ PROMPTS_TOOL_SPECS: tuple[ToolSpec, ...] = (
         "write_proposals",
         propose=_propose_publish_prompt,
         execute=_execute_publish_prompt,
-        allows_always=False,
-    ),
-    ToolSpec(
-        PUBLIC_PROMPT_EDIT_TOOL_NAME,
-        PROMPTS_TOOL_FAMILY,
-        PUBLIC_PROMPT_EDIT_DEFINITION,
-        "write_proposals",
-        propose=_propose_public_prompt_edit,
-        execute=_execute_public_prompt_edit,
         allows_always=False,
     ),
     ToolSpec(

@@ -34,7 +34,6 @@ from .prompts import (
     MY_PROMPT_READ_TOOL_NAME,
     MY_SKILL_READ_TOOL_NAME,
     PROMPTS_TOOL_FAMILY,
-    PUBLIC_PROMPT_EDIT_TOOL_NAME,
     PUBLISH_PROMPT_TOOL_NAME,
 )
 from .registry import (
@@ -258,7 +257,7 @@ class WorkspaceToolRunner:
             self._publish("workspace_tool_failed", progress)
             return {"status": "failed", "message": "The change could not be prepared."}
 
-        if spec.name in {PUBLISH_PROMPT_TOOL_NAME, PUBLIC_PROMPT_EDIT_TOOL_NAME}:
+        if spec.name == PUBLISH_PROMPT_TOOL_NAME:
             proposal = self._flag_private_overlap(proposal)
 
         try:
