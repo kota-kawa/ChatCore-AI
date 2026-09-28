@@ -171,16 +171,18 @@ test("a closing tag ends malformed multiline JSON and keeps the following prose"
   assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
 });
 
-test("an inline closing tag ends malformed JSON before an independent sentence", () => {
-  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken</chatcore_button> Follow-up prose.';
-  const displayed = getStreamingGenerativeUiDisplayText(text);
-  assert.equal(displayed, "Intro\n\nFollow-up prose.");
+test("an inline closing tag inside malformed JSON stays hidden with its ambiguous tail", () => {
+  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken</chatcore_button> follow-up prose.';
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "Intro");
 });
 
 test("a closing-tag literal in a streamed JSON string stays hidden", () => {
   const partial =
     'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed.';
   assert.equal(getStreamingGenerativeUiDisplayText(partial), "Intro");
+
+  const japanesePartial = 'Intro\n<chatcore_button>{"type":"yes_no","question":"タグ </chatcore_button> を説明します。';
+  assert.equal(getStreamingGenerativeUiDisplayText(japanesePartial), "Intro");
 
   const complete = `${partial}"}</chatcore_button>\nAfter`;
   assert.equal(getStreamingGenerativeUiDisplayText(complete), "Intro\n\nAfter");

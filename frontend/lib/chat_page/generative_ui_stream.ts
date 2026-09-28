@@ -61,12 +61,23 @@ function choiceJsonEnd(text: string, start: number): number | null {
   return null;
 }
 
-function isStandaloneProseAfterChoiceClose(text: string, closeEnd: number): boolean {
-  const lineEnd = text.indexOf("\n", closeEnd);
-  const following = text.slice(closeEnd, lineEnd < 0 ? text.length : lineEnd).trim();
-  if (!following || !/[.!?。！？][\])}"'」』】]*$/.test(following)) return false;
-  const firstCharacter = Array.from(following)[0];
-  return /\p{Lu}/u.test(firstCharacter) || /[\u3040-\u30ff\u3400-\u9fff]/u.test(firstCharacter);
+function isInsideJsonString(text: string, start: number, end: number): boolean {
+  let index = start;
+  while (/\s/.test(text[index] ?? "") && index < end) index += 1;
+  if (text[index] !== "{") return false;
+  let inString = false;
+  let escaped = false;
+  for (; index < end; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    }
+  }
+  return inString;
 }
 
 function findMalformedChoiceClose(text: string, start: number): number {
@@ -77,7 +88,7 @@ function findMalformedChoiceClose(text: string, start: number): number {
     const lineStart = text.lastIndexOf("\n", close.index - 1) + 1;
     const startsLine = !text.slice(lineStart, close.index).trim();
     const closeEnd = close.index + close[0].length;
-    if (startsLine || isStandaloneProseAfterChoiceClose(text, closeEnd)) return closeEnd;
+    if (startsLine || !isInsideJsonString(text, start, close.index)) return closeEnd;
   }
   return -1;
 }

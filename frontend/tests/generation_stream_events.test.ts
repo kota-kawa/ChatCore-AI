@@ -58,6 +58,17 @@ test("a done event without a response falls back to the received text", () => {
   assert.equal(action.responseText, "受信済みの本文");
 });
 
+test("a done event still hides an unclosed choice-button payload", () => {
+  const action = interpret(
+    "done",
+    { response: 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken' },
+  );
+
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.equal(action.responseText, "Intro");
+});
+
 // 空の完了は「回答なし」。空の吹き出しを残さずエラーとして扱う。
 // An empty completion means no answer, so it becomes an error, not a blank bubble.
 test("a done event with neither text nor answer parts reports an empty answer", () => {

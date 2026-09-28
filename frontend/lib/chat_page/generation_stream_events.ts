@@ -228,7 +228,7 @@ function interpretDoneEvent(
   context: GenerationStreamEventContext,
 ): GenerationStreamAction {
   const donePayload = normalizeChatResponsePayload(data);
-  const responseText = donePayload.response ?? context.streamedText;
+  const responseText = getStreamingGenerativeUiDisplayText(donePayload.response ?? context.streamedText);
   // 検索画像だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
   // Web-search image parts alone are not an answer; mirror the server-side rule.
   const hasAnswerParts = donePayload.parts?.some((part) => part.type !== "web_search_image") ?? false;
@@ -260,7 +260,7 @@ function interpretIncompleteEvent(
   return {
     kind: "incomplete",
     roomTitle: data.room_title,
-    finalText: incompletePayload.response ?? context.streamedText,
+    finalText: getStreamingGenerativeUiDisplayText(incompletePayload.response ?? context.streamedText),
     parts: incompletePayload.parts,
     message:
       typeof data.message === "string"
@@ -286,7 +286,7 @@ export function interpretGenerationStreamEvent(
 
   if (parsed.event === "response_parts_updated") {
     const updatePayload = normalizeChatResponsePayload(data);
-    const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(context.streamedText);
+    const displayText = getStreamingGenerativeUiDisplayText(updatePayload.response ?? context.streamedText);
     return {
       kind: "parts_updated",
       displayText,
@@ -314,7 +314,7 @@ export function interpretGenerationStreamEvent(
     const abortedPayload = normalizeChatResponsePayload(data);
     return {
       kind: "aborted",
-      finalText: abortedPayload.response ?? context.streamedText,
+      finalText: getStreamingGenerativeUiDisplayText(abortedPayload.response ?? context.streamedText),
       parts: abortedPayload.parts,
     };
   }
