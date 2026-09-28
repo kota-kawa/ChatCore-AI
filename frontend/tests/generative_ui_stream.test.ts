@@ -108,6 +108,21 @@ test("a closing tag inside a choice-button question does not expose the JSON tai
   assert.equal(getStreamingGenerativeUiDisplayText(text), "Intro\n\nAfter");
 });
 
+test("an unclosed tag keeps the prose before a later valid choice block", () => {
+  const text = [
+    "Intro",
+    '<chatcore_button>{"type":"yes_no","question":"First?"}',
+    "",
+    "Follow-up prose.",
+    "",
+    '<chatcore_button>{"type":"multiple_choice","question":"Second?","options":["A","B"]}</chatcore_button>',
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.doesNotMatch(displayed, /chatcore_button|"type"/);
+});
+
 test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
   const incompleteSingular = [
     "続きに進みますか？",

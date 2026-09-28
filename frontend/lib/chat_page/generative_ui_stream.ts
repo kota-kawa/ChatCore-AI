@@ -31,51 +31,51 @@ const HIDDEN_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "gi",
 );
-// 閉じタグは単数形・複数形のどちらでも閉じたとみなし、次の開きタグはまたがない（バックエンドと同じ）。
-// 開きタグは ">" が届く前から隠す。
-// Either closing tag name ends a block and a block never crosses another opening tag, as on
-// the backend. An opening tag is hidden even before its ">" arrives.
+// 閉じタグは単数形・複数形のどちらでも閉じたとみなす。開きタグは ">" 到着前から隠す。
+// Either closing tag name ends a block. Hide an opening tag even before its ">" arrives.
 const COMPLETE_TAG_OPEN_RE = /<chatcore_buttons?>/gi;
 const HIDDEN_TAG_START_RE = new RegExp(
   "<" + CHOICE_BUTTONS_TAG_NAME + "\\b[^>]*(?:>|$)",
   "gi",
 );
 
-function stripCompleteChoiceTags(text: string): string {
-  const lower = text.toLowerCase();
+function choiceJsonEnd(text: string, start: number): number | null {
+  let index = start;
+  while (/\s/.test(text[index] ?? "") && index < text.length) index += 1;
+  if (text[index] !== "{") return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return index + 1;
+  }
+  return null;
+}
+
+function stripChoiceTagsForStreaming(text: string): string {
   let stripped = "";
   let cursor = 0;
   COMPLETE_TAG_OPEN_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = COMPLETE_TAG_OPEN_RE.exec(text)) !== null) {
-    let inString = false;
-    let escaped = false;
-    let closeEnd = -1;
-    for (let index = COMPLETE_TAG_OPEN_RE.lastIndex; index < text.length; index += 1) {
-      const char = text[index];
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (char === "\\") escaped = true;
-        else if (char === '"') inString = false;
-        continue;
-      }
-      if (char === '"') {
-        inString = true;
-        continue;
-      }
-      if (lower.startsWith("<chatcore_button>", index) || lower.startsWith("<chatcore_buttons>", index)) break;
-      const close = lower.startsWith("</chatcore_button>", index)
-        ? "</chatcore_button>"
-        : lower.startsWith("</chatcore_buttons>", index) ? "</chatcore_buttons>" : null;
-      if (close) {
-        closeEnd = index + close.length;
-        break;
-      }
-    }
-    if (closeEnd < 0) continue;
-    stripped += text.slice(cursor, match.index) + "\n\n";
-    cursor = closeEnd;
-    COMPLETE_TAG_OPEN_RE.lastIndex = closeEnd;
+    stripped += text.slice(cursor, match.index);
+    const jsonEnd = choiceJsonEnd(text, COMPLETE_TAG_OPEN_RE.lastIndex);
+    if (jsonEnd === null) return stripped;
+    let afterJson = jsonEnd;
+    while (/\s/.test(text[afterJson] ?? "") && afterJson < text.length) afterJson += 1;
+    const close = /^<\/chatcore_buttons?>/i.exec(text.slice(afterJson));
+    cursor = close ? afterJson + close[0].length : jsonEnd;
+    stripped += "\n\n";
+    COMPLETE_TAG_OPEN_RE.lastIndex = cursor;
   }
   return stripped + text.slice(cursor);
 }
@@ -104,7 +104,7 @@ function findLastMatchIndex(re: RegExp, text: string): number {
 
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  let stripped = stripCompleteChoiceTags(normalized.replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n"));
+  let stripped = stripChoiceTagsForStreaming(normalized.replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n"));
 
   const fenceStart = findLastMatchIndex(HIDDEN_FENCE_START_RE, stripped);
   const tagStart = findLastMatchIndex(HIDDEN_TAG_START_RE, stripped);
