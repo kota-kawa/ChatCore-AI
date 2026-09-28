@@ -532,54 +532,88 @@ class UserRepositoryProfileCasTests(unittest.TestCase):
         self.assertIsNotNone(session.scalar.await_args.args[0]._for_update_arg)
 
 
-class ProfileLocaleSessionSyncTests(unittest.TestCase):
-    def test_successful_approved_locale_updates_the_existing_session_path(self):
-        request = Request(
+class _LocaleReadSession:
+    async def __aenter__(self):
+        return object()
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+class ProfileLocaleSessionSyncTests(unittest.IsolatedAsyncioTestCase):
+    def _request(self, session: dict) -> Request:
+        return Request(
             {
                 "type": "http",
                 "method": "POST",
                 "path": "/api/chat/tool-approvals/id/decision",
                 "headers": [],
-                "session": {"user_id": 7},
+                "session": session,
                 "state": {},
             }
         )
 
-        locale = _sync_approved_profile_locale(
+    async def _sync(self, request: Request, card: dict, persisted_locale: str | None):
+        read_locale = AsyncMock(return_value=persisted_locale)
+        with patch("blueprints.chat.tool_approvals.session_scope", _LocaleReadSession), patch(
+            "blueprints.chat.tool_approvals.UserRepository.get_user_preferred_locale", read_locale
+        ):
+            locale = await _sync_approved_profile_locale(request, 7, card)
+        return locale, read_locale
+
+    async def test_successful_approved_locale_updates_the_existing_session_path(self):
+        request = self._request({"user_id": 7})
+
+        locale, read_locale = await self._sync(
             request,
             {
                 "tool": PROFILE_SETTINGS_UPDATE_TOOL_NAME,
                 "status": "succeeded",
                 "preview": {"preferred_locale": "en"},
             },
+            "en",
         )
 
         self.assertEqual(locale, "en")
+        read_locale.assert_awaited_once_with(7)
         self.assertEqual(request.session["preferred_locale"], "en")
         self.assertTrue(request.session["_preferred_locale_loaded"])
         self.assertEqual(request.state.locale, "en")
         self.assertTrue(request.state.persist_locale_cookie)
 
-    def test_failed_or_denied_locale_proposal_does_not_change_the_session(self):
-        request = Request(
+    async def test_stale_approved_locale_syncs_to_the_persisted_value(self):
+        # 承認済みカードの preview ではなく、DB に今ある言語へ合わせる
+        # Sync to the locale persisted now, not the settled card's preview
+        request = self._request({"user_id": 7, "preferred_locale": "ja"})
+
+        locale, _ = await self._sync(
+            request,
             {
-                "type": "http",
-                "method": "POST",
-                "path": "/",
-                "headers": [],
-                "session": {"user_id": 7, "preferred_locale": "ja"},
-                "state": {},
-            }
+                "tool": PROFILE_SETTINGS_UPDATE_TOOL_NAME,
+                "status": "succeeded",
+                "preview": {"preferred_locale": "en"},
+            },
+            "ja",
         )
-        locale = _sync_approved_profile_locale(
+
+        self.assertEqual(locale, "ja")
+        self.assertEqual(request.session["preferred_locale"], "ja")
+        self.assertEqual(request.state.locale, "ja")
+
+    async def test_failed_or_denied_locale_proposal_does_not_change_the_session(self):
+        request = self._request({"user_id": 7, "preferred_locale": "ja"})
+
+        locale, read_locale = await self._sync(
             request,
             {
                 "tool": PROFILE_SETTINGS_UPDATE_TOOL_NAME,
                 "status": "failed",
                 "preview": {"preferred_locale": "en"},
             },
+            "en",
         )
 
         self.assertIsNone(locale)
+        read_locale.assert_not_awaited()
         self.assertEqual(request.session["preferred_locale"], "ja")
         self.assertNotIn("locale", request.state)

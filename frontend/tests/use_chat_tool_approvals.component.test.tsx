@@ -72,6 +72,10 @@ function profileApproval(overrides: Partial<ToolApprovalApi> = {}): ToolApproval
   };
 }
 
+function decided(entry: ToolApprovalApi, currentPreferredLocale: "ja" | "en" | null = null) {
+  return { approval: entry, currentPreferredLocale };
+}
+
 function conversation(approvals: ToolApprovalApi[]): UiChatMessage[] {
   return [
     { id: "u1", sender: "user", text: "読書メモに追記して" },
@@ -124,7 +128,7 @@ beforeEach(() => {
 
 describe("useChatToolApprovals", () => {
   it("applies the returned card and continues once the only card succeeded", async () => {
-    decideToolApprovalMock.mockResolvedValue(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } }));
+    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } })));
     const { decide, sendMessage, applyToolApproval } = renderApprovals(conversation([approval()]));
 
     await decide("a1", "approve_once");
@@ -136,7 +140,7 @@ describe("useChatToolApprovals", () => {
   });
 
   it("applies locale and theme preferences only after a successful profile update", async () => {
-    decideToolApprovalMock.mockResolvedValue(profileApproval({ status: "succeeded", decision: "once" }));
+    decideToolApprovalMock.mockResolvedValue(decided(profileApproval({ status: "succeeded", decision: "once" })));
     const { decide } = renderApprovals(conversation([profileApproval()]));
 
     await decide("profile-a1", "approve_once");
@@ -147,8 +151,54 @@ describe("useChatToolApprovals", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 
+  it("uses the server's persisted locale instead of a stale card preview", async () => {
+    decideToolApprovalMock.mockResolvedValue(decided(profileApproval({ status: "succeeded", decision: "once" }), "ja"));
+    const { decide } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).toHaveBeenCalledWith("ja");
+    expect(setLocaleMock).not.toHaveBeenCalledWith("en");
+    expect(routerReplaceMock).toHaveBeenCalledWith("/chat/room?x=1", "/chat/room?x=1", { locale: "ja" });
+  });
+
+  it("applies the theme and persisted locale from a succeeded profile card on a 409 conflict", async () => {
+    // 成功応答を受け取れずに再送した場合も、確定済みカードのテーマを反映し、言語は現在値に合わせる
+    // A resend after a lost success response still applies the settled theme and follows the persisted locale
+    const { ToolApprovalDecisionError } = await import("../lib/chat_page/tool_approval_api");
+    const settled = profileApproval({ status: "succeeded", decision: "once" });
+    decideToolApprovalMock.mockRejectedValue(
+      new ToolApprovalDecisionError("既に決定されています。", "approval_already_decided", 409, settled, "ja"),
+    );
+    const { decide, getMessages } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).toHaveBeenCalledWith("ja");
+    expect(setLocaleMock).not.toHaveBeenCalledWith("en");
+    expect(window.localStorage.getItem("chatcore-theme")).toBe("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    const card = getMessages()[1].parts?.find((part) => part.type === "tool_approval");
+    expect(card?.type === "tool_approval" ? card.approval.status : null).toBe("succeeded");
+  });
+
+  it("does not fall back to a conflict card's preview locale when the server sent none", async () => {
+    const { ToolApprovalDecisionError } = await import("../lib/chat_page/tool_approval_api");
+    const settled = profileApproval({ status: "succeeded", decision: "once" });
+    decideToolApprovalMock.mockRejectedValue(
+      new ToolApprovalDecisionError("既に決定されています。", "approval_already_decided", 409, settled),
+    );
+    const { decide } = renderApprovals(conversation([profileApproval()]));
+
+    await decide("profile-a1", "approve_once");
+
+    expect(setLocaleMock).not.toHaveBeenCalled();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("chatcore-theme")).toBe("dark");
+  });
+
   it.each(["denied", "failed", "pending"] as const)("does not apply profile preferences when the returned card is %s", async (status) => {
-    decideToolApprovalMock.mockResolvedValue(profileApproval({ status }));
+    decideToolApprovalMock.mockResolvedValue(decided(profileApproval({ status })));
     const { decide } = renderApprovals(conversation([profileApproval()]));
 
     await decide("profile-a1", "approve_once");
@@ -160,10 +210,10 @@ describe("useChatToolApprovals", () => {
   });
 
   it("does not apply profile preferences when the returned preview kind does not match", async () => {
-    decideToolApprovalMock.mockResolvedValue(profileApproval({
+    decideToolApprovalMock.mockResolvedValue(decided(profileApproval({
       status: "succeeded",
       preview: { kind: "memo_append", memo_id: 4, memo_title: "読書メモ", text: "要点", separator: "" },
-    }));
+    })));
     const { decide } = renderApprovals(conversation([profileApproval()]));
 
     await decide("profile-a1", "approve_once");
@@ -175,7 +225,7 @@ describe("useChatToolApprovals", () => {
   });
 
   it("forwards the warning acknowledgment to the decision API", async () => {
-    decideToolApprovalMock.mockResolvedValue(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } }));
+    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } })));
     const { decide } = renderApprovals(conversation([approval()]));
 
     await decide("a1", "approve_once", true);
@@ -190,19 +240,19 @@ describe("useChatToolApprovals", () => {
   });
 
   it("waits for the other card before continuing", async () => {
-    decideToolApprovalMock.mockResolvedValueOnce(approval({ status: "succeeded", decision: "once" }));
+    decideToolApprovalMock.mockResolvedValueOnce(decided(approval({ status: "succeeded", decision: "once" })));
     const { decide, sendMessage } = renderApprovals(conversation([approval(), approval({ id: "a2" })]));
 
     await decide("a1", "approve_once");
     expect(sendMessage).not.toHaveBeenCalled();
 
-    decideToolApprovalMock.mockResolvedValueOnce(approval({ id: "a2", status: "denied", decision: "deny" }));
+    decideToolApprovalMock.mockResolvedValueOnce(decided(approval({ id: "a2", status: "denied", decision: "deny" })));
     await decide("a2", "deny");
     expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("does not continue when every card was denied", async () => {
-    decideToolApprovalMock.mockResolvedValue(approval({ status: "denied", decision: "deny" }));
+    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "denied", decision: "deny" })));
     const { decide, sendMessage } = renderApprovals(conversation([approval()]));
 
     await decide("a1", "deny");
@@ -211,7 +261,7 @@ describe("useChatToolApprovals", () => {
   });
 
   it("does not continue while a reply is generating", async () => {
-    decideToolApprovalMock.mockResolvedValue(approval({ status: "succeeded", decision: "once" }));
+    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "succeeded", decision: "once" })));
     const { decide, sendMessage } = renderApprovals(conversation([approval()]), true);
 
     await decide("a1", "approve_once");

@@ -79,6 +79,8 @@ export async function decideToolApproval(
   }
   const parsed = ToolApprovalDecisionResponseSchema.safeParse(payload);
   const approval = parsed.success ? normalizeToolApproval(parsed.data.approval) : undefined;
-  if (!approval) throw new ToolApprovalDecisionError(fallbackMessage, "invalid_response", response.status);
-  return { approval, currentPreferredLocale: parsed.data.current_preferred_locale ?? null };
+  if (!parsed.success || !approval) {
+    throw new ToolApprovalDecisionError(fallbackMessage, "invalid_response", response.status);
+  }
+  return { approval, currentPreferredLocale: parsed.data.current_preferred_locale };
 }

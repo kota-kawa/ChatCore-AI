@@ -23,6 +23,7 @@ from services.chat_tool_approval_service import (
     list_auto_approvals,
     revoke_auto_approval,
 )
+from services.db import session_scope
 from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
     ERROR_TOOL_APPROVAL_DECISION_INVALID,
@@ -35,7 +36,6 @@ from services.i18n import (
     normalize_locale,
 )
 from services.locale_middleware import set_locale_cookie
-from services.db import session_scope
 from services.repositories.user_repository import UserRepository
 from services.request_models import ToolApprovalDecisionRequest
 from services.response_models import (
