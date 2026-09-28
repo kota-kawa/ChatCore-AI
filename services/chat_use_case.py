@@ -87,7 +87,7 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
     augment_messages_with_selected_references_async,
 )
-from services.selected_reference_sources import build_selected_reference_searchers
+from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
 from services.usage_limits import usage_limit_message
 from services.user_skills import ChatSkillsContext, build_chat_skills_context
 from services.web_search import (
@@ -191,6 +191,9 @@ class _ChatPostTurn:
     # 既定スキル「メモ」が ON で、このターンにメモのツールを渡すか。
     # Whether the built-in Memo Skill is on and this turn offers the memo tools.
     memo_tools_enabled: bool = False
+    # 既定スキル「プロンプト共有と設定」が ON で、このターンに関連ツールを渡すか。
+    # Whether the built-in Prompt sharing and settings Skill is on and this turn offers its tools.
+    prompt_tools_enabled: bool = False
     project_instructions: str | None = None
     room_summary: str = ""
     memory_facts: list[str] = field(default_factory=list)
@@ -692,6 +695,7 @@ class ChatPostUseCase:
         turn.user_skills_prompt = skills_context.prompt
         turn.generative_ui_enabled = skills_context.generative_ui_enabled
         turn.memo_tools_enabled = skills_context.memo_tools_enabled
+        turn.prompt_tools_enabled = skills_context.prompt_tools_enabled
 
     async def _load_project_instructions(self, turn: _ChatPostTurn) -> None:
         """
@@ -894,6 +898,17 @@ class ChatPostUseCase:
             unavailable_sources=selected_references.unavailable_sources,
             trace_results=turn.selected_reference_trace,
         )
+        # 事前検索（use_shared_prompts）が無効なままでも、既定スキル「プロンプト共有と設定」が
+        # 選択されたターンには同じ shared_prompt_search ツールをオンデマンド用に渡す。事前検索は
+        # 行わない（上の augment 呼び出しはこの代入より前に確定済み）。
+        # Even without the prefetch toggle (use_shared_prompts), a turn where the built-in Prompt
+        # sharing and settings Skill was selected still gets the same shared_prompt_search tool for
+        # on-demand calls; no eager prefetch runs (the augment call above already used whatever this
+        # was before this assignment).
+        if turn.shared_prompt_search is None and turn.prompt_tools_enabled:
+            turn.shared_prompt_search = DeduplicatedLookup(
+                deps.generation.search_shared_prompts, source_label="shared prompt"
+            )
 
     async def _select_skills_for_turn(self, turn: _ChatPostTurn) -> None:
         """有効スキルと生成UIモードを一度だけ判定する / Select Skills and UI mode once."""
@@ -912,6 +927,7 @@ class ChatPostUseCase:
         turn.generative_ui_enabled = selection.context.generative_ui_enabled
         turn.generative_ui_selected = selection.context.generative_ui_selected
         turn.memo_tools_enabled = selection.context.memo_tools_enabled
+        turn.prompt_tools_enabled = selection.context.prompt_tools_enabled
         turn.ui_mode = selection.ui_mode
 
     def _apply_generative_ui_mode(self, turn: _ChatPostTurn) -> None:
@@ -996,12 +1012,14 @@ class ChatPostUseCase:
         Build the data toolbox. A turn that carries attachments, pasted URLs or public-post
         references counts as having read external content.
         """
-        if not turn.memo_tools_enabled or turn.user_id is None:
+        if turn.user_id is None or not (turn.memo_tools_enabled or turn.prompt_tools_enabled):
             return None
         return build_workspace_toolbox(
             user_id=turn.user_id,
             chat_room_id=turn.chat_room_id,
             memo_tools_enabled=turn.memo_tools_enabled,
+            prompt_tools_enabled=turn.prompt_tools_enabled,
+            llm_profile_context=turn.user_profile_prompt or "",
             external_input_in_turn=bool(
                 turn.prepared_attached_files
                 or turn.prepared_attached_images

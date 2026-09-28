@@ -6,17 +6,23 @@ from services.chat_skill_selection import select_chat_skills
 from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     MEMO_TOOLS_SYSTEM_SKILL_ID,
+    PROMPT_TOOLS_SYSTEM_SKILL_ID,
     build_chat_skills_context,
 )
 
 
-def _context(*, user_skills=None, ui_enabled=True, memo_enabled=True):
+# 既存のテストの多くは生成UIとメモだけを対象にしているため、この既定スキルは既定で無効にし、
+# 対象のテストだけ明示的に有効にする。
+# Most existing tests only exercise Generative UI and Memo, so this built-in Skill defaults to
+# off here and only the tests that target it turn it on explicitly.
+def _context(*, user_skills=None, ui_enabled=True, memo_enabled=True, prompt_enabled=False):
     return build_chat_skills_context(
         list(user_skills or []),
         {
             "id": 42,
             "generative_ui_skill_enabled": ui_enabled,
             "memo_tools_skill_enabled": memo_enabled,
+            "prompt_tools_skill_enabled": prompt_enabled,
         },
         locale="ja",
         workspace_tools_available=True,
@@ -403,6 +409,50 @@ class ChatSkillSelectionTests(unittest.TestCase):
         self.assertEqual(result.ui_mode, "NONE")
         self.assertFalse(result.context.generative_ui_enabled)
         self.assertFalse(result.context.generative_ui_selected)
+
+    def test_prompt_tools_skill_is_dropped_when_the_model_does_not_select_it(self):
+        context = _context(ui_enabled=False, memo_enabled=False, prompt_enabled=True)
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "今日の天気を教えて"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision()),
+        )
+
+        self.assertFalse(result.telemetry["fallback"])
+        self.assertFalse(result.context.prompt_tools_enabled)
+        self.assertNotIn(PROMPT_TOOLS_SYSTEM_SKILL_ID, result.telemetry["selected_skill_ids"])
+
+    def test_prompt_tools_skill_is_kept_when_the_model_selects_it(self):
+        context = _context(ui_enabled=False, memo_enabled=False, prompt_enabled=True)
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "公開されているプロンプトを探して"}],
+            "model",
+            llm_json_response=Mock(return_value=_decision([PROMPT_TOOLS_SYSTEM_SKILL_ID])),
+        )
+
+        self.assertFalse(result.telemetry["fallback"])
+        self.assertTrue(result.context.prompt_tools_enabled)
+        self.assertTrue(result.telemetry["prompt_tools_selected"])
+        self.assertEqual(result.telemetry["selected_skill_ids"], [PROMPT_TOOLS_SYSTEM_SKILL_ID])
+
+    def test_prompt_tools_skill_disabled_by_setting_yields_no_candidate(self):
+        context = _context(ui_enabled=False, memo_enabled=False, prompt_enabled=False)
+        invoke = Mock()
+
+        result = select_chat_skills(
+            context,
+            [{"role": "user", "content": "こんにちは"}],
+            "model",
+            llm_json_response=invoke,
+        )
+
+        invoke.assert_not_called()
+        self.assertFalse(result.context.prompt_tools_enabled)
+        self.assertEqual(result.telemetry["reason"], "no_candidates")
 
 
 if __name__ == "__main__":

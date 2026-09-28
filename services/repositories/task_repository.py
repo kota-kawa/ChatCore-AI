@@ -239,6 +239,10 @@ class TaskRepository:
                 "system_task_revision": task.system_task_revision,
                 "is_system_task_customized": task.is_system_task_customized,
                 "name": task.name,
+                # チャットツールが提案時の版として使う。既存の一覧・単体取得の両方に付ける。
+                # Used by the chat tools as the proposed-against revision; added to both the
+                # list and the single-task read.
+                "updated_at": serialize_datetime_iso(task.updated_at),
                 "prompt_template": task.prompt_template,
                 "response_rules": task.response_rules,
                 "output_skeleton": task.output_skeleton,

@@ -534,6 +534,11 @@ async def list_enabled_user_skills(user_id: int, *, session: AsyncSession | None
     )
 
 
+async def list_personal_user_skills(user_id: int, *, session: AsyncSession | None = None):
+    """List only this user's own Skills, in full, without the built-in Skills mixed in."""
+    return await _read(lambda repo: repo.list_user_skills(user_id), session, repository=UserSkillRepository)
+
+
 async def get_user_skill(user_id: int, skill_id: int, *, session: AsyncSession | None = None):
     return await _read(lambda repo: repo.get_user_skill(user_id, skill_id), session, repository=UserSkillRepository)
 
