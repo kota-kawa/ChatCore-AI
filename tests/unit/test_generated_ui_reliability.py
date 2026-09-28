@@ -108,6 +108,10 @@ NON_INTERACTIVE_GROWTH_ARTIFACT: dict[str, Any] = {
     "js": "",
 }
 
+UNWIRED_CONTROLS_ISSUE = (
+    "2D artifact has operable controls but no script or event handlers; "
+    "wire each control so using it changes the displayed state"
+)
 INTERACTIVE_GROWTH_REQUEST = (
     "インゲンの成長記録を、日数で再生・操作できるインタラクティブなタイムラインにしてください。"
 )
@@ -192,6 +196,10 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
             "売上比較の考え方を図でまとめて",
             "Show the architecture as a diagram.",
             "比較を生成UIで見せて",
+            "このダッシュボードの配色を調整して見やすくしてください",
+            "資料の構成を操作して整理して",
+            "見出しをボタンで区切って表示して",
+            "この点に触れて説明して",
         )
 
         for request in operation_requests:
@@ -695,7 +703,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
             normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
         )
 
-        self.assertIn("2D artifact has operable controls but no script or event handlers", issues)
+        self.assertIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_operable_controls_without_wiring_are_ignored_when_the_request_is_not_passed(self):
         """user_request を渡さない既存呼び出しの挙動は変えない。"""
@@ -708,9 +716,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
 
         issues = requested_artifact_quality_issues(normalized, "2D")
 
-        self.assertNotIn(
-            "2D artifact has operable controls but no script or event handlers", issues
-        )
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_a_static_display_request_does_not_require_scripting(self):
         """操作を求めていない依頼では、操作部品があっても一律にJS必須にしない。"""
@@ -734,9 +740,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
             normalized, "2D", user_request="担当チームの一覧を図でまとめて"
         )
 
-        self.assertNotIn(
-            "2D artifact has operable controls but no script or event handlers", issues
-        )
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_operation_request_without_operable_controls_is_not_flagged(self):
         """操作を求める依頼でも、押せる部品自体が無ければ検出対象にしない。"""
@@ -751,9 +755,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
             normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
         )
 
-        self.assertNotIn(
-            "2D artifact has operable controls but no script or event handlers", issues
-        )
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_wired_operable_controls_are_not_flagged(self):
         """ボタンにaddEventListenerが配線済みなら、操作を求める依頼でも検出しない。"""
@@ -768,9 +770,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
             normalized, "2D", user_request="項目を選べるインタラクティブなUIにして"
         )
 
-        self.assertNotIn(
-            "2D artifact has operable controls but no script or event handlers", issues
-        )
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_safe_inline_html_event_handlers_count_as_wiring(self):
         """onclick等の安全なインラインハンドラは、別途jsが無くても配線ありと扱う。"""
@@ -792,9 +792,7 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
             normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
         )
 
-        self.assertNotIn(
-            "2D artifact has operable controls but no script or event handlers", issues
-        )
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
 
     def test_repair_retries_operable_controls_left_unwired(self):
         """修復経路: 未配線の操作UIは修復対象になり、正しいUIで差し替わる。"""

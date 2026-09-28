@@ -1755,7 +1755,10 @@ def requested_artifact_quality_issues(
             # presence in html counts as wiring even without a separate js.
             and not _EVENT_ATTR_RE.search(html)
         ):
-            issues.append("2D artifact has operable controls but no script or event handlers")
+            issues.append(
+                "2D artifact has operable controls but no script or event handlers; "
+                "wire each control so using it changes the displayed state"
+            )
     return issues
 
 
