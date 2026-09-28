@@ -171,9 +171,15 @@ test("a closing tag ends malformed multiline JSON and keeps the following prose"
   assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
 });
 
+test("an inline closing tag ends malformed JSON before an independent sentence", () => {
+  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken</chatcore_button> Follow-up prose.';
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.equal(displayed, "Intro\n\nFollow-up prose.");
+});
+
 test("a closing-tag literal in a streamed JSON string stays hidden", () => {
   const partial =
-    'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed';
+    'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed.';
   assert.equal(getStreamingGenerativeUiDisplayText(partial), "Intro");
 
   const complete = `${partial}"}</chatcore_button>\nAfter`;

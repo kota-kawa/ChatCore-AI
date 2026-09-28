@@ -61,6 +61,27 @@ function choiceJsonEnd(text: string, start: number): number | null {
   return null;
 }
 
+function isStandaloneProseAfterChoiceClose(text: string, closeEnd: number): boolean {
+  const lineEnd = text.indexOf("\n", closeEnd);
+  const following = text.slice(closeEnd, lineEnd < 0 ? text.length : lineEnd).trim();
+  if (!following || !/[.!?。！？][\])}"'」』】]*$/.test(following)) return false;
+  const firstCharacter = Array.from(following)[0];
+  return /\p{Lu}/u.test(firstCharacter) || /[\u3040-\u30ff\u3400-\u9fff]/u.test(firstCharacter);
+}
+
+function findMalformedChoiceClose(text: string, start: number): number {
+  const closeMatcher = /<\/chatcore_buttons?>/gi;
+  closeMatcher.lastIndex = start;
+  let close: RegExpExecArray | null;
+  while ((close = closeMatcher.exec(text)) !== null) {
+    const lineStart = text.lastIndexOf("\n", close.index - 1) + 1;
+    const startsLine = !text.slice(lineStart, close.index).trim();
+    const closeEnd = close.index + close[0].length;
+    if (startsLine || isStandaloneProseAfterChoiceClose(text, closeEnd)) return closeEnd;
+  }
+  return -1;
+}
+
 function stripChoiceTagsForStreaming(text: string): string {
   let stripped = "";
   let cursor = 0;
@@ -73,12 +94,12 @@ function stripChoiceTagsForStreaming(text: string): string {
       const nextOpen = /(?:^|\n)[ \t]*<chatcore_buttons?>/gi;
       nextOpen.lastIndex = COMPLETE_TAG_OPEN_RE.lastIndex;
       const later = nextOpen.exec(text);
-      const close = /(?:^|\n)[ \t]*<\/chatcore_buttons?>/i.exec(text.slice(COMPLETE_TAG_OPEN_RE.lastIndex));
-      const closeEnd = close ? COMPLETE_TAG_OPEN_RE.lastIndex + close.index + close[0].length : -1;
+      const closeEnd = findMalformedChoiceClose(text, COMPLETE_TAG_OPEN_RE.lastIndex);
       if (closeEnd >= 0 && (!later || closeEnd < later.index + later[0].lastIndexOf("<"))) {
         cursor = closeEnd;
+        while (/[ \t]/.test(text[cursor] ?? "")) cursor += 1;
         stripped += "\n\n";
-        COMPLETE_TAG_OPEN_RE.lastIndex = closeEnd;
+        COMPLETE_TAG_OPEN_RE.lastIndex = cursor;
         continue;
       }
       if (!later) return stripped;
