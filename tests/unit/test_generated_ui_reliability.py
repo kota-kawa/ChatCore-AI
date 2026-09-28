@@ -206,6 +206,8 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
             "資料の構成を操作して整理して",
             "見出しをボタンで区切って表示して",
             "この点に触れて説明して",
+            "この文章を調整して、読み手が理解を深める資料にしてください",
+            "写真の配置を調整して、全体の印象を高める見せ方にしてください",
         )
 
         for request in operation_requests:
