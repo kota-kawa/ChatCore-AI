@@ -172,6 +172,7 @@ class TaskRepository:
                 setattr(task, field, value)
         if task.system_task_key is not None:
             task.is_system_task_customized = True
+        task.updated_at = func.current_timestamp()
         await self.session.flush()
         return True
 

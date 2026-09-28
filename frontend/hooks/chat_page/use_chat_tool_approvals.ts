@@ -45,11 +45,13 @@ export function useChatToolApprovals({
   }, [messages]);
 
   const handleToolApprovalDecide = useCallback(
-    async (approvalId: string, decision: ToolApprovalDecision) => {
+    async (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings = false) => {
       if (inFlightRef.current.has(approvalId)) return;
       inFlightRef.current.add(approvalId);
       try {
-        const approval = await decideToolApproval(approvalId, decision, t("chat.toolApproval.decisionFailed"));
+        const approval = acknowledgeWarnings
+          ? await decideToolApproval(approvalId, decision, t("chat.toolApproval.decisionFailed"), undefined, true)
+          : await decideToolApproval(approvalId, decision, t("chat.toolApproval.decisionFailed"));
         decidedApprovalIdRef.current = approval.id;
         applyToolApproval(approval);
       } catch (error) {

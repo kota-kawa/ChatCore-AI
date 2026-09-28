@@ -638,6 +638,7 @@ async def edit_task(
     input_examples: str | None,
     output_examples: str | None,
     *,
+    expected_updated_at: str | None = None,
     session: AsyncSession | None = None,
 ) -> bool:
     return await _write(
@@ -650,6 +651,7 @@ async def edit_task(
             output_skeleton,
             input_examples,
             output_examples,
+            expected_updated_at=expected_updated_at,
         ),
         session,
         repository=TaskRepository,
@@ -666,8 +668,8 @@ async def add_task(
     output_examples: str,
     *,
     session: AsyncSession | None = None,
-) -> None:
-    await _write(
+) -> int:
+    return await _write(
         lambda repo: repo.add_task(
             user_id,
             title,

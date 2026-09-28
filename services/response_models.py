@@ -357,6 +357,7 @@ ToolApprovalToolName = Literal[
     "memo_append",
     "memo_edit",
     "publish_prompt",
+    "public_prompt_edit",
     "my_prompt_save",
     "my_skill_save",
 ]
@@ -374,6 +375,7 @@ _TOOL_NAME_FAMILIES: dict[str, str] = {
     "memo_append": "memo",
     "memo_edit": "memo",
     "publish_prompt": "prompts",
+    "public_prompt_edit": "prompts",
     "my_prompt_save": "prompts",
     "my_skill_save": "prompts",
 }
@@ -457,11 +459,25 @@ class PublishPromptPreviewApi(ToolApprovalModel):
     private_overlap_excerpts: list[str] = Field(default_factory=list)
 
 
+class PublicPromptEditPreviewApi(ToolApprovalModel):
+    kind: Literal["public_prompt_edit"]
+    prompt_id: int = Field(ge=1)
+    before_title: str
+    before_content: str
+    title: str
+    content: str
+    private_overlap_excerpts: list[str] = Field(default_factory=list)
+
+
 # 日本語: 自分用プロンプト（Task）の作成・編集案。task_id が無ければ新規作成。
 # English: Proposal to create or edit a saved prompt (Task); no task_id means a new one.
 class MyPromptSavePreviewApi(ToolApprovalModel):
     kind: Literal["my_prompt_save"]
     task_id: int | None = None
+    current_title: str | None = None
+    clear_fields: list[Literal["response_rules", "output_skeleton", "input_examples", "output_examples"]] = Field(
+        default_factory=list
+    )
     title: str
     prompt_content: str
     response_rules: str = ""
@@ -477,6 +493,7 @@ class MyPromptSavePreviewApi(ToolApprovalModel):
 class MySkillSavePreviewApi(ToolApprovalModel):
     kind: Literal["my_skill_save"]
     skill_id: int | None = None
+    current_name: str | None = None
     name: str | None = None
     instructions: str | None = None
 
@@ -512,6 +529,7 @@ class ToolApprovalApi(ToolApprovalModel):
         | MemoAppendPreviewApi
         | MemoEditPreviewApi
         | PublishPromptPreviewApi
+        | PublicPromptEditPreviewApi
         | MyPromptSavePreviewApi
         | MySkillSavePreviewApi
         | None

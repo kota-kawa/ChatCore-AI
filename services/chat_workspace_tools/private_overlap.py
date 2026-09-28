@@ -1,20 +1,20 @@
 """Detect private text leaking into a public post proposal.
 
 チャットの生成中に読んだ非公開の内容（メモ本文・抜粋、llm_profile_context、自分の Task・
-個人Skill の本文）が公開投稿（publish_prompt）の提案に 50 字以上そのまま一致したら、警告
+個人Skill の本文）が公開投稿の作成・編集提案に 50 字以上そのまま一致したら、警告
 （private_text_in_public_post）を出す。ブロックはしない: 利用者が確認チェックを入れれば
 承認できる（services/chat_tool_approval_service.py と ToolApprovalDecisionRequest を参照）。
 
 Warns, but never blocks, when private content read during the turn (memo bodies/excerpts,
 llm_profile_context, the user's own Task and personal Skill bodies) reappears verbatim, 50
-characters or more, inside a publish_prompt proposal. The user can still approve after
+characters or more, inside a public post creation or edit proposal. The user can still approve after
 acknowledging the warning (see services/chat_tool_approval_service.py and
 ToolApprovalDecisionRequest).
 """
 
 from __future__ import annotations
 
-from difflib import SequenceMatcher
+from collections import OrderedDict
 from typing import Any
 
 # 非公開の読み取り結果からテキストを拾うキー。メモ（content・excerpt）、自分用プロンプト
@@ -52,10 +52,11 @@ MAX_EXCERPT_DISPLAY_CHARS = 200
 
 
 class PrivateTextTracker:
-    """Accumulates private text read during one turn, for the publish_prompt overlap check."""
+    """Accumulates private text read during one turn for public-post overlap checks."""
 
     def __init__(self, *, seed: str = "") -> None:
         self._texts: list[str] = []
+        self._chunk_tails: OrderedDict[str, tuple[int, str]] = OrderedDict()
         seed_text = seed.strip()
         if seed_text:
             self.add(seed_text)
@@ -68,19 +69,59 @@ class PrivateTextTracker:
         if len(self._texts) > MAX_TRACKED_TEXTS:
             self._texts = self._texts[-MAX_TRACKED_TEXTS:]
 
+    def add_chunk(self, group_key: str, start: int, text: str) -> None:
+        """Track one private read chunk and the seam with its adjacent predecessor."""
+        if not text or not text.strip():
+            return
+        chunk = text[:MAX_PRIVATE_TEXT_CHARS]
+        previous = self._chunk_tails.get(group_key)
+        tail_source = chunk
+        if previous is not None:
+            previous_end, previous_tail = previous
+            if previous_end == start:
+                tail_source = previous_tail + chunk
+                self.add(tail_source)
+            else:
+                self.add(chunk)
+        else:
+            self.add(chunk)
+
+        end = start + len(chunk)
+        self._chunk_tails[group_key] = (end, tail_source[-(MIN_OVERLAP_LENGTH - 1) :])
+        self._chunk_tails.move_to_end(group_key)
+        while len(self._chunk_tails) > MAX_TRACKED_TEXTS:
+            self._chunk_tails.popitem(last=False)
+
     def find_overlaps(self, candidate: str) -> list[str]:
         """Return up to MAX_REPORTED_MATCHES excerpts of candidate that reappear from private text."""
         candidate_text = (candidate or "").strip()
-        if not candidate_text or not self._texts:
+        if len(candidate_text) < MIN_OVERLAP_LENGTH or not self._texts:
             return []
         matches: list[str] = []
         seen: set[str] = set()
         for private_text in self._texts:
-            matcher = SequenceMatcher(None, private_text, candidate_text, autojunk=False)
-            for block in matcher.get_matching_blocks():
-                if block.size < MIN_OVERLAP_LENGTH:
+            if len(private_text) < MIN_OVERLAP_LENGTH:
+                continue
+            windows: dict[str, int] = {}
+            for private_index in range(len(private_text) - MIN_OVERLAP_LENGTH + 1):
+                windows.setdefault(private_text[private_index : private_index + MIN_OVERLAP_LENGTH], private_index)
+            index = 0
+            while index <= len(candidate_text) - MIN_OVERLAP_LENGTH:
+                private_index = windows.get(candidate_text[index : index + MIN_OVERLAP_LENGTH])
+                if private_index is None:
+                    index += 1
                     continue
-                excerpt = candidate_text[block.b : block.b + block.size]
+                end = index + MIN_OVERLAP_LENGTH
+                private_end = private_index + MIN_OVERLAP_LENGTH
+                while (
+                    end < len(candidate_text)
+                    and private_end < len(private_text)
+                    and candidate_text[end] == private_text[private_end]
+                ):
+                    end += 1
+                    private_end += 1
+                excerpt = candidate_text[index:end]
+                index = end
                 key = excerpt[:MAX_EXCERPT_DISPLAY_CHARS]
                 if key in seen:
                     continue

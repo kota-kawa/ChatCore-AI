@@ -30,7 +30,13 @@ from services.chat_tool_approval_service import (
 
 from .memo import MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME, MEMO_READ_TOOL_NAME, MEMO_TOOL_FAMILY
 from .private_overlap import PrivateTextTracker, extract_private_texts
-from .prompts import PROMPTS_TOOL_FAMILY, PUBLISH_PROMPT_TOOL_NAME
+from .prompts import (
+    MY_PROMPT_READ_TOOL_NAME,
+    MY_SKILL_READ_TOOL_NAME,
+    PROMPTS_TOOL_FAMILY,
+    PUBLIC_PROMPT_EDIT_TOOL_NAME,
+    PUBLISH_PROMPT_TOOL_NAME,
+)
 from .registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -42,7 +48,9 @@ from .registry import (
 
 # 提案の中身のうち、非公開の混入を確かめる対象にする文字列フィールド。
 # The proposal fields checked for private-content overlap.
-_PUBLISH_PROMPT_OVERLAP_FIELDS = ("title", "content", "description", "input_examples", "output_examples")
+_PUBLISH_PROMPT_OVERLAP_FIELDS = (
+    "title", "content", "description", "input_examples", "output_examples", "ai_model"
+)
 # get_evidence の再読み取りで「自分自身のデータ」として扱う family。ここに無い family
 # （公開データ）は外部の内容として扱われる（services/chat_generation.py も参照）。
 # Families treated as "the user's own data" for a later get_evidence re-read; any family not
@@ -144,8 +152,7 @@ class WorkspaceToolRunner:
                         and memo_id > 0
                     )
             if spec.family in _PRIVATE_TEXT_FAMILIES:
-                for text in extract_private_texts(payload):
-                    self._private_texts.add(text)
+                self._track_private_text_result(spec.name, payload)
             evidence_refs = state.evidence_store.add_reference_payload(
                 payload,
                 source_type=spec.family,
@@ -165,6 +172,38 @@ class WorkspaceToolRunner:
             telemetry.read_budget_consumed = budget.read_chars
         self._publish("workspace_tool_completed", {**progress, "status": payload.get("status")})
         return payload
+
+    def _track_private_text_result(self, tool_name: str, payload: dict[str, Any]) -> None:
+        if tool_name == MY_PROMPT_READ_TOOL_NAME:
+            entry = payload.get("task")
+            resource_type, id_key = "task", "task_id"
+        elif tool_name == MY_SKILL_READ_TOOL_NAME:
+            entry = payload.get("skill")
+            resource_type, id_key = "skill", "skill_id"
+        else:
+            entry = None
+            resource_type, id_key = "", ""
+
+        if isinstance(entry, dict):
+            resource_id = entry.get(id_key)
+            section = entry.get("section")
+            start = entry.get("start")
+            content = entry.get("content")
+            if (
+                isinstance(resource_id, int)
+                and not isinstance(resource_id, bool)
+                and isinstance(section, str)
+                and isinstance(start, int)
+                and not isinstance(start, bool)
+                and isinstance(content, str)
+            ):
+                self._private_texts.add_chunk(
+                    f"{resource_type}:{resource_id}:{section}", start, content
+                )
+                return
+
+        for text in extract_private_texts(payload):
+            self._private_texts.add(text)
 
     # Write proposals -----------------------------------------------------------
 
@@ -219,7 +258,7 @@ class WorkspaceToolRunner:
             self._publish("workspace_tool_failed", progress)
             return {"status": "failed", "message": "The change could not be prepared."}
 
-        if spec.name == PUBLISH_PROMPT_TOOL_NAME:
+        if spec.name in {PUBLISH_PROMPT_TOOL_NAME, PUBLIC_PROMPT_EDIT_TOOL_NAME}:
             proposal = self._flag_private_overlap(proposal)
 
         try:
@@ -280,7 +319,7 @@ class WorkspaceToolRunner:
     # 見つかっても提案は止めず、承認カードへ警告として出すだけにする（services/response_models.py
     # の private_text_in_public_post と ToolApprovalDecisionRequest.acknowledge_warnings を参照）。
     # Check whether private content read this turn reappears, 50+ characters verbatim, inside a
-    # publish_prompt proposal. A match never stops the proposal; it only adds a warning to the
+    # public prompt proposal. A match never stops the proposal; it only adds a warning to the
     # card (see private_text_in_public_post in services/response_models.py and
     # ToolApprovalDecisionRequest.acknowledge_warnings).
     def _flag_private_overlap(self, proposal: Proposal) -> Proposal:

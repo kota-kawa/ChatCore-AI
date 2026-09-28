@@ -40,6 +40,7 @@ export async function decideToolApproval(
   decision: ToolApprovalDecision,
   fallbackMessage: string,
   fetchImpl: FetchImpl = resilientFetch,
+  acknowledgeWarnings = false,
 ): Promise<ToolApprovalApi> {
   const { response, payload } = await fetchJson<unknown>(
     `/api/chat/tool-approvals/${encodeURIComponent(approvalId)}/decision`,
@@ -47,7 +48,7 @@ export async function decideToolApproval(
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision } satisfies ToolApprovalDecisionRequest),
+      body: JSON.stringify({ decision, acknowledge_warnings: acknowledgeWarnings } satisfies ToolApprovalDecisionRequest),
     },
     fetchImpl,
   );

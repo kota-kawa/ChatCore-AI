@@ -5,29 +5,81 @@ import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import { isToolApprovalDecidable, isToolApprovalExpired } from "../../lib/chat_page/tool_approvals";
+import { buildPromptPath } from "../../lib/promptSlug";
 import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 import { MemoApprovalPreview } from "./tool_approval_previews/memo";
+import { PromptsApprovalPreview } from "./tool_approval_previews/prompts";
 
 type Tool = ToolApprovalApi["tool"];
 type Status = ToolApprovalApi["status"];
 type Warning = NonNullable<ToolApprovalApi["warnings"]>[number];
+type Preview = NonNullable<ToolApprovalApi["preview"]>;
+type PromptsPreview = Extract<Preview, { kind: "publish_prompt" | "public_prompt_edit" | "my_prompt_save" | "my_skill_save" }>;
 
 const TITLE_KEYS: Record<Tool, MessageKey> = {
   memo_create: "chat.toolApproval.title.memo_create",
   memo_append: "chat.toolApproval.title.memo_append",
   memo_edit: "chat.toolApproval.title.memo_edit",
+  publish_prompt: "chat.toolApproval.title.publish_prompt",
+  public_prompt_edit: "chat.toolApproval.title.public_prompt_edit",
+  my_prompt_save: "chat.toolApproval.title.my_prompt_save",
+  my_skill_save: "chat.toolApproval.title.my_skill_save",
 };
 
 const TITLE_ICONS: Record<Tool, string> = {
   memo_create: "bi-journal-plus",
   memo_append: "bi-journal-arrow-down",
   memo_edit: "bi-pencil-square",
+  publish_prompt: "bi-megaphone",
+  public_prompt_edit: "bi-pencil-square",
+  my_prompt_save: "bi-file-earmark-text",
+  my_skill_save: "bi-stars",
+};
+
+// 実行結果を開くリンク先。ツールごとの対象画面へ導く。
+// Where the result link opens: the screen matching each tool's target.
+const RESULT_LINKS: Record<Tool, { href: string; labelKey: MessageKey }> = {
+  memo_create: { href: "/memo", labelKey: "chat.toolApproval.openMemo" },
+  memo_append: { href: "/memo", labelKey: "chat.toolApproval.openMemo" },
+  memo_edit: { href: "/memo", labelKey: "chat.toolApproval.openMemo" },
+  publish_prompt: { href: "/prompt_share", labelKey: "chat.toolApproval.openPromptShare" },
+  public_prompt_edit: { href: "/prompt_share", labelKey: "chat.toolApproval.openPublicPrompt" },
+  my_prompt_save: { href: "/#task-selection", labelKey: "chat.toolApproval.openMyPrompts" },
+  my_skill_save: { href: "/#skill-selection-title", labelKey: "chat.toolApproval.openMySkills" },
 };
 
 const WARNING_KEYS: Record<Warning, MessageKey> = {
   shared_memo: "chat.toolApproval.warning.shared_memo",
   untrusted_input_in_turn: "chat.toolApproval.warning.untrusted_input_in_turn",
+  private_text_in_public_post: "chat.toolApproval.warning.private_text_in_public_post",
 };
+
+// 確認チェックが無ければ承認できない警告。
+// A warning that blocks approval until the acknowledgment checkbox is checked.
+const ACKNOWLEDGMENT_REQUIRED_WARNING: Warning = "private_text_in_public_post";
+
+// preview.kind でプロンプト系のプレビューか判定する（memo と prompts の描き分けに使う）。
+// Narrows on preview.kind to tell a prompts-family preview from a memo one.
+function isPromptsPreview(preview: Preview): preview is PromptsPreview {
+  return preview.kind === "publish_prompt"
+    || preview.kind === "public_prompt_edit"
+    || preview.kind === "my_prompt_save"
+    || preview.kind === "my_skill_save";
+}
+
+function resultLinkFor(approval: ToolApprovalApi): { href: string; labelKey: MessageKey } {
+  if (approval.tool !== "public_prompt_edit") return RESULT_LINKS[approval.tool];
+
+  const preview = approval.preview?.kind === "public_prompt_edit" ? approval.preview : null;
+  const promptId = preview?.prompt_id ?? approval.result?.target_id;
+  if (typeof promptId !== "number") return RESULT_LINKS.public_prompt_edit;
+
+  const title = preview?.title ?? approval.result?.target_title;
+  return {
+    href: buildPromptPath(promptId, title),
+    labelKey: "chat.toolApproval.openPublicPrompt",
+  };
+}
 
 const STATUS_KEYS: Record<Status, MessageKey> = {
   pending: "chat.toolApproval.status.pending",
@@ -58,6 +110,8 @@ const ERROR_KEYS = new Map<string, MessageKey>([
   ["target_shared", "chat.toolApproval.error.target_shared"],
   ["content_too_long", "chat.toolApproval.error.content_too_long"],
   ["invalid_content", "chat.toolApproval.error.invalid_content"],
+  ["name_conflict", "chat.toolApproval.error.name_conflict"],
+  ["prompt_rate_limited", "chat.toolApproval.error.prompt_rate_limited"],
 ]);
 
 // setTimeout が扱える最大の待ち時間。これより先の期限は再描画で拾う。
@@ -85,7 +139,7 @@ type Props = {
   approval: ToolApprovalApi;
   // 決定を送る。無いときは共有表示などの読み取り専用として描く
   // Sends the decision; without it the card renders read-only, as in a shared view
-  onDecide?: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
+  onDecide?: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   // 生成中や、後ろに利用者の発言があるなど、今は決められない状態
   // The card cannot be decided right now: a reply is generating or the user already wrote after it
   disabled?: boolean;
@@ -99,6 +153,7 @@ type Props = {
 function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Props) {
   const { t } = useTranslation();
   const titleId = useId();
+  const acknowledgmentId = useId();
   const nowMs = useNowUntil(approval);
   // 押してから応答が届くまでの二重送信を防ぐ / Blocks a second send while the decision is in flight
   const [submitting, setSubmitting] = useState<ToolApprovalDecision | null>(null);
@@ -109,20 +164,33 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
   const showActions = !readOnly && isToolApprovalDecidable(approval, nowMs);
   const inactive = disabled || submitting !== null;
 
+  const warnings = approval.warnings ?? [];
+  const requiresAcknowledgement = warnings.includes(ACKNOWLEDGMENT_REQUIRED_WARNING);
+  // 非公開内容の混入警告があるカードは、確認チェックを入れるまで承認できない。拒否は常に可能。
+  // A card with the private-content-overlap warning cannot be approved until the box is checked;
+  // denial is always available.
+  const [acknowledgedApprovalId, setAcknowledgedApprovalId] = useState<string | null>(null);
+  const acknowledged = acknowledgedApprovalId === approval.id;
+  const approvalBlocked = requiresAcknowledgement && !acknowledged;
+
   const decide = useCallback(
     async (decision: ToolApprovalDecision) => {
       if (inactive || !showActions || !onDecide) return;
+      if (decision !== "deny" && approvalBlocked) return;
       setSubmitting(decision);
       try {
-        await onDecide(approval.id, decision);
+        if (requiresAcknowledgement) {
+          await onDecide(approval.id, decision, acknowledged);
+        } else {
+          await onDecide(approval.id, decision);
+        }
       } finally {
         setSubmitting(null);
       }
     },
-    [approval.id, inactive, onDecide, showActions],
+    [acknowledged, approval.id, approvalBlocked, inactive, onDecide, requiresAcknowledgement, showActions],
   );
 
-  const warnings = approval.warnings ?? [];
   const result = approval.result;
   const statusText =
     displayStatus === "succeeded" && approval.decision === "auto"
@@ -133,6 +201,7 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
       ? t(ERROR_KEYS.get(result?.error_code ?? "") ?? "chat.toolApproval.error.unknown")
       : "";
   const showResultLink = displayStatus === "succeeded" && typeof result?.target_id === "number";
+  const resultLink = resultLinkFor(approval);
 
   return (
     <div
@@ -161,7 +230,26 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
         </ul>
       ) : null}
 
-      {approval.preview ? <MemoApprovalPreview preview={approval.preview} /> : null}
+      {approval.preview ? (
+        isPromptsPreview(approval.preview) ? (
+          <PromptsApprovalPreview preview={approval.preview} />
+        ) : (
+          <MemoApprovalPreview preview={approval.preview} />
+        )
+      ) : null}
+
+      {showActions && requiresAcknowledgement ? (
+        <label className="tool-approval-card__acknowledgment" htmlFor={acknowledgmentId}>
+          <input
+            id={acknowledgmentId}
+            type="checkbox"
+            checked={acknowledged}
+            disabled={inactive}
+            onChange={(event) => setAcknowledgedApprovalId(event.currentTarget.checked ? approval.id : null)}
+          />
+          <span>{t("chat.toolApproval.ackPrivateOverlap")}</span>
+        </label>
+      ) : null}
 
       {showActions ? (
         <>
@@ -169,7 +257,7 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
             <button
               type="button"
               className="interactive-button"
-              disabled={inactive}
+              disabled={inactive || approvalBlocked}
               onClick={() => void decide("approve_once")}
             >
               {approval.always_allowed ? t("chat.toolApproval.approveOnce") : t("chat.toolApproval.approve")}
@@ -178,7 +266,7 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
               <button
                 type="button"
                 className="interactive-button"
-                disabled={inactive}
+                disabled={inactive || approvalBlocked}
                 onClick={() => void decide("approve_always")}
               >
                 {t("chat.toolApproval.approveAlways")}
@@ -208,9 +296,9 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
               {errorText ? <span className="tool-approval-card__status-detail">{errorText}</span> : null}
             </div>
             {showResultLink ? (
-              <Link className="tool-approval-card__result-link" href="/memo">
+              <Link className="tool-approval-card__result-link" href={resultLink.href}>
                 {result?.target_title ? <span className="tool-approval-card__result-title">{result.target_title}</span> : null}
-                <span>{t("chat.toolApproval.openMemo")}</span>
+                <span>{t(resultLink.labelKey)}</span>
                 <i className="bi bi-arrow-right" aria-hidden="true"></i>
               </Link>
             ) : null}
