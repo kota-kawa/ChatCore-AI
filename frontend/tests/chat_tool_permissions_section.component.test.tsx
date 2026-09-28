@@ -19,6 +19,12 @@ const GRANTS = [
   { tool_name: "memo_create", family: "memo", created_at: "2026-09-20T10:00:00Z" },
   { tool_name: "memo_append", family: "memo", created_at: "2026-09-21T10:00:00Z" },
 ];
+const PROMPT_GRANTS = [
+  { tool_name: "publish_prompt", family: "prompts", created_at: "2026-09-22T10:00:00Z" },
+  { tool_name: "public_prompt_edit", family: "prompts", created_at: "2026-09-22T11:00:00Z" },
+  { tool_name: "my_prompt_save", family: "prompts", created_at: "2026-09-23T10:00:00Z" },
+  { tool_name: "my_skill_save", family: "prompts", created_at: "2026-09-24T10:00:00Z" },
+];
 
 beforeEach(() => {
   loadToolAutoApprovalsMock.mockReset();
@@ -39,6 +45,22 @@ describe("ChatToolPermissionsSection", () => {
     expect(items[0]).toHaveTextContent("メモの作成");
     expect(items[0]).toHaveTextContent("許可した日時");
     expect(items[1]).toHaveTextContent("メモへの追記");
+  });
+
+  it("labels and revokes always-approved prompt and Skill tools", async () => {
+    loadToolAutoApprovalsMock.mockResolvedValue(PROMPT_GRANTS);
+    revokeToolAutoApprovalMock.mockResolvedValue(true);
+    render(<ChatToolPermissionsSection isActive />);
+
+    const items = await screen.findAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("プロンプトの公開投稿"),
+      expect.stringContaining("公開プロンプトの編集"),
+      expect.stringContaining("自分用プロンプトの保存"),
+      expect.stringContaining("個人Skillの保存"),
+    ]);
+    fireEvent.click(within(items[1]).getByRole("button", { name: "公開プロンプトの編集: 取り消す" }));
+    expect(revokeToolAutoApprovalMock).toHaveBeenCalledWith("public_prompt_edit", "取り消せませんでした。");
   });
 
   it("revokes one tool and removes it from the list", async () => {

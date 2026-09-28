@@ -122,6 +122,31 @@ class ValidateToolApprovalPayloadTests(unittest.TestCase):
 
 
 class DescribeToolApprovalForContextTests(unittest.TestCase):
+    def test_prompt_and_skill_summaries_keep_the_target_but_not_the_proposed_body(self) -> None:
+        cases = (
+            ("publish_prompt", {"kind": "publish_prompt", "title": "Public <title>", "content": "private body"}),
+            (
+                "public_prompt_edit",
+                {
+                    "kind": "public_prompt_edit",
+                    "title": "Edited <title>",
+                    "before_content": "private old body",
+                    "content": "private body",
+                },
+            ),
+            ("my_prompt_save", {"kind": "my_prompt_save", "title": "Saved <title>", "prompt_content": "private body"}),
+            (
+                "my_skill_save",
+                {"kind": "my_skill_save", "current_name": "Skill <name>", "name": None, "instructions": "private body"},
+            ),
+        )
+        for tool, preview in cases:
+            with self.subTest(tool=tool):
+                lines = describe_tool_approval_for_context({"tool": tool, "status": "pending", "preview": preview})
+                self.assertEqual(len(lines), 3)
+                self.assertIn("&lt;", lines[1])
+                self.assertNotIn("private body", "\n".join(lines))
+
     def test_summary_is_escaped_and_leaves_out_the_body(self) -> None:
         approval = _memo_edit_approval(status="succeeded", decision="once", result={"target_id": 12})
 

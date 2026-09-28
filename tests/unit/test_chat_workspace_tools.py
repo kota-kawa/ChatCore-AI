@@ -42,6 +42,7 @@ from services.chat_workspace_tools.memo import (
     _propose_memo_create,
     _propose_memo_edit,
 )
+from services.chat_workspace_tools.prompts import MY_PROMPT_READ_TOOL_NAME, PROMPTS_TOOL_FAMILY
 from services.chat_workspace_tools.registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -299,6 +300,68 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         published: list[tuple[str, dict]] = []
         runner = WorkspaceToolRunner(toolbox, publish=lambda event, payload: published.append((event, payload)))
         return runner, published
+
+    def test_public_prompt_overlap_check_includes_the_ai_model_field(self):
+        private_text = "Private model instructions that must never be copied into public prompt metadata."
+        toolbox = ChatWorkspaceToolbox(
+            [], user_id=7, chat_room_id="room-7", llm_profile_context=private_text
+        )
+        runner = WorkspaceToolRunner(toolbox, publish=lambda *_: None)
+        proposal = Proposal(
+            arguments={},
+            preview={"kind": "publish_prompt", "ai_model": private_text},
+            target_ref={},
+            target_title="Prompt",
+        )
+
+        flagged = runner._flag_private_overlap(proposal)
+
+        self.assertEqual(flagged.target_ref["private_overlap_excerpts"], [private_text])
+
+    def test_runner_tracks_overlap_across_my_prompt_read_chunks(self):
+        left = "x" * 25
+        right = "y" * 25
+        content_by_start = {
+            0: "a" * 2_975 + left,
+            3_000: right + "b" * 2_975,
+        }
+
+        async def read(user_id: int, arguments: dict, max_chars: int) -> ReadResult:
+            start = arguments["start"]
+            return ReadResult(
+                payload={
+                    "status": "ok",
+                    "task": {
+                        "task_id": 42,
+                        "section": "prompt_content",
+                        "start": start,
+                        "content": content_by_start[start],
+                    },
+                }
+            )
+
+        spec = ToolSpec(
+            name=MY_PROMPT_READ_TOOL_NAME,
+            family=PROMPTS_TOOL_FAMILY,
+            definition={"type": "function", "function": {"name": MY_PROMPT_READ_TOOL_NAME}},
+            budget="reads",
+            read=read,
+        )
+        runner, _ = self._runner(spec)
+        state = _make_state()
+
+        runner.run(state, _tool_call(MY_PROMPT_READ_TOOL_NAME, start=0))
+        runner.run(state, _tool_call(MY_PROMPT_READ_TOOL_NAME, start=3_000))
+        proposal = Proposal(
+            arguments={},
+            preview={"kind": "publish_prompt", "content": left + right},
+            target_ref={},
+            target_title="Prompt",
+        )
+
+        flagged = runner._flag_private_overlap(proposal)
+
+        self.assertEqual(flagged.target_ref["private_overlap_excerpts"], [left + right])
 
     # Dispatch -----------------------------------------------------------------
 
