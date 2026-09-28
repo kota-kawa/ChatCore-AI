@@ -46,6 +46,7 @@ from .registry import (
     ToolSpec,
     WorkspaceToolArgumentError,
     WorkspaceToolError,
+    build_function_definition,
     validation_problems,
 )
 
@@ -449,20 +450,7 @@ async def _execute_memo_edit(
 # the descriptions at the provider boundary; the argument models above validate (ADR 0008).
 
 
-def _function(name: str, description: str, properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
-    return {
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-                "additionalProperties": False,
-            },
-        },
-    }
+_function = build_function_definition
 
 
 _MEMO_ID_PROPERTY = {

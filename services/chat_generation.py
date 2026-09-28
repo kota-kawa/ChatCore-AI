@@ -93,6 +93,7 @@ from .chat_web_page_reader import (
     WebPageReader,
     read_web_page_tool_definition,
 )
+from .chat_workspace_tools.prompts import PROMPTS_TOOL_FAMILY, SHARED_PROMPT_READ_TOOL_NAME
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .chat_workspace_tools.runner import WorkspaceToolRunner
 from .llm import (
@@ -434,13 +435,18 @@ def _with_tool_approval_parts(
 
 
 # 外部の内容を読むツール。呼んだターンでは「常に承認」でも書き込みを自動では実行しない。
+# shared_prompt_read も他人の公開投稿を読むため同じ扱いにする。
 # Tools that read external content; a turn that calls one never runs writes on its own, even
-# under "always approve".
-_EXTERNAL_CONTENT_TOOL_NAMES = frozenset({"web_search", READ_WEB_PAGE_TOOL_NAME, SHARED_PROMPT_TOOL_NAME})
+# under "always approve". shared_prompt_read reads another user's public post, so it counts too.
+_EXTERNAL_CONTENT_TOOL_NAMES = frozenset(
+    {"web_search", READ_WEB_PAGE_TOOL_NAME, SHARED_PROMPT_TOOL_NAME, SHARED_PROMPT_READ_TOOL_NAME}
+)
 # 利用者自身のデータの根拠。get_evidence でこれ以外を読み直したら外部の内容を読んだとみなす。
+# prompts は自分用プロンプト（Task）・個人Skill の一覧で、shared_prompts（公開投稿）は含まない。
 # Evidence from the user's own data; re-reading anything else through get_evidence counts as
-# reading external content.
-_OWN_DATA_EVIDENCE_TYPES = frozenset({"memo", PERSONAL_KNOWLEDGE_SOURCE})
+# reading external content. prompts covers the user's own Task/Skill listings; shared_prompts
+# (public posts) is deliberately excluded.
+_OWN_DATA_EVIDENCE_TYPES = frozenset({"memo", PERSONAL_KNOWLEDGE_SOURCE, PROMPTS_TOOL_FAMILY})
 
 
 def _includes_external_evidence(payload: dict[str, Any]) -> bool:

@@ -15,6 +15,24 @@ ToolApprovalDecisionRequest).
 from __future__ import annotations
 
 from difflib import SequenceMatcher
+from typing import Any
+
+# 非公開の読み取り結果からテキストを拾うキー。メモ（content・excerpt）、自分用プロンプト
+# （prompt_content 他）、個人Skill（instructions）に共通で使う。
+# Keys used to pull text out of a private read result: memo (content, excerpt), the user's own
+# prompts (prompt_content and friends), and personal Skills (instructions).
+PRIVATE_TEXT_KEYS = frozenset(
+    {
+        "content",
+        "excerpt",
+        "instructions",
+        "prompt_content",
+        "response_rules",
+        "output_skeleton",
+        "input_examples",
+        "output_examples",
+    }
+)
 
 # 一致の下限。これ未満は偶然の一致（定型句など）として無視する。
 # Minimum match length; anything shorter is ignored as a coincidental (boilerplate) overlap.
@@ -71,3 +89,23 @@ class PrivateTextTracker:
                 if len(matches) >= MAX_REPORTED_MATCHES:
                     return matches
         return matches
+
+
+# 読み取り結果（JSON になれる入れ子の dict/list）から、既知のキーの文字列だけを拾う。
+# Pull only the strings under known keys out of a read result (a JSON-able nested dict/list).
+def extract_private_texts(payload: Any) -> list[str]:
+    found: list[str] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in PRIVATE_TEXT_KEYS and isinstance(value, str):
+                    found.append(value)
+                elif isinstance(value, (dict, list)):
+                    _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(payload)
+    return found

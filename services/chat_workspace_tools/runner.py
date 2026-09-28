@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from services.chat_agent_budget import READ_MESSAGE_MAX_CHARS
@@ -27,7 +28,9 @@ from services.chat_tool_approval_service import (
     has_auto_approval,
 )
 
-from .memo import MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME, MEMO_READ_TOOL_NAME
+from .memo import MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME, MEMO_READ_TOOL_NAME, MEMO_TOOL_FAMILY
+from .private_overlap import PrivateTextTracker, extract_private_texts
+from .prompts import PROMPTS_TOOL_FAMILY, PUBLISH_PROMPT_TOOL_NAME
 from .registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -36,6 +39,15 @@ from .registry import (
     WorkspaceToolError,
     parse_tool_arguments,
 )
+
+# 提案の中身のうち、非公開の混入を確かめる対象にする文字列フィールド。
+# The proposal fields checked for private-content overlap.
+_PUBLISH_PROMPT_OVERLAP_FIELDS = ("title", "content", "description", "input_examples", "output_examples")
+# get_evidence の再読み取りで「自分自身のデータ」として扱う family。ここに無い family
+# （公開データ）は外部の内容として扱われる（services/chat_generation.py も参照）。
+# Families treated as "the user's own data" for a later get_evidence re-read; any family not
+# listed here (public data) is treated as external content (see services/chat_generation.py).
+_PRIVATE_TEXT_FAMILIES = frozenset({MEMO_TOOL_FAMILY, PROMPTS_TOOL_FAMILY})
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +58,12 @@ AWAITING_APPROVAL_MESSAGE = "Not executed. The user will approve or reject it on
 # 理由のコードに添えてモデルへ返す説明。カードの文言はフロントの i18n が持つ。
 # Explanations sent to the model alongside a reason code; the card's text lives in the frontend.
 _ERROR_HINTS = {
-    "target_not_found": "The memo was not found. Use memo_list or memo_search to get a valid memo_id.",
+    "target_not_found": "The target was not found. Re-check the id with the matching list or search tool.",
     "content_too_long": "The memo would exceed its maximum length. Shorten the text.",
-    "target_changed": "The memo changed in the meantime. Read it again before proposing a change.",
+    "target_changed": "The target changed in the meantime. Read or list it again before proposing a change.",
     "target_shared": "The memo became shared in the meantime, so it was not changed.",
+    "name_conflict": "A prompt, Task or Skill with that name already exists. Use a different name.",
+    "prompt_rate_limited": "Too many prompts were published recently. Try again later.",
 }
 
 
@@ -63,6 +77,11 @@ class WorkspaceToolRunner:
         self._toolbox = toolbox
         self._publish = publish
         self._read_memo_ids: set[int] = set()
+        # 非公開の内容が publish_prompt の提案に混入していないか確かめるための追跡。
+        # llm_profile_context を種にし、このターンで読んだ自分自身のデータを足していく。
+        # Tracks private content to check against a publish_prompt proposal; seeded with
+        # llm_profile_context and grown with the user's own data read during this turn.
+        self._private_texts = PrivateTextTracker(seed=toolbox.llm_profile_context)
 
     def run(self, state: ChatTurnRunState, tool_call: dict[str, Any]) -> dict[str, Any]:
         function = tool_call.get("function") or {}
@@ -124,6 +143,9 @@ class WorkspaceToolRunner:
                         and not isinstance(memo_id, bool)
                         and memo_id > 0
                     )
+            if spec.family in _PRIVATE_TEXT_FAMILIES:
+                for text in extract_private_texts(payload):
+                    self._private_texts.add(text)
             evidence_refs = state.evidence_store.add_reference_payload(
                 payload,
                 source_type=spec.family,
@@ -197,6 +219,9 @@ class WorkspaceToolRunner:
             self._publish("workspace_tool_failed", progress)
             return {"status": "failed", "message": "The change could not be prepared."}
 
+        if spec.name == PUBLISH_PROMPT_TOOL_NAME:
+            proposal = self._flag_private_overlap(proposal)
+
         try:
             if self._may_auto_approve(state, spec, proposal):
                 card = asyncio.run(
@@ -250,6 +275,22 @@ class WorkspaceToolRunner:
         if card["status"] == "succeeded":
             return {"status": "executed", "result": result}
         return self._error_payload(str(result.get("error_code") or "execution_failed"))
+
+    # このターンで読んだ非公開の内容が公開投稿の提案へ 50 字以上そのまま混入していないか確かめる。
+    # 見つかっても提案は止めず、承認カードへ警告として出すだけにする（services/response_models.py
+    # の private_text_in_public_post と ToolApprovalDecisionRequest.acknowledge_warnings を参照）。
+    # Check whether private content read this turn reappears, 50+ characters verbatim, inside a
+    # publish_prompt proposal. A match never stops the proposal; it only adds a warning to the
+    # card (see private_text_in_public_post in services/response_models.py and
+    # ToolApprovalDecisionRequest.acknowledge_warnings).
+    def _flag_private_overlap(self, proposal: Proposal) -> Proposal:
+        candidate = " ".join(
+            str(proposal.preview.get(field) or "") for field in _PUBLISH_PROMPT_OVERLAP_FIELDS
+        )
+        matches = self._private_texts.find_overlaps(candidate)
+        if not matches:
+            return proposal
+        return replace(proposal, target_ref={**proposal.target_ref, "private_overlap_excerpts": matches})
 
     def _unread_memo_id(self, spec: ToolSpec, arguments: dict[str, Any]) -> int | None:
         if spec.name not in {MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME}:
