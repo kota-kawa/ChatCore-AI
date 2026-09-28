@@ -68,6 +68,7 @@ class User(Base):
     context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
     generative_ui_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     memo_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
+    prompt_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     preferred_locale: Mapped[str | None] = mapped_column(String(16))
 
     __table_args__ = (

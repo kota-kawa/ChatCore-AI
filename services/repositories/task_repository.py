@@ -15,8 +15,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.datetime_serialization import serialize_datetime_iso
 from services.default_tasks import localize_system_task, resolve_system_task_key
 from services.error_messages import (
+    ERROR_TASK_CHANGED_ELSEWHERE,
     ERROR_TASK_NAME_CONFLICT,
     ERROR_TASK_NOT_FOUND,
     ERROR_TASK_ORDER_INVALID,
@@ -110,6 +112,17 @@ class TaskRepository:
         if result.rowcount != 1:
             raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
 
+    async def get_owned_task(self, user_id: int, task_id: int) -> dict[str, Any]:
+        """Read one of the user's own Tasks in full, for chat tools to propose an edit against."""
+        task = (
+            await self.session.execute(
+                select(Task).where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
+            )
+        ).scalar_one_or_none()
+        if task is None:
+            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
+        return self._localize_task(task, get_current_locale(), is_default=False)
+
     async def edit_task(
         self,
         user_id: int,
@@ -120,6 +133,8 @@ class TaskRepository:
         output_skeleton: str | None,
         input_examples: str | None,
         output_examples: str | None,
+        *,
+        expected_updated_at: str | None = None,
     ) -> bool:
         await self._lock_user_tasks(user_id)
         task = (
@@ -131,6 +146,8 @@ class TaskRepository:
         ).scalar_one_or_none()
         if task is None:
             raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
+        if expected_updated_at is not None and serialize_datetime_iso(task.updated_at) != expected_updated_at:
+            raise ApiServiceError(ERROR_TASK_CHANGED_ELSEWHERE, 409, code="target_changed")
         duplicate = await self.session.scalar(
             select(Task.id)
             .where(
@@ -167,7 +184,7 @@ class TaskRepository:
         output_skeleton: str,
         input_examples: str,
         output_examples: str,
-    ) -> None:
+    ) -> int:
         await self._lock_user_tasks(user_id)
         duplicate = await self.session.scalar(
             select(Task.id)
@@ -185,24 +202,24 @@ class TaskRepository:
                 Task.user_id == user_id, Task.deleted_at.is_(None)
             )
         )
-        self.session.add(
-            Task(
-                user_id=user_id,
-                name=title,
-                prompt_template=prompt_content,
-                response_rules=response_rules,
-                output_skeleton=output_skeleton,
-                input_examples=input_examples,
-                output_examples=output_examples,
-                display_order=int(next_order or 0),
-            )
+        task = Task(
+            user_id=user_id,
+            name=title,
+            prompt_template=prompt_content,
+            response_rules=response_rules,
+            output_skeleton=output_skeleton,
+            input_examples=input_examples,
+            output_examples=output_examples,
+            display_order=int(next_order or 0),
         )
+        self.session.add(task)
         try:
             await self.session.flush()
         except IntegrityError as exc:
             if is_unique_violation(exc):
                 raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict") from exc
             raise
+        return task.id
 
     # Internal helpers -------------------------------------------------------
 

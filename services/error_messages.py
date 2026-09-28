@@ -41,6 +41,9 @@ ERROR_TOOL_APPROVAL_EXPIRED = "この承認カードは期限が切れました�
 ERROR_TOOL_APPROVAL_ALWAYS_NOT_ALLOWED = "この操作は「常に承認」にできません。"
 ERROR_TOOL_APPROVAL_DECISION_INVALID = "decision には approve_once・approve_always・deny のいずれかを指定してください。"
 ERROR_TOOL_APPROVAL_RATE_LIMITED_TEMPLATE = "承認の操作が多すぎます。{seconds}秒ほど待ってからもう一度お試しください。"
+ERROR_TOOL_APPROVAL_ACK_REQUIRED = "警告の内容を確認し、チェックを入れてから決定してください。"
+ERROR_TASK_CHANGED_ELSEWHERE = "提案の後でタスクが更新されたため、上書きしませんでした。"
+ERROR_SKILL_CHANGED_ELSEWHERE = "提案の後でSkillが更新されたため、上書きしませんでした。"
 ERROR_CHAT_TOOL_WRITE_RATE_LIMITED_TEMPLATE = (
     "チャットからの書き込みが上限に達しました。{seconds}秒ほど待ってからもう一度お試しください。"
 )

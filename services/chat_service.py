@@ -510,6 +510,10 @@ async def fetch_tasks(user_id: int | None, locale: str, *, session: AsyncSession
     return await _read(lambda repo: repo.fetch_tasks(user_id, locale), session, repository=TaskRepository)
 
 
+async def get_owned_task(user_id: int, task_id: int, *, session: AsyncSession | None = None):
+    return await _read(lambda repo: repo.get_owned_task(user_id, task_id), session, repository=TaskRepository)
+
+
 async def list_user_skills(user_id: int, *, session: AsyncSession | None = None):
     async def operation(repo: UserSkillRepository):
         states = await repo.get_system_skill_states(user_id)
@@ -525,6 +529,32 @@ async def list_user_skills(user_id: int, *, session: AsyncSession | None = None)
 async def list_enabled_user_skills(user_id: int, *, session: AsyncSession | None = None):
     return await _read(
         lambda repo: repo.list_enabled_user_skills(user_id),
+        session,
+        repository=UserSkillRepository,
+    )
+
+
+async def get_user_skill(user_id: int, skill_id: int, *, session: AsyncSession | None = None):
+    return await _read(lambda repo: repo.get_user_skill(user_id, skill_id), session, repository=UserSkillRepository)
+
+
+async def update_user_skill(
+    user_id: int,
+    skill_id: int,
+    *,
+    name: str | None,
+    instructions: str | None,
+    expected_updated_at: str | None,
+    session: AsyncSession | None = None,
+):
+    return await _write(
+        lambda repo: repo.update_user_skill(
+            user_id,
+            skill_id,
+            name=name,
+            instructions=instructions,
+            expected_updated_at=expected_updated_at,
+        ),
         session,
         repository=UserSkillRepository,
     )

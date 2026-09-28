@@ -144,6 +144,7 @@ class AvatarStorageTestCase(unittest.TestCase):
             llm_profile_context="",
             generative_ui_skill_enabled=False,
             memo_tools_skill_enabled=True,
+            prompt_tools_skill_enabled=True,
             preferred_locale="ja",
         )
         self.assertEqual(

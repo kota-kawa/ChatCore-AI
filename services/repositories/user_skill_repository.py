@@ -20,6 +20,7 @@ from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import (
     ERROR_SHARED_SKILL_CONTENT_MISSING,
+    ERROR_SKILL_CHANGED_ELSEWHERE,
     ERROR_SKILL_LIMIT_REACHED,
     ERROR_SKILL_NAME_CONFLICT,
     ERROR_SKILL_NOT_FOUND,
@@ -31,6 +32,7 @@ from services.user_skills import (
     MAX_USER_SKILL_NAME_LENGTH,
     MAX_USER_SKILLS,
     MEMO_TOOLS_SYSTEM_SKILL_KEY,
+    PROMPT_TOOLS_SYSTEM_SKILL_KEY,
     normalize_user_skill_instructions,
     normalize_user_skill_name,
 )
@@ -42,6 +44,7 @@ DEFAULT_IMPORTED_SKILL_NAME = "共有Skill"
 _SYSTEM_SKILL_COLUMNS = {
     GENERATIVE_UI_SYSTEM_SKILL_KEY: User.generative_ui_skill_enabled,
     MEMO_TOOLS_SYSTEM_SKILL_KEY: User.memo_tools_skill_enabled,
+    PROMPT_TOOLS_SYSTEM_SKILL_KEY: User.prompt_tools_skill_enabled,
 }
 
 
@@ -196,6 +199,52 @@ class UserSkillRepository:
         skill = await self._owned_user_skill(skill_id, user_id, lock=True)
         await self.session.delete(skill)
         await self.session.flush()
+
+    async def get_user_skill(self, user_id: int, skill_id: int) -> dict[str, Any]:
+        """Read one of the user's own Skills in full, for chat tools to propose an edit against."""
+        skill = await self._owned_user_skill(skill_id, user_id, lock=False)
+        return self._serialize_user_skill(skill)
+
+    # 名前・本文の書き換え。提案時の updated_at と食い違えば、別画面での更新を検知して失敗させる。
+    # Rewrite the name and/or instructions. A mismatched ``expected_updated_at`` means the Skill
+    # moved on since the proposal, so the caller fails instead of overwriting it.
+    async def update_user_skill(
+        self,
+        user_id: int,
+        skill_id: int,
+        *,
+        name: str | None,
+        instructions: str | None,
+        expected_updated_at: str | None,
+    ) -> dict[str, Any]:
+        await self._lock_user_skills(user_id)
+        skill = await self._owned_user_skill(skill_id, user_id, lock=True)
+        if expected_updated_at is not None and serialize_datetime_iso(skill.updated_at) != expected_updated_at:
+            raise ApiServiceError(ERROR_SKILL_CHANGED_ELSEWHERE, 409, code="target_changed")
+        if name is not None:
+            normalized_name = normalize_user_skill_name(name)
+            duplicate = await self.session.scalar(
+                select(UserSkill.id)
+                .where(
+                    UserSkill.user_id == user_id,
+                    UserSkill.id != skill_id,
+                    func.lower(func.btrim(UserSkill.name)) == func.lower(func.btrim(normalized_name)),
+                )
+                .limit(1)
+            )
+            if duplicate is not None:
+                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict")
+            skill.name = normalized_name
+        if instructions is not None:
+            skill.instructions = normalize_user_skill_instructions(instructions)
+        skill.updated_at = datetime.utcnow()
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            if is_unique_violation(exc):
+                raise ApiServiceError(ERROR_SKILL_NAME_CONFLICT, 409, code="skill_name_conflict") from exc
+            raise
+        return self._serialize_user_skill(skill)
 
     # Built-in Skills ---------------------------------------------------------
 
