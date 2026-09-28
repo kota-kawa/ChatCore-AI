@@ -16,10 +16,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 INTERACTIVE_BUTTONS_PART_TYPE = "interactive_buttons"
 # 旧来の別名（interactive-buttons / interactive_buttons）も読み、本文へJSONを漏らさない。
-# Legacy aliases are still read so their JSON never leaks into the prose.
+# 一部モデル（実測: Qwen 3.8 27B）はフェンスの代わりに <chatcore_button>/<chatcore_buttons>
+# タグでJSONを包むことがあるため、開閉タグが対応している場合も同じ "json" 群で拾う。
+# Legacy aliases are still read so their JSON never leaks into the prose. Some models
+# (observed: Qwen 3.8 27B) wrap the JSON in <chatcore_button>/<chatcore_buttons> tags
+# instead of a fence; a matching opening/closing tag pair is captured into the same
+# "json" group so it is validated and stripped the same way as the fenced form.
 INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
-    r"```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
-    r"(?P<json>\{[\s\S]*?\})\s*```",
+    r"(?:```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
+    r"|<(?P<tag>chatcore_buttons?)>\s*)"
+    r"(?P<json>\{[\s\S]*?\})\s*"
+    r"(?:```|</(?P=tag)>)",
     re.IGNORECASE,
 )
 # 上限はモデルに見せる説明（services/chat_prompt.py の「Choice buttons」）と揃える。

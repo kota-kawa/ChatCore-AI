@@ -11,12 +11,17 @@ const PROBABLE_ARTIFACT_FENCE_NAMES = [
   "ui[\\s_-]*artifact",
 ].join("|");
 // 選択ボタンは生成UIではないためローダーの対象にしないが、JSON を本文に見せないよう同じく隠す。
+// 一部モデルはフェンスの代わりに <chatcore_button>/<chatcore_buttons> タグでJSONを包むため、
+// バックエンドの services/interactive_buttons.py と同じタグ名をストリーミング中も隠す。
 // Choice buttons are not a generated UI, so they never drive the loader, but their JSON is
-// hidden from the prose all the same.
+// hidden from the prose all the same. Some models wrap the JSON in <chatcore_button>/
+// <chatcore_buttons> tags instead of a fence; those tag names mirror the backend's
+// services/interactive_buttons.py and are hidden from the stream the same way.
 const CHOICE_BUTTONS_FENCE_NAMES = [
   "chatcore[\\s_-]*buttons",
   "interactive[\\s_-]*buttons",
 ].join("|");
+const CHOICE_BUTTONS_TAG_NAME = "chatcore_buttons?";
 const HIDDEN_FENCE_NAMES = `${PROBABLE_ARTIFACT_FENCE_NAMES}|${CHOICE_BUTTONS_FENCE_NAMES}`;
 const COMPLETE_HIDDEN_FENCE_RE = new RegExp(
   "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
@@ -24,6 +29,14 @@ const COMPLETE_HIDDEN_FENCE_RE = new RegExp(
 );
 const HIDDEN_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+  "gi",
+);
+const COMPLETE_HIDDEN_TAG_RE = new RegExp(
+  "<(" + CHOICE_BUTTONS_TAG_NAME + ")\\b[^>]*>[\\s\\S]*?</\\1>",
+  "gi",
+);
+const HIDDEN_TAG_START_RE = new RegExp(
+  "<(?:" + CHOICE_BUTTONS_TAG_NAME + ")\\b[^>]*>",
   "gi",
 );
 const ARTIFACT_FENCE_START_RE = new RegExp(
@@ -34,16 +47,31 @@ const PROBABLE_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + PROBABLE_ARTIFACT_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "i",
 );
+// 与えた正規表現の最後の一致位置を返す（一致なしは -1）。複数一致がある場合、
+// 未完了の開始位置は末尾側だけに残る想定のため、最後の一致を採用する。
+// Return the last match index for the given regex (-1 if none). When several
+// matches remain, only the trailing one should be an unfinished start, so the
+// last match is what we want.
+function findLastMatchIndex(re: RegExp, text: string): number {
+  re.lastIndex = 0;
+  let lastIndex = -1;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    lastIndex = match.index;
+  }
+  return lastIndex;
+}
+
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  let stripped = normalized.replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n");
+  let stripped = normalized
+    .replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n")
+    .replace(COMPLETE_HIDDEN_TAG_RE, "\n\n");
 
-  let incompleteFenceStart = -1;
-  HIDDEN_FENCE_START_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = HIDDEN_FENCE_START_RE.exec(stripped)) !== null) {
-    incompleteFenceStart = match.index;
-  }
+  const fenceStart = findLastMatchIndex(HIDDEN_FENCE_START_RE, stripped);
+  const tagStart = findLastMatchIndex(HIDDEN_TAG_START_RE, stripped);
+  const candidateStarts = [fenceStart, tagStart].filter((index) => index >= 0);
+  const incompleteFenceStart = candidateStarts.length > 0 ? Math.min(...candidateStarts) : -1;
 
   if (incompleteFenceStart >= 0) {
     stripped = stripped.slice(0, incompleteFenceStart);
