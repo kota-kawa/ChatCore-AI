@@ -70,6 +70,16 @@ def _buttons_block(payload: dict[str, Any], *, fence: str = "chatcore-buttons") 
     return f"```{fence}\n{json.dumps(payload, ensure_ascii=False)}\n```"
 
 
+# 一部モデル（実測: Qwen 3.8 27B）が使う独自タグ形式。開閉タグを別々に渡せば不整合も再現できる。
+# The custom tag form some models (observed: Qwen 3.8 27B) use in place of a fence. Passing
+# different open/close tags reproduces a mismatched pair.
+def _buttons_tag_block(
+    payload: dict[str, Any], *, open_tag: str = "chatcore_button", close_tag: str | None = None
+) -> str:
+    close = close_tag if close_tag is not None else open_tag
+    return f"<{open_tag}>\n{json.dumps(payload, ensure_ascii=False)}\n</{close}>"
+
+
 def _artifact_block() -> str:
     return f"```chatcore-artifact\n{json.dumps(ARTIFACT, ensure_ascii=False)}\n```"
 
@@ -187,6 +197,43 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
 
                 self.assertEqual(normalized.text, "本文")
                 self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], MULTIPLE)
+
+    def test_tag_wrapped_blocks_are_read_like_a_fence(self):
+        for payload, open_tag in ((YES_NO, "chatcore_button"), (MULTIPLE, "chatcore_buttons")):
+            with self.subTest(open_tag=open_tag):
+                raw = f"本文\n\n{_buttons_tag_block(payload, open_tag=open_tag)}"
+
+                normalized = normalize_response_with_artifacts(raw)
+
+                self.assertEqual(normalized.text, "本文")
+                self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
+    def test_tag_with_invalid_json_is_discarded_like_a_malformed_fence(self):
+        raw = (
+            "前置きです。\n\n<chatcore_button>\n"
+            '{"type": "multiple_select", "question": "q", "options": ["a"]}\n'
+            "</chatcore_button>"
+        )
+
+        normalized = normalize_response_with_artifacts(raw, ui_mode="NONE")
+
+        self.assertEqual(normalized.text, "前置きです。")
+        self.assertIsNone(normalized.parts)
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertEqual(normalized.artifact_status, "not_requested")
+
+    def test_mismatched_tag_pair_is_left_in_the_prose(self):
+        # 開閉タグ名が一致しない不正な形は、フェンスが閉じられなかった場合と同様に
+        # ブロックとして認識せず、本文にそのまま残す。
+        # A mismatched open/close pair is not recognized as a block at all, the same way an
+        # unterminated fence is left untouched in the prose.
+        block = _buttons_tag_block(YES_NO, open_tag="chatcore_buttons", close_tag="chatcore_button")
+        raw = f"本文\n\n{block}"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertIn("chatcore_buttons", normalized.text)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
 
     def test_buttons_follow_a_generated_ui_in_the_same_reply(self):
         raw = f"比較しました。\n\n{_artifact_block()}\n\n{_buttons_block(SINGLE)}"

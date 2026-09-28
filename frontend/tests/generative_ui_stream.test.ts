@@ -103,6 +103,51 @@ test("choice-button fences are hidden from the prose without driving the generat
   assert.equal(generativeUiFenceKind("```interactive-buttons\n{"), null);
 });
 
+test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
+  const incompleteSingular = [
+    "続きに進みますか？",
+    "<chatcore_button>",
+    '{"type":"yes_no","question":"実行',
+  ].join("\n");
+  const completeSingular = [
+    "続きに進みますか？",
+    "<chatcore_button>",
+    '{"type":"yes_no","question":"実行しますか？"}',
+    "</chatcore_button>",
+  ].join("\n");
+  const completePlural = [
+    "章を選んでください。",
+    "<chatcore_buttons>",
+    '{"type":"multiple_select","question":"含める章は？","options":["概要","費用"]}',
+    "</chatcore_buttons>",
+  ].join("\n");
+
+  for (const [text, prose] of [
+    [incompleteSingular, "続きに進みますか？"],
+    [completeSingular, "続きに進みますか？"],
+    [completePlural, "章を選んでください。"],
+  ] as const) {
+    assert.equal(getStreamingGenerativeUiDisplayText(text), prose);
+    assert.equal(generativeUiFenceKind(text), null);
+    assert.equal(isGenerativeUiPending(text), false);
+  }
+});
+
+test("a choice-button tag with a mismatched closing tag is left for the final render to resolve", () => {
+  // 開閉タグ名が一致しない不正な形は、ストリーミング中は開始位置から隠すが、
+  // 最終描画時にバックエンドが除去しない場合と整合させるためここでは断定しない。
+  // A malformed pair with mismatched tag names is still hidden from the start while
+  // streaming, mirroring how an unterminated fence is hidden defensively.
+  const mismatched = [
+    "内容を確定します。",
+    "<chatcore_buttons>",
+    '{"type":"yes_no","question":"実行しますか？"}',
+    "</chatcore_button>",
+  ].join("\n");
+
+  assert.equal(getStreamingGenerativeUiDisplayText(mismatched), "内容を確定します。");
+});
+
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
   const text = [
     "```chatcore-artifact",
