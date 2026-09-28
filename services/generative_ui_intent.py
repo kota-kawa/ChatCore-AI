@@ -71,6 +71,7 @@ _INJECTABLE_MODES = frozenset(_MODE_REQUIREMENTS)
 # wording is correctly static and does not match here.
 _JA_INTERACTIVE_OPERATION = (
     r"操作(?:できる|可能)|動かせる|いじれる|"
+    r"(?:操作して|調整して|触って)[^。\n]{0,20}(?:できる|られる|める|変わ|切り替わ)|"
     r"再生(?:できる|可能|して)|一時停止|巻き戻し|早送り|"
     r"スライダー(?:で|を)|ドラッグ(?:で|して)|つまみ(?:で|を)|"
     r"ボタン(?:を押すと|を押して|で(?:切り替|操作|選|再生|変更))|押すと(?:変わ|切り替わ)|"

@@ -190,6 +190,12 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
             "ボタンを押すと表示が切り替わるようにして",
             "Create an interactive timeline with a play button.",
             "Make the chart draggable so users can adjust the range.",
+            "ダッシュボードのフィルタを操作して結果を絞り込めるようにしてください",
+            "地図を操作してズームできるようにして",
+            "グラフの範囲を調整して詳細を確認できるようにして",
+            "アイコンを触ってON/OFFを切り替えられるようにして",
+            "スライダーで年を変えると地図が変わるようにしてください",
+            "ボタンで切り替えてください",
         )
         plain_visual_requests = (
             "この申請手順をフローチャートで可視化して",
