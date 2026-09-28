@@ -176,7 +176,7 @@ LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ
 
 ### チャットの書き込みツールと承認カード
 
-利用者自身のデータ（現在はメモのみ）を読み書きするツールは `services/chat_workspace_tools/` にファミリー単位でまとまり、対応する既定スキル（「メモ」、`users.memo_tools_skill_enabled`）が ON のログイン利用者の通常ルーム・ストリーミング生成で、当該ターンに選択された場合にだけ渡します。読み取りは検索・根拠読み取りツールと同じくその場で実行しますが、書き込み（作成・追記・書き換え）は生成中に実行せず、`services/chat_tool_approval_service.py` が `chat_tool_approvals` へ承認待ちの行を保存し、回答へ `tool_approval` パーツ（カード）を付けて締めます。承認は `blueprints/chat/tool_approvals.py` の決定 API を通り、実行は利用者が承認した後にサーバーが行います。ツールごとの「常に承認」（`chat_tool_auto_approvals`）は、そのターンが外部の内容を読んでいなければ提案の時点で実行しますが、外部の内容を読んだターンでは常に通常の承認待ちへ戻します。設計の理由は [ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md) に、判断ループとの結び付きは `docs/architecture/system_design_deep_dive.md` の第9.8節にあります。
+利用者自身のデータを読み書きするツールは `services/chat_workspace_tools/` にファミリー単位でまとまり、対応する既定 Skill（メモ、プロンプト共有）が ON のログイン利用者の通常ルーム・ストリーミング生成で、回答前に選択された場合にだけ渡します。読み取りは検索・根拠読み取りツールと同じくその場で実行しますが、書き込み（作成・追記・書き換え）は生成中に実行せず、`services/chat_tool_approval_service.py` が `chat_tool_approvals` へ承認待ちの行を保存し、回答へ `tool_approval` パーツ（カード）を付けて締めます。対象にはメモ、自分用 Prompt（Task）、個人 Skill、本人が所有する公開テキスト Prompt が含まれます。公開投稿の作成・編集は本人の承認後に反映し、作成時は Web 投稿のレート制限を適用します。公開投稿・編集内容がこのターンで読んだ非公開テキストと長く一致する場合は、カードに警告と確認を付けます。設計の理由は [ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md) に、判断ループとの結び付きは `docs/architecture/system_design_deep_dive.md` の第9.8節にあります。
 
 ### 添付ファイル
 
