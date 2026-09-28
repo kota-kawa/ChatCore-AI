@@ -73,7 +73,7 @@ function stripChoiceTagsForStreaming(text: string): string {
       const nextOpen = /(?:^|\n)[ \t]*<chatcore_buttons?>/gi;
       nextOpen.lastIndex = COMPLETE_TAG_OPEN_RE.lastIndex;
       const later = nextOpen.exec(text);
-      const close = /<\/chatcore_buttons?>/i.exec(text.slice(COMPLETE_TAG_OPEN_RE.lastIndex));
+      const close = /(?:^|\n)[ \t]*<\/chatcore_buttons?>/i.exec(text.slice(COMPLETE_TAG_OPEN_RE.lastIndex));
       const closeEnd = close ? COMPLETE_TAG_OPEN_RE.lastIndex + close.index + close[0].length : -1;
       if (closeEnd >= 0 && (!later || closeEnd < later.index + later[0].lastIndexOf("<"))) {
         cursor = closeEnd;
