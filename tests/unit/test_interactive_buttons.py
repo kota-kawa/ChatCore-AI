@@ -213,6 +213,40 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
         normalized = normalize_response_with_artifacts(_buttons_tag_block(payload))
         self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
 
+    def test_literal_tagged_example_inside_markdown_code_stays_in_the_message(self):
+        raw = "Show this example:\n```text\n" + _buttons_tag_block(YES_NO) + "\n```"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_choice_fence_nested_inside_markdown_code_stays_in_the_message(self):
+        raw = "```text\n" + _buttons_block(YES_NO) + "\n```"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_tagged_example_inside_inline_code_stays_in_the_message(self):
+        example = '<chatcore_button>{"type":"yes_no","question":"Proceed?"}</chatcore_button>'
+        raw = f"Type `{example}` exactly."
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_tagged_example_inside_multiline_code_span_stays_in_the_message(self):
+        example = _buttons_tag_block(YES_NO)
+        raw = "Read `this\n" + example + "\nas code` literally."
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
     def test_tag_wrapped_blocks_are_read_like_a_fence(self):
         for payload, open_tag in ((YES_NO, "chatcore_button"), (MULTIPLE, "chatcore_buttons")):
             with self.subTest(open_tag=open_tag):

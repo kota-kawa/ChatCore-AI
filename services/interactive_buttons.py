@@ -32,6 +32,8 @@ INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"(?(tag)</chatcore_buttons?>|```)",
     re.IGNORECASE,
 )
+_MARKDOWN_FENCE_START_RE = re.compile(r" {0,3}(`{3,}|~{3,})")
+_INLINE_CODE_DELIMITER_RE = re.compile(r"(`+)")
 # 上限はモデルに見せる説明（services/chat_prompt.py の「Choice buttons」）と揃える。
 # The limits match the model-facing description ("Choice buttons" in services/chat_prompt.py).
 MAX_INTERACTIVE_BUTTONS_QUESTION_CHARS = 500
@@ -42,6 +44,102 @@ MAX_INTERACTIVE_BUTTON_BLOCKS_PER_MESSAGE = 3
 
 class InteractiveButtonsValidationError(ValueError):
     """Raised when a choice-buttons payload does not satisfy the contract."""
+
+
+def is_markdown_code_position(text: str, position: int) -> bool:
+    """Whether a response offset is inside a Markdown code span or fenced block."""
+    if position < 0 or position >= len(text):
+        return False
+
+    fenced_ranges: list[tuple[int, int]] = []
+    fenced_opening_lines: list[tuple[int, int]] = []
+    fence_start: int | None = None
+    fence_character: str | None = None
+    fence_length = 0
+    line_start = 0
+    for line in text.splitlines(keepends=True):
+        line_end = line_start + len(line)
+        content = line.rstrip("\r\n")
+        fence_match = _MARKDOWN_FENCE_START_RE.match(content)
+
+        if fence_character is not None:
+            if fence_match:
+                marker = fence_match.group(1)
+                rest = content[fence_match.end() :]
+                if marker[0] == fence_character and len(marker) >= fence_length and not rest.strip():
+                    assert fence_start is not None
+                    fenced_ranges.append((fence_start, line_end))
+                    fence_start = None
+                    fence_character = None
+                    fence_length = 0
+        elif fence_match:
+            marker = fence_match.group(1)
+            fence_start = line_start
+            fenced_opening_lines.append((line_start, line_end))
+            fence_character = marker[0]
+            fence_length = len(marker)
+
+        line_start = line_end
+
+    if fence_start is not None:
+        fenced_ranges.append((fence_start, len(text)))
+
+    if any(start <= position < end for start, end in fenced_opening_lines):
+        return False
+
+    for start, end in fenced_ranges:
+        if start <= position < end:
+            return True
+
+    def fence_end_at(offset: int) -> int | None:
+        return next((end for start, end in fenced_ranges if start <= offset < end), None)
+
+    def is_escaped(offset: int) -> bool:
+        backslashes = 0
+        cursor = offset - 1
+        while cursor >= 0 and text[cursor] == "\\":
+            backslashes += 1
+            cursor -= 1
+        return backslashes % 2 == 1
+
+    cursor = 0
+    while cursor < len(text):
+        fence_end = fence_end_at(cursor)
+        if fence_end is not None:
+            cursor = fence_end
+            continue
+
+        opening = _INLINE_CODE_DELIMITER_RE.search(text, cursor)
+        if opening is None:
+            return False
+        opening_fence_end = fence_end_at(opening.start())
+        if opening_fence_end is not None:
+            cursor = opening_fence_end
+            continue
+        if is_escaped(opening.start()):
+            cursor = opening.end()
+            continue
+
+        delimiter_length = len(opening.group(1))
+        search_cursor = opening.end()
+        while (closing := _INLINE_CODE_DELIMITER_RE.search(text, search_cursor)) is not None:
+            closing_fence_end = fence_end_at(closing.start())
+            if closing_fence_end is not None:
+                search_cursor = closing_fence_end
+                continue
+            if is_escaped(closing.start()):
+                search_cursor = closing.end()
+                continue
+            if len(closing.group(1)) == delimiter_length:
+                if opening.end() <= position < closing.start():
+                    return True
+                cursor = closing.end()
+                break
+            search_cursor = closing.end()
+        else:
+            cursor = opening.end()
+
+    return False
 
 
 # 選択ボタン1組のスキーマ。yes_no は選択肢を持たず、表示側が「はい／いいえ」を出す。

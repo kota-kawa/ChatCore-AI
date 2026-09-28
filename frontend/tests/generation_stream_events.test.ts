@@ -69,6 +69,44 @@ test("a done event still hides an unclosed choice-button payload", () => {
   assert.equal(action.responseText, "Intro");
 });
 
+test("terminal event text parts hide malformed choice JSON", () => {
+  const response = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken';
+  for (const event of ["done", "incomplete", "aborted"]) {
+    const action = interpret(event, { response, parts: [{ type: "text", text: response }] });
+    assert.ok(action.kind === "done" || action.kind === "incomplete" || action.kind === "aborted");
+    assert.deepEqual(action.parts, [{ type: "text", text: "Intro" }]);
+  }
+});
+
+test("choice payload split across text parts stays hidden without losing later prose", () => {
+  const first = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken';
+  const second = '\n</chatcore_button>\nContinued';
+  const action = interpret("done", {
+    response: first + second,
+    parts: [{ type: "text", text: first }, { type: "text", text: second }],
+  });
+
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.deepEqual(action.parts, [
+    { type: "text", text: "Intro" },
+    { type: "text", text: "\n\nContinued" },
+  ]);
+});
+
+test("parts-updated events sanitize text parts as well as fallback prose", () => {
+  const response = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken';
+  const action = interpret("response_parts_updated", {
+    response,
+    parts: [{ type: "text", text: response }],
+  });
+
+  assert.equal(action.kind, "parts_updated");
+  if (action.kind !== "parts_updated") return;
+  assert.equal(action.displayText, "Intro");
+  assert.deepEqual(action.parts, [{ type: "text", text: "Intro" }]);
+});
+
 // 空の完了は「回答なし」。空の吹き出しを残さずエラーとして扱う。
 // An empty completion means no answer, so it becomes an error, not a blank bubble.
 test("a done event with neither text nor answer parts reports an empty answer", () => {

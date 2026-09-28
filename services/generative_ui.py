@@ -54,6 +54,7 @@ from services.interactive_buttons import (
     InteractiveButtonsValidationError,
     describe_interactive_buttons_for_context,
     interactive_buttons_parts,
+    is_markdown_code_position,
     validate_interactive_buttons_payload,
 )
 from services.llm import LlmOutputLimitError
@@ -1515,7 +1516,11 @@ def _validation_reason_code(error: str) -> str:
 # validation is only removed from the prose. Its failure stays out of the generated-UI
 # validation errors, so it never changes the artifact status or triggers a repair.
 def _split_interactive_buttons(text: str) -> tuple[str, list[dict[str, Any]]]:
-    matches = list(INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text))
+    matches = [
+        match
+        for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text)
+        if not is_markdown_code_position(text, match.start())
+    ]
     if not matches:
         return text, []
     buttons_list: list[dict[str, Any]] = []

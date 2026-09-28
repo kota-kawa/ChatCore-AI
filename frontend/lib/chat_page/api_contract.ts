@@ -27,6 +27,7 @@ import {
 import { ToolApprovalApiSchema, type ToolApprovalApi } from "../../types/generated/api_schemas";
 import { mergeUniqueChatRooms } from "./home_page_controller_utils";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
+import { getStreamingGenerativeUiDisplayText, sanitizeTextPartsForStreaming } from "./generative_ui_stream";
 import { asRecord } from "../utils";
 
 function optionalString(value: unknown): string | undefined {
@@ -232,6 +233,7 @@ export function normalizeToolApproval(rawApproval: unknown): ToolApprovalApi | u
 export function normalizeChatMessageParts(
   rawParts: unknown,
   rawArtifactStatus?: unknown,
+  sanitizeChoiceTags = true,
 ): ChatMessagePart[] | undefined {
   if (!Array.isArray(rawParts)) return undefined;
   const parts: ChatMessagePart[] = [];
@@ -282,7 +284,8 @@ export function normalizeChatMessageParts(
     parts.push({ type: "artifact_status", status: payloadStatus });
   }
   const orderedParts = normalizeMessagePartsForDisplay(parts);
-  return orderedParts.length > 0 ? orderedParts : undefined;
+  const safeParts = sanitizeChoiceTags ? sanitizeTextPartsForStreaming(orderedParts) : orderedParts;
+  return safeParts && safeParts.length > 0 ? safeParts : undefined;
 }
 
 // 日本語: チャットルーム一覧はバックエンドが Pydantic モデルを介さず dict を直接返している
@@ -384,9 +387,17 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
     const sibling_ids = Array.isArray(rawSiblingIds)
       ? (rawSiblingIds.filter((value) => typeof value === "number") as number[])
       : undefined;
-    const message_parts = normalizeChatMessageParts(record.message_parts, record.artifact_status);
+    const historyMessage = readChatHistoryMessageFields(record);
+    const message_parts = normalizeChatMessageParts(
+      record.message_parts,
+      record.artifact_status,
+      historyMessage.sender === "assistant",
+    );
     return {
-      ...readChatHistoryMessageFields(record),
+      ...historyMessage,
+      ...(historyMessage.sender === "assistant" && typeof historyMessage.message === "string"
+        ? { message: getStreamingGenerativeUiDisplayText(historyMessage.message) }
+        : {}),
       ...(message_parts ? { message_parts } : {}),
       ...(attached_file_names ? { attached_file_names } : {}),
       ...(attached_images ? { attached_images } : {}),

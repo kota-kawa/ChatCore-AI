@@ -218,6 +218,25 @@ test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from th
   }
 });
 
+test("literal choice-button examples inside Markdown code stay visible", () => {
+  const example = '<chatcore_button>{"type":"yes_no","question":"Proceed?"}</chatcore_button>';
+  const fenced = ["Example:", "```text", example, "```"].join("\n");
+  const nestedFence = [
+    "```text",
+    "```chatcore-buttons",
+    '{"type":"yes_no","question":"Proceed?"}',
+    "```",
+    "```",
+  ].join("\n");
+  const inline = `Type \`${example}\` exactly.`;
+  const multiline = ["Read `this", example, "as code` literally."].join("\n");
+
+  assert.equal(getStreamingGenerativeUiDisplayText(fenced), fenced);
+  assert.equal(getStreamingGenerativeUiDisplayText(nestedFence), nestedFence);
+  assert.equal(getStreamingGenerativeUiDisplayText(inline), inline);
+  assert.equal(getStreamingGenerativeUiDisplayText(multiline), multiline);
+});
+
 test("a choice-button tag closed by the other tag name does not hide the prose after it", () => {
   // 単数形と複数形の取り違えも閉じたとみなし、後ろの本文は隠さない（バックエンドと同じ）。
   // A singular/plural mix-up still closes the block, so the prose after it stays visible,
