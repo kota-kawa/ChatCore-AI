@@ -917,9 +917,15 @@ class MemoCollectionUpdateRequest(RequestPayloadModel):
     color: str | None = Field(default=None, max_length=20)
 
 
-# 日本語: 承認カードで利用者が選んだ操作。
-# English: Action the user picked on an approval card.
+# 日本語: 承認カードで利用者が選んだ操作。acknowledge_warnings は、非公開内容の混入警告
+#         （private_text_in_public_post）が出ているカードで、利用者が確認チェックを入れたか。
+#         警告の無いカードや拒否では無視する。
+# English: Action the user picked on an approval card. acknowledge_warnings says whether the
+#          user checked the acknowledgment box on a card carrying the private-content-overlap
+#          warning (private_text_in_public_post); ignored on cards without that warning and on a
+#          deny.
 class ToolApprovalDecisionRequest(RequestPayloadModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     decision: Literal["approve_once", "approve_always", "deny"]
+    acknowledge_warnings: bool = False
