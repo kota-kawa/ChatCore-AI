@@ -137,6 +137,24 @@ test("a broken JSON tag resynchronizes at a later choice block", () => {
   assert.doesNotMatch(displayed, /chatcore_button|"type"/);
 });
 
+test("a broken multiline JSON tag does not expose its fields before resynchronizing", () => {
+  const text = [
+    "Intro",
+    "<chatcore_button>",
+    "{",
+    '"type":"yes_no",',
+    '"question":"Broken',
+    "Follow-up prose.",
+    '<chatcore_button>{"type":"multiple_choice","question":"Second?","options":["A","B"]}</chatcore_button>',
+    "After",
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.match(displayed, /After/);
+  assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
+});
+
 test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
   const incompleteSingular = [
     "続きに進みますか？",

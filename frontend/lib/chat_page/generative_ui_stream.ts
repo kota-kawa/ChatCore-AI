@@ -75,8 +75,17 @@ function stripChoiceTagsForStreaming(text: string): string {
       const later = nextOpen.exec(text);
       if (!later) return stripped;
       const nextTag = later.index + later[0].lastIndexOf("<");
-      const firstNewline = text.indexOf("\n", COMPLETE_TAG_OPEN_RE.lastIndex);
-      cursor = firstNewline >= 0 && firstNewline < nextTag ? firstNewline + 1 : nextTag;
+      cursor = nextTag;
+      let lineStart = text.indexOf("\n", COMPLETE_TAG_OPEN_RE.lastIndex) + 1;
+      while (lineStart > 0 && lineStart < nextTag) {
+        const lineEnd = text.indexOf("\n", lineStart);
+        const line = text.slice(lineStart, lineEnd < 0 ? nextTag : Math.min(lineEnd, nextTag)).trim();
+        if (line && !/^[{}\[\],:]|^"|^(?:true|false|null|-?\d+(?:\.\d+)?)\s*[,}\]]?$/.test(line)) {
+          cursor = lineStart;
+          break;
+        }
+        lineStart = lineEnd < 0 ? nextTag : lineEnd + 1;
+      }
       stripped += "\n\n";
       COMPLETE_TAG_OPEN_RE.lastIndex = nextTag;
       continue;
