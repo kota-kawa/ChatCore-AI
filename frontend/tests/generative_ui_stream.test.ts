@@ -103,6 +103,11 @@ test("choice-button fences are hidden from the prose without driving the generat
   assert.equal(generativeUiFenceKind("```interactive-buttons\n{"), null);
 });
 
+test("a closing tag inside a choice-button question does not expose the JSON tail", () => {
+  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed"}</chatcore_button>\nAfter';
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "Intro\n\nAfter");
+});
+
 test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
   const incompleteSingular = [
     "続きに進みますか？",

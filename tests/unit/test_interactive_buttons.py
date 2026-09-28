@@ -198,6 +198,21 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
                 self.assertEqual(normalized.text, "本文")
                 self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], MULTIPLE)
 
+    def test_fenced_question_may_contain_a_literal_button_tag(self):
+        payload = {
+            "type": "multiple_choice",
+            "question": "Would you like to search for <chatcore_button> examples?",
+            "options": ["Yes", "No"],
+        }
+        normalized = normalize_response_with_artifacts(f"Intro\n\n{_buttons_block(payload)}\n\nAfter")
+        self.assertEqual(normalized.text.split(), ["Intro", "After"])
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
+    def test_tagged_question_may_contain_a_literal_button_tag(self):
+        payload = {"type": "yes_no", "question": "Type <chatcore_button> to proceed"}
+        normalized = normalize_response_with_artifacts(_buttons_tag_block(payload))
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
     def test_tag_wrapped_blocks_are_read_like_a_fence(self):
         for payload, open_tag in ((YES_NO, "chatcore_button"), (MULTIPLE, "chatcore_buttons")):
             with self.subTest(open_tag=open_tag):

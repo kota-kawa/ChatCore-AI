@@ -35,15 +35,50 @@ const HIDDEN_FENCE_START_RE = new RegExp(
 // 開きタグは ">" が届く前から隠す。
 // Either closing tag name ends a block and a block never crosses another opening tag, as on
 // the backend. An opening tag is hidden even before its ">" arrives.
-const COMPLETE_HIDDEN_TAG_RE = new RegExp(
-  "<" + CHOICE_BUTTONS_TAG_NAME + ">(?:(?!<" + CHOICE_BUTTONS_TAG_NAME + ">)[\\s\\S])*?</" +
-    CHOICE_BUTTONS_TAG_NAME + ">",
-  "gi",
-);
+const COMPLETE_TAG_OPEN_RE = /<chatcore_buttons?>/gi;
 const HIDDEN_TAG_START_RE = new RegExp(
   "<" + CHOICE_BUTTONS_TAG_NAME + "\\b[^>]*(?:>|$)",
   "gi",
 );
+
+function stripCompleteChoiceTags(text: string): string {
+  const lower = text.toLowerCase();
+  let stripped = "";
+  let cursor = 0;
+  COMPLETE_TAG_OPEN_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = COMPLETE_TAG_OPEN_RE.exec(text)) !== null) {
+    let inString = false;
+    let escaped = false;
+    let closeEnd = -1;
+    for (let index = COMPLETE_TAG_OPEN_RE.lastIndex; index < text.length; index += 1) {
+      const char = text[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (lower.startsWith("<chatcore_button>", index) || lower.startsWith("<chatcore_buttons>", index)) break;
+      const close = lower.startsWith("</chatcore_button>", index)
+        ? "</chatcore_button>"
+        : lower.startsWith("</chatcore_buttons>", index) ? "</chatcore_buttons>" : null;
+      if (close) {
+        closeEnd = index + close.length;
+        break;
+      }
+    }
+    if (closeEnd < 0) continue;
+    stripped += text.slice(cursor, match.index) + "\n\n";
+    cursor = closeEnd;
+    COMPLETE_TAG_OPEN_RE.lastIndex = closeEnd;
+  }
+  return stripped + text.slice(cursor);
+}
 const ARTIFACT_FENCE_START_RE = new RegExp(
   "```[ \\t]*" + ARTIFACT_FENCE_NAME + "(?:\\s+json)?[ \\t]*(?:\\n|$)",
   "i",
@@ -69,9 +104,7 @@ function findLastMatchIndex(re: RegExp, text: string): number {
 
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  let stripped = normalized
-    .replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n")
-    .replace(COMPLETE_HIDDEN_TAG_RE, "\n\n");
+  let stripped = stripCompleteChoiceTags(normalized.replace(COMPLETE_HIDDEN_FENCE_RE, "\n\n"));
 
   const fenceStart = findLastMatchIndex(HIDDEN_FENCE_START_RE, stripped);
   const tagStart = findLastMatchIndex(HIDDEN_TAG_START_RE, stripped);

@@ -28,7 +28,7 @@ INTERACTIVE_BUTTONS_PART_TYPE = "interactive_buttons"
 INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"(?:```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
     r"|(?P<tag><chatcore_buttons?>)\s*)"
-    r"(?P<json>\{(?:(?!<chatcore_buttons?>)[\s\S])*?\})\s*"
+    r'(?P<json>\{(?:(?:"(?:\\.|[^"\\])*")|(?(tag)(?!<chatcore_buttons?>))[^"\\]|\\.)*?\})\s*'
     r"(?(tag)</chatcore_buttons?>|```)",
     re.IGNORECASE,
 )
