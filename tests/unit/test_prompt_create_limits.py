@@ -72,7 +72,7 @@ class PromptCreateLimitTestCase(unittest.TestCase):
             "services.prompt_create_limits.consume_rate_limit",
             return_value=(True, 0, 0),
         ) as consume:
-            allowed, message, retry_after = consume_prompt_create_limits(None, 42)
+            allowed, _message, _retry_after = consume_prompt_create_limits(None, 42)
 
         self.assertTrue(allowed)
         self.assertEqual(
