@@ -42,7 +42,13 @@ from services.chat_workspace_tools.memo import (
     _propose_memo_create,
     _propose_memo_edit,
 )
-from services.chat_workspace_tools.prompts import MY_PROMPT_READ_TOOL_NAME, PROMPTS_TOOL_FAMILY
+from services.chat_workspace_tools.prompts import (
+    MY_PROMPT_READ_TOOL_NAME,
+    MY_PROMPT_SAVE_DEFINITION,
+    PROMPTS_TOOL_FAMILY,
+    _execute_my_prompt_save,
+    _propose_my_prompt_save,
+)
 from services.chat_workspace_tools.registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -285,6 +291,51 @@ class MemoProposeHandlerTests(unittest.TestCase):
             proposal = asyncio.run(_propose_memo_edit(1, {"memo_id": 42, "content": "全文書き換え"}))
         self.assertEqual(proposal.preview["mode"], "content")
         self.assertEqual(proposal.preview["content"], "全文書き換え")
+
+
+class MyPromptSaveTests(unittest.TestCase):
+    def test_edit_without_body_preserves_long_existing_task_body(self):
+        body = "x" * 12_000
+        task = {
+            "task_id": 42,
+            "name": "古いタイトル",
+            "prompt_template": body,
+            "response_rules": "existing rules",
+            "output_skeleton": None,
+            "input_examples": None,
+            "output_examples": None,
+            "updated_at": "revision-1",
+        }
+        with patch("services.chat_workspace_tools.prompts.get_owned_task", AsyncMock(return_value=task)):
+            proposal = asyncio.run(_propose_my_prompt_save(1, {"task_id": 42, "title": "新しいタイトル"}))
+
+        self.assertIsNone(proposal.arguments["prompt_content"])
+        self.assertEqual(proposal.preview["prompt_content"], body)
+
+        with patch("services.chat_workspace_tools.prompts.edit_task", AsyncMock(return_value=True)) as edit_task_mock:
+            asyncio.run(_execute_my_prompt_save("session", 1, proposal.arguments, proposal.target_ref))
+
+        edit_task_mock.assert_awaited_once_with(
+            1,
+            42,
+            "新しいタイトル",
+            None,
+            None,
+            None,
+            None,
+            None,
+            expected_updated_at="revision-1",
+            session="session",
+        )
+
+    def test_new_task_still_requires_prompt_body(self):
+        with self.assertRaises(WorkspaceToolArgumentError):
+            asyncio.run(_propose_my_prompt_save(1, {"title": "タイトル"}))
+
+    def test_prompt_body_is_optional_in_schema_for_edits(self):
+        definition = MY_PROMPT_SAVE_DEFINITION["function"]
+        self.assertEqual(definition["parameters"]["required"], ["title"])
+        self.assertIn("omit this to keep the existing body", definition["parameters"]["properties"]["prompt_content"]["description"])
 
 
 def _expand_repeats(value):

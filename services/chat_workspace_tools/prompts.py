@@ -7,7 +7,7 @@
 になる）。公開プロンプトの検索・読み取りは公開データであり、所有者の絞り込みを持たない。
 
 Searching and reading public prompts, and listing/reading the user's own Task prompts and
-personal Skills, run on the spot. Publishing or editing a text prompt and creating/editing a Task or
+personal Skills, run on the spot. Publishing a new text prompt and creating/editing a Task or
 personal Skill become proposals on an approval card. The user id is bound by the toolbox, and
 write functions only touch that user's own public posts, Tasks, and Skills (another user's id resolves to
 "not found" in the repository). Public prompt search/read has no owner scope: it is public data.
@@ -437,7 +437,7 @@ async def _execute_publish_prompt(
 class MyPromptSaveArguments(_ToolArguments):
     task_id: int | None = Field(default=None, ge=1)
     title: str = Field(min_length=1, max_length=MY_PROMPT_NAME_MAX_LENGTH)
-    prompt_content: str = Field(min_length=1, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
+    prompt_content: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
     response_rules: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
     output_skeleton: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
     input_examples: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
@@ -448,8 +448,10 @@ class MyPromptSaveArguments(_ToolArguments):
         self.title = self.title.strip()
         if not self.title:
             raise ValueError("title must not be blank")
-        if not self.prompt_content.strip():
+        if self.prompt_content is not None and not self.prompt_content.strip():
             raise ValueError("prompt_content must not be blank")
+        if self.task_id is None and self.prompt_content is None:
+            raise ValueError("prompt_content is required when creating a task")
         return self
 
 
@@ -474,7 +476,11 @@ async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Pr
         "current_title": task.get("name") if params.task_id is not None else None,
         "clear_fields": clear_fields,
         "title": params.title,
-        "prompt_content": params.prompt_content,
+        "prompt_content": (
+            params.prompt_content
+            if params.prompt_content is not None
+            else task.get("prompt_template") or ""
+        ),
         "response_rules": params.response_rules if params.response_rules is not None else task.get("response_rules") or "",
         "output_skeleton": params.output_skeleton if params.output_skeleton is not None else task.get("output_skeleton") or "",
         "input_examples": params.input_examples if params.input_examples is not None else task.get("input_examples") or "",
@@ -504,7 +510,7 @@ async def _execute_my_prompt_save(
 ) -> ExecutionOutcome:
     task_id = arguments.get("task_id")
     title = str(arguments.get("title") or "")
-    prompt_content = str(arguments.get("prompt_content") or "")
+    prompt_content = arguments.get("prompt_content")
     response_rules = arguments.get("response_rules")
     output_skeleton = arguments.get("output_skeleton")
     input_examples = arguments.get("input_examples")
@@ -514,7 +520,7 @@ async def _execute_my_prompt_save(
             new_task_id = await add_task(
                 user_id,
                 title,
-                prompt_content,
+                str(prompt_content or ""),
                 str(response_rules or ""),
                 str(output_skeleton or ""),
                 str(input_examples or ""),
@@ -755,17 +761,24 @@ MY_PROMPT_SAVE_DEFINITION = _function(
     MY_PROMPT_SAVE_TOOL_NAME,
     f"Propose creating a new saved prompt (Task), or editing one the user owns. {_PROPOSAL_NOTE} "
     "Give task_id to edit an existing one (use the id from a prior my_prompt_list result; never "
-    "invent one); omit it to create a new one. Editing replaces every given field.",
+    "invent one); omit it to create a new one. prompt_content is required for a new Task; when "
+    "editing, omit it to keep the existing body. Only provided optional fields are changed.",
     {
         "task_id": {"type": "integer", "description": "Omit to create; give an owned id to edit it."},
         "title": {"type": "string", "description": f"Up to {MY_PROMPT_NAME_MAX_LENGTH} characters."},
-        "prompt_content": {"type": "string", "description": "The main prompt text."},
+        "prompt_content": {
+            "type": "string",
+            "description": (
+                "Required when creating a Task (up to 8,000 characters). When editing, omit this to keep "
+                "the existing body; provide it only to replace the body."
+            ),
+        },
         "response_rules": {"type": "string", "description": "Optional rules for how the answer should look."},
         "output_skeleton": {"type": "string", "description": "Optional output template or structure."},
         "input_examples": {"type": "string", "description": "Optional example input."},
         "output_examples": {"type": "string", "description": "Optional example output."},
     },
-    ["title", "prompt_content"],
+    ["title"],
 )
 
 MY_SKILL_SAVE_DEFINITION = _function(

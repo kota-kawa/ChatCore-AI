@@ -1,13 +1,13 @@
 """Detect private text leaking into a public post proposal.
 
 チャットの生成中に読んだ非公開の内容（メモ本文・抜粋、llm_profile_context、自分の Task・
-個人Skill の本文）が公開投稿の作成・編集提案に 50 字以上そのまま一致したら、警告
+個人Skill の本文）が公開投稿の新規作成提案に 50 字以上そのまま一致したら、警告
 （private_text_in_public_post）を出す。ブロックはしない: 利用者が確認チェックを入れれば
 承認できる（services/chat_tool_approval_service.py と ToolApprovalDecisionRequest を参照）。
 
 Warns, but never blocks, when private content read during the turn (memo bodies/excerpts,
 llm_profile_context, the user's own Task and personal Skill bodies) reappears verbatim, 50
-characters or more, inside a public post creation or edit proposal. The user can still approve after
+characters or more, inside a new public post proposal. The user can still approve after
 acknowledging the warning (see services/chat_tool_approval_service.py and
 ToolApprovalDecisionRequest).
 """
