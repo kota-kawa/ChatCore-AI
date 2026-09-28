@@ -69,7 +69,18 @@ function stripChoiceTagsForStreaming(text: string): string {
   while ((match = COMPLETE_TAG_OPEN_RE.exec(text)) !== null) {
     stripped += text.slice(cursor, match.index);
     const jsonEnd = choiceJsonEnd(text, COMPLETE_TAG_OPEN_RE.lastIndex);
-    if (jsonEnd === null) return stripped;
+    if (jsonEnd === null) {
+      const nextOpen = /(?:^|\n)[ \t]*<chatcore_buttons?>/gi;
+      nextOpen.lastIndex = COMPLETE_TAG_OPEN_RE.lastIndex;
+      const later = nextOpen.exec(text);
+      if (!later) return stripped;
+      const nextTag = later.index + later[0].lastIndexOf("<");
+      const firstNewline = text.indexOf("\n", COMPLETE_TAG_OPEN_RE.lastIndex);
+      cursor = firstNewline >= 0 && firstNewline < nextTag ? firstNewline + 1 : nextTag;
+      stripped += "\n\n";
+      COMPLETE_TAG_OPEN_RE.lastIndex = nextTag;
+      continue;
+    }
     let afterJson = jsonEnd;
     while (/\s/.test(text[afterJson] ?? "") && afterJson < text.length) afterJson += 1;
     const close = /^<\/chatcore_buttons?>/i.exec(text.slice(afterJson));
