@@ -1393,6 +1393,7 @@ class ChatGenerationJob:
         while True:
             emitted = False
             attempt_chunks: list[str] = []
+            leak_guard = ProtocolLeakGuard()
             try:
                 # Check the complete provider request before opening a stream.  The legacy
                 # compactor only counted Web tool JSON and could miss system context, tool
@@ -1413,44 +1414,68 @@ class ChatGenerationJob:
                         f"(estimated={estimate_request_tokens(current_messages, current_tools)}, "
                         f"available={budget.available_input_tokens})."
                     )
-                leak_guard = ProtocolLeakGuard()
                 stream = get_llm_response_stream(
                     current_messages,
                     self._model,
                     tools=current_tools,
                     generation_phase=generation_phase,
                 )
-                for chunk in stream:
-                    if self._should_stop():
-                        return
-                    emitted = True
-                    # ツール呼び出しの JSON は本文ではないので、引数の文字列で誤検出しないよう素通しする。
-                    # Tool-call JSON is not body text; pass it through so its arguments cannot trip the guard.
-                    if _parse_tool_calls_chunk(chunk) is None:
-                        chunk = leak_guard.feed(chunk)
-                    if discard_partial_on_retry:
+                try:
+                    for chunk in stream:
+                        if self._should_stop():
+                            return
+                        emitted = True
+                        # ツール呼び出しの JSON は本文ではないので、引数の文字列で誤検出しないよう素通しする。
+                        # 保留中の本文を先に出し、ツール呼び出しとの前後を保つ。
+                        # Tool-call JSON is not body text; pass it through so its arguments cannot trip
+                        # the guard, after the held-back text so the order is kept.
+                        if _parse_tool_calls_chunk(chunk) is None:
+                            pieces: tuple[str, ...] = (leak_guard.feed(chunk),)
+                        else:
+                            pieces = (leak_guard.flush(), chunk)
+                        for piece in pieces:
+                            if discard_partial_on_retry:
+                                if leak_guard.tripped:
+                                    _trim_chunks_tail(attempt_chunks, leak_guard.overflow_chars)
+                                if piece:
+                                    attempt_chunks.append(piece)
+                                with self._chunks_lock:
+                                    self._pending_stream_chunks[:] = attempt_chunks
+                            elif piece:
+                                yield piece
                         if leak_guard.tripped:
-                            _trim_chunks_tail(attempt_chunks, leak_guard.overflow_chars)
-                        if chunk:
-                            attempt_chunks.append(chunk)
+                            # 漏れの先は回答ではない。読み続けると出力上限まで費用と時間だけが増える。
+                            # Nothing past the leak is an answer; reading on only burns tokens to the cap.
+                            self._telemetry.protocol_leak_truncations += 1
+                            logger.warning(
+                                "Stopped a stream where tool-call protocol leaked into the text "
+                                "(model=%s, phase=%s).",
+                                self._model,
+                                generation_phase,
+                            )
+                            close_stream = getattr(stream, "close", None)
+                            if callable(close_stream):
+                                close_stream()
+                            break
+                    tail = leak_guard.flush()
+                    if discard_partial_on_retry:
+                        if tail:
+                            attempt_chunks.append(tail)
+                    elif tail:
+                        yield tail
+                except Exception:
+                    # 保留していた本文は受け取り済みの本文の続きなので、例外より先に渡す。途中で
+                    # 失敗した回答を救うときも、この末尾まで含める。
+                    # Held-back text continues what was already received, so release it before the
+                    # error propagates; salvaging a failed answer must include this tail too.
+                    tail = leak_guard.flush()
+                    if tail and discard_partial_on_retry:
+                        attempt_chunks.append(tail)
                         with self._chunks_lock:
                             self._pending_stream_chunks[:] = attempt_chunks
-                    elif chunk:
-                        yield chunk
-                    if leak_guard.tripped:
-                        # 漏れの先は回答ではない。読み続けると出力上限まで費用と時間だけが増える。
-                        # Nothing past the leak is an answer; reading on only burns tokens to the cap.
-                        self._telemetry.protocol_leak_truncations += 1
-                        logger.warning(
-                            "Stopped a stream where tool-call protocol leaked into the text "
-                            "(model=%s, phase=%s).",
-                            self._model,
-                            generation_phase,
-                        )
-                        close_stream = getattr(stream, "close", None)
-                        if callable(close_stream):
-                            close_stream()
-                        break
+                    elif tail:
+                        yield tail
+                    raise
             except LlmOutputLimitError as exc:
                 # 調査ステップが出力上限に当たっただけでターン全体を落とさない。プロバイダは
                 # 例外の前に収集済みのツール呼び出しを流すので、それを使って調査を続ける。
