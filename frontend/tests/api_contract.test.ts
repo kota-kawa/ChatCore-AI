@@ -390,6 +390,64 @@ test("normalizeChatHistoryPayload falls back on malformed payloads", () => {
   );
 });
 
+test("normalizeChatHistoryPayload hides malformed choice JSON from text and parts", () => {
+  const response = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken';
+  const normalized = normalizeChatHistoryPayload({
+    messages: [{
+      id: 12,
+      message: response,
+      sender: "assistant",
+      timestamp: "2026-09-28T00:00:00Z",
+      message_parts: [{ type: "text", text: response }],
+    }],
+  });
+
+  assert.equal(normalized.messages[0]?.message, "Intro");
+  assert.deepEqual(normalized.messages[0]?.message_parts, [{ type: "text", text: "Intro" }]);
+});
+
+test("normalizeChatHistoryPayload preserves choice-like text written by the user", () => {
+  const message = 'Please inspect <chatcore_button>{"type":"yes_no","question":"Continue?"}</chatcore_button>';
+  const normalized = normalizeChatHistoryPayload({
+    messages: [{
+      id: 14,
+      message,
+      sender: "user",
+      timestamp: "2026-09-28T00:00:00Z",
+      message_parts: [{ type: "text", text: message }],
+    }],
+  });
+
+  assert.equal(normalized.messages[0]?.message, message);
+  assert.deepEqual(normalized.messages[0]?.message_parts, [{ type: "text", text: message }]);
+});
+
+test("normalizeChatHistoryPayload preserves choice-button examples in Markdown code", () => {
+  const example = '<chatcore_button>{"type":"yes_no","question":"Proceed?"}</chatcore_button>';
+  const response = [
+    "Example:",
+    "```text",
+    example,
+    "```",
+    `Inline: \`${example}\``,
+    "Read `this",
+    example,
+    "as code` literally.",
+  ].join("\n");
+  const normalized = normalizeChatHistoryPayload({
+    messages: [{
+      id: 13,
+      message: response,
+      sender: "assistant",
+      timestamp: "2026-09-28T00:00:00Z",
+      message_parts: [{ type: "text", text: response }],
+    }],
+  });
+
+  assert.equal(normalized.messages[0]?.message, response);
+  assert.deepEqual(normalized.messages[0]?.message_parts, [{ type: "text", text: response }]);
+});
+
 test("normalizeChatHistoryPayload ignores malformed contract siblings", () => {
   // 日本語: `detail` / `params` / `code` が壊れていても、読み取る項目は落ちない
   //         （生成スキーマをペイロード全体で `parse` していないことの担保）。

@@ -42,9 +42,9 @@ def tool_approval_part(approval: dict[str, Any]) -> dict[str, Any]:
 
 
 # 後続ターンのモデル文脈へ渡す要約行を作る。何を提案し、どう決まったかだけを伝え、
-# メモの本文や差分は入れない（利用者が承認していない本文を事実として読ませないため）。
-# Build the summary lines handed to later turns: what was proposed and how it ended, never the memo
-# body or diff, so text the user did not approve is not read back as fact.
+# 提案本文や差分は入れない（利用者が承認していない本文を事実として読ませないため）。
+# Build the summary lines handed to later turns: what was proposed and how it ended, never the
+# proposed body or diff, so text the user did not approve is not read back as fact.
 def describe_tool_approval_for_context(approval: Any) -> list[str]:
     if not isinstance(approval, dict):
         return []
@@ -64,9 +64,9 @@ def describe_tool_approval_for_context(approval: Any) -> list[str]:
 
 
 # 共有表示と fork 用に、提案の中身・結果・警告を落として読み取り専用にする。
-# 共有相手に非公開のメモ本文や差分を見せず、他人のカードを操作させないため。
+# 共有相手に非公開の提案本文や差分を見せず、他人のカードを操作させないため。
 # Strip the proposal, result and warnings and mark the card readonly for shared views and forks, so
-# viewers never see private memo text or diffs and cannot act on someone else's card.
+# viewers never see private proposal text or diffs and cannot act on someone else's card.
 def redact_tool_approval_for_share(approval: dict[str, Any]) -> dict[str, Any]:
     redacted = {
         key: approval[key]
@@ -77,12 +77,18 @@ def redact_tool_approval_for_share(approval: dict[str, Any]) -> dict[str, Any]:
     return redacted
 
 
-# 提案の対象の題名。作成なら新しいメモの題名、追記・書き換えなら対象メモの題名。
-# Title of the proposal's target: the new memo's title for a create, the target memo's for the rest.
+# 提案対象の題名。本文や差分は含めない。
+# Title of the proposal's target, without the body or diff.
 def _target_title(preview: Any) -> str:
     if not isinstance(preview, dict):
         return ""
-    title = preview.get("title") if preview.get("kind") == "memo_create" else preview.get("memo_title")
+    kind = preview.get("kind")
+    if kind in {"memo_create", "publish_prompt", "my_prompt_save"}:
+        title = preview.get("title")
+    elif kind == "my_skill_save":
+        title = preview.get("name") or preview.get("current_name")
+    else:
+        title = preview.get("memo_title")
     return str(title or "").strip()
 
 

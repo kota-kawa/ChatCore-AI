@@ -301,14 +301,14 @@ export function useHomePageGenerationActions({
           {
             id,
             sender: "assistant",
-            text: `エラー: ${errorMessage}`,
+            text: `${localize("エラー", "Error")}: ${errorMessage}`,
             error: true,
           },
         ];
       });
       requestScrollToBottom();
     },
-    [removeThinkingMessages, requestScrollToBottom],
+    [localize, removeThinkingMessages, requestScrollToBottom],
   );
 
   // 回答が1文字も返らなかったターンは、楽観表示したユーザー発話ごと取り消す。

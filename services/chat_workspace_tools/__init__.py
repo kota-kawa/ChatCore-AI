@@ -7,9 +7,12 @@ A family's tools reach the generation loop only while its built-in Skill (such a
 from __future__ import annotations
 
 from .memo import MEMO_TOOL_SPECS
+from .prompts import PROMPTS_TOOL_SPECS
 from .registry import ChatWorkspaceToolbox, ToolSpec
 
-WORKSPACE_TOOL_SPECS: dict[str, ToolSpec] = {spec.name: spec for spec in MEMO_TOOL_SPECS}
+WORKSPACE_TOOL_SPECS: dict[str, ToolSpec] = {
+    spec.name: spec for spec in (*MEMO_TOOL_SPECS, *PROMPTS_TOOL_SPECS)
+}
 
 
 def get_workspace_tool_spec(name: str) -> ToolSpec | None:
@@ -25,9 +28,14 @@ def build_workspace_toolbox(
     user_id: int,
     chat_room_id: str,
     memo_tools_enabled: bool,
+    prompt_tools_enabled: bool = False,
     external_input_in_turn: bool,
+    llm_profile_context: str = "",
 ) -> ChatWorkspaceToolbox | None:
-    specs = [*MEMO_TOOL_SPECS] if memo_tools_enabled else []
+    specs = [
+        *(MEMO_TOOL_SPECS if memo_tools_enabled else ()),
+        *(PROMPTS_TOOL_SPECS if prompt_tools_enabled else ()),
+    ]
     if not specs:
         return None
     return ChatWorkspaceToolbox(
@@ -35,4 +43,5 @@ def build_workspace_toolbox(
         user_id=user_id,
         chat_room_id=chat_room_id,
         external_input_in_turn=external_input_in_turn,
+        llm_profile_context=llm_profile_context,
     )

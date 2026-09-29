@@ -24,7 +24,7 @@ type BotMessagePartsProps = {
   // The choice buttons cannot be pressed because they were answered or a reply is generating
   choicesDisabled?: boolean;
   // 承認カードの決定を送る / Sends the decision made on an approval card
-  onToolApprovalDecide?: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
+  onToolApprovalDecide?: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   // 生成中や後ろに利用者の発言があるなど、承認カードを決められない状態
   // The approval cards cannot be decided because a reply is generating or the user wrote after them
   approvalsDisabled?: boolean;

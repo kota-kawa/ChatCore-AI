@@ -121,6 +121,36 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertIn("ここまでは書けています。", saved.call_args.args[0])
         self.assertEqual(job._telemetry.salvaged_partial_answers, 1)
 
+    def test_english_incomplete_event_localizes_server_message(self):
+        def stream(_messages, _model, **_kwargs):
+            yield "The first part."
+            raise LlmUpstreamServiceError("The provider disconnected.")
+
+        job, saved, _on_error = self.make_job(locale="en")
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "incomplete")
+        self.assertEqual(terminal_event(job).payload["response"], "The first part.")
+        self.assertEqual(
+            terminal_event(job).payload["message"],
+            "The connection to the AI provider ended early. The partial answer was saved.",
+        )
+        saved.assert_called_once()
+
+    def test_english_error_event_localizes_server_message(self):
+        def stream(_messages, _model, **_kwargs):
+            raise LlmRateLimitError("provider busy", retry_after_seconds=120)
+
+        job, _saved, _on_error = self.make_job(locale="en")
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "error")
+        self.assertEqual(
+            terminal_event(job).payload["message"],
+            "The AI provider is busy. Wait a moment and try again.",
+        )
+        self.assertEqual(terminal_event(job).payload["retry_after_seconds"], 120)
+
     def test_unconfirmed_memo_change_claims_are_replaced_before_stream_and_save(self):
         cases = (
             (

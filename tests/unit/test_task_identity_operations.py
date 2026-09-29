@@ -1,6 +1,7 @@
 import asyncio
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.messages import _load_task_prompt_data, _parse_task_launch_message
@@ -13,10 +14,50 @@ from blueprints.chat.tasks import (
 )
 from services.api_errors import ResourceNotFoundError
 from services.chat_message_normalization import find_latest_task_launch_request, mark_task_launch_input_for_llm
+from services.chat_service import add_task as add_task_service
+from services.chat_service import edit_task as edit_task_service
 from tests.helpers.request_helpers import build_request
 
 
 class TaskIdentityOperationsTestCase(unittest.TestCase):
+    def test_chat_task_service_returns_created_task_id(self):
+        fake_repository = SimpleNamespace(add_task=AsyncMock(return_value=42))
+
+        async def run_repository_operation(operation, _session, *, repository):
+            return await operation(fake_repository)
+
+        with patch("services.chat_service._write", side_effect=run_repository_operation):
+            created_id = asyncio.run(
+                add_task_service(7, "Task", "Body", "", "", "", "", session=object())
+            )
+
+        self.assertEqual(created_id, 42)
+
+    def test_chat_task_service_passes_expected_revision_to_repository(self):
+        fake_repository = SimpleNamespace(edit_task=AsyncMock(return_value=True))
+
+        async def run_repository_operation(operation, _session, *, repository):
+            return await operation(fake_repository)
+
+        with patch("services.chat_service._write", side_effect=run_repository_operation):
+            updated = asyncio.run(
+                edit_task_service(
+                    7,
+                    42,
+                    "Renamed",
+                    "Body",
+                    None,
+                    None,
+                    None,
+                    None,
+                    expected_updated_at="revision-1",
+                    session=object(),
+                )
+            )
+
+        self.assertTrue(updated)
+        self.assertEqual(fake_repository.edit_task.await_args.kwargs["expected_updated_at"], "revision-1")
+
     def test_reorder_delegates_to_async_repository_service(self):
         with patch(
             "blueprints.chat.tasks.update_tasks_order_record",

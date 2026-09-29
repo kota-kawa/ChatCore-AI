@@ -70,6 +70,16 @@ def _buttons_block(payload: dict[str, Any], *, fence: str = "chatcore-buttons") 
     return f"```{fence}\n{json.dumps(payload, ensure_ascii=False)}\n```"
 
 
+# 一部モデル（実測: Qwen 3.8 27B）が使う独自タグ形式。開閉タグを別々に渡せば不整合も再現できる。
+# The custom tag form some models (observed: Qwen 3.8 27B) use in place of a fence. Passing
+# different open/close tags reproduces a mismatched pair.
+def _buttons_tag_block(
+    payload: dict[str, Any], *, open_tag: str = "chatcore_button", close_tag: str | None = None
+) -> str:
+    close = close_tag if close_tag is not None else open_tag
+    return f"<{open_tag}>\n{json.dumps(payload, ensure_ascii=False)}\n</{close}>"
+
+
 def _artifact_block() -> str:
     return f"```chatcore-artifact\n{json.dumps(ARTIFACT, ensure_ascii=False)}\n```"
 
@@ -187,6 +197,113 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
 
                 self.assertEqual(normalized.text, "本文")
                 self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], MULTIPLE)
+
+    def test_fenced_question_may_contain_a_literal_button_tag(self):
+        payload = {
+            "type": "multiple_choice",
+            "question": "Would you like to search for <chatcore_button> examples?",
+            "options": ["Yes", "No"],
+        }
+        normalized = normalize_response_with_artifacts(f"Intro\n\n{_buttons_block(payload)}\n\nAfter")
+        self.assertEqual(normalized.text.split(), ["Intro", "After"])
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
+    def test_tagged_question_may_contain_a_literal_button_tag(self):
+        payload = {"type": "yes_no", "question": "Type <chatcore_button> to proceed"}
+        normalized = normalize_response_with_artifacts(_buttons_tag_block(payload))
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
+    def test_literal_tagged_example_inside_markdown_code_stays_in_the_message(self):
+        raw = "Show this example:\n```text\n" + _buttons_tag_block(YES_NO) + "\n```"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_choice_fence_nested_inside_markdown_code_stays_in_the_message(self):
+        raw = "```text\n" + _buttons_block(YES_NO) + "\n```"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_tagged_example_inside_inline_code_stays_in_the_message(self):
+        example = '<chatcore_button>{"type":"yes_no","question":"Proceed?"}</chatcore_button>'
+        raw = f"Type `{example}` exactly."
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_literal_tagged_example_inside_multiline_code_span_stays_in_the_message(self):
+        example = _buttons_tag_block(YES_NO)
+        raw = "Read `this\n" + example + "\nas code` literally."
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons"), [])
+
+    def test_tag_wrapped_blocks_are_read_like_a_fence(self):
+        for payload, open_tag in ((YES_NO, "chatcore_button"), (MULTIPLE, "chatcore_buttons")):
+            with self.subTest(open_tag=open_tag):
+                raw = f"本文\n\n{_buttons_tag_block(payload, open_tag=open_tag)}"
+
+                normalized = normalize_response_with_artifacts(raw)
+
+                self.assertEqual(normalized.text, "本文")
+                self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], payload)
+
+    def test_tag_with_invalid_json_is_discarded_like_a_malformed_fence(self):
+        raw = (
+            "前置きです。\n\n<chatcore_button>\n"
+            '{"type": "multiple_select", "question": "q", "options": ["a"]}\n'
+            "</chatcore_button>"
+        )
+
+        normalized = normalize_response_with_artifacts(raw, ui_mode="NONE")
+
+        self.assertEqual(normalized.text, "前置きです。")
+        self.assertIsNone(normalized.parts)
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertEqual(normalized.artifact_status, "not_requested")
+
+    def test_singular_and_plural_closing_tags_both_close_a_tag_block(self):
+        # 単数形と複数形の取り違えは閉じたとみなす。後ろの本文や別のブロックを
+        # 1つのJSONとして飲み込まない。
+        # A singular/plural mix-up still closes the block, and it never swallows the
+        # prose or a later block after it as one JSON value.
+        first = _buttons_tag_block(YES_NO, open_tag="chatcore_button", close_tag="chatcore_buttons")
+        second = _buttons_tag_block(SINGLE, open_tag="chatcore_button")
+        raw = f"本文開始。\n\n{first}\n\n残したい中間の説明文。\n\n{second}\n\n末尾の文章。"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertIn("残したい中間の説明文。", normalized.text)
+        self.assertIn("末尾の文章。", normalized.text)
+        self.assertNotIn("chatcore_button", normalized.text)
+        self.assertEqual(len(_parts_of_type(normalized.parts, "interactive_buttons")), 2)
+
+    def test_an_unclosed_tag_does_not_capture_the_next_tag_block(self):
+        # 閉じタグの無い開きタグは次の開きタグをまたがず、後ろの正しいブロックだけを拾う。
+        # An opening tag without a closing tag never reaches across the next opening tag, so
+        # only the well-formed block after it is taken.
+        raw = (
+            "本文\n\n<chatcore_button>\n"
+            + json.dumps(YES_NO, ensure_ascii=False)
+            + "\n\n説明文\n\n"
+            + _buttons_tag_block(SINGLE)
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertIn("説明文", normalized.text)
+        parts = _parts_of_type(normalized.parts, "interactive_buttons")
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0]["buttons"]["type"], SINGLE["type"])
 
     def test_buttons_follow_a_generated_ui_in_the_same_reply(self):
         raw = f"比較しました。\n\n{_artifact_block()}\n\n{_buttons_block(SINGLE)}"

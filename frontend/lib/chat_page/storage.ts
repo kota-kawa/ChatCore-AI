@@ -1,5 +1,6 @@
 import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { normalizeChatMessageParts } from "./api_contract";
+import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import {
   clearAllCachedHistory,
@@ -147,13 +148,14 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
         typeof (entry as { sender?: unknown }).sender === "string"
           ? (entry as { sender: string }).sender
           : "assistant";
+      const displayText = sender === "user" ? text : getStreamingGenerativeUiDisplayText(text);
       // 生成UIなどのパーツは保存時に書き込まれている。読み戻しで捨てると、リロード後に
       // Artifact が本文だけの吹き出しへ退化する。サーバーと同じ正規化を通して復元する。
       // Parts such as a generated UI are already written on save. Dropping them on read made
       // a reloaded artifact collapse into a text-only bubble, so they are restored through the
       // same normalization the server payloads use.
-      const parts = normalizeChatMessageParts((entry as { parts?: unknown }).parts);
-      normalized.push({ text, sender, ...(parts?.length ? { parts } : {}) });
+      const parts = normalizeChatMessageParts((entry as { parts?: unknown }).parts, undefined, sender !== "user");
+      normalized.push({ text: displayText, sender, ...(parts?.length ? { parts } : {}) });
     });
 
     return normalized;

@@ -7,7 +7,7 @@
 // timing effects live in generation_stream_consumer.ts.
 
 import { normalizeChatResponsePayload } from "./api_contract";
-import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
+import { getStreamingGenerativeUiDisplayText, sanitizeTextPartsForStreaming } from "./generative_ui_stream";
 import type { ChatGenerationPhase, ChatMessagePart, StreamParsedEvent } from "./types";
 import { getWebSearchFailureStatus } from "./web_search_failure_status";
 
@@ -228,10 +228,13 @@ function interpretDoneEvent(
   context: GenerationStreamEventContext,
 ): GenerationStreamAction {
   const donePayload = normalizeChatResponsePayload(data);
-  const responseText = donePayload.response ?? context.streamedText;
+  const responseText = getStreamingGenerativeUiDisplayText(donePayload.response ?? context.streamedText);
+  const parts = sanitizeTextPartsForStreaming(donePayload.parts);
   // 検索画像だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
   // Web-search image parts alone are not an answer; mirror the server-side rule.
-  const hasAnswerParts = donePayload.parts?.some((part) => part.type !== "web_search_image") ?? false;
+  const hasAnswerParts = parts?.some(
+    (part) => part.type !== "web_search_image" && (part.type !== "text" || Boolean(part.text.trim())),
+  ) ?? false;
 
   if (!responseText.trim() && !hasAnswerParts) {
     return {
@@ -248,7 +251,7 @@ function interpretDoneEvent(
     kind: "done",
     roomTitle: data.room_title,
     responseText,
-    parts: donePayload.parts,
+    parts,
   };
 }
 
@@ -260,8 +263,8 @@ function interpretIncompleteEvent(
   return {
     kind: "incomplete",
     roomTitle: data.room_title,
-    finalText: incompletePayload.response ?? context.streamedText,
-    parts: incompletePayload.parts,
+    finalText: getStreamingGenerativeUiDisplayText(incompletePayload.response ?? context.streamedText),
+    parts: sanitizeTextPartsForStreaming(incompletePayload.parts),
     message:
       typeof data.message === "string"
         ? data.message
@@ -286,11 +289,11 @@ export function interpretGenerationStreamEvent(
 
   if (parsed.event === "response_parts_updated") {
     const updatePayload = normalizeChatResponsePayload(data);
-    const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(context.streamedText);
+    const displayText = getStreamingGenerativeUiDisplayText(updatePayload.response ?? context.streamedText);
     return {
       kind: "parts_updated",
       displayText,
-      parts: updatePayload.parts?.length ? updatePayload.parts : null,
+      parts: updatePayload.parts?.length ? sanitizeTextPartsForStreaming(updatePayload.parts) ?? null : null,
     };
   }
 
@@ -314,8 +317,8 @@ export function interpretGenerationStreamEvent(
     const abortedPayload = normalizeChatResponsePayload(data);
     return {
       kind: "aborted",
-      finalText: abortedPayload.response ?? context.streamedText,
-      parts: abortedPayload.parts,
+      finalText: getStreamingGenerativeUiDisplayText(abortedPayload.response ?? context.streamedText),
+      parts: sanitizeTextPartsForStreaming(abortedPayload.parts),
     };
   }
 

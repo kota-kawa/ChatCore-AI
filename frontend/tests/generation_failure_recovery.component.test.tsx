@@ -3,6 +3,7 @@ import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_generation_actions";
+import { LocaleProvider } from "../contexts/locale_context";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
 import { readStoredGenerationState, readStoredHistory } from "../lib/chat_page/storage";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
@@ -147,6 +148,23 @@ describe("failed chat turns", () => {
   beforeEach(() => {
     resilientFetchMock.mockReset();
     window.localStorage.clear();
+  });
+
+  it("shows an English error prefix in an English UI", async () => {
+    resilientFetchMock.mockResolvedValue(
+      createJsonResponse(502, { error: "The AI provider is busy." }),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness(), {
+      wrapper: ({ children }) => <LocaleProvider initialLocale="en">{children}</LocaleProvider>,
+    });
+
+    await act(async () => {
+      await result.current.actions.generateResponse("Help me", "model", "room-1");
+    });
+
+    const error = result.current.state.messages.find((message) => message.error);
+    expect(error?.text).toBe("Error: The AI provider is busy.");
   });
 
   it("does not stack the user's own messages when a turn produces no answer", async () => {

@@ -23,7 +23,7 @@ def make_request(path, json_body, session=None):
 # English: Always allow the posting rate limit here; it is covered by its own tests.
 def allow_prompt_create_limits():
     return patch(
-        "blueprints.prompt_share.prompt_share_api._consume_prompt_create_limits",
+        "blueprints.prompt_share.prompt_share_api.consume_prompt_create_limits",
         return_value=(True, None, None),
     )
 

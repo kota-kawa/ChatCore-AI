@@ -61,9 +61,13 @@ function renderApprovals(initialMessages: UiChatMessage[], isGenerating = false)
       useChatToolApprovals({ messages: props.messages, isGenerating, applyToolApproval, sendMessage }),
     { initialProps: { messages } },
   );
-  const decide = async (id: string, decision: "approve_once" | "approve_always" | "deny") => {
+  const decide = async (
+    id: string,
+    decision: "approve_once" | "approve_always" | "deny",
+    acknowledgeWarnings = false,
+  ) => {
     await act(async () => {
-      await hook.result.current.handleToolApprovalDecide(id, decision);
+      await hook.result.current.handleToolApprovalDecide(id, decision, acknowledgeWarnings);
     });
     hook.rerender({ messages });
   };
@@ -86,6 +90,21 @@ describe("useChatToolApprovals", () => {
     expect(applyToolApproval).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith("承認した操作が実行されました。結果を踏まえて続けてください。");
+  });
+
+  it("forwards the warning acknowledgment to the decision API", async () => {
+    decideToolApprovalMock.mockResolvedValue(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } }));
+    const { decide } = renderApprovals(conversation([approval()]));
+
+    await decide("a1", "approve_once", true);
+
+    expect(decideToolApprovalMock).toHaveBeenCalledWith(
+      "a1",
+      "approve_once",
+      "承認を処理できませんでした。",
+      undefined,
+      true,
+    );
   });
 
   it("waits for the other card before continuing", async () => {

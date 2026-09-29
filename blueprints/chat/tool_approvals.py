@@ -16,7 +16,7 @@ from fastapi import Depends, Request
 
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
-from services.auth_limits import AuthLimitService, consume_rate_limit, get_auth_limit_service
+from services.auth_limits import AuthLimitService, consume_rate_limit, get_auth_limit_service, get_request_client_ip
 from services.chat_tool_approval_service import (
     ChatToolRateLimitedError,
     decide_tool_approval,
@@ -120,6 +120,8 @@ async def decide_chat_tool_approval(
             parsed_id,
             payload.decision,
             auth_limit_service=auth_limit_service,
+            acknowledge_warnings=payload.acknowledge_warnings,
+            client_ip=get_request_client_ip(request),
         )
     except ChatToolRateLimitedError as exc:
         return jsonify_rate_limited(exc.message, retry_after=exc.retry_after)

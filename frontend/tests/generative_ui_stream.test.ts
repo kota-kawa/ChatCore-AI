@@ -103,6 +103,162 @@ test("choice-button fences are hidden from the prose without driving the generat
   assert.equal(generativeUiFenceKind("```interactive-buttons\n{"), null);
 });
 
+test("a closing tag inside a choice-button question does not expose the JSON tail", () => {
+  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed"}</chatcore_button>\nAfter';
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "Intro\n\nAfter");
+});
+
+test("an unclosed tag keeps the prose before a later valid choice block", () => {
+  const text = [
+    "Intro",
+    '<chatcore_button>{"type":"yes_no","question":"First?"}',
+    "",
+    "Follow-up prose.",
+    "",
+    '<chatcore_button>{"type":"multiple_choice","question":"Second?","options":["A","B"]}</chatcore_button>',
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.doesNotMatch(displayed, /chatcore_button|"type"/);
+});
+
+test("a broken JSON tag resynchronizes at a later choice block", () => {
+  const text = [
+    "Intro",
+    '<chatcore_button>{"type":"yes_no","question":"Broken',
+    "Follow-up prose.",
+    '<chatcore_button>{"type":"multiple_choice","question":"Second?","options":["A","B"]}</chatcore_button>',
+    "After",
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.match(displayed, /After/);
+  assert.doesNotMatch(displayed, /chatcore_button|"type"/);
+});
+
+test("a broken multiline JSON tag does not expose its fields before resynchronizing", () => {
+  const text = [
+    "Intro",
+    "<chatcore_button>",
+    "{",
+    '"type":"yes_no",',
+    '"question":"Broken',
+    "Follow-up prose.",
+    '<chatcore_button>{"type":"multiple_choice","question":"Second?","options":["A","B"]}</chatcore_button>',
+    "After",
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.match(displayed, /After/);
+  assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
+});
+
+test("a closing tag ends malformed multiline JSON and keeps the following prose", () => {
+  const text = [
+    "Intro",
+    "<chatcore_button>",
+    "{",
+    '"type":"yes_no",',
+    '"question":"Broken',
+    "</chatcore_button>",
+    "Follow-up prose.",
+  ].join("\n");
+  const displayed = getStreamingGenerativeUiDisplayText(text);
+  assert.match(displayed, /Intro/);
+  assert.match(displayed, /Follow-up prose\./);
+  assert.doesNotMatch(displayed, /chatcore_button|yes_no|"question"|"type"/);
+});
+
+test("an inline closing tag inside malformed JSON stays hidden with its ambiguous tail", () => {
+  const text = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken</chatcore_button> follow-up prose.';
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "Intro");
+});
+
+test("a closing-tag literal in a streamed JSON string stays hidden", () => {
+  const partial =
+    'Intro\n<chatcore_button>{"type":"yes_no","question":"Type </chatcore_button> to proceed.';
+  assert.equal(getStreamingGenerativeUiDisplayText(partial), "Intro");
+
+  const japanesePartial = 'Intro\n<chatcore_button>{"type":"yes_no","question":"タグ </chatcore_button> を説明します。';
+  assert.equal(getStreamingGenerativeUiDisplayText(japanesePartial), "Intro");
+
+  const complete = `${partial}"}</chatcore_button>\nAfter`;
+  assert.equal(getStreamingGenerativeUiDisplayText(complete), "Intro\n\nAfter");
+});
+
+test("choice-button <chatcore_button>/<chatcore_buttons> tags are hidden from the prose", () => {
+  const incompleteSingular = [
+    "続きに進みますか？",
+    "<chatcore_button>",
+    '{"type":"yes_no","question":"実行',
+  ].join("\n");
+  const completeSingular = [
+    "続きに進みますか？",
+    "<chatcore_button>",
+    '{"type":"yes_no","question":"実行しますか？"}',
+    "</chatcore_button>",
+  ].join("\n");
+  const completePlural = [
+    "章を選んでください。",
+    "<chatcore_buttons>",
+    '{"type":"multiple_select","question":"含める章は？","options":["概要","費用"]}',
+    "</chatcore_buttons>",
+  ].join("\n");
+
+  for (const [text, prose] of [
+    [incompleteSingular, "続きに進みますか？"],
+    [completeSingular, "続きに進みますか？"],
+    [completePlural, "章を選んでください。"],
+  ] as const) {
+    assert.equal(getStreamingGenerativeUiDisplayText(text), prose);
+    assert.equal(generativeUiFenceKind(text), null);
+    assert.equal(isGenerativeUiPending(text), false);
+  }
+});
+
+test("literal choice-button examples inside Markdown code stay visible", () => {
+  const example = '<chatcore_button>{"type":"yes_no","question":"Proceed?"}</chatcore_button>';
+  const fenced = ["Example:", "```text", example, "```"].join("\n");
+  const nestedFence = [
+    "```text",
+    "```chatcore-buttons",
+    '{"type":"yes_no","question":"Proceed?"}',
+    "```",
+    "```",
+  ].join("\n");
+  const inline = `Type \`${example}\` exactly.`;
+  const multiline = ["Read `this", example, "as code` literally."].join("\n");
+
+  assert.equal(getStreamingGenerativeUiDisplayText(fenced), fenced);
+  assert.equal(getStreamingGenerativeUiDisplayText(nestedFence), nestedFence);
+  assert.equal(getStreamingGenerativeUiDisplayText(inline), inline);
+  assert.equal(getStreamingGenerativeUiDisplayText(multiline), multiline);
+});
+
+test("a choice-button tag closed by the other tag name does not hide the prose after it", () => {
+  // 単数形と複数形の取り違えも閉じたとみなし、後ろの本文は隠さない（バックエンドと同じ）。
+  // A singular/plural mix-up still closes the block, so the prose after it stays visible,
+  // matching the backend.
+  const mixed = [
+    "内容を確定します。",
+    "<chatcore_buttons>",
+    '{"type":"yes_no","question":"実行しますか？"}',
+    "</chatcore_button>",
+    "続きの説明です。",
+  ].join("\n");
+
+  const shown = getStreamingGenerativeUiDisplayText(mixed);
+  assert.match(shown, /内容を確定します。/);
+  assert.match(shown, /続きの説明です。/);
+  assert.doesNotMatch(shown, /chatcore_button|yes_no/);
+});
+
+test("a choice-button opening tag is hidden before its closing bracket arrives", () => {
+  assert.equal(getStreamingGenerativeUiDisplayText("Pick one.\n<chatcore_button"), "Pick one.");
+});
+
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
   const text = [
     "```chatcore-artifact",

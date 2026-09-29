@@ -431,6 +431,27 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "approval_always_not_allowed")
         self.assertEqual(self.store.rows[row.id].status, "pending")
 
+    def test_private_public_post_requires_acknowledgement_but_can_be_denied(self):
+        row = self._seed_pending(target_ref={"private_overlap_excerpts": ["Private text"]})
+        with self.assertRaises(ApiServiceError) as ctx:
+            self._decide(row, "approve_once")
+        self.assertEqual(ctx.exception.code, "approval_ack_required")
+        self.assertEqual(self.store.rows[row.id].status, "pending")
+        self.assertIn("private_text_in_public_post", self._decide(row, "deny")["warnings"])
+
+    def test_acknowledged_private_public_post_can_be_approved(self):
+        row = self._seed_pending(target_ref={"private_overlap_excerpts": ["Private text"]})
+        card = asyncio.run(
+            decide_tool_approval(
+                row.user_id,
+                row.id,
+                "approve_once",
+                auth_limit_service=self.auth_limit_service,
+                acknowledge_warnings=True,
+            )
+        )
+        self.assertEqual(card["status"], "succeeded")
+
     def test_approve_always_grants_and_revoke_removes_it(self):
         row = self._seed_pending()
         card = self._decide(row, "approve_always")

@@ -61,6 +61,48 @@ _MODE_REQUIREMENTS = {
 }
 _INJECTABLE_MODES = frozenset(_MODE_REQUIREMENTS)
 
+# 「操作・状態変化を求める」依頼だけを拾う。UIモード自体（平面/立体/無し）は
+# 「表示してほしい」全般で選ばれるため、可視化そのものの依頼と、それを操作できる
+# ことまで求める依頼は別の軸として扱う。操作語を伴わない依頼では静的な結果が
+# 正しい姿であり、ここに一致しない。
+# Matches only requests that ask to operate or change state, not merely to view something.
+# The UI mode decision fires for any "show me" request, so a request to visualize is kept on
+# a separate axis from one that also asks for it to be operable. A request with no operation
+# wording is correctly static and does not match here.
+_JA_INTERACTIVE_OPERATION = (
+    r"操作(?:できる|可能)|動かせる|いじれる|"
+    r"(?:操作して|調整して|触って)[^。\n]{0,20}(?:できる|られる|めるように|変わ|切り替わ)|"
+    r"再生(?:できる|可能|して)|一時停止|巻き戻し|早送り|"
+    r"スライダー(?:で|を)|ドラッグ(?:で|して)|つまみ(?:で|を)|"
+    r"ボタン(?:を押すと|を押して|で(?:切り替|操作|選|再生|変更))|押すと(?:変わ|切り替わ)|"
+    r"選ぶと(?:変わ|切り替わ)|変更すると(?:変わ|切り替わ)|調整(?:できる|可能)"
+)
+_EN_INTERACTIVE_OPERATION = (
+    r"\binteractive\b|\b(?:adjustable|draggable|playable|clickable|toggleable)\b|"
+    r"\b(?:drag|slide|toggle|press|click)\b[^.\n]{0,20}\bto\b[^.\n]{0,20}"
+    r"\b(?:change|update|adjust|control|reveal)\b|"
+    r"\bplay(?:\s*/\s*pause|back)?\b[^.\n]{0,20}\b(?:button|control)\b"
+)
+_INTERACTIVE_OPERATION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"インタラクティブ"),
+    re.compile(_JA_INTERACTIVE_OPERATION),
+    re.compile(_EN_INTERACTIVE_OPERATION, re.IGNORECASE),
+)
+
+
+def requests_interactive_operation(text: Any) -> bool:
+    """Return whether the request itself asks to operate the UI, not merely view it.
+
+    可視化の要求（UIモード判定）とは別の軸の判定。操作語を伴わない依頼では
+    静的な結果が正しい姿であり、False を返す。
+    A separate axis from the mode decision. A request with no operation wording is correctly
+    static, and this returns False for it.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+    normalized = text.strip()
+    return any(pattern.search(normalized) for pattern in _INTERACTIVE_OPERATION_PATTERNS)
+
 
 def is_explicit_generative_ui_opt_out(text: Any) -> bool:
     """Return whether the user themselves refused a generated UI.

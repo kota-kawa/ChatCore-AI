@@ -20,12 +20,12 @@ type MarkedParseOptions = {
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let memoMarkedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markdownEnhancementDisabled = false;
-// フェンス区間は散文の整形（見出し昇格・key:value の箇条書き化）から外す。
+// フェンス区間は散文の整形（key:value の箇条書き化）から外す。
 // 2つ目の選択肢は末尾の閉じていないフェンスで、生成中はこれが常に現れる。
 // 拾い損ねると、書き終わるまでメール本文が箇条書きへ作り替えられ、
 // 閉じフェンスが届いた瞬間に画面が組み替わってしまう。
-// Fenced spans are kept out of the prose normalization (heading promotion,
-// key:value bullets). The second alternative is a trailing unterminated fence,
+// Fenced spans are kept out of the prose normalization (key:value bullets).
+// The second alternative is a trailing unterminated fence,
 // which is what streaming shows for most of a block's lifetime. Without it the
 // email body is rebuilt as bullets until the closing fence lands, and the layout
 // visibly reshuffles at that moment.
@@ -112,19 +112,6 @@ function toStandaloneLabel(line: string) {
   return `**${match[1].trim()}:**`;
 }
 
-function isStandaloneTitleLine(lines: string[], index: number) {
-  const trimmed = lines[index].trim();
-  if (!trimmed || trimmed.length < 4 || trimmed.length > 44) return false;
-  if (/^(#{1,6}\s|[-*>\d`])/.test(trimmed)) return false;
-  if (/[。.!?！？]$/.test(trimmed)) return false;
-
-  const prev = index > 0 ? lines[index - 1].trim() : "";
-  const next = index < lines.length - 1 ? lines[index + 1].trim() : "";
-  if (prev !== "" || next !== "") return false;
-
-  return /[一-龯ぁ-んァ-ヶA-Za-z0-9]/.test(trimmed);
-}
-
 function isLikelyKeyValueLine(line: string) {
   const trimmed = line.trim();
   if (!trimmed) return false;
@@ -139,10 +126,6 @@ function toKeyValueBullet(line: string) {
   const key = match[1].trim();
   const value = match[2].trim();
   return `- **${key}:** ${value}`;
-}
-
-function isStandaloneConclusionLine(line: string) {
-  return /^(?:結論|まとめ|要約|回答)$/u.test(line.trim());
 }
 
 function collapseConsecutiveBlankLines(lines: string[], maxBlankLines = 1) {
@@ -234,42 +217,25 @@ function normalizeMarkdownSegmentForDisplay(segment: string, options: NormalizeM
     .split("\n")
     .map((line) => line.replace(/[ \t\u3000]+$/g, ""));
 
-  const promotedLines = [...normalizedLines];
-
-  for (let i = 0; i < promotedLines.length; i += 1) {
-    const trimmed = promotedLines[i].trim();
-    if (isStandaloneConclusionLine(trimmed)) {
-      promotedLines[i] = `## ${trimmed}`;
-      continue;
-    }
-    if (/^「[^」]{4,80}」$/.test(trimmed)) {
-      promotedLines[i] = `### ${trimmed}`;
-      continue;
-    }
-    if (isStandaloneTitleLine(promotedLines, i)) {
-      promotedLines[i] = `## ${trimmed}`;
-    }
-  }
-
   const listifiedLines: string[] = [];
-  for (let i = 0; i < promotedLines.length; ) {
-    if (!isLikelyKeyValueLine(promotedLines[i])) {
-      listifiedLines.push(promotedLines[i]);
+  for (let i = 0; i < normalizedLines.length; ) {
+    if (!isLikelyKeyValueLine(normalizedLines[i])) {
+      listifiedLines.push(normalizedLines[i]);
       i += 1;
       continue;
     }
 
     let j = i;
-    while (j < promotedLines.length && isLikelyKeyValueLine(promotedLines[j])) {
+    while (j < normalizedLines.length && isLikelyKeyValueLine(normalizedLines[j])) {
       j += 1;
     }
 
     if (j - i >= 2) {
       for (let k = i; k < j; k += 1) {
-        listifiedLines.push(toKeyValueBullet(promotedLines[k]));
+        listifiedLines.push(toKeyValueBullet(normalizedLines[k]));
       }
     } else {
-      listifiedLines.push(promotedLines[i]);
+      listifiedLines.push(normalizedLines[i]);
     }
     i = j;
   }

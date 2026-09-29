@@ -116,6 +116,40 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
     "AIからの回答が空でした。もう一度お試しください。": (
         "The AI returned an empty answer. Please try again."
     ),
+    "LLM設定エラーが発生しました。": "The AI model is not configured correctly.",
+    "LLMプロバイダ認証エラーが発生しました。設定を確認してください。": (
+        "The AI provider could not authenticate. Check its configuration."
+    ),
+    "AI提供元が混み合っています。時間をおいて再試行してください。": (
+        "The AI provider is busy. Wait a moment and try again."
+    ),
+    "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。質問を分けるか、参照を減らして再試行してください。": (
+        "The referenced information exceeds the model's context limit. Split the question or use fewer references and try again."
+    ),
+    "一時的な内部エラーが発生しました。時間をおいて再試行してください。": (
+        "A temporary error occurred. Wait a moment and try again."
+    ),
+    "応答は生成されましたが、履歴保存に失敗しました。": (
+        "The response was generated, but it could not be saved to chat history."
+    ),
+    "回答の続きを生成できず、途中までの回答を保存しました。": (
+        "Could not continue the response. The partial answer was saved."
+    ),
+    "回答が非常に長く、継続生成の上限に達しました。途中までの回答を保存しました。": (
+        "The response reached the continuation limit. The partial answer was saved."
+    ),
+    "参照した情報が多すぎて、モデルが一度に扱える上限を超えました。途中までの回答を保存しました。": (
+        "The referenced information exceeded the model's context limit. The partial answer was saved."
+    ),
+    "AI提供元が混み合っているため中断しました。途中までの回答を保存しました。": (
+        "The AI provider was busy, so the response stopped. The partial answer was saved."
+    ),
+    "AI提供元との接続が途中で終了しました。途中までの回答を保存しました。": (
+        "The connection to the AI provider ended early. The partial answer was saved."
+    ),
+    "生成が途中で終了しました。途中までの回答を保存しました。": (
+        "The response ended early. The partial answer was saved."
+    ),
     "画像を読み込めるのは GPT-6 Luna だけです。モデルを GPT-6 Luna に切り替えるか、画像を外してください。": (
         "Only GPT-6 Luna can read images. Switch the model to GPT-6 Luna or remove the images."
     ),

@@ -20,6 +20,8 @@ from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     MEMO_TOOLS_SKILL_INSTRUCTIONS,
     MEMO_TOOLS_SYSTEM_SKILL_ID,
+    PROMPT_TOOLS_SKILL_INSTRUCTIONS,
+    PROMPT_TOOLS_SYSTEM_SKILL_ID,
     build_chat_skills_context,
     build_enabled_user_skills_prompt,
     system_skill_key_for_id,
@@ -136,6 +138,41 @@ class UserSkillPromptTests(unittest.TestCase):
         for tool_name in ("memo_list", "memo_create", "memo_edit"):
             self.assertNotIn(tool_name, BASE_SYSTEM_PROMPT)
 
+    def test_prompt_tools_skill_joins_the_prompt_only_where_the_tools_are_offered(self):
+        signed_in = {"id": 1, "prompt_tools_skill_enabled": True}
+        offered = build_chat_skills_context([], signed_in, locale="ja", workspace_tools_available=True)
+        not_offered = build_chat_skills_context([], signed_in, locale="ja", workspace_tools_available=False)
+
+        self.assertTrue(offered.prompt_tools_enabled)
+        self.assertIn("## プロンプト共有と設定", offered.prompt or "")
+        self.assertIn(PROMPT_TOOLS_SKILL_INSTRUCTIONS, offered.prompt or "")
+        self.assertIn(
+            "publish_prompt can never be set to always approve",
+            PROMPT_TOOLS_SKILL_INSTRUCTIONS,
+        )
+        self.assertIn("never include the user's memo content", PROMPT_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertIn("cannot delete a prompt, Task, or personal Skill", PROMPT_TOOLS_SKILL_INSTRUCTIONS)
+        self.assertFalse(not_offered.prompt_tools_enabled)
+        self.assertNotIn(PROMPT_TOOLS_SKILL_INSTRUCTIONS, not_offered.prompt or "")
+
+    def test_prompt_tools_skill_is_off_for_guests_and_when_the_user_turned_it_off(self):
+        guest = build_chat_skills_context([], None, locale="ja", workspace_tools_available=True)
+        disabled = build_chat_skills_context(
+            [],
+            {"id": 1, "prompt_tools_skill_enabled": False},
+            locale="ja",
+            workspace_tools_available=True,
+        )
+
+        for skills_context in (guest, disabled):
+            with self.subTest(prompt=skills_context.prompt):
+                self.assertFalse(skills_context.prompt_tools_enabled)
+                self.assertNotIn("publish_prompt", skills_context.prompt or "")
+
+    def test_prompt_tools_tool_instructions_live_only_in_the_skill(self):
+        for tool_name in ("shared_prompt_read", "publish_prompt", "my_prompt_save", "my_skill_save"):
+            self.assertNotIn(tool_name, BASE_SYSTEM_PROMPT)
+
     def test_prompt_contains_only_named_nonempty_skills_and_removes_boundary_markers(self):
         prompt = build_enabled_user_skills_prompt(
             [
@@ -214,7 +251,7 @@ class UserSkillServiceTests(unittest.TestCase):
     def test_list_prepends_the_non_editable_default_skills(self):
         repository = MagicMock()
         repository.get_system_skill_states = AsyncMock(
-            return_value={"generative_ui": True, "memo_tools": False}
+            return_value={"generative_ui": True, "memo_tools": False, "prompt_tools": True}
         )
         repository.list_user_skills = AsyncMock(return_value=[{"id": 7, "name": "個人Skill"}])
 
@@ -230,16 +267,20 @@ class UserSkillServiceTests(unittest.TestCase):
         self.assertEqual(skills[1]["id"], MEMO_TOOLS_SYSTEM_SKILL_ID)
         self.assertEqual(skills[1]["system_skill_key"], "memo_tools")
         self.assertFalse(skills[1]["is_enabled"])
-        for skill in skills[:2]:
+        self.assertEqual(skills[2]["id"], PROMPT_TOOLS_SYSTEM_SKILL_ID)
+        self.assertEqual(skills[2]["system_skill_key"], "prompt_tools")
+        self.assertTrue(skills[2]["is_enabled"])
+        for skill in skills[:3]:
             self.assertTrue(skill["is_default"])
             self.assertFalse(skill["can_edit"])
             self.assertFalse(skill["can_delete"])
-        self.assertEqual(skills[2]["id"], 7)
+        self.assertEqual(skills[3]["id"], 7)
 
     def test_toggle_updates_only_the_default_skill_preference(self):
         for skill_id, key in (
             (GENERATIVE_UI_SYSTEM_SKILL_ID, "generative_ui"),
             (MEMO_TOOLS_SYSTEM_SKILL_ID, "memo_tools"),
+            (PROMPT_TOOLS_SYSTEM_SKILL_ID, "prompt_tools"),
         ):
             with self.subTest(key=key):
                 repository = MagicMock()
@@ -258,17 +299,18 @@ class UserSkillServiceTests(unittest.TestCase):
     def test_reserved_ids_map_to_system_skills_only(self):
         self.assertEqual(system_skill_key_for_id(0), "generative_ui")
         self.assertEqual(system_skill_key_for_id(-1), "memo_tools")
+        self.assertEqual(system_skill_key_for_id(-2), "prompt_tools")
         self.assertIsNone(system_skill_key_for_id(7))
 
     def test_system_skill_states_come_from_the_users_columns(self):
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(one_or_none=MagicMock(return_value=(True, False)))
+            return_value=MagicMock(one_or_none=MagicMock(return_value=(True, False, True)))
         )
 
         states = asyncio.run(UserSkillRepository(session).get_system_skill_states(7))
 
-        self.assertEqual(states, {"generative_ui": True, "memo_tools": False})
+        self.assertEqual(states, {"generative_ui": True, "memo_tools": False, "prompt_tools": True})
 
     def test_import_user_skill_allocates_a_non_conflicting_name_and_keeps_source(self):
         session = MagicMock()

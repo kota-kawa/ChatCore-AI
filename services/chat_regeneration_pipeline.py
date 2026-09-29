@@ -72,7 +72,7 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
     augment_messages_with_selected_references_async,
 )
-from services.selected_reference_sources import build_selected_reference_searchers
+from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
 from services.usage_limits import UsageLimitBlock, usage_limit_message
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
@@ -506,6 +506,14 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         unavailable_sources=selected_references.unavailable_sources,
         trace_results=selected_reference_trace,
     )
+    # 事前検索（use_shared_prompts）が無効なままでも、既定スキル「プロンプト共有と設定」が
+    # 選択されたターンには同じ shared_prompt_search ツールをオンデマンド用に渡す。事前検索は
+    # 行わない（上の augment 呼び出しはこの代入より前に確定済み）。
+    # Even without the prefetch toggle, a turn where the built-in Prompt sharing and settings
+    # Skill was selected still gets the same shared_prompt_search tool for on-demand calls; no
+    # eager prefetch runs (the augment call above already used whatever this was before this).
+    if shared_prompt_search is None and skills_context.prompt_tools_enabled:
+        shared_prompt_search = DeduplicatedLookup(deps.search_shared_prompts, source_label="shared prompt")
     # 生成UI設定を切った利用者と、UI不要と書いた利用者だけが明示的な拒否。判定モデルの
     # NONE では、検証を通ったArtifactを捨てない。
     # Only a disabled feature or a refusal the user wrote counts as an opt-out; a classifier
@@ -534,6 +542,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 user_id=user_id,
                 chat_room_id=chat_room_id,
                 memo_tools_enabled=skills_context.memo_tools_enabled,
+                prompt_tools_enabled=skills_context.prompt_tools_enabled,
+                llm_profile_context=user_profile_prompt or "",
                 external_input_in_turn=bool(
                     pasted_url_pages
                     or pipeline_input.use_shared_prompts
@@ -619,6 +629,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                locale=request_locale,
                 on_finished=on_finished,
                 on_error=on_error,
                 service=pipeline_input.chat_generation_service,
