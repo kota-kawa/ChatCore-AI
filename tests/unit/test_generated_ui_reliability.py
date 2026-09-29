@@ -19,6 +19,7 @@ from services.generative_ui import (
     requested_artifact_quality_issues,
     validate_artifact_payload,
 )
+from services.generative_ui_intent import requests_interactive_operation
 from services.generative_ui_javascript import javascript_structure_error
 from services.llm import LlmOutputLimitError
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
@@ -75,6 +76,45 @@ POLISHED_ARTIFACT = {
         "item.classList.remove('active'));button.classList.add('active');}));"
     ),
 }
+
+
+# 実例: 操作を求める依頼（issue #756の再現）に対し、ボタン7個とrange入力1個を持つが、
+# <script>もイベントハンドラも無い生成UI。形式上は有効なArtifactとして通ってしまう。
+# A real-shaped case (issue #756 reproduction): a requested-operation artifact with seven
+# buttons and one range input but no <script> and no event handler wiring anywhere. It still
+# passes as a formally valid Artifact.
+NON_INTERACTIVE_GROWTH_ARTIFACT: dict[str, Any] = {
+    "version": 1,
+    "title": "インゲンの成長記録",
+    "description": "日数を選んで成長の様子を確認できます",
+    "height": 420,
+    "html": (
+        '<div id="app"><h2>インゲンの成長記録</h2>'
+        '<div class="days">'
+        '<button class="day">0日</button><button class="day">7日</button>'
+        '<button class="day">14日</button><button class="day">21日</button>'
+        '<button class="day">28日</button><button class="day">35日</button>'
+        '<button class="play">再生</button>'
+        "</div>"
+        '<input type="range" min="0" max="35" value="0" />'
+        '<p class="state">発芽: 高さ5cm</p></div>'
+    ),
+    "css": (
+        "#app{padding:24px;border-radius:18px;background:#f8fafc;color:#172033;"
+        "font:14px/1.6 system-ui,sans-serif}.days{display:flex;gap:8px;margin-bottom:16px}"
+        "button{padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff}"
+        "input[type=range]{width:100%;margin:16px 0}.state{font-weight:700}"
+    ),
+    "js": "",
+}
+
+UNWIRED_CONTROLS_ISSUE = (
+    "2D artifact has operable controls but no script or event handlers; "
+    "wire each control so using it changes the displayed state"
+)
+INTERACTIVE_GROWTH_REQUEST = (
+    "インゲンの成長記録を、日数で再生・操作できるインタラクティブなタイムラインにしてください。"
+)
 
 
 def _artifact_block(payload: dict[str, Any] | None = None, *, introduction: str = "生成しました。") -> str:
@@ -141,6 +181,41 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
         for request in negative_requests:
             with self.subTest(request=request):
                 self.assertTrue(is_explicit_generative_ui_opt_out(request))
+
+    def test_operation_wording_is_detected_separately_from_a_plain_visual_request(self):
+        """可視化そのものの依頼（モード判定）と、操作を求める依頼は別軸で判定する。"""
+        operation_requests = (
+            INTERACTIVE_GROWTH_REQUEST,
+            "スライダーで値を変えられるグラフにして",
+            "ボタンを押すと表示が切り替わるようにして",
+            "Create an interactive timeline with a play button.",
+            "Make the chart draggable so users can adjust the range.",
+            "ダッシュボードのフィルタを操作して結果を絞り込めるようにしてください",
+            "地図を操作してズームできるようにして",
+            "グラフの範囲を調整して詳細を確認できるようにして",
+            "アイコンを触ってON/OFFを切り替えられるようにして",
+            "スライダーで年を変えると地図が変わるようにしてください",
+            "ボタンで切り替えてください",
+        )
+        plain_visual_requests = (
+            "この申請手順をフローチャートで可視化して",
+            "売上比較の考え方を図でまとめて",
+            "Show the architecture as a diagram.",
+            "比較を生成UIで見せて",
+            "このダッシュボードの配色を調整して見やすくしてください",
+            "資料の構成を操作して整理して",
+            "見出しをボタンで区切って表示して",
+            "この点に触れて説明して",
+            "この文章を調整して、読み手が理解を深める資料にしてください",
+            "写真の配置を調整して、全体の印象を高める見せ方にしてください",
+        )
+
+        for request in operation_requests:
+            with self.subTest(request=request):
+                self.assertTrue(requests_interactive_operation(request))
+        for request in plain_visual_requests:
+            with self.subTest(request=request):
+                self.assertFalse(requests_interactive_operation(request))
 
     def test_selected_mode_is_injected_as_a_required_generation_instruction(self):
         original = [{"role": "user", "content": "比較を生成UIで見せて"}]
@@ -621,6 +696,145 @@ class GeneratedUiQualityGateTests(unittest.TestCase):
         self.assertEqual(normalized.validation_errors, [])
         self.assertTrue(normalized.has_artifact())
         self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
+
+    def test_operable_controls_without_wiring_are_flagged_when_operation_is_requested(self):
+        """issue #756の再現: ボタン7個とrangeがあるのに配線が無いUIを、操作を求める依頼で検出する。"""
+        normalized = normalize_response_with_artifacts(
+            "生成UIを作成しました。\n\n```chatcore-artifact\n"
+            + json.dumps(NON_INTERACTIVE_GROWTH_ARTIFACT, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        self.assertEqual(normalized.validation_errors, [])
+        issues = requested_artifact_quality_issues(
+            normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
+        )
+
+        self.assertIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_operable_controls_without_wiring_are_ignored_when_the_request_is_not_passed(self):
+        """user_request を渡さない既存呼び出しの挙動は変えない。"""
+        normalized = normalize_response_with_artifacts(
+            "生成UIを作成しました。\n\n```chatcore-artifact\n"
+            + json.dumps(NON_INTERACTIVE_GROWTH_ARTIFACT, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        issues = requested_artifact_quality_issues(normalized, "2D")
+
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_a_static_display_request_does_not_require_scripting(self):
+        """操作を求めていない依頼では、操作部品があっても一律にJS必須にしない。"""
+        static_select_artifact = {
+            **VALID_ARTIFACT,
+            "html": (
+                '<div id="app"><h2>担当チーム一覧</h2>'
+                "<select disabled><option>フロントエンド</option><option>バックエンド</option>"
+                "</select><p>現在の担当は上記のとおりです。</p></div>"
+            ),
+            "js": "",
+        }
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n"
+            + json.dumps(static_select_artifact, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        issues = requested_artifact_quality_issues(
+            normalized, "2D", user_request="担当チームの一覧を図でまとめて"
+        )
+
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_operation_request_without_operable_controls_is_not_flagged(self):
+        """操作を求める依頼でも、押せる部品自体が無ければ検出対象にしない。"""
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n"
+            + json.dumps(VALID_ARTIFACT, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        issues = requested_artifact_quality_issues(
+            normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
+        )
+
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_wired_operable_controls_are_not_flagged(self):
+        """ボタンにaddEventListenerが配線済みなら、操作を求める依頼でも検出しない。"""
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n"
+            + json.dumps(POLISHED_ARTIFACT, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        issues = requested_artifact_quality_issues(
+            normalized, "2D", user_request="項目を選べるインタラクティブなUIにして"
+        )
+
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_safe_inline_html_event_handlers_count_as_wiring(self):
+        """onclick等の安全なインラインハンドラは、別途jsが無くても配線ありと扱う。"""
+        inline_wired_artifact = {
+            **VALID_ARTIFACT,
+            "html": (
+                '<div id="app"><button onclick="this.textContent = \'選択済み\'">切替</button></div>'
+            ),
+            "js": "",
+        }
+        normalized = normalize_response_with_artifacts(
+            "できました。\n\n```chatcore-artifact\n"
+            + json.dumps(inline_wired_artifact, ensure_ascii=False)
+            + "\n```",
+            ui_mode="2D",
+        )
+
+        issues = requested_artifact_quality_issues(
+            normalized, "2D", user_request=INTERACTIVE_GROWTH_REQUEST
+        )
+
+        self.assertNotIn(UNWIRED_CONTROLS_ISSUE, issues)
+
+    def test_repair_retries_operable_controls_left_unwired(self):
+        """修復経路: 未配線の操作UIは修復対象になり、正しいUIで差し替わる。"""
+        repaired_raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(POLISHED_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        normalized = normalize_response_with_artifact_retry(
+            "生成UIを作成しました。\n\n```chatcore-artifact\n"
+            + json.dumps(NON_INTERACTIVE_GROWTH_ARTIFACT, ensure_ascii=False)
+            + "\n```",
+            conversation_messages=[{"role": "user", "content": INTERACTIVE_GROWTH_REQUEST}],
+            model="test-model",
+            generate_response=lambda messages, _model: captured_messages.append(messages)
+            or repaired_raw,
+            user_request=INTERACTIVE_GROWTH_REQUEST,
+            ui_mode="2D",
+        )
+
+        self.assertEqual(len(captured_messages), 1)
+        repair_prompt = "\n".join(
+            str(message.get("content") or "")
+            for message in captured_messages[0]
+            if message.get("role") in {"system", "developer"}
+        )
+        self.assertIn(
+            "operable controls but no script or event handlers", repair_prompt
+        )
+        self.assertTrue(normalized.repair_attempted)
+        self.assertEqual(normalized.artifact_status, "valid")
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], POLISHED_ARTIFACT["title"])
 
 
 class GeneratedUiStatusDeliveryTests(unittest.TestCase):
