@@ -6,7 +6,9 @@ const VALID_PREFERENCES: ThemePreference[] = ["light", "dark", "auto"];
 const THEME_NAME_PATTERN = /\b(theme|appearance|color scheme|colour scheme|dark mode|light mode)\b|テーマ|外観|配色|ダークモード|ライトモード/i;
 const THEME_SETTING_REFERENCE_PATTERNS = [
   /\bcurrent(?:ly)?\s+(?:(?:color|colour)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\s+(?:setting|preference|configuration)\b|\b(?:currently selected|saved|configured|browser|app|application|site)\s+(?:(?:color|colour)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)(?:\s+(?:setting|preference|configuration))?\b/i,
-  /\bmy\s+(?:(?:current|saved|preferred)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\b(?!\s+(?:in|of|for)\s+(?:this|the|a)\s+(?:poem|story|book|essay|song|movie|film|novel|presentation|project))|\bmy\s+(?:(?:current|saved|preferred)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\s+(?:setting|preference|configuration)\b/i,
+  // 「my theme」の直後が文末・設定語・「今」だけのときに限る（theme song や for the brand を除く）
+  // Only when "my theme" ends the clause or is followed by a setting word or "now" (excludes "theme song", "for the brand")
+  /\bmy\s+(?:(?:current|saved|preferred)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)(?:\s+(?:setting|preference|configuration)s?)?(?=\s*(?:$|[?？.!。,、]|(?:right\s+)?now\b|currently\b))/i,
   /\b(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\s+(?:setting|preference|configuration|am I using|i(?:'m| am) using|is (?:enabled|active|selected)|do I have (?:set|selected))\b/i,
   /(?:今|現在)(?:の|の表示|の画面)?(?:テーマ|外観|配色|ダークモード|ライトモード)(?:設定|状態|は|を)|(?:テーマ|外観|配色|ダークモード|ライトモード)(?:の)?(?:設定|設定値|優先設定|状態)|(?:表示テーマ|画面テーマ|アプリテーマ|ブラウザーのテーマ|ブラウザのテーマ)/i,
 ];

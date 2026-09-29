@@ -54,4 +54,7 @@ test("theme preference is sent only for explicit theme reads", () => {
   assert.equal(shouldSendThemePreference("Change my theme to dark"), false);
   assert.equal(shouldSendThemePreference("テーマをダークにして"), false);
   assert.equal(shouldSendThemePreference("Summarize my travel memo"), false);
+  assert.equal(shouldSendThemePreference("What's my color scheme for the brand?"), false);
+  assert.equal(shouldSendThemePreference("What is my theme song for this trip?"), false);
+  assert.equal(shouldSendThemePreference("What is my theme right now?"), true);
 });
