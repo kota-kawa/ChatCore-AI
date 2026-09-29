@@ -210,17 +210,20 @@ class LlmRequestImageTests(_UploadRootTestCase):
             {"role": "user", "content": "describe it", IMAGE_INPUTS_KEY: [image.to_storage()]},
         ]
 
-    def test_luna_tool_turn_sends_image_url_parts_before_the_text(self):
+    def test_luna_tool_turn_sends_input_image_parts_before_the_text(self):
         image = self._store()
         client = MagicMock()
-        client.chat.completions.create.return_value = MagicMock(__iter__=lambda _self: iter(()))
+        stream_ctx = MagicMock()
+        stream_ctx.__enter__.return_value = MagicMock(__iter__=lambda _self: iter(()))
+        stream_ctx.__exit__.return_value = None
+        client.responses.stream.return_value = stream_ctx
         tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
         with patch.object(llm, "openai_client", client):
             list(llm.get_llm_response_stream(self._conversation(image), llm.GPT_6_LUNA_MODEL, tools=tools))
 
-        sent = client.chat.completions.create.call_args.kwargs["messages"]
+        sent = client.responses.stream.call_args.kwargs["input"]
         latest = sent[-1]
-        self.assertEqual([part["type"] for part in latest["content"]], ["image_url", "text"])
+        self.assertEqual([part["type"] for part in latest["content"]], ["input_image", "input_text"])
         self.assertEqual(latest["content"][1]["text"], "describe it")
         self.assertTrue(all(IMAGE_INPUTS_KEY not in message for message in sent))
 
