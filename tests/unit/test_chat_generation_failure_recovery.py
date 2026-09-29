@@ -667,6 +667,31 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertNotIn("<|", saved.call_args.args[0])
         self.assertEqual(job._telemetry.protocol_leak_truncations, 1)
 
+    # 日本語: 途中で失敗した回答を救うとき、目印の頭として保留していた末尾も保存されることを検証します。
+    # English: Verify salvaging a failed answer keeps the tail held back as a possible marker head.
+    def test_failure_salvage_keeps_the_held_back_tail(self):
+        def stream(_messages, _model, **_kwargs):
+            yield "結論から言うと、これは有効です。理由は次の通りです。That was"
+            raise LlmUpstreamServiceError("Groq API reported a mid-stream failure.")
+
+        job, saved, _on_error = self.make_job()
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "incomplete")
+        self.assertIn("That was", saved.call_args.args[0])
+
+    # 日本語: 保留中の本文は、後から届くツール呼び出しより前に並ぶことを検証します。
+    # English: Verify held-back text stays ahead of a tool call that arrives after it.
+    def test_held_back_text_stays_ahead_of_a_tool_call(self):
+        job, _saved, _on_error = self.make_job()
+        tool_chunk = json.dumps([tool_call("web_search", query="x")])
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            return_value=iter(["調べます。<b", tool_chunk]),
+        ):
+            chunks = list(job._iter_llm_stream_with_retry([{"role": "user", "content": "x"}], None))
+        self.assertEqual(chunks, ["調べます。", "<b", tool_chunk])
+
     # 日本語: 縮退しても回復しない設定不備は、そのままエラーになることを検証します。
     # English: Verify a configuration failure that degrading cannot fix still errors out.
     def test_authentication_failure_is_not_degraded(self):

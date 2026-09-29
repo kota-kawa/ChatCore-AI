@@ -39,9 +39,13 @@ def _prefixes(literal: str, min_chars: int = 1) -> str:
 # 本文の末尾が、続きしだいで目印の頭になりうる形。逐次配信では渡した文字を取り消せないため、この部分
 # だけは次のチャンクまで保留する（`<|im_`、`liassis`、`liassistant to=fun` など）。ふつうの文章の
 # 末尾が当たっても、次のチャンクで目印にならないと分かった時点で渡す。
+# 崩れた語の頭（`li` | `assistant to=...` の `li`）のように予測できない分は、渡した後で overflow_chars として
+# 報告するだけで、逐次配信では取り消せない。
 # A text end that could become the head of a marker once more text arrives. A streamed character
 # cannot be taken back, so only this part waits for the next chunk (`<|im_`, `liassis`,
 # `liassistant to=fun`). Ordinary prose that happens to match is released with the next chunk.
+# A head that cannot be foreseen (the `li` of `li` | `assistant to=...`) is only reported through
+# overflow_chars after release; a streamed path cannot take it back.
 _PARTIAL_MARKER_AT_END = re.compile(
     r"(?:</?\|?[A-Za-z_]*\|?=?"
     rf"|(?:\S*[ \t]+)?\b(?:{_prefixes('to=functions.')})"

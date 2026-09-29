@@ -40,11 +40,6 @@ class FindProtocolLeakTestCase(unittest.TestCase):
                 self.assertIsNone(find_protocol_leak(text))
 
 
-def _stream(guard: ProtocolLeakGuard, chunks: list[str]) -> str:
-    released = "".join(guard.feed(chunk) for chunk in chunks)
-    return released + guard.flush()
-
-
 class ProtocolLeakGuardTestCase(unittest.TestCase):
     def test_never_releases_the_head_of_a_marker_split_across_chunks(self):
         # 逐次配信では渡した文字を取り消せないので、目印の頭が先に出てはいけない（issue #778）。
@@ -92,6 +87,7 @@ class ProtocolLeakGuardTestCase(unittest.TestCase):
         self.assertEqual(guard.feed(" to=functions.web_search"), "")
         self.assertTrue(guard.tripped)
         self.assertEqual(guard.overflow_chars, len("xyz"))
+
 
 if __name__ == "__main__":
     unittest.main()
