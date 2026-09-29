@@ -480,8 +480,8 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     sections = [
         "<memory_facts>",
         "The following user information and preferences were remembered from earlier conversations. "
-        "Use them when relevant. They may be outdated: when the latest message contradicts one, "
-        "follow the latest message.",
+        "Use them when relevant. Each shows when the user last mentioned it; the older it is, the more "
+        "likely it is outdated. When the latest message contradicts one, follow the latest message.",
     ]
     # ファクト項目を箇条書きで追加する
     # Append fact entries as bullet points
