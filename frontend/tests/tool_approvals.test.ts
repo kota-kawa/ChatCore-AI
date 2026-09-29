@@ -170,7 +170,19 @@ test("the decision API posts the decision and returns the updated card", async (
   assert.equal(decided.status, "succeeded");
   assert.equal(calls[0].url, "/api/chat/tool-approvals/a1/decision");
   assert.equal(calls[0].init?.method, "POST");
-  assert.equal(calls[0].init?.body, JSON.stringify({ decision: "approve_always" }));
+  assert.equal(calls[0].init?.body, JSON.stringify({ decision: "approve_always", acknowledge_warnings: false }));
+});
+
+test("the decision API includes acknowledgment for a private-content warning", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(200, { approval: rawApproval({ status: "succeeded", decision: "once", result: { target_id: 5 } }) });
+  };
+
+  await decideToolApproval("a1", "approve_once", "失敗", fetchImpl, true);
+
+  assert.equal(calls[0].init?.body, JSON.stringify({ decision: "approve_once", acknowledge_warnings: true }));
 });
 
 test("the decision API surfaces the server's error code and message", async () => {

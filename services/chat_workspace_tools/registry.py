@@ -78,6 +78,30 @@ ProposeHandler = Callable[[int, dict[str, Any]], Awaitable[Proposal]]
 ExecuteHandler = Callable[[AsyncSession, int, dict[str, Any], dict[str, Any]], Awaitable[ExecutionOutcome]]
 
 
+# 関数ツール定義の共通の組み立て。スキーマの制約（enum・required・additionalProperties）は
+# モデルへの誘導であり、services/llm_tool_schema.py がプロバイダ境界で緩めるため、検証は
+# 各ファミリーの Pydantic 引数モデルが行う（ADR 0008）。
+# Shared assembly of a function tool definition. Its schema constraints (enum, required,
+# additionalProperties) guide the model; services/llm_tool_schema.py relaxes them at the
+# provider boundary, and each family's Pydantic argument models validate (ADR 0008).
+def build_function_definition(
+    name: str, description: str, properties: dict[str, Any], required: list[str]
+) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
 # ツール1つの定義。definition はモデルへ見せるスキーマ（制約は誘導であり、検証はハンドラの
 # Pydantic が行う。ADR 0008）。allows_always は「常に承認」を付与できるか。
 # One tool. definition is the schema shown to the model (its constraints guide, the handler's
@@ -110,6 +134,7 @@ class ChatWorkspaceToolbox:
         user_id: int,
         chat_room_id: str,
         external_input_in_turn: bool = False,
+        llm_profile_context: str = "",
     ) -> None:
         self._specs = {spec.name: spec for spec in specs}
         self.user_id = int(user_id)
@@ -118,6 +143,10 @@ class ChatWorkspaceToolbox:
         # Whether the turn starts having read external content: attachments, pasted URLs,
         # other people's public posts.
         self.external_input_in_turn = bool(external_input_in_turn)
+        # 非公開の内容が公開投稿へ混入していないかの判定に使う種（AIへ渡すプロフィール文脈）。
+        # Seed used to judge whether private content leaked into a public post (the profile
+        # context handed to the model).
+        self.llm_profile_context = str(llm_profile_context or "")
 
     def definitions(self) -> list[dict[str, Any]]:
         return [spec.definition for spec in self._specs.values()]

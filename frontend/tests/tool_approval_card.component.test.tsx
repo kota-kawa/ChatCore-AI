@@ -32,6 +32,15 @@ function memoEdit(preview: Record<string, unknown>, overrides: Record<string, un
   });
 }
 
+function promptApproval(preview: Record<string, unknown>, overrides: Record<string, unknown> = {}): ToolApprovalApi {
+  return approval({
+    tool: "publish_prompt",
+    family: "prompts",
+    preview: { kind: "publish_prompt", title: "会議の要約", content: "要点を箇条書きする", ...preview },
+    ...overrides,
+  });
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -131,7 +140,7 @@ describe("ToolApprovalCard", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("実行できませんでした");
-    expect(screen.getByRole("status")).toHaveTextContent("提案の後でメモが更新されたため、上書きしませんでした。");
+    expect(screen.getByRole("status")).toHaveTextContent("提案の後で対象が更新されたため、上書きしませんでした。");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
 
     rerender(
@@ -170,6 +179,105 @@ describe("ToolApprovalCard", () => {
     expect(warnings[0]).toHaveTextContent("このメモは共有中です。");
     expect(warnings[1]).toHaveTextContent("外部の内容");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("requires acknowledgment before approving a public prompt that overlaps private content", () => {
+    const onDecide = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ToolApprovalCard
+        approval={promptApproval(
+          { private_overlap_excerpts: ["利用者の非公開メモから一致した文"] },
+          { warnings: ["private_text_in_public_post"], always_allowed: true },
+        )}
+        onDecide={onDecide}
+      />,
+    );
+
+    expect(screen.getByText("このターンで読んだ非公開の内容（メモ・自分用プロンプト・個人Skill・プロフィールなど）と一致する箇所があります。公開してよい内容か確かめてください。")).toBeInTheDocument();
+    expect(screen.getByText("一致した箇所")).toBeInTheDocument();
+    expect(screen.getByText("利用者の非公開メモから一致した文")).toBeInTheDocument();
+    const approve = screen.getByRole("button", { name: "1度だけ承認" });
+    expect(approve).toBeDisabled();
+    expect(screen.getByRole("button", { name: "拒否" })).toBeEnabled();
+    fireEvent.click(approve);
+    expect(onDecide).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "内容を確認しました。公開してよい情報です。" }));
+    expect(approve).toBeEnabled();
+    fireEvent.click(approve);
+    expect(onDecide).toHaveBeenCalledWith("a1", "approve_once", true);
+  });
+
+  it.each([
+    ["publish_prompt", "プロンプト共有を開く", "/prompt_share", { kind: "publish_prompt", title: "公開案", content: "本文" }, "本文"],
+    ["my_prompt_save", "自分用プロンプトを開く", "/#task-selection", { kind: "my_prompt_save", task_id: 3, current_title: "検索", clear_fields: [], title: "検索", prompt_content: "検索する" }, "検索する"],
+    ["my_skill_save", "個人Skillを開く", "/#skill-selection-title", { kind: "my_skill_save", skill_id: 4, name: "校正", instructions: "誤字を直す" }, "誤字を直す"],
+  ])("shows the %s preview and result link", (tool, label, href, preview, previewText) => {
+    const current = approval({
+      tool,
+      family: "prompts",
+      preview,
+      status: "succeeded",
+      decision: "once",
+      result: { target_id: 12, target_title: "保存済み" },
+    });
+    render(<ToolApprovalCard approval={current} />);
+
+    expect(screen.getByRole("group")).toHaveTextContent(previewText);
+    expect(screen.getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", href);
+  });
+
+  it("identifies the existing Skill when only its instructions are edited", () => {
+    render(
+      <ToolApprovalCard
+        approval={approval({
+          tool: "my_skill_save",
+          family: "prompts",
+          always_allowed: false,
+          preview: {
+            kind: "my_skill_save",
+            skill_id: 9,
+            current_name: "調査アシスタント",
+            name: null,
+            instructions: "出典を確認する",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("group")).toHaveTextContent("調査アシスタント");
+    expect(screen.getByRole("group")).toHaveTextContent("出典を確認する");
+    expect(screen.getByRole("group")).not.toHaveTextContent("（題名なし）");
+  });
+
+  it("shows the existing Task name, id, and optional fields that will be cleared", () => {
+    render(
+      <ToolApprovalCard
+        approval={approval({
+          tool: "my_prompt_save",
+          family: "prompts",
+          always_allowed: false,
+          preview: {
+            kind: "my_prompt_save",
+            task_id: 3,
+            current_title: "既存Task",
+            clear_fields: ["response_rules"],
+            title: "新しいTask名",
+            prompt_content: "新しい本文",
+            response_rules: "",
+            output_skeleton: "",
+            input_examples: "",
+            output_examples: "",
+          },
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("group", { name: "自分用プロンプトを保存します" });
+    expect(card).toHaveTextContent("既存Task (#3)");
+    expect(card).toHaveTextContent("新しいTask名");
+    expect(card).toHaveTextContent("空にする項目");
+    expect(card).toHaveTextContent("回答のルール");
   });
 
   it("renders a readonly card from another view without buttons, with a note while pending", () => {

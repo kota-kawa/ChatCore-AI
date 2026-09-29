@@ -33,7 +33,6 @@ from services.error_messages import (
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
     ERROR_PROMPT_CREATE_RATE_LIMITED,
-    ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE,
     ERROR_PROMPT_FORM_UNPARSABLE,
     ERROR_PROMPT_NOT_FOUND,
     MESSAGE_SHARED_SKILL_ADDED,
@@ -54,6 +53,7 @@ from services.prompt_attachment_storage import (
 )
 from services.prompt_attachment_upload import save_prompt_attachment
 from services.prompt_categories import normalize_category
+from services.prompt_create_limits import consume_prompt_create_limits
 from services.prompt_types import (
     CONTENT_FORMATS,
     MEDIA_TYPES,
@@ -102,10 +102,6 @@ RECOMMENDATION_BASIS_POPULAR = "popular"
 RECOMMENDATION_RANKING_COLUMNS = ("semantic_distance", "anchor_distance", "same_category")
 PROMPT_FEED_DEFAULT_LIMIT = 24
 PROMPT_FEED_MAX_LIMIT = 100
-PROMPT_CREATE_RATE_WINDOW_SECONDS = 60 * 60
-PROMPT_CREATE_PER_IP_LIMIT = 12
-PROMPT_CREATE_PER_USER_LIMIT = 8
-PROMPT_CREATE_COOLDOWN_SECONDS = 15
 GUEST_PROMPT_LINK_PATTERN = re.compile(
     r"(?:\b(?:https?|ftp)://|\bwww\.|\bmailto:)",
     re.IGNORECASE,
@@ -157,32 +153,6 @@ def _guest_prompt_validation_error(
     if any(GUEST_PROMPT_LINK_PATTERN.search(value or "") for value in fields):
         return ERROR_GUEST_PROMPT_URL_FORBIDDEN
     return None
-
-
-def _consume_prompt_create_limits(
-    request: Request,
-    user_id: int,
-) -> tuple[bool, str | None, int | None]:
-    client_ip = get_request_client_ip(request)
-    checks = (
-        ("prompt:create:ip", client_ip, PROMPT_CREATE_PER_IP_LIMIT, PROMPT_CREATE_RATE_WINDOW_SECONDS),
-        ("prompt:create:user", str(user_id), PROMPT_CREATE_PER_USER_LIMIT, PROMPT_CREATE_RATE_WINDOW_SECONDS),
-        ("prompt:create:cooldown", str(user_id), 1, PROMPT_CREATE_COOLDOWN_SECONDS),
-    )
-    for key_prefix, identifier, limit, window_seconds in checks:
-        allowed, _, retry_after = consume_rate_limit(
-            key_prefix,
-            identifier,
-            limit=limit,
-            window_seconds=window_seconds,
-        )
-        if not allowed:
-            return (
-                False,
-                ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE.format(seconds=retry_after),
-                retry_after,
-            )
-    return True, None, None
 
 
 def _decode_prompt_feed_cursor(value: str | None) -> tuple[int, datetime, int] | None:
@@ -775,8 +745,8 @@ async def create_prompt(request: Request):
         # 添付の有無に関わらず投稿レートを消費する。テキストのみの投稿も同じ上限に従わせる。
         # Consume the posting rate limit regardless of attachments so text-only posts share the same caps.
         allowed, limit_message, retry_after = await run_blocking(
-            _consume_prompt_create_limits,
-            request,
+            consume_prompt_create_limits,
+            get_request_client_ip(request),
             int(user_id),
         )
         if not allowed:

@@ -186,7 +186,7 @@ type ChatMessageRowProps = {
   onRegenerate: () => void;
   onContinue: () => void;
   onChoiceSubmit: (text: string) => void;
-  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
+  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
@@ -468,7 +468,7 @@ type ChatMessageListProps = {
   onRegenerate: () => void;
   onContinue: () => void;
   onChoiceSubmit: (text: string) => void;
-  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision) => Promise<void>;
+  onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   tasks: NormalizedTask[];

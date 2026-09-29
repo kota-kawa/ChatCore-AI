@@ -261,14 +261,28 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "already_searched")
         self.assertNotIn("prompts", payload)
 
-    # 日本語: 未指定なら共有プロンプト検索は渡しません。
-    # English: Without the flag, no shared-prompt lookup is wired up.
-    def test_request_without_the_shared_prompt_flag_passes_no_lookup(self):
-        deps = self._build_deps(Mock())
+    # 日本語: 事前検索フラグが無くてもSkillが選ばれれば、オンデマンド検索だけ使えます。
+    # English: The selected Skill keeps on-demand lookup available without the prefetch flag.
+    def test_request_without_the_shared_prompt_flag_passes_only_the_on_demand_lookup(self):
+        shared_search = Mock(return_value={"status": "no_results"})
+        deps = self._build_deps(Mock(), shared_search)
+
+        lookup = self._run(deps, body_extra={}, session={"user_id": 42}, key="shared_prompt_search")
+
+        self.assertIsNotNone(lookup)
+        shared_search.assert_not_called()
+        lookup("議事録テンプレ")
+        shared_search.assert_called_once_with("議事録テンプレ")
+
+    def test_request_without_the_shared_prompt_flag_or_prompt_skill_passes_no_lookup(self):
+        shared_search = Mock(return_value={"status": "no_results"})
+        deps = self._build_deps(Mock(), shared_search)
+        deps.get_user_by_id.return_value = {"prompt_tools_skill_enabled": False}
 
         lookup = self._run(deps, body_extra={}, session={"user_id": 42}, key="shared_prompt_search")
 
         self.assertIsNone(lookup)
+        shared_search.assert_not_called()
 
     # 日本語: ツール呼び出しを使わないモデルでも、選択した参照元を事前検索して回答へ渡します。
     # English: Non-streaming models also receive prefetched selected references without tool calls.

@@ -352,11 +352,31 @@ class ContextDigestResponse(ResponsePayloadModel):
 #         ツールとプレビューの種類は PR ごとに増やす。
 # English: Value sets used by chat approval cards. DB CHECK constraints, part validation and the frontend
 #          types (generated Zod) all take them from here. Tools and preview kinds grow PR by PR.
-ToolApprovalToolName = Literal["memo_create", "memo_append", "memo_edit"]
-ToolApprovalFamily = Literal["memo"]
+ToolApprovalToolName = Literal[
+    "memo_create",
+    "memo_append",
+    "memo_edit",
+    "publish_prompt",
+    "my_prompt_save",
+    "my_skill_save",
+]
+ToolApprovalFamily = Literal["memo", "prompts"]
 ToolApprovalStatus = Literal["pending", "succeeded", "failed", "denied", "expired", "superseded", "cancelled"]
 ToolApprovalDecision = Literal["once", "always", "auto", "deny"]
-ToolApprovalWarning = Literal["shared_memo", "untrusted_input_in_turn"]
+ToolApprovalWarning = Literal["shared_memo", "untrusted_input_in_turn", "private_text_in_public_post"]
+
+# 日本語: ツール名ごとの正しい family。カードや「常に承認」の付与が、存在しない組み合わせ
+#         （例: publish_prompt を family "memo" で）を持てないようにする。
+# English: Each tool name's correct family, so a card or an "always approve" grant can never
+#          carry an impossible combination (such as publish_prompt under family "memo").
+_TOOL_NAME_FAMILIES: dict[str, str] = {
+    "memo_create": "memo",
+    "memo_append": "memo",
+    "memo_edit": "memo",
+    "publish_prompt": "prompts",
+    "my_prompt_save": "prompts",
+    "my_skill_save": "prompts",
+}
 
 
 # 日本語: 承認カードの部品の基底。メッセージに保存したパーツの検証にも使うため、未知のキーは通さず落とす。
@@ -418,6 +438,60 @@ class MemoEditPreviewApi(ToolApprovalModel):
         return self
 
 
+# 日本語: 公開プロンプトの投稿案。承認まで prompts テーブルには何も保存しない。
+#         private_overlap_excerpts は、このターンで読んだ非公開の内容と 50 字以上一致した
+#         箇所（確認するまで承認できない。services/chat_tool_approval_service.py を参照）。
+# English: Proposal to publish a public text prompt; nothing is saved to prompts before
+#          approval. private_overlap_excerpts are passages that matched, 50+ characters, private
+#          content read this turn (approval is blocked until acknowledged; see
+#          services/chat_tool_approval_service.py).
+class PublishPromptPreviewApi(ToolApprovalModel):
+    kind: Literal["publish_prompt"]
+    title: str
+    content: str
+    category: str = ""
+    description: str = ""
+    input_examples: str = ""
+    output_examples: str = ""
+    ai_model: str = ""
+    private_overlap_excerpts: list[str] = Field(default_factory=list)
+
+
+# 日本語: 自分用プロンプト（Task）の作成・編集案。task_id が無ければ新規作成。
+# English: Proposal to create or edit a saved prompt (Task); no task_id means a new one.
+class MyPromptSavePreviewApi(ToolApprovalModel):
+    kind: Literal["my_prompt_save"]
+    task_id: int | None = None
+    current_title: str | None = None
+    clear_fields: list[Literal["response_rules", "output_skeleton", "input_examples", "output_examples"]] = Field(
+        default_factory=list
+    )
+    title: str
+    prompt_content: str
+    response_rules: str = ""
+    output_skeleton: str = ""
+    input_examples: str = ""
+    output_examples: str = ""
+
+
+# 日本語: 個人Skillの作成・編集案。skill_id が無ければ新規作成で、その場合 name・instructions は必須。
+#         編集は与えたフィールドだけを置き換える。
+# English: Proposal to create or edit a personal Skill; no skill_id means a new one, which
+#          requires both name and instructions. An edit replaces only the given fields.
+class MySkillSavePreviewApi(ToolApprovalModel):
+    kind: Literal["my_skill_save"]
+    skill_id: int | None = None
+    current_name: str | None = None
+    name: str | None = None
+    instructions: str | None = None
+
+    @model_validator(mode="after")
+    def _require_content_to_create(self) -> MySkillSavePreviewApi:
+        if self.skill_id is None and (not self.name or not self.instructions):
+            raise ValueError("my_skill_save preview needs name and instructions to create a Skill")
+        return self
+
+
 # 日本語: 実行結果。成功なら対象、失敗なら理由のコード（表示文言はフロントの i18n が持つ）。
 # English: Outcome of running the tool: the target on success, a reason code on failure
 #          (display text lives in the frontend i18n).
@@ -438,16 +512,28 @@ class ToolApprovalApi(ToolApprovalModel):
     status: ToolApprovalStatus
     decision: ToolApprovalDecision | None = None
     always_allowed: bool = False
-    preview: MemoCreatePreviewApi | MemoAppendPreviewApi | MemoEditPreviewApi | None = None
+    preview: (
+        MemoCreatePreviewApi
+        | MemoAppendPreviewApi
+        | MemoEditPreviewApi
+        | PublishPromptPreviewApi
+        | MyPromptSavePreviewApi
+        | MySkillSavePreviewApi
+        | None
+    ) = None
     warnings: list[ToolApprovalWarning] = Field(default_factory=list)
     expires_at: str | None = None
     result: ToolApprovalResultApi | None = None
     readonly: bool = False
 
-    # 日本語: 操作できるカードは何を実行するかを示せなければならない。プレビューの種類はツールと一致させる。
-    # English: An actionable card must show what it will run, and its preview kind must match the tool.
+    # 日本語: 操作できるカードは何を実行するかを示せなければならない。プレビューの種類はツールと
+    #         一致させ、family はそのツール名の正しい family でなければならない。
+    # English: An actionable card must show what it will run: its preview kind must match the
+    #          tool, and family must be that tool name's correct family.
     @model_validator(mode="after")
     def _require_matching_preview(self) -> ToolApprovalApi:
+        if _TOOL_NAME_FAMILIES.get(self.tool) != self.family:
+            raise ValueError("tool approval family must match its tool")
         if self.preview is None:
             if not self.readonly:
                 raise ValueError("tool approval needs a preview unless it is readonly")
@@ -477,6 +563,12 @@ class ToolAutoApprovalApi(ResponsePayloadModel):
     tool_name: ToolApprovalToolName
     family: ToolApprovalFamily
     created_at: str
+
+    @model_validator(mode="after")
+    def _require_matching_family(self) -> ToolAutoApprovalApi:
+        if _TOOL_NAME_FAMILIES.get(self.tool_name) != self.family:
+            raise ValueError("auto approval family must match its tool")
+        return self
 
 
 class ToolAutoApprovalsResponse(ResponsePayloadModel):

@@ -42,6 +42,13 @@ from services.chat_workspace_tools.memo import (
     _propose_memo_create,
     _propose_memo_edit,
 )
+from services.chat_workspace_tools.prompts import (
+    MY_PROMPT_READ_TOOL_NAME,
+    MY_PROMPT_SAVE_DEFINITION,
+    PROMPTS_TOOL_FAMILY,
+    _execute_my_prompt_save,
+    _propose_my_prompt_save,
+)
 from services.chat_workspace_tools.registry import (
     ChatWorkspaceToolbox,
     Proposal,
@@ -286,6 +293,51 @@ class MemoProposeHandlerTests(unittest.TestCase):
         self.assertEqual(proposal.preview["content"], "全文書き換え")
 
 
+class MyPromptSaveTests(unittest.TestCase):
+    def test_edit_without_body_preserves_long_existing_task_body(self):
+        body = "x" * 12_000
+        task = {
+            "task_id": 42,
+            "name": "古いタイトル",
+            "prompt_template": body,
+            "response_rules": "existing rules",
+            "output_skeleton": None,
+            "input_examples": None,
+            "output_examples": None,
+            "updated_at": "revision-1",
+        }
+        with patch("services.chat_workspace_tools.prompts.get_owned_task", AsyncMock(return_value=task)):
+            proposal = asyncio.run(_propose_my_prompt_save(1, {"task_id": 42, "title": "新しいタイトル"}))
+
+        self.assertIsNone(proposal.arguments["prompt_content"])
+        self.assertEqual(proposal.preview["prompt_content"], body)
+
+        with patch("services.chat_workspace_tools.prompts.edit_task", AsyncMock(return_value=True)) as edit_task_mock:
+            asyncio.run(_execute_my_prompt_save("session", 1, proposal.arguments, proposal.target_ref))
+
+        edit_task_mock.assert_awaited_once_with(
+            1,
+            42,
+            "新しいタイトル",
+            None,
+            None,
+            None,
+            None,
+            None,
+            expected_updated_at="revision-1",
+            session="session",
+        )
+
+    def test_new_task_still_requires_prompt_body(self):
+        with self.assertRaises(WorkspaceToolArgumentError):
+            asyncio.run(_propose_my_prompt_save(1, {"title": "タイトル"}))
+
+    def test_prompt_body_is_optional_in_schema_for_edits(self):
+        definition = MY_PROMPT_SAVE_DEFINITION["function"]
+        self.assertEqual(definition["parameters"]["required"], ["title"])
+        self.assertIn("omit this to keep the existing body", definition["parameters"]["properties"]["prompt_content"]["description"])
+
+
 def _expand_repeats(value):
     if isinstance(value, dict) and "repeat" in value:
         return str(value["repeat"]) * int(value["times"])
@@ -299,6 +351,68 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         published: list[tuple[str, dict]] = []
         runner = WorkspaceToolRunner(toolbox, publish=lambda event, payload: published.append((event, payload)))
         return runner, published
+
+    def test_public_prompt_overlap_check_includes_the_ai_model_field(self):
+        private_text = "Private model instructions that must never be copied into public prompt metadata."
+        toolbox = ChatWorkspaceToolbox(
+            [], user_id=7, chat_room_id="room-7", llm_profile_context=private_text
+        )
+        runner = WorkspaceToolRunner(toolbox, publish=lambda *_: None)
+        proposal = Proposal(
+            arguments={},
+            preview={"kind": "publish_prompt", "ai_model": private_text},
+            target_ref={},
+            target_title="Prompt",
+        )
+
+        flagged = runner._flag_private_overlap(proposal)
+
+        self.assertEqual(flagged.target_ref["private_overlap_excerpts"], [private_text])
+
+    def test_runner_tracks_overlap_across_my_prompt_read_chunks(self):
+        left = "x" * 25
+        right = "y" * 25
+        content_by_start = {
+            0: "a" * 2_975 + left,
+            3_000: right + "b" * 2_975,
+        }
+
+        async def read(user_id: int, arguments: dict, max_chars: int) -> ReadResult:
+            start = arguments["start"]
+            return ReadResult(
+                payload={
+                    "status": "ok",
+                    "task": {
+                        "task_id": 42,
+                        "section": "prompt_content",
+                        "start": start,
+                        "content": content_by_start[start],
+                    },
+                }
+            )
+
+        spec = ToolSpec(
+            name=MY_PROMPT_READ_TOOL_NAME,
+            family=PROMPTS_TOOL_FAMILY,
+            definition={"type": "function", "function": {"name": MY_PROMPT_READ_TOOL_NAME}},
+            budget="reads",
+            read=read,
+        )
+        runner, _ = self._runner(spec)
+        state = _make_state()
+
+        runner.run(state, _tool_call(MY_PROMPT_READ_TOOL_NAME, start=0))
+        runner.run(state, _tool_call(MY_PROMPT_READ_TOOL_NAME, start=3_000))
+        proposal = Proposal(
+            arguments={},
+            preview={"kind": "publish_prompt", "content": left + right},
+            target_ref={},
+            target_title="Prompt",
+        )
+
+        flagged = runner._flag_private_overlap(proposal)
+
+        self.assertEqual(flagged.target_ref["private_overlap_excerpts"], [left + right])
 
     # Dispatch -----------------------------------------------------------------
 
@@ -465,7 +579,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         state = _make_state()
         result = runner.run(state, _tool_call("fake_write", text="x"))
         self.assertEqual(result["error_code"], "target_not_found")
-        self.assertIn("memo_id", result["message"])
+        self.assertIn("Re-check the id", result["message"])
         state.turn_state.record_search.assert_called_once()
         self.assertEqual(state.turn_state.record_search.call_args.kwargs["status"], "target_not_found")
 

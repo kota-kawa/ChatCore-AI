@@ -35,6 +35,7 @@ from services.chat_workspace_tools.registry import (
 from services.db import session_scope
 from services.error_messages import (
     ERROR_CHAT_TOOL_WRITE_RATE_LIMITED_TEMPLATE,
+    ERROR_TOOL_APPROVAL_ACK_REQUIRED,
     ERROR_TOOL_APPROVAL_ALREADY_DECIDED,
     ERROR_TOOL_APPROVAL_ALWAYS_NOT_ALLOWED,
     ERROR_TOOL_APPROVAL_EXPIRED,
@@ -130,6 +131,11 @@ def approval_card(row: ChatToolApproval) -> dict[str, Any]:
         warnings.append("shared_memo")
     if target_ref.get("untrusted_input"):
         warnings.append("untrusted_input_in_turn")
+    preview = dict(row.preview or {})
+    private_overlap_excerpts = target_ref.get("private_overlap_excerpts")
+    if private_overlap_excerpts:
+        warnings.append("private_text_in_public_post")
+        preview["private_overlap_excerpts"] = private_overlap_excerpts
     return validate_tool_approval_payload(
         {
             "id": str(row.id),
@@ -138,12 +144,20 @@ def approval_card(row: ChatToolApproval) -> dict[str, Any]:
             "status": row.status,
             "decision": row.decision,
             "always_allowed": _always_allowed(spec, target_ref),
-            "preview": row.preview,
+            "preview": preview,
             "warnings": warnings,
             "expires_at": _serialize_timestamp(row.expires_at),
             "result": row.result,
         }
     )
+
+
+# 非公開の内容が混入した警告付きのカードは、確認チェック（acknowledge_warnings）が
+# 立つまで承認（拒否は除く）できない。
+# A card carrying the private-content-overlap warning cannot be approved (denial is unaffected)
+# until the acknowledgment checkbox (acknowledge_warnings) is set.
+def _requires_acknowledgement(target_ref: dict[str, Any]) -> bool:
+    return bool(target_ref.get("private_overlap_excerpts"))
 
 
 def _audit(row: ChatToolApproval, *, outcome: str) -> None:
@@ -304,10 +318,16 @@ async def _execute(
     user_id: int,
     arguments: dict[str, Any],
     target_ref: dict[str, Any],
+    *,
+    client_ip: str | None = None,
 ) -> ExecutionOutcome:
     if spec.execute is None:
         raise WorkspaceToolError("execution_failed")
-    return await spec.execute(session, user_id, dict(arguments), dict(target_ref))
+    # client_ip は publish_prompt のレート制限にだけ使う一時的な受け渡しで、行には保存しない。
+    # client_ip is a transient hand-off used only by publish_prompt's rate limit; it is never
+    # persisted on the row.
+    execute_target_ref = {**target_ref, "_client_ip": client_ip} if client_ip else dict(target_ref)
+    return await spec.execute(session, user_id, dict(arguments), execute_target_ref)
 
 
 # Reply persistence and lifecycle ---------------------------------------------
@@ -428,6 +448,7 @@ async def _settle_locked(
     decision: str | None,
     spec: ToolSpec | None,
     now: datetime,
+    client_ip: str | None = None,
 ) -> tuple[ChatToolApproval, dict[str, Any], ExecutionOutcome | None]:
     """Settle one pending row: ``decision`` None expires it, "deny" denies it, else it runs."""
     outcome: ExecutionOutcome | None = None
@@ -447,7 +468,9 @@ async def _settle_locked(
             assert spec is not None
             try:
                 async with db.begin_nested():
-                    outcome = await _execute(spec, db, user_id, row.arguments, row.target_ref or {})
+                    outcome = await _execute(
+                        spec, db, user_id, row.arguments, row.target_ref or {}, client_ip=client_ip
+                    )
                 status, result = "succeeded", _success_result(outcome)
             except (WorkspaceToolError, ApiServiceError) as exc:
                 outcome = None
@@ -472,6 +495,8 @@ async def decide_tool_approval(
     requested_decision: str,
     *,
     auth_limit_service: AuthLimitService | None = None,
+    acknowledge_warnings: bool = False,
+    client_ip: str | None = None,
 ) -> dict[str, Any]:
     decision = _STORED_DECISION[requested_decision]
     async with session_scope() as db:
@@ -495,6 +520,8 @@ async def decide_tool_approval(
     if decision != "deny":
         if spec is None:
             raise _approval_not_found()
+        if _requires_acknowledgement(dict(row.target_ref or {})) and not acknowledge_warnings:
+            raise ApiServiceError(ERROR_TOOL_APPROVAL_ACK_REQUIRED, 400, code="approval_ack_required")
         allowed, retry_after = await run_blocking(
             consume_chat_tool_write_limit,
             user_id,
@@ -504,7 +531,9 @@ async def decide_tool_approval(
             raise ChatToolRateLimitedError(retry_after)
 
     try:
-        settled_row, card, outcome = await _settle_locked(approval_id, user_id, decision=decision, spec=spec, now=now)
+        settled_row, card, outcome = await _settle_locked(
+            approval_id, user_id, decision=decision, spec=spec, now=now, client_ip=client_ip
+        )
     except _ApprovalAlreadySettledError as settled:
         return _settled_card(settled.row, decision)
     _run_after_commit(outcome)

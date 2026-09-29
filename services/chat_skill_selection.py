@@ -22,6 +22,7 @@ from services.llm_context_budget import estimate_messages_tokens, get_available_
 from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     MEMO_TOOLS_SYSTEM_SKILL_ID,
+    PROMPT_TOOLS_SYSTEM_SKILL_ID,
     ChatSkillsContext,
     SkillCandidate,
     build_enabled_user_skills_prompt,
@@ -129,7 +130,9 @@ current task. A personal Skill may combine general response preferences with con
 background; do not treat unrelated background as a reason to discard an applicable response
 preference. The application preserves explicit, unconditional response-style instructions even
 when you omit the rest of that Skill. Select Memo only when the conversation asks about the user's
-saved memos or asks to create or change one. Use the bounded conversation, project instructions,
+saved memos or asks to create or change one. Select Prompt sharing and settings only when the
+conversation asks to search or read ChatCore's public prompts, or to read or change the user's own
+saved prompts (Tasks) or personal Skills. Use the bounded conversation, project instructions,
 and task instructions to judge relevance.
 
 Choose ui_mode from the latest substantive request, using prior turns only to resolve short
@@ -471,10 +474,14 @@ def _selected_context(
     builder = context._prompt_builder or build_enabled_user_skills_prompt
     has_ui_skill = GENERATIVE_UI_SYSTEM_SKILL_ID in selected_set and GENERATIVE_UI_SYSTEM_SKILL_ID not in excluded_set
     has_memo_skill = MEMO_TOOLS_SYSTEM_SKILL_ID in selected_set and MEMO_TOOLS_SYSTEM_SKILL_ID not in excluded_set
+    has_prompt_tools_skill = (
+        PROMPT_TOOLS_SYSTEM_SKILL_ID in selected_set and PROMPT_TOOLS_SYSTEM_SKILL_ID not in excluded_set
+    )
     return ChatSkillsContext(
         prompt=builder(selected_records),
         generative_ui_enabled=context.generative_ui_enabled,
         memo_tools_enabled=context.memo_tools_enabled and has_memo_skill,
+        prompt_tools_enabled=context.prompt_tools_enabled and has_prompt_tools_skill,
         candidates=context.candidates,
         generative_ui_selected=has_ui_skill,
         _prompt_builder=context._prompt_builder,
@@ -572,6 +579,7 @@ def _result(
             "ui_forbidden": ui_forbidden,
             "generative_ui_selected": context.generative_ui_selected,
             "memo_tools_selected": context.memo_tools_enabled,
+            "prompt_tools_selected": context.prompt_tools_enabled,
             "input_tokens": input_tokens,
             "input_budget_tokens": input_budget_tokens,
         },

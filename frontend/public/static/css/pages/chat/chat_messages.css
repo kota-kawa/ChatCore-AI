@@ -1631,6 +1631,39 @@
   flex: 0 0 auto;
 }
 
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__acknowledgment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+  min-height: var(--tap-target-min, 44px);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-primary);
+  color: var(--text-dark);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-normal, 1.5);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__acknowledgment input {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--primary-dark);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__acknowledgment:has(input:focus-visible) {
+  outline: 2px solid var(--primary-dark);
+  outline-offset: 2px;
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-card__acknowledgment input:disabled {
+  cursor: not-allowed;
+}
+
 :where(body.chat-page, .chat-page-shell) .tool-approval-preview {
   display: flex;
   flex-direction: column;
@@ -1650,6 +1683,21 @@
 /* Each partial edit starts at its "before" field, so a little extra space precedes the second and later edits */
 :where(body.chat-page, .chat-page-shell) .tool-approval-preview__field--before ~ .tool-approval-preview__field--before {
   margin-top: var(--space-2, 0.5rem);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__field--warning {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--primary-color);
+  background: var(--surface-secondary);
+}
+
+:where(body.chat-page, .chat-page-shell) .tool-approval-preview__overlap-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .tool-approval-preview__label {
@@ -1803,7 +1851,13 @@
   color: var(--primary-color, #19c37d);
 }
 
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .tool-approval-card__acknowledgment input {
+  accent-color: var(--primary-color, #19c37d);
+  color-scheme: dark;
+}
+
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(
+  .tool-approval-card__acknowledgment:has(input:focus-visible),
   .tool-approval-preview__summary,
   .tool-approval-card__result-link
 ):focus-visible {
