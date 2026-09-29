@@ -93,8 +93,14 @@ from .chat_web_page_reader import (
     WebPageReader,
     read_web_page_tool_definition,
 )
-from .chat_workspace_tools.profile import PROFILE_TOOL_FAMILY
-from .chat_workspace_tools.prompts import PROMPTS_TOOL_FAMILY, SHARED_PROMPT_READ_TOOL_NAME
+from .chat_workspace_tools.profile import PROFILE_SETTINGS_UPDATE_TOOL_NAME, PROFILE_TOOL_FAMILY
+from .chat_workspace_tools.prompts import (
+    MY_PROMPT_SAVE_TOOL_NAME,
+    MY_SKILL_SAVE_TOOL_NAME,
+    PROMPTS_TOOL_FAMILY,
+    PUBLISH_PROMPT_TOOL_NAME,
+    SHARED_PROMPT_READ_TOOL_NAME,
+)
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .chat_workspace_tools.runner import WorkspaceToolRunner
 from .llm import (
@@ -301,6 +307,71 @@ _MEMO_PENDING_CLAIM_EN = re.compile(
 )
 
 
+# メモ以外の書き込みツール（プロフィール・Task・公開投稿・Skill）の完了申告。プロンプトやタスクは会話の
+# 下書きとしても普通に「作成しました」と書かれるため、同じ対象のカードがこのターンにあり、どれも実行済み
+# でないときだけ食い違いとみなす。カードの無い回答は下書きと区別できないので判定しない。
+# Completion claims for the non-memo write tools (profile, Task, public post, Skill). Prompts and
+# tasks are also drafted in ordinary chat ("I've created a prompt:"), so a claim counts as a mismatch
+# only when this turn has a card for the same target and none of them was executed. An answer with no
+# such card cannot be told apart from a draft and is not judged.
+# 公開したという申告は動詞で判定し、「非公開で保存しました」を公開の申告と取り違えない。
+# A publish claim is judged by its verb, so "saved as private (非公開)" is not mistaken for one.
+_PUBLISH_CLAIM = re.compile(r"(?<![非未])(?:公開|投稿)(?:しました|いたしました|されました)|\b(?:published|posted)\b", re.IGNORECASE)
+# 承認待ちの提案やカードを説明する文。承認待ちの指示に沿った正しい説明なので判定しない。
+# A statement about the proposal or its card; it is the description the approval-pending prompt asks for.
+_WRITE_PROPOSAL_WORDING = re.compile(r"提案|カード|承認|\b(?:propos\w*|cards?|approv\w*)\b", re.IGNORECASE)
+_WRITE_TARGET_TOOLS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
+    (
+        re.compile(r"プロフィール|表示名|自己紹介|言語設定|表示設定|テーマ|profile|display name|\bbio\b|\btheme\b", re.IGNORECASE),
+        frozenset({PROFILE_SETTINGS_UPDATE_TOOL_NAME}),
+    ),
+    (
+        re.compile(r"プロンプト|タスク|prompt|task", re.IGNORECASE),
+        frozenset({MY_PROMPT_SAVE_TOOL_NAME, PUBLISH_PROMPT_TOOL_NAME}),
+    ),
+    (re.compile(r"スキル|skill", re.IGNORECASE), frozenset({MY_SKILL_SAVE_TOOL_NAME})),
+)
+_WRITE_CLAIM_JA = re.compile(
+    r"^[ \t]*(?:[-*・][ \t]*)?[^\n。！？]{0,100}"
+    r"(?:更新|変更|保存|作成|登録|公開|投稿|追加|編集|設定)(?:しました|いたしました|されました|が完了しました|済みです)"
+    r"(?=[。！!：:*]|$)",
+    re.MULTILINE,
+)
+_WRITE_CLAIM_EN = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?(?:(?:Done|Completed)[ \t]*[,—–:-][ \t]*)?"
+    r"(?:I(?:['’]ve| have)? (?:updated|changed|saved|created|published|posted|added|edited|set)\b"
+    r"|(?:The|Your|This) (?:[A-Za-z0-9][A-Za-z0-9'_-]*[ \t]+){0,8}"
+    r"(?:(?:has|have) been|was|is(?: now)?)(?: successfully)? "
+    r"(?:updated|changed|saved|created|published|posted|added|edited|set)\b)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+# 完了を申告した対象ごとに、このターンのカードがそれを裏付けないか。裏付けのない対象が1つでもあれば
+# True、判定の材料が無ければ False。
+# Whether any claimed target has cards in this turn but none executed; False when there is nothing
+# to judge the claim against.
+def _non_memo_write_claim_contradicted(statement: str, approval_cards: Sequence[dict[str, Any]]) -> bool:
+    if not approval_cards or not (_WRITE_CLAIM_JA.match(statement) or _WRITE_CLAIM_EN.match(statement)):
+        return False
+    if _WRITE_PROPOSAL_WORDING.search(statement):
+        return False
+    for pattern, tools in _WRITE_TARGET_TOOLS:
+        if not pattern.search(statement):
+            continue
+        cards = [card for card in approval_cards if card.get("tool") in tools]
+        # 公開の申告を裏付けるのは公開ツールの実行だけ。保存の実行では足りない。
+        # Only an executed publish backs a publish claim; an executed save does not.
+        backing = (
+            frozenset({PUBLISH_PROMPT_TOOL_NAME})
+            if PUBLISH_PROMPT_TOOL_NAME in tools and _PUBLISH_CLAIM.search(statement)
+            else tools
+        )
+        if cards and not any(card.get("tool") in backing and card.get("status") == "succeeded" for card in cards):
+            return True
+    return False
+
+
 def _is_memo_only_request(latest_user_message: str) -> bool:
     """Whether this memo-related request lacks an explicit external lookup request."""
     request = re.sub(r"```.*?```", "", latest_user_message, flags=re.DOTALL)
@@ -363,12 +434,12 @@ def _matching_memo_claim_card(
     return card
 
 
-def _unconfirmed_memo_change_fallback(
+def _unconfirmed_write_claim_fallback(
     text: str,
     latest_user_message: str,
     approval_cards: Sequence[dict[str, Any]] = (),
 ) -> str | None:
-    """Replace direct memo write claims unsupported by this turn's card status."""
+    """Replace memo write claims, and non-memo write claims its cards contradict, with a notice."""
     # Quoted examples and code are data, not claims made by the assistant.
     prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     for line in prose.splitlines():
@@ -398,7 +469,20 @@ def _unconfirmed_memo_change_fallback(
                 or _MEMO_PASSIVE_CLAIM_JA.match(statement)
                 or _MEMO_PASSIVE_CLAIM_EN.match(statement)
             )
+            # 「その変更は承認待ちです」のようにメモと名指ししない文は、メモのカードが無いターンでは
+            # 他の対象（Skill など）のカードの説明なので、メモの判定にかけない。
+            # A statement that never names a memo ("the change is awaiting approval") describes another
+            # target's card (a Skill, say) when the turn has cards but none for memos.
+            if (
+                (proposal or pending)
+                and approval_cards
+                and not any(str(card.get("tool") or "").startswith("memo_") for card in approval_cards)
+                and not re.search(r"メモ|\b(?:memo|note)\b", statement, re.IGNORECASE)
+            ):
+                continue
             if not (proposal or pending or completed):
+                if _non_memo_write_claim_contradicted(statement, approval_cards):
+                    return _unconfirmed_write_notice(latest_user_message, approval_cards, memo=False)
                 continue
             card = _matching_memo_claim_card(line[match.start():match.end()], latest_user_message, approval_cards)
             status = card.get("status") if card else None
@@ -408,14 +492,20 @@ def _unconfirmed_memo_change_fallback(
                 continue
             if completed and status == "succeeded" and not proposal:
                 continue
-            if infer_response_language(latest_user_message) == "en":
-                if approval_cards:
-                    return "This description does not match the approval card status. Please check the card."
-                return "The memo change was not submitted, and no approval card was created. Please try again."
-            if approval_cards:
-                return "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
-            return "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
+            return _unconfirmed_write_notice(latest_user_message, approval_cards, memo=True)
     return None
+
+
+def _unconfirmed_write_notice(latest_user_message: str, approval_cards: Sequence[dict[str, Any]], *, memo: bool) -> str:
+    # メモ以外はカードがあるときだけ判定するので、「カードも作成されていない」文面はメモだけが使う。
+    # Non-memo claims are judged only with cards present, so only memo uses the "no card" wording.
+    if infer_response_language(latest_user_message) == "en":
+        if approval_cards or not memo:
+            return "This description does not match the approval card status. Please check the card."
+        return "The memo change was not submitted, and no approval card was created. Please try again."
+    if approval_cards or not memo:
+        return "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+    return "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
 
 
 # 承認カードを本文・画像の後ろに付ける。カードがある回答では、利用者の判断をカードに一本化する
@@ -1067,7 +1157,7 @@ class ChatGenerationJob:
                 self._chunks.append(pending_text)
             partial_text = "".join(self._chunks)
             if self._workspace_tools is not None:
-                fallback = _unconfirmed_memo_change_fallback(
+                fallback = _unconfirmed_write_claim_fallback(
                     partial_text,
                     _latest_user_message_text(self._conversation_messages),
                     self._tool_approval_parts,
@@ -2031,7 +2121,7 @@ class ChatGenerationJob:
         step_chunks: list[str],
     ) -> None:
         if self._workspace_tools is not None:
-            fallback = _unconfirmed_memo_change_fallback(
+            fallback = _unconfirmed_write_claim_fallback(
                 "".join(step_chunks), state.latest_user_message, state.tool_approval_parts
             )
             if fallback is not None:
@@ -2633,7 +2723,7 @@ class ChatGenerationJob:
             and not state.workspace_action_recovery_attempted
             and not cancelled
             and not output_limited
-            and _unconfirmed_memo_change_fallback("".join(visible_chunks), state.latest_user_message) is not None
+            and _unconfirmed_write_claim_fallback("".join(visible_chunks), state.latest_user_message) is not None
         ):
             # 訂正も通常ループの判断予算を使う。結果や承認を捏造せず、同じツールで再判断させる。
             # Use the normal decision budget; let the model submit through the existing tools.
@@ -2678,7 +2768,7 @@ class ChatGenerationJob:
         if visible_chunks:
             visible_text = "".join(visible_chunks)
             if output_limited and self._workspace_tools is not None:
-                fallback = _unconfirmed_memo_change_fallback(
+                fallback = _unconfirmed_write_claim_fallback(
                     visible_text, state.latest_user_message, state.tool_approval_parts
                 )
                 if fallback is not None:
@@ -3681,7 +3771,7 @@ class ChatGenerationJob:
             latest_user_message,
         )
         if self._workspace_tools is not None:
-            fallback = _unconfirmed_memo_change_fallback(
+            fallback = _unconfirmed_write_claim_fallback(
                 normalized_response.text, latest_user_message, state.tool_approval_parts
             )
             if fallback is not None:

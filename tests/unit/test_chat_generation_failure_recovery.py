@@ -369,7 +369,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.assertEqual(saved.call_args.args[0], expected)
 
     def test_memo_claim_guard_matches_quoted_generated_titles_in_the_same_statement(self):
-        from services.chat_generation import _unconfirmed_memo_change_fallback
+        from services.chat_generation import _unconfirmed_write_claim_fallback
 
         card = {
             "tool": "memo_create", "status": "pending",
@@ -381,18 +381,105 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
             "新しいメモ『買い物リスト』の提案を作成しました。",
         ):
             with self.subTest(reply=reply):
-                self.assertIsNone(_unconfirmed_memo_change_fallback(reply, request, [card]))
+                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, request, [card]))
         for reply in (
             "新しいメモ「別の題名」は承認待ちです。",
             "買い物リストについて説明します。新しいメモ「別の題名」は承認待ちです。",
             "新しいメモ「買い物リスト」を作成しました。",
         ):
             with self.subTest(reply=reply):
-                self.assertIsNotNone(_unconfirmed_memo_change_fallback(reply, request, [card]))
+                self.assertIsNotNone(_unconfirmed_write_claim_fallback(reply, request, [card]))
         card["preview"]["title"] = "修正・追記の作業メモ"
-        self.assertIsNone(_unconfirmed_memo_change_fallback(
+        self.assertIsNone(_unconfirmed_write_claim_fallback(
             "新しいメモ「修正・追記の作業メモ」の提案を作成しました。", request, [card]
         ))
+
+    # 日本語: メモ以外の書き込み（プロフィール・Task・Skill・公開投稿）で、同じ対象のカードが未実行なのに
+    #         完了を申告した回答を差し替えることを検証します（issue #781）。
+    # English: Verify a completion claim about a non-memo write is replaced when this turn's card for
+    #          that target was not executed (issue #781).
+    def test_write_claim_guard_replaces_non_memo_claims_its_cards_contradict(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+        claims = {
+            "表示名を「こうた」に変更しました。": "profile_settings_update",
+            "- プロフィールの自己紹介を更新いたしました。": "profile_settings_update",
+            "**表示名を「こうた」に設定しました**": "profile_settings_update",
+            "新しいタスク「議事録要約」を保存しました。": "my_prompt_save",
+            "プロンプトを公開しました！": "publish_prompt",
+            "スキル「敬語チェック」を作成しました。": "my_skill_save",
+            "I updated your display name.": "profile_settings_update",
+            "Your new skill has been successfully created.": "my_skill_save",
+        }
+        for reply, tool in claims.items():
+            with self.subTest(reply=reply):
+                pending = {"tool": tool, "status": "pending"}
+                self.assertEqual(_unconfirmed_write_claim_fallback(reply, "お願いします", [pending]), mismatch)
+                executed = {"tool": tool, "status": "succeeded"}
+                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [executed, pending]))
+        # 保存（my_prompt_save）の実行では、公開したという申告は裏付けられない。
+        # An executed save does not back a claim that the prompt was published.
+        saved = {"tool": "my_prompt_save", "status": "succeeded"}
+        publish = {"tool": "publish_prompt", "status": "pending"}
+        self.assertEqual(_unconfirmed_write_claim_fallback("プロンプトを公開しました。", "お願いします", [saved, publish]), mismatch)
+        # 保存カードしか無くても、公開したという申告は裏付けられない。「非公開で保存」は公開の申告ではない。
+        # With only a save card, a publish claim is still unbacked; "saved as private" is no publish claim.
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback("プロンプトを公開しました。", "お願いします", [{**saved, "status": "pending"}]),
+            mismatch,
+        )
+        self.assertIsNone(_unconfirmed_write_claim_fallback("非公開でプロンプトを保存しました。", "お願いします", [saved, publish]))
+        # 承認待ちの提案やカードの説明は、承認待ちの指示どおりの正しい説明なので差し替えない。
+        # Describing the pending proposal or card is what the approval-pending prompt asks for.
+        for reply, tool in (
+            ("表示名を「こうた」に変更する提案を作成しました。承認カードを確認してください。", "profile_settings_update"),
+            ("表示名の変更カードを作成しました。", "profile_settings_update"),
+            ("プロンプトの保存カードを作成しました。", "my_prompt_save"),
+            ("I've created an approval card to update your display name.", "profile_settings_update"),
+            ("I've created a proposal to save the prompt.", "my_prompt_save"),
+            # 実 API（GPT-OSS 120B）で差し替えられていた文 / replaced in a real-API run (GPT-OSS 120B)
+            (
+                "提案された変更は、個人Skill「敬語チェック」を作成し、送信前に文面の敬語の誤りを指摘して直し方を示す"
+                "機能を追加するものです。現在、その変更は下の承認カードでユーザーの承認待ちです。",
+                "my_skill_save",
+            ),
+            ("The change is waiting for your approval.", "my_skill_save"),
+        ):
+            with self.subTest(reply=reply):
+                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [{"tool": tool, "status": "pending"}]))
+        # 2つの対象を申告したら、それぞれが裏付けられている必要がある。
+        # A claim naming two targets needs each of them backed.
+        profile = {"tool": "profile_settings_update", "status": "succeeded"}
+        task = {"tool": "my_prompt_save", "status": "pending"}
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback("プロフィールとタスクを更新しました。", "お願いします", [profile, task]), mismatch
+        )
+
+    # 日本語: カードの無い回答や、対象のカードが無い回答は、会話の下書きと区別できないので差し替えない
+    #         ことを検証します。
+    # English: Verify answers without a card for the target are left alone, since they cannot be told
+    #          apart from drafts written in the chat.
+    def test_write_claim_guard_leaves_drafts_alone(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        memo_card = {"tool": "memo_create", "status": "pending", "preview": {"kind": "memo_create", "title": "買い物"}}
+        for reply in (
+            "プロンプトを作成しました。以下がその内容です。",
+            "以下のプロンプトを作成しました：",
+            "タスクリストを作成しました：\n- 買い物",
+            "キャラクターのプロフィールを作成しました。名前は太郎です。",
+            "自己紹介文を作成しました：",
+            "レポートのテーマを更新しました。",
+            "スキルの説明を追加しました。",
+            "I've created a task list for you:",
+            "I've saved the prompt below for you to copy.",
+            "表示名は設定画面のプロフィール欄から変更できます。",
+            "承認すると表示名が「こうた」に変更されます。",
+        ):
+            with self.subTest(reply=reply):
+                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします"))
+                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [memo_card]))
 
     def test_memo_claim_guard_does_not_use_another_cards_success(self):
         other_memo = {
