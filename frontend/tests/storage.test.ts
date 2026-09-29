@@ -347,6 +347,19 @@ test("readStoredHistory restores generated UI parts instead of dropping them", (
   assert.equal(entry.parts?.[1].type, "sandbox_artifact");
 });
 
+test("readStoredHistory sanitizes cached assistant text and preserves user text", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+  const malformed = 'Intro\n<chatcore_button>{"type":"yes_no","question":"Broken';
+  const userExample = 'Please inspect <chatcore_button>{"type":"yes_no","question":"Continue?"}</chatcore_button>';
+
+  writeStoredHistory("room-legacy", [
+    { text: malformed, sender: "assistant" },
+    { text: userExample, sender: "user" },
+  ]);
+
+  assert.deepEqual(readStoredHistory("room-legacy").map(({ text }) => text), ["Intro", userExample]);
+});
+
 test("readStoredHistory keeps a generated UI failure notice on reload", () => {
   installFakeLocalStorage(new FakeLocalStorage());
 
