@@ -1,9 +1,9 @@
 """Detect model-internal tool-call protocol leaking into user-facing text.
 
-GPT-6 Luna と GPT-OSS はツール呼び出しを内部の Harmony 形式で表す。サンプリングが崩れると
+GPT-6 Luna と GPT-OSS はツール呼び出しを内部の Harmony 形式で、Qwen は XML 風のタグで表す。サンプリングが崩れると
 `assistant to=functions.web_search` や `<|im_end|>` のような内部形式が本文として流れ、そのまま
 出力上限まで繰り返すことがある（issue #771）。その先は回答ではないので、境目で打ち切る。
-GPT-6 Luna and GPT-OSS express tool calls in the internal Harmony format. When sampling derails,
+GPT-6 Luna and GPT-OSS express tool calls in the internal Harmony format, Qwen in XML-like tags. When sampling derails,
 strings such as `assistant to=functions.web_search` or `<|im_end|>` stream as body text and can
 repeat up to the output cap (issue #771). Nothing after that point is an answer, so cut there.
 """
@@ -19,6 +19,8 @@ _PROTOCOL_LEAK_PATTERN = re.compile(
     r"|\S*\bmulti_tool_use\.parallel\b"
     r"|<\|(?:im_start|im_end|im_sep|start|end|message|channel|call|return|constrain|assistant|user|system|endoftext)\|>"
     r"|</\|?assistant\|?>"
+    # Qwen はツール呼び出しを XML 風のタグで表す / Qwen expresses tool calls as XML-like tags.
+    r"|</?tool_call>|<function=[A-Za-z_]|</function>|<parameter=[A-Za-z_]|</parameter>"
 )
 # コードブロックとインラインコード。生成途中で閉じていないものも、その行末（ブロックは本文末）まで
 # コードとみなす。

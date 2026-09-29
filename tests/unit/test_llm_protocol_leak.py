@@ -18,6 +18,8 @@ class FindProtocolLeakTestCase(unittest.TestCase):
             "Test complete\n<|assistant|>THOOK": "Test complete\n",
             "156 \n</|assistant|> \n16.0": "156 \n",
             "156\n</assistant> (analysis) code?": "156\n",
+            "- 未決事項: 無料枠\n</parameter>\n</function>": "- 未決事項: 無料枠\n",
+            "回答です。<tool_call>\n<function=web_search>": "回答です。",
         }
         for text, kept in cases.items():
             with self.subTest(text=text):
