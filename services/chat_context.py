@@ -502,13 +502,14 @@ def build_project_instructions_message(instructions: str | None) -> dict[str, st
     trimmed = trim_text_to_token_budget(instructions, PROJECT_INSTRUCTIONS_TOKEN_BUDGET)
     if not trimmed:
         return None
-    # 日本語: プロジェクト固有の指示を当該プロジェクト内の会話で優先するよう渡すシステムプロンプト。
+    # 日本語: プロジェクト固有の指示。基本プロンプトの優先順位どおり、最新の明示的な依頼がこれに優先する。
+    # Project-specific instructions; per the base prompt's precedence, the latest explicit request wins.
     return {
         "role": "system",
         "content": (
             "<project_instructions>\n"
-            "The following are instructions specific to this project. Follow them with priority in "
-            "every conversation inside the project.\n"
+            "The following are instructions specific to this project. Follow them in every "
+            "conversation inside the project unless the latest message explicitly asks otherwise.\n"
             f"{trimmed}\n"
             "</project_instructions>"
         ),

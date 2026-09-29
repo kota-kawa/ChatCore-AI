@@ -236,7 +236,8 @@ class UserSkillPromptTests(unittest.TestCase):
             contents.index(
                 "<project_instructions>\n"
                 "The following are instructions specific to this project."
-                " Follow them with priority in every conversation inside the project.\n"
+                " Follow them in every conversation inside the project unless the latest message"
+                " explicitly asks otherwise.\n"
                 "project\n"
                 "</project_instructions>"
             ),
