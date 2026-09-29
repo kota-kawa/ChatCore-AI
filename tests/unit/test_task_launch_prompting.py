@@ -23,6 +23,7 @@ from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     GENERATIVE_UI_SKILL_INSTRUCTIONS,
 )
+from services.web_search import build_web_search_evidence_policy_message
 from tests.helpers.request_helpers import build_request
 
 
@@ -253,19 +254,24 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         for term in ("UI_MODE", "Artifact", "chatcore-artifact", "generated UI", "generative UI"):
             with self.subTest(term=term):
                 self.assertNotIn(term, BASE_SYSTEM_PROMPT)
-        # 画像の扱いなど、生成UIに依存しない画像の規則は基本プロンプトに残す。
-        # Image rules that do not depend on Generative UI stay in the base prompt.
-        self.assertIn("## Web-search visuals", BASE_SYSTEM_PROMPT)
+        # 検索画像の規則は検索したターンの方針にだけ置き、毎ターンの基本プロンプトには置かない（issue #781）。
+        # Search-image rules live only in the after-search policy, not in every turn's base prompt (issue #781).
+        self.assertNotIn("## Web-search visuals", BASE_SYSTEM_PROMPT)
 
-    # 日本語: 画像を求められたときにリンクの羅列で代替させないルールが入っていることを検証します。
-    # English: Verify the prompt forbids answering a "show me" request with a list of links.
-    def test_base_system_prompt_forbids_link_lists_instead_of_visuals(self):
-        self.assertIn("A link is never a substitute for an answer", BASE_SYSTEM_PROMPT)
-        self.assertIn("telling the user to open a page to see the pictures", BASE_SYSTEM_PROMPT)
-        self.assertIn("Do not print bare URLs in the prose", BASE_SYSTEM_PROMPT)
-        self.assertIn("describe its concrete appearance", BASE_SYSTEM_PROMPT)
-        self.assertIn("Never tell the user that normal chat cannot display images", BASE_SYSTEM_PROMPT)
-        self.assertNotIn("You cannot request, position, or count on them", BASE_SYSTEM_PROMPT)
+    # 日本語: 画像を求められたときにリンクの羅列で代替させず、画像を出せないと言わせない規則が、
+    #         検索したターンの方針と検索前の実行時文脈に入っていることを検証します。
+    # English: Verify the after-search policy and the pre-search runtime context forbid answering a
+    #          "show me" request with links or with a claim that images cannot be shown.
+    def test_search_prompts_forbid_link_lists_instead_of_visuals(self):
+        policy = build_web_search_evidence_policy_message()["content"]
+        self.assertIn("A list of links is never an answer", policy)
+        self.assertIn("Never write bare URLs in the prose", policy)
+        self.assertIn("answer with a concrete description drawn from the sources", policy)
+        self.assertIn("never tell the user that this chat cannot display images", policy)
+        self.assertIn("never emit image Markdown, HTML image tags, or image links", policy)
+        runtime = build_runtime_context_message()["content"]
+        self.assertIn("never tell the user that this chat cannot display images", runtime)
+        self.assertIn("when asked for photos, search", runtime)
         self.assertIn(
             "Never substitute links for a requested visual",
             GENERATIVE_UI_EXECUTION_CONTRACT,
