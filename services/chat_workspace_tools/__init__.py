@@ -8,6 +8,9 @@ tools still follow their respective built-in Skill toggles.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from typing import Any
+
 from .memo import MEMO_TOOL_SPECS
 from .profile import PROFILE_TOOL_SPECS
 from .prompts import PROMPTS_TOOL_SPECS
@@ -20,6 +23,19 @@ WORKSPACE_TOOL_SPECS: dict[str, ToolSpec] = {
 
 def get_workspace_tool_spec(name: str) -> ToolSpec | None:
     return WORKSPACE_TOOL_SPECS.get(name)
+
+
+# 会話のどこかに添付（文書・画像）があるか。過去ターンの添付も本文として毎ターン文脈へ戻るため、
+# 最新の発話だけでなく履歴全体を見る。添付を含むターンは外部の内容を読んだターンとして扱う。
+# Whether any message in the conversation carries attachments (documents or images). Earlier
+# uploads are put back into the context every turn, so the whole history counts, not just the
+# latest message; such a turn is treated as one that read external content.
+def conversation_has_attachments(messages: Iterable[Mapping[str, Any]]) -> bool:
+    return any(
+        message.get("role") == "user"
+        and bool(message.get("attached_file_contents") or message.get("attached_images"))
+        for message in messages
+    )
 
 
 # 1ターン分のツールボックスを作る。ログイン利用者の通常ルームで呼ぶ前提。プロフィールツールは

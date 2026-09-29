@@ -1,6 +1,7 @@
 """Exercise the real selector at both chat orchestration boundaries without provider calls."""
 
 import asyncio
+import dataclasses
 import json
 import unittest
 from types import SimpleNamespace
@@ -109,6 +110,27 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
             asyncio.run(run_chat_regeneration(pipeline_input))
 
         self.assertEqual(start.call_args.kwargs["workspace_tools"].browser_theme_preference, "dark")
+
+    # 日本語: 再生成でも、過去ターンの添付が文脈に戻るなら外部入力として扱うことを検証します（issue #781）。
+    # English: Regeneration also treats an earlier upload returning to the context as external input (issue #781).
+    def test_regeneration_counts_an_earlier_attachment_as_external_input(self):
+        pipeline_input = dataclasses.replace(
+            self._regeneration_input(),
+            all_messages=[
+                {"role": "user", "content": "資料です", "attached_file_contents": '[{"name":"a.txt","content":"x"}]'},
+                {"role": "assistant", "content": "読みました"},
+                {"role": "user", "content": "それを保存して"},
+            ],
+        )
+        with (
+            patch("services.chat_regeneration_pipeline.fetch_pasted_url_context", return_value=((), "")),
+            patch("services.chat_regeneration_pipeline.has_active_generation", return_value=False),
+            patch("services.chat_regeneration_pipeline.start_generation_job", return_value=Mock()) as start,
+            patch("services.chat_skill_selection.get_llm_json_response", return_value=self._decision([-1])),
+        ):
+            asyncio.run(run_chat_regeneration(pipeline_input))
+
+        self.assertTrue(start.call_args.kwargs["workspace_tools"].external_input_in_turn)
 
     def test_regeneration_reselects_and_filters_external_reference_text(self):
         pipeline_input = self._regeneration_input()

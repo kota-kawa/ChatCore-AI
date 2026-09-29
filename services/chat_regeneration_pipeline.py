@@ -49,7 +49,7 @@ from services.chat_url_context import (
     collect_earlier_pasted_urls,
     fetch_pasted_url_context,
 )
-from services.chat_workspace_tools import build_workspace_toolbox
+from services.chat_workspace_tools import build_workspace_toolbox, conversation_has_attachments
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import (
     artifact_status_part,
@@ -316,15 +316,6 @@ def _latest_user_content(messages: list[dict[str, Any]]) -> str:
     )
 
 
-# 最新のユーザー発話に添付（文書・画像）があるか。外部の内容を読んだターンとして扱う。
-# Whether the latest user message carries attachments; such a turn counts as reading external content.
-def _latest_user_has_attachments(messages: list[dict[str, Any]]) -> bool:
-    for message in reversed(messages):
-        if message.get("role") == "user":
-            return bool(message.get("attached_file_contents") or message.get("attached_images"))
-    return False
-
-
 # 再生成ターンのプロンプトを組み立て、生成を開始（またはエラーを返す）する共有パイプライン
 # Shared pipeline that builds the regeneration prompt and starts generation (or returns an error).
 async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRegenerationOutcome:
@@ -549,7 +540,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 external_input_in_turn=bool(
                     pasted_url_pages
                     or pipeline_input.use_shared_prompts
-                    or _latest_user_has_attachments(all_messages)
+                    or conversation_has_attachments(all_messages)
                 ),
             )
             save_with_approvals = deps.save_assistant_message_with_approvals

@@ -62,7 +62,7 @@ from services.chat_url_context import (
     collect_earlier_pasted_urls,
     fetch_pasted_url_context,
 )
-from services.chat_workspace_tools import build_workspace_toolbox
+from services.chat_workspace_tools import build_workspace_toolbox, conversation_has_attachments
 from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE, ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED
 from services.generative_ui import (
@@ -213,6 +213,10 @@ class _ChatPostTurn:
     # 日本語: 過去ターンで貼られたURL。本文は持たず、読み取りの入口としてだけ渡す。
     # English: URLs pasted in earlier turns, carried only as a reading entry point.
     earlier_pasted_urls: tuple[str, ...] = ()
+    # 日本語: 過去ターンを含め、文脈に戻る添付があるか。変換で画像の参照が消える前の生の履歴から求める。
+    # English: Whether any attachment, including earlier turns', is put back into the context. It is
+    #          taken from the raw history, before conversion drops the image references.
+    attachments_in_context: bool = False
     generation_key: str = ""
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
@@ -549,6 +553,7 @@ class ChatPostUseCase:
         # メッセージ履歴を LLM 向けに正規化
         # Normalize message history for LLM compatibility
         turn.normalized_all_messages = self.deps.prompts.normalize_messages_for_llm(turn.all_messages)
+        turn.attachments_in_context = conversation_has_attachments(turn.all_messages)
         # 選択器には取得した外部本文を渡さず、利用者と助手の元の会話だけを渡す。
         # Capture the original conversation before external reference augmentation.
         turn.skill_selection_history = [dict(message) for message in turn.normalized_all_messages]
@@ -1031,6 +1036,7 @@ class ChatPostUseCase:
             external_input_in_turn=bool(
                 turn.prepared_attached_files
                 or turn.prepared_attached_images
+                or turn.attachments_in_context
                 or turn.pasted_url_pages
                 or turn.use_shared_prompts
             ),

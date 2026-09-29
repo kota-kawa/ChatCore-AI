@@ -26,7 +26,11 @@ from services.chat_generation import ChatGenerationJob
 from services.chat_generation_telemetry import ChatGenerationTelemetry
 from services.chat_generation_turn import ChatTurnRunState
 from services.chat_turn_state import TurnStateUpdateFilter
-from services.chat_workspace_tools import build_workspace_toolbox, get_workspace_tool_spec
+from services.chat_workspace_tools import (
+    build_workspace_toolbox,
+    conversation_has_attachments,
+    get_workspace_tool_spec,
+)
 from services.chat_workspace_tools.memo import (
     MEMO_APPEND_TOOL_NAME,
     MEMO_CREATE_TOOL_NAME,
@@ -205,6 +209,18 @@ class RegistryTests(unittest.TestCase):
             {PROFILE_SETTINGS_READ_TOOL_NAME, PROFILE_SETTINGS_UPDATE_TOOL_NAME},
         )
         self.assertFalse(get_workspace_tool_spec(PROFILE_SETTINGS_UPDATE_TOOL_NAME).allows_always)
+
+    # 日本語: 過去ターンの添付も文脈へ戻るため、会話のどこかに添付があれば外部入力とみなすことを検証します。
+    # English: Earlier uploads return to the context, so an attachment anywhere counts as external input.
+    def test_conversation_has_attachments_looks_at_every_user_message(self):
+        history = [
+            {"role": "user", "content": "資料です", "attached_file_contents": '[{"name":"a.txt"}]'},
+            {"role": "assistant", "content": "読みました"},
+            {"role": "user", "content": "メモに追記して"},
+        ]
+        self.assertTrue(conversation_has_attachments(history))
+        self.assertTrue(conversation_has_attachments([{"role": "user", "content": "x", "attached_images": "[1]"}]))
+        self.assertFalse(conversation_has_attachments([{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]))
 
     def test_build_workspace_toolbox_carries_external_input_flag(self):
         toolbox = build_workspace_toolbox(
@@ -565,6 +581,18 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         summary = json.loads(state.approval_pending_summaries[0])
         self.assertEqual(summary, {"tool": "fake_write", "target": "Target"})
         self.assertEqual([event for event, _ in published], ["workspace_tool_started", "tool_approval_prepared"])
+
+    # 日本語: 引数モデルが受け付ける memo_id の書き方（真偽値・符号付き・区切り付き）でも、読んでから書く
+    #         確認を素通りしないことを検証します（issue #781）。
+    # English: Verify spellings of memo_id the argument model accepts (bool, signed, underscored)
+    #          cannot skip the read-before-write check (issue #781).
+    def test_memo_read_gate_uses_the_argument_models_coercion(self):
+        append = _fake_write_spec(allows_always=False, name=MEMO_APPEND_TOOL_NAME)
+        runner, _published = self._runner([append])
+        for memo_id in (True, "+12", "1_2", "12.0", 12.0):
+            with self.subTest(memo_id=memo_id):
+                result = runner.run(_make_state(), _tool_call(MEMO_APPEND_TOOL_NAME, memo_id=memo_id, text="new"))
+                self.assertEqual(result["status"], "read_required")
 
     def test_memo_append_and_edit_require_reading_the_same_target_first(self):
         read = _fake_read_spec(name=MEMO_READ_TOOL_NAME, memo_ids=(42,))
