@@ -701,7 +701,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIsInstance(response, StreamingResponse)
         self.assertIn("event: error", body)
-        self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        self.assertIn("LLM設定エラーが発生しました。", body)
         # ルームは消さず、返答が付かなかった発話だけを取り除く。
         # The room is kept; only the message that got no reply is removed.
         mock_discard_messages.assert_called_once_with("sid-1", "room-guest")
@@ -842,7 +842,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertEqual(len(cleanup_calls), 1)
         self.assertIn("event: error", body)
-        self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        self.assertIn("LLM設定エラーが発生しました。", body)
         self.assertTrue(
             any("Failed to run chat generation error callback." in entry for entry in logs.output),
             "the cleanup failure must be logged instead of being swallowed",
@@ -2981,8 +2981,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("limit=100", logged_text)
         self.assertIn("event: chunk", body)
 
-    # 日本語: LLMの設定エラー(APIキー不足等)が発生した際、その詳細メッセージがエラーイベントとして出力されることを検証します。
-    # English: Verify that LLM configuration errors (like missing API keys) are output as error events.
+    # 日本語: LLMの設定エラーでは、利用者へ汎用メッセージを出し、詳細をログに残す。
+    # English: Configuration errors show a generic user message and keep details in logs.
     def test_background_generation_job_surfaces_configuration_error_message(self):
         # ユーザーへエラーが表示される経路には、必ず詳細なログが対応して残ることを検証する。
         # Verify that a detailed log line always accompanies an error surfaced to the user.
@@ -3000,7 +3000,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("event: error", body)
-        self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        self.assertIn("LLM設定エラーが発生しました。", body)
         logged_text = "\n".join(log_cm.output)
         self.assertIn("configuration error", logged_text)
         self.assertIn("OPENAI_API_KEY が未設定です。", logged_text)
