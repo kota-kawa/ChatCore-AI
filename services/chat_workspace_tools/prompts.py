@@ -798,7 +798,8 @@ MY_SKILL_SAVE_DEFINITION = _function(
     f"Propose creating a new personal Skill, or editing the name or instructions of one the "
     f"user owns. {_PROPOSAL_NOTE} Give skill_id to edit an existing one (use the id from a prior "
     "my_skill_list result; never invent one); omit it to create a new one, which requires both "
-    "name and instructions. This tool cannot turn a Skill on or off or delete one.",
+    "name and instructions. A new Skill is enabled as soon as it is created and then applies to "
+    "later chats. This tool cannot turn a Skill on or off or delete one.",
     {
         "skill_id": {"type": "integer", "description": "Omit to create; give an owned id to edit it."},
         "name": {
