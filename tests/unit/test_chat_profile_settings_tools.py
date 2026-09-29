@@ -259,6 +259,7 @@ class ProfileToolAvailabilityTests(unittest.TestCase):
             prepared_attached_images=[],
             pasted_url_pages=(),
             use_shared_prompts=False,
+            attachments_in_context=False,
         )
 
         toolbox = use_case._build_workspace_toolbox(turn)
@@ -269,6 +270,12 @@ class ProfileToolAvailabilityTests(unittest.TestCase):
         )
         self.assertEqual(toolbox.llm_profile_context, "Private context")
         self.assertEqual(toolbox.browser_theme_preference, "dark")
+        self.assertFalse(toolbox.external_input_in_turn)
+
+        # 過去ターンの添付が文脈に戻るターンは、外部の内容を読んだターンとして扱う（issue #781）。
+        # A turn whose context carries an earlier upload counts as reading external content (issue #781).
+        turn.attachments_in_context = True
+        self.assertTrue(use_case._build_workspace_toolbox(turn).external_input_in_turn)
 
     def test_guest_temporary_and_non_streaming_turns_do_not_get_profile_tools(self):
         use_case = object.__new__(ChatPostUseCase)

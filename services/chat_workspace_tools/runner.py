@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from services.chat_agent_budget import READ_MESSAGE_MAX_CHARS
 from services.chat_generation_turn import ChatTurnRunState
 from services.chat_tool_approval_service import (
@@ -45,6 +47,12 @@ from .registry import (
     WorkspaceToolError,
     parse_tool_arguments,
 )
+
+# 引数モデル（MemoAppendArguments・MemoEditArguments の memo_id: int）と同じ緩い変換で memo_id を読む。
+# 独自に解釈すると、モデルでは通る書き方（True や "+12"）で「読んでから書く」確認を素通りできてしまう。
+# Read memo_id with the same lax coercion as the argument models (memo_id: int). Parsing it any other
+# way let spellings the models accept (True, "+12") skip the read-before-write check.
+_MEMO_ID_ADAPTER = TypeAdapter(int)
 
 # 提案の中身のうち、非公開の混入を確かめる対象にする文字列フィールド。
 # The proposal fields checked for private-content overlap.
@@ -358,16 +366,11 @@ class WorkspaceToolRunner:
     def _unread_memo_id(self, spec: ToolSpec, arguments: dict[str, Any]) -> int | None:
         if spec.name not in {MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME}:
             return None
-        raw_memo_id = arguments.get("memo_id")
-        if isinstance(raw_memo_id, bool):
-            return None
-        if isinstance(raw_memo_id, int):
-            memo_id = raw_memo_id
-        elif isinstance(raw_memo_id, str) and raw_memo_id.strip().isdecimal():
-            memo_id = int(raw_memo_id.strip())
-        elif isinstance(raw_memo_id, float) and raw_memo_id.is_integer():
-            memo_id = int(raw_memo_id)
-        else:
+        try:
+            memo_id = _MEMO_ID_ADAPTER.validate_python(arguments.get("memo_id"))
+        except ValidationError:
+            # 引数モデルでも通らない値なので、提案そのものが検証で断られる。
+            # The argument models reject this value too, so the proposal itself fails validation.
             return None
         if memo_id <= 0 or memo_id in self._read_memo_ids:
             return None
