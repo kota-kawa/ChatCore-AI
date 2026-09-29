@@ -436,7 +436,7 @@ async def _execute_publish_prompt(
 
 class MyPromptSaveArguments(_ToolArguments):
     task_id: int | None = Field(default=None, ge=1)
-    title: str = Field(min_length=1, max_length=MY_PROMPT_NAME_MAX_LENGTH)
+    title: str | None = Field(default=None, max_length=MY_PROMPT_NAME_MAX_LENGTH)
     prompt_content: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
     response_rules: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
     output_skeleton: str | None = Field(default=None, max_length=MY_PROMPT_FIELD_MAX_LENGTH)
@@ -445,11 +445,14 @@ class MyPromptSaveArguments(_ToolArguments):
 
     @model_validator(mode="after")
     def _normalize(self) -> MyPromptSaveArguments:
-        self.title = self.title.strip()
-        if not self.title:
-            raise ValueError("title must not be blank")
+        if self.title is not None:
+            self.title = self.title.strip()
+            if not self.title:
+                raise ValueError("title must not be blank")
         if self.prompt_content is not None and not self.prompt_content.strip():
             raise ValueError("prompt_content must not be blank")
+        if self.task_id is None and self.title is None:
+            raise ValueError("title is required when creating a task")
         if self.task_id is None and self.prompt_content is None:
             raise ValueError("prompt_content is required when creating a task")
         return self
@@ -465,6 +468,9 @@ async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Pr
         except ResourceNotFoundError:
             raise WorkspaceToolError("target_not_found") from None
         target_ref = {"task_id": params.task_id, "base_revision": task.get("updated_at")}
+    # 編集で題名を省いたら今の題名を保つ（本文や他の項目と同じく、指定したものだけ変える）
+    # An edit that omits the title keeps the current one, like the body and other fields
+    title = params.title if params.title is not None else str(task.get("name") or "")
     clear_fields = [
         field
         for field in ("response_rules", "output_skeleton", "input_examples", "output_examples")
@@ -475,7 +481,7 @@ async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Pr
         "task_id": params.task_id,
         "current_title": task.get("name") if params.task_id is not None else None,
         "clear_fields": clear_fields,
-        "title": params.title,
+        "title": title,
         "prompt_content": (
             params.prompt_content
             if params.prompt_content is not None
@@ -489,7 +495,7 @@ async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Pr
     return Proposal(
         arguments={
             "task_id": params.task_id,
-            "title": params.title,
+            "title": title,
             "prompt_content": params.prompt_content,
             "response_rules": params.response_rules,
             "output_skeleton": params.output_skeleton,
@@ -498,7 +504,7 @@ async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Pr
         },
         preview=preview,
         target_ref=target_ref,
-        target_title=params.title,
+        target_title=title,
     )
 
 
@@ -761,11 +767,17 @@ MY_PROMPT_SAVE_DEFINITION = _function(
     MY_PROMPT_SAVE_TOOL_NAME,
     f"Propose creating a new saved prompt (Task), or editing one the user owns. {_PROPOSAL_NOTE} "
     "Give task_id to edit an existing one (use the id from a prior my_prompt_list result; never "
-    "invent one); omit it to create a new one. prompt_content is required for a new Task; when "
-    "editing, omit it to keep the existing body. Only provided optional fields are changed.",
+    "invent one); omit it to create a new one. title and prompt_content are required for a new Task; "
+    "when editing, omit either to keep the existing value. Only provided fields are changed.",
     {
         "task_id": {"type": "integer", "description": "Omit to create; give an owned id to edit it."},
-        "title": {"type": "string", "description": f"Up to {MY_PROMPT_NAME_MAX_LENGTH} characters."},
+        "title": {
+            "type": "string",
+            "description": (
+                f"Up to {MY_PROMPT_NAME_MAX_LENGTH} characters. Required when creating a Task; when editing, "
+                "omit this to keep the existing title."
+            ),
+        },
         "prompt_content": {
             "type": "string",
             "description": (
@@ -778,7 +790,7 @@ MY_PROMPT_SAVE_DEFINITION = _function(
         "input_examples": {"type": "string", "description": "Optional example input."},
         "output_examples": {"type": "string", "description": "Optional example output."},
     },
-    ["title"],
+    [],
 )
 
 MY_SKILL_SAVE_DEFINITION = _function(
