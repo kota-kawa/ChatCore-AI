@@ -645,6 +645,28 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertEqual(len(pulled), 2)
         self.assertEqual(job._telemetry.protocol_leak_truncations, 1)
 
+    # 日本語: 逐次配信される継続生成で、チャンク境界をまたいだ目印の頭が配信・保存されないことを検証します。
+    # English: Verify a streamed continuation never sends or saves the head of a marker split across chunks.
+    def test_streamed_continuation_never_sends_the_head_of_a_split_marker(self):
+        continued = "後半の説明を続けます。" * 30
+
+        def stream(_messages, _model, *, generation_phase, **_kwargs):
+            if generation_phase == "agent":
+                yield "前半の説明です。"
+                raise LlmOutputLimitError("limit", reason="max_output_tokens")
+            yield continued
+            yield "最後の一文です。\n<|im_"
+            yield "end|>" + "繰り返し" * 50
+
+        job, saved, _on_error = self.make_job()
+        self.run_job(job, stream)
+
+        streamed = "".join(event.payload["text"] for event in job._events if event.event == "chunk")
+        self.assertIn("最後の一文です。", streamed)
+        self.assertNotIn("<|", streamed)
+        self.assertNotIn("<|", saved.call_args.args[0])
+        self.assertEqual(job._telemetry.protocol_leak_truncations, 1)
+
     # 日本語: 縮退しても回復しない設定不備は、そのままエラーになることを検証します。
     # English: Verify a configuration failure that degrading cannot fix still errors out.
     def test_authentication_failure_is_not_degraded(self):

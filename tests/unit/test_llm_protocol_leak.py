@@ -40,24 +40,58 @@ class FindProtocolLeakTestCase(unittest.TestCase):
                 self.assertIsNone(find_protocol_leak(text))
 
 
+def _stream(guard: ProtocolLeakGuard, chunks: list[str]) -> str:
+    released = "".join(guard.feed(chunk) for chunk in chunks)
+    return released + guard.flush()
+
+
 class ProtocolLeakGuardTestCase(unittest.TestCase):
-    def test_keeps_text_before_a_marker_split_across_chunks(self):
+    def test_never_releases_the_head_of_a_marker_split_across_chunks(self):
+        # 逐次配信では渡した文字を取り消せないので、目印の頭が先に出てはいけない（issue #778）。
+        # A streamed character cannot be retracted, so a marker head must never go out early (issue #778).
+        answer = "回答です。\n"
+        for chunks in (
+            [answer + "<|im_", "end|>続き"],
+            [answer + "</assis", "tant>"],
+            [answer + "liassis", "tant to=functions.web_search"],
+            [answer + "liassistant", " to=functions.web_search"],
+            [answer + "liassistant to=fun", "ctions.web_search\n{}"],
+            [answer + "multi_tool_", "use.parallel {}"],
+        ):
+            with self.subTest(chunks=chunks):
+                guard = ProtocolLeakGuard()
+                self.assertEqual(guard.feed(chunks[0]), answer)
+                self.assertEqual(guard.feed(chunks[1]), "")
+                self.assertTrue(guard.tripped)
+                self.assertEqual(guard.overflow_chars, 0)
+
+    def test_holds_only_a_possible_marker_head_and_releases_it_with_the_next_chunk(self):
         guard = ProtocolLeakGuard()
-        self.assertEqual(guard.feed("回答です。\n<|im_"), "回答です。\n<|im_")
+        self.assertEqual(guard.feed("関数 to= の説明です。"), "関数 to= の説明です。")
+        # ` to=functions` の頭になりうる `t` は、前の1語ごと保留する。
+        # A `t` that could open ` to=functions` is held together with the word before it.
+        self.assertEqual(guard.feed("I want t"), "I ")
+        self.assertEqual(guard.feed("o go. <b"), "want to go. ")
+        self.assertEqual(guard.feed(">太字</b>"), "<b>太字</b>")
+        self.assertEqual(guard.feed("That was"), "That ")
+        self.assertEqual(guard.flush(), "was")
         self.assertFalse(guard.tripped)
-        self.assertEqual(guard.feed("end|>続き"), "")
-        self.assertTrue(guard.tripped)
-        # 目印の頭 `<|im_` はすでに前のチャンクで渡しているので、その分を取り消させる。
-        # The marker head `<|im_` went out with the previous chunk, so that much must be retracted.
-        self.assertEqual(guard.overflow_chars, len("<|im_"))
-        self.assertEqual(guard.feed("さらに"), "")
 
     def test_cuts_inside_a_single_chunk(self):
         guard = ProtocolLeakGuard()
         self.assertEqual(guard.feed("156<|im_end|>156"), "156")
         self.assertTrue(guard.tripped)
         self.assertEqual(guard.overflow_chars, 0)
+        self.assertEqual(guard.flush(), "")
 
+    def test_reports_released_text_the_hold_back_could_not_foresee(self):
+        # 役割名の崩れ方は予測しきれない。すでに渡した頭は、取り消すべき長さとして返す。
+        # Garbled role words cannot all be foreseen; a head already released is reported for retraction.
+        guard = ProtocolLeakGuard()
+        self.assertEqual(guard.feed("回答\nxyz"), "回答\nxyz")
+        self.assertEqual(guard.feed(" to=functions.web_search"), "")
+        self.assertTrue(guard.tripped)
+        self.assertEqual(guard.overflow_chars, len("xyz"))
 
 if __name__ == "__main__":
     unittest.main()
