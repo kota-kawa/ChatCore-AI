@@ -8,7 +8,7 @@ import secrets
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import and_, delete, func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -121,6 +121,13 @@ _TREE_TURN_CONTEXT_COLUMNS: tuple[Any, ...] = (
     *_TREE_LLM_HISTORY_COLUMNS,
     *_TREE_WEB_SEARCH_COLUMNS,
 )
+
+
+class RememberedFact(NamedTuple):
+    """A room memory fact and when the user last mentioned it (naive UTC)."""
+
+    fact: str
+    last_mentioned_at: datetime
 
 
 class ChatRepository:
@@ -707,20 +714,29 @@ class ChatRepository:
 
     # Memory facts and summaries -------------------------------------------
 
-    async def list_room_memory_facts(self, chat_room_id: str, *, limit: int = 8) -> list[str]:
+    async def list_room_memory_facts(
+        self,
+        chat_room_id: str,
+        *,
+        mentioned_since: datetime,
+        limit: int = 8,
+    ) -> list[RememberedFact]:
+        # updated_at は同じ事実が再び抽出されるたびに進むので、最後に言及された時刻として使う。
+        # updated_at advances each time the same fact is extracted again, so it is the last mention.
         rows = (
             await self.session.execute(
-                select(MemoryFact.fact)
+                select(MemoryFact.fact, MemoryFact.updated_at)
                 .where(
                     MemoryFact.chat_room_id == chat_room_id,
                     MemoryFact.scope == "room",
                     MemoryFact.is_active.is_(True),
+                    MemoryFact.updated_at >= mentioned_since,
                 )
                 .order_by(MemoryFact.updated_at.desc(), MemoryFact.id.desc())
                 .limit(limit)
             )
         ).all()
-        return [str(fact) for (fact,) in rows if fact]
+        return [RememberedFact(str(fact), updated_at) for fact, updated_at in rows if fact]
 
     async def remember_facts(
         self,
