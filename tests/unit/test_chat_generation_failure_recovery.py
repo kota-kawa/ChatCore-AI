@@ -619,6 +619,32 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         saved.assert_called_once()
         self.assertEqual(job._telemetry.research_failure_recoveries, 1)
 
+    # 日本語: 本文に内部のツール呼び出し形式が漏れたら、そこで打ち切って読み続けないことを検証します（issue #771）。
+    # English: Verify a stream is cut and closed where tool-call protocol leaks into the text (issue #771).
+    def test_protocol_leak_is_cut_and_the_stream_is_not_read_further(self):
+        pulled = []
+
+        def stream(_messages, _model, **_kwargs):
+            for chunk in (
+                "テスト完了\nliassis",
+                'tant to=functions.web_search {"query":"x"}\n',
+                "multi_tool_use.parallel " * 50,
+            ):
+                pulled.append(chunk)
+                yield chunk
+
+        job, saved, _on_error = self.make_job()
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "done")
+        response = terminal_event(job).payload["response"]
+        self.assertEqual(response.strip(), "テスト完了")
+        self.assertNotIn("to=functions", saved.call_args.args[0])
+        # 漏れを検出した後は、上限まで残りを読まない。
+        # Once the leak is found, the rest is not read up to the cap.
+        self.assertEqual(len(pulled), 2)
+        self.assertEqual(job._telemetry.protocol_leak_truncations, 1)
+
     # 日本語: 縮退しても回復しない設定不備は、そのままエラーになることを検証します。
     # English: Verify a configuration failure that degrading cannot fix still errors out.
     def test_authentication_failure_is_not_degraded(self):

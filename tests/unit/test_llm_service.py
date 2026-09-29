@@ -667,45 +667,51 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(leading_part["text"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n"))
         self.assertEqual(leading_part["prompt_cache_breakpoint"], {"mode": "explicit"})
 
-    def test_get_openai_response_uses_none_reasoning_with_tools_for_luna(self):
+    def test_get_openai_response_sends_tools_to_responses_api_for_luna(self):
         """
-        Lunaのツール呼び出し時にChat Completionsへnoneのreasoningを渡すことを検証します。
-        Verify that Luna receives none reasoning when function tools use Chat Completions.
+        Luna のツール付き呼び出しは Chat Completions ではなく Responses API へ送り、推論も付けることを検証します。
+        Verify that Luna tool calls go to the Responses API with reasoning instead of Chat Completions.
         """
         mock_openai = MagicMock()
-        mock_openai.chat.completions.create.return_value = _mock_openai_response("openai-ok")
+        mock_openai.responses.create.return_value = SimpleNamespace(
+            output_text="",
+            output=[
+                SimpleNamespace(type="reasoning"),
+                SimpleNamespace(type="function_call", call_id="call-1", name="web_search", arguments='{"query":"q"}'),
+            ],
+            usage=None,
+        )
 
         with patch.object(llm, "openai_client", mock_openai):
             response = llm.get_openai_response(
                 [{"role": "user", "content": "search this"}],
                 llm.GPT_6_LUNA_MODEL,
-                tools=[{"type": "function", "function": {"name": "web_search"}}],
+                tools=[{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
                 generation_phase="final_answer",
             )
 
-        self.assertEqual(response, "openai-ok")
-        request_kwargs = mock_openai.chat.completions.create.call_args.kwargs
-        self.assertEqual(request_kwargs["reasoning_effort"], "none")
+        self.assertEqual(
+            json.loads(response),
+            [{"id": "call-1", "type": "function", "function": {"name": "web_search", "arguments": '{"query":"q"}'}}],
+        )
+        request_kwargs = mock_openai.responses.create.call_args.kwargs
+        self.assertEqual(request_kwargs["reasoning"], {"effort": "low"})
         self.assertEqual(request_kwargs["tool_choice"], "auto")
-        mock_openai.responses.create.assert_not_called()
+        [tool] = request_kwargs["tools"]
+        self.assertEqual(tool["type"], "function")
+        self.assertEqual(tool["name"], "web_search")
+        # 緩めたスキーマの方針を保つため、Responses API 既定の strict を切る。
+        # Responses API tools default to strict; it is turned off to keep the relaxed schema policy.
+        self.assertIs(tool["strict"], False)
+        mock_openai.chat.completions.create.assert_not_called()
 
-    def test_luna_reasoning_preserves_tool_and_auxiliary_boundaries(self):
+    def test_luna_reasoning_preserves_answer_and_auxiliary_boundaries(self):
         for phase in (*sorted(llm.ANSWER_GENERATION_PHASES), "default", "research"):
             with self.subTest(phase=phase):
                 expected = "low" if phase in llm.ANSWER_GENERATION_PHASES else "medium"
                 self.assertEqual(
-                    llm._openai_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=phase),
-                    {"reasoning_effort": expected},
-                )
-                self.assertEqual(
                     llm._openai_responses_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=phase),
                     {"reasoning": {"effort": expected}},
-                )
-                self.assertEqual(
-                    llm._openai_reasoning_kwargs(
-                        llm.GPT_6_LUNA_MODEL, generation_phase=phase, has_tool_context=True,
-                    ),
-                    {"reasoning_effort": "none"},
                 )
 
     def test_lower_chat_effort_preserves_groq_auxiliary_and_explicit_settings(self):
@@ -1339,14 +1345,25 @@ class LlmServiceTestCase(unittest.TestCase):
             with self.assertRaises(llm.LlmOutputLimitError):
                 next(stream)
 
-    def test_get_openai_response_stream_with_tools_uses_chat_completions_stream(self):
+    def test_get_openai_response_stream_with_tools_uses_responses_stream(self):
         """
-        ツール呼び出しを伴うOpenAIストリーミングの場合、レスポンスAPIではなく従来のチャットコンプリーションのストリームが利用されることを検証します。
-        Verify that OpenAI streaming falls back to chat.completions.create stream when tools are defined.
+        ツール付きの Luna ストリーミングも Responses API を使い、ツール呼び出しを最後に JSON で返すことを検証します。
+        Verify that tool-bearing Luna streams use the Responses API and yield tool calls as JSON at the end.
         """
         mock_openai = MagicMock()
-        mock_stream = _MockStream(_mock_stream_chunk("tool"), _mock_stream_chunk("-stream"))
-        mock_openai.chat.completions.create.return_value = mock_stream
+        events = [
+            SimpleNamespace(type="response.output_text.delta", delta="調べます"),
+            SimpleNamespace(
+                type="response.output_item.done",
+                item=SimpleNamespace(type="function_call", call_id="call-1", name="web_search", arguments='{"query":"q"}'),
+            ),
+        ]
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter(events))
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__enter__.return_value = mock_stream
+        mock_stream_ctx.__exit__.return_value = None
+        mock_openai.responses.stream.return_value = mock_stream_ctx
 
         with patch.object(llm, "openai_client", mock_openai):
             response = list(
@@ -1354,81 +1371,69 @@ class LlmServiceTestCase(unittest.TestCase):
                     [{"role": "user", "content": "hello"}],
                     llm.GPT_6_LUNA_MODEL,
                     tools=[{"type": "function", "function": {"name": "web_search"}}],
-                    generation_phase="final_answer",
+                    generation_phase="agent",
                 )
             )
 
-        # chat.completions.create が呼ばれ、かつ responses.stream が呼ばれていないことを検証
-        # Verify that chat.completions.create is called and responses.stream is not
-        self.assertEqual(response, ["tool", "-stream"])
-        mock_openai.chat.completions.create.assert_called_once()
-        chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
+        self.assertEqual(response[0], "調べます")
         self.assertEqual(
-            chat_kwargs["max_completion_tokens"],
-            llm.max_output_tokens_for_model(
-                llm.GPT_6_LUNA_MODEL,
-                "final_answer",
-            ),
+            json.loads(response[1]),
+            [{"id": "call-1", "type": "function", "function": {"name": "web_search", "arguments": '{"query":"q"}'}}],
         )
-        self.assertNotIn("max_tokens", chat_kwargs)
-        # Luna rejects non-none reasoning when Chat Completions also receives function tools.
-        # Luna は Chat Completions で function tool と none 以外の reasoning を併用できない。
-        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
-        self.assertEqual(chat_kwargs["tool_choice"], "auto")
-        mock_openai.responses.stream.assert_not_called()
-        self.assertTrue(mock_stream.closed)
+        stream_kwargs = mock_openai.responses.stream.call_args.kwargs
+        self.assertEqual(stream_kwargs["max_output_tokens"], llm.max_output_tokens_for_model(llm.GPT_6_LUNA_MODEL, "agent"))
+        # Chat Completions ではツールと推論を併用できず、none だと推論が本文へ漏れた（issue #771）。
+        # Chat Completions cannot combine tools with reasoning, and "none" leaked reasoning (issue #771).
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "low"})
+        self.assertEqual(stream_kwargs["tool_choice"], "auto")
+        self.assertEqual([tool["name"] for tool in stream_kwargs["tools"]], ["web_search"])
+        mock_openai.chat.completions.create.assert_not_called()
 
-    # docstring は文字列リテラルなので折り返すと本文が変わるため、行長チェックのみ除外します。
-    # The docstring is a string literal whose text would change if rewrapped, so only the line-length rule is waived.
-    def test_get_openai_response_stream_with_tool_history_uses_chat_completions(self):
+    def test_get_openai_response_stream_maps_tool_history_to_responses_items(self):
         """
-        メッセージ履歴の中にツール呼び出し履歴（tool/assistant role）が含まれている場合、OpenAI responses APIではなく従来のチャットコンプリーションが利用されることを検証します。
-        Verify that OpenAI streaming falls back to chat.completions.create stream when messages contain tool invocation history.
-        """  # noqa: E501
+        Chat Completions 形のツール履歴を Responses API の function_call / function_call_output へ写すことを検証します。
+        Verify that Chat Completions-shaped tool history maps to Responses function_call / function_call_output items.
+        """
         mock_openai = MagicMock()
-        mock_stream = _MockStream(_mock_stream_chunk("final"))
-        mock_openai.chat.completions.create.return_value = mock_stream
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(
+            return_value=iter([SimpleNamespace(type="response.output_text.delta", delta="final")])
+        )
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__enter__.return_value = mock_stream
+        mock_stream_ctx.__exit__.return_value = None
+        mock_openai.responses.stream.return_value = mock_stream_ctx
 
-        # 過去のツール呼び出し履歴を含むメッセージ
-        # Message history including tool and assistant roles
         messages = [
+            {"role": "user", "content": "OpenAI news"},
             {
                 "role": "assistant",
-                "content": None,
+                "content": "<turn_state_update>{}</turn_state_update>",
                 "tool_calls": [
                     {
                         "id": "call-1",
                         "type": "function",
-                        "function": {
-                            "name": "web_search",
-                            "arguments": '{"query":"OpenAI news"}',
-                        },
+                        "function": {"name": "web_search", "arguments": '{"query":"OpenAI news"}'},
                     }
                 ],
             },
-            {
-                "role": "tool",
-                "tool_call_id": "call-1",
-                "name": "web_search",
-                "content": '{"status":"completed"}',
-            },
+            {"role": "tool", "tool_call_id": "call-1", "name": "web_search", "content": '{"status":"completed"}'},
         ]
 
         with patch.object(llm, "openai_client", mock_openai):
             response = list(llm.get_openai_response_stream(messages, llm.GPT_6_LUNA_MODEL))
 
-        # 履歴が存在するため、chat.completions.create がフォールバックされることを検証
-        # Verify fallback to chat.completions.create due to tool history
         self.assertEqual(response, ["final"])
-        mock_openai.chat.completions.create.assert_called_once()
-        chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
-        self.assertNotIn("tools", chat_kwargs)
-        self.assertNotIn("tool_choice", chat_kwargs)
-        # Tool history also forces Chat Completions, so the same Luna restriction applies.
-        # ツール履歴も Chat Completions 経路を使うため、同じ Luna の制約が適用される。
-        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
-        mock_openai.responses.stream.assert_not_called()
-        self.assertTrue(mock_stream.closed)
+        stream_kwargs = mock_openai.responses.stream.call_args.kwargs
+        self.assertNotIn("tools", stream_kwargs)
+        sent = stream_kwargs["input"]
+        self.assertEqual(sent[1], {"role": "assistant", "content": "<turn_state_update>{}</turn_state_update>"})
+        self.assertEqual(
+            sent[2],
+            {"type": "function_call", "call_id": "call-1", "name": "web_search", "arguments": '{"query":"OpenAI news"}'},
+        )
+        self.assertEqual(sent[3], {"type": "function_call_output", "call_id": "call-1", "output": '{"status":"completed"}'})
+        mock_openai.chat.completions.create.assert_not_called()
 
     def test_get_llm_response_stream_routes_to_openai(self):
         """

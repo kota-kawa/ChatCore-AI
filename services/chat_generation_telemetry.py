@@ -49,6 +49,9 @@ class ChatGenerationTelemetry:
     truncated_evidence_payloads: int = 0
     input_limit_recoveries: int = 0
     research_output_limit_recoveries: int = 0
+    # 本文に内部のツール呼び出し形式が漏れ始めたため、そこで出力を打ち切った回数。
+    # How often a stream was cut where internal tool-call protocol began leaking into the text.
+    protocol_leak_truncations: int = 0
     # Context preparation counters. They contain sizes and counts only, never prompt bodies.
     context_projection_count: int = 0
     context_compaction_count: int = 0
@@ -198,6 +201,7 @@ class ChatGenerationTelemetry:
             "truncated_evidence_payloads": self.truncated_evidence_payloads,
             "input_limit_recoveries": self.input_limit_recoveries,
             "research_output_limit_recoveries": self.research_output_limit_recoveries,
+            "protocol_leak_truncations": self.protocol_leak_truncations,
             "context_projection_count": self.context_projection_count,
             "context_compaction_count": self.context_compaction_count,
             "context_recovery_count": self.context_recovery_count,

@@ -58,7 +58,27 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 完了通知と停止通知の競合で二重保存しやすいため、永続化処理をルートへ追加せず `ChatGenerationJob` の一度きり制御を通します。フロントの表示だけを直す場合も、サーバーが返すイベント契約を先に確認します。
 
-長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`llm_turns`、`tool_calls`、`web_search_count`、`continuation_count`、`continuation_stalled`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は3です。`continuation_stalled=true` は継続が重複部分だけで終わった状態なので、本文は保存済みですが完了扱いではありません。最後の判断が本文を返さなかった場合（内部封筒だけ、無出力、出力上限で本文ゼロ）は `empty_answer_recoveries` が 1 になり、内部封筒を要求しない回答のみの契約で同じ判断を1度だけやり直します。メモツールが有効でカードがまだ無い場合は、再試行でツールと直近の読み取り結果を残し、未提出の操作を続けられるようにします。回復後も本文が無ければ `error`（`AIからの回答が空でした`）で終わり、検索画像だけ・「回答までのステップ」だけの応答は保存しません。タグ（`<turn_state_update>`）を付けずに封筒の JSON だけを返した判断も本文ゼロとして扱い、その JSON で状態を更新したうえで同じやり直しに乗せます。このとき `untagged_turn_state_recoveries` が増え、回答として保存されません。停止・失敗時にバッファから救出する本文にも同じ判定を使います。利用者が内部キー名（`ready_to_answer` など）を挙げた発話では、JSON の回答を求められている可能性があるため判定しません。`missing_turn_state_updates` は判断ステップでタグ付きの封筒を読めなかった回数です。封筒を要求しない空回答の回復ステップは数えません。`done` で終わったターンでもこれが多いモデルは封筒の契約に従えていません。
+終端イベントの後も停止ボタンや生成中の吹き出しが残って見える場合は、先に `frontend/tests/generation_stream_consumer.test.ts` のハーネスで、同じ量の `chunk` と終端イベントを流して再現を試みます。約10万文字の本文と `incomplete` を流しても、ストリーム消費層は数十ミリ秒で `streaming:false` になり終端します。消費層が正しく終わるなら、原因は生成そのもの（本文の肥大化や生成時間）にあるので、「チャット回答に内部形式が混ざる・短い依頼が膨らむ」の手順で確認します。
+
+## チャット回答に内部形式が混ざる・短い依頼が膨らむ
+
+### 症状
+
+- 回答に `assistant to=functions.web_search`、`multi_tool_use.parallel`、`<|im_end|>`、`</|assistant|>`、`</parameter>` などのツール呼び出し形式や特殊トークンが混ざる。
+- `Need only phrase.` や `/final` のようなモデル内部の推論らしき英語、化け文字、同じ回答の二重化が本文に出る。
+- 「〜とだけ返して」のような短い依頼が出力上限まで膨らみ、`first_pass_finish_reason=max_output_tokens` や `continuation_stalled=true` で終わる。
+
+### 確認する境界
+
+- `services/llm.py` のプロバイダ別の呼び出し経路。GPT-6 Luna は Chat Completions ではツールと推論を併用できず（推論を付けると 400 で「function tools を使うなら /v1/responses」と返る）、推論 `none` で呼ぶと上記の崩れが起きる。Luna へツールを渡すターンは Responses API に載せ、Chat Completions 形のツール履歴を `function_call`／`function_call_output` に写す。Responses API の function tool は既定で strict なので、[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md) の緩めたスキーマを保つには `strict: false` を明示する。
+- `services/llm_protocol_leak.py` の漏れガードは、`services/chat_generation.py` の `_iter_llm_stream_with_retry` で本文にツール形式が出た位置で打ち切り、ストリームを閉じる。発動するとテレメトリの `protocol_leak_truncations` が増える。新しいモデルの形式（例: Qwen の XML 風タグ）が漏れたら、観測した形をテストに足してからパターンに加える。コードブロックとインラインコードの中は、利用者が形式そのものを尋ねた回答でありうるので対象外にしている。
+
+### 検証方法
+
+- 崩れは確率的で、1回の実行では正常に見えることが多い。判断ループが最初に送る要求（メッセージとツール定義）を捕捉して保存し、同じ要求で変更前後の生出力を**直列に**各8回ほど取って崩れの件数を比べる。並列に投げるとレート制限や上流エラーが混ざり、計測が無効になる。
+- 生出力は `strip_turn_state_update` で内部封筒を除いてから判定する。期待される短答（「テスト完了」など）との完全一致と、上記の形式を探す正規表現で機械的に数えられる。
+
+長い調査後の回答が短い、または途中で終わる場合は、ログの `terminal_event`、`agent_steps`、`llm_turns`、`tool_calls`、`web_search_count`、`continuation_count`、`continuation_stalled`、`output_chars`、`duration_seconds` を同じリクエストで確認します。`incomplete` は部分回答を保存済み、`done` はプロバイダが正常終了したことを表します。OpenAI Responses の `response.incomplete`、Chat Completions の `finish_reason=length`、Claude の `stop_reason=max_tokens` は LLM 層で出力上限として検出されます。`LLM_FINAL_ANSWER_MAX_CONTINUATIONS=0` で継続生成を無効化でき、既定値は3です。`continuation_stalled=true` は継続が重複部分だけで終わった状態なので、本文は保存済みですが完了扱いではありません。本文に `assistant to=functions.…` や `<|im_end|>` のような内部のツール呼び出し形式が混ざり始めた場合は、その位置で本文を切ってストリームを閉じ、`protocol_leak_truncations` が増えます（コードの中は対象外）。これが多いモデルは、ツール付きの要求で推論が崩れていないか `services/llm.py` の呼び出し経路を確認します。最後の判断が本文を返さなかった場合（内部封筒だけ、無出力、出力上限で本文ゼロ）は `empty_answer_recoveries` が 1 になり、内部封筒を要求しない回答のみの契約で同じ判断を1度だけやり直します。メモツールが有効でカードがまだ無い場合は、再試行でツールと直近の読み取り結果を残し、未提出の操作を続けられるようにします。回復後も本文が無ければ `error`（`AIからの回答が空でした`）で終わり、検索画像だけ・「回答までのステップ」だけの応答は保存しません。タグ（`<turn_state_update>`）を付けずに封筒の JSON だけを返した判断も本文ゼロとして扱い、その JSON で状態を更新したうえで同じやり直しに乗せます。このとき `untagged_turn_state_recoveries` が増え、回答として保存されません。停止・失敗時にバッファから救出する本文にも同じ判定を使います。利用者が内部キー名（`ready_to_answer` など）を挙げた発話では、JSON の回答を求められている可能性があるため判定しません。`missing_turn_state_updates` は判断ステップでタグ付きの封筒を読めなかった回数です。封筒を要求しない空回答の回復ステップは数えません。`done` で終わったターンでもこれが多いモデルは封筒の契約に従えていません。
 
 会話の途中や最後で `error` だけが表示される場合は、ログの `salvaged_partial_answers`、`research_failure_recoveries`、`llm_turn_budget_exhausted`、`llm_error_type` を確認します。判断ステップの本文は「ツール呼び出しが無い」と確定するまで配信されないため、その前に落ちると本文はバッファにしか存在しません。`salvaged_partial_answers=1` はそのバッファを救出して`incomplete` で保存した状態で、`error` で終わるのは本文が1文字も無いターンだけです。`research_failure_recoveries=1` は調査ステップがプロバイダ障害で落ち、ツールを外した回答へ縮退したことを表します。`llm_error_type` が `LlmProviderError`（再試行不可の汎用）の場合は、`services/llm.py` の `_map_provider_exception` がその例外を分類できていないので、分岐を足して再試行可能な型へ寄せます。ストリーム途中のプロバイダエラーはステータスコードを持たない `APIError` として、接続断は httpx の例外として届きます。
 

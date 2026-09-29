@@ -693,29 +693,6 @@ def _chat_completion_token_limit_kwargs(
     return {"max_tokens": max_tokens}
 
 
-def _openai_reasoning_kwargs(
-    model_name: str,
-    *,
-    generation_phase: str = "default",
-    has_tool_context: bool = False,
-) -> dict[str, Any]:
-    """Return phase-aware reasoning options for GPT-6 Luna Chat Completions.
-
-    GPT-6 Luna rejects function tools combined with non-``none`` reasoning on
-    the Chat Completions endpoint.  Tool-bearing turns stay on that endpoint
-    because their existing message history uses the Chat Completions shape, so
-    those requests must explicitly use ``none``.  Tool-free answers use low
-    effort to reduce latency and token usage; auxiliary calls retain medium.
-    """
-    if model_name == GPT_6_LUNA_MODEL:
-        if has_tool_context:
-            return {"reasoning_effort": "none"}
-        return {
-            "reasoning_effort": "low" if generation_phase in ANSWER_GENERATION_PHASES else "medium"
-        }
-    return {}
-
-
 def _openai_responses_reasoning_kwargs(
     model_name: str,
     *,
@@ -903,6 +880,95 @@ def _prepare_openai_responses_input(
     return prepared_messages
 
 
+# チャット層は Chat Completions 形でツール履歴を積むので、Responses API の入力項目へ写す。
+# assistant の tool_calls は function_call に、tool の結果は function_call_output になる。
+# The chat layer accumulates tool history in the Chat Completions shape; map it to Responses API
+# input items: assistant tool_calls become function_call items, tool results function_call_output.
+def _responses_input_items(messages: ConversationMessages) -> ConversationMessages:
+    items: ConversationMessages = []
+    for message in messages:
+        role = message.get("role")
+        if role == "tool":
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": str(message.get("tool_call_id") or ""),
+                    "output": str(message.get("content") or ""),
+                }
+            )
+            continue
+        tool_calls = message.get("tool_calls") if role == "assistant" else None
+        if not tool_calls:
+            items.append(message)
+            continue
+        if message.get("content"):
+            items.append({"role": "assistant", "content": message["content"]})
+        for tool_call in tool_calls:
+            function = tool_call.get("function") or {}
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": str(tool_call.get("id") or ""),
+                    "name": str(function.get("name") or ""),
+                    "arguments": str(function.get("arguments") or "{}"),
+                }
+            )
+    return items
+
+
+# Responses API の function tool は既定で strict になる。緩めたスキーマの方針（ADR 0008）を保つため
+# strict を明示的に切る。
+# Responses API function tools default to strict; turn it off explicitly to keep the relaxed
+# provider-safe schema policy (ADR 0008).
+def _responses_tool_kwargs(tools: list[dict[str, Any]] | None) -> dict[str, Any]:
+    response_tools: list[dict[str, Any]] = []
+    for tool in prepare_provider_tools(tools):
+        function = tool.get("function") or {}
+        if not function.get("name"):
+            continue
+        response_tools.append(
+            {
+                "type": "function",
+                "name": function["name"],
+                "description": function.get("description") or "",
+                "parameters": function.get("parameters") or {"type": "object", "properties": {}},
+                "strict": False,
+            }
+        )
+    if not response_tools:
+        return {}
+    return {"tools": response_tools, "tool_choice": "auto"}
+
+
+def _openai_responses_request_kwargs(
+    model_name: str,
+    prepared_messages: ConversationMessages,
+    *,
+    tools: list[dict[str, Any]] | None,
+    generation_phase: str,
+) -> dict[str, Any]:
+    return {
+        "model": model_name,
+        "input": _openai_request_messages(
+            model_name, _responses_input_items(prepared_messages), responses_api=True
+        ),
+        "max_output_tokens": max_output_tokens_for_model(model_name, generation_phase),
+        **_openai_responses_reasoning_kwargs(model_name, generation_phase=generation_phase),
+        **_responses_tool_kwargs(tools),
+    }
+
+
+def _responses_function_call_to_tool_call(item: Any) -> dict[str, Any]:
+    return {
+        "id": str(getattr(item, "call_id", "") or ""),
+        "type": "function",
+        "function": {
+            "name": str(getattr(item, "name", "") or ""),
+            "arguments": str(getattr(item, "arguments", "") or "{}"),
+        },
+    }
+
+
 # プロンプトキャッシュの区切り。チャット層は「固定の指示 → 会話履歴 → 変わる文脈 → 最新の発話」
 # の順に並べるので、アダプタはその境目に各プロバイダの区切りを付ける。区切りは2か所まで:
 # 全利用者で共通の先頭の基本プロンプトと、会話履歴の末尾（変わる文脈の直前）。
@@ -911,6 +977,7 @@ def _prepare_openai_responses_input(
 # the leading base prompt shared by every user, and the end of the history just before the
 # per-turn context.
 _SYSTEM_ROLES = frozenset({"system", "developer"})
+_RESPONSES_INPUT_ROLES = frozenset({"system", "developer", "user"})
 # 明示の区切りに対応するのは GPT-5.6 以降。Groq へ送るとリクエスト自体が拒否されうる。
 # Explicit breakpoints exist on GPT-5.6 and later only; Groq may reject the field outright.
 OPENAI_CACHE_BREAKPOINT_MODELS = frozenset({GPT_6_LUNA_MODEL})
@@ -950,9 +1017,11 @@ def _with_openai_cache_breakpoints(
         return messages
     indexes = set()
     for index in _prompt_cache_breakpoint_indexes(messages):
-        # Responses API は assistant の出力に区切りを置けないため、直前の入力側の発話へ寄せる。
-        # The Responses API rejects breakpoints on assistant output, so move to the prior input.
-        while responses_api and index > 0 and messages[index].get("role") == "assistant":
+        # Responses API は assistant の出力やツール履歴の項目に区切りを置けないため、直前の
+        # 入力側の発話へ寄せる。
+        # The Responses API rejects breakpoints on assistant output and tool-history items, so
+        # move to the prior input.
+        while responses_api and index > 0 and messages[index].get("role") not in _RESPONSES_INPUT_ROLES:
             index -= 1
         indexes.add(index)
     marked = [dict(message) for message in messages]
@@ -1109,7 +1178,6 @@ def _get_openai_compatible_response_stream(
         )
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
-    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     output_limit_reason: str | None = None
@@ -1124,11 +1192,6 @@ def _get_openai_compatible_response_stream(
             **_chat_completion_token_limit_kwargs(
                 model_name,
                 generation_phase=generation_phase,
-            ),
-            **_openai_reasoning_kwargs(
-                model_name,
-                generation_phase=generation_phase,
-                has_tool_context=has_tool_context,
             ),
             **(reasoning_kwargs or {}),
             "stream": True,
@@ -1654,8 +1717,10 @@ def get_claude_response_stream(
 
 # OpenAI Responses APIを呼び出してテキスト応答を取得する
 # Call the OpenAI Responses API to retrieve text responses.
-# OpenAI APIを呼び出して応答を取得します（ツール呼び出しの有無に応じてChat CompletionsまたはResponses APIを使用）。
-# Call the OpenAI API to retrieve the response, using Chat Completions or Responses API depending on tools.
+# ツールの有無にかかわらず Responses API を使う。GPT-6 Luna は Chat Completions ではツールと推論を
+# 併用できず、推論 none で呼ぶと内部の推論や特殊トークンが本文へ漏れる（issue #771）。
+# Always use the Responses API. On Chat Completions GPT-6 Luna cannot combine tools with reasoning,
+# and reasoning "none" leaks its internal reasoning and special tokens into the answer (issue #771).
 def get_openai_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -1663,8 +1728,6 @@ def get_openai_response(
     tools: list[dict[str, Any]] | None = None,
     generation_phase: str = "default",
 ) -> str:
-    # OpenAI Responses APIでテキスト応答を取得します。
-    # Fetch text output via OpenAI Responses API.
     if openai_client is None:
         _raise_configuration_error(
             "OPENAI_API_KEY が未設定です。",
@@ -1675,60 +1738,23 @@ def get_openai_response(
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
     )
-    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     try:
-        if has_tool_context:
-            # Responses API は既存の tool/result 会話履歴と形が合わないため、tool を使うターンだけ Chat Completions 側に寄せます。
-            # Since Responses API does not fit existing tool/result conversation formats,
-            # route only the tool usage turns to the Chat Completions API.
-            request_kwargs: dict[str, Any] = {
-                "model": model_name,
-                "messages": _openai_request_messages(
-                    model_name, sanitized_messages, responses_api=False
-                ),
-                **_chat_completion_token_limit_kwargs(
-                    model_name,
-                    generation_phase=generation_phase,
-                ),
-                **_openai_reasoning_kwargs(
-                    model_name,
-                    generation_phase=generation_phase,
-                    has_tool_context=has_tool_context,
-                ),
-                **_chat_completion_tool_kwargs(tools),
-            }
-            response = openai_client.chat.completions.create(
-                **request_kwargs,
-            )
-            message = response.choices[0].message
-            if not record_chat_completion_usage(model_name, getattr(response, "usage", None)):
-                record_estimated_usage(model_name, sanitized_messages, str(message.content or ""), tools=tools)
-            tool_calls = getattr(message, "tool_calls", None)
-            if tool_calls:
-                return json.dumps([
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        }
-                    }
-                    for tc in tool_calls
-                ])
-            return message.content or ""
-
         response = openai_client.responses.create(
-            model=model_name,
-            input=_openai_request_messages(model_name, sanitized_messages, responses_api=True),
-            max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
-            **_openai_responses_reasoning_kwargs(
+            **_openai_responses_request_kwargs(
                 model_name,
+                sanitized_messages,
+                tools=tools,
                 generation_phase=generation_phase,
             ),
         )
+        tool_calls = [
+            _responses_function_call_to_tool_call(item)
+            for item in (getattr(response, "output", None) or [])
+            if getattr(item, "type", None) == "function_call"
+        ]
+        output_text = str(getattr(response, "output_text", "") or "")
         if not record_responses_usage(model_name, getattr(response, "usage", None)):
-            record_estimated_usage(model_name, sanitized_messages, str(response.output_text or ""))
+            record_estimated_usage(model_name, sanitized_messages, output_text, tools=tools)
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -1738,13 +1764,17 @@ def get_openai_response(
             generation_phase=generation_phase,
         )
     else:
-        return response.output_text
+        if tool_calls:
+            return json.dumps(tool_calls, ensure_ascii=False)
+        return output_text
 
 
 # OpenAI Responses APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
 # Call the OpenAI Responses API and yield response chunks incrementally as a stream.
-# OpenAI APIからストリーム形式で応答を逐次取得します。
-# Call the OpenAI streaming API to yield response chunks incrementally.
+# ツール付きのターンも Responses API で流す（理由は get_openai_response を参照）。ツール呼び出しは
+# 他のプロバイダと同じく、最後に Chat Completions 形の JSON 配列として1度だけ返す。
+# Tool-bearing turns stream through the Responses API too (see get_openai_response). As with the
+# other providers, tool calls are yielded once at the end as a Chat Completions-shaped JSON array.
 def get_openai_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -1752,8 +1782,6 @@ def get_openai_response_stream(
     tools: list[dict[str, Any]] | None = None,
     generation_phase: str = "default",
 ) -> Iterator[str]:
-    # OpenAI Responses APIのストリーム断片を逐次返します。
-    # Yield OpenAI Responses API text deltas incrementally.
     if openai_client is None:
         _raise_configuration_error(
             "OPENAI_API_KEY が未設定です。",
@@ -1764,35 +1792,18 @@ def get_openai_response_stream(
     sanitized_messages = _prepare_openai_responses_input(
         _sanitize_conversation_messages(conversation_messages)
     )
-    has_tool_context = bool(tools) or _conversation_has_tool_history(sanitized_messages)
     try:
-        if has_tool_context:
-            # Tool 呼び出しを含む履歴は Chat Completions の message shape に合わせてストリーミングします。
-            # Stream message history containing tool calls in accordance with the Chat Completions message shape.
-            yield from _get_openai_compatible_response_stream(
-                client=openai_client,
-                conversation_messages=sanitized_messages,
-                model_name=model_name,
-                missing_key_message="OPENAI_API_KEY が未設定です。",
-                provider_error_message="OpenAI streaming API call failed.",
-                tools=tools,
-                generation_phase=generation_phase,
-            )
-            return
-
         output_limit_reason: str | None = None
         stream_usage: Any = None
         streamed_text: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
         stream_opened = False
         try:
             with openai_client.responses.stream(
-                model=model_name,
-                input=_openai_request_messages(
-                    model_name, sanitized_messages, responses_api=True
-                ),
-                max_output_tokens=max_output_tokens_for_model(model_name, generation_phase),
-                **_openai_responses_reasoning_kwargs(
+                **_openai_responses_request_kwargs(
                     model_name,
+                    sanitized_messages,
+                    tools=tools,
                     generation_phase=generation_phase,
                 ),
             ) as stream:
@@ -1808,6 +1819,12 @@ def get_openai_response_stream(
                         if delta:
                             streamed_text.append(delta)
                             yield delta
+                    elif event.type == "response.output_item.done":
+                        item = getattr(event, "item", None)
+                        if getattr(item, "type", None) == "function_call" and getattr(item, "name", None):
+                            tool_call = _responses_function_call_to_tool_call(item)
+                            tool_calls.append(tool_call)
+                            streamed_text.append(tool_call["function"]["arguments"])
                     elif event.type == "response.incomplete":
                         # 出力がトークン上限で打ち切られたことを記録する（生成UIのJSONが壊れる主因）。
                         # Record that output was cut off at the token cap (a main cause of
@@ -1826,7 +1843,11 @@ def get_openai_response_stream(
                         )
         finally:
             if stream_opened and not record_responses_usage(model_name, stream_usage):
-                record_estimated_usage(model_name, sanitized_messages, "".join(streamed_text))
+                record_estimated_usage(model_name, sanitized_messages, "".join(streamed_text), tools=tools)
+        # 打ち切られたステップでも、すでに要求されたツール呼び出しは先に流す。
+        # Emit the tool calls already requested before raising for a truncated step.
+        if tool_calls:
+            yield json.dumps(tool_calls, ensure_ascii=False)
         if output_limit_reason in {"max_output_tokens", "max_tokens"}:
             raise LlmOutputLimitError(
                 f"OpenAI output reached the configured token limit for {model_name}.",
@@ -1959,7 +1980,6 @@ def _get_chat_completions_json_response(
                 if provider_name == "Groq"
                 else {}
             ),
-            **_openai_reasoning_kwargs(model_name),
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }

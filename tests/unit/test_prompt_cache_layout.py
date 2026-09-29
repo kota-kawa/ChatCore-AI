@@ -158,17 +158,25 @@ class OpenAiBreakpointTests(unittest.TestCase):
         )
 
     def test_luna_stream_sends_breakpoints_and_groq_stream_does_not(self):
-        for model_name, client_name, expected in (
-            (llm.GPT_6_LUNA_MODEL, "openai_client", list),
-            (llm.GPT_OSS_120B_MODEL, "groq_client", str),
-        ):
-            client = MagicMock()
-            client.chat.completions.create.return_value = MagicMock(__iter__=lambda _self: iter(()))
-            tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
-            with self.subTest(model_name=model_name), patch.object(llm, client_name, client):
-                list(llm.get_llm_response_stream(_conversation(), model_name, tools=tools))
-                sent = client.chat.completions.create.call_args.kwargs["messages"]
-                self.assertIsInstance(sent[0]["content"], expected)
+        tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
+
+        # Luna はツール付きでも Responses API へ送るので、区切りは `input` の先頭に付く。
+        # Luna goes to the Responses API even with tools, so its breakpoint lands on `input`.
+        luna_client = MagicMock()
+        stream_ctx = MagicMock()
+        stream_ctx.__enter__.return_value = MagicMock(__iter__=lambda _self: iter(()))
+        stream_ctx.__exit__.return_value = None
+        luna_client.responses.stream.return_value = stream_ctx
+        with patch.object(llm, "openai_client", luna_client):
+            list(llm.get_llm_response_stream(_conversation(), llm.GPT_6_LUNA_MODEL, tools=tools))
+        self.assertIsInstance(luna_client.responses.stream.call_args.kwargs["input"][0]["content"], list)
+        luna_client.chat.completions.create.assert_not_called()
+
+        groq_client = MagicMock()
+        groq_client.chat.completions.create.return_value = MagicMock(__iter__=lambda _self: iter(()))
+        with patch.object(llm, "groq_client", groq_client):
+            list(llm.get_llm_response_stream(_conversation(), llm.GPT_OSS_120B_MODEL, tools=tools))
+        self.assertIsInstance(groq_client.chat.completions.create.call_args.kwargs["messages"][0]["content"], str)
 
 
 class ClaudeCacheLayoutTests(unittest.TestCase):
