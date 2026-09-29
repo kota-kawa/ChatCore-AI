@@ -9,6 +9,8 @@ preference column stays with the Skill repository that owns that feature.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select, text, update
@@ -27,6 +29,23 @@ from services.models import (
     UserAuthProvider,
     UserPasskey,
 )
+
+PROFILE_SETTINGS_FINGERPRINT_FIELDS = (
+    "username",
+    "bio",
+    "llm_profile_context",
+    "preferred_locale",
+)
+
+
+def profile_settings_fingerprint(profile: dict[str, Any]) -> str:
+    """Return a stable, non-reversible comparison token for the persistent profile fields."""
+    canonical = json.dumps(
+        [profile.get(field) for field in PROFILE_SETTINGS_FINGERPRINT_FIELDS],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class UserRepository:
@@ -48,6 +67,62 @@ class UserRepository:
     async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         user = await self.session.scalar(select(User).where(User.email == email).limit(1))
         return self._serialize_user(user) if user is not None else None
+
+    async def get_chat_profile_settings(self, user_id: int) -> dict[str, Any] | None:
+        """Read only fields exposed to the profile settings tools; never fetch email or avatar."""
+        result = await self.session.execute(
+            select(
+                User.id,
+                User.username,
+                User.bio,
+                User.llm_profile_context,
+                User.preferred_locale,
+            ).where(User.id == int(user_id))
+        )
+        row = result.mappings().first()
+        if row is None:
+            return None
+        return {
+            field: row[field]
+            for field in ("id", "username", "bio", "llm_profile_context", "preferred_locale")
+        }
+
+    async def update_chat_profile_settings_if_unchanged(
+        self,
+        user_id: int,
+        *,
+        expected_fingerprint: str | None,
+        updates: dict[str, Any],
+    ) -> bool | None:
+        """Compare and update the user's profile while holding its row lock.
+
+        ``None`` means the authenticated user's row disappeared; ``False`` means the snapshot
+        changed since proposal time. The caller owns the transaction, so approval settlement and
+        this write commit or roll back together.
+        """
+        user = await self.session.scalar(
+            select(User).where(User.id == int(user_id)).with_for_update()
+        )
+        if user is None:
+            return None
+        current = {
+            "username": user.username,
+            "bio": user.bio,
+            "llm_profile_context": user.llm_profile_context,
+            "preferred_locale": user.preferred_locale,
+        }
+        if expected_fingerprint is not None and profile_settings_fingerprint(current) != expected_fingerprint:
+            return False
+
+        allowed_fields = {"username", "bio", "llm_profile_context", "preferred_locale"}
+        if set(updates) - allowed_fields:
+            raise ValueError("profile settings update contains an unsupported field")
+        if not updates:
+            return True
+        result = await self.session.execute(
+            update(User).where(User.id == int(user_id)).values(**updates)
+        )
+        return bool(result.rowcount)
 
     async def list_active_avatar_urls(self) -> list[str]:
         """Read every avatar URL still referenced by a user row.

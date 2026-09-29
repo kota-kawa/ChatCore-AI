@@ -302,6 +302,9 @@ class ChatMessageRequest(RequestPayloadModel):
     chat_room_id: ChatRoomIdStr = "default"
     model: ModelNameStr | None = None
     attached_files: list[AttachedFileItem] = Field(default_factory=list, max_length=MAX_ATTACHED_FILES)
+    # 日本語: このブラウザーの保存済みテーマ設定。チャット内で明示的に読む場合だけ使う。
+    # English: This browser's stored theme preference, used only when explicitly read in chat.
+    theme_preference: Literal["light", "dark", "auto"] | None = None
     # 日本語: 回答の途中で自分のメモ・マイコンテキストを検索してよいか。ログイン中のみ有効。
     # English: Whether the answer may search the sender's own memos and My Context (login only).
     use_personal_knowledge: bool = False

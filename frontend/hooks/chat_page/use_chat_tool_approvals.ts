@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
 
 import { useTranslation } from "../../contexts/locale_context";
 import {
@@ -8,6 +9,8 @@ import {
 } from "../../lib/chat_page/tool_approval_api";
 import { findToolApproval, shouldAutoContinueAfterApproval } from "../../lib/chat_page/tool_approvals";
 import type { UiChatMessage } from "../../lib/chat_page/types";
+import type { Locale } from "../../lib/i18n/config";
+import { setThemePreference } from "../../scripts/core/theme";
 import { showToast } from "../../scripts/core/toast";
 import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 
@@ -31,7 +34,8 @@ export function useChatToolApprovals({
   applyToolApproval,
   sendMessage,
 }: UseChatToolApprovalsOptions) {
-  const { t } = useTranslation();
+  const { t, setLocale } = useTranslation();
+  const router = useRouter();
   // 仮想リストは画面外の行を作り直すので、カード側の状態とは別に送信中の ID をここで持つ
   // The virtual list rebuilds off-screen rows, so in-flight ids are tracked here as well as in the card
   const inFlightRef = useRef<Set<string>>(new Set());
@@ -48,10 +52,34 @@ export function useChatToolApprovals({
     async (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings = false) => {
       if (inFlightRef.current.has(approvalId)) return;
       inFlightRef.current.add(approvalId);
+      const syncProfilePreferences = (
+        approval: ToolApprovalApi,
+        currentPreferredLocale: Locale | null,
+        usePreviewLocaleFallback: boolean,
+      ) => {
+        if (
+          approval.tool !== "profile_settings_update"
+          || approval.status !== "succeeded"
+          || approval.preview?.kind !== "profile_settings_update"
+        ) {
+          return;
+        }
+        const locale = currentPreferredLocale
+          ?? (usePreviewLocaleFallback ? approval.preview.preferred_locale : null);
+        if (locale !== null) {
+          setLocale(locale);
+          void router.replace(router.asPath, router.asPath, { locale });
+        }
+        if (approval.preview.theme !== null) {
+          setThemePreference(approval.preview.theme);
+        }
+      };
       try {
-        const approval = acknowledgeWarnings
+        const result = acknowledgeWarnings
           ? await decideToolApproval(approvalId, decision, t("chat.toolApproval.decisionFailed"), undefined, true)
           : await decideToolApproval(approvalId, decision, t("chat.toolApproval.decisionFailed"));
+        const { approval } = result;
+        syncProfilePreferences(approval, result.currentPreferredLocale, true);
         decidedApprovalIdRef.current = approval.id;
         applyToolApproval(approval);
       } catch (error) {
@@ -64,7 +92,8 @@ export function useChatToolApprovals({
           } else if (error.code === "approval_already_decided" && error.approval) {
             // 別タブなどで先に決まったカードの最新状態が応答に載っているので、それに差し替える
             // The response carries the card's latest state, settled elsewhere (another tab, say);
-            // swap the card with it
+            // synchronize any committed profile preferences and swap the card with it
+            syncProfilePreferences(error.approval, error.currentPreferredLocale, false);
             applyToolApproval(error.approval);
           }
         }
@@ -73,7 +102,7 @@ export function useChatToolApprovals({
         inFlightRef.current.delete(approvalId);
       }
     },
-    [applyToolApproval, t],
+    [applyToolApproval, router, setLocale, t],
   );
 
   useEffect(() => {

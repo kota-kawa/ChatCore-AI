@@ -3,6 +3,19 @@ export type ThemePreference = "light" | "dark" | "auto";
 const STORAGE_KEY = "chatcore-theme";
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "light";
 const VALID_PREFERENCES: ThemePreference[] = ["light", "dark", "auto"];
+const THEME_NAME_PATTERN = /\b(theme|appearance|color scheme|colour scheme|dark mode|light mode)\b|テーマ|外観|配色|ダークモード|ライトモード/i;
+const THEME_SETTING_REFERENCE_PATTERNS = [
+  /\bcurrent(?:ly)?\s+(?:(?:color|colour)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\s+(?:setting|preference|configuration)\b|\b(?:currently selected|saved|configured|browser|app|application|site)\s+(?:(?:color|colour)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)(?:\s+(?:setting|preference|configuration))?\b/i,
+  // 「my theme」の直後が文末・設定語・「今」だけのときに限る（theme song や for the brand を除く）
+  // Only when "my theme" ends the clause or is followed by a setting word or "now" (excludes "theme song", "for the brand")
+  /\bmy\s+(?:(?:current|saved|preferred)\s+)?(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)(?:\s+(?:setting|preference|configuration)s?)?(?=\s*(?:$|[?？.!。,、]|(?:right\s+)?now\b|currently\b))/i,
+  /\b(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\s+(?:setting|preference|configuration|am I using|i(?:'m| am) using|is (?:enabled|active|selected)|do I have (?:set|selected))\b/i,
+  /(?:今|現在)(?:の|の表示|の画面)?(?:テーマ|外観|配色|ダークモード|ライトモード)(?:設定|状態|は|を)|(?:テーマ|外観|配色|ダークモード|ライトモード)(?:の)?(?:設定|設定値|優先設定|状態)|(?:表示テーマ|画面テーマ|アプリテーマ|ブラウザーのテーマ|ブラウザのテーマ)/i,
+];
+const THEME_READ_REQUEST_PATTERN =
+  /\b(?:what(?:'s| is)(?: my| the current)?|show(?: me)?|tell me|check|read|look up|find out|current(?:ly)?|list|summari[sz]e)\b|(?:今|現在|何|どの|教え|見せ|確認|調べ|知り|一覧|要約|まとめ|どうなって|設定は)|[?？]/i;
+const THEME_WRITE_REQUEST_PATTERN =
+  /\b(?:change|set|switch|make|turn|apply|choose|pick)\b.{0,24}\b(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\b|\b(?:theme|appearance|color scheme|colour scheme|dark mode|light mode)\b.{0,24}\b(?:to|as)\b.{0,10}\b(?:dark|light|auto)\b|(?:テーマ|配色|外観).{0,16}(?:変更|変え|切替|切り替え|にして|にする|に設定|を設定|更新|適用|選択して|選んで)/i;
 
 function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === "string" && (VALID_PREFERENCES as string[]).includes(value);
@@ -21,6 +34,15 @@ export function getStoredThemePreference(): ThemePreference {
     // localStorage unavailable
   }
   return DEFAULT_THEME_PREFERENCE;
+}
+
+export function shouldSendThemePreference(message: string): boolean {
+  return (
+    THEME_NAME_PATTERN.test(message) &&
+    THEME_SETTING_REFERENCE_PATTERNS.some((pattern) => pattern.test(message)) &&
+    THEME_READ_REQUEST_PATTERN.test(message) &&
+    !THEME_WRITE_REQUEST_PATTERN.test(message)
+  );
 }
 
 export function resolveTheme(preference: ThemePreference): "light" | "dark" {

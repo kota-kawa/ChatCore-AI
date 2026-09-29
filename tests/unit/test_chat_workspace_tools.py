@@ -42,6 +42,10 @@ from services.chat_workspace_tools.memo import (
     _propose_memo_create,
     _propose_memo_edit,
 )
+from services.chat_workspace_tools.profile import (
+    PROFILE_SETTINGS_READ_TOOL_NAME,
+    PROFILE_SETTINGS_UPDATE_TOOL_NAME,
+)
 from services.chat_workspace_tools.prompts import (
     MY_PROMPT_READ_TOOL_NAME,
     MY_PROMPT_SAVE_DEFINITION,
@@ -187,12 +191,20 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(toolbox.uses_read_budget(MEMO_READ_TOOL_NAME))
         self.assertFalse(toolbox.uses_read_budget(MEMO_LIST_TOOL_NAME))
 
-    def test_build_workspace_toolbox_off_when_skill_disabled(self):
-        self.assertIsNone(
-            build_workspace_toolbox(
-                user_id=1, chat_room_id="room-1", memo_tools_enabled=False, external_input_in_turn=False
-            )
+    def test_profile_tools_remain_available_when_both_default_skills_are_disabled(self):
+        toolbox = build_workspace_toolbox(
+            user_id=1,
+            chat_room_id="room-1",
+            memo_tools_enabled=False,
+            prompt_tools_enabled=False,
+            external_input_in_turn=False,
         )
+        self.assertIsNotNone(toolbox)
+        self.assertEqual(
+            {definition["function"]["name"] for definition in toolbox.definitions()},
+            {PROFILE_SETTINGS_READ_TOOL_NAME, PROFILE_SETTINGS_UPDATE_TOOL_NAME},
+        )
+        self.assertFalse(get_workspace_tool_spec(PROFILE_SETTINGS_UPDATE_TOOL_NAME).allows_always)
 
     def test_build_workspace_toolbox_carries_external_input_flag(self):
         toolbox = build_workspace_toolbox(

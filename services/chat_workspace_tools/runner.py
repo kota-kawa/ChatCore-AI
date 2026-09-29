@@ -30,6 +30,7 @@ from services.chat_tool_approval_service import (
 
 from .memo import MEMO_APPEND_TOOL_NAME, MEMO_EDIT_TOOL_NAME, MEMO_READ_TOOL_NAME, MEMO_TOOL_FAMILY
 from .private_overlap import PrivateTextTracker, extract_private_texts
+from .profile import PROFILE_SETTINGS_READ_TOOL_NAME, PROFILE_TOOL_FAMILY, THEME_STORAGE_NOTE
 from .prompts import (
     MY_PROMPT_READ_TOOL_NAME,
     MY_SKILL_READ_TOOL_NAME,
@@ -54,7 +55,7 @@ _PUBLISH_PROMPT_OVERLAP_FIELDS = (
 # （公開データ）は外部の内容として扱われる（services/chat_generation.py も参照）。
 # Families treated as "the user's own data" for a later get_evidence re-read; any family not
 # listed here (public data) is treated as external content (see services/chat_generation.py).
-_PRIVATE_TEXT_FAMILIES = frozenset({MEMO_TOOL_FAMILY, PROMPTS_TOOL_FAMILY})
+_PRIVATE_TEXT_FAMILIES = frozenset({MEMO_TOOL_FAMILY, PROMPTS_TOOL_FAMILY, PROFILE_TOOL_FAMILY})
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,13 @@ class WorkspaceToolRunner:
         else:
             payload = result.payload
             query = result.query
+            if spec.name == PROFILE_SETTINGS_READ_TOOL_NAME and arguments.get("include_theme") is True:
+                if self._toolbox.browser_theme_preference in {"light", "dark", "auto"}:
+                    payload["theme"] = self._toolbox.browser_theme_preference
+                    payload["theme_note"] = "Current preference supplied by this browser for this chat turn."
+                else:
+                    payload["theme"] = None
+                    payload["theme_note"] = THEME_STORAGE_NOTE
             if spec.name == MEMO_READ_TOOL_NAME and payload.get("status") == "ok":
                 memos = payload.get("memos")
                 if isinstance(memos, list):
@@ -179,6 +187,9 @@ class WorkspaceToolRunner:
         elif tool_name == MY_SKILL_READ_TOOL_NAME:
             entry = payload.get("skill")
             resource_type, id_key = "skill", "skill_id"
+        elif tool_name == PROFILE_SETTINGS_READ_TOOL_NAME:
+            self._track_profile_settings_result(payload)
+            return
         else:
             entry = None
             resource_type, id_key = "", ""
@@ -203,6 +214,20 @@ class WorkspaceToolRunner:
 
         for text in extract_private_texts(payload):
             self._private_texts.add(text)
+
+    def _track_profile_settings_result(self, payload: dict[str, Any]) -> None:
+        for field in ("display_name", "preferred_locale"):
+            value = payload.get(field)
+            if isinstance(value, str):
+                self._private_texts.add(value)
+        bio = payload.get("bio")
+        bio_start = payload.get("bio_start")
+        if isinstance(bio, str) and isinstance(bio_start, int) and not isinstance(bio_start, bool):
+            self._private_texts.add_chunk("profile:bio", bio_start, bio)
+        context = payload.get("llm_profile_context")
+        start = payload.get("llm_profile_context_start")
+        if isinstance(context, str) and isinstance(start, int) and not isinstance(start, bool):
+            self._private_texts.add_chunk("profile:llm_profile_context", start, context)
 
     # Write proposals -----------------------------------------------------------
 

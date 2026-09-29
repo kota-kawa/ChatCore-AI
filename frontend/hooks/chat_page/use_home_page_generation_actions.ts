@@ -61,6 +61,7 @@ import {
 } from "../../scripts/core/runtime_validation";
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 import { useTranslation } from "../../contexts/locale_context";
+import { getStoredThemePreference, shouldSendThemePreference } from "../../scripts/core/theme";
 
 // サーバーが「該当ルームが見つかりません」を返したことを表すエラーコード。
 // Error code the server returns when the chat room no longer exists.
@@ -1014,6 +1015,9 @@ export function useHomePageGenerationActions({
             message: payload.message,
             chat_room_id: generation.roomId,
             model: payload.model,
+            ...(shouldSendThemePreference(payload.message)
+              ? { theme_preference: getStoredThemePreference() }
+              : {}),
             use_personal_knowledge: personalKnowledgeEnabled,
             use_shared_prompts: sharedPromptsEnabled,
             attached_files:
@@ -1309,6 +1313,9 @@ export function useHomePageGenerationActions({
               new_message: newMessage,
               trailing_user_count: trailingUserCount,
               model,
+              ...(shouldSendThemePreference(newMessage)
+                ? { theme_preference: getStoredThemePreference() }
+                : {}),
               use_personal_knowledge: personalKnowledgeEnabled,
               use_shared_prompts: sharedPromptsEnabled,
             }),
@@ -1455,6 +1462,8 @@ export function useHomePageGenerationActions({
       truncateLastAnswerForRegenerate(roomId, currentRoomMode);
       markChatRoomActive(roomId);
       beginRegeneratedTurn(generation);
+      const latestUserMessage =
+        readStoredHistory(roomId).slice().reverse().find((entry) => entry.sender === "user")?.text ?? "";
 
       try {
         const response = await resilientFetch(
@@ -1466,6 +1475,9 @@ export function useHomePageGenerationActions({
             body: JSON.stringify({
               chat_room_id: roomId,
               model,
+              ...(shouldSendThemePreference(latestUserMessage)
+                ? { theme_preference: getStoredThemePreference() }
+                : {}),
               use_personal_knowledge: personalKnowledgeEnabled,
               use_shared_prompts: sharedPromptsEnabled,
             }),

@@ -93,6 +93,7 @@ from .chat_web_page_reader import (
     WebPageReader,
     read_web_page_tool_definition,
 )
+from .chat_workspace_tools.profile import PROFILE_TOOL_FAMILY
 from .chat_workspace_tools.prompts import PROMPTS_TOOL_FAMILY, SHARED_PROMPT_READ_TOOL_NAME
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .chat_workspace_tools.runner import WorkspaceToolRunner
@@ -446,7 +447,9 @@ _EXTERNAL_CONTENT_TOOL_NAMES = frozenset(
 # Evidence from the user's own data; re-reading anything else through get_evidence counts as
 # reading external content. prompts covers the user's own Task/Skill listings; shared_prompts
 # (public posts) is deliberately excluded.
-_OWN_DATA_EVIDENCE_TYPES = frozenset({"memo", PERSONAL_KNOWLEDGE_SOURCE, PROMPTS_TOOL_FAMILY})
+_OWN_DATA_EVIDENCE_TYPES = frozenset(
+    {"memo", PERSONAL_KNOWLEDGE_SOURCE, PROMPTS_TOOL_FAMILY, PROFILE_TOOL_FAMILY}
+)
 
 
 def _includes_external_evidence(payload: dict[str, Any]) -> bool:

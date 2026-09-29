@@ -23,18 +23,27 @@ from services.chat_tool_approval_service import (
     list_auto_approvals,
     revoke_auto_approval,
 )
+from services.db import session_scope
 from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
     ERROR_TOOL_APPROVAL_DECISION_INVALID,
     ERROR_TOOL_APPROVAL_NOT_FOUND,
     ERROR_TOOL_APPROVAL_RATE_LIMITED_TEMPLATE,
 )
+from services.i18n import (
+    PREFERRED_LOCALE_LOADED_SESSION_KEY,
+    PREFERRED_LOCALE_SESSION_KEY,
+    normalize_locale,
+)
+from services.locale_middleware import set_locale_cookie
+from services.repositories.user_repository import UserRepository
 from services.request_models import ToolApprovalDecisionRequest
 from services.response_models import (
     ToolApprovalDecisionResponse,
     ToolAutoApprovalRevokeResponse,
     ToolAutoApprovalsResponse,
 )
+from services.runtime_config import get_session_same_site, is_production_env
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -74,6 +83,42 @@ def _parse_approval_id(value: str) -> UUID | None:
         return UUID(value)
     except (TypeError, ValueError):
         return None
+
+
+async def _sync_approved_profile_locale(request: Request, user_id: int, card: dict) -> str | None:
+    """Synchronize from the latest persisted locale after a profile locale write settled."""
+    if card.get("status") != "succeeded" or card.get("tool") != "profile_settings_update":
+        return None
+    preview = card.get("preview")
+    proposed_locale = normalize_locale(preview.get("preferred_locale")) if isinstance(preview, dict) else None
+    if proposed_locale is None:
+        return None
+
+    try:
+        async with session_scope() as db:
+            locale = normalize_locale(await UserRepository(db).get_user_preferred_locale(user_id))
+    except Exception:
+        logger.exception("Failed to reload the current profile locale after a chat approval.")
+        return None
+    if locale is None:
+        return None
+
+    request.session[PREFERRED_LOCALE_SESSION_KEY] = locale
+    request.session[PREFERRED_LOCALE_LOADED_SESSION_KEY] = True
+    request.state.locale = locale
+    request.state.persist_locale_cookie = True
+    return locale
+
+
+def _set_profile_locale_cookie(request: Request, response, locale: str | None) -> None:
+    if locale is None:
+        return
+    set_locale_cookie(
+        response,
+        locale,
+        same_site=get_session_same_site(),
+        https_only=is_production_env(),
+    )
 
 
 @chat_bp.post("/api/chat/tool-approvals/{approval_id}/decision", name="chat.decide_tool_approval")
@@ -126,10 +171,29 @@ async def decide_chat_tool_approval(
     except ChatToolRateLimitedError as exc:
         return jsonify_rate_limited(exc.message, retry_after=exc.retry_after)
     except ApiServiceError as exc:
-        return jsonify_service_error(exc)
+        conflict_card = getattr(exc, "approval", None)
+        if isinstance(conflict_card, dict):
+            current_locale = await _sync_approved_profile_locale(request, user_id, conflict_card)
+            if current_locale is not None:
+                payload = exc.to_payload()
+                payload["current_preferred_locale"] = current_locale
+                response = jsonify(payload, status_code=exc.status_code, headers=exc.headers)
+                _set_profile_locale_cookie(request, response, current_locale)
+            else:
+                response = jsonify_service_error(exc)
+        else:
+            response = jsonify_service_error(exc)
+        return response
     except Exception:
         return log_and_internal_server_error(logger, "Failed to decide a chat tool approval.")
-    return jsonify(ToolApprovalDecisionResponse(approval=card).model_dump(exclude_none=True))
+    current_locale = await _sync_approved_profile_locale(request, user_id, card)
+    response = jsonify(
+        ToolApprovalDecisionResponse(approval=card, current_preferred_locale=current_locale).model_dump(
+            exclude_none=True
+        )
+    )
+    _set_profile_locale_cookie(request, response, current_locale)
+    return response
 
 
 @chat_bp.get("/api/chat/tool-auto-approvals", name="chat.list_tool_auto_approvals")

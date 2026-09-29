@@ -714,6 +714,36 @@ async def update_user_profile(
     )
 
 
+async def get_chat_profile_settings(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any] | None:
+    return await _read(
+        lambda repo: repo.get_chat_profile_settings(user_id),
+        session,
+        repository=UserRepository,
+    )
+
+
+async def update_chat_profile_settings_if_unchanged(
+    user_id: int,
+    *,
+    expected_fingerprint: str | None,
+    updates: dict[str, Any],
+    session: AsyncSession | None = None,
+) -> bool | None:
+    return await _write(
+        lambda repo: repo.update_chat_profile_settings_if_unchanged(
+            user_id,
+            expected_fingerprint=expected_fingerprint,
+            updates=updates,
+        ),
+        session,
+        repository=UserRepository,
+    )
+
+
 async def commit_email_change(user_id: int, new_email: str, *, session: AsyncSession | None = None) -> bool:
     return await _write(
         lambda repo: repo.commit_email_change(user_id, new_email),

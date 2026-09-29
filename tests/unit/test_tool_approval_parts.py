@@ -53,6 +53,24 @@ def _memo_edit_approval(**overrides: Any) -> dict[str, Any]:
     return approval
 
 
+def _profile_settings_approval(**overrides: Any) -> dict[str, Any]:
+    approval: dict[str, Any] = {
+        "id": APPROVAL_ID,
+        "tool": "profile_settings_update",
+        "family": "profile",
+        "status": "pending",
+        "always_allowed": False,
+        "preview": {
+            "kind": "profile_settings_update",
+            "bio": "",
+            "preferred_locale": "en",
+            "theme": "dark",
+        },
+    }
+    approval.update(overrides)
+    return approval
+
+
 class ValidateToolApprovalPayloadTests(unittest.TestCase):
     def test_valid_payload_round_trips_and_keeps_whitespace(self) -> None:
         approval = validate_tool_approval_payload(_memo_edit_approval())
@@ -83,6 +101,21 @@ class ValidateToolApprovalPayloadTests(unittest.TestCase):
                 approval = validate_tool_approval_payload(_memo_edit_approval(tool=preview["kind"], preview=preview))
                 self.assertEqual(approval["preview"]["kind"], preview["kind"])
 
+    def test_profile_settings_preview_accepts_only_proposed_values(self) -> None:
+        approval = validate_tool_approval_payload(_profile_settings_approval())
+
+        self.assertEqual(approval["family"], "profile")
+        self.assertFalse(approval["always_allowed"])
+        self.assertEqual(
+            approval["preview"],
+            {
+                "kind": "profile_settings_update",
+                "bio": "",
+                "preferred_locale": "en",
+                "theme": "dark",
+            },
+        )
+
     def test_invalid_payloads_are_rejected(self) -> None:
         cases = {
             "not a dict": "tool_approval",
@@ -90,6 +123,14 @@ class ValidateToolApprovalPayloadTests(unittest.TestCase):
             "unknown decision": _memo_edit_approval(decision="approve_once"),
             "unknown warning": _memo_edit_approval(warnings=["other"]),
             "unknown tool": _memo_edit_approval(tool="memo_delete"),
+            "wrong profile family": _profile_settings_approval(family="prompts"),
+            "wrong profile preview kind": _profile_settings_approval(
+                preview={"kind": "memo_create", "content": "body"},
+            ),
+            "profile preview without changes": _profile_settings_approval(preview={"kind": "profile_settings_update"}),
+            "unsupported theme": _profile_settings_approval(
+                preview={"kind": "profile_settings_update", "theme": "system"},
+            ),
             "preview kind differs from tool": _memo_edit_approval(tool="memo_create"),
             "missing preview on an actionable card": _memo_edit_approval(preview=None),
             "edits mode without edits": _memo_edit_approval(

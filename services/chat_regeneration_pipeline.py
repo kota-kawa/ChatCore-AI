@@ -227,6 +227,7 @@ class ChatRegenerationInput:
     use_personal_knowledge: bool
     use_shared_prompts: bool
     locale: str
+    theme_preference: str | None = None
     llm_daily_limit_service: LlmDailyLimitService | None = None
     chat_generation_service: ChatGenerationService | None = None
     # 日本語: 参照検索のクエリ。chat_edit_and_regenerate は編集後の本文（new_message）を渡し、
@@ -544,6 +545,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 memo_tools_enabled=skills_context.memo_tools_enabled,
                 prompt_tools_enabled=skills_context.prompt_tools_enabled,
                 llm_profile_context=user_profile_prompt or "",
+                browser_theme_preference=pipeline_input.theme_preference,
                 external_input_in_turn=bool(
                     pasted_url_pages
                     or pipeline_input.use_shared_prompts

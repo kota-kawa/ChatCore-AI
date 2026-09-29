@@ -613,6 +613,112 @@ class ChatToolApprovalRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({key: approval[key] for key in card}, card)
         decide.assert_awaited_once()
 
+    def _profile_card(self, preferred_locale: str = "en") -> dict[str, Any]:
+        return {
+            "id": str(uuid4()),
+            "tool": "profile_settings_update",
+            "family": "profile",
+            "status": "succeeded",
+            "decision": "once",
+            "preview": {"kind": "profile_settings_update", "preferred_locale": preferred_locale, "theme": "dark"},
+        }
+
+    def _persisted_locale(self, locale: str | None):
+        # 承認後は DB の現行言語を読み直すので、その読み取りだけを代役にする
+        # After an approval the route re-reads the persisted locale; only that read is faked
+        return (
+            patch("blueprints.chat.tool_approvals.session_scope", _fake_session_scope),
+            patch(
+                "blueprints.chat.tool_approvals.UserRepository.get_user_preferred_locale",
+                AsyncMock(return_value=locale),
+            ),
+        )
+
+    async def test_approved_profile_locale_returns_and_sets_the_persisted_locale(self):
+        app = self._app()
+        card = self._profile_card("en")
+        scope_patch, locale_patch = self._persisted_locale("en")
+        async with self._authenticated_client(app) as client:
+            with scope_patch, locale_patch as read_locale, patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval", AsyncMock(return_value=card)
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "approve_once"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["current_preferred_locale"], "en")
+        self.assertIn("chatcore_locale=en", response.headers.get("set-cookie", ""))
+        read_locale.assert_awaited_once_with(1)
+
+    async def test_resent_stale_profile_card_returns_the_current_locale_instead_of_its_preview(self):
+        # 古い en のカードを再送しても、その後に保存された ja へ session と cookie を合わせる
+        # Resending a stale "en" card keeps session and cookie on the "ja" saved since then
+        app = self._app()
+        card = self._profile_card("en")
+        scope_patch, locale_patch = self._persisted_locale("ja")
+        async with self._authenticated_client(app) as client:
+            with scope_patch, locale_patch, patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval",
+                AsyncMock(side_effect=ToolApprovalConflictError(card)),
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "approve_once"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(body["code"], "approval_already_decided")
+        self.assertEqual(body["current_preferred_locale"], "ja")
+        self.assertEqual(body["approval"]["preview"]["preferred_locale"], "en")
+        set_cookie = response.headers.get("set-cookie", "")
+        self.assertIn("chatcore_locale=ja", set_cookie)
+        self.assertNotIn("chatcore_locale=en", set_cookie)
+
+    async def test_profile_card_without_a_locale_change_skips_the_locale_read(self):
+        app = self._app()
+        card = self._profile_card()
+        card["preview"] = {"kind": "profile_settings_update", "theme": "dark"}
+        scope_patch, locale_patch = self._persisted_locale("ja")
+        async with self._authenticated_client(app) as client:
+            with scope_patch, locale_patch as read_locale, patch(
+                "blueprints.chat.tool_approvals.decide_tool_approval", AsyncMock(return_value=card)
+            ):
+                response = await client.post(
+                    f"/api/chat/tool-approvals/{card['id']}/decision",
+                    json={"decision": "approve_once"},
+                    headers={CSRF_HEADER_NAME: "token-1"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("current_preferred_locale", response.json())
+        self.assertNotIn("chatcore_locale", response.headers.get("set-cookie", ""))
+        read_locale.assert_not_awaited()
+
+    async def test_failed_locale_reload_still_returns_the_settled_card(self):
+        app = self._app()
+        card = self._profile_card("en")
+        async with self._authenticated_client(app) as client:
+            with patch("blueprints.chat.tool_approvals.session_scope", _fake_session_scope), patch(
+                "blueprints.chat.tool_approvals.UserRepository.get_user_preferred_locale",
+                AsyncMock(side_effect=RuntimeError("db down")),
+            ), patch("blueprints.chat.tool_approvals.decide_tool_approval", AsyncMock(return_value=card)):
+                with self.assertLogs("blueprints.chat.tool_approvals", level="ERROR"):
+                    response = await client.post(
+                        f"/api/chat/tool-approvals/{card['id']}/decision",
+                        json={"decision": "approve_once"},
+                        headers={CSRF_HEADER_NAME: "token-1"},
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["approval"]["status"], "succeeded")
+        self.assertNotIn("current_preferred_locale", response.json())
+        self.assertNotIn("chatcore_locale", response.headers.get("set-cookie", ""))
+
     async def test_decide_maps_a_service_conflict_to_its_status_code(self):
         app = self._app()
         async with self._authenticated_client(app) as client:

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BotMessageParts } from "../components/chat_page/bot_message_parts";
 import { ToolApprovalCard } from "../components/chat_page/tool_approval_card";
 import { SharedChatMessageParts } from "../components/shared_chat/shared_chat_message_parts";
+import { LocaleProvider } from "../contexts/locale_context";
 import { normalizeToolApproval } from "../lib/chat_page/api_contract";
 import type { ToolApprovalApi } from "../types/generated/api_schemas";
 
@@ -39,6 +40,37 @@ function promptApproval(preview: Record<string, unknown>, overrides: Record<stri
     preview: { kind: "publish_prompt", title: "会議の要約", content: "要点を箇条書きする", ...preview },
     ...overrides,
   });
+}
+
+type ProfileSettingsPreview = Extract<NonNullable<ToolApprovalApi["preview"]>, { kind: "profile_settings_update" }>;
+
+function profilePreview(overrides: Partial<ProfileSettingsPreview> = {}): ProfileSettingsPreview {
+  return {
+    kind: "profile_settings_update" as const,
+    display_name: null,
+    bio: null,
+    llm_profile_context: null,
+    preferred_locale: null,
+    theme: null,
+    ...overrides,
+  };
+}
+
+function profileApproval(overrides: Partial<ToolApprovalApi> = {}): ToolApprovalApi {
+  return {
+    id: "profile-a1",
+    tool: "profile_settings_update",
+    family: "profile",
+    status: "pending",
+    decision: null,
+    always_allowed: false,
+    preview: profilePreview(),
+    warnings: [],
+    expires_at: FAR_FUTURE,
+    result: null,
+    readonly: false,
+    ...overrides,
+  };
 }
 
 afterEach(() => {
@@ -349,6 +381,67 @@ describe("MemoApprovalPreview", () => {
     expect(disclosure).not.toBeNull();
     expect(disclosure).not.toHaveAttribute("open");
     expect(disclosure).toHaveTextContent("全部書き直した本文");
+  });
+
+  it("shows changed profile settings and makes empty text fields explicit", () => {
+    render(
+      <ToolApprovalCard
+        approval={profileApproval({
+          preview: {
+            kind: "profile_settings_update",
+            display_name: "Mika",
+            bio: "",
+            llm_profile_context: "",
+            preferred_locale: "en",
+            theme: "dark",
+          },
+        })}
+        onDecide={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByRole("group", { name: "プロフィール設定を更新します" });
+    expect(card.querySelector(".bi-person-gear")).toBeInTheDocument();
+    expect(screen.getByText("表示名").parentElement).toHaveTextContent("Mika");
+    expect(screen.getByText("自己紹介").parentElement).toHaveTextContent("空にします");
+    expect(screen.getByText("AIに伝えるプロフィール").parentElement).toHaveTextContent("空にします");
+    expect(screen.getByText("英語")).toBeInTheDocument();
+    expect(screen.getByText("ダーク")).toBeInTheDocument();
+    expect(screen.getByText("テーマ設定はこのブラウザーの localStorage に保存され、サーバーからは確認できません。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "常に承認" })).not.toBeInTheDocument();
+  });
+
+  it("links a succeeded profile update to the existing settings page", () => {
+    render(
+      <ToolApprovalCard
+        approval={profileApproval({
+          status: "succeeded",
+          decision: "once",
+          result: { target_id: 7, target_title: "", error_code: null },
+          preview: profilePreview({ preferred_locale: "ja" }),
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "プロフィール設定を開く" });
+    expect(link).toHaveAttribute("href", "/settings");
+  });
+
+  it("translates profile locale and theme values in the English catalogue", () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <ToolApprovalCard
+          approval={profileApproval({
+            preview: profilePreview({ preferred_locale: "ja", theme: "auto" }),
+          })}
+        />
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByRole("group", { name: "Update your profile settings" })).toBeInTheDocument();
+    expect(screen.getByText("Japanese")).toBeInTheDocument();
+    expect(screen.getByText("Auto")).toBeInTheDocument();
+    expect(screen.getByText("Theme preference is stored in this browser's localStorage and can't be read by the server.")).toBeInTheDocument();
   });
 });
 

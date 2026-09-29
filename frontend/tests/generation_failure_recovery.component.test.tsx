@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_generation_actions";
 import { LocaleProvider } from "../contexts/locale_context";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
-import { readStoredGenerationState, readStoredHistory } from "../lib/chat_page/storage";
+import { readStoredGenerationState, readStoredHistory, writeStoredHistory } from "../lib/chat_page/storage";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
@@ -205,6 +205,56 @@ describe("failed chat turns", () => {
     });
 
     expect(result.current.state.chatInput).toBe("送れなかった本文");
+  });
+
+  it("sends the stored browser theme preference for an explicit theme read", async () => {
+    window.localStorage.setItem("chatcore-theme", "auto");
+    resilientFetchMock.mockResolvedValue(createJsonResponse(502, { error: "失敗" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("今のテーマ設定を教えて", "model", "room-1");
+    });
+
+    const request = resilientFetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ theme_preference: "auto" });
+  });
+
+  it("does not send the stored browser theme preference for unrelated messages", async () => {
+    window.localStorage.setItem("chatcore-theme", "dark");
+    resilientFetchMock.mockResolvedValue(createJsonResponse(502, { error: "失敗" }));
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.generateResponse("このメモを要約して", "model", "room-1");
+    });
+
+    const request = resilientFetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).not.toHaveProperty("theme_preference");
+  });
+
+  it("preserves an explicit theme request when regenerating its answer", async () => {
+    window.localStorage.setItem("chatcore-theme", "dark");
+    writeStoredHistory("room-1", [
+      { text: "今のテーマ設定を教えて", sender: "user" },
+      { text: "ダークです。", sender: "bot" },
+    ]);
+    resilientFetchMock.mockImplementation(async (url) =>
+      String(url).includes("chat_regenerate")
+        ? createJsonResponse(200, { response: "ダークです。" })
+        : createJsonResponse(500, { error: "履歴を更新できません" }),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+
+    await act(async () => {
+      await result.current.actions.regenerateLastResponse("model", "room-1");
+    });
+
+    const request = resilientFetchMock.mock.calls.find((call) => String(call[0]).includes("chat_regenerate"))?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ theme_preference: "dark" });
   });
 
   it("treats an empty streamed answer as a failure instead of rendering a blank bubble", async () => {

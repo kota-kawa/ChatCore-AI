@@ -167,7 +167,8 @@ test("the decision API posts the decision and returns the updated card", async (
 
   const decided = await decideToolApproval("a1", "approve_always", "失敗", fetchImpl);
 
-  assert.equal(decided.status, "succeeded");
+  assert.equal(decided.approval.status, "succeeded");
+  assert.equal(decided.currentPreferredLocale, null);
   assert.equal(calls[0].url, "/api/chat/tool-approvals/a1/decision");
   assert.equal(calls[0].init?.method, "POST");
   assert.equal(calls[0].init?.body, JSON.stringify({ decision: "approve_always", acknowledge_warnings: false }));
@@ -214,12 +215,52 @@ test("the decision API attaches the settled card from an approval_already_decide
   });
 });
 
+function profileApproval(overrides: Record<string, unknown> = {}) {
+  return rawApproval({
+    tool: "profile_settings_update",
+    family: "profile",
+    status: "succeeded",
+    decision: "once",
+    preview: { kind: "profile_settings_update", preferred_locale: "en", theme: "dark" },
+    ...overrides,
+  });
+}
+
+test("the decision API returns the persisted locale alongside a settled profile card", async () => {
+  const fetchImpl = async () => jsonResponse(200, { approval: profileApproval(), current_preferred_locale: "en" });
+
+  const decided = await decideToolApproval("a1", "approve_once", "失敗", fetchImpl);
+
+  assert.equal(decided.approval.tool, "profile_settings_update");
+  assert.equal(decided.currentPreferredLocale, "en");
+});
+
+test("the decision API carries the persisted locale on an approval_already_decided conflict", async () => {
+  // 古い en のカードを再送しても、サーバーが返す現在の ja を採用する
+  // A resent stale "en" card yields the server's current "ja", not the card's preview
+  const fetchImpl = async () =>
+    jsonResponse(409, {
+      error: "既に決定されています。",
+      code: "approval_already_decided",
+      approval: profileApproval(),
+      current_preferred_locale: "ja",
+    });
+
+  await assert.rejects(decideToolApproval("a1", "approve_once", "失敗", fetchImpl), (error: unknown) => {
+    assert.ok(error instanceof ToolApprovalDecisionError);
+    assert.equal(error.approval?.tool, "profile_settings_update");
+    assert.equal(error.currentPreferredLocale, "ja");
+    return true;
+  });
+});
+
 test("the decision API leaves the card undefined when the conflict response carries none", async () => {
   const fetchImpl = async () => jsonResponse(409, { error: "既に決定されています。", code: "approval_already_decided" });
 
   await assert.rejects(decideToolApproval("a1", "approve_once", "失敗", fetchImpl), (error: unknown) => {
     assert.ok(error instanceof ToolApprovalDecisionError);
     assert.equal(error.approval, undefined);
+    assert.equal(error.currentPreferredLocale, null);
     return true;
   });
 });

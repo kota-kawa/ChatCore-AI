@@ -359,8 +359,9 @@ ToolApprovalToolName = Literal[
     "publish_prompt",
     "my_prompt_save",
     "my_skill_save",
+    "profile_settings_update",
 ]
-ToolApprovalFamily = Literal["memo", "prompts"]
+ToolApprovalFamily = Literal["memo", "prompts", "profile"]
 ToolApprovalStatus = Literal["pending", "succeeded", "failed", "denied", "expired", "superseded", "cancelled"]
 ToolApprovalDecision = Literal["once", "always", "auto", "deny"]
 ToolApprovalWarning = Literal["shared_memo", "untrusted_input_in_turn", "private_text_in_public_post"]
@@ -376,6 +377,7 @@ _TOOL_NAME_FAMILIES: dict[str, str] = {
     "publish_prompt": "prompts",
     "my_prompt_save": "prompts",
     "my_skill_save": "prompts",
+    "profile_settings_update": "profile",
 }
 
 
@@ -492,6 +494,33 @@ class MySkillSavePreviewApi(ToolApprovalModel):
         return self
 
 
+# 日本語: 承認後に反映する本人のプロフィール設定案。カードには変更を提案した値だけを含める。
+#         theme はブラウザー localStorage に保存し、チャットの明示的な読み取り要求にはその場の値を使う。
+# English: Proposed changes to the authenticated user's profile settings. The card carries only
+#          values being changed. Theme stays in browser localStorage; chat reads use the current request value.
+class ProfileSettingsUpdatePreviewApi(ToolApprovalModel):
+    kind: Literal["profile_settings_update"]
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    bio: str | None = Field(default=None, max_length=2000)
+    llm_profile_context: str | None = Field(default=None, max_length=20000)
+    preferred_locale: Literal["ja", "en"] | None = None
+    theme: Literal["light", "dark", "auto"] | None = None
+
+    @model_validator(mode="after")
+    def _require_nonempty_changes(self) -> ProfileSettingsUpdatePreviewApi:
+        fields = ("display_name", "bio", "llm_profile_context", "preferred_locale", "theme")
+        provided = self.model_fields_set.intersection(fields)
+        if not provided:
+            raise ValueError("profile settings preview needs at least one proposed value")
+        for field_name in provided:
+            value = getattr(self, field_name)
+            if value is None:
+                raise ValueError(f"{field_name} must not be null")
+            if field_name == "display_name" and not value.strip():
+                raise ValueError("display_name must not be blank")
+        return self
+
+
 # 日本語: 実行結果。成功なら対象、失敗なら理由のコード（表示文言はフロントの i18n が持つ）。
 # English: Outcome of running the tool: the target on success, a reason code on failure
 #          (display text lives in the frontend i18n).
@@ -519,6 +548,7 @@ class ToolApprovalApi(ToolApprovalModel):
         | PublishPromptPreviewApi
         | MyPromptSavePreviewApi
         | MySkillSavePreviewApi
+        | ProfileSettingsUpdatePreviewApi
         | None
     ) = None
     warnings: list[ToolApprovalWarning] = Field(default_factory=list)
@@ -547,6 +577,7 @@ class ToolApprovalApi(ToolApprovalModel):
 # English: Response carrying the updated card after an approve or deny decision.
 class ToolApprovalDecisionResponse(ResponsePayloadModel):
     approval: ToolApprovalApi
+    current_preferred_locale: Literal["ja", "en"] | None = None
 
 
 # 日本語: 承認 API が 409（決定済みの衝突）を返すときの応答。別タブなどで先に決まったカードの
@@ -555,6 +586,7 @@ class ToolApprovalDecisionResponse(ResponsePayloadModel):
 #          latest state, settled elsewhere (e.g. another tab), so the frontend can resync its card.
 class ToolApprovalConflictResponse(ApiErrorPayload):
     approval: ToolApprovalApi | None = None
+    current_preferred_locale: Literal["ja", "en"] | None = None
 
 
 # 日本語: 「常に承認」を付与済みのツール1件。

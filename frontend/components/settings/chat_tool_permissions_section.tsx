@@ -15,6 +15,7 @@ const TOOL_LABEL_KEYS: Record<ToolAutoApprovalApi["tool_name"], MessageKey> = {
   publish_prompt: "settings.chatPermissionsTool.publish_prompt",
   my_prompt_save: "settings.chatPermissionsTool.my_prompt_save",
   my_skill_save: "settings.chatPermissionsTool.my_skill_save",
+  profile_settings_update: "settings.chatPermissionsTool.profile_settings_update",
 };
 
 // 設定画面の「チャットの権限」。チャットで「常に承認」にしたツールを並べ、取り消せるようにする。

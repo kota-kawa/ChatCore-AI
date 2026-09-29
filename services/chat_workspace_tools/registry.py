@@ -135,6 +135,7 @@ class ChatWorkspaceToolbox:
         chat_room_id: str,
         external_input_in_turn: bool = False,
         llm_profile_context: str = "",
+        browser_theme_preference: str | None = None,
     ) -> None:
         self._specs = {spec.name: spec for spec in specs}
         self.user_id = int(user_id)
@@ -147,6 +148,7 @@ class ChatWorkspaceToolbox:
         # Seed used to judge whether private content leaked into a public post (the profile
         # context handed to the model).
         self.llm_profile_context = str(llm_profile_context or "")
+        self.browser_theme_preference = browser_theme_preference
 
     def definitions(self) -> list[dict[str, Any]]:
         return [spec.definition for spec in self._specs.values()]

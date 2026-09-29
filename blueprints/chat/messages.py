@@ -840,6 +840,9 @@ async def chat_regenerate(
     # Regeneration consults memos and My Context on the same terms as the original send.
     use_personal_knowledge = bool(data.get("use_personal_knowledge"))
     use_shared_prompts = bool(data.get("use_shared_prompts"))
+    theme_preference = data.get("theme_preference")
+    if not isinstance(theme_preference, str) or theme_preference not in ("light", "dark", "auto"):
+        theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
@@ -925,6 +928,7 @@ async def chat_regenerate(
                 use_personal_knowledge=use_personal_knowledge,
                 use_shared_prompts=use_shared_prompts,
                 locale=get_request_locale(request),
+                theme_preference=theme_preference,
                 llm_daily_limit_service=resolved_llm_daily_limit_service,
                 chat_generation_service=resolved_chat_generation_service,
                 # 再生成は新しい発話を受け取らないため、検索クエリは履歴の最新ユーザー発話から導出させる。
@@ -969,6 +973,9 @@ async def chat_edit_and_regenerate(
     # Editing and regenerating consults memos and My Context on the same terms as the original send.
     use_personal_knowledge = bool(data.get("use_personal_knowledge"))
     use_shared_prompts = bool(data.get("use_shared_prompts"))
+    theme_preference = data.get("theme_preference")
+    if not isinstance(theme_preference, str) or theme_preference not in ("light", "dark", "auto"):
+        theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
@@ -1139,6 +1146,7 @@ async def chat_edit_and_regenerate(
                 use_personal_knowledge=use_personal_knowledge,
                 use_shared_prompts=use_shared_prompts,
                 locale=get_request_locale(request),
+                theme_preference=theme_preference,
                 llm_daily_limit_service=resolved_llm_daily_limit_service,
                 chat_generation_service=resolved_chat_generation_service,
                 # 編集再生成は編集後の本文をそのまま参照検索のクエリに使う。
