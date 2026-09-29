@@ -684,10 +684,6 @@ async def add_task(
     )
 
 
-async def list_room_memory_facts(chat_room_id: str, *, limit: int = 8, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.list_room_memory_facts(chat_room_id, limit=limit), session)
-
-
 async def get_room_summary(chat_room_id: str, *, session: AsyncSession | None = None):
     return await _read(lambda repo: repo.get_room_summary(chat_room_id), session)
 
