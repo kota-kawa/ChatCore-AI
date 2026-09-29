@@ -403,30 +403,77 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
 
         mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
         claims = {
-            "表示名を「こうた」に変更しました。": "profile_settings_update",
-            "- プロフィールの自己紹介を更新いたしました。": "profile_settings_update",
-            "**表示名を「こうた」に設定しました**": "profile_settings_update",
-            "新しいタスク「議事録要約」を保存しました。": "my_prompt_save",
-            "プロンプトを公開しました！": "publish_prompt",
-            "スキル「敬語チェック」を作成しました。": "my_skill_save",
-            "I updated your display name.": "profile_settings_update",
-            "Your new skill has been successfully created.": "my_skill_save",
+            "表示名を「こうた」に変更しました。": (
+                "profile_settings_update",
+                {"kind": "profile_settings_update", "display_name": "こうた"},
+            ),
+            "- プロフィールの自己紹介を更新いたしました。": (
+                "profile_settings_update",
+                {"kind": "profile_settings_update", "bio": "敬語の誤りを指摘します"},
+            ),
+            "**表示名を「こうた」に設定しました**": (
+                "profile_settings_update",
+                {"kind": "profile_settings_update", "display_name": "こうた"},
+            ),
+            "新しいタスク「議事録要約」を保存しました。": (
+                "my_prompt_save",
+                {"kind": "my_prompt_save", "title": "議事録要約"},
+            ),
+            "プロンプト「予定表」を公開しました！": (
+                "publish_prompt",
+                {"kind": "publish_prompt", "title": "予定表"},
+            ),
+            "スキル「敬語チェック」を作成しました。": (
+                "my_skill_save",
+                {"kind": "my_skill_save", "name": "敬語チェック"},
+            ),
+            "I updated your display name.": (
+                "profile_settings_update",
+                {"kind": "profile_settings_update", "display_name": "Kota"},
+            ),
+            "I created the skill JapaneseChecker.": (
+                "my_skill_save",
+                {"kind": "my_skill_save", "name": "JapaneseChecker"},
+            ),
         }
-        for reply, tool in claims.items():
+        for reply, (tool, preview) in claims.items():
             with self.subTest(reply=reply):
-                pending = {"tool": tool, "status": "pending"}
+                pending = {"tool": tool, "status": "pending", "preview": preview}
                 self.assertEqual(_unconfirmed_write_claim_fallback(reply, "お願いします", [pending]), mismatch)
                 executed = {"tool": tool, "status": "succeeded"}
-                self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [executed, pending]))
+                self.assertIsNone(
+                    _unconfirmed_write_claim_fallback(reply, "お願いします", [{**executed, "preview": preview}, pending])
+                )
         # 保存（my_prompt_save）の実行では、公開したという申告は裏付けられない。
         # An executed save does not back a claim that the prompt was published.
-        saved = {"tool": "my_prompt_save", "status": "succeeded"}
-        publish = {"tool": "publish_prompt", "status": "pending"}
-        self.assertEqual(_unconfirmed_write_claim_fallback("プロンプトを公開しました。", "お願いします", [saved, publish]), mismatch)
-        # 保存カードしか無くても、公開したという申告は裏付けられない。「非公開で保存」は公開の申告ではない。
-        # With only a save card, a publish claim is still unbacked; "saved as private" is no publish claim.
+        saved = {
+            "tool": "my_prompt_save",
+            "status": "succeeded",
+            "preview": {"kind": "my_prompt_save", "title": "予定表"},
+        }
+        publish = {
+            "tool": "publish_prompt",
+            "status": "pending",
+            "preview": {"kind": "publish_prompt", "title": "予定表"},
+        }
         self.assertEqual(
-            _unconfirmed_write_claim_fallback("プロンプトを公開しました。", "お願いします", [{**saved, "status": "pending"}]),
+            _unconfirmed_write_claim_fallback("プロンプト「予定表」を公開しました。", "お願いします", [saved, publish]),
+            mismatch,
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've saved and published the prompt '予定表'.",
+                "Save and publish the prompt '予定表'.",
+                [saved, publish],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "プロンプト「予定表」を保存し、公開しました。",
+                "プロンプト「予定表」を保存して公開してください。",
+                [saved, publish],
+            ),
             mismatch,
         )
         self.assertIsNone(_unconfirmed_write_claim_fallback("非公開でプロンプトを保存しました。", "お願いします", [saved, publish]))
@@ -450,10 +497,21 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [{"tool": tool, "status": "pending"}]))
         # 2つの対象を申告したら、それぞれが裏付けられている必要がある。
         # A claim naming two targets needs each of them backed.
-        profile = {"tool": "profile_settings_update", "status": "succeeded"}
-        task = {"tool": "my_prompt_save", "status": "pending"}
+        profile = {
+            "tool": "profile_settings_update",
+            "status": "succeeded",
+            "preview": {"kind": "profile_settings_update", "display_name": "こうた"},
+        }
+        task = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "議事録"},
+        }
         self.assertEqual(
-            _unconfirmed_write_claim_fallback("プロフィールとタスクを更新しました。", "お願いします", [profile, task]), mismatch
+            _unconfirmed_write_claim_fallback(
+                "表示名「こうた」とタスク「議事録」を保存しました。", "お願いします", [profile, task]
+            ),
+            mismatch,
         )
 
     # 日本語: カードの無い回答や、対象のカードが無い回答は、会話の下書きと区別できないので差し替えない
@@ -480,6 +538,522 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
             with self.subTest(reply=reply):
                 self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします"))
                 self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [memo_card]))
+
+    def test_write_claim_guard_matches_the_specific_prompt_or_task_card(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+        pending_minutes = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "議事録"},
+        }
+        succeeded_roadmap = {
+            "tool": "my_prompt_save",
+            "status": "succeeded",
+            "preview": {"kind": "my_prompt_save", "title": "計画書"},
+        }
+        request = "タスク「議事録」と「計画書」を更新してください。"
+        reply = "タスク「議事録」を保存しました。"
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(reply, request, [pending_minutes, succeeded_roadmap]),
+            mismatch,
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                reply,
+                request,
+                [{**pending_minutes, "status": "succeeded"}, {**succeeded_roadmap, "status": "pending"}],
+            )
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "タスク「議事録」と「計画書」を保存しました。",
+                request,
+                [pending_minutes, succeeded_roadmap],
+            ),
+            mismatch,
+        )
+
+    def test_write_claim_guard_does_not_ignore_a_completion_claim_because_a_card_is_pending(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch = "This description does not match the approval card status. Please check the card."
+        pending_display_name = {
+            "tool": "profile_settings_update",
+            "status": "pending",
+            "preview": {"kind": "profile_settings_update", "display_name": "Kota"},
+        }
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "Your display name has been updated, but the approval card is still pending.",
+                "Set the display name to Kota.",
+                [pending_display_name],
+            ),
+            mismatch,
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "表示名を変更しましたが、承認カードはまだ承認待ちです。",
+                "表示名を「Kota」に変更してください。",
+                [pending_display_name],
+            ),
+            "この説明と承認カードの状態が一致しません。承認カードを確認してください。",
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "Your display name has been updated, and theme is still awaiting approval.",
+                "Update your display name to Kota and theme to dark.",
+                [
+                    {
+                        "tool": "profile_settings_update",
+                        "status": "succeeded",
+                        "preview": {"kind": "profile_settings_update", "display_name": "Kota"},
+                    },
+                    {
+                        "tool": "profile_settings_update",
+                        "status": "pending",
+                        "preview": {"kind": "profile_settings_update", "theme": "dark"},
+                    },
+                ],
+            )
+        )
+
+    def test_write_claim_guard_does_not_treat_a_different_pending_target_as_a_claim(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        succeeded_minutes = {
+            "tool": "my_prompt_save",
+            "status": "succeeded",
+            "preview": {"kind": "my_prompt_save", "title": "議事録"},
+        }
+        pending_roadmap = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "計画書"},
+        }
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "タスク「議事録」を保存しましたが、タスク「計画書」はまだ承認待ちです。",
+                "タスク「議事録」と「計画書」を保存してください。",
+                [succeeded_minutes, pending_roadmap],
+            )
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "The Task Agenda has been saved, and the Task Plan is still waiting for approval.",
+                "Save tasks 'Agenda' and 'Plan'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "succeeded",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    },
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Plan"},
+                    },
+                ],
+            )
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "The Task Agenda has been saved, and Task Plan has not been saved yet.",
+                "Save tasks 'Agenda' and 'Plan'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "succeeded",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    },
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Plan"},
+                    },
+                ],
+            )
+        )
+
+    def test_write_claim_guard_does_not_treat_copy_instructions_as_a_draft(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "Your Task Agenda has been saved; copy it from your Tasks page.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+
+    def test_write_claim_guard_checks_a_passive_completion_after_approval_card_creation(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've created an approval card, and your Task was saved.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've created an approval card for Task Agenda and saved it.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+
+    def test_write_claim_guard_checks_completion_before_approval_card_creation(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+        pending_task = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "議事録"},
+        }
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "タスク「議事録」を保存しましたが、承認カードを作成しました。",
+                "タスク「議事録」を保存してください。",
+                [pending_task],
+            ),
+            mismatch,
+        )
+
+    def test_write_claim_guard_treats_published_as_a_publish_claim(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
+        cards = [
+            {
+                "tool": "my_prompt_save",
+                "status": "succeeded",
+                "preview": {"kind": "my_prompt_save", "title": "町内会案内"},
+            },
+            {
+                "tool": "publish_prompt",
+                "status": "pending",
+                "preview": {"kind": "publish_prompt", "title": "町内会案内"},
+            },
+        ]
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "プロンプト「町内会案内」は公開済みです。",
+                "プロンプト「町内会案内」を公開してください。",
+                cards,
+            ),
+            mismatch,
+        )
+
+    def test_write_claim_guard_ignores_publish_word_inside_a_saved_title(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        cards = [
+            {
+                "tool": "my_prompt_save",
+                "status": "succeeded",
+                "preview": {"kind": "my_prompt_save", "title": "published status"},
+            },
+            {
+                "tool": "publish_prompt",
+                "status": "pending",
+                "preview": {"kind": "publish_prompt", "title": "published status"},
+            },
+        ]
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "I saved the prompt 'published status'.",
+                "Save the prompt 'published status'.",
+                cards,
+            )
+        )
+
+    def test_write_claim_guard_does_not_match_a_different_quoted_task_title(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        pending_ledger = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "家計簿"},
+        }
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "タスク「買い物リスト」を作成しました。",
+                "タスク「家計簿」を保存して、買い物リストも作成してください。",
+                [pending_ledger],
+            )
+        )
+
+    def test_write_claim_guard_leaves_a_draft_alone_when_another_task_card_is_pending(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        pending_trip = {
+            "tool": "my_prompt_save",
+            "status": "pending",
+            "preview": {"kind": "my_prompt_save", "title": "旅行計画"},
+        }
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "タスクリストを作成しました：\n- 買い物",
+                "旅行計画のタスクを保存してください。",
+                [pending_trip],
+            )
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "I've created a task list for you:\n- Groceries",
+                "Save the task 'Travel Plan'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Travel Plan"},
+                    }
+                ],
+            )
+        )
+
+    def test_write_claim_guard_matches_titleless_publish_to_the_unique_requested_prompt(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "The prompt was published.",
+                "Publish the prompt 'Agenda'.",
+                [
+                    {
+                        "tool": "publish_prompt",
+                        "status": "pending",
+                        "preview": {"kind": "publish_prompt", "title": "Agenda"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "The prompt was published for 'Other'.",
+                "Publish the prompt 'Agenda'.",
+                [
+                    {
+                        "tool": "publish_prompt",
+                        "status": "pending",
+                        "preview": {"kind": "publish_prompt", "title": "Agenda"},
+                    }
+                ],
+            )
+        )
+
+    def test_write_claim_guard_matches_titleless_profile_update_to_the_requested_field(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "プロフィールを更新しました。",
+                "表示名を Kota に更新してください。",
+                [
+                    {
+                        "tool": "profile_settings_update",
+                        "status": "pending",
+                        "preview": {"kind": "profile_settings_update", "display_name": "Kota"},
+                    }
+                ],
+            ),
+            "この説明と承認カードの状態が一致しません。承認カードを確認してください。",
+        )
+
+    def test_write_claim_guard_matches_titleless_task_and_skill_completions(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        mismatch_en = "This description does not match the approval card status. Please check the card."
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "Your Task has been saved.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            ),
+            mismatch_en,
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "Your Skill has been created.",
+                "Create the skill 'Planner'.",
+                [
+                    {
+                        "tool": "my_skill_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_skill_save", "name": "Planner"},
+                    }
+                ],
+            ),
+            mismatch_en,
+        )
+
+    def test_write_claim_guard_leaves_a_same_title_draft_alone(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "I've created a draft task titled 'Agenda' below for you to copy.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            )
+        )
+
+    def test_write_claim_guard_matches_locale_profile_claims(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "Your locale has been updated.",
+                "Set the locale to ja.",
+                [
+                    {
+                        "tool": "profile_settings_update",
+                        "status": "pending",
+                        "preview": {"kind": "profile_settings_update", "preferred_locale": "ja"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+
+    def test_write_claim_guard_checks_a_completion_after_approval_card_creation(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've created an approval card and saved the task 'Agenda'.",
+                "Save the task 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    }
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+
+    def test_write_claim_guard_does_not_match_a_japanese_title_prefix(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertIsNone(
+            _unconfirmed_write_claim_fallback(
+                "タスク「買い物リスト」を作成しました。",
+                "タスク「買い物」を保存してください。",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "買い物"},
+                    }
+                ],
+            )
+        )
+
+    def test_write_claim_guard_checks_both_sides_of_comma_separated_publish_claim(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've saved, then published the prompt 'Agenda'.",
+                "Save and publish the prompt 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "succeeded",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    },
+                    {
+                        "tool": "publish_prompt",
+                        "status": "pending",
+                        "preview": {"kind": "publish_prompt", "title": "Agenda"},
+                    },
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "I've saved the prompt 'Agenda', and published it.",
+                "Save and publish the prompt 'Agenda'.",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "succeeded",
+                        "preview": {"kind": "my_prompt_save", "title": "Agenda"},
+                    },
+                    {
+                        "tool": "publish_prompt",
+                        "status": "pending",
+                        "preview": {"kind": "publish_prompt", "title": "Agenda"},
+                    },
+                ],
+            ),
+            "This description does not match the approval card status. Please check the card.",
+        )
+
+    def test_write_claim_guard_checks_both_sides_of_japanese_past_compound_publish_claim(self):
+        from services.chat_generation import _unconfirmed_write_claim_fallback
+
+        self.assertEqual(
+            _unconfirmed_write_claim_fallback(
+                "プロンプト「議事録」を保存した後に公開しました。",
+                "プロンプト「議事録」を保存して公開してください。",
+                [
+                    {
+                        "tool": "my_prompt_save",
+                        "status": "pending",
+                        "preview": {"kind": "my_prompt_save", "title": "議事録"},
+                    },
+                    {
+                        "tool": "publish_prompt",
+                        "status": "succeeded",
+                        "preview": {"kind": "publish_prompt", "title": "議事録"},
+                    },
+                ],
+            ),
+            "この説明と承認カードの状態が一致しません。承認カードを確認してください。",
+        )
 
     def test_memo_claim_guard_does_not_use_another_cards_success(self):
         other_memo = {
