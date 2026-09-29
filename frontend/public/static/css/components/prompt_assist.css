@@ -106,7 +106,6 @@
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief-input:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--assist-hue-2) 55%, var(--assist-border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--assist-hue-2) 18%, transparent);
 }
 
 /* --- run button --- */

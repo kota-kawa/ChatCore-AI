@@ -147,7 +147,6 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       .email-input:focus {
         background: rgba(10, 20, 15, 0.7);
         border-color: var(--accent);
-        box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.12);
       }
 
       .submit-btn,

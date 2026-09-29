@@ -75,7 +75,6 @@
 :where(body.chat-page, .chat-page-shell) .project-field__input:focus,
 :where(body.chat-page, .chat-page-shell) .project-field__textarea:focus {
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 /* ─── 所属チャット一覧 / Member chats ─── */

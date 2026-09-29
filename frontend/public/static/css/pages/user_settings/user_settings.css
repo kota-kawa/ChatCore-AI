@@ -495,7 +495,6 @@ body.settings-page,
 
 :where(body.settings-page, .user-settings-page) .custom-form-control:focus {
   border-color: var(--settings-accent);
-  box-shadow: var(--settings-focus-ring);
   outline: none;
 }
 
@@ -2189,7 +2188,6 @@ body.settings-page,
 
 .edit-prompt-modal__input:focus {
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .edit-prompt-modal__input:disabled {

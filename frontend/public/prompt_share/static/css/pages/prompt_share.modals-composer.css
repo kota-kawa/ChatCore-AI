@@ -441,7 +441,6 @@
 .prompt-detail-comments__composer textarea:focus {
   outline: none;
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .prompt-detail-comments__composer button {
@@ -1051,7 +1050,6 @@
 .prompt-share-modal .form-group select:focus {
   outline: none;
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .prompt-share-modal .composer-required,
@@ -1573,7 +1571,6 @@
 
 .prompt-share-modal .image-upload-field:focus-within {
   border-color: var(--modal-accent);
-  box-shadow: var(--modal-focus-ring);
 }
 
 .prompt-share-modal .image-upload-field__icon {
