@@ -344,10 +344,58 @@ class MyPromptSaveTests(unittest.TestCase):
         with self.assertRaises(WorkspaceToolArgumentError):
             asyncio.run(_propose_my_prompt_save(1, {"title": "タイトル"}))
 
-    def test_prompt_body_is_optional_in_schema_for_edits(self):
+    def test_new_task_still_requires_title(self):
+        with self.assertRaises(WorkspaceToolArgumentError):
+            asyncio.run(_propose_my_prompt_save(1, {"prompt_content": "本文"}))
+
+    def test_blank_title_is_rejected_even_when_editing(self):
+        with self.assertRaises(WorkspaceToolArgumentError):
+            asyncio.run(_propose_my_prompt_save(1, {"task_id": 42, "title": "  ", "prompt_content": "本文"}))
+
+    def test_edit_without_title_keeps_the_current_title(self):
+        # 本文だけを変える依頼で題名を省いても、承認カードが作られ今の題名が保たれる
+        # A body-only edit that omits the title still yields a card and keeps the current title
+        task = {
+            "task_id": 42,
+            "name": "会議レビュー",
+            "prompt_template": "旧本文",
+            "response_rules": "結論を先に書く。",
+            "output_skeleton": "## 結論",
+            "input_examples": "決定事項の確認",
+            "output_examples": "## 結論\n確認しました。",
+            "updated_at": "revision-1",
+        }
+        with patch("services.chat_workspace_tools.prompts.get_owned_task", AsyncMock(return_value=task)):
+            proposal = asyncio.run(_propose_my_prompt_save(1, {"task_id": 42, "prompt_content": "新本文"}))
+
+        self.assertEqual(proposal.preview["title"], "会議レビュー")
+        self.assertEqual(proposal.preview["current_title"], "会議レビュー")
+        self.assertEqual(proposal.preview["prompt_content"], "新本文")
+        self.assertEqual(proposal.preview["response_rules"], "結論を先に書く。")
+        self.assertEqual(proposal.target_title, "会議レビュー")
+
+        with patch("services.chat_workspace_tools.prompts.edit_task", AsyncMock(return_value=True)) as edit_task_mock:
+            asyncio.run(_execute_my_prompt_save("session", 1, proposal.arguments, proposal.target_ref))
+
+        edit_task_mock.assert_awaited_once_with(
+            1,
+            42,
+            "会議レビュー",
+            "新本文",
+            None,
+            None,
+            None,
+            None,
+            expected_updated_at="revision-1",
+            session="session",
+        )
+
+    def test_title_and_prompt_body_are_optional_in_schema_for_edits(self):
         definition = MY_PROMPT_SAVE_DEFINITION["function"]
-        self.assertEqual(definition["parameters"]["required"], ["title"])
-        self.assertIn("omit this to keep the existing body", definition["parameters"]["properties"]["prompt_content"]["description"])
+        self.assertEqual(definition["parameters"]["required"], [])
+        properties = definition["parameters"]["properties"]
+        self.assertIn("omit this to keep the existing body", properties["prompt_content"]["description"])
+        self.assertIn("omit this to keep the existing title", properties["title"]["description"])
 
 
 def _expand_repeats(value):
