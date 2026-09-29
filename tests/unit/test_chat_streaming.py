@@ -451,12 +451,15 @@ class ChatStreamingTestCase(unittest.TestCase):
             for message in loop_messages
             if message.get("role") == "system"
         )
-        self.assertIn("current TurnState is the only semantic state", system_contents)
-        self.assertIn("not a resolved intent", system_contents)
-        self.assertIn("self-contained objective", system_contents)
-        self.assertIn("explicit topic", system_contents)
-        self.assertIn("choose exactly one action", system_contents)
-        self.assertIn("answer immediately in the same model turn", system_contents)
+        self.assertIn("TurnState is this turn's only working state", system_contents)
+        self.assertIn("no separate planning, summary, or answer phase", system_contents)
+        self.assertIn("self-contained request", system_contents)
+        self.assertIn("honor corrections and topic changes", system_contents)
+        self.assertIn("Do exactly one of these", system_contents)
+        # 封筒はツールを呼ぶ判断にだけ求め、そのまま回答する判断には求めない。
+        # The envelope is required only before a tool call, never before a direct answer.
+        self.assertIn("Before every tool call, write exactly one internal envelope", system_contents)
+        self.assertIn("write only the complete\n  user-facing answer, with no envelope", system_contents)
         self.assertNotIn("step_notes", system_contents)
         self.assertNotIn("research_summary", system_contents)
         self.assertEqual(messages, [{"role": "user", "content": "鎌倉の紅葉を教えて"}])
@@ -474,8 +477,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("answer the original request now", system_contents)
         self.assertIn("Resolve the objective from the recent", system_contents)
         self.assertIn("must follow the envelope in this same response", system_contents)
-        self.assertNotIn("choose exactly one action", system_contents)
-        self.assertNotIn("call one appropriate tool", system_contents)
+        self.assertNotIn("Do exactly one of these", system_contents)
+        self.assertNotIn("call one tool", system_contents)
 
     # 空回答の再試行で封筒のみを繰り返さないよう、通常契約を本文のみの要求で置き換える。
     # Replace the contract for empty-answer recovery so it cannot demand another envelope.
@@ -1086,7 +1089,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("ready_to_answer", persisted[0])
         self.assertEqual(job._telemetry.empty_answer_recoveries, 1)
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 1)
-        self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 0)
 
     # 日本語: やり直しでもタグ無しの封筒 JSON しか返らなければ、JSON もトレースも保存せず
     # 空回答のエラーで終えることを検証します。
@@ -1167,9 +1170,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(job._telemetry.empty_answer_recoveries, 0)
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 0)
 
-    # 日本語: タグの無い普通の回答は、これまでどおりそのまま保存し、封筒の欠落だけを数えます。
-    # English: An ordinary answer without an envelope is still saved as is; only the missing
-    # envelope is counted.
+    # 日本語: 封筒の無い普通の回答はそのまま保存し、封筒を求めない判断なので欠落にも数えません。
+    # English: An ordinary answer without an envelope is saved as is and, since a direct answer
+    # needs no envelope, is not counted as missing.
     def test_plain_answer_without_an_envelope_is_saved_as_before(self):
         persisted = []
 
@@ -1189,6 +1192,33 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(persisted, ["鎌倉の紅葉は12月上旬が見頃です。"])
         self.assertEqual(job._telemetry.empty_answer_recoveries, 0)
         self.assertEqual(job._telemetry.untagged_turn_state_recoveries, 0)
+        self.assertEqual(job._telemetry.missing_turn_state_updates, 0)
+
+    # 日本語: ツールを呼ぶ判断に封筒が無いときだけ、封筒の欠落として数えることを検証します。
+    # English: Verify only a tool-calling decision without an envelope counts as a missing envelope.
+    def test_tool_call_without_an_envelope_counts_as_missing(self):
+        persisted = []
+
+        with (
+            patch("services.chat_generation.search_brave_llm_context", return_value=_kyoto_search_result()),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=[
+                    iter([_web_search_tool_call_chunk("京都の紅葉")]),
+                    iter(["京都の紅葉は11月下旬が見頃です。"]),
+                ],
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-tool-without-envelope:default",
+                conversation_messages=[{"role": "user", "content": "京都の紅葉を調べて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted.append(response),
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: done", body)
+        self.assertIn("京都の紅葉は11月下旬が見頃です。", persisted[0])
         self.assertEqual(job._telemetry.missing_turn_state_updates, 1)
 
     # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。

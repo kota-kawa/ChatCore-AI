@@ -2543,7 +2543,17 @@ class ChatGenerationJob:
             return ModelDecision(outcome="stopped")
 
         turn_state_update = parse_turn_state_update(step_chunks)
-        if turn_state_update is None and not state.empty_answer_recovery_attempted:
+        # 封筒は次の判断へ状態を渡すためのもので、契約はツールを呼ぶ判断にだけ求める。そのまま
+        # 回答する判断と、封筒を省かせる回復ステップに封筒が無いのは契約どおりなので数えない。
+        # The envelope carries state into the next decision, so the contract asks for it only on a
+        # decision that calls a tool. A direct answer, or a recovery step told to omit the envelope,
+        # follows the contract without one and is not counted.
+        if (
+            turn_state_update is None
+            and tool_calls_buffer
+            and not force_answer
+            and not state.empty_answer_recovery_attempted
+        ):
             state.telemetry.missing_turn_state_updates += 1
         state.turn_state.apply_model_update(turn_state_update)
         return ModelDecision(
