@@ -116,6 +116,7 @@ from .llm_context_budget import (
     get_context_budget,
     request_fits_context,
 )
+from .llm_protocol_leak import ProtocolLeakGuard
 from .personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     get_personal_knowledge_tool_definition,
@@ -551,6 +552,19 @@ def _is_retry_delay_affordable(exc: BaseException) -> bool:
 
 # ストリームのチャンク文字列からツール呼び出し（JSON形式）を解析する
 # Parse tool calls (JSON format) from a stream chunk string
+# バッファ済みのチャンク列の末尾から指定文字数を取り除く（プロトコル漏れの目印がチャンク境界を
+# またいでいた場合に、前のチャンクへ入った目印の頭を消す）。
+# Drop the given number of characters from the end of buffered chunks, removing the head of a
+# protocol-leak marker that began in an earlier chunk.
+def _trim_chunks_tail(chunks: list[str], chars: int) -> None:
+    while chars > 0 and chunks:
+        last = chunks.pop()
+        if len(last) > chars:
+            chunks.append(last[: len(last) - chars])
+            return
+        chars -= len(last)
+
+
 def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     stripped = chunk.strip()
     if not stripped.startswith("[") or '"function"' not in stripped:
@@ -1399,21 +1413,44 @@ class ChatGenerationJob:
                         f"(estimated={estimate_request_tokens(current_messages, current_tools)}, "
                         f"available={budget.available_input_tokens})."
                     )
-                for chunk in get_llm_response_stream(
+                leak_guard = ProtocolLeakGuard()
+                stream = get_llm_response_stream(
                     current_messages,
                     self._model,
                     tools=current_tools,
                     generation_phase=generation_phase,
-                ):
+                )
+                for chunk in stream:
                     if self._should_stop():
                         return
                     emitted = True
+                    # ツール呼び出しの JSON は本文ではないので、引数の文字列で誤検出しないよう素通しする。
+                    # Tool-call JSON is not body text; pass it through so its arguments cannot trip the guard.
+                    if _parse_tool_calls_chunk(chunk) is None:
+                        chunk = leak_guard.feed(chunk)
                     if discard_partial_on_retry:
-                        attempt_chunks.append(chunk)
+                        if leak_guard.tripped:
+                            _trim_chunks_tail(attempt_chunks, leak_guard.overflow_chars)
+                        if chunk:
+                            attempt_chunks.append(chunk)
                         with self._chunks_lock:
                             self._pending_stream_chunks[:] = attempt_chunks
-                    else:
+                    elif chunk:
                         yield chunk
+                    if leak_guard.tripped:
+                        # 漏れの先は回答ではない。読み続けると出力上限まで費用と時間だけが増える。
+                        # Nothing past the leak is an answer; reading on only burns tokens to the cap.
+                        self._telemetry.protocol_leak_truncations += 1
+                        logger.warning(
+                            "Stopped a stream where tool-call protocol leaked into the text "
+                            "(model=%s, phase=%s).",
+                            self._model,
+                            generation_phase,
+                        )
+                        close_stream = getattr(stream, "close", None)
+                        if callable(close_stream):
+                            close_stream()
+                        break
             except LlmOutputLimitError as exc:
                 # 調査ステップが出力上限に当たっただけでターン全体を落とさない。プロバイダは
                 # 例外の前に収集済みのツール呼び出しを流すので、それを使って調査を続ける。
