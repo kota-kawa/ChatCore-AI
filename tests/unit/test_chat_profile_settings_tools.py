@@ -376,6 +376,7 @@ class ProfileSettingsProposalAndExecutionTests(unittest.TestCase):
             )
 
         self.assertEqual(outcome.target_id, 7)
+        self.assertEqual(outcome.target_title, "")
         update.assert_awaited_once_with(
             7,
             expected_fingerprint=profile_settings_fingerprint(current),

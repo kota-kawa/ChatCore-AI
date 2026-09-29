@@ -236,7 +236,9 @@ async def _execute_profile_settings_update(
         raise WorkspaceToolError("target_not_found")
     if not updated:
         raise WorkspaceToolError("target_changed")
-    return ExecutionOutcome(target_id=user_id, target_title="Profile settings")
+    # カードのリンク文言はフロントの i18n が持つので、言語固定の見出しは付けない
+    # The card's link text comes from frontend i18n, so no fixed-language title is attached
+    return ExecutionOutcome(target_id=user_id, target_title="")
 
 
 _READ_DESCRIPTION = (

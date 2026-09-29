@@ -417,7 +417,7 @@ describe("MemoApprovalPreview", () => {
         approval={profileApproval({
           status: "succeeded",
           decision: "once",
-          result: { target_id: null, target_title: null, error_code: null },
+          result: { target_id: 7, target_title: "", error_code: null },
           preview: profilePreview({ preferred_locale: "ja" }),
         })}
       />,

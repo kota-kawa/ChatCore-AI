@@ -190,8 +190,7 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
     displayStatus === "failed"
       ? t(ERROR_KEYS.get(result?.error_code ?? "") ?? "chat.toolApproval.error.unknown")
       : "";
-  const showResultLink = displayStatus === "succeeded"
-    && (approval.tool === "profile_settings_update" || typeof result?.target_id === "number");
+  const showResultLink = displayStatus === "succeeded" && typeof result?.target_id === "number";
   const resultLink = RESULT_LINKS[approval.tool];
 
   return (
