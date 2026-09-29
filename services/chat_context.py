@@ -473,11 +473,15 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     if not normalized_facts:
         return None
 
-    # 日本語: ユーザーの情報・好みを会話を通じて尊重するよう渡すシステムプロンプト。
+    # 日本語: 過去の会話から抽出したユーザーの情報・好み。古くなりうるので、最新の発言と食い違えば
+    # そちらを優先させる（issue #774）。
+    # Facts extracted from earlier conversations. They can go stale, so the latest message wins
+    # when the two disagree (issue #774).
     sections = [
         "<memory_facts>",
-        "The following is user information or preferences you must keep honoring throughout this "
-        "conversation.",
+        "The following user information and preferences were remembered from earlier conversations. "
+        "Use them when relevant. They may be outdated: when the latest message contradicts one, "
+        "follow the latest message.",
     ]
     # ファクト項目を箇条書きで追加する
     # Append fact entries as bullet points
