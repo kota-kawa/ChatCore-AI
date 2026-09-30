@@ -10,8 +10,10 @@ on:
 permissions:
   contents: read
 
+# The event name is part of the group so that a manual deploy run on main is not
+# replaced by a newer pending push run (only one pending run is kept per group).
 concurrency:
-  group: ci-quality-${{ github.ref }}
+  group: ci-quality-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -511,10 +513,12 @@ jobs:
             ./frontend
 
   deploy:
-    name: Deploy (main push)
+    name: Deploy (manual)
     runs-on: ubuntu-latest
     needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, coverage, frontend_checks, docker_backend_build, docker_frontend_build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Merging into main does not deploy. Run this workflow manually (workflow_dispatch)
+    # with main selected; every CI job above runs first and gates the deploy.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     # The first PostgreSQL 15 -> 18 logical dump/restore can legitimately take
     # longer than an ordinary blue/green application deployment.
     timeout-minutes: 60

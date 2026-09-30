@@ -8,6 +8,7 @@ serves as the source of truth and reproduction reference.
 
 No change can be **merged** into `main`, and no **deploy** can run, unless every
 CI check defined in [`.github/workflows/tests.yml`](workflows/tests.yml) succeeds.
+Merging into `main` does not deploy: production deploys are started manually.
 
 ## How merges are gated
 
@@ -35,11 +36,11 @@ Additional settings:
 | `strict` (require up to date) | `false` | Branches do not have to be rebased onto the latest `main` before merging. |
 | Required pull request reviews | none | Reviews are not enforced by this rule. |
 
-> **Excluded on purpose:** `Coverage Report (Python 3.14)` and `Deploy (main push)`
-> are conditional jobs that do not run on pull requests. Marking them as required
-> would block every PR indefinitely, so they are not part of the required checks.
-> `Coverage Report` still gates the nightly and `main` runs through
-> `coverage report --fail-under=70`, so a large coverage regression fails there.
+> **Excluded on purpose:** `Deploy (manual)` is a conditional job that never runs
+> on pull requests. Marking it as required would block every PR indefinitely, so it
+> is not part of the required checks. `Coverage Report (Python 3.14)` is not
+> required either, but it runs on every trigger and enforces
+> `coverage report --fail-under=70`, so a large coverage regression fails the run.
 >
 > Unit test shard jobs are also not listed directly. They are gated through
 > `Unit Tests (Python 3.14)`, which depends on every shard and fails if any shard
@@ -50,12 +51,15 @@ Additional settings:
 The `deploy` job in [`tests.yml`](workflows/tests.yml) declares:
 
 ```yaml
-needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
-if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+needs: [version_lock_check, dependency_audit, lint, lint_full, typecheck_backend, dead_code, unittest, integration_tests, coverage, frontend_checks, docker_backend_build, docker_frontend_build]
+if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
 ```
 
-Because of `needs`, the deploy step only runs after all listed CI jobs succeed on
-a push to `main`. If any of them fail, the deploy is skipped automatically.
+A push to `main` runs CI but never deploys. To deploy, run the `CI Quality`
+workflow manually with `main` selected (Actions tab → **Run workflow**, or
+`gh workflow run tests.yml --ref main`). Because of `needs`, the deploy step only
+runs after all listed CI jobs succeed in that same run; if any of them fail, the
+deploy is skipped automatically. Runs started on other branches skip the deploy.
 
 ## Reproducing the configuration
 

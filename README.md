@@ -119,11 +119,11 @@ alembic upgrade head
 | Ruff Lint | Syntax errors and undefined names (fast gate) |
 | Unit Tests | 25+ unit tests covering services, auth, chat, rate limiting, security |
 | Integration Tests | Route-level endpoint tests against the full ASGI app |
-| Coverage Report | Combined unit + integration coverage, uploaded as XML artifact (main push / scheduled runs) |
+| Coverage Report | Combined unit + integration coverage, uploaded as XML artifact |
 | Frontend Checks | Import resolution, TypeScript type-check, and logic/component tests via `npm test` |
-| Deploy | SSH deploy to production — only runs after all jobs pass on `main` |
+| Deploy | SSH deploy to production — manual only (`Run workflow` on `main`); runs after all jobs pass in that run. Merging into `main` does not deploy |
 
-- Concurrent runs on the same branch are automatically cancelled to avoid redundant work.
+- Concurrent runs of the same event on the same branch are automatically cancelled to avoid redundant work.
 - A scheduled run fires daily at 03:00 UTC to catch dependency regressions.
 - Failed deploys trigger an automatic rollback to the previous Git commit.
 
@@ -311,11 +311,11 @@ alembic upgrade head
 | Ruff Lint | 構文エラー・未定義名の即時検出（高速ゲート） |
 | Unit Tests | サービス層・認証・チャット・レート制限・セキュリティなど25件以上 |
 | Integration Tests | 実際のASGIアプリに対するルートレベルのエンドポイントテスト |
-| Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存（mainへのpush・スケジュール実行時） |
+| Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存 |
 | Frontend Checks | import解決、TypeScript型チェック、`npm test`によるロジック／コンポーネントテスト |
-| Deploy | 全ジョブ通過後にSSHで本番デプロイ（mainのpush時のみ） |
+| Deploy | SSHで本番デプロイ（手動実行のみ。`main` を選んで Run workflow し、その実行で全ジョブが通過した後に動く。`main` へのマージだけではデプロイされない） |
 
-- 同一ブランチで並走するジョブは自動キャンセルして無駄な実行を排除。
+- 同一ブランチ・同一イベントで並走する実行は自動キャンセルして無駄を排除。
 - 毎日03:00 UTCにスケジュール実行し、依存パッケージの非互換を継続的に検知。
 - デプロイ失敗時は直前のGitコミットへ自動ロールバック。
 
