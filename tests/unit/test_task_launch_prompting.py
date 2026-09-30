@@ -235,7 +235,18 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertNotIn("at most 10 steps", prompt)
         self.assertIn("Never ask permission to search or fetch", prompt)
         self.assertIn("never announce a future search or estimated", prompt)
-        self.assertIn("Without that context, do not claim current facts were verified", prompt)
+        self.assertIn("Without search results, do not claim current facts were verified", prompt)
+        # 引用記法と検索後の回答方針は検索方針に1回だけあり、実行時文脈では繰り返さない。
+        # The citation marker and the after-search answering rules live in the search policy only.
+        runtime = build_runtime_context_message()["content"]
+        self.assertNotIn("[[source:", runtime)
+        self.assertNotIn("citation", runtime)
+        self.assertNotIn("<web_search_context>", runtime)
+        # 許可を求めない・将来の検索を予告しない規則は実行時文脈に1回だけ置く。
+        # The no-permission, no-announcement rule sits once, in the runtime context.
+        policy = build_web_search_evidence_policy_message()["content"]
+        self.assertNotIn("Shall I search", policy)
+        self.assertNotIn("ask for permission", policy)
         self.assertEqual(prompt.count("try one materially different query"), 1)
         self.assertEqual(prompt.count("Absence of evidence is not disproof"), 1)
 
