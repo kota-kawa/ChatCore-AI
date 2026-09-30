@@ -1809,8 +1809,14 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         self.assertIn("implicit references in short follow-ups", content)
         self.assertIn("https://example.com/python", content)
         self.assertIn("<prior_search", content)
-        self.assertIn("full-width citation brackets such as 【src_...】", content)
-        self.assertIn("ordinary Markdown citations or links", content)
+        self.assertIn("real evidence_id", content)
+        self.assertIn("citation marker contract in the base system instructions", content)
+        self.assertIn("source id here is only a result number", content)
+        self.assertNotIn("full-width citation brackets", content)
+        self.assertNotIn("ordinary Markdown citations or links", content)
+        self.assertNotIn("marker is internal transport syntax", content)
+        self.assertIn("full-width citations such as `【src_...】`", BASE_SYSTEM_PROMPT)
+        self.assertIn("exact `[[source:<evidence_id>]]` form", BASE_SYSTEM_PROMPT)
 
     def test_build_prior_message_returns_none_without_sources(self):
         empty = web_search.WebSearchResult(query="x", searched_at="t", sources=())
