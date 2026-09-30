@@ -158,6 +158,20 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repo.update_fact.call_args.kwargs["expected_revision"], 2)
         schedule.assert_called_once()
 
+    async def test_update_is_unconfirmed_unless_the_owner_edits(self):
+        for owner, expected in ((None, False), (True, True)):
+            repo = _repo()
+            repo.update_fact.return_value = fact_row(content="new", revision=3)
+            extra = {} if owner is None else {"confirmed_by_owner": owner}
+            with self.subTest(owner=owner), patch(
+                "services.context_vault_service._repository", return_value=repo
+            ), patch(
+                "services.context_vault_service.session_scope",
+                return_value=_TransactionSession(),
+            ), patch("services.context_vault_service.schedule_embedding"):
+                await update_fact(7, 3, expected_revision=2, content="new", **extra)
+            self.assertIs(repo.update_fact.call_args.kwargs["confirmed_by_owner"], expected)
+
     async def test_list_uses_keyset_cursor_and_total_active(self):
         repo = _repo()
         repo.list_facts.return_value = [fact_row(id=4), fact_row(id=3)]

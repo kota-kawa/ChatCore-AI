@@ -238,8 +238,11 @@ async def update_fact(
     fact_type: ContextFactType | None = None,
     status: ContextFactStatus | None = None,
     importance: int | None = None,
+    confirmed_by_owner: bool = False,
     session: AsyncSession | None = None,
 ) -> ContextFactResponse:
+    # confirmed_by_owner は Web UI（本人）の編集だけが True にする。既定 False は MCP などの外部書き込み。
+    # Only the owner's web UI edits pass True; the False default is for external writers such as MCP.
     fact = await _transaction(
         session,
         lambda db: _repository(db).update_fact(
@@ -251,6 +254,7 @@ async def update_fact(
             fact_type=fact_type,
             status=status,
             importance=max(0, min(int(importance), 100)) if importance is not None else None,
+            confirmed_by_owner=confirmed_by_owner,
         ),
     )
     if session is None and str(fact.get("status")) == "active":

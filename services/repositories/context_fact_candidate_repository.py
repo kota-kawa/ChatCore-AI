@@ -55,6 +55,8 @@ _FACT_COLUMNS = (
     "importance",
     "status",
     "revision",
+    "confidence",
+    "last_confirmed_at",
     "created_at",
     "updated_at",
 )
@@ -120,6 +122,8 @@ def _serialize_fact(row: Any) -> dict[str, Any]:
         "importance": int(record["importance"] if record["importance"] is not None else 50),
         "status": str(record["status"] or "active"),
         "revision": max(int(record["revision"] or 1), 1),
+        "confidence": float(record["confidence"]) if record["confidence"] is not None else None,
+        "last_confirmed_at": serialize_datetime_iso(record["last_confirmed_at"]),
         "created_at": serialize_datetime_iso(record["created_at"]),
         "updated_at": serialize_datetime_iso(record["updated_at"]),
     }
@@ -319,6 +323,10 @@ class ContextFactCandidateRepository:
             source_ref=candidate["source_ref"],
             source_client_id=candidate["source_client_id"],
             importance=importance if importance is not None else candidate["importance"],
+            # 承認は本人が内容を見て確かめた行為。抽出時の確信度を残し、確認時刻は今にする。
+            # Approval is the owner reviewing the content: keep the extraction confidence and stamp now.
+            confidence=candidate["confidence"],
+            last_confirmed_at=func.current_timestamp(),
         ).returning(*_FACT_RETURNING)
         fact_row = (await self.session.execute(fact_statement)).mappings().first()
         if fact_row is None:  # pragma: no cover - PostgreSQL RETURNING invariant

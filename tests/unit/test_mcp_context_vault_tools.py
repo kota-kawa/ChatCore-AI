@@ -142,6 +142,37 @@ class McpContextVaultToolTestCase(unittest.TestCase):
                 )
                 audit.assert_called_once_with(actor, tool_name, 11)
 
+    def test_mcp_writes_are_never_owner_confirmed(self):
+        actor = SimpleNamespace(user_id=7, client_id="client-a")
+        fact = ContextFactResponse(
+            id=11, fact_type="preference", title="Editor", content="Use Vim", status="active", revision=4
+        )
+        server = self._server()
+        create = AsyncMock(return_value=fact)
+        update = AsyncMock(return_value=fact)
+        with (
+            patch("services.mcp_tools.context_vault.require_actor", return_value=actor),
+            patch("services.mcp_tools.context_vault.consume_tool_limit", new=AsyncMock()),
+            patch("services.mcp_tools.context_vault.create_fact", new=create),
+            patch("services.mcp_tools.context_vault.update_fact", new=update),
+            patch("services.mcp_tools.context_vault.audit_tool_success"),
+        ):
+            asyncio.run(
+                server.call_tool(
+                    "save_context_fact",
+                    {"fact_type": "preference", "title": "Editor", "content": "Use Vim"},
+                )
+            )
+            asyncio.run(
+                server.call_tool(
+                    "update_context_fact",
+                    {"fact_id": 11, "expected_revision": 3, "content": "Use Emacs"},
+                )
+            )
+
+        self.assertEqual(create.await_args.kwargs["source_kind"], "mcp")
+        self.assertFalse(update.await_args.kwargs.get("confirmed_by_owner", False))
+
 
 if __name__ == "__main__":
     unittest.main()
