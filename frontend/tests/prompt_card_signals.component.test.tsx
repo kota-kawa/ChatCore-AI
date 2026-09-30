@@ -80,6 +80,16 @@ describe("PromptCard signals", () => {
     expect(container.querySelector(".like-btn .prompt-action-count")).toHaveTextContent("5");
   });
 
+  it("places the view count in the header right before the date, not in the action row", () => {
+    const { container } = renderCard({ view_count: 128 });
+
+    const views = screen.getByLabelText("閲覧 128 回");
+    const stamp = container.querySelector(".prompt-card__header .prompt-card__stamp");
+    expect(stamp).toContainElement(views);
+    expect(views.nextElementSibling).toBe(container.querySelector(".prompt-card__created-at"));
+    expect(container.querySelector(".prompt-actions")).not.toContainElement(views);
+  });
+
   it("hides the like count while nobody has liked the prompt", () => {
     const { container } = renderCard({ view_count: 0, like_count: 0 });
 

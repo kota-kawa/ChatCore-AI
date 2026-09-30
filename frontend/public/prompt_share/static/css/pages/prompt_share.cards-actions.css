@@ -107,9 +107,35 @@
   min-height: 3rem;
 }
 
-.prompt-share-page .prompt-card__created-at {
+/* 閲覧数と日時を1つの塊にして右下の枠に置く。バッジが折り返しても閲覧数だけ取り残されない
+   Group the view count and date into one block in the bottom-right cell so the count is never stranded when badges wrap */
+.prompt-share-page .prompt-card__stamp {
   grid-area: date;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* 閲覧数は操作ではないので、日時と同じ副次テキストの色と大きさで並べる
+   The view count is not an action, so it shares the date's secondary-text color and size */
+.prompt-share-page .prompt-card__views {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.prompt-share-page .prompt-card__views i {
+  font-size: 0.78rem;
+}
+
+.prompt-share-page .prompt-card__created-at {
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
@@ -409,9 +435,7 @@
 
 .prompt-share-page .prompt-actions {
   display: grid;
-  /* 先頭の列は閲覧数（自然幅）、残り 3 列を操作ボタンで等分する */
-  /* First column holds the view count at its natural width; the three action buttons share the rest */
-  grid-template-columns: auto repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   justify-items: center;
   column-gap: 0.2rem;
@@ -442,23 +466,6 @@
   position: relative;
   isolation: isolate;
   overflow: visible;
-}
-
-/* 閲覧数。操作ではないので操作ボタンより小さく、副次テキストの色で並べる */
-/* View count: not an action, so it sits smaller than the action buttons in the secondary text color */
-.prompt-share-page .prompt-action-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  min-height: 44px;
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.prompt-share-page .prompt-action-stat i {
-  font-size: 0.9rem;
 }
 
 .prompt-share-page .prompt-action-count {

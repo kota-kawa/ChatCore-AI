@@ -260,10 +260,18 @@ function PromptCardComponent({
             </span>
           )}
         </div>
-        <span className="prompt-card__created-at">
-          <i className="bi bi-calendar3"></i>
-          {safeCreatedAt}
-        </span>
+        {/* 閲覧数は操作ではなく指標なので、操作ボタンの行ではなく日時の左に置く。並び順（閲覧数順）の根拠も見える */}
+        {/* The view count is a signal, not an action, so it sits left of the date instead of in the action row; it also makes the feed's popularity order visible */}
+        <div className="prompt-card__stamp">
+          <span className="prompt-card__views" aria-label={t("promptShare.viewCountLabel", { count: viewCount })}>
+            <i className="bi bi-eye" aria-hidden="true"></i>
+            <span>{viewCount}</span>
+          </span>
+          <span className="prompt-card__created-at">
+            <i className="bi bi-calendar3"></i>
+            {safeCreatedAt}
+          </span>
+        </div>
         {/* 投稿者と日付を同じメタ情報行に配置する。ユーザーIDがある場合のみプロフィールへ遷移できる */}
         {/* Keep the author and date on the same metadata row; only make the author interactive when a user ID exists */}
         {hasAuthorProfile ? (
@@ -438,12 +446,6 @@ function PromptCardComponent({
 
       <div className="prompt-meta">
         <div className="prompt-actions">
-          {/* 閲覧数は操作ではなく指標。並び順（閲覧数順）の根拠が見えるようカードに出す */}
-          {/* The view count is a signal, not an action; showing it makes the feed's popularity order visible */}
-          <span className="prompt-action-stat" aria-label={t("promptShare.viewCountLabel", { count: viewCount })}>
-            <i className="bi bi-eye" aria-hidden="true"></i>
-            <span>{viewCount}</span>
-          </span>
           <button
             className="prompt-action-btn comment-btn cc-press"
             type="button"
