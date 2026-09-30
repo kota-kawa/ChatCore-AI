@@ -77,6 +77,7 @@ class ContextVaultPortabilityParsingTestCase(unittest.TestCase):
             {**json.loads(_json_document([valid])), "version": 2},
             {**json.loads(_json_document([valid])), "unexpected": True},
             json.loads(_json_document([{**valid, "id": 99}])),
+            json.loads(_json_document([{**valid, "confidence": 1.5}])),
             json.loads(_json_document([{**valid, "title": " "}])),
         ]
         for payload in cases:
@@ -117,6 +118,26 @@ class ContextVaultPortabilityDatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(media_type, "application/json")
         self.assertEqual(filename, "chat-core-context-vault.json")
         repo.list_all_facts.assert_awaited_once_with(7, limit=1001)
+
+    async def test_export_records_confidence_and_confirmation_and_import_accepts_them(self):
+        repo = MagicMock()
+        repo.list_all_facts = AsyncMock(
+            return_value=[
+                _row(confidence=0.8, last_confirmed_at="2026-09-01T10:00:00"),
+                _row(id=4),
+            ]
+        )
+        with patch("services.context_vault_portability._repository", return_value=repo):
+            content, _, _ = await build_export(7, "json", session=object())
+        confirmed, unconfirmed = json.loads(content)["facts"]
+        self.assertEqual(confirmed["confidence"], 0.8)
+        self.assertEqual(confirmed["last_confirmed_at"], "2026-09-01T10:00:00")
+        self.assertIsNone(unconfirmed["confidence"])
+        self.assertIsNone(unconfirmed["last_confirmed_at"])
+
+        parsed = parse_import_document("json", content)
+        self.assertEqual(parsed[0].confidence, 0.8)
+        self.assertIsNone(parsed[1].last_confirmed_at)
 
     async def test_preview_uses_async_duplicate_and_cap_queries(self):
         fact = {

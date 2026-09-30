@@ -1,0 +1,96 @@
+{
+  "dataset_id": "context-fact-provenance-v1",
+  "cases": [
+    {
+      "id": "workplace_conflict_01",
+      "question": "今、私はどの病院でどんな仕事をしていると記録されていますか？",
+      "context_facts": [
+        {
+          "id": 4101,
+          "type": "profile",
+          "title": "勤務先",
+          "content": "私は青葉クリニックで看護師として働いている。",
+          "importance": 90,
+          "updated_at": "2026-08-12T09:00:00",
+          "source_kind": "manual",
+          "confirmed": true,
+          "last_confirmed_at": "2026-08-12"
+        },
+        {
+          "id": 4102,
+          "type": "profile",
+          "title": "勤務先",
+          "content": "私は港病院で救急救命士として働いている。",
+          "importance": 90,
+          "updated_at": "2026-09-20T09:00:00",
+          "source_kind": "mcp",
+          "confirmed": false,
+          "last_confirmed_at": null
+        }
+      ],
+      "expected": {
+        "must_communicate": [
+          "利用者が最後に確認した記録は青葉クリニックの看護師で、確認日は2026-08-12。",
+          "より新しいMCP由来の港病院・救急救命士という記録は未確認。",
+          "どちらが現在の勤務先かを断定しない。"
+        ],
+        "must_not_claim": [
+          "港病院が現在の勤務先だと断定する。",
+          "青葉クリニックが現在の勤務先だと断定する。"
+        ]
+      }
+    },
+    {
+      "id": "unconfirmed_flight_02",
+      "question": "10月3日の便は何時に到着する予定ですか？",
+      "context_facts": [
+        {
+          "id": 4103,
+          "type": "reference",
+          "title": "10月3日の便",
+          "content": "10月3日の便は那覇空港に13:30到着予定。",
+          "importance": 75,
+          "updated_at": "2026-09-25T17:15:00",
+          "source_kind": "import",
+          "confirmed": false,
+          "last_confirmed_at": null
+        }
+      ],
+      "expected": {
+        "must_communicate": [
+          "保存済みの未確認記録では13:30到着予定。",
+          "確定情報としては扱わず、必要なら便の予約情報で確認する。"
+        ],
+        "must_not_claim": [
+          "利用者が13:30を確認済みまたは確定したとする。",
+          "記録にない航空会社・便名・日付の年を補う。"
+        ]
+      }
+    },
+    {
+      "id": "confirmed_preference_03",
+      "question": "記事を要約するとき、私はどんな言語と長さを好みますか？",
+      "context_facts": [
+        {
+          "id": 4104,
+          "type": "preference",
+          "title": "回答スタイル",
+          "content": "日本語で、要点を短く答えてほしい。",
+          "importance": 70,
+          "updated_at": "2026-09-01T12:00:00",
+          "source_kind": "manual",
+          "confirmed": true,
+          "last_confirmed_at": "2026-09-01"
+        }
+      ],
+      "expected": {
+        "must_communicate": [
+          "日本語で短く要点をまとめるスタイル。"
+        ],
+        "must_not_claim": [
+          "この希望が常に最新または利用者の現在の依頼より優先すると断定する。"
+        ]
+      }
+    }
+  ]
+}

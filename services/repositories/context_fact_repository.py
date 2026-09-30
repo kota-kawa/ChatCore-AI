@@ -9,10 +9,13 @@ from typing import Any
 from sqlalchemy import (
     and_,
     bindparam,
+    case,
     column,
     exists,
     func,
     literal,
+    null,
+    or_,
     select,
     tuple_,
     update,
@@ -52,6 +55,8 @@ _FACT_COLUMNS = (
     "status",
     "revision",
     "embedding_status",
+    "confidence",
+    "last_confirmed_at",
     "created_at",
     "updated_at",
 )
@@ -95,6 +100,8 @@ def _serialize_record(record: dict[str, Any]) -> dict[str, Any]:
         ),
         "status": str(record["status"] or "active"),
         "revision": max(int(record["revision"] or 1), 1),
+        "confidence": float(record["confidence"]) if record["confidence"] is not None else None,
+        "last_confirmed_at": serialize_datetime_iso(record["last_confirmed_at"]),
         "created_at": serialize_datetime_iso(record["created_at"]),
         "updated_at": serialize_datetime_iso(record["updated_at"]),
         "_updated_at_raw": record["updated_at"],
@@ -342,6 +349,10 @@ class ContextFactRepository:
         if await self.count_active(user_id) >= MAX_ACTIVE_CONTEXT_FACTS:
             raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
+        # 本人が Web UI で書いた事実（manual）だけを作成時点で確認済みにする。MCP は本人の承認なしに
+        # 保存されるので NULL（未確認）のまま。ADR 0016。
+        # Only facts the owner typed in the web UI (manual) start out confirmed. MCP saves without
+        # the owner's approval, so it stays NULL (unconfirmed). ADR 0016.
         statement = (
             pg_insert(ContextFact)
             .values(
@@ -355,6 +366,7 @@ class ContextFactRepository:
                 importance=importance,
                 idempotency_key_hash=idempotency_key_hash,
                 idempotency_payload_hash=idempotency_payload_hash,
+                last_confirmed_at=func.current_timestamp() if source_kind == "manual" else None,
             )
             .on_conflict_do_nothing(index_elements=[ContextFact.idempotency_key_hash])
             .returning(*_FACT_RETURNING_COLUMNS)
@@ -423,6 +435,8 @@ class ContextFactRepository:
 
         imported: list[dict[str, Any]] = []
         if importable:
+            # last_confirmed_at / confidence は書かない: import は外部由来なので未確認（NULL）のまま。
+            # Neither last_confirmed_at nor confidence is written: imports are external, so they stay unconfirmed (NULL).
             statement = pg_insert(ContextFact).values(
                 [
                     {
@@ -458,7 +472,15 @@ class ContextFactRepository:
         fact_type: str | None = None,
         status: str | None = None,
         importance: int | None = None,
+        confirmed_by_owner: bool = False,
     ) -> dict[str, Any]:
+        """Update a fact under optimistic locking.
+
+        Changing title, content, or type sets ``last_confirmed_at`` to now when the owner
+        made the change and clears it otherwise (an MCP client rewrote it and the owner has
+        not seen it). Re-sending unchanged fields, status changes, and importance changes
+        leave confirmation alone.
+        """
         if status == "active":
             await self._lock_user_writes(user_id)
             current_status = await self.session.scalar(
@@ -475,14 +497,29 @@ class ContextFactRepository:
                 raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
         changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
-        if title is not None or content is not None or fact_type is not None:
-            changes["embedding_status"] = "pending"
+        content_change_conditions = []
         if title is not None:
             changes["title"] = title
+            content_change_conditions.append(ContextFact.title.is_distinct_from(title))
         if content is not None:
             changes["content"] = content
+            content_change_conditions.append(ContextFact.content.is_distinct_from(content))
         if fact_type is not None:
             changes["fact_type"] = fact_type
+            content_change_conditions.append(ContextFact.fact_type.is_distinct_from(fact_type))
+        if content_change_conditions:
+            content_changed = or_(*content_change_conditions)
+            changes["embedding_status"] = case(
+                (content_changed, "pending"),
+                else_=ContextFact.embedding_status,
+            )
+            changes["last_confirmed_at"] = case(
+                (
+                    content_changed,
+                    func.current_timestamp() if confirmed_by_owner else null(),
+                ),
+                else_=ContextFact.last_confirmed_at,
+            )
         if status is not None:
             changes["status"] = status
         if importance is not None:

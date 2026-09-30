@@ -13,6 +13,7 @@ from typing import Any
 
 from services.context_vault_service import build_digest, search_facts
 from services.mcp_memo_service import get_memo, list_memos, search_memos
+from services.response_models import ContextFactResponse
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,18 @@ async def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[st
     return memos
 
 
+# 事実がどこから来て本人が確かめたかをモデルへ渡す。MCP・import 由来の未確認の事実は、本人が
+# 確かめた事実と食い違うときの根拠にしないよう、日付つきの `confirmed` で区別できるようにする。
+# Tell the model where a fact came from and whether the owner confirmed it, so an unconfirmed MCP or
+# import fact can be told apart from a confirmed one when the two disagree.
+def _fact_provenance(fact: ContextFactResponse) -> dict[str, Any]:
+    return {
+        "source_kind": fact.source_kind,
+        "confirmed": fact.last_confirmed_at is not None,
+        "last_confirmed_at": fact.last_confirmed_at[:10] if fact.last_confirmed_at else None,
+    }
+
+
 async def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
     result = await search_facts(user_id, query, mode="semantic", limit=limit)
     return [
@@ -145,6 +158,7 @@ async def _search_facts(user_id: int, query: str, *, limit: int) -> list[dict[st
             "content": _trim(fact.content, MAX_FACT_CONTENT_CHARS),
             "importance": fact.importance,
             "updated_at": fact.updated_at,
+            **_fact_provenance(fact),
         }
         for fact in result.facts
     ]
@@ -188,6 +202,7 @@ async def build_personal_overview(
                 "title": fact.title,
                 "content": _trim(fact.content, MAX_FACT_CONTENT_CHARS),
                 "importance": fact.importance,
+                **_fact_provenance(fact),
             }
             for group in digest.groups
             for fact in group.facts

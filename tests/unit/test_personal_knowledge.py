@@ -14,6 +14,7 @@ from services.personal_knowledge import (
     search_personal_knowledge,
 )
 from services.research_state import TurnState
+from services.response_models import ContextFactResponse
 
 
 class _Memo:
@@ -41,6 +42,8 @@ class _Fact:
     content = "飛行機が好み"
     importance = 70
     updated_at = "2026-08-02T00:00:00"
+    source_kind = "manual"
+    last_confirmed_at = "2026-08-02T09:30:00"
 
 
 class _FactSearch:
@@ -124,6 +127,47 @@ class PersonalKnowledgeSearchTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list_call.await_args.kwargs["sort"], "updated")
         self.assertEqual(overview["recent_memo_count"], 1)
         self.assertEqual(overview["context_fact_count"], 1)
+        self.assertEqual(overview["context_facts"][0]["source_kind"], "manual")
+        self.assertTrue(overview["context_facts"][0]["confirmed"])
+        self.assertEqual(overview["context_facts"][0]["last_confirmed_at"], "2026-08-02")
+
+    async def test_search_and_overview_tell_unconfirmed_mcp_from_confirmed_facts(self):
+        def fact(fact_id, source_kind, confirmed_at):
+            return ContextFactResponse(
+                id=fact_id,
+                fact_type="preference",
+                title=f"fact {fact_id}",
+                content="c",
+                status="active",
+                revision=1,
+                source_kind=source_kind,
+                last_confirmed_at=confirmed_at,
+            )
+
+        facts = [fact(1, "chat", "2026-09-01T10:00:00"), fact(2, "mcp", None)]
+        search = type("Facts", (), {"facts": facts})()
+        digest = type("Digest", (), {"groups": [type("Group", (), {"facts": facts})()]})()
+        empty_listing = type("Listing", (), {"memos": []})()
+        with patch(
+            "services.personal_knowledge.search_memos",
+            new=AsyncMock(return_value=_MemoSearch([])),
+        ), patch(
+            "services.personal_knowledge.search_facts", new=AsyncMock(return_value=search)
+        ), patch(
+            "services.personal_knowledge.list_memos", new=AsyncMock(return_value=empty_listing)
+        ), patch("services.personal_knowledge.build_digest", new=AsyncMock(return_value=digest)):
+            found = await search_personal_knowledge(7, "x")
+            overview = await build_personal_overview(7)
+
+        expected = [
+            {"source_kind": "chat", "confirmed": True, "last_confirmed_at": "2026-09-01"},
+            {"source_kind": "mcp", "confirmed": False, "last_confirmed_at": None},
+        ]
+        for listed in (found.facts, overview["context_facts"]):
+            self.assertEqual(
+                [{key: item[key] for key in expected[0]} for item in listed],
+                expected,
+            )
 
 
 class PersonalKnowledgePayloadTestCase(unittest.TestCase):

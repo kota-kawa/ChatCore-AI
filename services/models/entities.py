@@ -679,6 +679,10 @@ class ContextFact(Base):
     importance: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("50"))
     idempotency_key_hash: Mapped[str | None] = mapped_column(CHAR(64))
     idempotency_payload_hash: Mapped[str | None] = mapped_column(CHAR(64))
+    # 抽出時の確信度（本人が書いた事実は NULL）と、本人が最後に確かめた時刻（NULL は未確認）。
+    # Extraction confidence (NULL when the owner wrote it) and when the owner last confirmed it (NULL = unconfirmed).
+    confidence: Mapped[float | None] = mapped_column(DOUBLE_PRECISION)
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     __table_args__ = (
         CheckConstraint(
@@ -691,6 +695,7 @@ class ContextFact(Base):
         CheckConstraint("status IN ('active', 'deprecated')", name="chk_context_facts_status"),
         CheckConstraint("source_kind IN ('manual', 'mcp', 'chat', 'import')", name="ck_context_facts_source_kind"),
         CheckConstraint("importance BETWEEN 0 AND 100", name="ck_context_facts_importance"),
+        CheckConstraint("confidence IS NULL OR confidence BETWEEN 0 AND 1", name="ck_context_facts_confidence"),
         CheckConstraint("idempotency_key_hash IS NULL OR idempotency_key_hash ~ '^[0-9a-f]{64}$'",
                         name="ck_context_facts_idempotency_key_hash"),
         CheckConstraint("idempotency_payload_hash IS NULL OR idempotency_payload_hash ~ '^[0-9a-f]{64}$'",

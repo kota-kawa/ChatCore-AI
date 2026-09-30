@@ -92,6 +92,8 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
         revision=max(int(fact.get("revision") or 1), 1),
         source_kind=str(fact.get("source_kind") or "manual"),
         importance=max(0, min(int(importance if importance is not None else 50), 100)),
+        confidence=fact.get("confidence"),
+        last_confirmed_at=fact.get("last_confirmed_at"),
         created_at=fact.get("created_at"),
         updated_at=fact.get("updated_at"),
     )
@@ -238,8 +240,11 @@ async def update_fact(
     fact_type: ContextFactType | None = None,
     status: ContextFactStatus | None = None,
     importance: int | None = None,
+    confirmed_by_owner: bool = False,
     session: AsyncSession | None = None,
 ) -> ContextFactResponse:
+    # confirmed_by_owner は Web UI（本人）の編集だけが True にする。既定 False は MCP などの外部書き込み。
+    # Only the owner's web UI edits pass True; the False default is for external writers such as MCP.
     fact = await _transaction(
         session,
         lambda db: _repository(db).update_fact(
@@ -251,6 +256,7 @@ async def update_fact(
             fact_type=fact_type,
             status=status,
             importance=max(0, min(int(importance), 100)) if importance is not None else None,
+            confirmed_by_owner=confirmed_by_owner,
         ),
     )
     if session is None and str(fact.get("status")) == "active":

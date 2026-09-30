@@ -134,6 +134,7 @@ class ContextVaultRouteTestCase(unittest.TestCase):
             fact_type=None,
             status=None,
             importance=95,
+            confirmed_by_owner=True,
         )
 
     def test_revision_conflict_is_translated_to_409(self):

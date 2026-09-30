@@ -458,6 +458,7 @@ async def api_update_context_fact(request: Request, fact_id: int):
             fact_type=payload.fact_type,
             status=payload.status,
             importance=payload.importance,
+            confirmed_by_owner=True,
         )
         return jsonify({"status": "success", "fact": fact.model_dump()})
     except ApiServiceError as exc:

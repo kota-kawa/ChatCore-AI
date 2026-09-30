@@ -45,6 +45,8 @@ def _fact(**overrides):
         "importance": 95,
         "status": "active",
         "revision": 1,
+        "confidence": 0.9,
+        "last_confirmed_at": None,
         "created_at": None,
         "updated_at": None,
     }
@@ -114,6 +116,25 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         candidate_sql = str(session.execute.await_args_list[2].args[0].compile(dialect=dialect()))
         self.assertIn("RETURNING", fact_sql)
         self.assertIn("revision", candidate_sql)
+
+    async def test_approve_candidate_carries_confidence_and_confirms_now(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(side_effect=[_candidate(confidence=0.72), 0])
+        session.execute = AsyncMock(
+            side_effect=[
+                MagicMock(),
+                _result(mapping=_fact(confidence=0.72)),
+                _result(mapping=_candidate(status="approved", revision=2, promoted_fact_id=31)),
+            ]
+        )
+
+        _, fact = await ContextFactCandidateRepository(session).approve_candidate(7, 8, expected_revision=1)
+
+        insert = session.execute.await_args_list[1].args[0]
+        compiled = insert.compile(dialect=dialect())
+        self.assertEqual(compiled.params["confidence"], 0.72)
+        self.assertIn("CURRENT_TIMESTAMP", " ".join(str(compiled).split()))
+        self.assertEqual(fact["confidence"], 0.72)
 
     async def test_approve_candidate_rejects_stale_revision_before_insert(self):
         session = MagicMock()
