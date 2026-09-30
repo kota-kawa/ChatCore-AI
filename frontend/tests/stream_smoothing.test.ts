@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FINAL_REVEAL_WINDOW_MS,
   MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND,
   advanceStreamPace,
+  advanceStreamPaceToFinish,
   clampToCodePointBoundary,
   createStreamPace,
 } from "../lib/chat_page/stream_smoothing";
@@ -112,6 +114,39 @@ test("advanceStreamPace caps the elapsed time per update", () => {
   // A huge dt (hidden tab) must not flush the whole backlog at once.
   const next = advanceStreamPace(pace, 1000, 10000);
   assert.ok(next < 1000, `a huge dt must not reveal everything (saw ${next})`);
+});
+
+test("advanceStreamPaceToFinish reveals a long backlog by the deadline, monotonically", () => {
+  const pace = createStreamPace(0, 0);
+  const deadline = FINAL_REVEAL_WINDOW_MS;
+  let length = 0;
+  for (let now = FRAME_MS; now < deadline; now += FRAME_MS) {
+    const next = advanceStreamPaceToFinish(pace, 20_000, now, deadline);
+    assert.ok(next >= length, "the visible length must be monotonic");
+    assert.ok(next <= 20_000, "the visible length must never pass the target");
+    length = next;
+  }
+  assert.ok(length > MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND, "must run far faster than the normal cap");
+  assert.equal(advanceStreamPaceToFinish(pace, 20_000, deadline, deadline), 20_000);
+});
+
+test("advanceStreamPaceToFinish is never slower than the normal pace on a small backlog", () => {
+  const normal = createStreamPace(0, 0);
+  const finishing = createStreamPace(0, 0);
+  const deadline = FINAL_REVEAL_WINDOW_MS;
+  for (let now = FRAME_MS; now < deadline; now += FRAME_MS) {
+    const normalLength = advanceStreamPace(normal, 40, now);
+    const finishingLength = advanceStreamPaceToFinish(finishing, 40, now, deadline);
+    assert.ok(finishingLength >= normalLength, `slower than normal at t=${now}`);
+  }
+});
+
+test("advanceStreamPaceToFinish reaches the full text after a long frame gap", () => {
+  const pace = createStreamPace(0, 0);
+  advanceStreamPaceToFinish(pace, 5000, FRAME_MS, FINAL_REVEAL_WINDOW_MS);
+  // rAF が止まっていた後の1回の更新でも、締め切りを過ぎていれば全文になる。
+  // One update after a long rAF pause shows everything once the deadline is past.
+  assert.equal(advanceStreamPaceToFinish(pace, 5000, FINAL_REVEAL_WINDOW_MS + 5000, FINAL_REVEAL_WINDOW_MS), 5000);
 });
 
 test("clampToCodePointBoundary keeps surrogate pairs intact", () => {
