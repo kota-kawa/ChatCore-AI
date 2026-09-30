@@ -499,7 +499,13 @@ async def decide_tool_approval(
     client_ip: str | None = None,
 ) -> dict[str, Any]:
     decision = _STORED_DECISION[requested_decision]
-    async with session_scope() as db:
+    # 読み取りもトランザクションで確定させる。確定せずに閉じると session_scope のロールバックが
+    # 行の属性を失効させ、閉じた後に読むと DetachedInstanceError になる（expire_on_commit=False
+    # なので確定なら属性が残る）。
+    # Commit even this read: closing without a commit lets session_scope's rollback expire the
+    # row, and reading it after the close raises DetachedInstanceError (expire_on_commit=False
+    # keeps the attributes on a commit).
+    async with session_scope() as db, db.begin():
         row = await ChatToolApprovalRepository(db).get_actionable(approval_id, user_id)
     if row is None:
         raise _approval_not_found()
@@ -545,7 +551,9 @@ async def decide_tool_approval(
 
 
 async def list_auto_approvals(user_id: int) -> list[dict[str, Any]]:
-    async with session_scope() as db:
+    # decide_tool_approval と同じく、閉じた後に属性を読むので確定させる。
+    # As in decide_tool_approval, the grants are read after the close, so commit.
+    async with session_scope() as db, db.begin():
         grants = await ChatToolApprovalRepository(db).list_grants(user_id)
     listed: list[dict[str, Any]] = []
     for grant in grants:
