@@ -41,7 +41,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 - `lib/data/swr_fetcher.ts`: GET の JSON 取得、HTTP エラー正規化、SWR 既定値をまとめます。
 - `scripts/core/csrf.ts`: `/api/csrf-token` を使って状態変更リクエストへ CSRF ヘッダーを付けます。
 - `lib/chat_page/api_contract.ts`: チャット履歴・生成 UI パーツ・検索画像・承認カードなどの実行時正規化を担当します。承認カード（`tool_approval` パーツ）は生成スキーマ `ToolApprovalApiSchema` で検証し、描けないカードは捨てます。
-- `components/chat_page/tool_approval_card.tsx` ＋ `components/chat_page/tool_approval_previews/` ＋ `lib/chat_page/tool_approvals.ts` ＋ `hooks/chat_page/use_chat_tool_approvals.ts`: チャットの書き込みツールの承認カード。見た目と無効条件（生成中・後ろに利用者の発言がある）は選択ボタンに揃え、決定は承認 API へ送り、応答のカードでパーツを差し替えます。最新の回答のカードがすべて決まり 1 件以上成功したら、`chat.toolApproval.continuePrompt` を通常の送信経路で送ります。共有表示では伏せ字化された読み取り専用のカードとして状態だけを見せます。「常に承認」の一覧と取り消しは設定画面の `components/settings/chat_tool_permissions_section.tsx` です。
+- `components/chat_page/tool_approval_card.tsx` ＋ `components/chat_page/tool_approval_previews/` ＋ `lib/chat_page/tool_approvals.ts` ＋ `hooks/chat_page/use_chat_tool_approvals.ts`: チャットの書き込みツールの承認カード。見た目と無効条件（生成中・後ろに利用者の発言がある）は選択ボタンに揃え、決定は承認 API へ送り、応答のカードでパーツを差し替えます。決定してもチャットは送信せず、結果は利用者の次の発言のときにサーバーが AI の文脈へ加えます。共有表示では伏せ字化された読み取り専用のカードとして状態だけを見せます。「常に承認」の一覧と取り消しは設定画面の `components/settings/chat_tool_permissions_section.tsx` です。
 - `types/generated/api_schemas.ts`: Backend Pydantic model から生成される契約です。直接編集しません。
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。
 - `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。

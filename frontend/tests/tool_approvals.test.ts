@@ -8,7 +8,6 @@ import {
   isToolApprovalDecidable,
   isToolApprovalExpired,
   replaceToolApprovalInMessages,
-  shouldAutoContinueAfterApproval,
 } from "../lib/chat_page/tool_approvals";
 import type { UiChatMessage } from "../lib/chat_page/types";
 import type { ToolApprovalApi } from "../types/generated/api_schemas";
@@ -126,32 +125,6 @@ test("replacing a card updates only the matching part and keeps the list when no
   assert.equal(next[0], messages[0]);
 
   assert.equal(replaceToolApprovalInMessages(messages, approval({ id: "missing" })), messages);
-});
-
-test("auto-continue waits until every card on the latest reply is settled and one succeeded", () => {
-  const succeeded = approval({ status: "succeeded", decision: "once" });
-  const pendingOther = approval({ id: "a2" });
-  assert.equal(shouldAutoContinueAfterApproval([user("u1"), assistant("m1", [succeeded, pendingOther])], "a1"), false);
-
-  const deniedOther = approval({ id: "a2", status: "denied", decision: "deny" });
-  assert.equal(shouldAutoContinueAfterApproval([user("u1"), assistant("m1", [succeeded, deniedOther])], "a1"), true);
-});
-
-test("auto-continue does not fire when every card was denied or failed", () => {
-  const denied = approval({ status: "denied", decision: "deny" });
-  const failed = approval({ id: "a2", status: "failed", decision: "once", result: { error_code: "target_not_found" } });
-  assert.equal(shouldAutoContinueAfterApproval([user("u1"), assistant("m1", [denied, failed])], "a2"), false);
-});
-
-test("auto-continue ignores cards on an older reply or one the user already answered", () => {
-  const succeeded = approval({ status: "succeeded", decision: "once" });
-  // 後ろに利用者の発言がある / The user already wrote after the reply
-  assert.equal(shouldAutoContinueAfterApproval([user("u1"), assistant("m1", [succeeded]), user("u2")], "a1"), false);
-  // 決めたカードが最新の回答に無い / The decided card is not on the latest reply
-  const older = [user("u1"), assistant("m1", [succeeded]), user("u2"), assistant("m2", [])];
-  assert.equal(shouldAutoContinueAfterApproval(older, "a1"), false);
-  assert.equal(shouldAutoContinueAfterApproval([user("u1"), assistant("m1", [succeeded])], "unknown"), false);
-  assert.equal(shouldAutoContinueAfterApproval([], "a1"), false);
 });
 
 function jsonResponse(status: number, body: unknown) {

@@ -245,7 +245,6 @@ export const jaMessages = {
   "chat.toolApproval.preview.privateOverlapExcerpt": "一致した箇所",
   "chat.toolApproval.readOnlyNote": "このカードは共有された会話のもので、ここからは操作できません。",
   "chat.toolApproval.decisionFailed": "承認を処理できませんでした。",
-  "chat.toolApproval.continuePrompt": "承認した操作が実行されました。結果を踏まえて続けてください。",
   "chat.attachmentUnavailable": "チャットの準備中はファイルを添付できません。",
   "chat.deleteTaskConfirm": "このタスクを削除してもよろしいですか？",
   "chat.titleRequired": "タイトルを入力してください。",

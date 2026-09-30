@@ -165,7 +165,6 @@ export const enMessages = {
   "chat.toolApproval.preview.privateOverlapExcerpt": "Matching passage",
   "chat.toolApproval.readOnlyNote": "This card belongs to a shared conversation; it cannot be used from here.",
   "chat.toolApproval.decisionFailed": "Could not process your decision.",
-  "chat.toolApproval.continuePrompt": "The action I approved has run. Please continue from the result.",
   "chat.attachmentUnavailable": "Files cannot be attached while the chat is being prepared.",
   "chat.deleteTaskConfirm": "Delete this task?", "chat.titleRequired": "Enter a title.",
   "chat.taskLoadFailed": "Could not load tasks.", "chat.taskUpdateFailed": "Could not update the task.",
