@@ -522,6 +522,38 @@ test("reconnect attempts stop after 12 CONSECUTIVE failures instead of spinning 
   assert.equal(assistantMessages(recorder.messages())[0]?.text, "途中まで");
 });
 
+// 再接続が 200 で開いても、イベントを1件も届けずに閉じるなら成功ではない。
+// 成功扱いで試行回数を 0 に戻すと、待ち 0ms のまま無限に再接続してしまう。
+// A reconnect that opens with a 200 but closes without delivering a single
+// event is not a success. Resetting the attempt count on it would reconnect
+// forever at a 0ms wait.
+test("reconnects that open with 200 but deliver no event count as failures and give up at the cap", async () => {
+  const clock = createFakeClock();
+  let attempts = 0;
+
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: () => {
+      attempts += 1;
+      // 退行時に無限ループでテストが固まらないよう、30回を超えたら通常の失敗に切り替える。
+      // Switch to ordinary failures after 30 calls so a regression ends the test instead of hanging it.
+      if (attempts > 30) return Promise.reject(new TypeError("Failed to fetch"));
+      return Promise.resolve(createScriptedStream([]).response);
+    },
+  });
+  seedThinkingMessage(recorder);
+
+  const interrupted = createScriptedStream([sseBlock(1, "chunk", { text: "途中まで" })]);
+
+  const completed = await settleStream(consumeGenerationStream(interrupted.response, recorder.host), clock, 3_000);
+
+  assert.equal(completed, false);
+  assert.equal(attempts, 12);
+  assert.equal(recorder.errors().length, 1);
+  assert.match(recorder.errors()[0], /ストリームを再開できませんでした/);
+  assert.equal(assistantMessages(recorder.messages())[0]?.text, "途中まで");
+});
+
 // レビュー指摘: 再接続上限は「生涯合計」ではなく「連続失敗」に対する予算で
 // なければならない。11回連続で再接続に成功した後にたった1回失敗しても、
 // そこで打ち切ってはいけない（1回失敗しても次で回復すれば良い）。

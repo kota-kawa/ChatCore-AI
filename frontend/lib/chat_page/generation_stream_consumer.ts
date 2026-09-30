@@ -60,21 +60,26 @@ const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
 // and makes the last part of a fast response snap into view.
 const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
-// 再接続の「連続失敗」試行上限（生涯合計ではない）。1回でも再接続に成功すれば
-// カウントはリセットされる。バックオフは 15 秒で頭打ちになるため、この回数で
-// 約 105 秒粘ってから諦める。上限が無いと、復旧しない切断（ヘッダーだけ返して
-// 本文を送らないプロキシなど）で「思考中」のまま無限に空転し、エラー表示も
-// 生成ガードの解放も起きなくなる。生涯合計にしてしまうと、長時間ターンで
-// 回線が不安定でも正常に復旧し続けているケースまで、通算回数を使い切っただけで
-// 打ち切られてしまう。
-// Upper bound on *consecutive* reconnect failures (not a lifetime total): the
-// count resets to zero on every successful reconnect. The backoff tops out at
-// 15s, so this keeps trying for roughly 105 seconds before giving up. Without
-// a bound, a drop that never recovers (e.g. a proxy that returns headers but
-// no events) spins forever: no error is surfaced and the generation guard is
-// never released. Treating it as a lifetime total instead would cut off a
-// long turn that keeps recovering fine over a flaky connection, just because
-// the lifetime count ran out.
+// 再接続の「進捗なし」試行上限（生涯合計ではない）。再接続した応答で新しい
+// イベント（本文・進捗）を1件でも受け取れればカウントはリセットされる。
+// 接続が 200 で開くだけでは成功と数えない。バックオフは 15 秒で頭打ちになるため、
+// この回数で約 105 秒粘ってから諦める。上限が無いと、復旧しない切断（ヘッダーだけ
+// 返して本文を送らないプロキシなど）で「思考中」のまま無限に空転し、エラー表示も
+// 生成ガードの解放も起きなくなる。接続の成否だけでリセットすると、200 で開いて
+// すぐ空で閉じる応答が待ち 0ms のまま無限に続く。生涯合計にしてしまうと、長時間
+// ターンで回線が不安定でも正常に復旧し続けているケースまで、通算回数を使い切った
+// だけで打ち切られてしまう。
+// Upper bound on reconnects *without progress* (not a lifetime total): the
+// count resets to zero whenever a reconnected response delivers at least one
+// new event (text or progress). Merely opening with a 200 does not count as
+// success. The backoff tops out at 15s, so this keeps trying for roughly 105
+// seconds before giving up. Without a bound, a drop that never recovers (e.g.
+// a proxy that returns headers but no events) spins forever: no error is
+// surfaced and the generation guard is never released. Resetting on the
+// connection alone would let a 200 that closes empty loop forever at a 0ms
+// wait. Treating it as a lifetime total instead would cut off a long turn that
+// keeps recovering fine over a flaky connection, just because the lifetime
+// count ran out.
 const MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS = 12;
 
 export type GenerationStreamTimers = {
@@ -587,6 +592,12 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     }
   };
 
+  // 再接続の成否判定に使う、これまでに反映した新しいイベントの数。再送された
+  // 既読イベントと、何も変えないイベントは数えない。
+  // Count of new events applied so far, used to judge whether a reconnect made
+  // progress. Replayed events and events that change nothing are not counted.
+  let appliedEventCount = 0;
+
   const processBlock = (block: string, progress: StreamProgressState) => {
     const parsed = parseStreamEventBlock(block);
     if (!parsed) return;
@@ -597,10 +608,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       storedStateSync.noteLastEventId(parsed.id);
     }
 
-    applyStreamAction(
-      interpretGenerationStreamEvent(parsed, { streamedText: state.streamedText, localize: host.localize }),
-      progress,
-    );
+    const action = interpretGenerationStreamEvent(parsed, { streamedText: state.streamedText, localize: host.localize });
+    if (action.kind !== "ignored") appliedEventCount += 1;
+    applyStreamAction(action, progress);
   };
 
   const readStreamResponse = async (streamResponse: Response): Promise<StreamReadResult> => {
@@ -688,8 +698,14 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     let reconnectAttempt = 0;
 
     while (host.isActive()) {
+      const eventsBeforeRead = appliedEventCount;
       const result = await readStreamResponse(activeResponse);
       if (!host.isActive()) return false;
+      // 新しいイベントを受け取れた応答だけを再接続の成功と数え、連続で進捗が
+      // 無かった回数を数え直す。
+      // Only a response that delivered a new event counts as a successful
+      // reconnect; restart the count of consecutive attempts without progress.
+      if (appliedEventCount > eventsBeforeRead) reconnectAttempt = 0;
 
       if (result === "completed") {
         const revealCompletion = renderer.revealCompletion();
@@ -701,6 +717,13 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
 
       if (typeof result === "object" && result.status === "error") {
         persistInterruptedStream(state.streamedText ? `${result.message} ここまでの応答を保存しました。` : result.message);
+        return false;
+      }
+
+      // 200 で開いたのに何も届かず閉じる再接続が続いても、上限で必ず終わらせる。
+      // Even reconnects that open with a 200 but close empty must end at the cap.
+      if (reconnectAttempt >= MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS) {
+        persistUnresumableStream();
         return false;
       }
 
@@ -729,15 +752,6 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         }
         continue;
       }
-      // 再接続が成功したので連続失敗のカウントをリセットする。上限は「生涯合計」
-      // ではなく「連続何回失敗したか」に対する予算であるべきで、そうしないと
-      // 長時間ターンで回線が不安定でも正常に復旧し続けているケースが、通算回数
-      // を使い切っただけで打ち切られてしまう。
-      // Reset the consecutive-failure count on a successful reconnect. The
-      // budget is meant to cap consecutive failures, not a lifetime total;
-      // otherwise a long turn that keeps recovering fine over a flaky
-      // connection would get cut off just because the lifetime count ran out.
-      reconnectAttempt = 0;
       activeResponse = reconnectResponse;
     }
 
