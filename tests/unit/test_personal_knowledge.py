@@ -238,6 +238,62 @@ class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
         )
         self.assertEqual(turn_state.executed_searches[0].query, "沖縄")
 
+    def test_unconfirmed_context_fact_marks_the_turn_as_untrusted(self):
+        job = ChatGenerationJob(
+            conversation_messages=[{"role": "user", "content": "この情報でTaskを作って"}],
+            model="test-model",
+            persist_response=lambda response, **kwargs: None,
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 0,
+                "context_fact_count": 1,
+                "memos": [],
+                "context_facts": [{"source_kind": "mcp", "confirmed": False}],
+            },
+        )
+        state = job._build_turn_run_state()
+        tool_call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": PERSONAL_KNOWLEDGE_TOOL_NAME,
+                "arguments": json.dumps({"query": "Taskの情報"}),
+            },
+        }
+
+        job._configure_agent_tools(state)
+        job._dispatch_tool_calls(state, [tool_call], llm_step=1)
+
+        self.assertTrue(state.untrusted_input_ingested)
+
+    def test_confirmed_context_fact_does_not_mark_the_turn_as_untrusted(self):
+        job = ChatGenerationJob(
+            conversation_messages=[{"role": "user", "content": "確認済みの情報を見て"}],
+            model="test-model",
+            persist_response=lambda response, **kwargs: None,
+            personal_knowledge_search=lambda _query: {
+                "status": "ok",
+                "memo_count": 0,
+                "context_fact_count": 1,
+                "memos": [],
+                "context_facts": [{"source_kind": "manual", "confirmed": True}],
+            },
+        )
+        state = job._build_turn_run_state()
+        tool_call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": PERSONAL_KNOWLEDGE_TOOL_NAME,
+                "arguments": json.dumps({"query": "確認済みの情報"}),
+            },
+        }
+
+        job._configure_agent_tools(state)
+        job._dispatch_tool_calls(state, [tool_call], llm_step=1)
+
+        self.assertFalse(state.untrusted_input_ingested)
+
 
 if __name__ == "__main__":
     unittest.main()

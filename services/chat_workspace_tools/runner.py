@@ -376,10 +376,10 @@ class WorkspaceToolRunner:
             return None
         return memo_id
 
-    # 「常に承認」を付与済みで、対象が共有中でなく、このターンで外部の内容を読んでおらず、
+    # 「常に承認」を付与済みで、対象が共有中でなく、このターンで外部・未確認の内容を読んでおらず、
     # 書き込みの上限にも達していないときだけ、提案の時点で実行する。
     # Run at proposal time only when "always approve" is granted, the target is not shared,
-    # the turn has read no external content, and the write limit still allows it.
+    # the turn has read no external or owner-unconfirmed content, and the write limit still allows it.
     def _may_auto_approve(self, state: ChatTurnRunState, spec: ToolSpec, proposal: Proposal) -> bool:
         if not spec.allows_always or proposal.shared:
             return False

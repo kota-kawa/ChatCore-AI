@@ -27,6 +27,7 @@ MCP の `save_context_fact` は本人の承認なしに active な事実を作�
 
 - `ContextFactResponse` に `confidence` と `last_confirmed_at` が増えます。画面はこの変更では変えません。
 - MCP の `get_personal_context`・`search_context` の応答にも同じ項目が含まれ、外部クライアントも確認状態を読めます。
+- チャットの検索結果に未確認事実が含まれる場合、そのターンは「常に承認」の自動実行条件を満たしません。事実自体は回答の根拠から除かず、書き込み提案は通常の承認カードで利用者が確認します。
 - `last_confirmed_at` を `updated_at` の代わりに並び順やカーソルへ使いません。
 - ルーム内の会話記憶 `memory_facts` は別系統で、この判断の対象外です。
 - 下位互換のため両列は NULL 許容の追加です。downgrade は列を削除するため確認履歴を失い、実行前に論理バックアップが必要です。

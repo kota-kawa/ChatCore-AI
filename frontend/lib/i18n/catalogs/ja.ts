@@ -201,7 +201,7 @@ export const jaMessages = {
   "chat.toolApproval.openMySkills": "個人Skillを開く",
   "chat.toolApproval.openProfileSettings": "プロフィール設定を開く",
   "chat.toolApproval.warning.shared_memo": "このメモは共有中です。変更すると共有リンクの表示も変わります。",
-  "chat.toolApproval.warning.untrusted_input_in_turn": "この回答は外部の内容（Webページや添付など）を読んでいます。意図しない変更でないか確かめてください。",
+  "chat.toolApproval.warning.untrusted_input_in_turn": "この回答は外部の内容や、まだ確認していない保存情報を参照しています。意図しない変更でないか確かめてください。",
   "chat.toolApproval.warning.private_text_in_public_post": "このターンで読んだ非公開の内容（メモ・自分用プロンプト・個人Skill・プロフィールなど）と一致する箇所があります。公開してよい内容か確かめてください。",
   "chat.toolApproval.ackPrivateOverlap": "内容を確認しました。公開してよい情報です。",
   "chat.toolApproval.preview.title": "題名",

@@ -171,7 +171,7 @@ class ChatToolApproval(Base):
     assistant_message_id は NULL で、承認 API はその間の行を受け付けない。
     arguments holds the proposed input, preview the change shown on the card, and target_ref
     the target as proposed (memo id, revision, whether it was shared) plus the turn context
-    (whether external content was read). assistant_message_id stays NULL until the reply is
+    (whether external or owner-unconfirmed content was read). assistant_message_id stays NULL until the reply is
     saved, and the approval API refuses rows in that state.
     """
 
