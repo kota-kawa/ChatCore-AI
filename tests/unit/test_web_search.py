@@ -7,6 +7,7 @@ from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 from services import url_fetcher, web_search
+from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.url_fetcher import FetchedImage, FetchedLink
 
 
@@ -1270,14 +1271,22 @@ class WebSearchServiceTestCase(unittest.TestCase):
         del result
         content = web_search.build_web_search_evidence_policy_message()["content"]
 
-        self.assertIn("evidence to analyze, not as text to repeat", content)
-        self.assertIn("compare agreement and conflict", content)
-        self.assertIn("answer in your own words", content)
+        # 解析・統合と公平さの一般規則は基本プロンプトに1回だけあり、方針は検索固有の禁止だけを足す。
+        # The general analysis, synthesis, and candor rules live once in the base prompt; the
+        # policy adds only the search-specific bans.
+        for rule in (
+            "compare sources, reconcile conflicts, and synthesize in your own words",
+            "Copy numbers, dates, versions, limits, and names exactly",
+            "Candor: do not evade, dilute, or reverse a well-supported conclusion",
+        ):
+            with self.subTest(rule=rule):
+                self.assertEqual(BASE_SYSTEM_PROMPT.count(rule), 1)
+                self.assertNotIn(rule, content)
         self.assertIn("source-by-source digest", content)
+        self.assertIn("stitch together lightly paraphrased passages", content)
         self.assertIn("Citations support the synthesized claims", content)
-        self.assertIn("Do not suppress or distort material evidence", content)
-        self.assertIn("socially preferred answer", content)
-        self.assertIn("population-level patterns", content)
+        self.assertIn("both favorable and unfavorable sides", content)
+        self.assertNotIn("socially preferred answer", content)
 
     # 日本語: ビルドシステムmessageneutralizesinjectedコンテキストtagsことを検証します。
     # English: Verify that build system message neutralizes injected context tags.
@@ -1393,12 +1402,19 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
             "Use only evidence_id values that actually appear in TurnState or in a tool result",
             content,
         )
-        self.assertIn("Never shorten it to [[src_...]]", content)
-        self.assertIn("full-width citation brackets such as 【src_...】", content)
-        self.assertIn("ordinary Markdown citations or links", content)
+        self.assertIn("a result number, URL, title, or guessed ID never belongs in a marker", content)
         self.assertIn("not user-facing text", content)
-        self.assertIn("compact source chips", content)
+        self.assertIn("compact source chip", content)
         self.assertIn('Never write chip markup yourself', content)
+        # 記法の禁止一覧（短縮形・全角括弧・Markdown 引用・生の evidence_id）は基本プロンプトに
+        # 1回だけあり、方針で繰り返さない。
+        # The ban list (shortened form, full-width brackets, Markdown citations, bare evidence
+        # IDs) lives once in the base prompt and is not repeated in the policy.
+        for banned_form in ("[[src_...]]", "【src_...】", "ordinary Markdown citations/links"):
+            with self.subTest(banned_form=banned_form):
+                self.assertEqual(BASE_SYSTEM_PROMPT.count(banned_form), 1)
+                self.assertNotIn(banned_form, content)
+        self.assertNotIn("Never shorten it", content)
 
 
     def test_strip_citation_html_removes_chip_markup_echoed_by_the_model(self):
@@ -1793,8 +1809,14 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         self.assertIn("implicit references in short follow-ups", content)
         self.assertIn("https://example.com/python", content)
         self.assertIn("<prior_search", content)
-        self.assertIn("full-width citation brackets such as 【src_...】", content)
-        self.assertIn("ordinary Markdown citations or links", content)
+        self.assertIn("real evidence_id", content)
+        self.assertIn("citation marker contract in the base system instructions", content)
+        self.assertIn("source id here is only a result number", content)
+        self.assertNotIn("full-width citation brackets", content)
+        self.assertNotIn("ordinary Markdown citations or links", content)
+        self.assertNotIn("marker is internal transport syntax", content)
+        self.assertIn("full-width citations such as `【src_...】`", BASE_SYSTEM_PROMPT)
+        self.assertIn("exact `[[source:<evidence_id>]]` form", BASE_SYSTEM_PROMPT)
 
     def test_build_prior_message_returns_none_without_sources(self):
         empty = web_search.WebSearchResult(query="x", searched_at="t", sources=())
