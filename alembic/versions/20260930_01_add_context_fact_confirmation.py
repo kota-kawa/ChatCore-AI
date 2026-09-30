@@ -15,21 +15,20 @@ The CHECK is added in the same statement as the new column, so every row is NULL
 validation cannot fail or hold a long scan (context_facts is capped per user).
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
-
 revision: str = "20260930_01"
-down_revision: Union[str, Sequence[str], None] = "20260928_01"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "20260928_01"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 追加のみ（expand）。両列とも NULL 許容で、旧色のコードが INSERT/UPDATE しても壊れない。
+    # 追加のみ（expand）。両列とも NULL 許容で、旧バージョンのコードが INSERT/UPDATE しても壊れない。
     # 型は candidates.confidence（DOUBLE PRECISION）に揃え、承認時の値を桁落ちなく引き継ぐ。
-    # Expand only: both columns are nullable, so the old color keeps working. The type matches
+    # Expand only: both columns are nullable, so older code keeps working. The type matches
     # context_fact_candidates.confidence so the approved value is carried over without float4 noise.
     op.execute(
         """
