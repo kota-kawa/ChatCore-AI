@@ -132,7 +132,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo = _repo()
         repo.approve_candidate.return_value = (
             _candidate(status="approved", revision=2, promoted_fact_id=31),
-            _fact(),
+            _fact(confidence=0.72, last_confirmed_at="2026-07-23T12:00:00"),
         )
         with patch("services.context_vault_candidate_service._repository", return_value=repo), patch(
             "services.context_vault_candidate_service.schedule_embedding"
@@ -149,6 +149,8 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 session=object(),
             )
         self.assertEqual(result.fact.id, 31)
+        self.assertEqual(result.fact.confidence, 0.72)
+        self.assertEqual(result.fact.last_confirmed_at, "2026-07-23T12:00:00")
         repo.approve_candidate.assert_awaited_once_with(
             7,
             8,

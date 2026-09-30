@@ -31,6 +31,8 @@ const sampleFact: ContextFact = {
   importance: 75,
   status: "active",
   revision: 2,
+  confidence: null,
+  last_confirmed_at: null,
   created_at: null,
   updated_at: null,
 };

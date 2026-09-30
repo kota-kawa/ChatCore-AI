@@ -104,6 +104,8 @@ def _portable_fact(row: dict[str, Any]) -> ContextVaultPortableFact:
         content=row["content"],
         status=row["status"],
         importance=row.get("importance", 50),
+        confidence=row.get("confidence"),
+        last_confirmed_at=row.get("last_confirmed_at"),
     )
 
 

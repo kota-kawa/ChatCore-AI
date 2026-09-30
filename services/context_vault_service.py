@@ -92,6 +92,8 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
         revision=max(int(fact.get("revision") or 1), 1),
         source_kind=str(fact.get("source_kind") or "manual"),
         importance=max(0, min(int(importance if importance is not None else 50), 100)),
+        confidence=fact.get("confidence"),
+        last_confirmed_at=fact.get("last_confirmed_at"),
         created_at=fact.get("created_at"),
         updated_at=fact.get("updated_at"),
     )

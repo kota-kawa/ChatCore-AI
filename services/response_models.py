@@ -229,6 +229,12 @@ class ContextFactResponse(ResponsePayloadModel):
     revision: int
     source_kind: Literal["manual", "chat", "mcp", "import"] = "manual"
     importance: int = Field(default=50, ge=0, le=100)
+    # 抽出時の確信度（0〜1）。本人が書いた事実・MCP・import は None。
+    # Extraction confidence (0-1); None for facts the owner wrote, and for MCP and import.
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    # 本人が最後に確かめた時刻。None は未確認（MCP・import 由来、または MCP が書き換えた後）。
+    # When the owner last confirmed the fact; None means unconfirmed (MCP or import, or rewritten by MCP since).
+    last_confirmed_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -251,6 +257,10 @@ class ContextVaultPortableFact(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
     status: Literal["active", "deprecated"]
     importance: int = Field(ge=0, le=100)
+    # 記録として書き出すだけで、import では使わない（import した事実は常に未確認）。
+    # Exported as a record only; import ignores both (imported facts are always unconfirmed).
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    last_confirmed_at: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def _require_non_blank_text(self) -> ContextVaultPortableFact:
