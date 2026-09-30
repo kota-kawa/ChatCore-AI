@@ -28,7 +28,13 @@ import {
 import { removeThinkingMessages } from "./home_page_controller_utils";
 import { rememberStreamEventId } from "./message_window";
 import { createSseBlockDecoder } from "./sse_block_decoder";
-import { advanceStreamPace, clampToCodePointBoundary, createStreamPace } from "./stream_smoothing";
+import {
+  FINAL_REVEAL_WINDOW_MS,
+  advanceStreamPace,
+  advanceStreamPaceToFinish,
+  clampToCodePointBoundary,
+  createStreamPace,
+} from "./stream_smoothing";
 import { normalizeCitationChipStreamBoundary, splitStreamDisplayText } from "./stream_display_text";
 import { parseStreamEventBlock } from "./streaming";
 import {
@@ -228,6 +234,11 @@ function createStreamRenderer(
 
   let chunkRenderRafId: number | null = null;
   let finalRevealTimerId: number | null = null;
+  // done 受信後の早送りの締め切りと、rAF が止まっても締め切りで描画を進める保険のタイマー。
+  // Deadline of the post-"done" fast-forward, and a fallback timer that drives
+  // the render at the deadline even when rAF is paused (a hidden tab).
+  let finalRevealDeadline: number | null = null;
+  let finalRevealDeadlineTimerId: number | null = null;
   let revealCompletionPromise: Promise<void> | null = null;
   let resolveRevealCompletion: (() => void) | null = null;
 
@@ -330,10 +341,17 @@ function createStreamRenderer(
     persistAnswer();
   };
 
+  const clearFinalRevealDeadlineTimer = () => {
+    if (finalRevealDeadlineTimerId === null) return;
+    timers.clearTimeout(finalRevealDeadlineTimerId);
+    finalRevealDeadlineTimerId = null;
+  };
+
   const finishPendingFinalization = () => {
     const pending = state.pendingFinalization;
     if (!pending) return;
     state.pendingFinalization = null;
+    clearFinalRevealDeadlineTimer();
     finalizeStreamingMessage(pending.finalText, pending.persist, pending.parts);
     resolveRevealCompletion?.();
     resolveRevealCompletion = null;
@@ -342,7 +360,14 @@ function createStreamRenderer(
   // 表示位置を1フレーム分進め、チャンク境界→語境界→引用チップ境界へ丸める。
   // Advance one frame, then round to a chunk, word and citation-chip boundary.
   const resolveDisplayLength = (pacedText: string, frameNow: number) => {
-    const smoothedLength = clampToCodePointBoundary(pacedText, advanceStreamPace(streamPace, pacedText.length, frameNow));
+    // done 受信後は締め切りまでに全文へ届く速さで進め、それ以前は通常の上限付き速度で流す。
+    // After "done", advance fast enough to reach the full text by the deadline;
+    // before it, use the normal capped pace.
+    const advancedLength =
+      finalRevealDeadline === null
+        ? advanceStreamPace(streamPace, pacedText.length, frameNow)
+        : advanceStreamPaceToFinish(streamPace, pacedText.length, frameNow, finalRevealDeadline);
+    const smoothedLength = clampToCodePointBoundary(pacedText, advancedLength);
     // 表示はチャンク境界まで巻き戻し、さらに語境界へ合わせる。文字単位で
     // 伸ばすと生成中の行が毎フレーム折り返し直しになり、読んでいる文字が
     // 動いてしまう（スマホで顕著）。かたまり単位で伸ばせば折り返しの変化が
@@ -436,15 +461,31 @@ function createStreamRenderer(
     },
 
     // 最終応答を表示キューへ渡し、未表示分と最後のフェードが完了してから
-    // streaming=false にする。高速応答でも末尾が一括表示されなくなる。
+    // streaming=false にする。高速応答でも末尾が一括表示されなくなる。未表示分は
+    // FINAL_REVEAL_WINDOW_MS 内に流し切るため、長い回答でも停止ボタンは長く残らない。
     // Feed the final response through the display queue and only mark it
-    // complete after the remaining text and fade have drained.
+    // complete after the remaining text and fade have drained. The remainder is
+    // flushed within FINAL_REVEAL_WINDOW_MS, so a long answer does not keep the
+    // stop button up for long.
     queueFinalization(finalText: string, persist = true, parts?: ChatMessagePart[]) {
       state.pendingFinalization = { finalText, persist, parts };
       if (!revealCompletionPromise) {
         revealCompletionPromise = new Promise<void>((resolve) => {
           resolveRevealCompletion = resolve;
         });
+      }
+      if (finalRevealDeadline === null) {
+        const now = timers.now();
+        finalRevealDeadline = now + FINAL_REVEAL_WINDOW_MS;
+        // 早送りは経過時間で進めるため、止まっていた間の時間を持ち込まない。
+        // The fast-forward follows elapsed time, so do not carry in idle time.
+        streamPace.lastTime = now;
+        finalRevealDeadlineTimerId = timers.setTimeout(() => {
+          finalRevealDeadlineTimerId = null;
+          if (!state.pendingFinalization) return;
+          cancelRender();
+          flushChunkRender();
+        }, FINAL_REVEAL_WINDOW_MS);
       }
       scheduleRender();
     },
@@ -468,6 +509,7 @@ function createStreamRenderer(
 
     dispose() {
       cancelRender();
+      clearFinalRevealDeadlineTimer();
       if (finalRevealTimerId !== null) {
         timers.clearTimeout(finalRevealTimerId);
         finalRevealTimerId = null;

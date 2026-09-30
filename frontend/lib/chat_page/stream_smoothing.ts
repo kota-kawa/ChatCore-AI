@@ -30,6 +30,21 @@ const MIN_RATE_CHARS_PER_MS = 0.05;
 export const MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND = 120;
 const MAX_RATE_CHARS_PER_MS = MAX_STREAM_REVEAL_RATE_CHARS_PER_SECOND / 1000;
 
+// 完了通知（done）を受けてから、未表示の残りをすべて表示し切るまでの時間。
+// 通常の上限（120文字/秒）のままだと長い回答では表示が終わるまで数分かかり、
+// 生成が済んでいるのに停止ボタンと生成中表示が残り続ける。完了後は演出よりも
+// 「終わったことが伝わる」ことを優先し、この時間内に残りを流し切る。完了前の
+// 表示速度は変えない。このあとに最後の語のフェード待ち（約 0.6 秒）が入るため、
+// 停止ボタンが戻るまでは done から合計で約 1.2 秒になる。
+// Time allotted to reveal everything still hidden once "done" has arrived. At
+// the normal cap (120 chars/s) a long answer would take minutes to finish,
+// leaving the stop button and busy state on for a generation that is already
+// over. After completion, telling the user it is finished matters more than
+// the pacing effect, so the remainder is flushed within this window. The pace
+// before completion is unchanged. The final word's fade wait (about 0.6s)
+// follows, so the stop button returns about 1.2s after "done" in total.
+export const FINAL_REVEAL_WINDOW_MS = 600;
+
 // 1回の更新で進めてよい時間の上限。タブ非表示明けなどの巨大なdtで一気に
 // 進んでしまわないようにする。
 // Cap on the elapsed time per update so a huge dt (e.g. after the tab was
@@ -79,6 +94,34 @@ export function advanceStreamPace(pace: StreamPace, targetLength: number, now: n
     MAX_RATE_CHARS_PER_MS,
   );
   pace.length = Math.min(targetLength, pace.length + rate * dt);
+  return Math.floor(pace.length);
+}
+
+// 完了後の表示位置を1フレーム分進め、締め切り（deadline）までに全文へ届くようにする。
+// 通常の等速ペースより遅くならないよう、通常ペースと「残りを締め切りまでに等速で
+// 流す速度」の速い方を採る。経過時間で進めるため、rAFが間引かれても締め切りを
+// 過ぎた時点で全文になる。
+// Advance the pace by one frame after completion so the whole text is visible by
+// the deadline. It never runs slower than the normal pace: the faster of the
+// normal step and "finish the remainder at a constant speed by the deadline"
+// wins. Progress follows elapsed time, so even throttled frames reach the full
+// text once the deadline has passed.
+export function advanceStreamPaceToFinish(
+  pace: StreamPace,
+  targetLength: number,
+  now: number,
+  deadline: number,
+): number {
+  const elapsed = Math.max(now - pace.lastTime, 0);
+  const normalLength = advanceStreamPace(pace, targetLength, now);
+  if (targetLength <= pace.length) return normalLength;
+
+  const remainingMs = deadline - now;
+  const forcedLength =
+    remainingMs <= 0
+      ? targetLength
+      : pace.length + (targetLength - pace.length) * Math.min(elapsed / (remainingMs + elapsed), 1);
+  pace.length = Math.min(targetLength, Math.max(pace.length, forcedLength));
   return Math.floor(pace.length);
 }
 

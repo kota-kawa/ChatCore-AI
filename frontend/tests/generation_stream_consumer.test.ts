@@ -104,6 +104,143 @@ test("streamed text is revealed gradually instead of appearing all at once", asy
   await settleStream(consuming, clock);
 });
 
+// 仮想フレームを進めながら、上限時間までに決着するかを返す。settleStream と違い、
+// 決着しなくても待ち続けない（退行時にテストが固まらない）。
+// Drives virtual frames up to a time limit and reports whether the promise
+// settled. Unlike settleStream it never waits forever, so a regression fails
+// the assertion instead of hanging the test.
+async function driveWithin<T>(promise: Promise<T>, clock: FakeClock, limitMs: number, withFrames = true) {
+  let result: { value: T } | null = null;
+  void promise.then((value) => {
+    result = { value };
+  });
+  const startedAt = clock.now();
+  while (!result && clock.now() - startedAt < limitMs) {
+    await flushMicrotasks();
+    if (withFrames) clock.runFrames();
+    clock.advance(60);
+    await flushMicrotasks();
+  }
+  return { settled: result !== null, value: (result as { value: T } | null)?.value, elapsedMs: clock.now() - startedAt };
+}
+
+// done を受けたら、長い回答でも短い時間で全文を出し切り、呼び出し側へ制御を返す。
+// 通常の上限（120文字/秒）のままだと 20,000 文字で約 167 秒かかり、停止ボタンが
+// 生成完了後もその間ずっと残っていた。
+// After "done", even a very long answer is fully revealed within a short window
+// and control returns to the caller. At the normal 120 chars/s cap, 20,000
+// characters took about 167s, keeping the stop button up long after the
+// generation was over.
+test("a long answer finishes within about a second of done instead of trickling out", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+
+  const longAnswer = "あ".repeat(20_000);
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: longAnswer }),
+    sseBlock(2, "done", { response: longAnswer }),
+  ]);
+
+  // 早送り 600ms + 最後の語のフェード待ち 620ms + テストの刻み幅。
+  // 600ms fast-forward + 620ms final-fade wait + the test's step granularity.
+  const driven = await driveWithin(consumeGenerationStream(stream.response, recorder.host), clock, 1_400);
+
+  assert.equal(driven.settled, true, "the stream must resolve within ~1.4s of done");
+  assert.equal(driven.value, true);
+  const answers = assistantMessages(recorder.messages());
+  assert.equal(answers[0].text, longAnswer);
+  assert.equal(answers[0].streaming, false);
+  assert.deepEqual(recorder.persistedAnswers(), [{ text: longAnswer, sender: "bot" }]);
+});
+
+// 先頭のブロックを返したあと、release() が呼ばれるまで読み出しを止める。done を
+// 「文字送りの途中で」届けるために使う。
+// Serves the leading blocks, then holds the read until release() is called, so
+// that "done" can arrive in the middle of a paced reveal.
+function createGatedStream(leading: string[]) {
+  const encoder = new TextEncoder();
+  let index = 0;
+  let release: (block: string) => void = () => undefined;
+  const gate = new Promise<string>((resolve) => {
+    release = resolve;
+  });
+  const reader = {
+    read: async () => {
+      if (index < leading.length) {
+        index += 1;
+        return { value: encoder.encode(leading[index - 1]), done: false };
+      }
+      if (index === leading.length) {
+        index += 1;
+        return { value: encoder.encode(await gate), done: false };
+      }
+      return { value: undefined, done: true };
+    },
+    cancel: async () => undefined,
+  };
+  const response = {
+    ok: true,
+    status: 200,
+    headers: { get: () => "text/event-stream" },
+    body: { getReader: () => reader },
+  } as unknown as Response;
+  return { response, release };
+}
+
+// 通常の文字送りで途中まで進んだあとに done が来ても、done から一定時間で終わる。
+// A done that lands mid-reveal still finishes within a fixed time from done.
+test("done in the middle of a paced reveal fast-forwards the remainder", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+
+  const longAnswer = "これは途中で完了通知を受ける長い回答です。".repeat(500);
+  const gated = createGatedStream([sseBlock(1, "chunk", { text: longAnswer })]);
+  const consuming = consumeGenerationStream(gated.response, recorder.host);
+  await flushMicrotasks();
+
+  // done 前は通常の上限付き速度のまま（2秒で 240 文字以下）。
+  // Before done the capped pace applies (at most 240 chars in 2 seconds).
+  for (let elapsed = 0; elapsed < 2_000; elapsed += 16) {
+    clock.runFrames();
+    clock.advance(16);
+  }
+  clock.runFrames();
+  const revealedBeforeDone = assistantMessages(recorder.messages())[0].text.length;
+  assert.ok(revealedBeforeDone > 0 && revealedBeforeDone <= 240, `pre-done pace changed: ${revealedBeforeDone}`);
+
+  gated.release(sseBlock(2, "done", { response: longAnswer }));
+  const driven = await driveWithin(consuming, clock, 1_400);
+
+  assert.equal(driven.settled, true, "the stream must resolve within ~1.4s of done");
+  assert.equal(driven.value, true);
+  assert.equal(assistantMessages(recorder.messages())[0].text, longAnswer);
+  assert.equal(assistantMessages(recorder.messages())[0].streaming, false);
+});
+
+// rAF が止まる非表示タブでも、締め切りのタイマーで描画が進み完了する。
+// In a hidden tab rAF is paused; the deadline timer still drives the finish.
+test("a long answer still finishes after done when animation frames never fire", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+
+  const longAnswer = "い".repeat(20_000);
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: longAnswer }),
+    sseBlock(2, "done", { response: longAnswer }),
+  ]);
+
+  // フレームを進めない = rAF が一度も発火しない。
+  // Not running frames means rAF never fires.
+  const driven = await driveWithin(consumeGenerationStream(stream.response, recorder.host), clock, 2_000, false);
+
+  assert.equal(driven.settled, true, "the deadline timer must finish the reveal without rAF");
+  assert.equal(assistantMessages(recorder.messages())[0].text, longAnswer);
+  assert.equal(assistantMessages(recorder.messages())[0].streaming, false);
+});
+
 // ---------------------------------------------------------------------------
 // 途中で切れたストリーム / a stream that ends mid-message
 // ---------------------------------------------------------------------------
