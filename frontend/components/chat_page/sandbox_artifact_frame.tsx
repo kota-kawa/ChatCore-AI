@@ -580,7 +580,6 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     };
   }, [artifact.title]);
 
-  const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
   // navigation_blocked はフレームを破棄した後の専用文言、blank も別の文言、それ以外の
   // 失敗（例外・CSP遮断・タイムアウト）は同じ「実行できなかった」文言でまとめる。
   // navigation_blocked gets its own message once the frame has been destroyed, blank gets
@@ -596,16 +595,10 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   return (
     <section className="sandbox-artifact" aria-label={artifact.title}>
       <header className="sandbox-artifact__header">
-        <div className="sandbox-artifact__heading">
-          <h3 className="sandbox-artifact__title">{artifact.title}</h3>
-          {artifact.description ? (
-            <p className="sandbox-artifact__description">{artifact.description}</p>
-          ) : null}
-        </div>
-        <span className="sandbox-artifact__badge">
-          <span className="sandbox-artifact__badge-dot" aria-hidden="true" />
-          {badgeLabel}
-        </span>
+        <h3 className="sandbox-artifact__title">{artifact.title}</h3>
+        {artifact.description ? (
+          <p className="sandbox-artifact__description">{artifact.description}</p>
+        ) : null}
       </header>
       {navigationBlocked ? (
         // フレームを破棄する: iframeをDOMから外し、そのブラウジングコンテキスト（と中で
