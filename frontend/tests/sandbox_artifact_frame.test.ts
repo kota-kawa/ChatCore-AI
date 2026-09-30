@@ -209,10 +209,10 @@ test("buildSandboxArtifactSrcDoc supplies local OrbitControls compatibility", ()
   assert.doesNotMatch(srcDoc, /three\/examples\/jsm\/controls/);
 });
 
-test("SandboxArtifactFrame shows a badge reflecting the artifact type", () => {
+test("SandboxArtifactFrame keeps the header to the title without a type label", () => {
   const markup2d = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact }));
-  assert.match(markup2d, /sandbox-artifact__badge/);
-  assert.match(markup2d, /Generated UI/);
+  assert.match(markup2d, /class="sandbox-artifact__title">[^<]+</);
+  assert.doesNotMatch(markup2d, /Generated UI|sandbox-artifact__badge/);
 
   const markup3d = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, {
     artifact: {
@@ -221,7 +221,7 @@ test("SandboxArtifactFrame shows a badge reflecting the artifact type", () => {
       js: "const scene = new THREE.Scene();",
     },
   }));
-  assert.match(markup3d, /Generated 3D/);
+  assert.doesNotMatch(markup3d, /Generated 3D|sandbox-artifact__badge/);
 });
 
 test("SandboxArtifactFrame clamps oversized requested height", () => {
