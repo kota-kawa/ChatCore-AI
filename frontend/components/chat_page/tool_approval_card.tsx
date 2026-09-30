@@ -136,10 +136,12 @@ type Props = {
 };
 
 // チャットの書き込みツールの承認カード。選択ボタンと同じ面とピルで、実行する内容のプレビューと
-// 「1度だけ承認／常に承認／拒否」を出す。決まった後は状態と結果への導線だけを残す。
+// 「承認／拒否」の二択を出す。「常に承認」はカードでは選ばせず、既存の付与は設定の「チャットの権限」で
+// 取り消せる。決まった後は状態と結果への導線だけを残す。
 // Approval card for a chat write tool. It shares the choice buttons' panel and pills, showing a preview
-// of what will run and "approve once / always approve / deny"; once decided, only the outcome and a
-// link to the result remain.
+// of what will run and a two-way "approve / deny". The card never offers "always approve"; existing
+// grants stay revocable under Chat permissions in Settings. Once decided, only the outcome and a link
+// to the result remain.
 function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Props) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -252,18 +254,8 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
               disabled={inactive || approvalBlocked}
               onClick={() => void decide("approve_once")}
             >
-              {approval.always_allowed ? t("chat.toolApproval.approveOnce") : t("chat.toolApproval.approve")}
+              {t("chat.toolApproval.approve")}
             </button>
-            {approval.always_allowed ? (
-              <button
-                type="button"
-                className="interactive-button"
-                disabled={inactive || approvalBlocked}
-                onClick={() => void decide("approve_always")}
-              >
-                {t("chat.toolApproval.approveAlways")}
-              </button>
-            ) : null}
             <button
               type="button"
               className="interactive-button"
@@ -275,8 +267,6 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
           </div>
           {submitting !== null ? (
             <div className="interactive-buttons-hint" role="status">{t("chat.toolApproval.deciding")}</div>
-          ) : approval.always_allowed ? (
-            <div className="interactive-buttons-hint">{t("chat.toolApproval.alwaysHint")}</div>
           ) : null}
         </>
       ) : (
