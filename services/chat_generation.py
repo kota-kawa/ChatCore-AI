@@ -220,7 +220,7 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
 
 def _contains_unconfirmed_context_facts(payload: dict[str, Any] | None) -> bool:
     """Whether a personal-knowledge result contains facts the owner has not confirmed."""
-    if not payload or payload.get("status") != "ok":
+    if not payload:
         return False
     facts = payload.get("context_facts")
     if not isinstance(facts, list):
@@ -2199,6 +2199,14 @@ class ChatGenerationJob:
                 status="prior_turn",
             )
         for selected_trace in self._selected_reference_trace:
+            if (
+                selected_trace.source == PERSONAL_KNOWLEDGE_SOURCE
+                and _contains_unconfirmed_context_facts(selected_trace.payload)
+            ):
+                # 選択済み参照と、検索0件時に注入する概観にもツール検索と同じ自動承認ゲートを適用する。
+                # Selected references and the no-match overview enter the prompt before the job
+                # starts; they must hold the same auto-approval gate as tool-driven lookups.
+                state.untrusted_input_ingested = True
             selected_refs = evidence_store.add_reference_payload(
                 selected_trace.payload,
                 source_type=selected_trace.source,
