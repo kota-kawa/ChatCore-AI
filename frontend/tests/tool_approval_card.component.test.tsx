@@ -78,40 +78,36 @@ afterEach(() => {
 });
 
 describe("ToolApprovalCard", () => {
-  it("offers approve once / always approve / deny and sends one decision only", async () => {
+  it("offers only approve / deny and sends one decision only", async () => {
     let resolveDecision: () => void = () => {};
     const onDecide = vi.fn(() => new Promise<void>((resolve) => { resolveDecision = resolve; }));
     render(<ToolApprovalCard approval={approval()} onDecide={onDecide} />);
 
     expect(screen.getByRole("group", { name: "メモを作成します" })).toBeInTheDocument();
-    const once = screen.getByRole("button", { name: "1度だけ承認" });
-    const always = screen.getByRole("button", { name: "常に承認" });
-    const deny = screen.getByRole("button", { name: "拒否" });
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual(["承認", "拒否"]);
+    const [approve, deny] = buttons;
+    expect(screen.queryByText(/設定の「チャットの権限」/)).not.toBeInTheDocument();
 
-    fireEvent.click(always);
-    fireEvent.click(once);
+    fireEvent.click(approve);
     fireEvent.click(deny);
 
     expect(onDecide).toHaveBeenCalledTimes(1);
-    expect(onDecide).toHaveBeenCalledWith("a1", "approve_always");
-    expect(once).toBeDisabled();
-    expect(always).toBeDisabled();
+    expect(onDecide).toHaveBeenCalledWith("a1", "approve_once");
+    expect(approve).toBeDisabled();
     expect(deny).toBeDisabled();
     expect(screen.getByText("処理しています…")).toBeInTheDocument();
 
     await act(async () => resolveDecision());
-    expect(once).toBeEnabled();
+    expect(approve).toBeEnabled();
   });
 
-  it("shows only approve and deny for a tool that cannot be always approved", () => {
+  it("sends deny from the deny button", () => {
     const onDecide = vi.fn().mockResolvedValue(undefined);
     render(<ToolApprovalCard approval={approval({ always_allowed: false })} onDecide={onDecide} />);
 
-    expect(screen.queryByRole("button", { name: "常に承認" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "1度だけ承認" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "承認" }));
-    expect(onDecide).toHaveBeenCalledWith("a1", "approve_once");
-    expect(screen.queryByText(/設定の「チャットの権限」/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "拒否" }));
+    expect(onDecide).toHaveBeenCalledWith("a1", "deny");
   });
 
   it("keeps the buttons disabled while generating or once the user wrote after the reply", () => {
@@ -228,7 +224,7 @@ describe("ToolApprovalCard", () => {
     expect(screen.getByText("このターンで読んだ非公開の内容（メモ・自分用プロンプト・個人Skill・プロフィールなど）と一致する箇所があります。公開してよい内容か確かめてください。")).toBeInTheDocument();
     expect(screen.getByText("一致した箇所")).toBeInTheDocument();
     expect(screen.getByText("利用者の非公開メモから一致した文")).toBeInTheDocument();
-    const approve = screen.getByRole("button", { name: "1度だけ承認" });
+    const approve = screen.getByRole("button", { name: "承認" });
     expect(approve).toBeDisabled();
     expect(screen.getByRole("button", { name: "拒否" })).toBeEnabled();
     fireEvent.click(approve);
