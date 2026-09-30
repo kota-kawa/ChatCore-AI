@@ -9,10 +9,13 @@ from typing import Any
 from sqlalchemy import (
     and_,
     bindparam,
+    case,
     column,
     exists,
     func,
     literal,
+    null,
+    or_,
     select,
     tuple_,
     update,
@@ -473,10 +476,10 @@ class ContextFactRepository:
     ) -> dict[str, Any]:
         """Update a fact under optimistic locking.
 
-        Editing title, content, or type is a change to what the fact says, so it sets
-        ``last_confirmed_at`` to now when the owner did it and clears it otherwise (an MCP
-        client rewrote it and the owner has not seen it).  Status and importance changes,
-        including deprecate and restore, leave the confirmation alone.
+        Changing title, content, or type sets ``last_confirmed_at`` to now when the owner
+        made the change and clears it otherwise (an MCP client rewrote it and the owner has
+        not seen it). Re-sending unchanged fields, status changes, and importance changes
+        leave confirmation alone.
         """
         if status == "active":
             await self._lock_user_writes(user_id)
@@ -494,15 +497,29 @@ class ContextFactRepository:
                 raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
         changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
-        if title is not None or content is not None or fact_type is not None:
-            changes["embedding_status"] = "pending"
-            changes["last_confirmed_at"] = func.current_timestamp() if confirmed_by_owner else None
+        content_change_conditions = []
         if title is not None:
             changes["title"] = title
+            content_change_conditions.append(ContextFact.title.is_distinct_from(title))
         if content is not None:
             changes["content"] = content
+            content_change_conditions.append(ContextFact.content.is_distinct_from(content))
         if fact_type is not None:
             changes["fact_type"] = fact_type
+            content_change_conditions.append(ContextFact.fact_type.is_distinct_from(fact_type))
+        if content_change_conditions:
+            content_changed = or_(*content_change_conditions)
+            changes["embedding_status"] = case(
+                (content_changed, "pending"),
+                else_=ContextFact.embedding_status,
+            )
+            changes["last_confirmed_at"] = case(
+                (
+                    content_changed,
+                    func.current_timestamp() if confirmed_by_owner else null(),
+                ),
+                else_=ContextFact.last_confirmed_at,
+            )
         if status is not None:
             changes["status"] = status
         if importance is not None:

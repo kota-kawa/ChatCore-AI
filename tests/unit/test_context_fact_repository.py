@@ -214,20 +214,42 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_owner_content_edit_confirms_now(self):
         sql, _ = await self._update(content="New", confirmed_by_owner=True)
 
-        self.assertIn("last_confirmed_at=CURRENT_TIMESTAMP", sql.replace(" ", ""))
+        self.assertIn(
+            "CASEWHEN(context_facts.contentISDISTINCTFROM",
+            sql.replace(" ", ""),
+        )
+        self.assertIn("THENCURRENT_TIMESTAMPELSEcontext_facts.last_confirmed_atEND", sql.replace(" ", ""))
 
     async def test_mcp_content_edit_clears_confirmation(self):
-        sql, params = await self._update(content="New")
+        sql, _ = await self._update(content="New")
 
-        self.assertNotIn("last_confirmed_at=CURRENT_TIMESTAMP", sql.replace(" ", ""))
-        self.assertIsNone(params["last_confirmed_at"])
+        self.assertIn("THENNULL", sql.replace(" ", ""))
+        self.assertIn("ELSEcontext_facts.last_confirmed_atEND", sql.replace(" ", ""))
+
+    async def test_resending_unchanged_fact_fields_does_not_confirm_or_reembed(self):
+        sql, params = await self._update(
+            title="Chat-Core",
+            content="Context vault foundation",
+            fact_type="project",
+            importance=90,
+            confirmed_by_owner=True,
+        )
+
+        normalized_sql = sql.replace(" ", "")
+        self.assertIn("context_facts.titleISDISTINCTFROM", normalized_sql)
+        self.assertIn("context_facts.contentISDISTINCTFROM", normalized_sql)
+        self.assertIn("context_facts.fact_typeISDISTINCTFROM", normalized_sql)
+        self.assertIn("ELSEcontext_facts.last_confirmed_atEND", normalized_sql)
+        self.assertIn("ELSEcontext_facts.embedding_statusEND", normalized_sql)
+        self.assertEqual(params["title"], "Chat-Core")
+        self.assertEqual(params["content"], "Context vault foundation")
 
     async def test_title_and_type_edits_count_as_content_edits(self):
-        _, title_params = await self._update(title="New title")
-        _, type_params = await self._update(fact_type="profile")
+        title_sql, _ = await self._update(title="New title")
+        type_sql, _ = await self._update(fact_type="profile")
 
-        self.assertIn("last_confirmed_at", title_params)
-        self.assertIn("last_confirmed_at", type_params)
+        self.assertIn("context_facts.title IS DISTINCT FROM", title_sql)
+        self.assertIn("context_facts.fact_type IS DISTINCT FROM", type_sql)
 
     async def test_status_and_importance_changes_leave_confirmation_alone(self):
         for kwargs in ({"importance": 90}, {"importance": 90, "confirmed_by_owner": True}):
