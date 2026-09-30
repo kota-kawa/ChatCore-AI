@@ -306,7 +306,9 @@ class SharedContentRepository:
                   SELECT
                     p.id, p.title, p.category, p.content, p.description,
                     COALESCE(u.username, p.author, 'ユーザー') AS author,
-                    p.input_examples, p.output_examples, p.content_format,
+                    p.user_id AS author_user_id,
+                    COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
+                    p.input_examples, p.output_examples, p.ai_model, p.content_format,
                     p.media_type, p.attributes, p.attachments, p.featured_at,
                     COALESCE(pvc.view_count, 0) AS view_count,
                     {lexical_rank} AS lexical_rank,

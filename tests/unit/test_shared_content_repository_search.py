@@ -115,6 +115,20 @@ class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("<= :semantic_max_distance", sql)
         self.assertIn("OR (p.embedding_vector IS NOT NULL", sql)
 
+    async def test_results_carry_the_same_author_fields_as_the_feed(self):
+        session = MagicMock()
+        row = {"id": 1, "author_user_id": 7, "author_avatar_url": "/static/user-icon.png", "ai_model": "gpt"}
+        session.execute = AsyncMock(return_value=_result(rows=[row]))
+
+        result = await _search(session, query="architecture")
+
+        sql = str(session.execute.await_args.args[0])
+        self.assertIn("p.user_id AS author_user_id", sql)
+        self.assertIn("COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url", sql)
+        self.assertIn("p.ai_model", sql)
+        self.assertEqual(result["rows"][0]["author_user_id"], 7)
+        self.assertEqual(result["rows"][0]["author_avatar_url"], "/static/user-icon.png")
+
 
 class SharedContentRepositoryRecommendationTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_recommendations_rank_by_anchor_distance_then_category_then_views(self):

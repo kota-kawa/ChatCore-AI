@@ -44,6 +44,26 @@ class PromptSearchTestCase(unittest.TestCase):
         row.update(overrides)
         return row
 
+    def test_search_keeps_author_fields_for_the_card(self):
+        service = StubSharedContentService(
+            {
+                "rows": [self._row(author_user_id=7, author_avatar_url="/media/avatars/a.png", ai_model="gpt")],
+                "total": 1,
+                "has_next": False,
+            }
+        )
+
+        with (
+            patch("blueprints.prompt_share.prompt_search.SharedContentService", return_value=service),
+            patch.object(prompt_search, "_embed_search_query", return_value=None),
+        ):
+            payload = asyncio.run(_search_public_prompts("sample", 1, 20, 9))
+
+        prompt = payload["prompts"][0]
+        self.assertEqual(prompt["author_user_id"], 7)
+        self.assertEqual(prompt["author_avatar_url"], "/media/avatars/a.png")
+        self.assertEqual(prompt["ai_model"], "gpt")
+
     def test_search_maps_service_rows_and_pagination(self):
         service = StubSharedContentService(
             {"rows": [self._row(lexical_rank=3, semantic_distance=0.2)], "total": 55, "has_next": True}
