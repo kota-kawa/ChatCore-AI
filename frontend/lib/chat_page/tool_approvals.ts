@@ -55,24 +55,3 @@ export function findToolApproval(messages: UiChatMessage[], approvalId: string):
   }
   return undefined;
 }
-
-// 承認の決定を受けて、決まった文面で会話を自動的に続けるか。最新のアシスタント発言にある
-// カードがすべて決まり、1件以上が成功したときだけ続ける。全部拒否・失敗なら利用者の次の発言を待つ。
-// 決めたカードが最新の発言のものでない、後ろにすでに利用者の発言がある場合も続けない。
-// Whether to continue the conversation with the fixed prompt after a decision. Continue only when
-// every card on the latest assistant message is settled and at least one succeeded; when all were
-// denied or failed, wait for the user. Never continue for a card on an older message or once the
-// user has already written after it.
-export function shouldAutoContinueAfterApproval(messages: UiChatMessage[], decidedApprovalId: string): boolean {
-  let latestAssistant: UiChatMessage | undefined;
-  for (const message of messages) {
-    if (message.sender === "assistant") latestAssistant = message;
-    if (message.sender === "user") latestAssistant = undefined;
-  }
-  if (!latestAssistant) return false;
-
-  const approvals = approvalsOf(latestAssistant);
-  if (!approvals.some((approval) => approval.id === decidedApprovalId)) return false;
-  if (approvals.some((approval) => approval.status === "pending")) return false;
-  return approvals.some((approval) => approval.status === "succeeded");
-}

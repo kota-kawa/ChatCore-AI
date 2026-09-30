@@ -23,7 +23,6 @@ vi.mock("../contexts/locale_context", () => ({
     setLocale: setLocaleMock,
     t: (key: string) => {
       if (key === "chat.toolApproval.decisionFailed") return "承認を処理できませんでした。";
-      if (key === "chat.toolApproval.continuePrompt") return "承認した操作が実行されました。結果を踏まえて続けてください。";
       return key;
     },
   }),
@@ -93,15 +92,14 @@ function conversation(approvals: ToolApprovalApi[]): UiChatMessage[] {
 
 // 実画面と同じく、applyToolApproval でメッセージを差し替えて再描画する小さな器
 // A tiny harness that, like the real screen, re-renders with the messages applyToolApproval produced
-function renderApprovals(initialMessages: UiChatMessage[], isGenerating = false) {
+function renderApprovals(initialMessages: UiChatMessage[]) {
   let messages = initialMessages;
-  const sendMessage = vi.fn();
   const applyToolApproval = vi.fn((next: ToolApprovalApi) => {
     messages = replaceToolApprovalInMessages(messages, next);
   });
   const hook = renderHook(
     (props: { messages: UiChatMessage[] }) =>
-      useChatToolApprovals({ messages: props.messages, isGenerating, applyToolApproval, sendMessage }),
+      useChatToolApprovals({ messages: props.messages, applyToolApproval }),
     { initialProps: { messages } },
   );
   const decide = async (
@@ -114,7 +112,7 @@ function renderApprovals(initialMessages: UiChatMessage[], isGenerating = false)
     });
     hook.rerender({ messages });
   };
-  return { decide, sendMessage, applyToolApproval, getMessages: () => messages };
+  return { decide, applyToolApproval, getMessages: () => messages };
 }
 
 beforeEach(() => {
@@ -127,16 +125,25 @@ beforeEach(() => {
 });
 
 describe("useChatToolApprovals", () => {
-  it("applies the returned card and continues once the only card succeeded", async () => {
-    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "succeeded", decision: "once", result: { target_id: 4 } })));
-    const { decide, sendMessage, applyToolApproval } = renderApprovals(conversation([approval()]));
+  it.each([
+    ["approve_once", "succeeded"],
+    ["deny", "denied"],
+  ] as const)("applies the returned card on %s without adding a chat message", async (decision, status) => {
+    decideToolApprovalMock.mockResolvedValue(decided(approval({ status, decision: decision === "deny" ? "deny" : "once" })));
+    const initial = conversation([approval()]);
+    const { decide, applyToolApproval, getMessages } = renderApprovals(initial);
 
-    await decide("a1", "approve_once");
+    await decide("a1", decision);
 
-    expect(decideToolApprovalMock).toHaveBeenCalledWith("a1", "approve_once", "承認を処理できませんでした。");
+    expect(decideToolApprovalMock).toHaveBeenCalledWith("a1", decision, "承認を処理できませんでした。");
     expect(applyToolApproval).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith("承認した操作が実行されました。結果を踏まえて続けてください。");
+    // 決定はカードの状態を変えるだけで、利用者の発言も新しいメッセージも増やさない
+    // A decision only changes the card; it adds neither a user message nor any other message
+    const messages = getMessages();
+    expect(messages).toHaveLength(initial.length);
+    expect(messages.filter((message) => message.sender === "user")).toHaveLength(1);
+    const card = messages[1].parts?.find((part) => part.type === "tool_approval");
+    expect(card?.type === "tool_approval" ? card.approval.status : null).toBe(status);
   });
 
   it("applies locale and theme preferences only after a successful profile update", async () => {
@@ -239,47 +246,29 @@ describe("useChatToolApprovals", () => {
     );
   });
 
-  it("waits for the other card before continuing", async () => {
+  it("does not add a chat message after settling every card of a reply", async () => {
+    const initial = conversation([approval(), approval({ id: "a2" })]);
+    const { decide, getMessages } = renderApprovals(initial);
+
     decideToolApprovalMock.mockResolvedValueOnce(decided(approval({ status: "succeeded", decision: "once" })));
-    const { decide, sendMessage } = renderApprovals(conversation([approval(), approval({ id: "a2" })]));
-
     await decide("a1", "approve_once");
-    expect(sendMessage).not.toHaveBeenCalled();
-
     decideToolApprovalMock.mockResolvedValueOnce(decided(approval({ id: "a2", status: "denied", decision: "deny" })));
     await decide("a2", "deny");
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-  });
 
-  it("does not continue when every card was denied", async () => {
-    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "denied", decision: "deny" })));
-    const { decide, sendMessage } = renderApprovals(conversation([approval()]));
-
-    await decide("a1", "deny");
-
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
-
-  it("does not continue while a reply is generating", async () => {
-    decideToolApprovalMock.mockResolvedValue(decided(approval({ status: "succeeded", decision: "once" })));
-    const { decide, sendMessage } = renderApprovals(conversation([approval()]), true);
-
-    await decide("a1", "approve_once");
-
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(getMessages()).toHaveLength(initial.length);
+    expect(getMessages().filter((message) => message.sender === "user")).toHaveLength(1);
   });
 
   it("marks the card expired when the server says it expired, and tells the user", async () => {
     const { ToolApprovalDecisionError } = await import("../lib/chat_page/tool_approval_api");
     decideToolApprovalMock.mockRejectedValue(new ToolApprovalDecisionError("承認の期限が切れています。", "approval_expired", 409));
-    const { decide, sendMessage, getMessages } = renderApprovals(conversation([approval()]));
+    const { decide, getMessages } = renderApprovals(conversation([approval()]));
 
     await decide("a1", "approve_once");
 
     const card = getMessages()[1].parts?.find((part) => part.type === "tool_approval");
     expect(card?.type === "tool_approval" ? card.approval.status : null).toBe("expired");
     expect(showToastMock).toHaveBeenCalledWith("承認の期限が切れています。", { variant: "error" });
-    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("keeps the card pending on other failures so the user can try again", async () => {
@@ -299,14 +288,13 @@ describe("useChatToolApprovals", () => {
     decideToolApprovalMock.mockRejectedValue(
       new ToolApprovalDecisionError("既に決定されています。", "approval_already_decided", 409, settledElsewhere),
     );
-    const { decide, sendMessage, getMessages } = renderApprovals(conversation([approval()]));
+    const { decide, getMessages } = renderApprovals(conversation([approval()]));
 
     await decide("a1", "approve_once");
 
     const card = getMessages()[1].parts?.find((part) => part.type === "tool_approval");
     expect(card?.type === "tool_approval" ? card.approval.status : null).toBe("denied");
     expect(showToastMock).toHaveBeenCalledWith("既に決定されています。", { variant: "error" });
-    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("leaves the card as is on a 409 conflict without a card in the response", async () => {

@@ -181,15 +181,9 @@ function ChatMainSectionComponent() {
     handleSendMessage(t("chat.continueAnswerPrompt"));
   }, [handleSendMessage, t]);
 
-  // 承認カードの決定を送り、全部決まって1件以上成功したら通常の送信経路で会話を続ける。
-  // Send approval-card decisions and, once all are settled with at least one success, continue the
-  // conversation through the ordinary send path.
-  const { handleToolApprovalDecide } = useChatToolApprovals({
-    messages,
-    isGenerating,
-    applyToolApproval,
-    sendMessage: handleSendMessage,
-  });
+  // 承認カードの決定を送る。決定してもチャットは送信しない。
+  // Send approval-card decisions; a decision never sends a chat message.
+  const { handleToolApprovalDecide } = useChatToolApprovals({ messages, applyToolApproval });
 
   // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
