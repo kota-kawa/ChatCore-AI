@@ -121,7 +121,7 @@ export const enMessages = {
   "chat.toolApproval.openMySkills": "Open personal Skills",
   "chat.toolApproval.openProfileSettings": "Open profile settings",
   "chat.toolApproval.warning.shared_memo": "This memo is shared. Changing it also changes what people with the link see.",
-  "chat.toolApproval.warning.untrusted_input_in_turn": "This reply read outside content (web pages, attachments and so on). Make sure the change is one you intended.",
+  "chat.toolApproval.warning.untrusted_input_in_turn": "This reply used outside content or saved facts you have not confirmed. Make sure the change is one you intended.",
   "chat.toolApproval.warning.private_text_in_public_post": "This matches private content read this turn (memos, saved prompts, personal Skills, your profile, and so on). Make sure it is fine to publish.",
   "chat.toolApproval.ackPrivateOverlap": "I checked this and it is fine to publish.",
   "chat.toolApproval.preview.title": "Title",

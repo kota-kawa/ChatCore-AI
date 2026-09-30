@@ -143,11 +143,10 @@ class ChatTurnRunState:
     # 承認待ちの回答へ渡す、サーバーが作った要約（ツール名と対象の題名の JSON）。
     # Server-built summaries (JSON of tool name and target title) handed to the pending answer.
     approval_pending_summaries: list[str] = field(default_factory=list)
-    # 外部の内容（Web 検索・ページ本文・貼り付け URL・添付・他人の公開投稿）を読んだか。
+    # 外部の内容、または本人が未確認のパーソナル・コンテキストを読んだか。
     # 立つと「常に承認」でも自動では実行せず、カードに理由を出す。
-    # Whether external content (web search, page bodies, pasted URLs, attachments, other people's
-    # public posts) was read. Once set, "always approve" no longer runs writes on its own and the
-    # card says why.
+    # Whether external content or owner-unconfirmed personal context was read. Once set,
+    # "always approve" no longer runs writes on its own and the card says why.
     untrusted_input_ingested: bool = False
 
 

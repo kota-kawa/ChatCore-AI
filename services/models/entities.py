@@ -167,12 +167,13 @@ class ChatToolApproval(Base):
     """One approval card for a chat write tool: proposed, then run only after the user decides.
 
     arguments は提案時の引数、preview はカードに出す変更内容、target_ref は提案時の対象
-    （メモの ID・版・共有中か）とターンの文脈（外部の内容を読んだか）。回答を保存するまで
+    （メモの ID・版・共有中か）とターンの文脈（外部の内容、または本人未確認の
+    情報を読んだか）。回答を保存するまで
     assistant_message_id は NULL で、承認 API はその間の行を受け付けない。
     arguments holds the proposed input, preview the change shown on the card, and target_ref
     the target as proposed (memo id, revision, whether it was shared) plus the turn context
-    (whether external content was read). assistant_message_id stays NULL until the reply is
-    saved, and the approval API refuses rows in that state.
+    (whether external or owner-unconfirmed content was read). assistant_message_id stays NULL
+    until the reply is saved, and the approval API refuses rows in that state.
     """
 
     __tablename__ = "chat_tool_approvals"

@@ -102,8 +102,8 @@ class ChatGenerationTelemetry:
     # 承認待ちのカードを残したターンか。ツールを外した回答で締めたことを表す。
     # Whether the turn left a pending approval card and so closed with a tool-free answer.
     approval_pending_turn: bool = False
-    # 「常に承認」を付与済みでも、外部の内容を読んだターンなので手動のカードにしたか。
-    # Whether an "always approve" grant was held back because the turn had read external content.
+    # 「常に承認」を付与済みでも、外部または本人未確認の内容を読んだため手動のカードにしたか。
+    # Whether an "always approve" grant was held back because the turn read external or unconfirmed data.
     auto_approval_suppressed_by_untrusted_input: bool = False
     # 生成UIの5段階（判定・注入・抽出／検証・修復・実行）を、モデル別の成功率として
     # 集計できるようにする。理由コードは services/generative_ui_status.py の固定語彙のみ。

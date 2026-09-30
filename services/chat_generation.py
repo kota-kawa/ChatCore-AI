@@ -218,6 +218,16 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _contains_unconfirmed_context_facts(payload: dict[str, Any] | None) -> bool:
+    """Whether a personal-knowledge result contains facts the owner has not confirmed."""
+    if not payload:
+        return False
+    facts = payload.get("context_facts")
+    if not isinstance(facts, list):
+        return False
+    return any(not isinstance(fact, dict) or fact.get("confirmed") is not True for fact in facts)
+
+
 # 完了したターンにユーザーが読める回答があるかを判定する。検索画像だけ・トレースだけは回答ではない。
 # Decide whether a finished turn carries an answer the user can read; images or a trace alone are not one.
 def _has_user_facing_answer(
@@ -2048,7 +2058,7 @@ class ChatGenerationJob:
         turn_state: TurnState,
         evidence_store: EvidenceStore,
         trace_steps: list[TraceStep] | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         admitted = self._begin_lookup_tool_call(
             tool_call,
             tool_name=tool_name,
@@ -2059,7 +2069,7 @@ class ChatGenerationJob:
             turn_state=turn_state,
         )
         if admitted is None:
-            return
+            return None
         step, query = admitted
         # 受け付け判定を通った時点で search は None ではない。
         # Admission guarantees a callable search here.
@@ -2096,7 +2106,7 @@ class ChatGenerationJob:
                 trace_steps.append(
                     self._lookup_trace_step(event_prefix, {"status": "failed"}, query)
                 )
-            return
+            return None
 
         # 参照元が「検索できなかった」と返した場合も障害として扱う。0件として通すと、
         # UI もモデルも「該当なし」と伝えてしまう。
@@ -2123,7 +2133,7 @@ class ChatGenerationJob:
             current_messages.append(_tool_result_message(tool_call, payload))
             if trace_steps is not None:
                 trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
-            return
+            return payload
 
         self._publish(
             f"{event_prefix}_completed",
@@ -2138,6 +2148,7 @@ class ChatGenerationJob:
         current_messages.append(_tool_result_message(tool_call, payload))
         if trace_steps is not None and status != "already_searched":
             trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
+        return payload
 
     # ターン開始時の状態を組み立てる。既存の参照根拠と選択済み参照をここで取り込む。
     # Build the turn's starting state, seeding it with prior evidence and selected references.
@@ -2188,6 +2199,14 @@ class ChatGenerationJob:
                 status="prior_turn",
             )
         for selected_trace in self._selected_reference_trace:
+            if (
+                selected_trace.source == PERSONAL_KNOWLEDGE_SOURCE
+                and _contains_unconfirmed_context_facts(selected_trace.payload)
+            ):
+                # 選択済み参照と、検索0件時に注入する概観にもツール検索と同じ自動承認ゲートを適用する。
+                # Selected references and the no-match overview enter the prompt before the job
+                # starts; they must hold the same auto-approval gate as tool-driven lookups.
+                state.untrusted_input_ingested = True
             selected_refs = evidence_store.add_reference_payload(
                 selected_trace.payload,
                 source_type=selected_trace.source,
@@ -3102,7 +3121,7 @@ class ChatGenerationJob:
                 func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
                 and self._personal_knowledge_search is not None
             ):
-                self._run_lookup_tool_call(
+                lookup_payload = self._run_lookup_tool_call(
                     tc,
                     tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
                     search=self._personal_knowledge_search,
@@ -3116,6 +3135,10 @@ class ChatGenerationJob:
                     evidence_store=state.evidence_store,
                     trace_steps=state.web_search_trace_steps,
                 )
+                if _contains_unconfirmed_context_facts(lookup_payload):
+                    # MCP/import facts can be active without owner review. Treat them like
+                    # external input so "always approve" cannot turn one into a silent write.
+                    state.untrusted_input_ingested = True
                 continue
 
             if (
