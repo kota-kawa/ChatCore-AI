@@ -78,9 +78,9 @@ class WebPageGenerationTestCase(unittest.TestCase):
 
         job, saved = self.make_job(prior=[prior])
         with (
-            patch("services.chat_generation.is_web_search_enabled", return_value=False),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-            patch("services.chat_generation.search_brave_llm_context") as search,
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_web_search.search_brave_llm_context") as search,
             patch("services.chat_web_page_reader.fetch_url_document", return_value=document) as fetch,
         ):
             job._run()
@@ -108,10 +108,10 @@ class WebPageGenerationTestCase(unittest.TestCase):
 
         job, saved = self.make_job(prior=[prior])
         with (
-            patch("services.chat_generation.is_web_search_enabled", return_value=False),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
             patch("services.chat_web_page_reader.fetch_url_document") as fetch,
-            patch("services.chat_generation.search_brave_llm_context") as search,
+            patch("services.chat_generation_web_search.search_brave_llm_context") as search,
         ):
             job._run()
         fetch.assert_not_called()
@@ -150,11 +150,11 @@ class WebPageGenerationTestCase(unittest.TestCase):
         # decisions need a budget of four.
         budget = AgentStepBudget(4, 1, max_read_calls=2)
         with (
-            patch("services.chat_generation.AgentStepBudget.from_environment", return_value=budget),
-            patch("services.chat_generation.is_web_search_enabled", return_value=True),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-            patch("services.chat_generation.search_brave_llm_context", return_value=found) as search,
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_agent_budget.AgentStepBudget.from_environment", return_value=budget),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=True),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=found) as search,
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
             patch("services.chat_web_page_reader.fetch_url_document", return_value=document) as fetch,
         ):
             job._run()
@@ -176,7 +176,7 @@ class WebPageGenerationTestCase(unittest.TestCase):
         job, _ = self.make_job(prior=[prior])
         state = job._build_turn_run_state()
         state.budget = AgentStepBudget(3, 2, max_read_calls=1)
-        with patch("services.chat_generation.is_web_search_enabled", return_value=True):
+        with patch("services.chat_generation_tools.is_web_search_enabled", return_value=True):
             job._configure_agent_tools(state)
         job._dispatch_tool_calls(state, [tool_call("get_evidence", evidence_ids=[prior.sources[0].evidence_id])], 1)
         names = {tool["function"]["name"] for tool in job._available_agent_tools(state)}
@@ -191,7 +191,7 @@ class WebPageGenerationTestCase(unittest.TestCase):
         job, _ = self.make_job(prior=[result()])
         state = job._build_turn_run_state()
         state.budget = AgentStepBudget(3, 2, max_read_chars=500)
-        with patch("services.chat_generation.is_web_search_enabled", return_value=True):
+        with patch("services.chat_generation_tools.is_web_search_enabled", return_value=True):
             job._configure_agent_tools(state)
         names = {tool["function"]["name"] for tool in job._available_agent_tools(state)}
         self.assertEqual(names, {"web_search"})
@@ -277,8 +277,8 @@ class PastedUrlGenerationTestCase(unittest.TestCase):
 
         job, saved = self.make_job([{"role": "user", "content": prompt}])
         with (
-            patch("services.chat_generation.is_web_search_enabled", return_value=False),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
             patch("services.chat_web_page_reader.fetch_url_document") as fetch,
         ):
             job._run()
@@ -318,7 +318,7 @@ class EarlierPastedUrlTestCase(unittest.TestCase):
     def test_without_earlier_urls_the_page_is_unreachable(self):
         job, _ = self.make_job()
         state = job._build_turn_run_state()
-        with patch("services.chat_generation.is_web_search_enabled", return_value=False):
+        with patch("services.chat_generation_tools.is_web_search_enabled", return_value=False):
             job._configure_agent_tools(state)
 
         self.assertEqual(len(state.evidence_store), 0)
@@ -332,7 +332,7 @@ class EarlierPastedUrlTestCase(unittest.TestCase):
 
         job, _ = self.make_job(earlier_pasted_urls=urls)
         state = job._build_turn_run_state()
-        with patch("services.chat_generation.is_web_search_enabled", return_value=False):
+        with patch("services.chat_generation_tools.is_web_search_enabled", return_value=False):
             job._configure_agent_tools(state)
 
         evidence_id = pasted_url_evidence_id(self.url)

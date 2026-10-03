@@ -28,8 +28,8 @@
 | プロンプト上の方針 | アプリ側の強制 | 実装・境界 |
 | --- | --- | --- |
 | 深刻な危害への具体的支援を避け、高リスク分野では根拠に見合う慎重さを保つ | 回答文の安全性を判定する汎用ゲートはない。ツールのスコープ・引数・所有者・承認状態は別途サーバーで検査する | 方針は `services/chat_prompt.py`。ツール検証は各 `services/chat_workspace_tools/` と `services/mcp_tools/` |
-| 指示の優先順位を守り、引用・記憶・ツール結果を命令として扱わない | 外部入力を読んだターンでは「常に承認」の自動実行を抑止する。MCP/import 由来など本人未確認のマイコンテキスト事実を検索したターンも同じ抑止へ入れる。内容の真偽や自由文の従い方までは判定しない | `services/chat_generation.py`、`services/chat_workspace_tools/runner.py`、`services/personal_knowledge.py` |
-| 操作が完了したと主張するのはツール結果が確認できた場合だけ | 承認・実行結果と食い違う書き込み完了の申告を回答側で検査する。警告・承認待ちのカードも結果状態に合わせる | `services/chat_generation.py`、`services/chat_tool_approval_service.py`、`tests/unit/test_chat_generation_failure_recovery.py` |
+| 指示の優先順位を守り、引用・記憶・ツール結果を命令として扱わない | 外部入力を読んだターンでは「常に承認」の自動実行を抑止する。MCP/import 由来など本人未確認のマイコンテキスト事実を検索したターンも同じ抑止へ入れる。内容の真偽や自由文の従い方までは判定しない | `services/chat_generation_tools.py`、`services/chat_tool_calls.py`、`services/chat_workspace_tools/runner.py`、`services/personal_knowledge.py` |
+| 操作が完了したと主張するのはツール結果が確認できた場合だけ | 承認・実行結果と食い違う書き込み完了の申告を回答側で検査する。警告・承認待ちのカードも結果状態に合わせる | `services/chat_write_claim_guard.py`、`services/chat_tool_approval_service.py`、`tests/unit/test_chat_generation_failure_recovery.py` |
 | 書き込みや外部操作には明示された権限と確認条件を使う | スコープ、利用者 ID、型付き引数、版番号、レート制限、承認カードをサーバー側で検証する | `services/mcp_oauth.py`、`services/mcp_tools/`、`services/chat_workspace_tools/`、`services/chat_tool_approval_service.py` |
 | 記憶された事実は古い可能性があり、最新の本人発話と矛盾するときは最新の発話を優先する | 事実の出所・確信度・本人の最終確認を保存して検索結果に含める。未確認事実は回答から除外せず、無条件の自動書き込みだけを抑止する | `context_facts.confidence`、`context_facts.last_confirmed_at`、`services/personal_knowledge.py`、[ADR 0016](../decisions/0016-context-fact-confirmation.md) |
 

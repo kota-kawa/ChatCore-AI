@@ -91,7 +91,7 @@ effort: high
 | その他のサブエージェント | 調査、設計、実装、実 API での計測など、上の 2 つ以外のすべて | 最新の Luna（max） | 最新の Sonnet（high） |
 
 ## AI 出力の品質確認
-- 対象は LLM に渡す内容や応答の扱いを変える変更です。例: プロンプト文言（`blueprints/chat/tasks.py`、`services/chat_prompt.py`、`services/prompt_assist.py`）、ツール定義（`services/llm_tool_schema.py`）、会話・コンテキストの組み立てと判断ループ（`services/chat_generation.py`）、モデル名・温度・出力上限などの設定。Web 検索の要否・クエリ生成・結果の選択・要約・引用を変える場合も対象です。
+- 対象は LLM に渡す内容や応答の扱いを変える変更です。例: プロンプト文言（`blueprints/chat/tasks.py`、`services/chat_prompt.py`、`services/prompt_assist.py`）、ツール定義（`services/llm_tool_schema.py`）、会話・コンテキストの組み立てと判断ループ（`services/chat_generation_agent_loop.py`）、モデル名・温度・出力上限などの設定。Web 検索の要否・クエリ生成・結果の選択・要約・引用を変える場合も対象です。
 - 実 API は呼ばず、LLM 代替サブエージェント（「サブエージェントの指定」参照）を LLM API の代わりに使います。変更前と変更後のプロンプト・ツール定義・会話を実装と同じ手順で組み立て、同じ入力に対する出力を得てください。
 - 入力は代表的なケースを 3〜5 件用意します。通常ケースに加え、変更で改善を狙ったケースと、退行しやすいケース（長い文脈、ツール呼び出しが要る質問、日本語と英語の混在など）を含めます。
 - 判定は観点を先に決めて行います。例: 指示への追従、事実性と出典、形式（JSON やツール呼び出しの契約）、冗長さ、口調。変更前後の出力を並べ、観点ごとにどちらが良いかを根拠付きで記録します。
@@ -107,7 +107,7 @@ effort: high
 | --- | --- | --- |
 | プロンプト文言 | `services/chat_prompt.py`、`services/prompt_assist.py`、`blueprints/chat/tasks.py` | `tests/unit/test_task_launch_prompting.py`、`tests/unit/test_chat_prompt_management.py`、`tests/unit/test_prompt_assist_logic.py` |
 | ツール定義 | `services/llm_tool_schema.py` | `tests/unit/test_llm_tool_schema.py` |
-| 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
+| 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_generation_agent_loop.py`、`services/chat_generation_llm_stream.py`、`services/chat_generation_answer_stream.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
 | Web 検索 | `services/web_search.py`、`services/web_search_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py` |
 | 生成 UI | `services/generative_ui.py`、`services/generative_ui_repair.py` | `tests/unit/test_generative_ui.py`、`tests/unit/test_generated_ui_reliability.py`、`tests/unit/test_generative_ui_contract_matches_validator.py` |
 | モデル設定・プロバイダ | `services/llm.py`、`services/llm_model_limits.py` | `tests/unit/test_llm_service.py` |

@@ -63,12 +63,12 @@ from .registry import (
 # 書き込みのカード上の family（公開投稿・自分用プロンプト・個人Skill、すべて "prompts"）。
 # 読み取りの家族は用途で分け、他人の公開データを読んだ根拠（shared_prompts）と、自分自身の
 # データを読んだ根拠（prompts）を区別する。get_evidence の再読み取りで外部内容の判定に使う
-# （services/chat_generation.py の _OWN_DATA_EVIDENCE_TYPES）。
+# （services/chat_tool_calls.py の _OWN_DATA_EVIDENCE_TYPES）。
 # The card family for every write tool (publishing, Task, personal Skill) is "prompts". Read
 # families are split by purpose so the evidence for someone else's public post
 # (shared_prompts) is distinguished from evidence for the user's own data (prompts); this backs
 # the "did this turn read external content" check on a later get_evidence re-read
-# (_OWN_DATA_EVIDENCE_TYPES in services/chat_generation.py).
+# (_OWN_DATA_EVIDENCE_TYPES in services/chat_tool_calls.py).
 PROMPTS_TOOL_FAMILY = "prompts"
 SHARED_PROMPT_READ_FAMILY = "shared_prompts"
 

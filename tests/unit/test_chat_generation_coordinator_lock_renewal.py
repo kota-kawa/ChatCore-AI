@@ -208,7 +208,7 @@ class ChatGenerationJobLockRenewalTestCase(unittest.TestCase):
                 yield "chunk "
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=_slow_stream,
         ):
             job = service.start_generation_job(

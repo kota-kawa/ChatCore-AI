@@ -27,12 +27,14 @@ from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
-    _budgeted_web_search_result_tool_payload,
-    _web_search_result_tool_payload,
     build_generation_key,
     clear_generation_job_state,
     has_active_generation,
     start_generation_job,
+)
+from services.chat_generation_web_search import (
+    _budgeted_web_search_result_tool_payload,
+    _web_search_result_tool_payload,
 )
 from services.chat_turn_state import (
     TURN_LOOP_EMPTY_ANSWER_RECOVERY_PROMPT,
@@ -681,7 +683,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                                     return_value=(True, 1, 300),
                                 ):
                                     with patch(
-                                        "services.chat_generation.get_llm_response_stream",
+                                        "services.chat_generation_llm_stream.get_llm_response_stream",
                                         side_effect=LlmConfigurationError(
                                             "OPENAI_API_KEY が未設定です。"
                                         ),
@@ -715,7 +717,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted_messages = []
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["こん", "にちは"]),
         ):
             job = start_generation_job(
@@ -745,7 +747,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         cleanup_calls = []
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=lambda *args, **kwargs: iter([]),
         ) as mock_stream:
             job = start_generation_job(
@@ -783,7 +785,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             cleanup_finished.set()
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
         ):
             job = start_generation_job(
@@ -828,9 +830,9 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         # 日本語: ジョブは別スレッドで走るため、起動前からログを捕捉する。
         # English: The job runs on another thread, so capture logs from before it starts.
-        with self.assertLogs("services.chat_generation", level="ERROR") as logs:
+        with self.assertLogs("services.chat_generation_job_base", level="ERROR") as logs:
             with patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
             ):
                 job = start_generation_job(
@@ -866,7 +868,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             return iter([_turn_state_update(), "回復した最終回答"])
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=stream_side_effect,
         ):
             job = start_generation_job(
@@ -916,7 +918,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             return iter([_turn_state_update(), "上限後の最終回答"])
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=stream_side_effect,
         ):
             job = start_generation_job(
@@ -989,15 +991,15 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.choose_web_search_images",
+                "services.chat_generation_answer_stream.choose_web_search_images",
                 return_value=[
                     {
                         "url": "https://cdn.example.com/maple.jpg",
@@ -1052,14 +1054,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=_kyoto_search_result(),
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-untagged-envelope:default",
@@ -1113,14 +1115,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=_kyoto_search_result(),
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-untagged-envelope-twice:default",
@@ -1148,7 +1150,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         requested_json = _bare_turn_state(objective="サンプル")
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=lambda *_args, **_kwargs: iter([requested_json]),
         ):
             job = start_generation_job(
@@ -1177,7 +1179,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted = []
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=lambda *_args, **_kwargs: iter(["鎌倉の紅葉は12月上旬が見頃です。"]),
         ):
             job = start_generation_job(
@@ -1200,9 +1202,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted = []
 
         with (
-            patch("services.chat_generation.search_brave_llm_context", return_value=_kyoto_search_result()),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=_kyoto_search_result()),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=[
                     iter([_web_search_tool_call_chunk("京都の紅葉")]),
                     iter(["京都の紅葉は11月下旬が見頃です。"]),
@@ -1239,7 +1241,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         generation_key = "guest:sid-cancel:default"
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=fake_stream,
         ):
             job = start_generation_job(
@@ -1274,7 +1276,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield from ()
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=fake_stream,
         ):
             job = start_generation_job(
@@ -1297,7 +1299,7 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Verify that the background generation job's done event includes persistence metadata.
     def test_background_generation_job_includes_persist_metadata_in_done_event(self):
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["hello"]),
         ):
             job = start_generation_job(
@@ -1331,7 +1333,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         persisted_messages = []
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter([artifact_block[:40], artifact_block[40:]]),
         ):
             job = start_generation_job(
@@ -1382,11 +1384,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 return_value=iter(["比較結果を文章で説明します。"]),
             ),
             patch(
-                "services.chat_generation.get_llm_response",
+                "services.chat_generation_finalization.get_llm_response",
                 return_value=repaired_block,
             ) as mock_repair,
         ):
@@ -1500,11 +1502,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "Python news",
                     "回答本文",
@@ -1584,14 +1586,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-policy:default",
@@ -1641,18 +1643,18 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "京都の紅葉",
                     "京都の紅葉名所です。",
                 ),
             ),
             patch(
-                "services.chat_generation.choose_web_search_images",
+                "services.chat_generation_answer_stream.choose_web_search_images",
                 return_value=[
                     {
                         "url": "https://cdn.example.com/maple.jpg",
@@ -1758,9 +1760,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_records.append({"response": response, "message_parts": message_parts})
 
         with (
-            patch("services.chat_generation.search_brave_llm_context", return_value=search_result),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=search_result),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "京都の紅葉",
                     "京都の紅葉名所は東福寺と永観堂です。",
@@ -1768,7 +1770,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 ),
             ),
             patch(
-                "services.chat_generation.choose_web_search_images",
+                "services.chat_generation_answer_stream.choose_web_search_images",
                 return_value=[
                     {
                         "url": "https://cdn.example.com/maple.jpg",
@@ -1832,7 +1834,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_direct_answer_stream("回答本文"),
             ),
         ):
@@ -1883,11 +1885,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "高山 観光",
                     "高山のおすすめは古い町並です",
@@ -1896,7 +1898,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     echoed_chip,
                 ),
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-echoed-chip:default",
@@ -1959,11 +1961,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "Python release",
                     "最新版です。[[sou",
@@ -2053,11 +2055,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "春日部 カフェ Wi-Fi",
                     "利用できます。",
@@ -2108,11 +2110,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "春日部 カフェ Wi-Fi",
                     "利用できます。",
@@ -2160,11 +2162,11 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream(
                     "Python release",
                     "最新版です。[[sr",
@@ -2299,9 +2301,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "検索結果を踏まえた回答"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 side_effect=lambda query, freshness="", **_kwargs: search_results[query],
             ) as mock_search,
         ):
@@ -2417,12 +2419,12 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "明月院と東慶寺の最終回答です。"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-mid-answer-search:default",
@@ -2528,12 +2530,12 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "鎌倉の紅葉は11月下旬が見頃です。"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-step-note:default",
@@ -2603,9 +2605,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "今週の東京の天気です。"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ) as mock_search,
         ):
@@ -2638,7 +2640,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "ツールなしで回答しました。"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
         ):
             job = start_generation_job(
                 "guest:sid-1:default",
@@ -2712,20 +2714,20 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.AgentStepBudget.from_environment",
+                "services.chat_agent_budget.AgentStepBudget.from_environment",
                 return_value=AgentStepBudget(max_tool_calls=1, max_llm_turns=3, max_read_calls=0),
             ),
             patch.dict(
-                "services.chat_generation.os.environ",
+                "os.environ",
                 {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
                 clear=False,
             ),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-tool-choice-none:default",
@@ -2791,9 +2793,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "回答"
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ) as mock_search,
         ):
@@ -2872,9 +2874,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             )
 
         with (
-            patch.dict("services.chat_generation.os.environ", {"CHAT_AGENT_MAX_STEPS": "10"}, clear=False),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
-            patch("services.chat_generation.search_brave_llm_context", side_effect=search_side_effect) as mock_search,
+            patch.dict("os.environ", {"CHAT_AGENT_MAX_STEPS": "10"}, clear=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_web_search.search_brave_llm_context", side_effect=search_side_effect) as mock_search,
         ):
             job = start_generation_job(
                 "guest:sid-1:default",
@@ -2905,7 +2907,7 @@ class ChatStreamingTestCase(unittest.TestCase):
     def test_background_generation_job_reports_response_generation_status(self):
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 return_value=iter(["回答"]),
             ),
         ):
@@ -2928,11 +2930,11 @@ class ChatStreamingTestCase(unittest.TestCase):
     def test_background_generation_job_keeps_web_search_failure_status_until_chunk(self):
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=_search_then_answer_stream("今日のニュース", "回答"),
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 side_effect=RuntimeError("brave is unavailable"),
             ),
         ):
@@ -2986,16 +2988,16 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch.dict(
-                "services.chat_generation.os.environ",
+                "os.environ",
                 {"CHAT_AGENT_MAX_TOOL_CALLS": "1", "CHAT_AGENT_MAX_LLM_TURNS": "3"},
                 clear=False,
             ),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream_side_effect),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 side_effect=WebSearchQuotaExceededError(limit=100, retry_after_seconds=3600),
             ),
-            self.assertLogs("services.chat_generation", level="WARNING") as log_cm,
+            self.assertLogs("services.chat_generation_web_search", level="WARNING") as log_cm,
         ):
             job = start_generation_job(
                 "guest:sid-1:default",
@@ -3016,9 +3018,9 @@ class ChatStreamingTestCase(unittest.TestCase):
     def test_background_generation_job_surfaces_configuration_error_message(self):
         # ユーザーへエラーが表示される経路には、必ず詳細なログが対応して残ることを検証する。
         # Verify that a detailed log line always accompanies an error surfaced to the user.
-        with self.assertLogs("services.chat_generation", level="ERROR") as log_cm:
+        with self.assertLogs("services.chat_generation_finalization", level="ERROR") as log_cm:
             with patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
             ):
                 job = start_generation_job(
@@ -3038,9 +3040,9 @@ class ChatStreamingTestCase(unittest.TestCase):
     def test_background_generation_job_logs_authentication_and_rate_limit_errors(self):
         # 認証エラー・レート制限エラーもユーザー表示だけでなく必ずログに残ることを検証する。
         # Authentication and rate-limit errors must also be logged, not just shown to the user.
-        with self.assertLogs("services.chat_generation", level="ERROR") as log_cm:
+        with self.assertLogs("services.chat_generation_finalization", level="ERROR") as log_cm:
             with patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=LlmAuthenticationError("Anthropic Claude API authentication failed."),
             ):
                 job = start_generation_job(
@@ -3052,9 +3054,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                 b"".join(_iter_llm_stream_events(job))
         self.assertIn("authentication error", "\n".join(log_cm.output))
 
-        with self.assertLogs("services.chat_generation", level="WARNING") as log_cm:
+        with self.assertLogs("services.chat_generation_finalization", level="WARNING") as log_cm:
             with patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=LlmRateLimitError(
                     "Groq API rate limit exceeded.", retry_after_seconds=30
                 ),
@@ -3082,9 +3084,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield from ["こん", "にちは"]
 
         with (
-            patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
+            patch("services.chat_generation_llm_stream._llm_stream_retry_delay", return_value=0.0),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=flaky_stream,
             ),
         ):
@@ -3118,9 +3120,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             return iter([_turn_state_update(), "final answer"])
 
         with (
-            patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0),
+            patch("services.chat_generation_llm_stream._llm_stream_retry_delay", return_value=0.0),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=flaky_stream,
             ),
         ):
@@ -3156,7 +3158,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3195,7 +3197,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         with (
             patch.dict("os.environ", {"LLM_FINAL_ANSWER_MAX_CONTINUATIONS": "1"}),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3235,7 +3237,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3300,14 +3302,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ) as mock_search,
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-research-limit:default",
@@ -3377,14 +3379,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-invalid-state:default",
@@ -3460,7 +3462,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3500,7 +3502,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3541,7 +3543,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
         ):
@@ -3585,8 +3587,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             )
 
         with (
-            patch("services.chat_generation.request_fits_context", side_effect=fits),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_agent_loop.request_fits_context", side_effect=fits),
+            patch("services.chat_generation_llm_stream.request_fits_context", side_effect=fits),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
         ):
             job = start_generation_job(
                 f"guest:sid-followup-{recovery}:default",
@@ -3653,11 +3656,11 @@ class ChatStreamingTestCase(unittest.TestCase):
             return _direct_answer_stream("The plans differ at 50 seats.", state={"objective": objective})
 
         with (
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-            patch("services.chat_generation.search_brave_llm_context", return_value=WebSearchResult(
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=WebSearchResult(
                 query="plans A B 50 seats pricing", searched_at="2026-09-06T00:00:00+00:00", sources=(),
             )),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = start_generation_job(
                 "guest:sid-resolved-followup:default",
@@ -3681,7 +3684,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "ok"
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=delayed_stream,
         ):
             job_key = build_generation_key(chat_room_id="default", user_id=1)
@@ -3706,7 +3709,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             release_generation.wait(timeout=1.0)
             yield "done"
 
-        with patch("services.chat_generation.get_llm_response_stream", side_effect=delayed_stream):
+        with patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=delayed_stream):
             job_key = build_generation_key(chat_room_id="default", user_id=7)
             start_generation_job(
                 job_key,
@@ -3817,7 +3820,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 return_value=(True, 1, 300),
             ),
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=delayed_stream,
             ),
         ):
@@ -4535,7 +4538,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         session = {"user_id": 99}
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["完了"]),
         ):
             job_key = build_generation_key(chat_room_id="room-status", user_id=99)
@@ -4569,7 +4572,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         session = {"user_id": 77}
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["再", "生"]),
         ):
             job_key = build_generation_key(chat_room_id="room-replay", user_id=77)
@@ -4633,7 +4636,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         session = {"user_id": 81}
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["A", "B"]),
         ):
             job_key = build_generation_key(chat_room_id="room-last-id", user_id=81)

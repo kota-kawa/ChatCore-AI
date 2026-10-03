@@ -124,6 +124,8 @@ Redis 障害時の扱いは用途ごとに異なります。一般キャッシ�
 
 チャットの生成は HTTP ハンドラ内で LLM 呼び出しを完了させるのではなく、`services/chat_generation.py` の `ChatGenerationService`／`ChatGenerationJob` に委譲します。
 
+`services/chat_generation.py` が持つのはサービスとジョブの入口（各フェーズを順に呼ぶ `_run`）だけです。ジョブの状態・イベント配信・保存・停止は `services/chat_generation_job_base.py`、生成ループの各フェーズは `services/chat_generation_llm_stream.py`（LLM ストリームの読み取りと再試行）、`services/chat_generation_agent_loop.py`（ターン状態の構築と判断ループ）、`services/chat_generation_tools.py`・`services/chat_generation_web_search.py`（ツールの提示と実行）、`services/chat_generation_answer_stream.py`（回答の配信と継続生成）、`services/chat_generation_finalization.py`（仕上げと失敗の通知）にあり、`ChatGenerationJob` がこれらを継承して束ねます。フェーズが共有する純粋関数は `services/chat_tool_calls.py`（ツール呼び出しの解析・整形）と `services/chat_write_claim_guard.py`（書き込み完了の申告と承認カードの照合）に置きます。
+
 1. `blueprints/chat/messages.py` が入力、部屋の所有権、制限、参照コンテキストを検証してジョブを開始する。
 2. バックグラウンド実行器上のジョブが `services/llm.py` のプロバイダ抽象化を通じてストリームを読む。
 3. ジョブはイベントに連番を付け、接続中の SSE に通知し、必要に応じて Redis のリプレイ／協調機能を使う。
@@ -144,7 +146,7 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 通常チャットの検索を伴うターンは、`services/research_state.py` の単一の `TurnState` を意味状態の正本として扱います。`TurnState` には目的、未解決事項、得られた事実、出典、実行済み検索をまとめ、`step_notes` や `research_summary` のような並行する内部状態を持ちません。状態更新は文字数で先頭・末尾を切る処理ではありません。検索結果を受け取ったモデルが、質問への回答に必要な新しい事実、既存事実の修正、なお不明な点を判断し、根拠との対応を保って `TurnState` へ統合します。
 
-`services/chat_generation.py` が「`TurnState` をモデルへ渡す → モデルが回答・根拠の読み取り・検索を選ぶ → ツール結果を受け取ったモデルが `TurnState` を更新する → 再判断する」という1本のループを所有します。事前の検索 Planner、調査後だけを扱う Wrapup、別 Summary 生成は置きません。モデルは `TurnState` の更新を内部封筒（`<turn_state_update>`）で返しますが、封筒は次の判断へ状態を渡すためのものなので、ツールを呼ぶ判断にだけ求め、そのまま回答する判断には求めません。回答するメインモデル自身が、既知の抜粋で十分なら回答し、抜粋にない詳細が必要なら対象ページを読み、既知のページでは不足する場合や最新性が必要な場合は検索します。読んでいない本文の詳細を抜粋から推測して説明せず、取得失敗時は読めなかったことを明示します。検索と読み取りには独立した予算があり、検索上限に達しても読み取りは続けられます。利用可能なツールの予算が尽きた場合は、その時点の状態と読めた根拠から、不確実性を明示して回答します。
+`services/chat_generation_agent_loop.py` が「`TurnState` をモデルへ渡す → モデルが回答・根拠の読み取り・検索を選ぶ → ツール結果を受け取ったモデルが `TurnState` を更新する → 再判断する」という1本のループを所有します。事前の検索 Planner、調査後だけを扱う Wrapup、別 Summary 生成は置きません。モデルは `TurnState` の更新を内部封筒（`<turn_state_update>`）で返しますが、封筒は次の判断へ状態を渡すためのものなので、ツールを呼ぶ判断にだけ求め、そのまま回答する判断には求めません。回答するメインモデル自身が、既知の抜粋で十分なら回答し、抜粋にない詳細が必要なら対象ページを読み、既知のページでは不足する場合や最新性が必要な場合は検索します。読んでいない本文の詳細を抜粋から推測して説明せず、取得失敗時は読めなかったことを明示します。検索と読み取りには独立した予算があり、検索上限に達しても読み取りは続けられます。利用可能なツールの予算が尽きた場合は、その時点の状態と読めた根拠から、不確実性を明示して回答します。
 
 検索結果と元のツール結果は、`services/chat_evidence_store.py` の `EvidenceStore` がターン内に保持し、`TurnState` の外かつプロンプト外へ置きます。同じルームの現在の会話経路にある保存済み検索結果もここへ復元し、検索クエリ・検索日時・結果順を保った evidence ID 群を `TurnState.record_search(status="prior_turn")` で登録します。初期プロンプトへ過去の抜粋全量を再注入せず、次の判断には原則として更新済みの `TurnState` と直近のツール結果だけを渡します。`get_evidence` は選択した evidence ID の保存情報を返し、Web 出典については抜粋とメタデータを返します。Web の本文と画像候補は返しません。
 
@@ -162,7 +164,7 @@ SSE は通常イベントの連番と Redis リプレイ契約を維持しつつ
 
 モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 
-LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップを、利用可能な関数名と未実行であることを伝えてツール付きで1度だけやり直し、再び拒否されたらツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
+LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ境界で緩めます。プロバイダによってはモデルが返したツール引数をサーバー側で JSON Schema 検証し、違反を再試行不可のエラーとして返すため、`enum`・`required`・`additionalProperties: false` はそのまま渡しません。許可値と必須項目は説明文へ移し、値の検証と正規化はツール実行側（`services/chat_generation_tools.py`・`services/chat_generation_web_search.py` と `services/web_search.py`）が担います。それでもプロバイダがツール呼び出しを拒否した場合は `LlmToolSchemaError` として分類し、同じステップを、利用可能な関数名と未実行であることを伝えてツール付きで1度だけやり直し、再び拒否されたらツールなしで1度だけやり直します。詳細と理由は [ADR 0008](docs/decisions/0008-provider-safe-tool-schemas.md) にあります。
 
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 
@@ -227,7 +229,7 @@ npm --prefix frontend run generate:api-schemas
 | 変更したいもの | 最初に見る場所 | 併せて確認するもの |
 | --- | --- | --- |
 | API の入出力 | 対応する `blueprints/` と `services/*_models.py` | 生成 Zod、フロントの API 正規化、ルートテスト |
-| チャットの生成・停止・再接続 | `services/chat_generation.py` | `services/chat_turn_state.py`、`services/research_state.py`、`services/chat_evidence_store.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
+| チャットの生成・停止・再接続 | `services/chat_generation.py`、`services/chat_generation_job_base.py`、`services/chat_generation_agent_loop.py` | `services/chat_turn_state.py`、`services/research_state.py`、`services/chat_evidence_store.py`、`blueprints/chat/messages.py`、`frontend/hooks/chat_page/`、SSE テスト |
 | チャットの書き込みツールと承認カード | `services/chat_workspace_tools/`、`services/chat_tool_approval_service.py` | `blueprints/chat/tool_approvals.py`、`services/repositories/chat_tool_approval_repository.py`、`services/tool_approval_parts.py`、[ADR 0013](docs/decisions/0013-chat-writes-through-stored-approvals.md)、`tests/unit/test_chat_workspace_tools.py`、`tests/unit/test_chat_tool_approval_api.py` |
 | 認証・セッション・CSRF | `blueprints/auth*`、`services/repositories/auth_identity_repository.py`、`services/session_middleware.py`、`services/csrf.py` | `user_auth_providers`契約、Redis の設定、セキュリティテスト、ログイン後の ID ローテーション |
 | 永続データ | 対応サービス／リポジトリ | 新規 Alembic revision、所有者確認、対象 DB テスト |

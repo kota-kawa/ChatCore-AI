@@ -20,7 +20,7 @@ def _log_line(request_id: str, message: str, extra: dict) -> str:
     # 実際のフォーマッタでログ行を作る。集計側がログの形に追随できているかを確かめるため。
     # Build the line with the real formatter so the summary is tested against the real log shape.
     record = logging.LogRecord(
-        "services.chat_generation", logging.INFO, "chat_generation.py", 1, message, None, None
+        "services.chat_generation_finalization", logging.INFO, "chat_generation_finalization.py", 1, message, None, None
     )
     record.request_id = request_id
     for key, value in extra.items():
