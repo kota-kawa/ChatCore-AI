@@ -527,6 +527,7 @@ export function useHomePageController() {
     loggedIn,
     mutateChatRooms,
     pageViewState,
+    hasMessages: messages.length > 0,
     persistCurrentRoomId,
     prepareChatViewTransition,
     removeStoredHistory,

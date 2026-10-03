@@ -78,6 +78,9 @@ type UseHomePageRoomActionsParams = {
   loggedIn: boolean;
   mutateChatRooms: KeyedMutator<ChatRoomsPage>;
   pageViewState: PageViewState;
+  // 表示中のメッセージが 1 件以上あるか（メッセージは常に現在のルームのもの）。
+  // Whether any message is currently loaded (messages always belong to the current room).
+  hasMessages: boolean;
   persistCurrentRoomId: (roomId: string | null, mode?: ChatRoomMode) => void;
   prepareChatViewTransition: () => void;
   removeStoredHistory: (roomId: string) => void;
@@ -142,6 +145,7 @@ export function useHomePageRoomActions({
   loggedIn,
   mutateChatRooms,
   pageViewState,
+  hasMessages,
   persistCurrentRoomId,
   prepareChatViewTransition,
   removeStoredHistory,
@@ -429,7 +433,14 @@ export function useHomePageRoomActions({
         prepareChatViewTransition();
       }
 
-      if (currentRoomIdRef.current === roomId && !forceReload) {
+      // 開こうとしているルームを既に表示しているなら読み込み直さない。ただしトップページでは、
+      // 再読み込みや別ページから戻った後に前回のルーム ID だけが復元され、会話はまだ読み込まれて
+      // いないことがある。その状態で読み込みを省くと、会話があるのに空のチャット画面になる。
+      // Skip reloading when this room is already on screen. On the top page, though, a reload or a
+      // return from another page restores only the last room's id without its messages; skipping
+      // the load there would open an empty chat screen for a room that does have a conversation.
+      const roomAlreadyLoaded = pageViewState !== "setup" || hasMessages;
+      if (currentRoomIdRef.current === roomId && !forceReload && roomAlreadyLoaded) {
         setPageViewState("chat");
         closeOverlaySidebar();
         setOpenRoomActionsFor(null);
@@ -459,6 +470,7 @@ export function useHomePageRoomActions({
       chatRooms,
       closeOverlaySidebar,
       currentRoomIdRef,
+      hasMessages,
       loadChatHistory,
       loadLocalChatHistory,
       pageViewState,
