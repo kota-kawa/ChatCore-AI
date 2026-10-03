@@ -52,7 +52,7 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 1. ブラウザで `/api/chat` の開始リクエストと `/api/chat_generation_stream` のストリームを分けて確認する。
 2. SSE の event 名、連番、`done`／`aborted`／`error`／`incomplete` を確認する。本文が途中で止まっただけか、ジョブ自体が終了したかを区別する。`: keepalive` はイベントIDを持たない接続維持コメントであり、生成進捗やアイドルタイムアウトのリセットには数えない。
-3. `services/chat_generation.py` のジョブ状態、キャンセル要求、イベント履歴、永続化の一度きり制御を確認する。
+3. `services/chat_generation_job_base.py` のジョブ状態、キャンセル要求、イベント履歴、永続化の一度きり制御を確認する。
 4. `blueprints/chat/messages.py` の再接続・ステータス・停止ルートと、`frontend/hooks/chat_page/use_home_page_generation_actions.ts` の Abort／再接続処理を照合する。
 5. 外部 LLM の実通信の前に、生成ストリームをモックして「接続切断」「再接続」「途中停止」「プロバイダエラー」をテストする。
 
@@ -71,7 +71,7 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 ### 確認する境界
 
 - `services/llm.py` のプロバイダ別の呼び出し経路。GPT-6 Luna は Chat Completions ではツールと推論を併用できず（推論を付けると 400 で「function tools を使うなら /v1/responses」と返る）、推論 `none` で呼ぶと上記の崩れが起きる。Luna へツールを渡すターンは Responses API に載せ、Chat Completions 形のツール履歴を `function_call`／`function_call_output` に写す。Responses API の function tool は既定で strict なので、[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md) の緩めたスキーマを保つには `strict: false` を明示する。
-- `services/llm_protocol_leak.py` の漏れガードは、`services/chat_generation.py` の `_iter_llm_stream_with_retry` で本文にツール形式が出た位置で打ち切り、ストリームを閉じる。発動するとテレメトリの `protocol_leak_truncations` が増える。新しいモデルの形式（例: Qwen の XML 風タグ）が漏れたら、観測した形をテストに足してからパターンに加える。コードブロックとインラインコードの中は、利用者が形式そのものを尋ねた回答でありうるので対象外にしている。
+- `services/llm_protocol_leak.py` の漏れガードは、`services/chat_generation_llm_stream.py` の `_iter_llm_stream_with_retry` で本文にツール形式が出た位置で打ち切り、ストリームを閉じる。発動するとテレメトリの `protocol_leak_truncations` が増える。新しいモデルの形式（例: Qwen の XML 風タグ）が漏れたら、観測した形をテストに足してからパターンに加える。コードブロックとインラインコードの中は、利用者が形式そのものを尋ねた回答でありうるので対象外にしている。
 
 ### 検証方法
 
@@ -82,7 +82,7 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 会話の途中や最後で `error` だけが表示される場合は、ログの `salvaged_partial_answers`、`research_failure_recoveries`、`llm_turn_budget_exhausted`、`llm_error_type` を確認します。判断ステップの本文は「ツール呼び出しが無い」と確定するまで配信されないため、その前に落ちると本文はバッファにしか存在しません。`salvaged_partial_answers=1` はそのバッファを救出して`incomplete` で保存した状態で、`error` で終わるのは本文が1文字も無いターンだけです。`research_failure_recoveries=1` は調査ステップがプロバイダ障害で落ち、ツールを外した回答へ縮退したことを表します。`llm_error_type` が `LlmProviderError`（再試行不可の汎用）の場合は、`services/llm.py` の `_map_provider_exception` がその例外を分類できていないので、分岐を足して再試行可能な型へ寄せます。ストリーム途中のプロバイダエラーはステータスコードを持たない `APIError` として、接続断は httpx の例外として届きます。
 
-ツール（関数呼び出し）を使うターンだけが `error` で終わる場合は、プロバイダ側のツール引数検証を疑います。`Tool call validation failed` や `tool_use_failed` は、モデルが返した引数がツールスキーマに合わないとしてプロバイダが拒否した状態で、`LlmToolSchemaError` として分類されます。ログの `tool_schema_retries` は利用可能な関数名を示してツール付きでやり直したステップ、`tool_schema_recoveries` は引き直しも拒否されてツールなしでやり直したステップです。`tool_schema_rejections` には拒否ごとの理由（`schema_mismatch`・`unknown_tool`・`unparsable_call`・`tool_choice_none`・`other`）、拒否文にあったツール名、そのステップで提示していたツール名が残り、メモなどのツールで手順がどこまで進んだかは `workspace_tool_results`（呼んだ順の `ツール名:status`）で追えます。`workspace_action_recoveries` は、カード無しで変更・提案を主張した回答を配信前に止め、ツール付きで一度訂正させた回数です。`unknown_tool` で提示していないツール名が出ていれば、モデルが一覧に無いツールを呼んでいます。未定義ツールの拒否は提示一覧とループ指示の整合を確認します。`schema_mismatch` なら、`enum` や `required` を足すのではなく、`services/llm_tool_schema.py` の緩和対象を確認し、値の正規化をハンドラ側（`services/chat_generation.py`、`services/web_search.py`）へ寄せます（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）。
+ツール（関数呼び出し）を使うターンだけが `error` で終わる場合は、プロバイダ側のツール引数検証を疑います。`Tool call validation failed` や `tool_use_failed` は、モデルが返した引数がツールスキーマに合わないとしてプロバイダが拒否した状態で、`LlmToolSchemaError` として分類されます。ログの `tool_schema_retries` は利用可能な関数名を示してツール付きでやり直したステップ、`tool_schema_recoveries` は引き直しも拒否されてツールなしでやり直したステップです。`tool_schema_rejections` には拒否ごとの理由（`schema_mismatch`・`unknown_tool`・`unparsable_call`・`tool_choice_none`・`other`）、拒否文にあったツール名、そのステップで提示していたツール名が残り、メモなどのツールで手順がどこまで進んだかは `workspace_tool_results`（呼んだ順の `ツール名:status`）で追えます。`workspace_action_recoveries` は、カード無しで変更・提案を主張した回答を配信前に止め、ツール付きで一度訂正させた回数です。`unknown_tool` で提示していないツール名が出ていれば、モデルが一覧に無いツールを呼んでいます。未定義ツールの拒否は提示一覧とループ指示の整合を確認します。`schema_mismatch` なら、`enum` や `required` を足すのではなく、`services/llm_tool_schema.py` の緩和対象を確認し、値の正規化をハンドラ側（`services/chat_generation_tools.py`、`services/chat_generation_web_search.py`、`services/web_search.py`）へ寄せます（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）。
 
 開始経路だけ正常で再生成・再接続だけ切れる場合は、`deploy/chatcore-ai.conf` の4つの SSE 経路が同じ location に入り、`proxy_buffering off` と長い `proxy_read_timeout` が適用されているか確認します。
 

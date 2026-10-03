@@ -39,7 +39,7 @@
 5. `POST /api/chat_regenerate`、`/api/chat_edit_and_regenerate`: 既存履歴から分岐生成。
 6. `POST /api/chat_switch_branch`: 現在表示する履歴ブランチを切り替え。
 
-ジョブの実行・永続化・Redis 協調は `services/chat_generation.py`、LLM provider の振り分けは `services/llm.py` に置き、ルートへ重複実装しません。
+ジョブの実行・永続化・Redis 協調は `services/chat_generation.py` と、その各フェーズを持つ `services/chat_generation_job_base.py` などのモジュール、LLM provider の振り分けは `services/llm.py` に置き、ルートへ重複実装しません。
 
 個人Skillは `GET /api/skills` で一覧を取得し、`POST /api/skills` で追加、
 `PATCH /api/skills/{skill_id}` で有効状態を切り替え、`DELETE /api/skills/{skill_id}`
