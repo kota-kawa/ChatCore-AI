@@ -1,10 +1,10 @@
 """Runs one workspace tool call inside the chat generation loop.
 
 生成ループ（同期のワーカースレッド）から呼ばれ、非同期の DB 処理は asyncio.run で橋渡しする
-（services/chat_generation.py の検索系ツールと同じ進め方）。読み取りは結果を根拠として登録し、
+（services/chat_generation_tools.py の検索系ツールと同じ進め方）。読み取りは結果を根拠として登録し、
 書き込みは提案を作って承認待ちにするか、「常に承認」の条件を満たせばその場で実行する。
 Called from the generation loop (a synchronous worker thread); async database work is bridged
-with asyncio.run, the same way the lookup tools in services/chat_generation.py do it. Reads are
+with asyncio.run, the same way the lookup tools in services/chat_generation_tools.py do it. Reads are
 registered as evidence; writes become a pending approval, or run on the spot when the "always
 approve" conditions hold.
 """
@@ -60,9 +60,9 @@ _PUBLISH_PROMPT_OVERLAP_FIELDS = (
     "title", "content", "description", "input_examples", "output_examples", "ai_model"
 )
 # get_evidence の再読み取りで「自分自身のデータ」として扱う family。ここに無い family
-# （公開データ）は外部の内容として扱われる（services/chat_generation.py も参照）。
+# （公開データ）は外部の内容として扱われる（services/chat_tool_calls.py も参照）。
 # Families treated as "the user's own data" for a later get_evidence re-read; any family not
-# listed here (public data) is treated as external content (see services/chat_generation.py).
+# listed here (public data) is treated as external content (see services/chat_tool_calls.py).
 _PRIVATE_TEXT_FAMILIES = frozenset({MEMO_TOOL_FAMILY, PROMPTS_TOOL_FAMILY, PROFILE_TOOL_FAMILY})
 
 logger = logging.getLogger(__name__)

@@ -785,7 +785,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
 class ChatGenerationApprovalPendingTests(unittest.TestCase):
     """1ターンの生成ループが、承認待ちのカードをどう締めるかを検証する（ADR 0009 の単一ループを保つ）。
 
-    Verifies how the single-turn generation loop (services/chat_generation.py) closes once a
+    Verifies how the single-turn generation loop (services/chat_generation_agent_loop.py) closes once a
     write proposal is left for approval: no new ending phase (ADR 0009), the next decision gets
     no tools at all, and the budget-exhaustion telemetry is not tripped for this reason.
     """
@@ -801,10 +801,10 @@ class ChatGenerationApprovalPendingTests(unittest.TestCase):
 
     def _run(self, job, stream):
         with (
-            patch.dict("services.chat_generation.os.environ", {"LLM_STREAM_MAX_RETRIES": "0"}, clear=False),
-            patch("services.chat_generation.is_web_search_enabled", return_value=False),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch.dict("os.environ", {"LLM_STREAM_MAX_RETRIES": "0"}, clear=False),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job._run()
 

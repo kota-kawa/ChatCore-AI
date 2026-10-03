@@ -101,7 +101,7 @@ class StableToolListTests(unittest.TestCase):
             persist_response=MagicMock(),
         )
         state = job._build_turn_run_state()
-        with patch("services.chat_generation.is_web_search_enabled", return_value=web_search):
+        with patch("services.chat_generation_tools.is_web_search_enabled", return_value=web_search):
             job._configure_agent_tools(state)
         return job, state
 

@@ -5,10 +5,10 @@ import unittest
 from unittest.mock import patch
 
 from services.chat_generation import (
-    REMOTE_CANCEL_CHECK_INTERVAL_SECONDS,
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
 )
+from services.chat_generation_coordinator import REMOTE_CANCEL_CHECK_INTERVAL_SECONDS
 from services.chat_turn_state import strip_turn_state_update
 from services.web_search import WebSearchResult, WebSearchSource
 
@@ -286,7 +286,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     def test_stop_during_answer_output_persists_partial_response(self):
         persisted = []
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner, persisted)
@@ -319,7 +319,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
                 yield '"unresolved_questions":['
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=deciding_stream,
         ):
             job = self.owner.start_generation_job(
@@ -376,14 +376,14 @@ class ChatGenerationStopTestCase(unittest.TestCase):
 
         with (
             patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=stream_side_effect,
             ),
             patch(
-                "services.chat_generation.search_brave_llm_context",
+                "services.chat_generation_web_search.search_brave_llm_context",
                 return_value=search_result,
             ) as mock_search,
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job = self.owner.start_generation_job(
                 self.job_key,
@@ -405,7 +405,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     # English: Verify regeneration can start for the same room right after a stop.
     def test_regeneration_is_allowed_immediately_after_remote_stop(self):
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=_endless_answer_stream,
         ):
             self._start_job(self.owner)
@@ -433,7 +433,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
     # English: Verify the periodic marker check stops the job even when the pub/sub notice is missed.
     def test_running_job_stops_itself_from_the_cancel_request_marker(self):
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner)
@@ -455,7 +455,7 @@ class ChatGenerationStopTestCase(unittest.TestCase):
         self.redis.set(cancel_key, "1")
 
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             side_effect=_endless_answer_stream,
         ):
             job = self._start_job(self.owner)

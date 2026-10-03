@@ -90,13 +90,13 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
     def run_job(self, job, stream, *, max_retries="0", web_search=False):
         with (
             patch.dict(
-                "services.chat_generation.os.environ",
+                "os.environ",
                 {"LLM_STREAM_MAX_RETRIES": max_retries},
                 clear=False,
             ),
-            patch("services.chat_generation.is_web_search_enabled", return_value=web_search),
-            patch("services.chat_generation.get_llm_response_stream", side_effect=stream),
-            patch("services.chat_generation.choose_web_search_images", return_value=[]),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=web_search),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
         ):
             job._run()
 
@@ -369,7 +369,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.assertEqual(saved.call_args.args[0], expected)
 
     def test_memo_claim_guard_matches_quoted_generated_titles_in_the_same_statement(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         card = {
             "tool": "memo_create", "status": "pending",
@@ -399,7 +399,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
     # English: Verify a completion claim about a non-memo write is replaced when this turn's card for
     #          that target was not executed (issue #781).
     def test_write_claim_guard_replaces_non_memo_claims_its_cards_contradict(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
         claims = {
@@ -519,7 +519,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
     # English: Verify answers without a card for the target are left alone, since they cannot be told
     #          apart from drafts written in the chat.
     def test_write_claim_guard_leaves_drafts_alone(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         memo_card = {"tool": "memo_create", "status": "pending", "preview": {"kind": "memo_create", "title": "買い物"}}
         for reply in (
@@ -540,7 +540,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
                 self.assertIsNone(_unconfirmed_write_claim_fallback(reply, "お願いします", [memo_card]))
 
     def test_write_claim_guard_matches_the_specific_prompt_or_task_card(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
         pending_minutes = {
@@ -577,7 +577,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_does_not_ignore_a_completion_claim_because_a_card_is_pending(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch = "This description does not match the approval card status. Please check the card."
         pending_display_name = {
@@ -621,7 +621,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_does_not_treat_a_different_pending_target_as_a_claim(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         succeeded_minutes = {
             "tool": "my_prompt_save",
@@ -678,7 +678,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_does_not_treat_copy_instructions_as_a_draft(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -696,7 +696,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_checks_a_passive_completion_after_approval_card_creation(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -728,7 +728,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_checks_completion_before_approval_card_creation(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
         pending_task = {
@@ -746,7 +746,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_treats_published_as_a_publish_claim(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch = "この説明と承認カードの状態が一致しません。承認カードを確認してください。"
         cards = [
@@ -771,7 +771,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_ignores_publish_word_inside_a_saved_title(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         cards = [
             {
@@ -794,7 +794,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_does_not_match_a_different_quoted_task_title(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         pending_ledger = {
             "tool": "my_prompt_save",
@@ -810,7 +810,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_leaves_a_draft_alone_when_another_task_card_is_pending(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         pending_trip = {
             "tool": "my_prompt_save",
@@ -839,7 +839,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_matches_titleless_publish_to_the_unique_requested_prompt(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -870,7 +870,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_matches_titleless_profile_update_to_the_requested_field(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -888,7 +888,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_matches_titleless_task_and_skill_completions(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         mismatch_en = "This description does not match the approval card status. Please check the card."
         self.assertEqual(
@@ -921,7 +921,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_leaves_a_same_title_draft_alone(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertIsNone(
             _unconfirmed_write_claim_fallback(
@@ -938,7 +938,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_matches_locale_profile_claims(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -956,7 +956,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_checks_a_completion_after_approval_card_creation(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -974,7 +974,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_does_not_match_a_japanese_title_prefix(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertIsNone(
             _unconfirmed_write_claim_fallback(
@@ -991,7 +991,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_checks_both_sides_of_comma_separated_publish_claim(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -1033,7 +1033,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         )
 
     def test_write_claim_guard_checks_both_sides_of_japanese_past_compound_publish_claim(self):
-        from services.chat_generation import _unconfirmed_write_claim_fallback
+        from services.chat_write_claim_guard import _unconfirmed_write_claim_fallback
 
         self.assertEqual(
             _unconfirmed_write_claim_fallback(
@@ -1104,7 +1104,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
             parts=[{"type": "text", "text": "旅行メモに追記しました。"}],
             validation_errors=[],
         )
-        with patch("services.chat_generation.normalize_response_with_artifact_retry", return_value=repaired):
+        with patch("services.chat_generation_finalization.normalize_response_with_artifact_retry", return_value=repaired):
             self.run_job(job, lambda *_args, **_kwargs: iter(("承知しました。",)))
 
         expected = "メモの変更は送信されておらず、承認カードも作成されていません。もう一度お試しください。"
@@ -1347,7 +1347,7 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         job, _saved, _on_error = self.make_job()
         tool_chunk = json.dumps([tool_call("web_search", query="x")])
         with patch(
-            "services.chat_generation.get_llm_response_stream",
+            "services.chat_generation_llm_stream.get_llm_response_stream",
             return_value=iter(["調べます。<b", tool_chunk]),
         ):
             chunks = list(job._iter_llm_stream_with_retry([{"role": "user", "content": "x"}], None))
@@ -1438,8 +1438,8 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         job, saved, _on_error = self.make_job()
         budget = AgentStepBudget(3, 6)
         with (
-            patch("services.chat_generation.AgentStepBudget.from_environment", return_value=budget),
-            patch("services.chat_generation.search_brave_llm_context", return_value=None),
+            patch("services.chat_agent_budget.AgentStepBudget.from_environment", return_value=budget),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=None),
         ):
             self.run_job(job, stream, web_search=True)
 

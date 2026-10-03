@@ -13,9 +13,9 @@ from pydantic import ValidationError
 
 from blueprints.chat.tool_approvals import _sync_approved_profile_locale
 from services.chat_agent_budget import AgentStepBudget
-from services.chat_generation import _includes_external_evidence
 from services.chat_generation_telemetry import ChatGenerationTelemetry
 from services.chat_generation_turn import ChatTurnRunState
+from services.chat_tool_calls import _includes_external_evidence
 from services.chat_turn_state import TurnStateUpdateFilter
 from services.chat_use_case import ChatPostUseCase
 from services.chat_workspace_tools import build_workspace_toolbox

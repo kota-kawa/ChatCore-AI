@@ -893,13 +893,13 @@ class GeneratedUiTurnDeliveryTests(unittest.TestCase):
         )
 
         with (
-            mock.patch("services.chat_generation.is_web_search_enabled", return_value=False),
+            mock.patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
             mock.patch(
-                "services.chat_generation.get_llm_response_stream",
+                "services.chat_generation_llm_stream.get_llm_response_stream",
                 side_effect=lambda *_args, **_kwargs: iter([streamed_answer]),
             ),
             mock.patch(
-                "services.chat_generation.get_llm_response",
+                "services.chat_generation_finalization.get_llm_response",
                 return_value=repaired_answer,
             ),
         ):
