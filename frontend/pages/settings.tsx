@@ -17,6 +17,7 @@ import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from 
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { showToast } from "../scripts/core/toast";
 import { getStoredThemePreference, setThemePreference, type ThemePreference } from "../scripts/core/theme";
+import { forgetKnownAccount } from "../lib/auth/account_switcher";
 import { asId, asString } from "../lib/utils";
 import { EditPromptModal } from "../components/settings/edit_prompt_modal";
 import { LikedPromptCard, PromptCard } from "../components/settings/prompt_cards";
@@ -1228,7 +1229,7 @@ export default function UserSettingsPage() {
     setAccountDeleting(true);
     setAccountDeleteError(null);
     try {
-      await settingsFetchJsonOrThrow<Record<string, unknown>>(
+      const deleted = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/account",
         {
           method: "DELETE",
@@ -1242,6 +1243,12 @@ export default function UserSettingsPage() {
           defaultMessage: locale === "en" ? "Could not delete the account." : "アカウント削除に失敗しました。"
         }
       );
+      // 削除したアカウントを切り替えメニューの「ログアウト済み」に残さない
+      // Keep the deleted account out of the switcher's signed-out entries
+      const deletedUserId = deleted.payload.user_id;
+      if (typeof deletedUserId === "number") {
+        forgetKnownAccount(deletedUserId);
+      }
       showToast(locale === "en" ? "Account deleted." : "アカウントを削除しました。", { variant: "success" });
       // 削除完了後、少し間を置いてからログインページへリダイレクトする
       // Brief delay before redirecting to login so the toast can be seen

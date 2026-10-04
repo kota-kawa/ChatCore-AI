@@ -13,9 +13,25 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from services.account_sessions import settle_parked_sessions
 from services.async_utils import run_blocking
 from services.cache import get_redis_client, mark_redis_unavailable
 from services.csrf import CSRF_SESSION_KEY
+from services.session_scope import (
+    MAX_PARKED_SESSIONS,
+    PARKED_SESSION_FLAG,
+    PARKED_SESSION_IDS_ORIGINAL_SCOPE_KEY,
+    PARKED_SESSION_IDS_SCOPE_KEY,
+    SESSION_IDS_TO_DELETE_SCOPE_KEY,
+    SESSION_ORIGINAL_DATA_SCOPE_KEY,
+    SESSION_ORIGINAL_ID_SCOPE_KEY,
+    SESSION_RESTORE_MISSING,
+    SESSION_RESTORE_NEW,
+    SESSION_RESTORE_REDIS_UNAVAILABLE,
+    SESSION_RESTORE_RESTORED,
+    SESSION_RESTORE_STATUS_SCOPE_KEY,
+    session_redis_key,
+)
 
 # ロガーの設定
 # Configure logger
@@ -24,15 +40,6 @@ logger = logging.getLogger(__name__)
 # 定数の定義
 # Define constants
 REDIS_BACKEND = "redis"
-SESSION_IDS_TO_DELETE_SCOPE_KEY = "_session_ids_to_delete"
-SESSION_RESTORE_STATUS_SCOPE_KEY = "_session_restore_status"
-SESSION_ORIGINAL_DATA_SCOPE_KEY = "_session_original_data"
-SESSION_ORIGINAL_ID_SCOPE_KEY = "_session_original_id"
-
-SESSION_RESTORE_NEW = "new"
-SESSION_RESTORE_RESTORED = "restored"
-SESSION_RESTORE_MISSING = "missing"
-SESSION_RESTORE_REDIS_UNAVAILABLE = "redis_unavailable"
 
 
 def rotate_session_identifier(request: Request) -> None:
@@ -107,6 +114,8 @@ class HybridSessionMiddleware:
         self.https_only = https_only
         self.bypass_paths = tuple(bypass_paths)
         self.serializer = URLSafeSerializer(secret_key, salt="strike.session")
+        self.parked_sessions_cookie = f"{session_cookie}_accounts"
+        self.parked_sessions_serializer = URLSafeSerializer(secret_key, salt="strike.session.accounts")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # HTTPリクエスト以外のタイプはスルーする
@@ -136,6 +145,9 @@ class HybridSessionMiddleware:
             session_data[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
         scope["session"] = session_data
         scope["session_id"] = session_id
+        parked_session_ids = self._load_parked_session_ids(scope)
+        scope[PARKED_SESSION_IDS_SCOPE_KEY] = parked_session_ids
+        scope[PARKED_SESSION_IDS_ORIGINAL_SCOPE_KEY] = tuple(parked_session_ids)
 
         # レスポンス送信時にセッションコミット処理を挟むためのラッパー
         # Wrapper to intercept response start and commit the session
@@ -146,14 +158,13 @@ class HybridSessionMiddleware:
                 # Save session right before starting response to reflect any changes
                 # to request.session in cookies and Redis storage.
                 headers = MutableHeaders(scope=message)
-                await run_blocking(self._commit_session, scope, headers)
+                await run_blocking(self._commit, scope, headers)
             await send(message)
 
         return await self.app(scope, receive, send_wrapper)
 
-    def _load_cookie_state(self, scope: Scope) -> dict[str, Any] | None:
-        # Cookieから署名された値を読み込んでデシリアライズする
-        # Load signed value from Cookie and deserialize it
+    @staticmethod
+    def _read_cookie(scope: Scope, name: str) -> str | None:
         headers = Headers(scope=scope)
         cookie_header = headers.get("cookie")
         if not cookie_header:
@@ -161,10 +172,17 @@ class HybridSessionMiddleware:
 
         cookies = SimpleCookie()
         cookies.load(cookie_header)
-        if self.session_cookie not in cookies:
+        if name not in cookies:
+            return None
+        return cookies[name].value
+
+    def _load_cookie_state(self, scope: Scope) -> dict[str, Any] | None:
+        # Cookieから署名された値を読み込んでデシリアライズする
+        # Load signed value from Cookie and deserialize it
+        signed_value = self._read_cookie(scope, self.session_cookie)
+        if signed_value is None:
             return None
 
-        signed_value = cookies[self.session_cookie].value
         try:
             payload = self.serializer.loads(signed_value)
         except BadSignature:
@@ -186,6 +204,43 @@ class HybridSessionMiddleware:
                 return payload
             return None
         return None
+
+    def _load_parked_session_ids(self, scope: Scope) -> list[str]:
+        # 待機セッションの Cookie も署名付きの参照IDだけを持つ。本体は Redis にある。
+        # The parked-session cookie also carries signed reference IDs only; the data stays in Redis.
+        signed_value = self._read_cookie(scope, self.parked_sessions_cookie)
+        if signed_value is None:
+            return []
+        try:
+            payload = self.parked_sessions_serializer.loads(signed_value)
+        except BadSignature:
+            return []
+        if not isinstance(payload, list):
+            return []
+        session_ids = [item for item in payload if isinstance(item, str) and item]
+        return list(dict.fromkeys(session_ids))[:MAX_PARKED_SESSIONS]
+
+    def _commit(self, scope: Scope, headers: MutableHeaders) -> None:
+        self._commit_session(scope, headers)
+        self._commit_parked_session_ids(scope, headers)
+
+    def _commit_parked_session_ids(self, scope: Scope, headers: MutableHeaders) -> None:
+        # 一覧を変えたリクエストだけ Cookie を書き直す。一覧に触れていないリクエストが
+        # 古い一覧を書き戻して、別のリクエストの変更を消さないようにする。
+        # Rewrite the cookie only when this request changed the list, so a request that never
+        # touched it cannot write a stale list back over another request's change.
+        if tuple(scope.get(PARKED_SESSION_IDS_SCOPE_KEY) or []) == scope.get(PARKED_SESSION_IDS_ORIGINAL_SCOPE_KEY):
+            return
+        session_ids = settle_parked_sessions(scope, self.max_age)
+        if not session_ids:
+            self._set_cookie(headers, "", max_age=0, name=self.parked_sessions_cookie)
+            return
+        self._set_cookie(
+            headers,
+            self.parked_sessions_serializer.dumps(session_ids),
+            self.max_age,
+            name=self.parked_sessions_cookie,
+        )
 
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
@@ -232,6 +287,13 @@ class HybridSessionMiddleware:
         restore_status = scope.get(SESSION_RESTORE_STATUS_SCOPE_KEY)
         original_session = scope.get(SESSION_ORIGINAL_DATA_SCOPE_KEY)
         original_session_id = scope.get(SESSION_ORIGINAL_ID_SCOPE_KEY)
+
+        if session.get(PARKED_SESSION_FLAG) is True:
+            # 待機に回った後のセッションを指す古いリクエスト。保存も Cookie の再発行もしない。
+            # 再発行すると、切り替え後のブラウザが切り替え前のアカウントへ戻ってしまう。
+            # A stale request that still points at a session parked in the meantime. Neither save it
+            # nor re-issue its cookie: doing so would revert the browser to the account it switched from.
+            return
 
         if restore_status == SESSION_RESTORE_MISSING and session:
             # ローテーション済みIDを読んだ古いGETが未認証セッションを再発行しないようにする。
@@ -409,25 +471,29 @@ class HybridSessionMiddleware:
             mark_redis_unavailable(exc)
 
     def _redis_key(self, session_id: str) -> str:
-        # Redisのセッションキーを作成する
-        # Create a Redis session key
-        return f"session:{session_id}"
+        return session_redis_key(session_id)
 
     def _set_cookie(
-        self, headers: MutableHeaders, value: str, max_age: int | None = None
+        self,
+        headers: MutableHeaders,
+        value: str,
+        max_age: int | None = None,
+        *,
+        name: str | None = None,
     ) -> None:
-        # レスポンスヘッダーにセッションCookieを設定する
-        # Set the session cookie in response headers
+        # レスポンスヘッダーにセッションCookie（name 指定時はその Cookie）を設定する
+        # Set the session cookie (or the named cookie) in response headers
+        cookie_name = name or self.session_cookie
         cookie = SimpleCookie()
-        cookie[self.session_cookie] = value
-        cookie[self.session_cookie]["path"] = self.path
-        cookie[self.session_cookie]["httponly"] = True
+        cookie[cookie_name] = value
+        cookie[cookie_name]["path"] = self.path
+        cookie[cookie_name]["httponly"] = True
         if self.same_site:
-            cookie[self.session_cookie]["samesite"] = self.same_site
+            cookie[cookie_name]["samesite"] = self.same_site
         if self.https_only:
-            cookie[self.session_cookie]["secure"] = True
+            cookie[cookie_name]["secure"] = True
         if max_age is not None:
-            cookie[self.session_cookie]["max-age"] = str(max_age)
+            cookie[cookie_name]["max-age"] = str(max_age)
         if max_age == 0:
-            cookie[self.session_cookie]["expires"] = "Thu, 01 Jan 1970 00:00:00 GMT"
+            cookie[cookie_name]["expires"] = "Thu, 01 Jan 1970 00:00:00 GMT"
         headers.append("set-cookie", cookie.output(header="").strip())

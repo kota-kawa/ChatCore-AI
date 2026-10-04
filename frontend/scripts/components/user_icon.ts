@@ -3,18 +3,33 @@
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 import { resilientFetch } from "../core/resilient_fetch";
 import { STORAGE_KEYS } from "../core/constants";
-import { clearPersistentCache } from "../../lib/data/persistent_cache";
-import { clearAllHomePagePersistedState, clearStoredUserScope } from "../../lib/chat_page/storage";
+import {
+  DEFAULT_AVATAR_URL,
+  clearCachedUserIconProfile,
+  readCachedUserIconProfile,
+  writeCachedUserIconProfile
+} from "../core/user_icon_cache";
+import {
+  buildAddAccountUrl,
+  clearPreviousUserBrowserState,
+  fetchSignedInAccounts,
+  forgetKnownAccount,
+  listSwitchableAccounts,
+  readKnownAccounts,
+  rememberAccounts,
+  requestAccountSwitch,
+  type AccountIdentity,
+  type SignedInAccounts,
+  type SwitchableAccount
+} from "../../lib/auth/account_switcher";
 import { LOCALE_CHANGE_EVENT, getRuntimeLocale } from "../../lib/i18n/config";
 import { translate } from "../../lib/i18n/translate";
+import { ACCOUNT_LIST_STYLES, renderAccountList, renderCurrentAccount } from "./user_icon_accounts";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
-//  - /api/user/profile で avatar_url / username を取得
+//  - /api/user/profile で avatar_url / username / email を取得
 //  - カスタム画像がある場合はデフォルト画像を先に出さない
+//  - メニューを開くたびに /api/auth/accounts でログイン中のほかのアカウントを取得
 // ────────────────────────────────────────────────
-
-const DEFAULT_AVATAR_URL = "/static/user-icon.png";
-const AVATAR_CACHE_KEY = "chatcore.userIcon.avatarUrl";
-const USERNAME_CACHE_KEY = "chatcore.userIcon.username";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -23,45 +38,6 @@ function normalizeText(value: unknown) {
 function hasCustomAvatar(value: unknown) {
   const avatarUrl = normalizeText(value);
   return avatarUrl !== "" && avatarUrl !== DEFAULT_AVATAR_URL;
-}
-
-function readCachedProfile() {
-  try {
-    const avatarUrl = normalizeText(localStorage.getItem(AVATAR_CACHE_KEY));
-    if (!avatarUrl) {
-      return null;
-    }
-
-    return {
-      avatarUrl,
-      username: normalizeText(localStorage.getItem(USERNAME_CACHE_KEY))
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedProfile(avatarUrl: string, username: string) {
-  const url = avatarUrl || DEFAULT_AVATAR_URL;
-  try {
-    localStorage.setItem(AVATAR_CACHE_KEY, url);
-    if (username) {
-      localStorage.setItem(USERNAME_CACHE_KEY, username);
-    } else {
-      localStorage.removeItem(USERNAME_CACHE_KEY);
-    }
-  } catch {
-    // localStorage が使えなくても表示は継続する
-  }
-}
-
-function clearCachedProfile() {
-  try {
-    localStorage.removeItem(AVATAR_CACHE_KEY);
-    localStorage.removeItem(USERNAME_CACHE_KEY);
-  } catch {
-    // localStorage が使えなくても表示は継続する
-  }
 }
 
 const tpl = document.createElement("template");
@@ -121,29 +97,42 @@ tpl.innerHTML = `
       position: absolute;
       top: 3.5rem;
       right: 0;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.1);
-      min-width: 160px;
+      background: var(--surface-primary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-m);
+      box-shadow: var(--shadow-md);
+      width: max-content;
+      min-width: 15rem;
+      max-width: min(20rem, calc(100vw - 20px));
+      max-height: calc(100dvh - 4.5rem);
+      overflow-y: auto;
       display: none;
       flex-direction: column;
-      overflow: hidden;
       animation: fade .15s ease-out;
     }
     @keyframes fade { from { opacity: 0; transform: translateY(-5px);}
                       to   { opacity: 1; transform: translateY(0);} }
     .item {
+      min-height: 2.75rem;
+      box-sizing: border-box;
       padding: .6rem 1rem;
-      font-size: .9rem;
+      font-size: var(--text-sm);
       text-decoration: none;
-      color: #333;
+      color: var(--text-dark);
       display: flex;
       align-items: center;
       gap: .5rem;
       cursor: pointer;
     }
-    .item:hover { background: #f5f5f5; }
+    .item:hover { background: var(--surface-tertiary); }
+    .item-add-account { border-bottom: 1px solid var(--border-default); }
+    .item:focus-visible,
+    .account:focus-visible,
+    .account-remove:focus-visible {
+      outline: 2px solid var(--primary-dark);
+      outline-offset: -2px;
+    }
+${ACCOUNT_LIST_STYLES}
   </style>
 
   <button class="btn">
@@ -152,28 +141,20 @@ tpl.innerHTML = `
 
   <!-- 文言は表示言語に合わせて applyLocaleStrings が流し込む / applyLocaleStrings fills the copy in for the active display language -->
   <div class="dropdown">
+    <div class="current"></div>
+    <div class="accounts" role="group"></div>
+    <div class="switch-error" role="alert" hidden></div>
+    <a class="item item-add-account"><span aria-hidden="true">➕</span><span class="item-label"></span></a>
     <a class="item" href="/settings"><span aria-hidden="true">⚙️</span><span class="item-label"></span></a>
     <a class="item" href="/logout"><span aria-hidden="true">🚪</span><span class="item-label"></span></a>
   </div>
 `;
 
 async function postLogoutAndRedirect() {
-  clearCachedProfile();
-  // ユーザー切替時に他人のデータを見せないよう、永続 SWR キャッシュを消去する。
-  // Clear the persisted SWR cache so a switched user never sees the previous user's data.
-  clearPersistentCache();
-  // ホーム画面のチャット全文・生成状態・下書きも同じ理由で消す。次の利用者
-  // （同一端末での別アカウント、または未ログイン）にAの本文を絶対に見せない。
-  // Clear the home page's chat text, generation state and drafts for the same
-  // reason: the next person on this device (another account, or a guest) must
-  // never see the outgoing user's text.
-  clearAllHomePagePersistedState();
-  // このブラウザの「持ち主」記録も外す。次に認証確認が通った利用者を、新規の
-  // 持ち主としてそのまま記録させ、無用な二重破棄を避ける。
-  // Drop the "owner" marker for this browser too, so the next authenticated
-  // user is simply recorded as the new owner instead of triggering a second,
-  // redundant wipe.
-  clearStoredUserScope();
+  // 次の利用者（同一端末での別アカウント、または未ログイン）に前の利用者のデータを見せない。
+  // The next person on this device (another account, or a guest) must never see the
+  // outgoing user's data.
+  clearPreviousUserBrowserState();
   // 認証状態キャッシュが "1"（ログイン中）のまま残っていると、次の利用者が
   // 認証確認より前にログイン済みUIとチャット本文を復元してしまう。
   // A stale "logged in" auth cache would let the next visitor's pre-auth
@@ -211,6 +192,14 @@ class UserIcon extends HTMLElement {
   private _handleLocaleChange: () => void;
   private settingsLabel: HTMLElement | null;
   private logoutLabel: HTMLElement | null;
+  private addAccountLabel: HTMLElement | null;
+  private currentAccountEl: HTMLElement;
+  private accountsEl: HTMLElement;
+  private switchErrorEl: HTMLElement;
+  private currentAccount: AccountIdentity | null = null;
+  private signedInAccounts: SignedInAccounts | null = null;
+  private accountsRequestVersion = 0;
+  private switching = false;
 
   constructor() {
     super();
@@ -221,13 +210,23 @@ class UserIcon extends HTMLElement {
     const dropdown = root.querySelector(".dropdown") as HTMLDivElement | null;
     const avatarImg = root.querySelector(".avatar") as HTMLImageElement | null;
 
-    if (!btn || !dropdown || !avatarImg) {
+    const currentAccountEl = root.querySelector(".current") as HTMLElement | null;
+    const accountsEl = root.querySelector(".accounts") as HTMLElement | null;
+    const switchErrorEl = root.querySelector(".switch-error") as HTMLElement | null;
+    const addAccountAnchor = root.querySelector(".item-add-account") as HTMLAnchorElement | null;
+
+    if (!btn || !dropdown || !avatarImg || !currentAccountEl || !accountsEl || !switchErrorEl || !addAccountAnchor) {
       throw new Error("user-icon template is missing required elements");
     }
 
     this.btn = btn;
     this.dropdown = dropdown;
     this.avatarImg = avatarImg;
+    this.currentAccountEl = currentAccountEl;
+    this.accountsEl = accountsEl;
+    this.switchErrorEl = switchErrorEl;
+    addAccountAnchor.href = buildAddAccountUrl();
+    this.addAccountLabel = addAccountAnchor.querySelector(".item-label");
     this.settingsLabel = root.querySelector('a[href="/settings"] .item-label');
     this.logoutLabel = root.querySelector('a[href="/logout"] .item-label');
     this._handleAuthState = this._handleAuthStateInternal.bind(this);
@@ -238,8 +237,12 @@ class UserIcon extends HTMLElement {
     // ドロップダウン開閉
     this.btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.dropdown.style.display =
-        this.dropdown.style.display === "flex" ? "none" : "flex";
+      const opening = this.dropdown.style.display !== "flex";
+      this.switchErrorEl.hidden = true;
+      this.dropdown.style.display = opening ? "flex" : "none";
+      if (opening) {
+        void this.refreshAccounts();
+      }
     });
     // 外側クリックで閉じる
     document.addEventListener("click", () => {
@@ -293,6 +296,70 @@ class UserIcon extends HTMLElement {
     this.avatarImg.alt = translate(locale, "userMenu.avatarAlt");
     if (this.settingsLabel) this.settingsLabel.textContent = translate(locale, "userMenu.settings");
     if (this.logoutLabel) this.logoutLabel.textContent = translate(locale, "userMenu.logout");
+    if (this.addAccountLabel) this.addAccountLabel.textContent = translate(locale, "userMenu.addAccount");
+    this.switchErrorEl.textContent = translate(locale, "userMenu.switchFailed");
+    this.renderAccounts();
+  }
+
+  // メニューを開くたびに取り直す。別タブでのログイン・ログアウトを反映するため。
+  // Reloaded on every open so sign-ins and sign-outs from other tabs show up.
+  private async refreshAccounts() {
+    const requestVersion = ++this.accountsRequestVersion;
+    const signedInAccounts = await fetchSignedInAccounts();
+    if (requestVersion !== this.accountsRequestVersion || !signedInAccounts) {
+      return;
+    }
+    rememberAccounts([...(signedInAccounts.current ? [signedInAccounts.current] : []), ...signedInAccounts.others]);
+    this.signedInAccounts = signedInAccounts;
+    this.renderAccounts();
+  }
+
+  private renderAccounts() {
+    const current = this.signedInAccounts?.current ?? this.currentAccount;
+    if (current) {
+      renderCurrentAccount(this.currentAccountEl, current);
+    } else {
+      this.currentAccountEl.replaceChildren();
+    }
+    // ログイン中かどうかはサーバーの応答で決まるので、応答が来るまで一覧は出さない
+    // Whether an account is signed in comes from the server, so wait for its answer
+    if (!this.signedInAccounts) {
+      this.accountsEl.replaceChildren();
+      return;
+    }
+    renderAccountList(this.accountsEl, listSwitchableAccounts(this.signedInAccounts, readKnownAccounts()), {
+      onSwitch: (account, row) => void this.switchTo(account, row),
+      onForget: (account) => {
+        forgetKnownAccount(account.userId);
+        this.renderAccounts();
+      }
+    });
+  }
+
+  // 待機中のアカウントへ切り替える。サーバー側でセッションが切れていた場合は、
+  // そのアカウントのログイン画面へ進める。
+  // Switch to a parked account. When its server session is gone, fall through to the
+  // login page for that account.
+  private async switchTo(account: SwitchableAccount, row: HTMLElement) {
+    if (this.switching) {
+      return;
+    }
+    this.switching = true;
+    row.setAttribute("aria-busy", "true");
+    this.switchErrorEl.hidden = true;
+    const result = await requestAccountSwitch(account.userId);
+    if (result === "failed") {
+      this.switching = false;
+      row.removeAttribute("aria-busy");
+      this.switchErrorEl.hidden = false;
+      return;
+    }
+    if (result === "signed_out") {
+      window.location.href = buildAddAccountUrl(account.email);
+      return;
+    }
+    clearPreviousUserBrowserState();
+    window.location.href = "/";
   }
 
   private syncTextureContext() {
@@ -313,8 +380,12 @@ class UserIcon extends HTMLElement {
       this._profileRequestVersion += 1;
       this._profileRequest = null;
       this.dropdown.style.display = "none";
-      clearCachedProfile();
+      clearCachedUserIconProfile();
       this.setAvatarPending();
+      this.currentAccount = null;
+      this.signedInAccounts = null;
+      this.accountsRequestVersion += 1;
+      this.renderAccounts();
     }
   }
 
@@ -346,7 +417,7 @@ class UserIcon extends HTMLElement {
       if (res.status === 401) {
         // 未ログイン時は静かに何もしない
         this._profileLoaded = false;
-        clearCachedProfile();
+        clearCachedUserIconProfile();
         this.setAvatarPending();
         return;
       }
@@ -360,8 +431,10 @@ class UserIcon extends HTMLElement {
       const name = normalizeText(data.username);
       const resolvedAvatar = hasCustomAvatar(avatar) ? avatar : DEFAULT_AVATAR_URL;
 
-      writeCachedProfile(resolvedAvatar, name);
+      writeCachedUserIconProfile(resolvedAvatar, name);
       this.setAvatar(resolvedAvatar, name);
+      this.currentAccount = { username: name, email: normalizeText(data.email), avatarUrl: resolvedAvatar };
+      this.renderAccounts();
       this._profileLoaded = true;
     } catch (err) {
       if (requestVersion !== this._profileRequestVersion) {
@@ -373,7 +446,7 @@ class UserIcon extends HTMLElement {
   }
 
   private restoreCachedAvatar() {
-    const cachedProfile = readCachedProfile();
+    const cachedProfile = readCachedUserIconProfile();
     if (!cachedProfile) {
       return false;
     }

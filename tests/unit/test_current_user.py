@@ -108,7 +108,7 @@ class CurrentUserTestCase(unittest.TestCase):
             response = asyncio.run(api_delete_user_account(request))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.body.decode()), {"message": "アカウントを削除しました。"})
+        self.assertEqual(json.loads(response.body.decode()), {"message": "アカウントを削除しました。", "user_id": 7})
         self.assertEqual(session, {})
         mock_delete.assert_called_once_with(7)
 

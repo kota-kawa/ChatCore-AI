@@ -113,6 +113,7 @@ LLM・埋め込み・Brave 検索の呼び出しは、プロバイダ応答の�
 Redis は設定されている環境で次の用途に使われます。
 
 - セッション本体（`session:<id>`）の保存。ブラウザ Cookie には署名された Redis 参照 ID だけを保持します。
+- 同じブラウザでログイン中のほかのアカウントのセッション（待機セッション）も同じ `session:<id>` に保存します。参照 ID は別の署名付き HttpOnly Cookie（`session_accounts`）に並べ、`services/account_sessions.py` が表示中のセッションとの入れ替え（切り替え）と、ログアウト時の繰り上げを行います。理由と影響は [ADR 0017](docs/decisions/0017-parked-sessions-for-account-switching.md) にあります。
 - Google OAuth の短命トランザクション（`google_oauth_transaction:<state>`）の保存。state、PKCE verifier、redirect URI、遷移先を一般セッションから分離し、コールバック時に `GETDEL` で一度だけ消費します。
 - メール認証の短命トランザクション（`email_auth_transaction:<id>`）の保存。ログイン・新規登録のコード、対象ユーザー、試行回数を一般セッションから分離し、専用HttpOnly CookieとRedisの楽観的排他で検証します。コードはdigestで保存し、成功・期限切れ・試行回数上限で一度だけ消費します。
 - キャッシュ、日次・月次制限、シングルフライトロック。
