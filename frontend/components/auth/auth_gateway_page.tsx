@@ -10,7 +10,11 @@ import {
 } from "../../scripts/core/passkeys";
 import { fetchJson } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { clearAllHomePagePersistedState, clearStoredUserScope } from "../../lib/chat_page/storage";
+import {
+  clearPreviousUserBrowserState,
+  getLoginEmailHint,
+  isAddAccountRequest
+} from "../../lib/auth/account_switcher";
 import { REDIRECT_DELAY_MS } from "./auth_gateway_modules/constants";
 import { AuthCodeStep } from "./auth_gateway_modules/components/auth_code_step";
 import { AuthEntryStep } from "./auth_gateway_modules/components/auth_entry_step";
@@ -74,23 +78,21 @@ export default function AuthGatewayPage() {
   };
 
   // 認証成功（メールコード・パスキー・Google のいずれか）は必ずこのページを
-  // 経由してホームへリダイレクトされる。ユーザー切替はログアウトを経由しない
-  // 場合でも必ずログインを経由するため、リダイレクト直前にこの端末へ残る
-  // 前の利用者のチャット全文・持ち主マーカーを消しておけば、直後にホーム画面が
-  // 誤って前の利用者の本文を復元することがなくなる。
+  // 経由してホームへリダイレクトされる。別アカウントの追加のように、ユーザー切替は
+  // ログアウトを経由しない場合でも必ずログインを経由するため、リダイレクト直前に
+  // この端末へ残る前の利用者のデータを消しておけば、直後の画面が誤って前の利用者の
+  // 本文やアイコンを復元することがなくなる。以下の各リダイレクトの直前で
+  // clearPreviousUserBrowserState を呼ぶ。
   // Every successful authentication (email code, passkey, or Google) redirects
-  // home through this page. A user switch always goes through login even when
-  // it skips logout, so wiping any previous user's chat text and owner marker
-  // right before the redirect guarantees the home page can never restore it.
-  const clearHomePagePersistedStateForFreshLogin = () => {
-    clearAllHomePagePersistedState();
-    clearStoredUserScope();
-  };
+  // home through this page. A user switch such as adding another account always
+  // goes through login even when it skips logout, so wiping the previous user's
+  // data right before the redirect guarantees the next page can never restore
+  // their text or avatar. Each redirect below calls clearPreviousUserBrowserState first.
 
   // 認証完了後に指定パスへ遅延リダイレクトをスケジュールする
   // Schedule a delayed redirect to the specified path after authentication completes
   const scheduleRedirect = (targetPath: string = getPostAuthRedirectPath()) => {
-    clearHomePagePersistedStateForFreshLogin();
+    clearPreviousUserBrowserState();
     clearTimer(redirectTimerRef);
     setRedirectingAfterAuth(true);
     redirectTimerRef.current = setTimeout(() => {
@@ -134,6 +136,12 @@ export default function AuthGatewayPage() {
     ensureCsrfProtection();
     document.body.classList.add("auth-page");
     setSupportsPasskeys(browserSupportsPasskeys());
+    // ログアウト済みアカウントを選んで来たときは、そのメールアドレスを入力済みにする
+    // Prefill the email when the user picked a signed-out account from the switcher
+    const emailHint = getLoginEmailHint(getSearchParams());
+    if (emailHint) {
+      setEmail(emailHint);
+    }
     return () => {
       document.body.classList.remove("auth-page");
       clearTimer(redirectTimerRef);
@@ -173,7 +181,12 @@ export default function AuthGatewayPage() {
             );
             return;
           }
-          clearHomePagePersistedStateForFreshLogin();
+          // 別アカウントの追加で来たときは、ログイン中でもログイン画面に留まる
+          // Stay on the login page when the user came to add another account
+          if (isAddAccountRequest(query)) {
+            return;
+          }
+          clearPreviousUserBrowserState();
           window.location.href = nextPath;
         }
       } catch (error) {
@@ -288,7 +301,7 @@ export default function AuthGatewayPage() {
     setPasskeyPending(true);
     try {
       await authenticateWithPasskey();
-      clearHomePagePersistedStateForFreshLogin();
+      clearPreviousUserBrowserState();
       window.location.href = getPostAuthRedirectPath();
     } catch (error) {
       // ユーザーがキャンセルした場合はエラー表示しない

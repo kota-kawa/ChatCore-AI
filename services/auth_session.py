@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from services.account_sessions import park_current_session
+from services.csrf import CSRF_SESSION_KEY
 from services.i18n import (
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
@@ -19,10 +21,26 @@ def establish_authenticated_session(
     email: str,
     preferred_locale: str | None = None,
 ) -> None:
-    # セッション固定化攻撃（Session Fixation）を防ぐためにセッションIDをローテーションする
-    # Rotate the session identifier to prevent session fixation attacks
-    rotate_session_identifier(request)
     session = request.session
+    current_user_id = session.get("user_id")
+    signed_in_as_another_user = isinstance(current_user_id, int) and current_user_id != int(user_id)
+    # 別アカウントでログイン中なら、そのセッションを破棄せず待機に回して後から切り替えられるようにする。
+    # それ以外はセッション固定化攻撃（Session Fixation）を防ぐために旧IDを破棄する。どちらでも新しいIDが発行される。
+    # When another account is signed in, park its session instead of discarding it so the user can
+    # switch back. Otherwise discard the old ID to prevent session fixation. A fresh ID is issued either way.
+    if signed_in_as_another_user and park_current_session(request):
+        # 新しいアカウントのセッションは空から作る。管理者フラグなど、元のアカウントの
+        # セッションに載っていた値を引き継がせない。CSRF トークンだけは、このページが
+        # 取得済みの値で次のリクエストを送るので残す。
+        # Start the new account's session from scratch so nothing the other account's session
+        # held (the admin flag, for example) carries over. Only the CSRF token stays, because
+        # this page sends its next request with the token it already fetched.
+        csrf_token = session.get(CSRF_SESSION_KEY)
+        session.clear()
+        if csrf_token is not None:
+            session[CSRF_SESSION_KEY] = csrf_token
+    else:
+        rotate_session_identifier(request)
     # セッション内にログインユーザーのIDとメールアドレスを書き込む
     # Write the logged-in user's ID and email into the session dict
     session["user_id"] = int(user_id)

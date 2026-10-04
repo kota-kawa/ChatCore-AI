@@ -60,6 +60,8 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 from blueprints.auth_account import (
     api_current_user,
     api_delete_user_account,
+    api_list_accounts,
+    api_switch_account,
     login,
     logout,
     register_page,
@@ -109,6 +111,7 @@ from blueprints.verification import (
     api_send_verification_email,
     api_verify_registration_code,
 )
+from services.account_sessions import activate_parked_session, load_parked_sessions
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
 from services.auth_limits import (
@@ -234,6 +237,8 @@ AUTH_FAILURE_STATUS_CODE = 401
 auth_bp.get("/register", name="auth.register_page")(register_page)
 auth_bp.get("/api/current_user", name="auth.api_current_user")(api_current_user)
 auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")(api_delete_user_account)
+auth_bp.get("/api/auth/accounts", name="auth.api_list_accounts")(api_list_accounts)
+auth_bp.post("/api/auth/accounts/switch", name="auth.api_switch_account")(api_switch_account)
 auth_bp.get("/login", name="auth.login")(login)
 auth_bp.post("/logout", name="auth.logout")(logout)
 auth_bp.post("/api/auth/send_email_code", name="auth.api_send_email_code")(api_send_email_code)
@@ -312,9 +317,11 @@ __all__ = [
     "_resolve_llm_daily_limit_service",
     "_user_id_from_session",
     "_validate_google_oauth_settings",
+    "activate_parked_session",
     "api_current_user",
     "api_delete_passkey",
     "api_delete_user_account",
+    "api_list_accounts",
     "api_list_passkeys",
     "api_passkey_authenticate_options",
     "api_passkey_authenticate_verify",
@@ -323,6 +330,7 @@ __all__ = [
     "api_send_email_code",
     "api_send_login_code",
     "api_send_verification_email",
+    "api_switch_account",
     "api_verify_email_code",
     "api_verify_login_code",
     "api_verify_registration_code",
@@ -373,6 +381,7 @@ __all__ = [
     "jsonify_rate_limited",
     "link_google_account",
     "list_passkeys_for_user",
+    "load_parked_sessions",
     "log_and_internal_server_error",
     "logger",
     "login",

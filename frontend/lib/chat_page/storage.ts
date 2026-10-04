@@ -2,6 +2,8 @@ import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { normalizeChatMessageParts } from "./api_contract";
 import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
+import { clearCachedUserIconProfile } from "../../scripts/core/user_icon_cache";
+import { clearPersistentCache } from "../data/persistent_cache";
 import {
   clearAllCachedHistory,
   readCachedHistory,
@@ -461,13 +463,19 @@ export function consumeAuthSuccessHint() {
   // 着地するときに付く。着地した時点で新規の認証が確定しているので、この端末に
   // 残っていた前の利用者の永続状態を今すぐ破棄する。ここで消しておけば、直後の
   // restoreHomeViewFromStorage が古い持ち主のレイアウトを一瞬でも復元しない。
+  // ログイン中のまま別アカウントを追加した場合はログアウトを経由しないので、
+  // 永続 SWR キャッシュとアイコンの表示キャッシュもここで消す。
   // This hint is attached when the Google OAuth callback lands directly on "/"
   // (bypassing /login). By the time it lands, a fresh authentication has just
   // been confirmed, so wipe whatever persisted state a previous user left on
   // this device right now. Clearing it here means the restoreHomeViewFromStorage
   // that follows never restores the previous owner's layout, even briefly.
+  // Adding another account while signed in skips logout, so the persisted SWR
+  // cache and the icon's display cache are cleared here as well.
   clearAllHomePagePersistedState();
   clearStoredUserScope();
+  clearPersistentCache();
+  clearCachedUserIconProfile();
 
   writeCachedAuthState(true);
   url.searchParams.delete(AUTH_SUCCESS_HINT.queryParam);

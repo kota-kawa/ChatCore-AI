@@ -452,5 +452,12 @@ export const enMessages = {
   "userMenu.avatarAlt": "User icon",
   "userMenu.avatarAltNamed": "{username}’s icon",
   "userMenu.settings": "Settings",
-  "userMenu.logout": "Log out"
+  "userMenu.logout": "Log out",
+  "userMenu.addAccount": "Add another account",
+  "userMenu.otherAccounts": "Other accounts",
+  "userMenu.switchAccount": "Switch to {name}",
+  "userMenu.signedOut": "Signed out",
+  "userMenu.signInAgain": "Sign in again as {name}",
+  "userMenu.removeAccount": "Remove {name} from this list",
+  "userMenu.switchFailed": "Could not switch accounts. Please try again in a moment."
 } as const satisfies Record<MessageKey, string>;

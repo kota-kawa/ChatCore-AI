@@ -149,4 +149,34 @@ describe("auth gateway clears previous-user storage before redirecting home", ()
 
     await waitFor(() => expectPreviousUserStorageCleared());
   });
+
+  // 別アカウントの追加で来たときは、ログイン中でもホームへ戻さずログイン画面を出す。
+  // この時点ではまだ利用者は替わっていないので、今の利用者のデータも消さない。
+  // Arriving to add another account keeps the login page up even while signed in.
+  // The user has not changed yet, so the current user's data stays as well.
+  it("stays on the login page with the email prefilled when adding another account", async () => {
+    seedPreviousUserStorage();
+    browserSupportsPasskeysMock.mockReturnValue(false);
+    window.history.replaceState({}, "", "/login?add_account=1&email=user2%40example.com");
+
+    fetchMock.mockImplementation(async (url: unknown) => {
+      const requestedUrl = String(url);
+      if (requestedUrl.includes("current_user")) return jsonResponse({ logged_in: true, user: { id: 1 } });
+      return jsonResponse({});
+    });
+
+    try {
+      render(<AuthGatewayPage />);
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/current_user", expect.anything()));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(document.querySelector<HTMLInputElement>("#email")).toHaveValue("user2@example.com");
+      expect(localStorage.getItem(PRIVATE_ROOM_KEY)).not.toBeNull();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
 });

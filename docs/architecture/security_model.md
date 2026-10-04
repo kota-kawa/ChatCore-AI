@@ -54,6 +54,6 @@ LLM の出力も、外部から取得した本文も、「LLM が作った」「
 
 ## 検証
 
-- 単体テスト: `tests/unit/test_csrf_protection.py`、`test_security.py`、`test_auth_session.py`、`test_mcp_session_bypass.py`、`test_mcp_oauth.py`、`test_mcp_oauth_routes.py`、`test_generated_ui_reliability.py`、`test_chat_tool_approval_api.py`（所有者確認・CSRF・レート制限・承認カードの状態遷移）、`test_chat_workspace_tools.py` と `test_personal_knowledge.py`（外部・未確認の内容を読んだターンでの自動承認の抑止）。
+- 単体テスト: `tests/unit/test_csrf_protection.py`、`test_security.py`、`test_auth_session.py`、`test_account_sessions.py`（待機セッションの切り替え・ログアウト・Cookie の改ざん）、`test_mcp_session_bypass.py`、`test_mcp_oauth.py`、`test_mcp_oauth_routes.py`、`test_generated_ui_reliability.py`、`test_chat_tool_approval_api.py`（所有者確認・CSRF・レート制限・承認カードの状態遷移）、`test_chat_workspace_tools.py` と `test_personal_knowledge.py`（外部・未確認の内容を読んだターンでの自動承認の抑止）。
 - CI: `.github/workflows/tests.yml` の `dependency_audit` ジョブが依存パッケージの既知の脆弱性を検査し、`deploy` ジョブは全検査の成功を前提にします。
 - 変更時: 状態を変更するルートを追加したら CSRF 適用を確認し、LLM へ渡すデータや LLM の出力を実行する経路を追加したら、上の信頼境界の表に行を足してください。

@@ -1044,7 +1044,14 @@ export const jaMessages = {
   "userMenu.avatarAlt": "ユーザーアイコン",
   "userMenu.avatarAltNamed": "{username}のアイコン",
   "userMenu.settings": "設定",
-  "userMenu.logout": "ログアウト"
+  "userMenu.logout": "ログアウト",
+  "userMenu.addAccount": "別のアカウントを追加",
+  "userMenu.otherAccounts": "ほかのアカウント",
+  "userMenu.switchAccount": "{name}に切り替える",
+  "userMenu.signedOut": "ログアウト済み",
+  "userMenu.signInAgain": "{name}でログインし直す",
+  "userMenu.removeAccount": "{name}を一覧から削除",
+  "userMenu.switchFailed": "切り替えられませんでした。少し待ってからもう一度お試しください。"
 } as const;
 
 export type MessageKey = keyof typeof jaMessages;
