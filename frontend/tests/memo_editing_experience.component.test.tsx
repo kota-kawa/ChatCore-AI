@@ -39,7 +39,11 @@ describe("MemoMarkdown checklists and links", () => {
     expect(boxes(container).map((box) => box.disabled)).toEqual([false, false]);
 
     fireEvent.click(boxes(container)[1]);
-    expect(onToggleTask).toHaveBeenCalledWith(1, 2);
+    expect(onToggleTask).toHaveBeenCalledWith(1, [
+      { label: "パスポート", checked: false },
+      { label: "常備薬", checked: true },
+    ]);
+    expect(boxes(container).map((box) => box.getAttribute("aria-label"))).toEqual(["パスポート", "常備薬"]);
   });
 
   it("marks the click as handled so the surrounding click-to-open does not fire", () => {
@@ -189,7 +193,7 @@ describe("useMemoListContinuation", () => {
 const mutateMock = vi.fn(async () => undefined);
 const mutate = mutateMock as unknown as KeyedMutator<MemoListState>;
 const showFlash = vi.fn();
-const updateMemoListOptimistically = vi.fn(async () => undefined);
+const updateMemoListOptimistically = vi.fn(async (_updater: unknown, _ids: unknown) => undefined);
 const noop = () => undefined;
 const asyncNoop = async () => undefined;
 
@@ -207,33 +211,63 @@ function useItemActionsHarness() {
 
 describe("ticking a checklist box on a list card", () => {
   const card: MemoSummary = { id: 7, title: "旅行", excerpt: "- [ ] パスポート\n- [x] 常備薬" };
+  const shown = [{ label: "パスポート", checked: false }, { label: "常備薬", checked: true }];
 
   beforeEach(() => {
     vi.mocked(updateMemo).mockResolvedValue(undefined);
   });
 
-  it("rewrites the full body, which is longer than the card excerpt", async () => {
-    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 7, title: "旅行", ai_response: `${card.excerpt}\n- [ ] 続き` });
+  it("rewrites the full body, which is longer than the card excerpt, without resending the title", async () => {
+    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 7, title: "保存したメモ", ai_response: `${card.excerpt}\n- [ ] 続き` });
     const { result } = renderHook(() => useItemActionsHarness());
     await act(async () => {
-      await result.current.handleToggleMemoTask(card, 0, 2);
+      await result.current.handleToggleMemoTask(card, 0, shown);
     });
     expect(updateMemo).toHaveBeenCalledWith(
       7,
-      { title: "旅行", ai_response: "- [x] パスポート\n- [x] 常備薬\n- [ ] 続き" },
+      { ai_response: "- [x] パスポート\n- [x] 常備薬\n- [ ] 続き" },
       expect.any(String),
     );
+    // カードは保存を待たずに切り替わる
+    // The card flips without waiting for the save
+    const [updater] = updateMemoListOptimistically.mock.calls[0] as unknown as [(memo: MemoSummary) => MemoSummary];
+    expect(updater(card).excerpt).toBe("- [x] パスポート\n- [x] 常備薬");
     expect(mutateMock).toHaveBeenCalled();
   });
 
   it("writes nothing when the body no longer matches what the card shows", async () => {
-    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 7, title: "旅行", ai_response: "- [x] 別の端末で変更\n- [x] 常備薬" });
+    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 7, title: "旅行", ai_response: "- [ ] 別の端末で追加\n- [x] 常備薬" });
     const { result } = renderHook(() => useItemActionsHarness());
     await act(async () => {
-      await result.current.handleToggleMemoTask(card, 0, 2);
+      await result.current.handleToggleMemoTask(card, 0, shown);
     });
     expect(updateMemo).not.toHaveBeenCalled();
     expect(showFlash).toHaveBeenCalledWith("error", expect.any(String));
+    // 取り直した一覧が、先に切り替えたカードの表示を元に戻す
+    // The reloaded list puts the optimistically flipped card back
     expect(mutateMock).toHaveBeenCalled();
+  });
+});
+
+describe("links inside a list card", () => {
+  it("are excluded from the click that opens the card", async () => {
+    const { MemoHistoryPanel } = await import("../components/memo/MemoHistoryPanel");
+    const openMemoDetail = vi.fn(async () => undefined);
+    const memos: MemoSummary[] = [{ id: 1, title: "本", excerpt: "[本](https://example.com/books) を読む" }];
+    const controller = createMemoPageControllerStub({
+      memos, otherMemos: memos, pinnedMemos: [], totalMemoCount: 1, openMemoDetail,
+    });
+    render(
+      <MemoPageContextProvider controller={controller}>
+        <MemoHistoryPanel />
+      </MemoPageContextProvider>,
+    );
+    const link = screen.getByRole("link", { name: "本" });
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+    expect(openMemoDetail).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("を読む", { exact: false }), { clientX: 300, clientY: 300 });
+    expect(openMemoDetail).toHaveBeenCalledWith("1");
   });
 });

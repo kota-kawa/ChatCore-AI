@@ -14,6 +14,9 @@ interface UseMemoDetailEditFocusParams {
   // 編集中の本文。クリック位置は、この文字列に対する位置として渡ってくる
   // The body being edited; click positions arrive as offsets into this string
   bodySource: string;
+  // 開いているメモ。別のメモに替わったら、控えていたスクロール位置を捨てる
+  // The open memo; the remembered scroll position is dropped when it changes
+  memoId: string | number | undefined;
 }
 
 // プレビュー面（本文・タイトル）をクリックしたら編集モードへ切り替え、入力へフォーカスを渡す。
@@ -26,7 +29,7 @@ interface UseMemoDetailEditFocusParams {
 // history) and can only take focus once shown, so the request is parked in a ref and honoured by
 // the effect that runs after the mode flips. Returning through the edit tab resumes at the caret
 // and scroll position the textarea had before it was hidden.
-export function useMemoDetailEditFocus({ previewMode, setPreviewMode, bodySource }: UseMemoDetailEditFocusParams) {
+export function useMemoDetailEditFocus({ previewMode, setPreviewMode, bodySource, memoId }: UseMemoDetailEditFocusParams) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const pendingTargetRef = useRef<{ target: MemoDetailEditTarget; position?: MemoEditPosition } | null>(null);
@@ -36,6 +39,10 @@ export function useMemoDetailEditFocus({ previewMode, setPreviewMode, bodySource
   // 隠すと scrollTop は 0 に戻るので、見えている間の値を控えておく
   // Hiding resets scrollTop to 0, so remember the value while the textarea is visible
   const bodyScrollTopRef = useRef(0);
+
+  useLayoutEffect(() => {
+    bodyScrollTopRef.current = 0;
+  }, [memoId]);
 
   const rememberBodyScroll = useCallback(() => {
     const textarea = textareaRef.current;

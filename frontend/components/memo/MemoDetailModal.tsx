@@ -8,8 +8,9 @@ import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
-import { toggleTaskMarker } from "../../lib/memo/list_editing";
+import { toggleTaskMarker, type RenderedTask } from "../../lib/memo/list_editing";
 import { captureMemoEditPosition } from "../../lib/memo/detail_edit_position";
+import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoMarkdown } from "./MemoMarkdown";
@@ -62,17 +63,22 @@ export function MemoDetailModal() {
     previewMode: detailPreviewMode,
     setPreviewMode: setDetailPreviewMode,
     bodySource: detailEditAiResponse,
+    memoId: selectedMemo?.id,
   });
 
   // 画面キーボードに隠れている高さ。レイアウトの高さが縮まない iOS でだけ 0 より大きくなる
   // Height covered by the on-screen keyboard; above 0 only on iOS, where the layout does not shrink
   const visualViewportHeight = useVisualViewportHeight(isOpen);
-  const keyboardInset = visualViewportHeight === null ? 0 : Math.max(0, window.innerHeight - visualViewportHeight);
+  // ピンチで拡大している間も表示領域は縮むが、キーボードではないので持ち上げない
+  // Pinch-zooming shrinks the visual viewport too, but that is not a keyboard, so nothing is lifted
+  const keyboardInset = visualViewportHeight === null || (window.visualViewport?.scale ?? 1) > 1.01
+    ? 0
+    : Math.max(0, window.innerHeight - visualViewportHeight);
 
   // プレビューのチェック欄をその場で切り替える（保存は既存の自動保存に任せる）
   // Tick a checklist box right in the preview; the existing autosave persists it
-  const toggleDetailTask = useCallback((index: number, renderedCount: number) => {
-    const next = toggleTaskMarker(detailEditAiResponse, index, renderedCount);
+  const toggleDetailTask = useCallback((index: number, rendered: RenderedTask[]) => {
+    const next = toggleTaskMarker(detailEditAiResponse, index, rendered);
     if (next === null) return false;
     setDetailEditAiResponse(next);
     return true;
@@ -81,7 +87,7 @@ export function MemoDetailModal() {
   // タイトルで Enter を押したら本文へ進む（日本語変換の確定の Enter は除く）
   // Enter in the title moves on to the body (except the Enter that confirms an IME conversion)
   const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
     textareaRef.current?.focus();
   }, [textareaRef]);

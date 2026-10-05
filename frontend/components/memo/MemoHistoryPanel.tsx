@@ -139,7 +139,9 @@ export function MemoHistoryPanel() {
                           tabIndex={0}
                           className="memo-item__open memo-item__open--content"
                           onClick={(event) => {
-                            if (event.defaultPrevented) return;
+                            // チェック欄（MemoMarkdown が処理済み）と本文中のリンクは、カードを開く操作にしない
+                            // A checkbox (already handled by MemoMarkdown) or a link in the body does not open the card
+                            if (event.defaultPrevented || (event.target as Element).closest("a")) return;
                             if (isBulkMode) { toggleSelectMemo(memoId); return; }
                             void openMemoDetail(memoId);
                           }}
@@ -155,8 +157,11 @@ export function MemoHistoryPanel() {
                             <MemoMarkdown
                               text={parseMemoText(memo.excerpt)}
                               className="memo-item__excerpt"
-                              onToggleTask={isBulkMode || isBusy ? undefined : (index, renderedCount) => {
-                                void handleToggleMemoTask(memo, index, renderedCount);
+                              onToggleTask={isBulkMode ? undefined : (index, rendered) => {
+                                // 保存中の連打は受け付けない（古い本文をもとに二重に書き換えないため）
+                                // Ignore taps while a save is running so two rewrites never start from the same stale body
+                                if (isBusy) return false;
+                                void handleToggleMemoTask(memo, index, rendered);
                                 return true;
                               }}
                             />

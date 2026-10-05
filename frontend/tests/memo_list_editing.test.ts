@@ -86,23 +86,68 @@ test("indentLines indents and outdents the selected lines", () => {
   const indented = apply(value, indentLines(value, value.length, value.length, 1));
   assert.equal(indented.value, "- a\n  - b");
   assert.equal(indented.caret, indented.value.length);
-  assert.equal(apply(indented.value, indentLines(indented.value, 0, indented.value.length, -1)).value, value);
+  assert.equal(apply(indented.value, indentLines(indented.value, indented.value.length, indented.value.length, -1)).value, value);
   assert.equal(indentLines(value, 0, 0, -1), null);
 });
 
-test("findTaskMarkers follows preview order and ignores fenced code", () => {
-  const source = "- [ ] a\n```\n- [x] コードの中\n```\n1. [X] b\n  * [ ] c\n- [] 欄ではない\n> - [x] d";
-  assert.deepEqual(findTaskMarkers(source).map((marker) => marker.checked), [false, true, false, true]);
+test("indentLines nests under a numbered item by the width of its marker", () => {
+  // Markdown は親の記号の幅だけ字下げした行を入れ子にする（"1. " は 3、"10. " は 4）
+  // Markdown nests a line indented by its parent's marker width ("1. " is 3, "10. " is 4)
+  const numbered = "1. a\n1. b";
+  assert.equal(apply(numbered, indentLines(numbered, numbered.length, numbered.length, 1)).value, "1. a\n   1. b");
+  const wide = "10. a\n- b";
+  assert.equal(apply(wide, indentLines(wide, wide.length, wide.length, 1)).value, "10. a\n    - b");
 });
+
+test("indentLines leaves blank lines of a multi-line selection untouched", () => {
+  const value = "- a\n\n- b";
+  assert.equal(apply(value, indentLines(value, 0, value.length, 1)).value, "  - a\n\n  - b");
+});
+
+test("Enter on an empty nested item returns to the parent's indent whatever its width", () => {
+  assert.equal(enterAtEnd("1. a\n   1. ").value, "1. a\n1. ");
+  assert.equal(enterAtEnd("- a\n  - b\n    - ").value, "- a\n  - b\n  - ");
+});
+
+test("findTaskMarkers follows preview order and ignores fenced code and empty boxes", () => {
+  const source = "- [ ] a\n```\n- [x] コードの中\n```\n1. [X] b\n  * [ ] c\n- [] 欄ではない\n> - [x] d\n- [ ] \n- [ ]";
+  assert.deepEqual(findTaskMarkers(source).map((marker) => [marker.checked, marker.text]), [
+    [false, "a"], [true, "b"], [false, "c"], [true, "d"],
+  ]);
+  assert.deepEqual(findTaskMarkers("- [ ] a\r\n- [ ]\r\n").map((marker) => marker.text), ["a"]);
+});
+
+const rendered = (...tasks: [string, boolean][]) => tasks.map(([label, checked]) => ({ label, checked }));
 
 test("toggleTaskMarker flips only the requested box", () => {
-  const source = "- [ ] パスポート\n- [x] 常備薬\n  - [ ] 予備";
-  assert.equal(toggleTaskMarker(source, 0, 3), "- [x] パスポート\n- [x] 常備薬\n  - [ ] 予備");
-  assert.equal(toggleTaskMarker(source, 1, 3), "- [ ] パスポート\n- [ ] 常備薬\n  - [ ] 予備");
-  assert.equal(toggleTaskMarker(source, 2, 3), "- [ ] パスポート\n- [x] 常備薬\n  - [x] 予備");
+  const source = "- [ ] パスポート\n- [x] **常備薬** [店](https://example.com)\n  - [ ] 予備";
+  const boxes = rendered(["パスポート", false], ["常備薬 店", true], ["予備", false]);
+  assert.equal(toggleTaskMarker(source, 0, boxes), source.replace("- [ ] パスポート", "- [x] パスポート"));
+  assert.equal(toggleTaskMarker(source, 1, boxes), source.replace("- [x] **常備薬**", "- [ ] **常備薬**"));
+  assert.equal(toggleTaskMarker(source, 2, boxes), source.replace("- [ ] 予備", "- [x] 予備"));
 });
 
-test("toggleTaskMarker refuses when the rendered boxes do not match the source", () => {
-  assert.equal(toggleTaskMarker("- [ ] a", 0, 2), null);
-  assert.equal(toggleTaskMarker("- [ ] a", 3, 1), null);
+test("toggleTaskMarker still works when the memo ends with an empty checklist item", () => {
+  // 項目を入力して改行すると、末尾に空の「- [ ] 」が残る。描画ではこれは欄にならない
+  // Typing an item and pressing Enter leaves a trailing empty "- [ ] ", which is not rendered as a box
+  assert.equal(toggleTaskMarker("- [ ] a\n- [ ] ", 0, rendered(["a", false])), "- [x] a\n- [ ] ");
+});
+
+test("toggleTaskMarker refuses when the rendered boxes do not line up with the source", () => {
+  assert.equal(toggleTaskMarker("- [ ] a", 0, rendered(["a", false], ["b", false])), null);
+  assert.equal(toggleTaskMarker("- [ ] a", 3, rendered(["a", false])), null);
+  assert.equal(toggleTaskMarker("- [ ] a", 0, rendered(["a", true])), null);
+  // 行の途中にあるコードフェンスは、描画側と本文側で数え方が食い違う。件数は合っても別の行を指す
+  // A code fence in the middle of a line is counted differently by the renderer and the source
+  // scan: the counts agree but the box points at another line
+  assert.equal(toggleTaskMarker("text ```\n- [ ] x\n```\n- [ ] y", 0, rendered(["y", false])), null);
+  assert.equal(toggleTaskMarker("- - [ ] a\n- [ ] b c", 0, rendered(["a", false])), null);
+});
+
+test("toggleTaskMarker accepts the head of the body for a list card and rejects a shifted one", () => {
+  const body = "- [ ] a\n- [x] b\n- [ ] 続き";
+  const card = rendered(["a", false], ["b", true]);
+  assert.equal(toggleTaskMarker(body, 0, card), null);
+  assert.equal(toggleTaskMarker(body, 0, card, true), "- [x] a\n- [x] b\n- [ ] 続き");
+  assert.equal(toggleTaskMarker(`- [ ] 追加\n${body}`, 0, card, true), null);
 });
