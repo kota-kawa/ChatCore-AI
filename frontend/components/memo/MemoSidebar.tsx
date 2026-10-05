@@ -98,6 +98,16 @@ export function MemoSidebar() {
                         </span>
                         <span className="memo-sidebar-collection-name">{t("memo.archive")}</span>
                       </button>
+                      <button
+                        type="button"
+                        className={`memo-sidebar-collection-item memo-sidebar-collection-item--system${archiveScope === "trash" ? " is-active" : ""}`}
+                        onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("trash"); }}
+                      >
+                        <span className="memo-sidebar-collection-icon" aria-hidden="true">
+                          <i className="bi bi-trash3"></i>
+                        </span>
+                        <span className="memo-sidebar-collection-name">{t("memo.trash")}</span>
+                      </button>
                       {collections.map((col) => (
                         <button
                           key={col.id}

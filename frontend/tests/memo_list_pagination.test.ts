@@ -38,6 +38,19 @@ test("buildMemoListUrl keeps the filters while the limit grows", () => {
   assert.equal(params.get("collection_id"), "7");
 });
 
+test("buildMemoListUrl asks for the trash only in the trash scope and keeps search and collection", () => {
+  const trash = paramsOf(buildMemoListUrl({ ...baseOptions, archiveScope: "trash", query: "旅行", collectionId: 3 }));
+  assert.equal(trash.get("only_trashed"), "true");
+  assert.equal(trash.get("q"), "旅行");
+  assert.equal(trash.get("collection_id"), "3");
+  assert.equal(trash.get("only_archived"), null);
+  assert.equal(trash.get("include_archived"), null);
+
+  for (const scope of ["active", "archived", "all"]) {
+    assert.equal(paramsOf(buildMemoListUrl({ ...baseOptions, archiveScope: scope })).get("only_trashed"), null);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // loadMemoList: the backend caps one request at MAX_MEMO_LIST_REQUEST_LIMIT rows
 // ---------------------------------------------------------------------------

@@ -60,3 +60,25 @@ describe("MemoToolbar mobile controls", () => {
     expect(screen.getByTestId("toolbar-state")).toHaveTextContent("archived/title/1/true");
   });
 });
+
+describe("MemoToolbar in the trash", () => {
+  it("offers a Trash chip next to All memos and Archive that switches the scope", () => {
+    render(<ToolbarHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "表示・整理メニュー" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "ゴミ箱" }));
+
+    expect(screen.getByTestId("toolbar-state")).toHaveTextContent("trash/manual/all/false");
+    expect(screen.getByRole("heading", { level: 2, name: "ゴミ箱" })).toBeInTheDocument();
+  });
+
+  it("drops the export button there, because exports never include trashed memos", () => {
+    render(<ToolbarHarness />);
+    expect(screen.getByRole("button", { name: "エクスポート" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "表示・整理メニュー" }));
+    fireEvent.click(screen.getByRole("button", { name: "ゴミ箱" }));
+
+    expect(screen.queryByRole("button", { name: "エクスポート" })).toBeNull();
+  });
+});

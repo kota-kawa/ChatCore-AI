@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatDate, formatDateTime } from "../lib/datetime";
+import { daysUntil, formatDate, formatDateTime } from "../lib/datetime";
 
 // サーバーのTZが何であっても同じ文字列を返すことを確認する。
 // ここがずれると SSR とブラウザで表示が変わり、React のハイドレーション不一致
@@ -71,4 +71,25 @@ test("invalid or empty values still render as an empty string", () => {
   assert.equal(formatDateTime(""), "");
   assert.equal(formatDateTime("not-a-date"), "");
   assert.equal(formatDate(null), "");
+});
+
+// ゴミ箱の「あと N 日」。端数は切り上げ、オフセットなしの ISO 文字列は UTC として読む
+// The trash's "N days left": rounded up, and an offset-less ISO string is read as UTC
+test("daysUntil rounds up and reads offset-less timestamps as UTC", () => {
+  const now = Date.parse("2026-10-01T00:00:00Z");
+  assert.equal(daysUntil("2026-10-31T00:00:00", now), 30);
+  assert.equal(daysUntil("2026-10-31T00:00:00Z", now), 30);
+  assert.equal(daysUntil("2026-10-01T01:00:00Z", now), 1);
+  assert.equal(daysUntil("2026-10-01T00:00:00Z", now), 0);
+  assert.equal(daysUntil("2026-09-30T00:00:00Z", now), -1);
+  assert.equal(daysUntil(null, now), null);
+  assert.equal(daysUntil("not a date", now), null);
+});
+
+test("daysUntil does not depend on the ambient time zone", () => {
+  const now = Date.parse("2026-10-01T00:00:00Z");
+  const utc = withTimeZone("UTC", () => daysUntil("2026-10-11T00:00:00", now));
+  const newYork = withTimeZone("America/New_York", () => daysUntil("2026-10-11T00:00:00", now));
+  assert.equal(utc, 10);
+  assert.equal(newYork, 10);
 });

@@ -61,3 +61,17 @@ export function formatDate(value?: string | null): string {
     timeZone: DISPLAY_TIME_ZONE,
   }).format(parsed);
 }
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * 指定した日時まであと何日か（端数は切り上げ）。過ぎていれば 0 以下になる。
+ * 表示用の文字列ではなく瞬間どうしの差なので、表示タイムゾーンには依存しない。
+ * How many days remain until the given time, rounded up; zero or negative once it has passed.
+ * It compares two instants rather than formatting one, so it does not depend on the display time zone.
+ */
+export function daysUntil(value: string | null | undefined, now: number = Date.now()): number | null {
+  const parsed = parseDate(value);
+  if (!parsed) return null;
+  return Math.ceil((parsed.getTime() - now) / MS_PER_DAY);
+}

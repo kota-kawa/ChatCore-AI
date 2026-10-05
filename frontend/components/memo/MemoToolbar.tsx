@@ -36,7 +36,7 @@ export function MemoToolbar() {
               <div className="memo-toolbar__top-row">
                 <div className="memo-toolbar__brand">
                   <div className="memo-toolbar__title">
-                    <h2>{activeCollection ? activeCollection.name : archiveScope === "archived" ? (english ? "Archive" : "アーカイブ") : t("memo.heading")}</h2>
+                    <h2>{archiveScope === "trash" ? t("memo.trash") : activeCollection ? activeCollection.name : archiveScope === "archived" ? (english ? "Archive" : "アーカイブ") : t("memo.heading")}</h2>
                     <span className="memo-toolbar__count">
                       {english ? `${totalMemoCount} items` : `${totalMemoCount}件`}
                     </span>
@@ -63,16 +63,20 @@ export function MemoToolbar() {
                   >
                     <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`} aria-hidden="true"></i>
                   </button>
-                  <button
-                    type="button"
-                    className="memo-toolbar__icon-btn"
-                    onClick={() => setIsExportModalOpen(true)}
-                    aria-label={t("memo.export")}
-                    data-tooltip={t("memo.export")}
-                    data-tooltip-placement="bottom"
-                  >
-                    <i className="bi bi-download" aria-hidden="true"></i>
-                  </button>
+                  {/* 書き出しはゴミ箱のメモを含めない（バックエンド側で除外される）ので、ゴミ箱では出さない
+                      Export leaves trashed memos out (the backend excludes them), so the trash has no export button */}
+                  {archiveScope !== "trash" && (
+                    <button
+                      type="button"
+                      className="memo-toolbar__icon-btn"
+                      onClick={() => setIsExportModalOpen(true)}
+                      aria-label={t("memo.export")}
+                      data-tooltip={t("memo.export")}
+                      data-tooltip-placement="bottom"
+                    >
+                      <i className="bi bi-download" aria-hidden="true"></i>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`memo-toolbar__icon-btn memo-toolbar__filter-toggle${hasActiveFilters ? " has-active-filters" : ""}`}
@@ -125,6 +129,14 @@ export function MemoToolbar() {
                   >
                     <i className="bi bi-archive" aria-hidden="true"></i>
                     {english ? "Archive" : "アーカイブ"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`memo-filter-chip${archiveScope === "trash" ? " is-active" : ""}`}
+                    onClick={() => { setActiveCollectionId(null); setArchiveScope("trash"); }}
+                  >
+                    <i className="bi bi-trash3" aria-hidden="true"></i>
+                    {t("memo.trash")}
                   </button>
                 </div>
                 <div className="memo-mobile-controls__field">

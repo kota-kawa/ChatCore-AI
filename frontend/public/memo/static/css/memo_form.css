@@ -7217,6 +7217,98 @@ body.memo-page {
   }
 }
 
+/* ── ゴミ箱 / Trash ─────────────────────────────────────────────────────────
+   説明と「ゴミ箱を空にする」を一覧の上に置く。消す操作は赤にしない（赤は失敗の表示だけ）。
+   The notice and "Empty trash" sit above the list. Destructive actions are not red (red is for failures only). */
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice__text {
+  margin: 0;
+  color: var(--memo-text-muted);
+  font-size: 0.85rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice__empty,
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: var(--tap-target-min, 44px);
+  padding: 0 0.6rem;
+  border: 1px solid var(--memo-border);
+  border-radius: var(--radius-full, 999px);
+  background: transparent;
+  color: var(--memo-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice__empty:hover:not(:disabled),
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-action:hover:not(:disabled) {
+  background: var(--memo-amber-soft);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice__empty:focus-visible,
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-action:focus-visible {
+  outline: 2px solid var(--memo-amber-strong);
+  outline-offset: 2px;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-trash-notice__empty:disabled,
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 範囲の選択肢が奇数個のとき、余った最後の 1 つを 1 行にまたがせて、片側だけ空く見た目を避ける
+   With an odd number of scope choices the last one spans the row instead of leaving half of it empty */
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__scope .memo-filter-chip:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* 通常はツールバーと一覧の間を作成欄の上余白が空けているが、ゴミ箱には作成欄が無いので同じ幅を一覧側に持たせる
+   Normally the composer's top margin separates the toolbar from the list; the trash has no composer, so the list carries the same gap */
+:where(body.memo-page, .memo-page-shell) .memo-board--trash {
+  margin-top: 1.5rem;
+}
+
+/* ゴミ箱のカードは開けないので、押せそうな見た目（ポインタ）にしない。一括選択中だけ押して選べる
+   A trashed card cannot be opened, so it does not look pressable; only bulk selection makes it a button */
+:where(body.memo-page, .memo-page-shell) .memo-item.is-trashed .memo-item__open--content:not([role="button"]) {
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-expiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--memo-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* 幅の狭い 2 列でもボタンが指で押せるよう、2 つが並ばなければ縦に積む（どちらも高さ 44px 以上）
+   The two buttons stack when they do not fit side by side, so each stays finger-sized in the narrow two columns */
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-item__trash-action {
+  flex: 1 1 6rem;
+}
+
 /* タイトルと操作列が 1 行に収まらない幅では、1 行目をタイトルと保存状態、2 行目を操作列にする。
    保存状態を操作列の後ろに並べたままだと、それだけが 3 行目に折り返してヘッダーが伸びる。
    Where the title and the action row no longer fit on one line, row one holds the title and the
