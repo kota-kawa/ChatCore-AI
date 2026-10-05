@@ -6,6 +6,7 @@ import { parseMemoText } from "../../lib/memo/utils";
 import type { MemoSummary } from "../../lib/memo/types";
 import { daysUntil, formatDate, formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
+import { HighlightedText } from "./HighlightedText";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { CopyButton } from "../ui/copy_button";
@@ -200,12 +201,15 @@ export function MemoHistoryPanel() {
                           {/* 本文の最初の行がそのままタイトルになっているメモは、題を出すと同じ文が 2 回並ぶ
                               A memo whose title is just the first line of its body would show that line twice */}
                           {!isAutoMemoTitle(memo.title, parseMemoText(memo.excerpt)) && (
-                            <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
+                            <h3 className="memo-item__title">
+                              {memo.title ? <HighlightedText text={memo.title} query={query} /> : t("memo.savedMemo")}
+                            </h3>
                           )}
                           {memo.excerpt && (
                             <MemoMarkdown
                               text={parseMemoText(memo.excerpt)}
                               className="memo-item__excerpt"
+                              highlight={query}
                               onToggleTask={isBulkMode || isTrash ? undefined : (index, rendered) => {
                                 // 保存中の連打は受け付けない（古い本文をもとに二重に書き換えないため）
                                 // Ignore taps while a save is running so two rewrites never start from the same stale body

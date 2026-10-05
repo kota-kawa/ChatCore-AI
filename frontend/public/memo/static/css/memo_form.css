@@ -7309,6 +7309,16 @@ body.memo-page {
   flex: 1 1 6rem;
 }
 
+/* ── 検索語の強調 / Search term highlight ───────────────────────────────────
+   琥珀（メモの色相）を透かした面で、文字色は本文のまま。ライト・ダーク・色付きメモの上でも本文が読める
+   An amber (the memo hue) tint with the body text colour untouched, readable on light, dark and coloured notes */
+:where(body.memo-page, .memo-page-shell) mark.memo-search-hit {
+  padding: 0 0.08em;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--memo-amber) 38%, transparent);
+  color: inherit;
+}
+
 /* タイトルと操作列が 1 行に収まらない幅では、1 行目をタイトルと保存状態、2 行目を操作列にする。
    保存状態を操作列の後ろに並べたままだと、それだけが 3 行目に折り返してヘッダーが伸びる。
    Where the title and the action row no longer fit on one line, row one holds the title and the
