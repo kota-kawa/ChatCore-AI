@@ -20,7 +20,7 @@ const trashed: MemoSummary = {
 
 function renderTrash(overrides: Parameters<typeof createMemoPageControllerStub>[0] = {}) {
   const handlers = {
-    openMemoDetail: vi.fn(async () => undefined),
+    openMemoDetail: vi.fn(async () => true),
     handleRestoreMemo: vi.fn(async () => undefined),
     handlePurgeMemo: vi.fn(async () => undefined),
     handleEmptyTrash: vi.fn(async () => undefined),
