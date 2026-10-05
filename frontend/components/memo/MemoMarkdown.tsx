@@ -1,6 +1,7 @@
-import { useEffect, useRef, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, type MouseEvent } from "react";
 
 import type { RenderedTask } from "../../lib/memo/list_editing";
+import { buildHighlightPattern, highlightTextNodes } from "../../lib/memo/search_highlight";
 import { formatMemoOutput } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
@@ -44,15 +45,19 @@ function findTappedTask(container: HTMLElement, event: MouseEvent): HTMLInputEle
 
 // マークダウン形式のテキストをHTMLとしてレンダリングするコンポーネント。
 // onToggleTask を渡すと、チェックリストの欄をその場で切り替えられる。
+// highlight を渡すと、その検索語に一致した文字を <mark> で強調する（textContent は変わらない）。
 // Component to render markdown formatted text as HTML. With onToggleTask the checklist boxes can
-// be ticked in place.
-export function MemoMarkdown({ text, className, onToggleTask }: {
+// be ticked in place. With highlight, text matching those search terms is wrapped in <mark>
+// (textContent stays the same).
+export function MemoMarkdown({ text, className, onToggleTask, highlight }: {
   text: string;
   className?: string;
   onToggleTask?: ToggleTask;
+  highlight?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canToggleTasks = Boolean(onToggleTask);
+  const highlightPattern = useMemo(() => buildHighlightPattern(highlight ?? ""), [highlight]);
   // Markdownのテキストが変更されたときにサニタイズして描画する副作用
   // Effect to render sanitized HTML when markdown text changes
   useEffect(() => {
@@ -65,6 +70,9 @@ export function MemoMarkdown({ text, className, onToggleTask }: {
       link.target = "_blank";
       link.rel = "noopener noreferrer";
     });
+    // 描画し直すたびに強調も付け直す（描画は毎回 HTML 全体を置き換える）
+    // Highlight again on every render (each render replaces the whole HTML)
+    highlightTextNodes(container, highlightPattern);
     // Markdown の描画はチェック欄を無効化して出すので、切り替えられるときだけ有効に戻す
     // The Markdown renderer emits disabled checkboxes; enable them only when they can be toggled
     if (canToggleTasks) {
@@ -73,7 +81,7 @@ export function MemoMarkdown({ text, className, onToggleTask }: {
         box.setAttribute("aria-label", taskLabel(box));
       });
     }
-  }, [canToggleTasks, text]);
+  }, [canToggleTasks, highlightPattern, text]);
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;

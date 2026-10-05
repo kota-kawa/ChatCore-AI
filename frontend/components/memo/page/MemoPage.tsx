@@ -9,6 +9,7 @@ import { MemoComposer } from "../MemoComposer";
 import { MemoCrawlSummary } from "../MemoCrawlSummary";
 import { MemoDetailModal } from "../MemoDetailModal";
 import { MemoExportModal } from "../MemoExportModal";
+import { MemoFlashToast } from "../MemoFlashToast";
 import { MemoHistoryPanel } from "../MemoHistoryPanel";
 import { MemoNewFab } from "../MemoNewFab";
 import { MemoShareModal } from "../MemoShareModal";
@@ -42,9 +43,16 @@ export default function MemoPage() {
     activeView,
     setActiveView,
     flashState,
+    runFlashAction,
+    holdFlash,
+    releaseFlash,
     isBulkMode,
     viewMode,
+    archiveScope,
   } = controller;
+  // ゴミ箱は読み取り専用の一覧なので、メモを書き始める入口（作成欄と新規作成ボタン）は出さない
+  // The trash is a read-only list, so the ways to start a new memo (composer and new-memo button) are hidden
+  const isTrashScope = archiveScope === "trash";
 
   return (
     <>
@@ -97,12 +105,6 @@ export default function MemoPage() {
               {/* ── Toolbar ── */}
               <MemoToolbar />
 
-            {flashState && (
-              <div className={`memo-flash memo-flash--${flashState.type}`} role="alert">
-                {flashState.text}
-              </div>
-            )}
-
             <MemoCrawlSummary />
 
             {/* Bulk action bar */}
@@ -111,17 +113,20 @@ export default function MemoPage() {
             )}
 
             {/* ── Quick capture ── */}
-            <MemoComposer />
+            {!isTrashScope && <MemoComposer />}
 
-            <div className={`memo-board memo-board--${viewMode}`}>
+            <div className={`memo-board memo-board--${viewMode}${isTrashScope ? " memo-board--trash" : ""}`}>
               {/* ── Memo list ── */}
               <MemoHistoryPanel />
             </div>
-            {isLoggedIn && !isBulkMode && <MemoNewFab />}
+            {isLoggedIn && !isBulkMode && !isTrashScope && <MemoNewFab />}
               </>
               )}
             </div>
           </div>
+
+          {/* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ── */}
+          <MemoFlashToast flash={flashState} onAction={runFlashAction} onHold={holdFlash} onRelease={releaseFlash} />
 
           {/* ── Memo detail modal ── */}
           <MemoDetailModal />

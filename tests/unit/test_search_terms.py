@@ -4,6 +4,7 @@ from services.search_terms import (
     MAX_SEARCH_TERMS,
     build_like_pattern,
     escape_like_term,
+    kana_variants,
     split_search_terms,
 )
 
@@ -32,6 +33,31 @@ class SplitSearchTermsTestCase(unittest.TestCase):
     def test_blank_query_yields_no_terms(self):
         self.assertEqual(split_search_terms("   "), [])
         self.assertEqual(split_search_terms(""), [])
+
+
+class KanaVariantsTestCase(unittest.TestCase):
+    def test_hiragana_term_gains_its_katakana_spelling(self):
+        self.assertEqual(kana_variants("ぱすぽーと"), ["ぱすぽーと", "パスポート"])
+
+    def test_katakana_term_gains_its_hiragana_spelling(self):
+        self.assertEqual(kana_variants("パスポート"), ["パスポート", "ぱすぽーと"])
+
+    def test_mixed_term_gains_both_uniform_spellings(self):
+        self.assertEqual(kana_variants("パスぽーと"), ["パスぽーと", "ぱすぽーと", "パスポート"])
+
+    def test_terms_without_kana_have_no_variants(self):
+        self.assertEqual(kana_variants("沖縄旅行"), ["沖縄旅行"])
+        self.assertEqual(kana_variants("deploy"), ["deploy"])
+
+    def test_kanji_okurigana_and_voiced_marks_are_converted(self):
+        self.assertEqual(kana_variants("申し込みゔぁ"), ["申し込みゔぁ", "申シ込ミヴァ"])
+        self.assertEqual(kana_variants("いすゞ"), ["いすゞ", "イスヾ"])
+
+    def test_kana_without_a_counterpart_is_left_unchanged(self):
+        self.assertEqual(kana_variants("ヷ"), ["ヷ"])
+
+    def test_half_width_katakana_is_out_of_scope(self):
+        self.assertEqual(kana_variants("ﾊﾟｽﾎﾟｰﾄ"), ["ﾊﾟｽﾎﾟｰﾄ"])
 
 
 class LikeEscapingTestCase(unittest.TestCase):

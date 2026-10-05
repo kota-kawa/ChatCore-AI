@@ -166,10 +166,33 @@ export async function updateMemo(
   return payload.memo;
 }
 
-// メモを削除する
-// Delete a memo
+// メモをゴミ箱へ移動する（共有リンクも同時に無効になる）
+// Move a memo to the trash (its share link is revoked at the same time)
 export async function deleteMemo(memoId: string | number, defaultMessage: string): Promise<void> {
   await memoFetchJsonOrThrow(`/memo/api/${memoId}`, { method: "DELETE", credentials: "same-origin" }, { defaultMessage });
+}
+
+// ゴミ箱のメモを元に戻す。共有リンクは無効のままで、自動では再開しない
+// Restore a trashed memo; its share link stays revoked and does not resume on its own
+export async function restoreMemo(memoId: string | number, defaultMessage: string): Promise<void> {
+  await memoFetchJsonOrThrow(`/memo/api/${memoId}/restore`, { method: "POST", credentials: "same-origin" }, { defaultMessage });
+}
+
+// ゴミ箱のメモ 1 件を完全に削除する
+// Permanently delete one memo that is in the trash
+export async function purgeMemo(memoId: string | number, defaultMessage: string): Promise<void> {
+  await memoFetchJsonOrThrow(`/memo/api/trash/${memoId}`, { method: "DELETE", credentials: "same-origin" }, { defaultMessage });
+}
+
+// ゴミ箱を空にし、完全に削除した件数を返す
+// Empty the trash and return how many memos were deleted for good
+export async function emptyMemoTrash(defaultMessage: string): Promise<number> {
+  const { payload } = await memoFetchJsonOrThrow<{ deleted?: number }>(
+    "/memo/api/trash",
+    { method: "DELETE", credentials: "same-origin" },
+    { defaultMessage },
+  );
+  return typeof payload.deleted === "number" ? payload.deleted : 0;
 }
 
 // ピン留め状態を設定する

@@ -45,7 +45,10 @@ export function buildMemoListUrl(options: {
 
   const tq = options.query.trim();
   if (tq) params.set("q", tq);
-  if (options.archiveScope === "all") params.set("include_archived", "1");
+  // ゴミ箱は別の一覧。並べ替えは削除した新しい順に固定され、sort と pinned_first は効かない
+  // The trash is a separate list, always newest-deleted first; sort and pinned_first have no effect there
+  if (options.archiveScope === "trash") params.set("only_trashed", "true");
+  else if (options.archiveScope === "all") params.set("include_archived", "1");
   else if (options.archiveScope === "archived") params.set("only_archived", "1");
   if (options.collectionId !== null) params.set("collection_id", String(options.collectionId));
 

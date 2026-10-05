@@ -18,6 +18,9 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   flashState: null,
   setFlashState: noop,
   showFlash: noop,
+  runFlashAction: noop,
+  holdFlash: noop,
+  releaseFlash: noop,
   // layout
   activeView: "memos",
   setActiveView: noop,
@@ -29,6 +32,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   setIsSidebarCollapsed: noop,
   // list
   query: "",
+  debouncedQuery: "",
   setQuery: noop,
   sortMode: "manual",
   setSortMode: noop,
@@ -153,6 +157,10 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   handleToggleMemoTask: asyncNoop,
   handleToggleArchive: asyncNoop,
   handleDeleteMemo: asyncNoop,
+  handleRestoreMemo: asyncNoop,
+  handlePurgeMemo: asyncNoop,
+  handleEmptyTrash: asyncNoop,
+  emptyingTrash: false,
   copyMemoFullText: asyncFalse,
   // share
   isShareModalOpen: false,

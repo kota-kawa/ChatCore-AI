@@ -45,6 +45,7 @@ async def api_recent_memos(
     sort: str = "manual",
     include_archived: bool = False,
     only_archived: bool = False,
+    only_trashed: bool = False,
     pinned_first: bool = True,
     collection_id: int | None = None,
 ):
@@ -62,6 +63,7 @@ async def api_recent_memos(
         sort (str): ソート順指定 / Sorting criteria identifier.
         include_archived (bool): アーカイブ済みメモを含めるか / Include archived memos in result.
         only_archived (bool): アーカイブ済みメモのみ取得するか / Fetch only archived memos.
+        only_trashed (bool): ゴミ箱のメモのみ取得するか（削除した新しい順） / Fetch only trashed memos, newest deleted first.
         pinned_first (bool): ピン留めされたメモを優先するか / Prioritize pinned memos.
         collection_id (int | None): 特定コレクションで絞り込む場合のID / Filter by memo collection ID.
 
@@ -82,7 +84,7 @@ async def api_recent_memos(
     semantic_embedding: list[float] | None = None
     # セマンティック検索かつクエリが存在し、埋め込み機能が有効な場合、検索語句のベクトルを生成
     # If using semantic sort with a query, generate the query vector embedding if embeddings are enabled.
-    if sort == "semantic" and q.strip() and _memo_attr("embeddings_available")():
+    if sort == "semantic" and q.strip() and not only_trashed and _memo_attr("embeddings_available")():
         try:
             # 外部の埋め込み生成処理を実行
             # Generate vector embedding for the query.
@@ -108,6 +110,7 @@ async def api_recent_memos(
             sort=sort if sort != "semantic" else "recent",
             include_archived=include_archived,
             only_archived=only_archived,
+            only_trashed=only_trashed,
             pinned_first=pinned_first,
             collection_id=collection_id,
             semantic_query_embedding=semantic_embedding,
@@ -305,12 +308,12 @@ async def api_update_memo(request: Request, memo_id: int):
 @memo_bp.delete("/api/{memo_id:int}", name="memo.api_delete")
 async def api_delete_memo(request: Request, memo_id: int):
     """
-    メモを削除するエンドポイント
-    Endpoint to delete a memo.
+    メモをゴミ箱へ移動するエンドポイント
+    Endpoint to move a memo to the trash.
 
     Args:
         request (Request): FastAPI リクエストオブジェクト / FastAPI Request.
-        memo_id (int): 削除対象のメモID / Target memo ID to delete.
+        memo_id (int): ゴミ箱へ移動するメモID / Target memo ID to move to the trash.
 
     Returns:
         Response: 処理結果を示すJSONレスポンス / Success status JSON.
@@ -322,8 +325,8 @@ async def api_delete_memo(request: Request, memo_id: int):
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     try:
-        # DBからメモを物理/論理削除
-        # Delete the memo record from database.
+        # メモをゴミ箱へ移動（完全削除は保持期間後またはゴミ箱から）
+        # Move the memo to the trash (permanent deletion happens after retention or from the trash).
         await _memo_attr("_delete_memo")(user_id, memo_id)
         return jsonify({"status": "success"})
     except ApiServiceError as exc:

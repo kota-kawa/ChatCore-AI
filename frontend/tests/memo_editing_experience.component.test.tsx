@@ -205,6 +205,7 @@ function useItemActionsHarness() {
     selectedMemoId: undefined,
     patchSelectedMemoOptimistically: noop,
     refreshSelectedMemoIfNeeded: asyncNoop,
+    saveSelectedMemoEdits: async () => true,
     startMemoDetailCloseAnimation: noop,
   });
 }

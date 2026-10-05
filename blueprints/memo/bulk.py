@@ -59,8 +59,8 @@ async def api_bulk_memo(request: Request):
         return validation_error
 
     try:
-        # 指定された一括アクション（削除、ピン留め、アーカイブ、コレクション設定など）を実行
-        # Execute the bulk action (delete, pin, archive, set collection) on given memo IDs.
+        # 指定された一括アクション（ゴミ箱へ移動・復元・完全削除、ピン留め、アーカイブ、コレクション設定など）を実行
+        # Execute the bulk action (trash, restore, purge, pin, archive, set collection) on given memo IDs.
         result = await _memo_attr("_bulk_action")(
             user_id,
             payload.action,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, TypeVar
 
@@ -15,6 +16,7 @@ from sqlalchemy import (
     exists,
     func,
     insert,
+    or_,
     select,
     update,
 )
@@ -26,9 +28,15 @@ from services.db import session_scope
 from services.embeddings import get_semantic_max_distance
 from services.models import MemoCollection, MemoEntry, SharedMemoEntry
 from services.models.types import Vector
-from services.search_terms import build_like_pattern, split_search_terms
+from services.search_terms import build_like_pattern, kana_variants, split_search_terms
 
-from .memo_constants import COLLECTION_NOT_FOUND_ERROR, MEMO_NOT_FOUND_ERROR
+from .memo_constants import (
+    COLLECTION_NOT_FOUND_ERROR,
+    MEMO_NOT_FOUND_ERROR,
+    MEMO_TRASH_PURGE_BATCH_SIZE,
+    MEMO_TRASH_RETENTION_DAYS,
+    TRASH_BULK_ACTIONS,
+)
 from .memo_helpers import date_end, date_start, ensure_title
 from .memo_serializers import serialize_memo_detail, serialize_memo_summary
 
@@ -51,6 +59,23 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return dict(mapping)
 
 
+# ゴミ箱のメモは、一覧・復元・完全削除以外のどの経路にも見せない。メモを読み書きする文はこの条件の
+# どちらかを付ける。付けない例外は、埋め込みの保存（memo_embedding_repository）、コレクション削除時の
+# collection_id の NULL 化、新規作成時の sort_order の最大値の算出、アカウント削除と期限切れ削除
+# （物理削除）だけで、いずれもメモの内容を返さない。
+# Trashed memos are hidden from every path except the trash list, restore and permanent delete, so
+# statements that read or write memos carry one of these two conditions. The only exceptions are
+# storing an embedding (memo_embedding_repository), nulling collection_id when a collection is
+# deleted, computing the max sort_order for a new memo, and the physical deletes (account deletion
+# and retention purge); none of them returns memo content.
+def _live_memo():
+    return MemoEntry.deleted_at.is_(None)
+
+
+def _trashed_memo():
+    return MemoEntry.deleted_at.is_not(None)
+
+
 def _summary_columns(*, detail: bool = False):
     response = MemoEntry.ai_response if detail else func.left(
         func.coalesce(MemoEntry.ai_response, ""), 400
@@ -64,6 +89,7 @@ def _summary_columns(*, detail: bool = False):
         MemoEntry.revision.label("revision"),
         MemoEntry.archived_at.label("archived_at"),
         MemoEntry.pinned_at.label("pinned_at"),
+        MemoEntry.deleted_at.label("deleted_at"),
         MemoEntry.collection_id.label("collection_id"),
         MemoEntry.background_color.label("background_color"),
         MemoCollection.name.label("collection_name"),
@@ -106,22 +132,37 @@ async def fetch_memo_summaries(
     pinned_first: bool,
     collection_id: int | None,
     semantic_query_embedding: list[float] | None,
+    only_trashed: bool = False,
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
     async def operation(db: AsyncSession) -> dict[str, Any]:
+        # ゴミ箱の一覧は削除した新しい順に固定し、アーカイブの絞り込みと意味検索は使わない。
+        # The trash list is fixed to newest-deleted first and ignores the archive filters and semantic search.
+        semantic_embedding = None if only_trashed else semantic_query_embedding
         conditions = [MemoEntry.user_id == user_id]
-        if only_archived:
-            conditions.append(MemoEntry.archived_at.is_not(None))
-        elif not include_archived:
-            conditions.append(MemoEntry.archived_at.is_(None))
+        if only_trashed:
+            conditions.append(_trashed_memo())
+        else:
+            conditions.append(_live_memo())
+            if only_archived:
+                conditions.append(MemoEntry.archived_at.is_not(None))
+            elif not include_archived:
+                conditions.append(MemoEntry.archived_at.is_(None))
 
         normalized_query = query.strip()
-        if normalized_query and not semantic_query_embedding:
+        if normalized_query and not semantic_embedding:
             for term in split_search_terms(normalized_query):
-                pattern = build_like_pattern(term)
+                # ひらがな・カタカナを区別せず当てるため、語ごとに両方の綴りを OR で並べる。
+                # Match hiragana and katakana alike by OR-ing both spellings of each term.
+                spellings = [build_like_pattern(variant) for variant in kana_variants(term)]
                 conditions.append(
-                    MemoEntry.title.ilike(pattern, escape="\\")
-                    | MemoEntry.ai_response.ilike(pattern, escape="\\")
+                    or_(
+                        *(
+                            column.ilike(pattern, escape="\\")
+                            for pattern in spellings
+                            for column in (MemoEntry.title, MemoEntry.ai_response)
+                        )
+                    )
                 )
         parsed_date_from = date_start(date_from)
         if parsed_date_from is not None:
@@ -132,8 +173,8 @@ async def fetch_memo_summaries(
         if collection_id is not None:
             conditions.append(MemoEntry.collection_id == collection_id)
 
-        if semantic_query_embedding is not None:
-            distance = _vector_distance(semantic_query_embedding)
+        if semantic_embedding is not None:
+            distance = _vector_distance(semantic_embedding)
             semantic_conditions = [
                 *conditions,
                 MemoEntry.embedding_vector.is_not(None),
@@ -156,15 +197,18 @@ async def fetch_memo_summaries(
             }
 
         order_by = []
-        if pinned_first:
+        if only_trashed:
+            order_by.extend((MemoEntry.deleted_at.desc(), MemoEntry.id.desc()))
+        elif pinned_first:
             order_by.append(case((MemoEntry.pinned_at.is_(None), 1), else_=0).asc())
             if sort != "manual":
                 order_by.append(MemoEntry.pinned_at.desc())
-        sort_expression = _resolve_sort_expression(sort)
-        if isinstance(sort_expression, tuple):
-            order_by.extend(sort_expression)
-        else:
-            order_by.append(sort_expression)
+        if not only_trashed:
+            sort_expression = _resolve_sort_expression(sort)
+            if isinstance(sort_expression, tuple):
+                order_by.extend(sort_expression)
+            else:
+                order_by.append(sort_expression)
         total = await db.scalar(select(func.count(MemoEntry.id)).where(*conditions))
         rows = (
             await db.execute(
@@ -220,6 +264,7 @@ async def fetch_memo_detail(
                 _memo_join_statement(detail=True).where(
                     MemoEntry.id == memo_id,
                     MemoEntry.user_id == user_id,
+                    _live_memo(),
                 )
             )
         ).mappings().first()
@@ -309,7 +354,7 @@ async def update_memo(
                     (SharedMemoEntry.expires_at.is_(None)
                      | (SharedMemoEntry.expires_at > func.current_timestamp())),
                 ).label("is_shared"),
-            ).where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id)
+            ).where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo())
         )
         current_row = existing.mappings().first()
         if current_row is None:
@@ -348,7 +393,7 @@ async def update_memo(
         else:
             resolved_background_color = current["background_color"]
 
-        conditions = [MemoEntry.id == memo_id, MemoEntry.user_id == user_id]
+        conditions = [MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo()]
         if expected_revision is not None:
             conditions.append(MemoEntry.revision == expected_revision)
         if not allow_shared_content_change:
@@ -380,7 +425,7 @@ async def update_memo(
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
             if not await db.scalar(
-                select(exists().where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id))
+                select(exists().where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo()))
             ):
                 raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
             if not allow_shared_content_change and await db.scalar(
@@ -416,7 +461,7 @@ async def set_memo_archive_state(
     async def operation(db: AsyncSession) -> dict[str, Any]:
         statement = (
             update(MemoEntry)
-            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo())
             .values(
                 archived_at=func.current_timestamp() if enabled else None,
                 revision=MemoEntry.revision + 1,
@@ -449,6 +494,7 @@ async def set_memo_pin_state(
                 select(func.coalesce(func.max(MemoEntry.sort_order), 0) + 1)
                 .where(
                     MemoEntry.user_id == user_id,
+                    _live_memo(),
                     MemoEntry.archived_at.is_(None),
                     MemoEntry.pinned_at.is_not(None),
                 )
@@ -456,7 +502,7 @@ async def set_memo_pin_state(
             )
         statement = (
             update(MemoEntry)
-            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo())
             .values(**values)
             .returning(MemoEntry.id)
         )
@@ -496,7 +542,7 @@ async def reorder_memo(
                     order_expression,
                     MemoEntry.pinned_at,
                     MemoEntry.archived_at,
-                ).where(MemoEntry.user_id == user_id, MemoEntry.id.in_(ids))
+                ).where(MemoEntry.user_id == user_id, MemoEntry.id.in_(ids), _live_memo())
             )
         ).mappings().all()
         by_id = {int(row["id"]): dict(row) for row in rows}
@@ -535,6 +581,7 @@ async def reorder_memo(
             next_order = await db.scalar(
                 select(func.coalesce(func.max(MemoEntry.sort_order), 0) + 1).where(
                     MemoEntry.user_id == user_id,
+                    _live_memo(),
                     (MemoEntry.pinned_at.is_not(None)) == dragged_pinned,
                     (MemoEntry.archived_at.is_not(None)) == dragged_archived,
                 )
@@ -543,7 +590,7 @@ async def reorder_memo(
 
         statement = (
             update(MemoEntry)
-            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo())
             .values(
                 sort_order=new_order,
                 revision=MemoEntry.revision + 1,
@@ -558,21 +605,127 @@ async def reorder_memo(
     return await _in_transaction(session, operation)
 
 
+async def _revoke_shares_on_trash(db: AsyncSession, memo_ids: list[int]) -> None:
+    """Revoke the share links of memos that just moved to the trash.
+
+    共有を止める目的で消したメモが、復元の際に本人の知らないまま公開に戻らないよう、ゴミ箱へ
+    移す時点で共有を解除する。復元しても再開せず、共有設定からもう一度有効にする必要がある。
+    A memo may be deleted precisely to stop sharing it, so restoring must not silently republish
+    the old link: sharing is revoked on trashing and only resumes when the owner enables it again.
+    """
+    await db.execute(
+        update(SharedMemoEntry)
+        .where(SharedMemoEntry.memo_entry_id.in_(memo_ids), SharedMemoEntry.revoked_at.is_(None))
+        .values(revoked_at=func.current_timestamp())
+    )
+
+
 async def delete_memo(
     user_id: int,
     memo_id: int,
     *,
     session: AsyncSession | None = None,
 ) -> None:
+    """Move a memo to the trash and revoke its share link; it is deleted for good after the retention period."""
+
     async def operation(db: AsyncSession) -> None:
-        statement = delete(MemoEntry).where(
-            MemoEntry.id == memo_id,
-            MemoEntry.user_id == user_id,
-        ).returning(MemoEntry.id)
+        statement = (
+            update(MemoEntry)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo())
+            .values(deleted_at=func.current_timestamp())
+            .returning(MemoEntry.id)
+        )
+        if (await db.execute(statement)).scalar_one_or_none() is None:
+            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+        await _revoke_shares_on_trash(db, [memo_id])
+
+    await _in_transaction(session, operation)
+
+
+async def restore_memo(
+    user_id: int,
+    memo_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    """Take a memo out of the trash with its archive, pin and collection state unchanged."""
+
+    async def operation(db: AsyncSession) -> dict[str, Any]:
+        statement = (
+            update(MemoEntry)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _trashed_memo())
+            .values(deleted_at=None)
+            .returning(MemoEntry.id)
+        )
+        if (await db.execute(statement)).scalar_one_or_none() is None:
+            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+        return await fetch_memo_detail(user_id, memo_id, session=db)
+
+    return await _in_transaction(session, operation)
+
+
+async def purge_memo(
+    user_id: int,
+    memo_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> None:
+    """Permanently delete one memo that is in the trash. A memo outside the trash is not found."""
+
+    async def operation(db: AsyncSession) -> None:
+        statement = (
+            delete(MemoEntry)
+            .where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _trashed_memo())
+            .returning(MemoEntry.id)
+        )
         if (await db.execute(statement)).scalar_one_or_none() is None:
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
 
     await _in_transaction(session, operation)
+
+
+async def empty_memo_trash(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> int:
+    """Permanently delete every trashed memo of one user and return how many were deleted."""
+
+    async def operation(db: AsyncSession) -> int:
+        deleted = await db.execute(
+            delete(MemoEntry)
+            .where(MemoEntry.user_id == user_id, _trashed_memo())
+            .returning(MemoEntry.id)
+        )
+        return len(deleted.scalars().all())
+
+    return await _in_transaction(session, operation)
+
+
+async def purge_expired_memo_trash(
+    *,
+    limit: int = MEMO_TRASH_PURGE_BATCH_SIZE,
+    session: AsyncSession | None = None,
+) -> int:
+    """Permanently delete up to `limit` trashed memos of any user past the retention period, oldest first."""
+
+    async def operation(db: AsyncSession) -> int:
+        expired_ids = (
+            select(MemoEntry.id)
+            .where(
+                _trashed_memo(),
+                MemoEntry.deleted_at
+                <= func.current_timestamp() - timedelta(days=MEMO_TRASH_RETENTION_DAYS),
+            )
+            .order_by(MemoEntry.deleted_at, MemoEntry.id)
+            .limit(limit)
+        )
+        deleted = await db.execute(
+            delete(MemoEntry).where(MemoEntry.id.in_(expired_ids)).returning(MemoEntry.id)
+        )
+        return len(deleted.scalars().all())
+
+    return await _in_transaction(session, operation)
 
 
 async def bulk_action(
@@ -587,19 +740,32 @@ async def bulk_action(
         return {"affected": 0}
 
     async def operation(db: AsyncSession) -> dict[str, Any]:
+        # 復元と完全削除はゴミ箱のメモだけが対象で、それ以外の操作はゴミ箱のメモに触れない。
+        # Restore and purge target only trashed memos; every other action never touches them.
+        scope = _trashed_memo() if action in TRASH_BULK_ACTIONS else _live_memo()
         owned_ids = (
             await db.scalars(
                 select(MemoEntry.id).where(
                     MemoEntry.user_id == user_id,
                     MemoEntry.id.in_(memo_ids),
+                    scope,
                 )
             )
         ).all()
         if not owned_ids:
             return {"affected": 0}
-        conditions = [MemoEntry.id.in_(owned_ids), MemoEntry.user_id == user_id]
+        conditions = [MemoEntry.id.in_(owned_ids), MemoEntry.user_id == user_id, scope]
         statement: Any
         if action == "delete":
+            statement = (
+                update(MemoEntry)
+                .where(*conditions)
+                .values(deleted_at=func.current_timestamp())
+                .returning(MemoEntry.id)
+            )
+        elif action == "restore":
+            statement = update(MemoEntry).where(*conditions).values(deleted_at=None).returning(MemoEntry.id)
+        elif action == "purge":
             statement = delete(MemoEntry).where(*conditions).returning(MemoEntry.id)
         else:
             values: dict[str, Any] = {
@@ -625,6 +791,8 @@ async def bulk_action(
                 return {"affected": 0}
             statement = update(MemoEntry).where(*conditions).values(**values).returning(MemoEntry.id)
         affected = (await db.execute(statement)).scalars().all()
+        if action == "delete" and affected:
+            await _revoke_shares_on_trash(db, list(affected))
         return {"affected": len(affected)}
 
     return await _in_transaction(session, operation)
@@ -636,7 +804,7 @@ async def fetch_collections(
     session: AsyncSession | None = None,
 ) -> list[dict[str, Any]]:
     async def operation(db: AsyncSession) -> list[dict[str, Any]]:
-        memo_count = func.count(MemoEntry.id).filter(MemoEntry.archived_at.is_(None))
+        memo_count = func.count(MemoEntry.id).filter(MemoEntry.archived_at.is_(None), _live_memo())
         rows = (
             await db.execute(
                 select(
@@ -749,6 +917,7 @@ async def update_collection(
             select(func.count(MemoEntry.id)).where(
                 MemoEntry.collection_id == collection_id,
                 MemoEntry.archived_at.is_(None),
+                _live_memo(),
             )
         )
         return {

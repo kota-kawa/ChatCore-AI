@@ -7,10 +7,12 @@ import type {
   BulkAction,
   BulkMemoActionInput,
   Collection,
+  FlashAction,
   FlashState,
   MemoListState,
   MemoSummary,
 } from "../../lib/memo/types";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 
 type UseMemoPageBulkParams = {
   memos: MemoSummary[];
@@ -20,11 +22,15 @@ type UseMemoPageBulkParams = {
     updater: (memo: MemoSummary) => MemoSummary | null,
     targetIds: Iterable<string | number>,
   ) => Promise<void>;
-  showFlash: (type: FlashState["type"], text: string) => void;
+  showFlash: (type: FlashState["type"], text: string, action?: FlashAction) => void;
 };
 
-// 一括選択モードと一括操作（削除・アーカイブ・ピン・コレクション設定）
-// Bulk-selection mode and bulk actions (delete / archive / pin / set collection)
+// 通知の「元に戻す」で逆操作にする組み合わせ。ゴミ箱への移動とアーカイブだけが対象
+// The actions an undo can reverse: moving to the trash and archiving only
+const UNDO_ACTIONS: Partial<Record<BulkAction, BulkAction>> = { delete: "restore", archive: "unarchive", unarchive: "archive" };
+
+// 一括選択モードと一括操作（ゴミ箱への移動と復元・完全削除・アーカイブ・ピン・コレクション設定）
+// Bulk-selection mode and bulk actions (move to trash, restore, delete for good / archive / pin / set collection)
 export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOptimistically, showFlash }: UseMemoPageBulkParams) {
   const { t } = useTranslation();
 
@@ -61,9 +67,26 @@ export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOpti
     setSelectedIds(new Set());
   }, []);
 
-  const executeBulkAction = useCallback(async (action: BulkAction, extra?: { collectionId?: number | null }) => {
-    if (selectedIds.size === 0) return;
-    const selectedIdList = Array.from(selectedIds);
+  // 完了通知の文言。復元では、共有していたメモの共有が解除されたままであることも伝える
+  // The completion notice. A restore also says that memos which had been shared stay unshared
+  const bulkSuccessMessage = useCallback((action: BulkAction, count: number, anyShared: boolean) => {
+    if (action === "delete") return t("memo.bulkMovedToTrash", { count });
+    if (action === "purge") return t("memo.bulkPurged", { count });
+    if (action === "restore") return t(anyShared ? "memo.bulkRestoredShareOff" : "memo.bulkRestored", { count });
+    const labels = {
+      archive: t("memo.archive"), unarchive: t("memo.unarchive"),
+      pin: t("memo.pin"), unpin: t("memo.unpin"),
+      set_collection: t("memo.setCollection"), clear_collection: t("memo.clearCollection"),
+    };
+    return t("memo.bulkActionSuccess", { count, action: labels[action] });
+  }, [t]);
+
+  const executeBulk = useCallback(async (
+    action: BulkAction,
+    selectedIdList: string[],
+    extra?: { collectionId?: number | null },
+    isUndo = false,
+  ) => {
     setBulkLoading(true);
 
     const now = new Date().toISOString();
@@ -71,9 +94,17 @@ export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOpti
       extra?.collectionId !== undefined && extra.collectionId !== null
         ? collections.find((collection) => collection.id === extra.collectionId) ?? null
         : null;
+    const selectedMemos = memos.filter((memo) => selectedIdList.includes(String(memo.id)));
+    // 逆操作の対象は、操作で状態が実際に変わったメモだけ（元からアーカイブ済みのものまで戻さない）
+    // Only memos whose state the action really changed are undone (ones already archived stay archived)
+    const undoAction = UNDO_ACTIONS[action];
+    const undoIds = selectedMemos
+      .filter((memo) => action === "delete" || Boolean(memo.is_archived) !== (action === "archive"))
+      .map((memo) => String(memo.id));
+    const anyShared = selectedMemos.some((memo) => Boolean(memo.share_token));
 
     await updateMemoListOptimistically((memo) => {
-      if (action === "delete") return null;
+      if (action === "delete" || action === "restore" || action === "purge") return null;
       if (action === "archive") return { ...memo, is_archived: true, archived_at: now };
       if (action === "unarchive") return { ...memo, is_archived: false, archived_at: null };
       if (action === "pin") return { ...memo, is_pinned: true, pinned_at: now };
@@ -105,13 +136,13 @@ export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOpti
       if (extra?.collectionId !== undefined) body.collection_id = extra.collectionId;
 
       await runBulkMemoAction(body, t("memo.bulkActionFailed"));
-      const labels: Record<BulkAction, string> = {
-        delete: t("common.delete"), archive: t("memo.archive"), unarchive: t("memo.unarchive"),
-        pin: t("memo.pin"), unpin: t("memo.unpin"),
-        set_collection: t("memo.setCollection"), clear_collection: t("memo.clearCollection"),
-      };
-      showFlash("success", t("memo.bulkActionSuccess", { count: selectedIds.size, action: labels[action] }));
-      if (action === "delete") setSelectedIds(new Set());
+      const count = selectedIdList.length;
+      const undo: FlashAction | undefined =
+        undoAction && !isUndo && undoIds.length > 0
+          ? { label: t("memo.undo"), onAction: () => executeBulk(undoAction, undoIds, undefined, true) }
+          : undefined;
+      showFlash("success", bulkSuccessMessage(action, count, anyShared), undo);
+      if (action === "delete" || action === "restore" || action === "purge") setSelectedIds(new Set());
       await mutate();
       setBulkCollectionId(null);
     } catch (error) {
@@ -120,7 +151,15 @@ export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOpti
     } finally {
       setBulkLoading(false);
     }
-  }, [collections, mutate, selectedIds, showFlash, updateMemoListOptimistically]);
+  }, [bulkSuccessMessage, collections, memos, mutate, showFlash, t, updateMemoListOptimistically]);
+
+  const executeBulkAction = useCallback(async (action: BulkAction, extra?: { collectionId?: number | null }) => {
+    if (selectedIds.size === 0) return;
+    // 完全削除は取り消せないので、選択した件数を示して確認する
+    // Deleting for good cannot be undone, so confirm with the number of selected memos
+    if (action === "purge" && !(await showConfirmModal(t("memo.bulkPurgeConfirm", { count: selectedIds.size })))) return;
+    await executeBulk(action, Array.from(selectedIds), extra);
+  }, [executeBulk, selectedIds, t]);
 
   const exitBulkMode = useCallback(() => {
     setIsBulkMode(false);

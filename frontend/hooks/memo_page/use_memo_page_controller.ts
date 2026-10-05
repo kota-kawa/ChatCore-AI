@@ -83,6 +83,7 @@ export function useMemoPageController() {
     selectedMemoId: detail.selectedMemo?.id,
     patchSelectedMemoOptimistically: detail.patchSelectedMemoOptimistically,
     refreshSelectedMemoIfNeeded: detail.refreshSelectedMemoIfNeeded,
+    saveSelectedMemoEdits: detail.saveDetailEdit,
     startMemoDetailCloseAnimation: detail.startMemoDetailCloseAnimation,
   });
 

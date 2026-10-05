@@ -104,6 +104,9 @@ export function useMemoPageList() {
 
   return {
     query,
+    // 一覧の取得に実際に使っている検索語（入力が落ち着いてから追従する）
+    // The search text the list was actually fetched with (it follows once typing settles)
+    debouncedQuery,
     setQuery,
     sortMode,
     setSortMode,

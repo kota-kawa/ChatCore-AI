@@ -48,7 +48,7 @@ erDiagram
 | Projects | `projects`, `project_files` | プロジェクトはユーザー所有。チャット部屋から project を参照する。`services/repositories/project_repository.py` が `projects` と `chat_rooms.project_id` の所属を所有し、部屋の所有者確認は `services/repositories/chat_room_access.py` を共有する。 |
 | Tasks | `task_with_examples`, `task_versions` | `services/repositories/task_repository.py` が所有する。system task とユーザー task を同じ主テーブルで扱い、論理削除・revision・source prompt を追加情報として持つ。version 行は旧列に加えて、現在の task 全体を `snapshot` JSONB に保存する。 |
 | Prompt sharing | `prompts`, `guest_prompt_submissions`, `prompt_versions`, `prompt_view_counts`, `prompt_impression_counts`, `prompt_list_entries`, `prompt_likes`, `prompt_comments`, `prompt_comment_reports`, `prompt_resources` | 公開プロンプト、ゲスト投稿のCookie/IPハッシュと引継ぎ状態、バージョン、ビュー数、いいね、コメント、Skill resources を分離する。未引継ぎゲストの `prompts.user_id` と `prompt_versions.user_id` は NULL を許容し、version 行は `snapshot` JSONB に現在の prompt 全体を保存する。ビュー数とカードの表示回数は編集日時・履歴を更新しない専用カウンターで保持し（2 つを並べるとクリック率になる）、`prompts.featured_at` は運営が一覧の先頭に固定した投稿の日時（NULL は通常の投稿）で、画像本体は DB ではなく attachment storage 境界へ委譲する。`prompts.embedding_vector` は意味検索・関連投稿用の補助情報で、`embedding_status` が `pending`／`ready` の再生成状態を表す。 |
-| Memo | `memo_collections`, `memo_entries`, `shared_memo_entries` | メモ本体、コレクション、期限・撤回可能な共有トークンを分離する。embedding はメモ検索用の補助情報で、`embedding_status` が `pending`／`ready` の再生成状態を表す。 |
+| Memo | `memo_collections`, `memo_entries`, `shared_memo_entries` | メモ本体、コレクション、期限・撤回可能な共有トークンを分離する。embedding はメモ検索用の補助情報で、`embedding_status` が `pending`／`ready` の再生成状態を表す。`memo_entries.deleted_at` はゴミ箱（NULL が通常のメモ）で、値があるメモはゴミ箱の一覧・復元・完全削除以外のどの経路（一覧・詳細・更新・検索・コレクション件数・エクスポート・共有・MCP・チャットのメモツール・embedding backfill）にも現れない。ゴミ箱へ移す時点で共有リンクは解除（`shared_memo_entries.revoked_at` を設定）され、復元しても自動では再開しない（共有設定からもう一度有効にする）。保持日数は `services/repositories/memo_constants.py` の `MEMO_TRASH_RETENTION_DAYS`（30日）で、超えた行は `app.py` の定期クリーンアップが物理削除し、共有行は ON DELETE CASCADE で一緒に消える。 |
 | Context vault | `context_facts`, `context_fact_candidates` | active/deprecated の事実と、承認前の抽出候補を分ける。候補は承認後に事実へ紐づく。`context_facts.embedding_status` で vector の生成待ちを監視する。`context_facts.confidence`（抽出時の確信度）と `last_confirmed_at`（本人が最後に確かめた時刻、NULL は未確認）は `updated_at` とは別に持つ（[ADR 0016](../decisions/0016-context-fact-confirmation.md)）。 |
 | MCP OAuth | `mcp_oauth_clients`, `mcp_oauth_user_clients`, `mcp_oauth_grants`, `mcp_oauth_authorization_codes`, `mcp_oauth_tokens` | client、ユーザー別 client 表示、grant、短命 authorization code、access/refresh token を分離する。token の保存値は digest 化される。 |
 
@@ -64,7 +64,7 @@ erDiagram
 - キャッシュ、日次・月次クォータ、single-flight lock、チャット生成のイベント協調は Redis を使います。
 - プロンプト共有画像の表示用・カード用 WebP は `PROMPT_SHARE_UPLOAD_DIR` の永続 Docker volume に保存されます。DB は添付 descriptor と参照関係の source of truth です。
 - アバター画像は `AVATAR_UPLOAD_DIR` の永続 Docker volume に保存し、`/api/user/avatars/<filename>` としてアプリが配信します。`users.avatar_url` が source of truth で、旧 `/static/uploads/<filename>` は読み出し時に `services/avatar_storage.py` の `normalize_avatar_url` が現行URLへ読み替えます。既定アイコン `/static/user-icon.png` は frontend の静的アセットです。
-- エフェメラルチャットの削除、添付ファイルとアバターの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
+- エフェメラルチャットの削除、保持期間を過ぎたゴミ箱のメモの完全削除、添付ファイルとアバターの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
 
 ## スキーマ変更を追う場所
 

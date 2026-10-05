@@ -7,7 +7,7 @@ import {
 
 // Bulk action bar
 export function MemoBulkBar() {
-  const { memos, collections } = useMemoPageListContext();
+  const { memos, collections, archiveScope } = useMemoPageListContext();
   const {
     hasSelection,
     selectedIds,
@@ -19,6 +19,9 @@ export function MemoBulkBar() {
     setBulkCollectionId,
   } = useMemoPageBoardContext();
   const { t } = useTranslation();
+  // ゴミ箱のメモにできるのは、元に戻すか完全に削除するかだけ
+  // The only things to do with trashed memos are restore them or delete them for good
+  const isTrash = archiveScope === "trash";
   return (
             <div className="memo-bulk-bar memo-card" role="toolbar" aria-label={t("memo.bulkToolbar")}>
               <div className="memo-bulk-bar__info">
@@ -33,6 +36,16 @@ export function MemoBulkBar() {
                   {hasSelection ? t("memo.selectedCount", { count: selectedIds.size }) : t("memo.selectAll")}
                 </label>
               </div>
+              {isTrash ? (
+                <div className="memo-bulk-bar__actions">
+                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("restore")} disabled={!hasSelection || bulkLoading}>
+                    <i className="bi bi-arrow-counterclockwise"></i>{t("memo.restoreAction")}
+                  </button>
+                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("purge")} disabled={!hasSelection || bulkLoading}>
+                    <i className="bi bi-x-circle"></i>{t("memo.purge")}
+                  </button>
+                </div>
+              ) : (
               <div className="memo-bulk-bar__actions">
                 <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("pin")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.pin")} data-tooltip-placement="top">
                   <i className="bi bi-pin-angle"></i>{t("memo.pin")}
@@ -69,6 +82,7 @@ export function MemoBulkBar() {
                   <i className="bi bi-trash3"></i>{t("common.delete")}
                 </button>
               </div>
+              )}
             </div>
   );
 }

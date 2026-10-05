@@ -4,8 +4,9 @@ import { createPortal } from "react-dom";
 import { isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { parseMemoText } from "../../lib/memo/utils";
 import type { MemoSummary } from "../../lib/memo/types";
-import { formatDate, formatDateTime } from "../../lib/datetime";
+import { daysUntil, formatDate, formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
+import { HighlightedText } from "./HighlightedText";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { CopyButton } from "../ui/copy_button";
@@ -28,6 +29,10 @@ export function MemoHistoryPanel() {
     memoListLoading,
     memos,
     hasActiveFilters,
+    debouncedQuery,
+    archiveScope,
+    activeCollectionId,
+    query,
   } = useMemoPageListContext();
   const {
     pinnedMemos,
@@ -55,16 +60,29 @@ export function MemoHistoryPanel() {
     setOpenMenuMemoId,
     setMenuPosition,
     handleDeleteMemo,
+    handleRestoreMemo,
+    handlePurgeMemo,
+    handleEmptyTrash,
+    emptyingTrash,
     handleMemoSectionDragOver,
     handleMemoDrop,
     showFlash,
   } = useMemoPageBoardContext();
   const { t } = useTranslation();
+  // ゴミ箱の一覧は読み取り専用。開く・編集・ピン・並べ替え・共有はできず、戻すか完全に削除するだけ
+  // The trash list is read-only: no opening, editing, pinning, reordering or sharing, only restore or delete for good
+  const isTrash = archiveScope === "trash";
+  // 「ゴミ箱を空にする」は絞り込みに関係なく全件を消すので、一部だけが見えている間は出さない
+  // "Empty trash" deletes everything whatever the filter, so it is withheld while only part of the trash is shown
+  const canEmptyTrash = isTrash && memos.length > 0 && !query.trim() && activeCollectionId === null;
   return (
             <section className="memo-history-panel">
               <div className="memo-panel__header">
                 <div className="memo-panel__heading">
-                  <h2><i className="bi bi-list-ul" aria-hidden="true"></i>{t("memo.list")}</h2>
+                  <h2>
+                    <i className={`bi ${isTrash ? "bi-trash3" : "bi-list-ul"}`} aria-hidden="true"></i>
+                    {isTrash ? t("memo.trash") : t("memo.list")}
+                  </h2>
                   {activeCollection && <CollectionBadge name={activeCollection.name} color={activeCollection.color || "#6b7280"} />}
                 </div>
                 <span className="memo-panel__count">
@@ -73,12 +91,33 @@ export function MemoHistoryPanel() {
                 </span>
               </div>
 
+              {isTrash && (
+                <div className="memo-trash-notice">
+                  <p className="memo-trash-notice__text">{t("memo.trashNotice")}</p>
+                  {canEmptyTrash && (
+                    <button
+                      type="button"
+                      className="memo-trash-notice__empty"
+                      onClick={() => { void handleEmptyTrash(); }}
+                      disabled={emptyingTrash}
+                    >
+                      <i className="bi bi-trash3" aria-hidden="true"></i>
+                      {t("memo.emptyTrash")}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {memoLoadError && <div className="memo-history__empty">{memoLoadError.message}</div>}
               {!memoLoadError && memoListLoading && memos.length === 0 && (
                 <MemoListSkeleton />
               )}
               {!memoLoadError && !memoListLoading && memos.length === 0 && (
-                <div className="memo-history__empty">{hasActiveFilters ? t("memo.noMatchingMemos") : t("memo.noMemosYet")}</div>
+                <div className="memo-history__empty">
+                  {isTrash && !query.trim() && activeCollectionId === null
+                    ? t("memo.trashEmpty")
+                    : hasActiveFilters ? t("memo.noMatchingMemos") : t("memo.noMemosYet")}
+                </div>
               )}
 
               {memos.length > 0 && (() => {
@@ -91,6 +130,7 @@ export function MemoHistoryPanel() {
                   const canDragMemo = canDragMemos && !isBusy;
                   const isDragging = draggedMemoId === memoId;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
+                  const trashDaysLeft = isTrash ? daysUntil(memo.trash_expires_at) : null;
 
                   return (
                     <li key={memoId}>
@@ -99,7 +139,7 @@ export function MemoHistoryPanel() {
                           if (el) cardRefs.current.set(memoId, el);
                           else cardRefs.current.delete(memoId);
                         }}
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${isDragging ? " is-dragging" : ""}`}
+                        className={`memo-item${isTrash ? " is-trashed" : ""}${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${isDragging ? " is-dragging" : ""}`}
                         style={memo.background_color ? { "--memo-card-accent": memo.background_color } as React.CSSProperties : undefined}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
@@ -118,7 +158,7 @@ export function MemoHistoryPanel() {
                           </div>
                         )}
 
-                        {!isBulkMode && (
+                        {!isBulkMode && !isTrash && (
                           <button
                             type="button"
                             className={`memo-item__pin${memo.is_pinned ? " is-pinned" : ""}`}
@@ -138,18 +178,22 @@ export function MemoHistoryPanel() {
                             Not a button element so the checkboxes inside stay clickable (controls nested in
                             a button do not receive clicks in every browser); role and keys match a button */}
                         <div
-                          role="button"
-                          tabIndex={0}
+                          role={isTrash && !isBulkMode ? undefined : "button"}
+                          tabIndex={isTrash && !isBulkMode ? undefined : 0}
                           className="memo-item__open memo-item__open--content"
                           onClick={(event) => {
                             // チェック欄（MemoMarkdown が処理済み）と本文中のリンクは、カードを開く操作にしない
                             // A checkbox (already handled by MemoMarkdown) or a link in the body does not open the card
                             if (event.defaultPrevented || (event.target as Element).closest("a")) return;
                             if (isBulkMode) { toggleSelectMemo(memoId); return; }
+                            // ゴミ箱のメモは詳細を取得できない（バックエンドが 404 を返す）ので開かない
+                            // A trashed memo has no detail to open (the backend answers 404)
+                            if (isTrash) return;
                             void openMemoDetail(memoId);
                           }}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                            if (isTrash && !isBulkMode) return;
                             event.preventDefault();
                             if (isBulkMode) { toggleSelectMemo(memoId); return; }
                             void openMemoDetail(memoId);
@@ -158,13 +202,16 @@ export function MemoHistoryPanel() {
                           {/* 本文の最初の行がそのままタイトルになっているメモは、題を出すと同じ文が 2 回並ぶ
                               A memo whose title is just the first line of its body would show that line twice */}
                           {!isAutoMemoTitle(memo.title, parseMemoText(memo.excerpt)) && (
-                            <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
+                            <h3 className="memo-item__title">
+                              {memo.title ? <HighlightedText text={memo.title} query={debouncedQuery} /> : t("memo.savedMemo")}
+                            </h3>
                           )}
                           {memo.excerpt && (
                             <MemoMarkdown
                               text={parseMemoText(memo.excerpt)}
                               className="memo-item__excerpt"
-                              onToggleTask={isBulkMode ? undefined : (index, rendered) => {
+                              highlight={debouncedQuery}
+                              onToggleTask={isBulkMode || isTrash ? undefined : (index, rendered) => {
                                 // 保存中の連打は受け付けない（古い本文をもとに二重に書き換えないため）
                                 // Ignore taps while a save is running so two rewrites never start from the same stale body
                                 if (isBusy) return false;
@@ -189,6 +236,14 @@ export function MemoHistoryPanel() {
                                 <span className="memo-item__date-short">{formatDate(memo.updated_at || memo.created_at)}</span>
                               </time>
                             )}
+                            {trashDaysLeft !== null && (
+                              <span className="memo-item__trash-expiry">
+                                <i className="bi bi-hourglass-split" aria-hidden="true"></i>
+                                {trashDaysLeft <= 0
+                                  ? t("memo.trashDeletingSoon")
+                                  : t(trashDaysLeft === 1 ? "memo.trashDayLeft" : "memo.trashDaysLeft", { days: trashDaysLeft })}
+                              </span>
+                            )}
                             {memo.is_archived && (
                               <span className="memo-item__archive-badge" aria-label={t("memo.archived")} data-tooltip={t("memo.archived")} data-tooltip-placement="top">
                                 <i className="bi bi-archive-fill" aria-hidden="true"></i>
@@ -196,7 +251,7 @@ export function MemoHistoryPanel() {
                             )}
                           </div>
 
-                          {!isBulkMode && (
+                          {!isBulkMode && !isTrash && (
                             <div className="memo-item__actions">
                               <CopyButton
                                 onCopy={() => copyMemoFullText(memo)}
@@ -298,16 +353,43 @@ export function MemoHistoryPanel() {
                             </div>
                           )}
                         </footer>
+
+                        {isTrash && !isBulkMode && (
+                          <div className="memo-item__trash-actions" role="group" aria-label={t("memo.trashItem")}>
+                            <button
+                              type="button"
+                              className="memo-item__trash-action"
+                              onClick={() => { void handleRestoreMemo(memo); }}
+                              disabled={isBusy}
+                            >
+                              <i className="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                              {t("memo.restoreAction")}
+                            </button>
+                            <button
+                              type="button"
+                              className="memo-item__trash-action memo-item__trash-action--purge"
+                              onClick={() => { void handlePurgeMemo(memo); }}
+                              disabled={isBusy}
+                            >
+                              <i className="bi bi-x-circle" aria-hidden="true"></i>
+                              {t("memo.purge")}
+                            </button>
+                          </div>
+                        )}
                       </article>
                     </li>
                   );
                 };
 
-                const showSectionLabels = pinnedMemos.length > 0 && otherMemos.length > 0;
+                // ゴミ箱は削除した新しい順の 1 つの並び。ピン留めは操作できないので、分けて先頭に出さない
+                // The trash is one list, newest deletion first; pins cannot be used there, so they are not split out on top
+                const sectionPinned = isTrash ? [] : pinnedMemos;
+                const sectionOther = isTrash ? memos : otherMemos;
+                const showSectionLabels = sectionPinned.length > 0 && sectionOther.length > 0;
 
                 return (
                   <div className="memo-history__sections">
-                    {pinnedMemos.length > 0 && (
+                    {sectionPinned.length > 0 && (
                       <section className="memo-history__section">
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">
@@ -316,24 +398,24 @@ export function MemoHistoryPanel() {
                         )}
                         <ul
                           className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
-                          onDragOver={(event) => handleMemoSectionDragOver(event, pinnedMemos)}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, sectionPinned)}
                           onDrop={(event) => { void handleMemoDrop(event); }}
                         >
-                          {pinnedMemos.map(renderMemoCard)}
+                          {sectionPinned.map(renderMemoCard)}
                         </ul>
                       </section>
                     )}
-                    {otherMemos.length > 0 && (
+                    {sectionOther.length > 0 && (
                       <section className="memo-history__section">
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">{t("memo.other")}</h3>
                         )}
                         <ul
                           className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
-                          onDragOver={(event) => handleMemoSectionDragOver(event, otherMemos)}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, sectionOther)}
                           onDrop={(event) => { void handleMemoDrop(event); }}
                         >
-                          {otherMemos.map(renderMemoCard)}
+                          {sectionOther.map(renderMemoCard)}
                         </ul>
                       </section>
                     )}

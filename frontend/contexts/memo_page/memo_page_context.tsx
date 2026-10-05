@@ -32,6 +32,7 @@ type MemoPageUiContextValue = Pick<
 type MemoPageListContextValue = Pick<
   MemoPageControllerState,
   | "query"
+  | "debouncedQuery"
   | "setQuery"
   | "sortMode"
   | "setSortMode"
@@ -91,6 +92,10 @@ type MemoPageBoardContextValue = Pick<
   | "handleToggleMemoTask"
   | "handleToggleArchive"
   | "handleDeleteMemo"
+  | "handleRestoreMemo"
+  | "handlePurgeMemo"
+  | "handleEmptyTrash"
+  | "emptyingTrash"
   | "copyMemoFullText"
   | "showFlash"
   | "canDragMemos"
@@ -239,6 +244,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
   const listValue = useMemo<MemoPageListContextValue>(
     () => ({
       query: controller.query,
+      debouncedQuery: controller.debouncedQuery,
       setQuery: controller.setQuery,
       sortMode: controller.sortMode,
       setSortMode: controller.setSortMode,
@@ -260,6 +266,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
     }),
     [
       controller.query,
+      controller.debouncedQuery,
       controller.setQuery,
       controller.sortMode,
       controller.setSortMode,
@@ -337,6 +344,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       handleToggleMemoTask: controller.handleToggleMemoTask,
       handleToggleArchive: controller.handleToggleArchive,
       handleDeleteMemo: controller.handleDeleteMemo,
+      handleRestoreMemo: controller.handleRestoreMemo,
+      handlePurgeMemo: controller.handlePurgeMemo,
+      handleEmptyTrash: controller.handleEmptyTrash,
+      emptyingTrash: controller.emptyingTrash,
       copyMemoFullText: controller.copyMemoFullText,
       showFlash: controller.showFlash,
       canDragMemos: controller.canDragMemos,
@@ -376,6 +387,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.handleToggleMemoTask,
       controller.handleToggleArchive,
       controller.handleDeleteMemo,
+      controller.handleRestoreMemo,
+      controller.handlePurgeMemo,
+      controller.handleEmptyTrash,
+      controller.emptyingTrash,
       controller.copyMemoFullText,
       controller.showFlash,
       controller.canDragMemos,

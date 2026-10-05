@@ -38,7 +38,7 @@ async def fetch_memos_for_export(
             MemoEntry.background_color,
             MemoEntry.created_at,
             MemoEntry.updated_at,
-        ).where(MemoEntry.user_id == user_id)
+        ).where(MemoEntry.user_id == user_id, MemoEntry.deleted_at.is_(None))
         if memo_ids:
             statement = statement.where(MemoEntry.id.in_(memo_ids))
         rows = (

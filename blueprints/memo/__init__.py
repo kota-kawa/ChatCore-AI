@@ -28,6 +28,9 @@ from services.repositories.memo_repository import (
     delete_memo as _delete_memo,
 )
 from services.repositories.memo_repository import (
+    empty_memo_trash as _empty_memo_trash,
+)
+from services.repositories.memo_repository import (
     fetch_collections as _fetch_collections,
 )
 from services.repositories.memo_repository import (
@@ -43,7 +46,13 @@ from services.repositories.memo_repository import (
     insert_memo as _insert_memo,
 )
 from services.repositories.memo_repository import (
+    purge_memo as _purge_memo,
+)
+from services.repositories.memo_repository import (
     reorder_memo as _reorder_memo,
+)
+from services.repositories.memo_repository import (
+    restore_memo as _restore_memo,
 )
 from services.repositories.memo_repository import (
     set_memo_archive_state as _set_memo_archive_state,
@@ -89,7 +98,7 @@ def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
 # その後、テストが `blueprints.memo` から直接 import できるようハンドラ名を再エクスポートする。
 # Import the route modules so their handlers register on the router (registration order = import order),
 # then re-export the handler names so tests can keep importing them from `blueprints.memo`.
-from . import bulk, collections, export, memos, pages, reorder, share, suggest  # noqa: F401, E402
+from . import bulk, collections, export, memos, pages, reorder, share, suggest, trash  # noqa: F401, E402
 from .bulk import api_bulk_memo  # noqa: E402
 from .collections import (  # noqa: E402
     api_create_collection,
@@ -117,6 +126,7 @@ from .share import (  # noqa: E402
     api_shared_memo,
 )
 from .suggest import api_suggest_memo  # noqa: E402
+from .trash import api_empty_memo_trash, api_purge_memo, api_restore_memo  # noqa: E402
 
 # 外部に公開されるモジュールAPIの定義
 # Exported module API components.
@@ -127,6 +137,7 @@ __all__ = [
     "_bulk_action",
     "_delete_collection",
     "_delete_memo",
+    "_empty_memo_trash",
     "_ensure_title",
     "_fetch_collections",
     "_fetch_memo_detail",
@@ -134,7 +145,9 @@ __all__ = [
     "_fetch_memos_for_export",
     "_insert_collection",
     "_insert_memo",
+    "_purge_memo",
     "_reorder_memo",
+    "_restore_memo",
     "_schedule_embedding",
     "_set_memo_archive_state",
     "_set_memo_pin_state",
@@ -147,6 +160,7 @@ __all__ = [
     "api_create_memo",
     "api_delete_collection",
     "api_delete_memo",
+    "api_empty_memo_trash",
     "api_export_memos",
     "api_list_collections",
     "api_memo_detail",
@@ -154,8 +168,10 @@ __all__ = [
     "api_memo_share_refresh",
     "api_memo_share_revoke",
     "api_pin_memo",
+    "api_purge_memo",
     "api_recent_memos",
     "api_reorder_memo",
+    "api_restore_memo",
     "api_share_memo",
     "api_shared_memo",
     "api_suggest_memo",

@@ -30,6 +30,8 @@ export type MemoSummary = {
   collection_name?: string | null;
   collection_color?: string | null;
   background_color?: string | null;
+  deleted_at?: string | null;
+  trash_expires_at?: string | null;
 };
 
 export type MemoDetail = MemoSummary & {
@@ -51,10 +53,15 @@ export type SharePayload = {
   error?: string;
 };
 export type CollectionListPayload = { collections?: Collection[]; error?: string };
-export type FlashState = { type: "success" | "error"; text: string };
+// 通知に添える操作（「元に戻す」など）。押されたときに onAction を 1 回だけ呼ぶ
+// An action attached to a notice ("Undo" and the like); onAction runs once when it is pressed
+export type FlashAction = { label: string; onAction: () => void | Promise<void> };
+export type FlashState = { type: "success" | "error"; text: string; action?: FlashAction };
 export type HttpError = Error & { status?: number };
 export type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
-export type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
+// delete はゴミ箱への移動。restore と purge はゴミ箱の中のメモにだけ使う
+// delete moves memos to the trash; restore and purge apply to memos already in the trash
+export type BulkAction = "delete" | "restore" | "purge" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 export type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 export type MemoDropPosition = "before" | "after";
 

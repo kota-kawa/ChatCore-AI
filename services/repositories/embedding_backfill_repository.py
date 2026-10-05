@@ -16,8 +16,9 @@ class EmbeddingBackfillRepository:
 
     # (entity, text columns, row filter). Only public, live prompts are ever searched, so
     # private and soft-deleted rows are left out instead of paying for vectors nobody reads.
+    # Trashed memos are skipped the same way; a restored one is picked up by the next run.
     _TABLE_SPECS: ClassVar[dict[str, tuple[Any, tuple[Any, ...], tuple[Any, ...]]]] = {
-        "memo_entries": (MemoEntry, (MemoEntry.title, MemoEntry.ai_response), ()),
+        "memo_entries": (MemoEntry, (MemoEntry.title, MemoEntry.ai_response), (MemoEntry.deleted_at.is_(None),)),
         "context_facts": (
             ContextFact,
             (ContextFact.fact_type, ContextFact.title, ContextFact.content),

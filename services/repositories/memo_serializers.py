@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 from services.datetime_serialization import serialize_datetime_iso
 from services.share_common import TokenShareLifecycle, build_public_share_url
 
-from .memo_constants import DEFAULT_EXCERPT_LENGTH
+from .memo_constants import DEFAULT_EXCERPT_LENGTH, MEMO_TRASH_RETENTION_DAYS
 from .memo_helpers import parse_memo_text
 
 
@@ -62,6 +63,21 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def serialize_trash_meta(memo: dict[str, Any]) -> dict[str, Any]:
+    """
+    ゴミ箱の状態（削除日時と完全削除される日時）をシリアライズする関数
+    Serialize the trash state: when the memo was trashed and when it will be deleted for good.
+    """
+    deleted_at = memo.get("deleted_at")
+    trash_expires_at = (
+        deleted_at + timedelta(days=MEMO_TRASH_RETENTION_DAYS) if isinstance(deleted_at, datetime) else None
+    )
+    return {
+        "deleted_at": serialize_datetime_iso(deleted_at),
+        "trash_expires_at": serialize_datetime_iso(trash_expires_at),
+    }
+
+
 def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
     """
     メモの概要情報をシリアライズする関数（一覧表示用）
@@ -100,6 +116,7 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
         "collection_name": memo.get("collection_name"),
         "collection_color": memo.get("collection_color"),
         "background_color": memo.get("background_color"),
+        **serialize_trash_meta(memo),
         **share_meta,
     }
 
@@ -136,5 +153,6 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         "collection_name": memo.get("collection_name"),
         "collection_color": memo.get("collection_color"),
         "background_color": memo.get("background_color"),
+        **serialize_trash_meta(memo),
         **share_meta,
     }

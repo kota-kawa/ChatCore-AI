@@ -5,10 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useMemoPageBulk } from "../hooks/memo_page/use_memo_page_bulk";
 import { runBulkMemoAction } from "../lib/memo/api";
-import type { Collection, MemoListState, MemoSummary } from "../lib/memo/types";
+import type { Collection, FlashAction, MemoListState, MemoSummary } from "../lib/memo/types";
+import { showConfirmModal } from "../scripts/core/alert_modal";
 
 vi.mock("../lib/memo/api", () => ({
   runBulkMemoAction: vi.fn(),
+}));
+vi.mock("../scripts/core/alert_modal", () => ({
+  showConfirmModal: vi.fn(),
 }));
 
 type Updater = (memo: MemoSummary) => MemoSummary | null;
@@ -59,10 +63,88 @@ describe("useMemoPageBulk", () => {
     expect(Array.from(targetIds)).toEqual(["1", "2"]);
     expect(updater(makeMemo(1))).toMatchObject({ id: 1, is_archived: true });
     expect(updater(makeMemo(1))?.archived_at).toEqual(expect.any(String));
-    expect(showFlash).toHaveBeenCalledWith("success", expect.any(String));
+    expect(showFlash).toHaveBeenCalledWith("success", expect.any(String), expect.objectContaining({ label: "元に戻す" }));
     expect(mutateMock).toHaveBeenCalled();
     expect(result.current.bulkLoading).toBe(false);
     expect(result.current.selectedIds.size).toBe(2);
+  });
+
+  // 通知に付いた「元に戻す」を取り出す
+  // Pulls the undo out of the latest notice
+  function lastUndo(): FlashAction {
+    const action = showFlash.mock.calls[showFlash.mock.calls.length - 1][2] as FlashAction | undefined;
+    if (!action) throw new Error("the notice carries no undo");
+    return action;
+  }
+
+  it("undoes a bulk archive for the memos it actually archived, without offering another undo", async () => {
+    const { result } = renderHook(() => useBulkHarness([makeMemo(1), { ...makeMemo(2), is_archived: true }]));
+    await selectMemos(result, ["1", "2"]);
+    await act(async () => {
+      await result.current.executeBulkAction("archive");
+    });
+
+    await act(async () => {
+      await lastUndo().onAction();
+    });
+
+    // 元からアーカイブ済みの 2 は戻さない
+    // Memo 2 was already archived and stays so
+    expect(runBulkMemoAction).toHaveBeenLastCalledWith({ action: "unarchive", memo_ids: [1] }, expect.any(String));
+    expect(showFlash).toHaveBeenLastCalledWith("success", expect.any(String), undefined);
+  });
+
+  it("moves memos to the trash without a confirmation and offers a restore as the undo", async () => {
+    const { result } = renderHook(() => useBulkHarness([makeMemo(1), makeMemo(2)]));
+    await selectMemos(result, ["1", "2"]);
+
+    await act(async () => {
+      await result.current.executeBulkAction("delete");
+    });
+
+    expect(showConfirmModal).not.toHaveBeenCalled();
+    expect(showFlash).toHaveBeenLastCalledWith("success", "2件をゴミ箱に移動しました。", expect.objectContaining({ label: "元に戻す" }));
+
+    await act(async () => {
+      await lastUndo().onAction();
+    });
+
+    expect(runBulkMemoAction).toHaveBeenLastCalledWith({ action: "restore", memo_ids: [1, 2] }, expect.any(String));
+    expect(showFlash).toHaveBeenLastCalledWith("success", "2件を元に戻しました。", undefined);
+  });
+
+  it("says that shared memos stay unshared when they are restored", async () => {
+    const { result } = renderHook(() => useBulkHarness([{ ...makeMemo(1), share_token: "tok" }, makeMemo(2)]));
+    await selectMemos(result, ["1", "2"]);
+
+    await act(async () => {
+      await result.current.executeBulkAction("restore");
+    });
+
+    expect(runBulkMemoAction).toHaveBeenCalledWith({ action: "restore", memo_ids: [1, 2] }, expect.any(String));
+    expect(showFlash).toHaveBeenLastCalledWith("success", expect.stringContaining("共有は解除されたまま"), undefined);
+    expect(result.current.selectedIds.size).toBe(0);
+  });
+
+  it("deletes for good only after a confirmation that shows the selected count", async () => {
+    vi.mocked(showConfirmModal).mockResolvedValueOnce(false);
+    const { result } = renderHook(() => useBulkHarness([makeMemo(1), makeMemo(2)]));
+    await selectMemos(result, ["1", "2"]);
+
+    await act(async () => {
+      await result.current.executeBulkAction("purge");
+    });
+    expect(showConfirmModal).toHaveBeenCalledWith(expect.stringContaining("2件"));
+    expect(runBulkMemoAction).not.toHaveBeenCalled();
+    expect(result.current.selectedIds.size).toBe(2);
+
+    vi.mocked(showConfirmModal).mockResolvedValueOnce(true);
+    await act(async () => {
+      await result.current.executeBulkAction("purge");
+    });
+    expect(runBulkMemoAction).toHaveBeenCalledWith({ action: "purge", memo_ids: [1, 2] }, expect.any(String));
+    expect(showFlash).toHaveBeenLastCalledWith("success", "2件を完全に削除しました。", undefined);
+    expect(result.current.selectedIds.size).toBe(0);
   });
 
   it("assigns the collection with its name and colour and sends collection_id", async () => {

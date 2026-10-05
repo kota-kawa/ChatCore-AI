@@ -38,6 +38,7 @@ from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
 from services.locale_middleware import LocaleMiddleware  # noqa: E402
 from services.logging_config import configure_logging  # noqa: E402
 from services.mcp_config import is_mcp_enabled  # noqa: E402
+from services.memo_trash_cleanup import cleanup_expired_memo_trash  # noqa: E402
 from services.prompt_attachment_cleanup import cleanup_orphaned_prompt_attachments  # noqa: E402
 from services.prompt_attachment_storage import PROMPT_ATTACHMENT_MAX_REQUEST_BYTES  # noqa: E402
 from services.request_body_limit import RequestBodySizeLimitMiddleware  # noqa: E402
@@ -104,6 +105,20 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
             # シングルフライトロックを獲得できたワーカーだけが実際の削除を行う。
             # Every worker process owns this thread under multi-worker deployments, so only
             # the worker that wins the single-flight lock performs the actual cleanup.
+            # 保持期間を過ぎたゴミ箱のメモの完全削除。失敗しても後続の掃除を飛ばさないよう、
+            # 独立した try で包む。
+            # Permanent deletion of trashed memos past retention, in its own try so a failure here
+            # cannot skip the cleanups below.
+            try:
+                memo_trash_lock = await asyncio.to_thread(
+                    try_acquire_single_flight,
+                    "memo_trash_cleanup",
+                    CLEANUP_LOCK_TTL_SECONDS,
+                )
+                if memo_trash_lock:
+                    await cleanup_expired_memo_trash()
+            except Exception:
+                logger.exception("Failed to purge expired trashed memos.")
             ephemeral_lock = await asyncio.to_thread(
                 try_acquire_single_flight,
                 "ephemeral_cleanup",
