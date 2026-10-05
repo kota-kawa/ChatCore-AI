@@ -1,4 +1,5 @@
 import { useMemoPageActionMenu } from "./use_memo_page_action_menu";
+import { useMemoDetailRoute } from "./use_memo_detail_route";
 import { useMemoPageAuth } from "./use_memo_page_auth";
 import { useMemoPageBulk } from "./use_memo_page_bulk";
 import { useMemoPageChrome } from "./use_memo_page_chrome";
@@ -46,6 +47,12 @@ export function useMemoPageController() {
     collections: collections.collections,
     mutate: list.mutate,
     showFlash: flash.showFlash,
+  });
+
+  useMemoDetailRoute({
+    openMemoId: detail.selectedMemo && !detail.isMemoDetailClosing ? String(detail.selectedMemo.id) : null,
+    openMemoDetail: detail.openMemoDetail,
+    closeMemoDetail: detail.closeMemoDetail,
   });
 
   const actionMenu = useMemoPageActionMenu();

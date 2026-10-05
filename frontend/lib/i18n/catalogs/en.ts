@@ -288,7 +288,7 @@ export const enMessages = {
   "memo.taskToggleFailed": "Could not toggle the checkbox. Open the memo and edit it instead.", "memo.writePlaceholder": "Write a memo…",
   "memo.agentTitle": "Chaco for Memos", "memo.agentHeaderSubtitle": "Organize this memo together",
   "memo.agentDescription": "Ask for a summary, questions, or edits based on this memo. Edits are applied only when you run them.",
-  "memo.agentPlaceholder": "Ask about or request an edit to this memo…", "memo.list": "Memo list", "memo.noMatchingMemos": "No memos match these filters.",
+  "memo.agentPlaceholder": "Ask about or request an edit to this memo…", "memo.list": "Memo list", "memo.noMatchingMemos": "No memos match these filters.", "memo.noMemosYet": "No memos yet. Write your first one in the box above.",
   "memo.loadMoreMemos": "Load more memos", "memo.loadingMore": "Loading…", "memo.remainingCount": "{count} more",
   "memo.selectNamed": "Select {title}", "memo.archived": "Archived", "memo.moreActions": "More actions", "memo.shareSettings": "Sharing settings",
   "memo.pinned": "Pinned", "memo.other": "Other",

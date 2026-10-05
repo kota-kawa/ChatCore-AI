@@ -360,4 +360,27 @@ describe("useMemoPageDetail", () => {
     expect(result.current.detailSaveStatus).toBe("error");
     expect(result.current.detailSaveError).not.toBe("Request timed out");
   });
+
+  it("re-derives a title that came from the first line as the body changes", async () => {
+    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 1, title: "歯医者 10/12", ai_response: "歯医者 10/12\n15:00" });
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("歯医者 10/19\n15:00");
+    });
+    expect(result.current.detailEditTitle).toBe("歯医者 10/19");
+  });
+
+  it("leaves a title the user wrote alone when the body changes", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("書き直した本文");
+    });
+    expect(result.current.detailEditTitle).toBe("a");
+  });
 });

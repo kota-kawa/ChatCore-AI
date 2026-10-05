@@ -20,6 +20,7 @@ import { useTranslation } from "../../contexts/locale_context";
 import { useMemoDetailEditFocus } from "../../hooks/memo_page/use_memo_detail_edit_focus";
 import { useVisualViewportHeight } from "../../hooks/use_visual_viewport_height";
 import {
+  useMemoPageBoardContext,
   useMemoPageDetailContext,
   useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
@@ -55,6 +56,7 @@ export function MemoDetailModal() {
     detailEditAiResponse,
     setDetailEditAiResponse,
   } = useMemoPageDetailContext();
+  const { actionLoadingId, handleTogglePin, handleToggleArchive, handleDeleteMemo, openShareModal } = useMemoPageBoardContext();
   const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -370,6 +372,45 @@ export function MemoDetailModal() {
                   required
                 />
                 {!detailPreviewMode && <MemoFormatToolbar textareaRef={textareaRef} />}
+                {/* 読んでいる間は、一覧に戻らなくてもこのメモを整理できる操作を同じ位置に出す
+                    While reading, the same slot offers the actions that organise this memo without
+                    going back to the list */}
+                {detailPreviewMode && (
+                  <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
+                    <button
+                      type="button"
+                      className={`memo-modal__memo-action${selectedMemo.is_pinned ? " is-active" : ""}`}
+                      onClick={() => { void handleTogglePin(selectedMemo); }}
+                      disabled={actionLoadingId === String(selectedMemo.id)}
+                      aria-pressed={Boolean(selectedMemo.is_pinned)}
+                    >
+                      <i className={`bi ${selectedMemo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`} aria-hidden="true"></i>
+                      {selectedMemo.is_pinned ? t("memo.unpin") : t("memo.pin")}
+                    </button>
+                    <button
+                      type="button"
+                      className="memo-modal__memo-action"
+                      onClick={() => { void handleToggleArchive(selectedMemo); }}
+                      disabled={actionLoadingId === String(selectedMemo.id)}
+                    >
+                      <i className={`bi ${selectedMemo.is_archived ? "bi-archive-fill" : "bi-archive"}`} aria-hidden="true"></i>
+                      {selectedMemo.is_archived ? t("memo.unarchive") : t("memo.archive")}
+                    </button>
+                    <button type="button" className="memo-modal__memo-action" onClick={() => { void openShareModal(selectedMemo); }}>
+                      <i className="bi bi-share" aria-hidden="true"></i>
+                      {t("memo.shareSettings")}
+                    </button>
+                    <button
+                      type="button"
+                      className="memo-modal__memo-action"
+                      onClick={() => { void handleDeleteMemo(selectedMemo); }}
+                      disabled={actionLoadingId === String(selectedMemo.id)}
+                    >
+                      <i className="bi bi-trash3" aria-hidden="true"></i>
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                )}
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>

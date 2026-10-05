@@ -3,6 +3,7 @@ import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { loadMemoDetail, updateMemo } from "../../lib/memo/api";
+import { autoMemoTitle, isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { DETAIL_AUTOSAVE_DELAY_MS, MEMO_DETAIL_CLOSE_ANIMATION_MS } from "../../lib/memo/constants";
 import type {
   Collection,
@@ -115,6 +116,17 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     detailEditTitle,
     selectedMemo,
   ]);
+
+  // タイトルが本文の最初の行から自動で付いたものなら、本文の書き換えに合わせて付け直す。
+  // そのままにすると、最初の行を直したあとも古い行がタイトルとして残り、一覧に同じ内容が
+  // 題と本文の両方で並ぶ。利用者が付けたタイトルには触れない。
+  // When the title is the one derived from the body's first line, re-derive it as the body
+  // changes. Left alone, the old line would stay as the title after the first line is edited and
+  // the list would show the content twice. A title the user wrote is never touched.
+  const updateDetailBody = useCallback((nextBody: string) => {
+    if (isAutoMemoTitle(detailEditTitle, detailEditAiResponse)) setDetailEditTitle(autoMemoTitle(nextBody));
+    setDetailEditAiResponse(nextBody);
+  }, [detailEditAiResponse, detailEditTitle]);
 
   const clearDetailAutoSaveTimer = useCallback(() => {
     if (!detailAutoSaveTimerRef.current) return;
@@ -383,7 +395,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     detailEditCollectionId,
     setDetailEditCollectionId,
     detailEditAiResponse,
-    setDetailEditAiResponse,
+    setDetailEditAiResponse: updateDetailBody,
     detailEditBackgroundColor,
     setDetailEditBackgroundColor,
     detailSaveStatus,

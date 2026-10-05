@@ -6930,6 +6930,194 @@ body.memo-page {
   }
 }
 
+/* ── 詳細モーダル: 読んでいる間の操作 / Detail modal: actions while reading ───── */
+.memo-modal .memo-modal__memo-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--modal-border-soft);
+  padding-top: 0.25rem;
+  scrollbar-width: none;
+}
+
+.memo-modal .memo-modal__memo-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.memo-modal .memo-modal__memo-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--modal-text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.memo-modal .memo-modal__memo-action.is-active {
+  color: var(--modal-accent);
+}
+
+.memo-modal .memo-modal__memo-action:disabled {
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .memo-modal .memo-modal__memo-action:hover:not(:disabled) {
+    background: var(--modal-surface-muted);
+    color: var(--modal-text);
+  }
+}
+
+.memo-modal .memo-modal__memo-action:focus-visible {
+  outline: 2px solid var(--modal-accent);
+  outline-offset: -2px;
+}
+
+/* カードの日付は、幅のある表示では日時、スマホの 2 列表示では日付だけにする
+   Card dates show date and time where there is room and the date alone in the phone two-column layout */
+:where(body.memo-page, .memo-page-shell) .memo-item__date-short {
+  display: none;
+}
+
+/* ── スマホの新規作成ボタン（広い画面では出さない） / Phone-only new memo button ── */
+:where(body.memo-page, .memo-page-shell) .memo-new-fab {
+  display: none;
+}
+
+/* カードのメニューにだけ置く項目。広い画面ではカード下のボタンが同じ役目を持つ
+   Entries that exist only in the card menu; on wide screens the buttons under the card do this */
+.memo-item__dropdown-item--compact-only {
+  display: none;
+}
+
+/* ── 指で操作する端末: 押せる領域を 44px 以上にする / Touch devices: 44px targets ──
+   ボタンの見た目（30px の丸）は変えず、当たり判定だけを外側へ広げる。丸ごと大きくすると、
+   背景色の付くダークテーマでカードの題や本文に被る。
+   The buttons keep their look (a 30px circle); only the hit area grows outwards. Enlarging the
+   circle itself would cover the card title and text in dark theme, where it has a background. */
+@media (pointer: coarse) {
+  :where(body.memo-page, .memo-page-shell) .memo-item__action {
+    position: relative;
+  }
+
+  :where(body.memo-page, .memo-page-shell) :is(.memo-item__pin, .memo-item__action)::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+
+  .memo-item__dropdown-item {
+    min-height: 44px;
+  }
+}
+
+/* ── スマホ幅の一覧 / Phone-width list ─────────────────────────────────────
+   1 画面に見えるメモを増やすためグリッドは 2 列にし、カード下の操作は日付とメニューだけにする
+   （コピーとアーカイブはメニューへ）。リスト表示は 1 列のまま。
+   Two columns so more memos fit on screen, with only the date and the menu under each card
+   (copy and archive move into the menu). The list view stays single-column. */
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) .memo-board--grid .memo-history__list {
+    columns: 2;
+    column-gap: 0.5rem;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-board--grid .memo-history__list > li {
+    margin-bottom: 0.5rem;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-board--grid .memo-item__actions > .memo-item__action {
+    display: none;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-board--grid .memo-item__date-full {
+    display: none;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-board--grid .memo-item__date-short {
+    display: inline;
+  }
+
+  /* カードの本文より大きいチェック欄は 2 列の幅では場所を取りすぎる（周囲のタップも拾うので小さくてよい）
+     A box larger than the card text takes too much of a two-column card; taps around it count anyway */
+  :where(body.memo-page, .memo-page-shell) .memo-item__excerpt input[type="checkbox"]:enabled {
+    width: 1.1rem;
+    height: 1.1rem;
+    vertical-align: -0.2rem;
+  }
+
+  .memo-modal .memo-modal__memo-action {
+    padding: 0 0.5rem;
+  }
+
+  .memo-item__dropdown-item--compact-only {
+    display: flex;
+  }
+
+  /* 右上に固定されたユーザーアイコンがタブの文字やスクロール中のカードに重なるので、
+     この幅ではページと一緒に流し、タブ側にもアイコンの幅を空ける
+     The fixed user icon covers the tab label and the cards scrolling under it, so at this width
+     it scrolls with the page and the tab bar leaves room for it */
+  :where(body.memo-page, .memo-page-shell) user-icon {
+    position: absolute;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
+    margin-right: 4rem;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher__item {
+    gap: 0.3rem;
+    padding-inline: 0.4rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* 一括操作中は、下のメモを選んだあとも操作に届くよう画面上部に留める
+     While bulk-selecting, the bar stays at the top so the actions remain reachable after
+     selecting memos further down */
+  :where(body.memo-page, .memo-page-shell) .memo-bulk-bar.memo-card {
+    position: sticky;
+    top: 0.4rem;
+    z-index: 5;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-new-fab {
+    position: fixed;
+    right: 1.25rem;
+    bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+    z-index: var(--z-floating-action-menu, 60);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--memo-amber-strong);
+    color: white;
+    font-size: 1.4rem;
+    box-shadow: var(--memo-shadow);
+    cursor: pointer;
+  }
+
+  /* 濃色のボタンなので、地色のすき間を挟んで同じ色の輪を出す
+     A dark button: the ring repeats its colour across a gap of the page background */
+  :where(body.memo-page, .memo-page-shell) .memo-new-fab:focus-visible {
+    outline: 3px solid var(--memo-amber-strong);
+    outline-offset: 3px;
+  }
+}
+
 /* タイトルと操作列が 1 行に収まらない幅では、1 行目をタイトルと保存状態、2 行目を操作列にする。
    保存状態を操作列の後ろに並べたままだと、それだけが 3 行目に折り返してヘッダーが伸びる。
    Where the title and the action row no longer fit on one line, row one holds the title and the

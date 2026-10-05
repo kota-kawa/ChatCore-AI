@@ -10,6 +10,7 @@ import { MemoCrawlSummary } from "../MemoCrawlSummary";
 import { MemoDetailModal } from "../MemoDetailModal";
 import { MemoExportModal } from "../MemoExportModal";
 import { MemoHistoryPanel } from "../MemoHistoryPanel";
+import { MemoNewFab } from "../MemoNewFab";
 import { MemoShareModal } from "../MemoShareModal";
 import { MemoSidebar } from "../MemoSidebar";
 import { MemoToolbar } from "../MemoToolbar";
@@ -116,6 +117,7 @@ export default function MemoPage() {
               {/* ── Memo list ── */}
               <MemoHistoryPanel />
             </div>
+            {isLoggedIn && !isBulkMode && <MemoNewFab />}
               </>
               )}
             </div>
