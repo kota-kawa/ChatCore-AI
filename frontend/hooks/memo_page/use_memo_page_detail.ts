@@ -13,6 +13,7 @@ import type {
   MemoUpdateInput,
 } from "../../lib/memo/types";
 import { parseMemoText } from "../../lib/memo/utils";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { copyTextToClipboard } from "../../scripts/core/clipboard";
 
 type UseMemoPageDetailParams = {
@@ -161,7 +162,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }
   }, [cancelMemoDetailCloseAnimation]);
 
-  const saveDetailEdit = useCallback(async () => {
+  const saveDetailEdit = useCallback(async (options: { keepalive?: boolean } = {}) => {
     if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
     if (!detailEditAiResponse.trim()) {
       setDetailSaveStatus("error");
@@ -197,7 +198,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
         }
       }
 
-      const updatedMemo = await updateMemo(selectedMemo.id, body, t("memo.memoUpdateFailed"));
+      const updatedMemo = await updateMemo(selectedMemo.id, body, t("memo.memoUpdateFailed"), options);
       if (requestId === detailSaveSequenceRef.current) {
         if (updatedMemo) {
           // Keep the exact text the user submitted as the saved baseline
@@ -221,7 +222,12 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     } catch (error) {
       if (requestId === detailSaveSequenceRef.current) {
         setDetailSaveStatus("error");
-        setDetailSaveError(error instanceof Error ? error.message : t("memo.memoUpdateFailed"));
+        // 通信に届かなかった失敗は fetch が英語の TypeError を投げるので、状況が分かる文言に置き換える
+        // A request that never reached the network throws an English TypeError, so say what happened instead
+        const offline = error instanceof TypeError || navigator.onLine === false;
+        setDetailSaveError(
+          offline ? t("memo.saveOffline") : error instanceof Error ? error.message : t("memo.memoUpdateFailed"),
+        );
       }
       return false;
     }
@@ -240,11 +246,24 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     if (memoDetailCloseTimerRef.current) return;
     clearDetailAutoSaveTimer();
     if (detailHasUnsavedChanges) {
-      const saved = await saveDetailEdit();
-      if (!saved) return;
+      if (!detailEditAiResponse.trim()) {
+        // 本文が空のメモは保存できない。閉じられなくなるより、最後に保存した内容を残して閉じる
+        // An empty body cannot be saved; close on the last saved content rather than trapping the user
+        showFlash("error", t("memo.emptyBodyNotSaved"));
+      } else if (!(await saveDetailEdit())) {
+        const discard = await showConfirmModal(t("memo.discardUnsavedConfirm"));
+        if (!discard) return;
+      }
     }
     startMemoDetailCloseAnimation();
-  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit, startMemoDetailCloseAnimation]);
+  }, [
+    clearDetailAutoSaveTimer,
+    detailEditAiResponse,
+    detailHasUnsavedChanges,
+    saveDetailEdit,
+    showFlash,
+    startMemoDetailCloseAnimation,
+  ]);
 
   const openMemoAgent = useCallback(async () => {
     if (!selectedMemo?.id) return;
@@ -278,6 +297,34 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     saveDetailEdit,
     selectedMemo,
   ]);
+
+  // 保存に失敗したまま回線が戻ったら、入力を待たずに保存し直す
+  // Once the connection returns after a failed save, save again without waiting for more input
+  useEffect(() => {
+    if (detailSaveStatus !== "error" || !detailHasUnsavedChanges || !detailEditAiResponse.trim()) return;
+    const retry = () => { void saveDetailEdit(); };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [detailEditAiResponse, detailHasUnsavedChanges, detailSaveStatus, saveDetailEdit]);
+
+  // 自動保存の待ち時間のうちにタブを離れる・閉じると入力が消えるので、その瞬間に保存を送る。
+  // スマホではアプリ切り替えで pagehide が来ないことがあるため visibilitychange も見る。
+  // Leaving or closing the tab inside the autosave delay would drop the input, so save at that
+  // moment. Phones may skip pagehide on an app switch, hence visibilitychange as well.
+  useEffect(() => {
+    if (!selectedMemo || !detailHasUnsavedChanges) return;
+    const flush = (event: Event) => {
+      if (event.type === "visibilitychange" && document.visibilityState !== "hidden") return;
+      clearDetailAutoSaveTimer();
+      void saveDetailEdit({ keepalive: true });
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit, selectedMemo]);
 
   useEffect(() => {
     if (!selectedMemo) setIsMemoAgentOpen(false);

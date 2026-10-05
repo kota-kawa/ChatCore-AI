@@ -265,18 +265,24 @@ export function MemoDetailModal() {
               >
                 <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
               </button>
-              <span
-                className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
-                role="status"
-                aria-live="polite"
-              >
-                {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
-                {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-                {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
-                {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
-                {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
-              </span>
             </div>
+          )}
+          {/* 保存状態は横スクロールする操作列の外に置く。列の中だとスマホでは画面外へ流れ、
+              保存できていないことに気づけない
+              The save state stays outside the horizontally scrolling action row; inside it the
+              state scrolls off-screen on phones and a failed save goes unnoticed */}
+          {selectedMemo && (
+            <span
+              className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
+              role="status"
+              aria-live="polite"
+            >
+              {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
+              {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+              {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
+              {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+              {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
+            </span>
           )}
           <ModalCloseButton label={t("common.close")} onClick={() => { void closeMemoDetail(); }} />
         </header>

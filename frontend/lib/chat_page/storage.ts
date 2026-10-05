@@ -362,6 +362,7 @@ export function clearAllHomePagePersistedState() {
     localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
     localStorage.removeItem(STORAGE_KEYS.homePageViewState);
     localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
+    localStorage.removeItem(STORAGE_KEYS.memoComposeDraft);
   } catch {
     // ignore localStorage failures
   }

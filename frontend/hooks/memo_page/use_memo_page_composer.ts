@@ -12,6 +12,7 @@ import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { createMemo, suggestMemoTitle } from "../../lib/memo/api";
+import { readMemoComposeDraft, writeMemoComposeDraft } from "../../lib/memo/compose_draft";
 import type { FlashState, MemoComposeFormState, MemoListState } from "../../lib/memo/types";
 
 type UseMemoPageComposerParams = {
@@ -40,6 +41,21 @@ export function useMemoPageComposer({ mutate, showFlash, setFlashState }: UseMem
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 書きかけを端末から復元し、以後の変更を控える。復元より先に空の初期値で上書きしないよう、
+  // 読み込みが済むまで書き込みを止める。
+  // Restore the unsaved memo from the device, then mirror later changes. Writing waits for the
+  // read so the empty initial state cannot overwrite the stored draft first.
+  const composeDraftLoadedRef = useRef(false);
+  useEffect(() => {
+    const draft = readMemoComposeDraft();
+    composeDraftLoadedRef.current = true;
+    if (draft) setFormState((prev) => ({ ...prev, ...draft }));
+  }, []);
+  useEffect(() => {
+    if (!composeDraftLoadedRef.current) return;
+    writeMemoComposeDraft(formState);
+  }, [formState]);
 
   // 新規メモ作成用テキストエリアの高さを自動調整する副作用
   // Effect to automatically resize the textarea for new memo composition
@@ -102,9 +118,14 @@ export function useMemoPageComposer({ mutate, showFlash, setFlashState }: UseMem
     }
   }, [formState.ai_response, showFlash]);
 
+  // 続きから書けるよう、カーソルは末尾に置く（チェックリストは挿入した「- [ ] 」の後ろになる）
+  // Put the caret at the end so typing continues the text (after the inserted "- [ ] " for checklists)
   const focusComposeTextarea = useCallback(() => {
     window.setTimeout(() => {
-      composeTextareaRef.current?.focus();
+      const textarea = composeTextareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     }, 0);
   }, []);
 

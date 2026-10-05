@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemoPageComposer } from "../hooks/memo_page/use_memo_page_composer";
 import { createMemo, suggestMemoTitle } from "../lib/memo/api";
 import type { MemoListState } from "../lib/memo/types";
+import { STORAGE_KEYS } from "../scripts/core/constants";
 
 vi.mock("../lib/memo/api", () => ({
   createMemo: vi.fn(),
@@ -31,6 +32,7 @@ function useComposerHarness() {
 
 describe("useMemoPageComposer", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(createMemo).mockResolvedValue(undefined);
     vi.mocked(suggestMemoTitle).mockResolvedValue({ title: "提案タイトル" });
   });
@@ -126,5 +128,59 @@ describe("useMemoPageComposer", () => {
       result.current.openChecklistComposer();
     });
     expect(result.current.formState.ai_response).toBe("abc\n- [ ] ");
+  });
+
+  it("puts the caret after the inserted checklist marker", () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useComposerHarness());
+      const textarea = document.createElement("textarea");
+      document.body.append(textarea);
+      result.current.composeTextareaRef.current = textarea;
+
+      act(() => {
+        result.current.openChecklistComposer();
+      });
+      // 実画面では React が value を反映した後にタイマーが走る
+      // On the real page React has applied the value before the timer fires
+      textarea.value = result.current.formState.ai_response;
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      expect(document.activeElement).toBe(textarea);
+      expect(textarea.selectionStart).toBe("- [ ] ".length);
+      expect(textarea.selectionEnd).toBe("- [ ] ".length);
+      textarea.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores an unsaved draft after a remount and forgets it once saved", async () => {
+    const first = renderHook(() => useComposerHarness());
+    act(() => {
+      first.result.current.setFormState({ ...emptyForm, ai_response: "書きかけ", title: "下書き", collection_id: 7 });
+    });
+    first.unmount();
+
+    const second = renderHook(() => useComposerHarness());
+    expect(second.result.current.formState).toEqual({ ...emptyForm, ai_response: "書きかけ", title: "下書き" });
+    expect(second.result.current.composeIsExpanded).toBe(true);
+
+    await act(async () => {
+      await second.result.current.handleSubmitMemo(makeSubmitEvent());
+    });
+    expect(localStorage.getItem(STORAGE_KEYS.memoComposeDraft)).toBeNull();
+    second.unmount();
+
+    const third = renderHook(() => useComposerHarness());
+    expect(third.result.current.formState).toEqual(emptyForm);
+  });
+
+  it("ignores a stored draft that is not valid", () => {
+    localStorage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ ai_response: 3, background_color: "red" }));
+    const { result } = renderHook(() => useComposerHarness());
+    expect(result.current.formState).toEqual(emptyForm);
   });
 });

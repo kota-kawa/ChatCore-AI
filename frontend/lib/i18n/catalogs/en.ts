@@ -332,6 +332,8 @@ export const enMessages = {
   "memo.memoSaved": "Memo saved.", "memo.bodyRequired": "Enter memo content.", "memo.memoSaveFailed": "Could not save the memo.",
   "memo.aiResponseRequired": "Enter the AI response first.", "memo.aiSuggestionFailed": "Could not get an AI suggestion.", "memo.aiTitleSuggested": "AI suggested a title.",
   "memo.checklist": "Checklist", "memo.memoDetailFailed": "Could not load memo details.", "memo.memoUpdateFailed": "Could not update the memo.",
+  "memo.saveOffline": "Offline — not saved", "memo.emptyBodyNotSaved": "The memo was empty, so it was closed without saving your changes.",
+  "memo.discardUnsavedConfirm": "Your changes could not be saved. Close without saving?",
   "memo.pinUpdateFailed": "Could not update the pin.", "memo.unpinnedSuccess": "Memo unpinned.", "memo.pinnedSuccess": "Memo pinned.",
   "memo.archiveUpdateFailed": "Could not update the archive status.", "memo.unarchivedSuccess": "Memo removed from the archive.", "memo.archivedSuccess": "Memo archived.",
   "memo.deleteConfirm": "Delete “{title}”?", "memo.memoDeleteFailed": "Could not delete the memo.", "memo.memoDeleted": "Memo deleted.", "memo.copyFailed": "Could not copy.",

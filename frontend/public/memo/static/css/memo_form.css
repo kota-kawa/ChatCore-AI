@@ -6837,10 +6837,12 @@ body.memo-page {
     padding-right: 1rem;
   }
 
+  /* 1 行目はタイトルと保存状態、2 行目が操作列。保存状態の右は閉じるボタンの分だけ空ける
+     Row one holds the title and the save state, row two the actions; the save state keeps
+     clear of the close button on its right */
   .memo-modal .memo-modal__heading {
-    flex-basis: 100%;
-    box-sizing: border-box;
-    padding-right: 3rem;
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .memo-modal .memo-modal__header > .cc-modal__close {
@@ -6861,7 +6863,9 @@ body.memo-page {
   }
 
   .memo-modal .memo-modal__autosave-status {
-    max-width: 12rem;
+    order: 1;
+    max-width: 11rem;
+    margin-right: 3rem;
   }
 
   .memo-modal .memo-modal__body {
