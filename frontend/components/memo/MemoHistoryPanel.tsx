@@ -44,6 +44,7 @@ export function MemoHistoryPanel() {
     clearMemoDragState,
     toggleSelectMemo,
     handleTogglePin,
+    handleToggleMemoTask,
     openMemoDetail,
     copyMemoFullText,
     handleToggleArchive,
@@ -129,14 +130,38 @@ export function MemoHistoryPanel() {
                           </button>
                         )}
 
-                        <button
-                          type="button"
+                        {/* 中のチェック欄を押せるよう button 要素にはしない（button の中の操作部品は
+                            ブラウザによってクリックを受け取れない）。役割とキー操作は button と同じにする
+                            Not a button element so the checkboxes inside stay clickable (controls nested in
+                            a button do not receive clicks in every browser); role and keys match a button */}
+                        <div
+                          role="button"
+                          tabIndex={0}
                           className="memo-item__open memo-item__open--content"
-                          onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
+                          onClick={(event) => {
+                            if (event.defaultPrevented) return;
+                            if (isBulkMode) { toggleSelectMemo(memoId); return; }
+                            void openMemoDetail(memoId);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                            event.preventDefault();
+                            if (isBulkMode) { toggleSelectMemo(memoId); return; }
+                            void openMemoDetail(memoId);
+                          }}
                         >
                           <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
-                          {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
-                        </button>
+                          {memo.excerpt && (
+                            <MemoMarkdown
+                              text={parseMemoText(memo.excerpt)}
+                              className="memo-item__excerpt"
+                              onToggleTask={isBulkMode || isBusy ? undefined : (index, renderedCount) => {
+                                void handleToggleMemoTask(memo, index, renderedCount);
+                                return true;
+                              }}
+                            />
+                          )}
+                        </div>
 
                         <footer className="memo-item__footer">
                           <div className="memo-item__meta">

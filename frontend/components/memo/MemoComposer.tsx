@@ -2,6 +2,7 @@ import React from "react";
 
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
+import { MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
@@ -35,6 +36,15 @@ export function MemoComposer() {
   } = useMemoPageComposerContext();
   const { locale, t } = useTranslation();
   const english = locale === "en";
+
+  // タイトルで Enter を押したら保存ではなく本文へ進む（日本語変換の確定の Enter は除く）
+  // Enter in the title moves on to the body instead of saving (except the Enter that confirms an IME conversion)
+  const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    setPreviewMode(false);
+    window.setTimeout(() => composeTextareaRef.current?.focus(), 0);
+  };
   return (
           <section className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
             {!composeIsExpanded ? (
@@ -87,6 +97,7 @@ export function MemoComposer() {
                     className="memo-control memo-quick-capture__title-input"
                     value={formState.title}
                     onChange={handleFormChange}
+                    onKeyDown={handleTitleKeyDown}
                     maxLength={255}
                     placeholder={english ? "Title" : "タイトル"}
                     autoFocus={!hasComposeDraft}
@@ -117,6 +128,7 @@ export function MemoComposer() {
                       name="ai_response"
                       data-agent-id="memo.ai-response"
                       ref={composeTextareaRef}
+                      data-memo-editor=""
                       className="memo-control memo-control--response"
                       value={formState.ai_response}
                       onChange={handleFormChange}
@@ -125,6 +137,7 @@ export function MemoComposer() {
                       required
                     />
                   )}
+                  {!previewMode && <MemoFormatToolbar textareaRef={composeTextareaRef} />}
                 </div>
 
                 <div className="memo-quick-capture__bottom-row">

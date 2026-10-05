@@ -1662,6 +1662,45 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-preview-content p { margin: 0.42rem 0; }
 :where(body.memo-page, .memo-page-shell) .memo-preview-content ul,
 :where(body.memo-page, .memo-page-shell) .memo-preview-content ol { margin: 0.4rem 0 0.4rem 1rem; padding-left: 0.8rem; }
+/* 全体のリセットがリストの記号を消しているので、メモの本文では戻す。記号が無いと箇条書きと
+   番号付きリストがただの字下げに見える。チェックリストの行は欄が記号の代わりになる。
+   The global reset strips list markers, so the memo body restores them; without them bulleted and
+   numbered lists read as plain indentation. Checklist rows use the checkbox as their marker. */
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) ul { list-style: disc; }
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) ol { list-style: decimal; }
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) li:has(> input[type="checkbox"]),
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) li:has(> p > input[type="checkbox"]) {
+  list-style: none;
+}
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt :is(ul, ol) { margin: 0 0 0.5rem; padding-left: 1.2rem; }
+:where(body.memo-page, .memo-page-shell) .memo-item__excerpt li:has(> input[type="checkbox"]) { margin-left: -1.2rem; }
+
+/* 表は線が無いとセルの文字がつながって読めない。線は文字色から作り、色付きメモやダークでもなじませる
+   Without rules the cell text runs together. The rules derive from the text colour so they also
+   sit right on coloured memos and in dark theme */
+:where(body.memo-page, .memo-page-shell) .memo-preview-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+:where(body.memo-page, .memo-page-shell) .memo-preview-content :is(th, td) {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+:where(body.memo-page, .memo-page-shell) .memo-preview-content th { font-weight: 700; }
+
+/* リンクは本文と同じ色だと押せることが分からない
+   A link in the body colour does not read as tappable */
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) a {
+  color: var(--modal-accent, var(--memo-amber-strong));
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-preview-content pre { border-radius: 8px; padding: 0.75rem; overflow-x: auto; }
 :where(body.memo-page, .memo-page-shell) .memo-preview-content code { font-size: 0.85em; border-radius: 4px; padding: 0.15em 0.35em; }
 :where(body.memo-page, .memo-page-shell) .memo-preview-content .memo-preserved-blank-line,
@@ -1677,6 +1716,59 @@ html[data-cc-auth="in"] .memo-guest-intro {
   margin: 0 0.42rem 0 0;
   vertical-align: -0.16rem;
   accent-color: var(--memo-amber);
+}
+:where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) input[type="checkbox"]:enabled {
+  cursor: pointer;
+}
+/* 指で押す端末では欄を大きくする（周囲のタップも MemoMarkdown が拾う）
+   Larger boxes on touch devices (MemoMarkdown also accepts taps just around them) */
+@media (pointer: coarse) {
+  :where(body.memo-page, .memo-page-shell) :is(.memo-preview-content, .memo-item__excerpt) input[type="checkbox"]:enabled {
+    width: 1.3rem;
+    height: 1.3rem;
+    vertical-align: -0.28rem;
+  }
+  :where(body.memo-page, .memo-page-shell) .memo-preview-content li:has(> input[type="checkbox"]) {
+    padding-block: 0.22rem;
+  }
+}
+
+/* ── 書式ツールバー / Formatting toolbar ─────────────────────────────── */
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.15rem;
+  overflow-x: auto;
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  padding-top: 0.25rem;
+  scrollbar-width: none;
+}
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar::-webkit-scrollbar { display: none; }
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  :where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn:hover {
+    background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+}
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn:active {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn:focus-visible {
+  outline: 2px solid var(--modal-accent, var(--memo-amber-strong));
+  outline-offset: -2px;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-preview-empty {
@@ -5136,6 +5228,12 @@ body.memo-page {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
+/* プレビュー中は隠す（flex の指定が hidden 属性に勝たないよう明示する）
+   Hidden during the preview (explicit so the flex rules never beat the hidden attribute) */
+.memo-modal .memo-modal__edit-textarea[hidden] {
+  display: none;
+}
+
 .memo-modal .memo-modal__edit-textarea:focus {
   outline: none;
   box-shadow: none;
@@ -6854,6 +6952,18 @@ body.memo-page {
 }
 
 @media (max-width: 640px) {
+  /* iOS は画面キーボードが出てもレイアウトの高さ（dvh）が縮まないので、下からのシートは
+     キーボードの裏に潜る。MemoDetailModal が測ったキーボードの高さだけ持ち上げて縮める。
+     Android は画面自体が縮むので、この値は 0 のまま。
+     iOS keeps the layout height (dvh) when the on-screen keyboard opens, so a bottom sheet slides
+     under the keyboard. Lift and shrink it by the keyboard height MemoDetailModal measures; on
+     Android the layout itself shrinks and the value stays 0. */
+  .memo-modal .memo-modal__content {
+    height: calc(94dvh - var(--memo-keyboard-inset, 0px));
+    max-height: calc(100dvh - var(--memo-keyboard-inset, 0px));
+    margin-bottom: var(--memo-keyboard-inset, 0px);
+  }
+
   .memo-modal .memo-modal__header {
     padding-right: 1rem;
   }
