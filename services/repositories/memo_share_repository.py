@@ -37,12 +37,22 @@ class MemoShareRepository:
         *,
         force_refresh: bool,
     ) -> dict[str, Any]:
+        # メモの行を共有ロックして、ゴミ箱への移動（行の UPDATE）がこのトランザクションの終了まで
+        # 待つようにする。ロックしないと、所有者確認のあとにゴミ箱へ移され、その後に有効な共有行が
+        # 挿入されて、復元時に共有が再開してしまう。ゴミ箱へ先に移った場合は、ロック待ちの後に
+        # 条件を再評価するので見つからず、404 になる。
+        # Share-lock the memo row so a concurrent move to the trash (an UPDATE of the row) waits until
+        # this transaction ends. Without it the memo could be trashed after the ownership check and an
+        # active share row inserted afterwards, resuming sharing on restore. If the trash move wins,
+        # the condition is re-evaluated after the lock wait and the memo is not found.
         owner = await self.session.scalar(
-            select(MemoEntry.id).where(
+            select(MemoEntry.id)
+            .where(
                 MemoEntry.id == memo_id,
                 MemoEntry.user_id == user_id,
                 MemoEntry.deleted_at.is_(None),
             )
+            .with_for_update(read=True)
         )
         if owner is None:
             raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)

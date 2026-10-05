@@ -8,6 +8,7 @@ Create Date: 2026-10-05
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "20261005_01"
 down_revision: str | Sequence[str] | None = "20260930_01"
@@ -40,8 +41,26 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # ゴミ箱にあるメモは通常のメモとして復活する。削除済みの意図は失われるため、実行前に確認すること。
-    # Trashed memos reappear as ordinary memos, losing the intent to delete them; check before running.
-    with op.get_context().autocommit_block():
-        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_memo_entries_deleted_at")
+    # ゴミ箱にメモが残っていると、列を落とした時点で利用者が削除したメモが通常のメモとして復活し、
+    # 共有を止める目的で消したメモまで一覧や MCP から読めてしまう。データを完全に戻せる保証がない
+    # ので、ゴミ箱が空でなければ自動 downgrade を拒否する（20260826_01 と同じ方針）。
+    # 空にするには、ゴミ箱を空にする操作か期限切れ削除でメモを物理削除してから実行する。
+    # If trashed memos remain, dropping the column would resurrect memos the user deleted as ordinary
+    # ones, even ones deleted to stop sharing them. Since the data cannot be restored faithfully, the
+    # downgrade is refused unless the trash is empty (the same policy as 20260826_01); empty it first
+    # by purging the memos.
+    # 検査と列の削除の間に新しい削除が入らないよう、書き込みを止めてから数える。
+    # Writes are blocked before counting so no memo can be trashed between the check and the drop.
+    connection = op.get_bind()
+    connection.execute(text("LOCK TABLE memo_entries IN SHARE ROW EXCLUSIVE MODE"))
+    trashed = connection.execute(
+        text("SELECT count(*) FROM memo_entries WHERE deleted_at IS NOT NULL")
+    ).scalar_one()
+    if trashed:
+        raise RuntimeError(
+            f"20261005_01 cannot be downgraded while {trashed} trashed memo(s) exist: dropping deleted_at "
+            "would restore memos the user deleted. Purge the memo trash first, then retry."
+        )
+    # 列を落とすと部分索引 idx_memo_entries_deleted_at も一緒に消える。
+    # Dropping the column also drops the partial index idx_memo_entries_deleted_at.
     op.execute("ALTER TABLE memo_entries DROP COLUMN IF EXISTS deleted_at")

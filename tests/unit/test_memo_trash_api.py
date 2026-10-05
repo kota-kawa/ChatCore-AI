@@ -235,10 +235,15 @@ class MemoTrashRepositoryStatementsTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_expiry_purge_uses_the_retention_constant(self):
         session = self._session(scalars=[1])
-        self.assertEqual(await purge_expired_memo_trash(session=session), 1)
+        self.assertEqual(await purge_expired_memo_trash(limit=25, session=session), 1)
 
         compiled = session.execute.await_args.args[0].compile(dialect=dialect())
         self.assertIn("memo_entries.deleted_at <=", str(compiled))
+        # 1回の削除は件数を絞ったバッチで、古い順
+        # One delete is a bounded batch, oldest first.
+        self.assertIn("LIMIT", str(compiled))
+        self.assertIn("ORDER BY memo_entries.deleted_at, memo_entries.id", str(compiled))
+        self.assertIn(25, compiled.params.values())
         self.assertEqual(MEMO_TRASH_RETENTION_DAYS, 30)
         self.assertTrue(any(getattr(v, "days", None) == MEMO_TRASH_RETENTION_DAYS for v in compiled.params.values()))
 

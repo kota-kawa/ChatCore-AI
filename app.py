@@ -105,16 +105,20 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
             # シングルフライトロックを獲得できたワーカーだけが実際の削除を行う。
             # Every worker process owns this thread under multi-worker deployments, so only
             # the worker that wins the single-flight lock performs the actual cleanup.
-            # 保持期間を過ぎたゴミ箱のメモの完全削除。他の掃除の失敗で先送りされないよう最初に行う。
-            # Permanent deletion of trashed memos past retention; first, so a failure in the file
-            # cleanups below cannot postpone it.
-            memo_trash_lock = await asyncio.to_thread(
-                try_acquire_single_flight,
-                "memo_trash_cleanup",
-                CLEANUP_LOCK_TTL_SECONDS,
-            )
-            if memo_trash_lock:
-                await cleanup_expired_memo_trash()
+            # 保持期間を過ぎたゴミ箱のメモの完全削除。失敗しても後続の掃除を飛ばさないよう、
+            # 独立した try で包む。
+            # Permanent deletion of trashed memos past retention, in its own try so a failure here
+            # cannot skip the cleanups below.
+            try:
+                memo_trash_lock = await asyncio.to_thread(
+                    try_acquire_single_flight,
+                    "memo_trash_cleanup",
+                    CLEANUP_LOCK_TTL_SECONDS,
+                )
+                if memo_trash_lock:
+                    await cleanup_expired_memo_trash()
+            except Exception:
+                logger.exception("Failed to purge expired trashed memos.")
             ephemeral_lock = await asyncio.to_thread(
                 try_acquire_single_flight,
                 "ephemeral_cleanup",

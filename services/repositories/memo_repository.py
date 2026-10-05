@@ -33,6 +33,7 @@ from services.search_terms import build_like_pattern, kana_variants, split_searc
 from .memo_constants import (
     COLLECTION_NOT_FOUND_ERROR,
     MEMO_NOT_FOUND_ERROR,
+    MEMO_TRASH_PURGE_BATCH_SIZE,
     MEMO_TRASH_RETENTION_DAYS,
     TRASH_BULK_ACTIONS,
 )
@@ -58,10 +59,15 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return dict(mapping)
 
 
-# ゴミ箱のメモは、一覧・復元・完全削除以外のどの経路にも見せない。memo_entries を読み書きする
-# 文はすべてこの条件のどちらかを必ず付ける。
-# Trashed memos are hidden from every path except the trash list, restore and permanent delete.
-# Every statement that reads or writes memo_entries must carry one of these two conditions.
+# ゴミ箱のメモは、一覧・復元・完全削除以外のどの経路にも見せない。メモを読み書きする文はこの条件の
+# どちらかを付ける。付けない例外は、埋め込みの保存（memo_embedding_repository）、コレクション削除時の
+# collection_id の NULL 化、新規作成時の sort_order の最大値の算出、アカウント削除と期限切れ削除
+# （物理削除）だけで、いずれもメモの内容を返さない。
+# Trashed memos are hidden from every path except the trash list, restore and permanent delete, so
+# statements that read or write memos carry one of these two conditions. The only exceptions are
+# storing an embedding (memo_embedding_repository), nulling collection_id when a collection is
+# deleted, computing the max sort_order for a new memo, and the physical deletes (account deletion
+# and retention purge); none of them returns memo content.
 def _live_memo():
     return MemoEntry.deleted_at.is_(None)
 
@@ -698,19 +704,24 @@ async def empty_memo_trash(
 
 async def purge_expired_memo_trash(
     *,
+    limit: int = MEMO_TRASH_PURGE_BATCH_SIZE,
     session: AsyncSession | None = None,
 ) -> int:
-    """Permanently delete trashed memos of every user once the retention period has passed."""
+    """Permanently delete up to `limit` trashed memos of any user past the retention period, oldest first."""
 
     async def operation(db: AsyncSession) -> int:
-        deleted = await db.execute(
-            delete(MemoEntry)
+        expired_ids = (
+            select(MemoEntry.id)
             .where(
                 _trashed_memo(),
                 MemoEntry.deleted_at
                 <= func.current_timestamp() - timedelta(days=MEMO_TRASH_RETENTION_DAYS),
             )
-            .returning(MemoEntry.id)
+            .order_by(MemoEntry.deleted_at, MemoEntry.id)
+            .limit(limit)
+        )
+        deleted = await db.execute(
+            delete(MemoEntry).where(MemoEntry.id.in_(expired_ids)).returning(MemoEntry.id)
         )
         return len(deleted.scalars().all())
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
 from uuid import uuid4
@@ -287,6 +288,43 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ResourceNotFoundError):
                 await get_shared_memo_payload(token, session=session)
 
+    async def test_share_creation_and_trashing_serialize_on_the_memo_row(self) -> None:
+        async with session_scope() as session, session.begin():
+            racing = await self._memo(session, "共有と削除の競合")
+            late = await self._memo(session, "削除が先")
+
+        # 共有の作成がメモの行を握っている間、ゴミ箱への移動は待たされ、移動のあとに共有が解除される。
+        # While share creation holds the memo row the trash move waits, and sharing is revoked after it.
+        async with session_scope() as sharing, sharing.begin():
+            await create_or_get_shared_memo_token(racing, self.owner, session=sharing)
+            trashing = asyncio.create_task(delete_memo(self.owner, racing))
+            finished, _ = await asyncio.wait({trashing}, timeout=1.0)
+            self.assertFalse(finished, "the trash move did not wait for the share transaction")
+        await asyncio.wait_for(trashing, timeout=10)
+        async with session_scope() as session, session.begin():
+            self.assertIsNotNone(
+                await session.scalar(
+                    text("SELECT revoked_at FROM shared_memo_entries WHERE memo_entry_id = :id"), {"id": racing}
+                )
+            )
+            await restore_memo(self.owner, racing, session=session)
+            self.assertFalse((await get_memo_share_state(racing, self.owner, session=session))["is_active"])
+
+        # ゴミ箱への移動が先に確定していなければ待ち、確定後は共有行を作らず「見つからない」になる。
+        # A share request that arrives while the trash move is pending waits, then finds no memo and inserts nothing.
+        async with session_scope() as trashing_session, trashing_session.begin():
+            await delete_memo(self.owner, late, session=trashing_session)
+            sharing_task = asyncio.create_task(create_or_get_shared_memo_token(late, self.owner))
+            finished, _ = await asyncio.wait({sharing_task}, timeout=1.0)
+            self.assertFalse(finished, "the share request did not wait for the trash transaction")
+        with self.assertRaises(ResourceNotFoundError):
+            await asyncio.wait_for(sharing_task, timeout=10)
+        async with session_scope() as session:
+            rows = await session.scalar(
+                text("SELECT count(*) FROM shared_memo_entries WHERE memo_entry_id = :id"), {"id": late}
+            )
+            self.assertEqual(rows, 0)
+
     async def test_other_users_cannot_restore_purge_or_empty_each_others_trash(self) -> None:
         async with session_scope() as session, session.begin():
             mine = await self._memo(session, "自分")
@@ -384,6 +422,30 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertEqual(list(remaining), [recent, live])
+
+    async def test_retention_purge_deletes_at_most_one_batch_oldest_first(self) -> None:
+        async with session_scope() as session, session.begin():
+            ids = [await self._memo(session, f"期限切れ{index}") for index in range(3)]
+            for index, memo_id in enumerate(ids):
+                await delete_memo(self.owner, memo_id, session=session)
+                await session.execute(
+                    text(
+                        "UPDATE memo_entries SET deleted_at = CURRENT_TIMESTAMP - make_interval(days => :days) "
+                        "WHERE id = :id"
+                    ),
+                    {"days": 40 + index, "id": memo_id},
+                )
+
+            # 先頭の 2 件（最も古い ids[2] と ids[1]）だけが消える
+            # Only the two oldest (ids[2], then ids[1]) go in the first batch.
+            self.assertEqual(await purge_expired_memo_trash(limit=2, session=session), 2)
+            remaining = await session.scalars(
+                text("SELECT id FROM memo_entries WHERE id IN (:a, :b, :c)").bindparams(
+                    a=ids[0], b=ids[1], c=ids[2]
+                )
+            )
+            self.assertEqual(list(remaining), [ids[0]])
+            self.assertEqual(await purge_expired_memo_trash(limit=2, session=session), 1)
 
 
 if __name__ == "__main__":

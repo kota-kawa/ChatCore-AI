@@ -20,8 +20,10 @@ import re
 # `/` and `\` are left out: they appear inside terms such as URLs and file paths.
 _TERM_SEPARATOR_PATTERN = re.compile(r"[\s、。，．,.;:!?！？「」『』（）()\[\]【】〈〉<>\"'|]+")
 
-# 語数の上限。1語につき ILIKE 条件が2つ増えるため、際限なく増やさない。
-# Each term adds two ILIKE conditions, so cap how many a single query may contribute.
+# 語数の上限。1語につき ILIKE 条件が増える（通常は列ごとに1つで2つ、メモ検索はひらがな・カタカナの
+# 綴りも並べるため最大6つ）ので、際限なく増やさない。
+# Each term adds ILIKE conditions (one per column, so two; memo search also spells the term in
+# hiragana and katakana, so up to six), so cap how many a single query may contribute.
 MAX_SEARCH_TERMS = 8
 
 

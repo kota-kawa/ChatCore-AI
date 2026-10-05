@@ -65,6 +65,12 @@ pre-deploy の upgrade に含められません。データ backfill が必要�
 分離してください。Contract 用のコマンドは環境変数から明示的に設定し、通常の
 `alembic upgrade head` に破壊的変更を隠さないでください。
 
+`memo_entries.deleted_at`（メモのゴミ箱、`20261005_01`）は追加のみの migration ですが、旧色はこの列を
+知りません。切り替えの重なり中は、新色でゴミ箱へ移したメモが旧色の一覧・詳細・エクスポート・公開共有
+ページに一時的に見えます（共有はゴミ箱へ移す時点で解除されるため、公開ページは新色が解除した後は
+404 になります）。旧色の削除は従来どおり物理削除です。この downgrade は、ゴミ箱にメモが残っている間は
+拒否されます。
+
 ## Embedding の復旧と監視
 
 `memo_entries.embedding_status`、`context_facts.embedding_status`、`prompts.embedding_status` は、
