@@ -8,13 +8,17 @@ import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
+import { toggleTaskMarker, type RenderedTask } from "../../lib/memo/list_editing";
 import { captureMemoEditPosition } from "../../lib/memo/detail_edit_position";
+import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
 import { parseMemoText } from "../../lib/memo/utils";
+import { MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoDetailEditFocus } from "../../hooks/memo_page/use_memo_detail_edit_focus";
+import { useVisualViewportHeight } from "../../hooks/use_visual_viewport_height";
 import {
   useMemoPageDetailContext,
   useMemoPageListContext,
@@ -55,10 +59,38 @@ export function MemoDetailModal() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
-  const { textareaRef, titleInputRef, beginEditing } = useMemoDetailEditFocus({
+  const { textareaRef, titleInputRef, beginEditing, rememberBodyScroll } = useMemoDetailEditFocus({
     previewMode: detailPreviewMode,
     setPreviewMode: setDetailPreviewMode,
+    bodySource: detailEditAiResponse,
+    memoId: selectedMemo?.id,
   });
+
+  // 画面キーボードに隠れている高さ。レイアウトの高さが縮まない iOS でだけ 0 より大きくなる
+  // Height covered by the on-screen keyboard; above 0 only on iOS, where the layout does not shrink
+  const visualViewportHeight = useVisualViewportHeight(isOpen);
+  // ピンチで拡大している間も表示領域は縮むが、キーボードではないので持ち上げない
+  // Pinch-zooming shrinks the visual viewport too, but that is not a keyboard, so nothing is lifted
+  const keyboardInset = visualViewportHeight === null || (window.visualViewport?.scale ?? 1) > 1.01
+    ? 0
+    : Math.max(0, window.innerHeight - visualViewportHeight);
+
+  // プレビューのチェック欄をその場で切り替える（保存は既存の自動保存に任せる）
+  // Tick a checklist box right in the preview; the existing autosave persists it
+  const toggleDetailTask = useCallback((index: number, rendered: RenderedTask[]) => {
+    const next = toggleTaskMarker(detailEditAiResponse, index, rendered);
+    if (next === null) return false;
+    setDetailEditAiResponse(next);
+    return true;
+  }, [detailEditAiResponse, setDetailEditAiResponse]);
+
+  // タイトルで Enter を押したら本文へ進む（日本語変換の確定の Enter は除く）
+  // Enter in the title moves on to the body (except the Enter that confirms an IME conversion)
+  const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || isImeConfirmKey(event)) return;
+    event.preventDefault();
+    textareaRef.current?.focus();
+  }, [textareaRef]);
 
   // プレビュー面のクリックで編集に入る。リンク・操作部品・ドラッグ選択は通常動作のまま
   // Enter edit mode from a preview click; links, controls and drag selections keep their behaviour
@@ -155,7 +187,10 @@ export function MemoDetailModal() {
       <div
         ref={panelRef}
         className={`cc-modal__panel cc-modal__panel--xl cc-modal__panel--reader memo-modal__content${detailEditBackgroundColor ? " has-accent" : ""}`}
-        style={detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } as React.CSSProperties : undefined}
+        style={{
+          ...(detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } : null),
+          ...(keyboardInset > 0 ? { "--memo-keyboard-inset": `${keyboardInset}px` } : null),
+        } as React.CSSProperties}
         tabIndex={-1}
       >
         <header className="cc-modal__header memo-modal__header">
@@ -179,6 +214,7 @@ export function MemoDetailModal() {
                 className="memo-modal__title-input"
                 value={detailEditTitle}
                 onChange={(event) => setDetailEditTitle(event.target.value)}
+                onKeyDown={handleTitleKeyDown}
                 placeholder={t("memo.titleAutoPlaceholder")}
                 maxLength={255}
                 aria-label={t("memo.titleLabel")}
@@ -296,7 +332,7 @@ export function MemoDetailModal() {
           {!detailLoading && selectedMemo && (
             <>
               <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
-                {detailPreviewMode ? (
+                {detailPreviewMode && (
                   <>
                     <span id="memo-detail-edit-hint" className="memo-modal__edit-hint">{t("memo.clickToEdit")}</span>
                     {/* tabIndex=0 は Enter で編集に入るための停止点。本文内のリンク等とは別の停止点になる
@@ -310,22 +346,30 @@ export function MemoDetailModal() {
                       onKeyDown={handlePreviewKeyDown}
                     >
                       {detailEditAiResponse.trim()
-                        ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
+                        ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" onToggleTask={toggleDetailTask} />
                         : <p className="memo-preview-empty">{t("memo.noPreviewText")}</p>}
                     </div>
                   </>
-                ) : (
-                  <textarea
-                    ref={textareaRef}
-                    id="memo-detail-ai-response"
-                    className="memo-modal__edit-textarea"
-                    value={detailEditAiResponse}
-                    onChange={(event) => setDetailEditAiResponse(event.target.value)}
-                    placeholder={t("memo.writePlaceholder")}
-                    aria-label={t("memo.content")}
-                    required
-                  />
                 )}
+                {/* プレビュー中も外さずに隠すだけにする。外すとカーソル位置と「元に戻す」の履歴が消える。
+                    key でメモごとに作り直し、履歴が別のメモへ持ち越されないようにする
+                    Hidden rather than unmounted during the preview: unmounting drops the caret and the
+                    undo history. The key remounts it per memo so the history never carries over */}
+                <textarea
+                  key={selectedMemo.id}
+                  ref={textareaRef}
+                  id="memo-detail-ai-response"
+                  className="memo-modal__edit-textarea"
+                  data-memo-editor=""
+                  hidden={detailPreviewMode}
+                  value={detailEditAiResponse}
+                  onChange={(event) => setDetailEditAiResponse(event.target.value)}
+                  onScroll={rememberBodyScroll}
+                  placeholder={t("memo.writePlaceholder")}
+                  aria-label={t("memo.content")}
+                  required
+                />
+                {!detailPreviewMode && <MemoFormatToolbar textareaRef={textareaRef} />}
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>

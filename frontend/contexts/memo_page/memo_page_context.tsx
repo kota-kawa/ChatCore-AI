@@ -88,6 +88,7 @@ type MemoPageBoardContextValue = Pick<
   | "actionLoadingId"
   | "copyingMemoId"
   | "handleTogglePin"
+  | "handleToggleMemoTask"
   | "handleToggleArchive"
   | "handleDeleteMemo"
   | "copyMemoFullText"
@@ -332,6 +333,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       actionLoadingId: controller.actionLoadingId,
       copyingMemoId: controller.copyingMemoId,
       handleTogglePin: controller.handleTogglePin,
+      handleToggleMemoTask: controller.handleToggleMemoTask,
       handleToggleArchive: controller.handleToggleArchive,
       handleDeleteMemo: controller.handleDeleteMemo,
       copyMemoFullText: controller.copyMemoFullText,
@@ -369,6 +371,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.actionLoadingId,
       controller.copyingMemoId,
       controller.handleTogglePin,
+      controller.handleToggleMemoTask,
       controller.handleToggleArchive,
       controller.handleDeleteMemo,
       controller.copyMemoFullText,

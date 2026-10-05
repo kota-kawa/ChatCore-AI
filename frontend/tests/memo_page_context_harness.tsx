@@ -150,6 +150,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   actionLoadingId: "",
   copyingMemoId: "",
   handleTogglePin: asyncNoop,
+  handleToggleMemoTask: asyncNoop,
   handleToggleArchive: asyncNoop,
   handleDeleteMemo: asyncNoop,
   copyMemoFullText: asyncFalse,

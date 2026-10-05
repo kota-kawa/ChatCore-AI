@@ -81,7 +81,7 @@ export type MemoExportScope = "all" | "selected";
 // ---------------------------------------------------------------------------
 
 export type MemoUpdateInput = {
-  title: string;
+  title?: string;
   ai_response: string;
   background_color?: string;
   clear_background_color?: true;
