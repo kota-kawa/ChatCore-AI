@@ -73,7 +73,7 @@ pre-deploy の upgrade に含められません。データ backfill が必要�
 `scripts/backfill_embeddings.py --dry-run` で件数を確認できます。
 公開プロンプトは投稿・編集時にバックグラウンドで vector を生成しますが、列を追加した
 migration の適用直後は既存投稿が全て `pending` のため、一度 `--target prompts` を流してください。
-対象は公開中かつ未削除の投稿だけです。
+対象は公開中かつ未削除の投稿だけです。メモもゴミ箱にあるものは対象外で、復元したメモは次回の実行で拾われます。
 
 ```sh
 python3 scripts/backfill_embeddings.py --dry-run

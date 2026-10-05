@@ -887,7 +887,11 @@ class MemoSuggestRequest(RequestPayloadModel):
 class MemoBulkActionRequest(RequestPayloadModel):
     # 一括操作APIの入力
     # Input payload for bulk memo operations.
-    action: Literal["delete", "archive", "unarchive", "pin", "unpin", "set_collection", "clear_collection"]
+    # delete はゴミ箱への移動。restore と purge はゴミ箱のメモにだけ効く。
+    # delete moves to the trash; restore and purge apply to trashed memos only.
+    action: Literal[
+        "delete", "restore", "purge", "archive", "unarchive", "pin", "unpin", "set_collection", "clear_collection"
+    ]
     memo_ids: list[int] = Field(min_length=1, max_length=200)
     collection_id: int | None = None
 

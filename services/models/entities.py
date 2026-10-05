@@ -567,6 +567,7 @@ class MemoEntry(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime)
     pinned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
     collection_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("memo_collections.id", ondelete="SET NULL"))
     embedding: Mapped[str | None] = mapped_column(Text)
     embedding_vector: Mapped[list[float] | None] = mapped_column(Vector(768))
@@ -591,6 +592,7 @@ class MemoEntry(Base):
         Index("idx_memo_entries_user_archived_pinned_created", "user_id", "archived_at", desc("pinned_at"), desc("created_at")),
         Index("idx_memo_entries_user_archived_pinned_sort", "user_id", "archived_at", "pinned_at", desc("sort_order")),
         Index("idx_memo_entries_user_updated_id", "user_id", desc("updated_at"), desc("id")),
+        Index("idx_memo_entries_deleted_at", "deleted_at", postgresql_where=text("deleted_at IS NOT NULL")),
         Index("idx_memo_entries_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
         Index("idx_memo_entries_response_trgm", "ai_response", postgresql_using="gin", postgresql_ops={"ai_response": "gin_trgm_ops"}),
         Index("idx_memo_entries_embedding_vector_hnsw", "embedding_vector", postgresql_using="hnsw",

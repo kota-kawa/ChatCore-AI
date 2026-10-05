@@ -41,6 +41,7 @@ class MemoShareRepository:
             select(MemoEntry.id).where(
                 MemoEntry.id == memo_id,
                 MemoEntry.user_id == user_id,
+                MemoEntry.deleted_at.is_(None),
             )
         )
         if owner is None:
@@ -97,6 +98,7 @@ class MemoShareRepository:
             select(MemoEntry.id).where(
                 MemoEntry.id == memo_id,
                 MemoEntry.user_id == user_id,
+                MemoEntry.deleted_at.is_(None),
             )
         )
         if owner is None:
@@ -116,6 +118,7 @@ class MemoShareRepository:
             select(MemoEntry.id).where(
                 MemoEntry.id == memo_id,
                 MemoEntry.user_id == user_id,
+                MemoEntry.deleted_at.is_(None),
             )
         )
         if owner is None:
@@ -146,6 +149,7 @@ class MemoShareRepository:
             .join(MemoEntry, MemoEntry.id == SharedMemoEntry.memo_entry_id)
             .where(
                 SharedMemoEntry.share_token == token,
+                MemoEntry.deleted_at.is_(None),
                 SharedMemoEntry.revoked_at.is_(None),
                 (
                     SharedMemoEntry.expires_at.is_(None)

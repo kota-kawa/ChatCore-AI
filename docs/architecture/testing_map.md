@@ -10,7 +10,7 @@
 | チャット・SSE・部屋 | `tests/unit/test_chat_*.py`, `test_chat_streaming.py`, `test_chat_generation_stop.py`, `tests/integration/test_endpoint_routes.py` | 入力、所有者、branch、quota、生成イベント、停止・再接続 |
 | タスク・prompt assist | `test_default_tasks.py`, `test_edit_default_task.py`, `test_task_*.py`, `test_prompt_assist*.py` | seed、localized task、並び順、重複制約、assist quota |
 | Prompt sharing | `test_prompt_share*.py`, `test_prompt_*_api.py`, `test_prompt_attachment_*.py`, `test_prompt_resource_repository.py` | 公開範囲、検索、like/comment、添付処理、resource |
-| Memo | `test_memo_*.py`, `test_embedding*.py` | CRUD、collection、archive/pin、share、embedding |
+| Memo | `test_memo_*.py`, `test_embedding*.py`, `tests/integration/test_memo_trash.py` | CRUD、collection、archive/pin、share、embedding、ゴミ箱（全経路からの除外・復元・完全削除・保持期限） |
 | Context vault | `test_context_vault_*.py`, `test_context_fact_*.py`, `tests/integration/test_context_vault_endpoints.py` | candidate、承認、portability、pagination、API 境界 |
 | MCP | `test_mcp_*.py`, `test_mcp_oauth*.py` | OAuth、scope、tool authorization、machine session bypass |
 | DB／migration | `test_db_postgres.py`, `test_migration_sql_syntax.py`, migration 名に対応する `test_*_migration.py` | SQL、安全な retry、upgrade/downgrade、制約・index |

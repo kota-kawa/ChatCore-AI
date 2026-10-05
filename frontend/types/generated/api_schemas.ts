@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 6bf04cceccd72593c2fddc52b31eb2b18f517448a56468e009e9294b30caf213
+// Schema fingerprint: 762eec161042f7d9d355cc433d1c45df11f57e60fad782a80117f22172212a22
 
 import { z } from "zod";
 
@@ -92,7 +92,7 @@ export type MemoShareCreateRequest = z.infer<typeof MemoShareCreateRequestSchema
 export const MemoSuggestRequestSchema = z.object({ "ai_response": z.string().min(1) });
 export type MemoSuggestRequest = z.infer<typeof MemoSuggestRequestSchema>;
 
-export const MemoBulkActionRequestSchema = z.object({ "action": z.enum(["delete","archive","unarchive","pin","unpin","set_collection","clear_collection"]), "memo_ids": z.array(z.number().int()).min(1).max(200), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
+export const MemoBulkActionRequestSchema = z.object({ "action": z.enum(["delete","restore","purge","archive","unarchive","pin","unpin","set_collection","clear_collection"]), "memo_ids": z.array(z.number().int()).min(1).max(200), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
 export type MemoBulkActionRequest = z.infer<typeof MemoBulkActionRequestSchema>;
 
 export const MemoCollectionCreateRequestSchema = z.object({ "name": z.string().min(1).max(100), "color": z.string().max(20).default("#6b7280") });
