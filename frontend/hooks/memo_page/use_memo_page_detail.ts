@@ -152,7 +152,10 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }, MEMO_DETAIL_CLOSE_ANIMATION_MS);
   }, [clearDetailAutoSaveTimer]);
 
-  const openMemoDetail = useCallback(async (memoId: string | number) => {
+  // 開けたかどうかを返す。失敗時は詳細が開かず画面に何も出ないので、ここで通知する
+  // Resolves to whether the memo opened. On failure the detail never opens and nothing would
+  // show, so the error is surfaced here
+  const openMemoDetail = useCallback(async (memoId: string | number): Promise<boolean> => {
     cancelMemoDetailCloseAnimation();
     setIsMemoDetailClosing(false);
     setDetailError("");
@@ -168,7 +171,11 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     detailSaveSequenceRef.current += 1;
     try {
       const memo = await loadMemoDetail(memoId);
-      if (!memo) { setDetailError(t("memo.memoDetailFailed")); return; }
+      if (!memo) {
+        setDetailError(t("memo.memoDetailFailed"));
+        showFlash("error", t("memo.memoDetailFailed"));
+        return false;
+      }
       setDetailEditTitle(memo.title || "");
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
@@ -178,12 +185,16 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       setDetailPreviewMode(Boolean(memo.ai_response?.trim()));
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
+      return true;
     } catch (error) {
-      setDetailError(error instanceof Error ? error.message : t("memo.memoDetailFailed"));
+      const message = error instanceof Error ? error.message : t("memo.memoDetailFailed");
+      setDetailError(message);
+      showFlash("error", message);
+      return false;
     } finally {
       setDetailLoading(false);
     }
-  }, [cancelMemoDetailCloseAnimation]);
+  }, [cancelMemoDetailCloseAnimation, showFlash]);
 
   const sendDetailEdit = useCallback(async (
     memoId: string | number,

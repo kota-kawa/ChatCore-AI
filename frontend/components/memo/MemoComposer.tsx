@@ -47,19 +47,25 @@ export function MemoComposer() {
   // under body count as part of the composer.
   const sectionRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const autoSubmittedBodyRef = useRef<string | null>(null);
   const hasBody = Boolean(formState.ai_response.trim());
   useEffect(() => {
     if (!composeIsExpanded || submitting) return undefined;
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element) || sectionRef.current?.contains(target)) return;
-      if (target.closest("[role='listbox'], [role='menu'], .modal-base, [data-memo-composer-trigger]")) return;
-      if (hasBody) formRef.current?.requestSubmit();
+      if (target.closest("[role='listbox'], [role='menu'], .modal-base, .cc-alert-modal, [data-memo-composer-trigger]")) return;
+      // 同じ内容の保存に失敗したあとは、クリックのたびに送り直さない（「完了」で送り直せる）
+      // After a failed save of the same content, do not resend on every click ("Done" still retries)
+      if (hasBody && autoSubmittedBodyRef.current !== formState.ai_response) {
+        autoSubmittedBodyRef.current = formState.ai_response;
+        formRef.current?.requestSubmit();
+      }
       else if (!hasComposeDraft) setIsComposeExpanded(false);
     };
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
-  }, [composeIsExpanded, hasBody, hasComposeDraft, setIsComposeExpanded, submitting]);
+  }, [composeIsExpanded, formState.ai_response, hasBody, hasComposeDraft, setIsComposeExpanded, submitting]);
 
   // タイトルで Enter を押したら保存ではなく本文へ進む（日本語変換の確定の Enter は除く）
   // Enter in the title moves on to the body instead of saving (except the Enter that confirms an IME conversion)

@@ -5,7 +5,7 @@ type UseMemoDetailRouteParams = {
   // 開いている（閉じるアニメーション中ではない）メモの id。無ければ null
   // Id of the memo that is open (and not animating closed), or null
   openMemoId: string | null;
-  openMemoDetail: (memoId: string | number) => Promise<void>;
+  openMemoDetail: (memoId: string | number) => Promise<boolean>;
   closeMemoDetail: () => Promise<void>;
 };
 
@@ -28,6 +28,7 @@ export function useMemoDetailRoute({ openMemoId, openMemoDetail, closeMemoDetail
 
   useEffect(() => {
     if (!router.isReady) return;
+    const firstSync = previousRef.current === null;
     const previous = previousRef.current ?? { route: null, open: null };
     previousRef.current = { route: routeMemoId, open: openMemoId };
     if (routeMemoId === openMemoId) return;
@@ -48,7 +49,21 @@ export function useMemoDetailRoute({ openMemoId, openMemoDetail, closeMemoDetail
     }
 
     if (routeMemoId) {
-      void openMemoDetail(routeMemoId);
+      // 「進む」で開き直したメモは履歴に 1 つ前（一覧）があるので、閉じるときは戻ればよい。
+      // 最初の表示で URL から開いた場合だけは戻る先がこの画面とは限らないので、置き換えにする
+      // A memo reopened with "forward" has the list one entry back, so closing can go back. Only
+      // a memo opened from the URL on first load may have no entry of this page behind it, so
+      // that one is replaced instead
+      pushedEntryRef.current = !firstSync;
+      const failedId = routeMemoId;
+      void openMemoDetail(routeMemoId).then((opened) => {
+        // 開けなかった id（存在しない・他人のメモ）を URL に残すと、再読み込みのたびに失敗を繰り返す
+        // Leaving an id that could not open (missing, or someone else's) would fail again on every reload
+        if (opened || previousRef.current?.route !== failedId) return;
+        const query = { ...router.query };
+        delete query.memo;
+        void router.replace({ pathname: router.pathname, query }, undefined, { shallow: true });
+      });
     } else {
       pushedEntryRef.current = false;
       void closeMemoDetail();

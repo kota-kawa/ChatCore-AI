@@ -3,6 +3,7 @@ import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { deleteMemo, loadMemoDetail, setMemoArchived, setMemoPinned, updateMemo } from "../../lib/memo/api";
+import { autoMemoTitle, isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { toggleTaskMarker, type RenderedTask } from "../../lib/memo/list_editing";
 import type { FlashState, MemoDetail, MemoListState, MemoSummary } from "../../lib/memo/types";
 import { parseMemoText } from "../../lib/memo/utils";
@@ -122,27 +123,38 @@ export function useMemoPageItemActions({
   // 一覧のカードに見えているチェック欄を切り替える。カードは本文の先頭だけを表示しているので、
   // 全文を取り直し、見えている欄が全文の先頭と同じ並び・同じ文字であることを確かめてから書き換える。
   // 食い違えば（別の端末で編集された等）別の行を書き換えかねないので、何もせず一覧を取り直す。
-  // カードの表示は先に切り替え、失敗したら取り直した一覧で元に戻す。タイトルは送らない
-  // （送ると、タイトル未設定の古いメモに表示用の仮の題が保存されてしまう）。
+  // カードの表示は先に切り替え、失敗したら取り直した一覧で元に戻す。タイトルは、本文の最初の行
+  // から付いた自動タイトルのときだけ付け直して送る（それ以外で送ると、タイトル未設定の古いメモに
+  // 表示用の仮の題が保存されてしまう）。
   // Toggles a checkbox shown on a list card. A card shows only the head of the body, so the full
   // text is fetched and the visible boxes are checked against its head (order and text) before it
   // is rewritten. On a mismatch (edited elsewhere, for example) the wrong line could change, so
   // nothing is written and the list is reloaded. The card flips first and the reloaded list puts
-  // it back on failure. The title is not sent (sending it would store the display placeholder as
-  // the title of an old untitled memo).
+  // it back on failure. The title is sent only to re-derive one that came from the body's first
+  // line (sending it otherwise would store the display placeholder as the title of an old
+  // untitled memo).
   const handleToggleMemoTask = useCallback(async (memo: MemoSummary, index: number, rendered: RenderedTask[]) => {
     await withActionLoading(memo.id, async () => {
-      const optimisticExcerpt = toggleTaskMarker(parseMemoText(memo.excerpt), index, rendered);
+      const excerpt = parseMemoText(memo.excerpt);
+      const optimisticExcerpt = toggleTaskMarker(excerpt, index, rendered);
       if (optimisticExcerpt !== null) {
-        await updateMemoListOptimistically((current) => ({ ...current, excerpt: optimisticExcerpt }), [memo.id]);
+        await updateMemoListOptimistically((current) => ({
+          ...current,
+          excerpt: optimisticExcerpt,
+          title: isAutoMemoTitle(current.title, excerpt) ? autoMemoTitle(optimisticExcerpt) : current.title,
+        }), [memo.id]);
       }
       try {
         const detail = await loadMemoDetail(memo.id);
-        const next = toggleTaskMarker(detail?.ai_response || "", index, rendered, true);
+        const body = detail?.ai_response || "";
+        const next = toggleTaskMarker(body, index, rendered, true);
         if (next === null) {
           showFlash("error", t("memo.taskToggleFailed"));
         } else {
-          await updateMemo(memo.id, { ai_response: next }, t("memo.memoUpdateFailed"));
+          // 本文の最初の行から付いた自動タイトルは、その行のチェックが変われば付け直す
+          // A title derived from the first line is re-derived when that line's checkbox changes
+          const title = isAutoMemoTitle(detail?.title, body) ? { title: autoMemoTitle(next) } : {};
+          await updateMemo(memo.id, { ...title, ai_response: next }, t("memo.memoUpdateFailed"));
         }
       } catch (error) {
         showFlash("error", error instanceof Error ? error.message : t("memo.memoUpdateFailed"));

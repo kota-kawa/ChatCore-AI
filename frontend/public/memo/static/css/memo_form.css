@@ -7015,6 +7015,12 @@ body.memo-page {
     inset: -7px;
   }
 
+  /* 並んだボタンどうしで広げた当たり判定が重ならないよう、間隔も広げる（30px + 14px = 44px）
+     Widen the gap as well so the enlarged hit areas of adjacent buttons do not overlap (30px + 14px = 44px) */
+  :where(body.memo-page, .memo-page-shell) .memo-item__actions {
+    gap: 14px;
+  }
+
   .memo-item__dropdown-item {
     min-height: 44px;
   }
@@ -7108,6 +7114,12 @@ body.memo-page {
     font-size: 1.4rem;
     box-shadow: var(--memo-shadow);
     cursor: pointer;
+  }
+
+  /* ダークテーマのアクセント色は明るい黄色なので、白い記号では読めない
+     Dark theme's accent is a bright yellow, on which a white glyph is unreadable */
+  [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-new-fab {
+    color: black;
   }
 
   /* 濃色のボタンなので、地色のすき間を挟んで同じ色の輪を出す

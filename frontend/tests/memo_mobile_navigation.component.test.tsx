@@ -27,7 +27,7 @@ vi.mock("next/router", () => ({
 }));
 
 describe("useMemoDetailRoute", () => {
-  const openMemoDetail = vi.fn(async () => undefined);
+  const openMemoDetail = vi.fn(async (_memoId: string | number) => true);
   const closeMemoDetail = vi.fn(async () => undefined);
 
   beforeEach(() => {
@@ -83,6 +83,30 @@ describe("useMemoDetailRoute", () => {
 
     rerender({ open: null });
     expect(routerMock.back).not.toHaveBeenCalled();
+  });
+
+  it("goes back when a memo reopened with the forward button is closed from the UI", () => {
+    const { rerender } = renderRoute();
+    // 「進む」: 一覧を表示中に URL へ memo が戻ってくる
+    // Forward: the memo returns to the URL while the list is showing
+    routerState.history.push({});
+    routerState.query = { memo: "12" };
+    rerender({ open: null });
+    expect(openMemoDetail).toHaveBeenCalledWith("12");
+    rerender({ open: "12" });
+
+    rerender({ open: null });
+    expect(routerMock.back).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it("drops an id that could not be opened from the URL", async () => {
+    openMemoDetail.mockResolvedValueOnce(false);
+    routerState.query = { memo: "999" };
+    renderRoute();
+    await act(async () => {});
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(routerState.query).toEqual({});
   });
 
   it("ignores a memo value in the URL that is not an id", () => {
@@ -156,6 +180,14 @@ describe("MemoComposer outside click", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("does not resend the same body on every click after the first attempt", () => {
+    const onSubmit = vi.fn();
+    render(<ComposerHarness initial={{ ...emptyForm, ai_response: "牛乳" }} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole("button", { name: "outside" }));
+    fireEvent.click(screen.getByRole("button", { name: "outside" }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores clicks inside the composer and in pickers rendered outside it", () => {
     const onSubmit = vi.fn();
     render(<ComposerHarness initial={{ ...emptyForm, ai_response: "牛乳" }} onSubmit={onSubmit} />);
@@ -174,6 +206,7 @@ describe("MemoDetailModal actions while reading", () => {
       handleToggleArchive: vi.fn(async () => undefined),
       handleDeleteMemo: vi.fn(async () => undefined),
       openShareModal: vi.fn(async () => undefined),
+      closeMemoDetail: vi.fn(async () => undefined),
     };
     const controller = createMemoPageControllerStub({
       selectedMemo: memo,
@@ -191,7 +224,7 @@ describe("MemoDetailModal actions while reading", () => {
     return handlers;
   }
 
-  it("offers pin, archive, share and delete for the open memo", () => {
+  it("offers pin, archive, share and delete for the open memo", async () => {
     const handlers = renderDetail(true);
     const toolbar = screen.getByRole("toolbar", { name: "操作" });
     expect(toolbar).not.toBeNull();
@@ -200,10 +233,14 @@ describe("MemoDetailModal actions while reading", () => {
     expect(pin.getAttribute("aria-pressed")).toBe("true");
     act(() => { fireEvent.click(pin); });
     fireEvent.click(screen.getByRole("button", { name: "アーカイブ" }));
-    fireEvent.click(screen.getByRole("button", { name: "共有設定" }));
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
     expect(handlers.handleTogglePin).toHaveBeenCalledWith(memo);
     expect(handlers.handleToggleArchive).toHaveBeenCalledWith(memo);
+    // 共有設定は別のモーダルなので、この詳細を閉じてから開く
+    // Share settings is another modal, so this detail closes before it opens
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "共有設定" })); });
+    expect(handlers.closeMemoDetail).toHaveBeenCalledTimes(1);
+    expect(handlers.closeMemoDetail.mock.invocationCallOrder[0]).toBeLessThan(handlers.openShareModal.mock.invocationCallOrder[0]);
     expect(handlers.openShareModal).toHaveBeenCalledWith(memo);
     expect(handlers.handleDeleteMemo).toHaveBeenCalledWith(memo);
   });
