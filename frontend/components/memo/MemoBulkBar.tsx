@@ -41,7 +41,7 @@ export function MemoBulkBar() {
                   <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("restore")} disabled={!hasSelection || bulkLoading}>
                     <i className="bi bi-arrow-counterclockwise"></i>{t("memo.restoreAction")}
                   </button>
-                  <button type="button" className="memo-bulk-btn memo-bulk-btn--danger" onClick={() => void executeBulkAction("purge")} disabled={!hasSelection || bulkLoading}>
+                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("purge")} disabled={!hasSelection || bulkLoading}>
                     <i className="bi bi-x-circle"></i>{t("memo.purge")}
                   </button>
                 </div>

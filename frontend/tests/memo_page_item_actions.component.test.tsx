@@ -26,7 +26,8 @@ const mutate = mutateMock as unknown as KeyedMutator<MemoListState>;
 const updateMemoListOptimistically = vi.fn(async () => undefined);
 const showFlash = vi.fn();
 const patchSelectedMemoOptimistically = vi.fn();
-const refreshSelectedMemoIfNeeded = vi.fn(async () => undefined);
+const refreshSelectedMemoIfNeeded = vi.fn(async (_memoId: string | number) => undefined);
+const saveSelectedMemoEdits = vi.fn(async () => true);
 const startMemoDetailCloseAnimation = vi.fn();
 
 function useItemActionsHarness(selectedMemoId?: number) {
@@ -37,6 +38,7 @@ function useItemActionsHarness(selectedMemoId?: number) {
     selectedMemoId,
     patchSelectedMemoOptimistically,
     refreshSelectedMemoIfNeeded,
+    saveSelectedMemoEdits,
     startMemoDetailCloseAnimation,
   });
 }
@@ -104,14 +106,55 @@ describe("useMemoPageItemActions trash and undo", () => {
     expect(startMemoDetailCloseAnimation).not.toHaveBeenCalled();
   });
 
-  it("tells the user that sharing stays off when a shared memo is restored", async () => {
+  it("tells the user that sharing stays off when a memo that was shared is restored from the trash", async () => {
     const { result } = renderHook(() => useItemActionsHarness());
 
     await act(async () => {
-      await result.current.handleRestoreMemo({ ...memo, share_token: "tok" });
+      await result.current.handleRestoreMemo({ ...memo, deleted_at: "2026-10-05T00:00:00", share_token: "tok" });
     });
 
     expect(showFlash).toHaveBeenLastCalledWith("success", "元に戻しました。共有は解除されたままです。");
+  });
+
+  it("mentions sharing on an undo only when the memo was shared at the moment it was deleted", async () => {
+    const { result } = renderHook(() => useItemActionsHarness());
+
+    // 以前に共有して、すでに解除してあったメモ: 共有の話は出さない
+    // Shared once and already turned off: nothing to say about sharing
+    await act(async () => {
+      await result.current.handleRestoreMemo({ ...memo, share_token: "tok", is_active: false });
+    });
+    expect(showFlash).toHaveBeenLastCalledWith("success", "元に戻しました。");
+
+    await act(async () => {
+      await result.current.handleRestoreMemo({ ...memo, share_token: "tok", is_active: true });
+    });
+    expect(showFlash).toHaveBeenLastCalledWith("success", "元に戻しました。共有は解除されたままです。");
+  });
+
+  it("saves the open detail's pending edits before trashing that memo", async () => {
+    const { result } = renderHook(() => useItemActionsHarness(7));
+    await act(async () => {
+      await result.current.handleDeleteMemo(memo);
+    });
+    expect(saveSelectedMemoEdits).toHaveBeenCalledTimes(1);
+    expect(saveSelectedMemoEdits.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deleteMemo).mock.invocationCallOrder[0]);
+  });
+
+  it("does not save the open detail when another memo is trashed", async () => {
+    const { result } = renderHook(() => useItemActionsHarness(99));
+    await act(async () => {
+      await result.current.handleDeleteMemo(memo);
+    });
+    expect(saveSelectedMemoEdits).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the detail for the archived memo's id, never for whatever was open when the action was created", async () => {
+    const { result } = renderHook(() => useItemActionsHarness(7));
+    await act(async () => {
+      await result.current.handleToggleArchive(memo);
+    });
+    expect(refreshSelectedMemoIfNeeded).toHaveBeenLastCalledWith(7);
   });
 
   it("reports a failed restore as an error", async () => {

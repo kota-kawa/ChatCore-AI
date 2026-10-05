@@ -19,7 +19,9 @@ type UseMemoPageItemActionsParams = {
   showFlash: (type: FlashState["type"], text: string, action?: FlashAction) => void;
   selectedMemoId: string | number | undefined;
   patchSelectedMemoOptimistically: (memoId: string | number, patch: Partial<MemoDetail>) => void;
-  refreshSelectedMemoIfNeeded: () => Promise<void>;
+  refreshSelectedMemoIfNeeded: (memoId: string | number) => Promise<void>;
+  // 開いている詳細の未保存の編集を保存する / Saves the pending edits of the open detail
+  saveSelectedMemoEdits: () => Promise<boolean>;
   startMemoDetailCloseAnimation: () => void;
 };
 
@@ -32,6 +34,7 @@ export function useMemoPageItemActions({
   selectedMemoId,
   patchSelectedMemoOptimistically,
   refreshSelectedMemoIfNeeded,
+  saveSelectedMemoEdits,
   startMemoDetailCloseAnimation,
 }: UseMemoPageItemActionsParams) {
   const { t } = useTranslation();
@@ -65,11 +68,11 @@ export function useMemoPageItemActions({
         await setMemoPinned(memo.id, enabled, t("memo.pinUpdateFailed"));
         showFlash("success", memo.is_pinned ? t("memo.unpinnedSuccess") : t("memo.pinnedSuccess"));
         await mutate();
-        await refreshSelectedMemoIfNeeded();
+        await refreshSelectedMemoIfNeeded(memo.id);
       } catch (error) {
         showFlash("error", error instanceof Error ? error.message : t("memo.pinUpdateFailed"));
         await mutate();
-        await refreshSelectedMemoIfNeeded();
+        await refreshSelectedMemoIfNeeded(memo.id);
       }
     });
   }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, updateMemoListOptimistically, withActionLoading]);
@@ -95,11 +98,11 @@ export function useMemoPageItemActions({
         const text = enabled ? t("memo.archivedSuccess") : t("memo.unarchivedSuccess");
         showFlash("success", text, isUndo ? undefined : { label: t("memo.undo"), onAction: () => setArchived(memo, !enabled, true) });
         await mutate();
-        await refreshSelectedMemoIfNeeded();
+        await refreshSelectedMemoIfNeeded(memo.id);
       } catch (error) {
         showFlash("error", error instanceof Error ? error.message : t("memo.archiveUpdateFailed"));
         await mutate();
-        await refreshSelectedMemoIfNeeded();
+        await refreshSelectedMemoIfNeeded(memo.id);
       }
     });
   }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, t, updateMemoListOptimistically, withActionLoading]);
@@ -121,7 +124,14 @@ export function useMemoPageItemActions({
       await updateMemoListOptimistically(() => null, [memo.id]);
       try {
         await restoreMemo(memo.id, t("memo.restoreFailed"));
-        showFlash("success", memo.share_token ? t("memo.restoredShareOff") : t("memo.restored"));
+        // ゴミ箱へ移すと共有は解除される。直前の削除を取り消す場合は削除前のメモを持っているので、
+        // 共有中だったときだけ知らせる。ゴミ箱の一覧のメモは解除後の状態しか分からないため、
+        // 共有したことがあるメモには知らせる
+        // Trashing a memo turns its sharing off. An undo right after the delete still holds the
+        // memo from before, so it mentions sharing only when that memo was shared. A memo listed in
+        // the trash only shows the state after the revoke, so any memo that was ever shared gets the note
+        const wasShared = memo.deleted_at ? Boolean(memo.share_token) : Boolean(memo.is_active);
+        showFlash("success", wasShared ? t("memo.restoredShareOff") : t("memo.restored"));
       } catch (error) {
         showFlash("error", error instanceof Error ? error.message : t("memo.restoreFailed"));
       }
@@ -168,18 +178,24 @@ export function useMemoPageItemActions({
   // Handler to move a memo to the trash. No confirmation: the notice's undo takes it back
   const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
     await withActionLoading(memo.id, async () => {
+      // 詳細を開いたまま削除するときは、打ったばかりの編集を先に保存する。保存せずに消すと、
+      // 「元に戻す」で戻ってくるのが編集前の内容になる（保存できない内容ならそのまま削除する）
+      // Deleting from the open detail saves what was just typed first; otherwise undo would bring
+      // back the text from before the edit (content that cannot be saved is deleted as it is)
+      const isOpenInDetail = Boolean(selectedMemoId) && String(selectedMemoId) === String(memo.id);
+      if (isOpenInDetail) await saveSelectedMemoEdits();
       await updateMemoListOptimistically(() => null, [memo.id]);
       try {
         await deleteMemo(memo.id, t("memo.memoDeleteFailed"));
         showFlash("success", t("memo.movedToTrash"), { label: t("memo.undo"), onAction: () => handleRestoreMemo(memo) });
-        if (selectedMemoId && String(selectedMemoId) === String(memo.id)) startMemoDetailCloseAnimation();
+        if (isOpenInDetail) startMemoDetailCloseAnimation();
         await mutate();
       } catch (error) {
         showFlash("error", error instanceof Error ? error.message : t("memo.memoDeleteFailed"));
         await mutate();
       }
     });
-  }, [handleRestoreMemo, mutate, selectedMemoId, showFlash, startMemoDetailCloseAnimation, t, updateMemoListOptimistically, withActionLoading]);
+  }, [handleRestoreMemo, mutate, saveSelectedMemoEdits, selectedMemoId, showFlash, startMemoDetailCloseAnimation, t, updateMemoListOptimistically, withActionLoading]);
 
   // 一覧のカードに見えているチェック欄を切り替える。カードは本文の先頭だけを表示しているので、
   // 全文を取り直し、見えている欄が全文の先頭と同じ並び・同じ文字であることを確かめてから書き換える。

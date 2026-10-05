@@ -12,6 +12,7 @@ describe("search highlighting on cards", () => {
     const memo: MemoSummary = { id: 1, title: "Passport メモ", excerpt: "持ち物: パスポート と 充電器" };
     const controller = createMemoPageControllerStub({
       query: "ぱすぽーと passport",
+      debouncedQuery: "ぱすぽーと passport",
       memos: [memo],
       otherMemos: [memo],
       totalMemoCount: 1,
@@ -28,7 +29,7 @@ describe("search highlighting on cards", () => {
 
   it("does not mark the placeholder shown for an untitled memo", () => {
     const memo: MemoSummary = { id: 2, title: "", excerpt: "本文" };
-    const controller = createMemoPageControllerStub({ query: "メモ", memos: [memo], otherMemos: [memo], totalMemoCount: 1 });
+    const controller = createMemoPageControllerStub({ query: "メモ", debouncedQuery: "メモ", memos: [memo], otherMemos: [memo], totalMemoCount: 1 });
     render(
       <MemoPageContextProvider controller={controller}>
         <MemoHistoryPanel />

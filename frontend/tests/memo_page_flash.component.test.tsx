@@ -89,4 +89,19 @@ describe("useMemoPageFlash", () => {
     act(() => result.current.runFlashAction());
     expect(second).toHaveBeenCalledTimes(1);
   });
+
+  it("stays while held and gets its full time again once released", () => {
+    const { result } = renderHook(() => useMemoPageFlash());
+    act(() => result.current.showFlash("success", "移動しました", { label: "元に戻す", onAction: vi.fn() }));
+    act(() => vi.advanceTimersByTime(5000));
+    act(() => result.current.holdFlash());
+    act(() => vi.advanceTimersByTime(60000));
+    expect(result.current.flashState).not.toBeNull();
+
+    act(() => result.current.releaseFlash());
+    act(() => vi.advanceTimersByTime(5999));
+    expect(result.current.flashState).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current.flashState).toBeNull();
+  });
 });

@@ -32,6 +32,7 @@ type MemoPageUiContextValue = Pick<
 type MemoPageListContextValue = Pick<
   MemoPageControllerState,
   | "query"
+  | "debouncedQuery"
   | "setQuery"
   | "sortMode"
   | "setSortMode"
@@ -243,6 +244,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
   const listValue = useMemo<MemoPageListContextValue>(
     () => ({
       query: controller.query,
+      debouncedQuery: controller.debouncedQuery,
       setQuery: controller.setQuery,
       sortMode: controller.sortMode,
       setSortMode: controller.setSortMode,
@@ -264,6 +266,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
     }),
     [
       controller.query,
+      controller.debouncedQuery,
       controller.setQuery,
       controller.sortMode,
       controller.setSortMode,

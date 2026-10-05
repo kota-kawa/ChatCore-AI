@@ -383,4 +383,34 @@ describe("useMemoPageDetail", () => {
     });
     expect(result.current.detailEditTitle).toBe("a");
   });
+
+  it("does not reopen a closed detail, or swap the open memo, when a late refresh arrives", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    await act(async () => {
+      await result.current.closeMemoDetail();
+      await vi.advanceTimersByTimeAsync(MEMO_DETAIL_CLOSE_ANIMATION_MS);
+    });
+    expect(result.current.selectedMemo).toBeNull();
+
+    // 閉じたあとに届いた「元に戻す」の再読み込み
+    // The refresh of an undo that lands after the detail closed
+    await act(async () => {
+      await result.current.refreshSelectedMemoIfNeeded(1);
+    });
+    expect(result.current.selectedMemo).toBeNull();
+
+    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 2, title: "別のメモ", ai_response: "別の本文" });
+    await act(async () => {
+      await result.current.openMemoDetail(2);
+    });
+    vi.mocked(loadMemoDetail).mockClear();
+    await act(async () => {
+      await result.current.refreshSelectedMemoIfNeeded(1);
+    });
+    expect(loadMemoDetail).not.toHaveBeenCalled();
+    expect(result.current.selectedMemo?.id).toBe(2);
+  });
 });

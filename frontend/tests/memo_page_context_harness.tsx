@@ -19,6 +19,8 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   setFlashState: noop,
   showFlash: noop,
   runFlashAction: noop,
+  holdFlash: noop,
+  releaseFlash: noop,
   // layout
   activeView: "memos",
   setActiveView: noop,
@@ -30,6 +32,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   setIsSidebarCollapsed: noop,
   // list
   query: "",
+  debouncedQuery: "",
   setQuery: noop,
   sortMode: "manual",
   setSortMode: noop,

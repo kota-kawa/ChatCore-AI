@@ -73,6 +73,24 @@ export function useMemoPageFlash() {
     }, action ? FLASH_ACTION_DURATION_MS : FLASH_DURATION_MS);
   }, []);
 
+  // 通知にポインターやフォーカスがある間は消さない。離れたら、あらためて同じ時間だけ出しておく。
+  // キーボードで「元に戻す」まで移動している途中に消えないようにするため。
+  // The notice stays while the pointer or focus is on it and gets its full time again afterwards,
+  // so it cannot disappear while someone is tabbing to the undo button.
+  const holdFlash = useCallback(() => {
+    if (!flashTimerRef.current) return;
+    clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = null;
+  }, []);
+  const releaseFlash = useCallback(() => {
+    if (flashTimerRef.current) return;
+    flashTimerRef.current = setTimeout(() => {
+      flashActionRef.current = null;
+      setFlashState(null);
+      flashTimerRef.current = null;
+    }, flashActionRef.current ? FLASH_ACTION_DURATION_MS : FLASH_DURATION_MS);
+  }, []);
+
   // 通知の操作ボタンが押されたとき。先に通知を消してから操作を走らせる（結果は操作側が新しい通知で知らせる）
   // The notice's action button was pressed: hide the notice first, then run the action (which reports its own result)
   const runFlashAction = useCallback(() => {
@@ -82,5 +100,5 @@ export function useMemoPageFlash() {
     void action.onAction();
   }, [dismissFlash]);
 
-  return { flashState, setFlashState, showFlash, runFlashAction };
+  return { flashState, setFlashState, showFlash, runFlashAction, holdFlash, releaseFlash };
 }

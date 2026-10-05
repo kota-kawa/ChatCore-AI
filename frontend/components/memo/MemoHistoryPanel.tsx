@@ -29,6 +29,7 @@ export function MemoHistoryPanel() {
     memoListLoading,
     memos,
     hasActiveFilters,
+    debouncedQuery,
     archiveScope,
     activeCollectionId,
     query,
@@ -202,14 +203,14 @@ export function MemoHistoryPanel() {
                               A memo whose title is just the first line of its body would show that line twice */}
                           {!isAutoMemoTitle(memo.title, parseMemoText(memo.excerpt)) && (
                             <h3 className="memo-item__title">
-                              {memo.title ? <HighlightedText text={memo.title} query={query} /> : t("memo.savedMemo")}
+                              {memo.title ? <HighlightedText text={memo.title} query={debouncedQuery} /> : t("memo.savedMemo")}
                             </h3>
                           )}
                           {memo.excerpt && (
                             <MemoMarkdown
                               text={parseMemoText(memo.excerpt)}
                               className="memo-item__excerpt"
-                              highlight={query}
+                              highlight={debouncedQuery}
                               onToggleTask={isBulkMode || isTrash ? undefined : (index, rendered) => {
                                 // 保存中の連打は受け付けない（古い本文をもとに二重に書き換えないため）
                                 // Ignore taps while a save is running so two rewrites never start from the same stale body
@@ -380,11 +381,15 @@ export function MemoHistoryPanel() {
                   );
                 };
 
-                const showSectionLabels = pinnedMemos.length > 0 && otherMemos.length > 0;
+                // ゴミ箱は削除した新しい順の 1 つの並び。ピン留めは操作できないので、分けて先頭に出さない
+                // The trash is one list, newest deletion first; pins cannot be used there, so they are not split out on top
+                const sectionPinned = isTrash ? [] : pinnedMemos;
+                const sectionOther = isTrash ? memos : otherMemos;
+                const showSectionLabels = sectionPinned.length > 0 && sectionOther.length > 0;
 
                 return (
                   <div className="memo-history__sections">
-                    {pinnedMemos.length > 0 && (
+                    {sectionPinned.length > 0 && (
                       <section className="memo-history__section">
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">
@@ -393,24 +398,24 @@ export function MemoHistoryPanel() {
                         )}
                         <ul
                           className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
-                          onDragOver={(event) => handleMemoSectionDragOver(event, pinnedMemos)}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, sectionPinned)}
                           onDrop={(event) => { void handleMemoDrop(event); }}
                         >
-                          {pinnedMemos.map(renderMemoCard)}
+                          {sectionPinned.map(renderMemoCard)}
                         </ul>
                       </section>
                     )}
-                    {otherMemos.length > 0 && (
+                    {sectionOther.length > 0 && (
                       <section className="memo-history__section">
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">{t("memo.other")}</h3>
                         )}
                         <ul
                           className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
-                          onDragOver={(event) => handleMemoSectionDragOver(event, otherMemos)}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, sectionOther)}
                           onDrop={(event) => { void handleMemoDrop(event); }}
                         >
-                          {otherMemos.map(renderMemoCard)}
+                          {sectionOther.map(renderMemoCard)}
                         </ul>
                       </section>
                     )}

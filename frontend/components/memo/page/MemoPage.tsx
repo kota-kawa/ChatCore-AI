@@ -44,6 +44,8 @@ export default function MemoPage() {
     setActiveView,
     flashState,
     runFlashAction,
+    holdFlash,
+    releaseFlash,
     isBulkMode,
     viewMode,
     archiveScope,
@@ -124,7 +126,7 @@ export default function MemoPage() {
           </div>
 
           {/* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ── */}
-          <MemoFlashToast flash={flashState} onAction={runFlashAction} />
+          <MemoFlashToast flash={flashState} onAction={runFlashAction} onHold={holdFlash} onRelease={releaseFlash} />
 
           {/* ── Memo detail modal ── */}
           <MemoDetailModal />

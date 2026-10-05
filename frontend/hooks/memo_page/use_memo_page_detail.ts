@@ -93,13 +93,27 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     ));
   }, []);
 
-  const refreshSelectedMemoIfNeeded = useCallback(async () => {
-    if (!selectedMemo?.id) return;
+  // いま開いているメモ。操作の完了後や「元に戻す」は、押した時点の描画より後に走るので、
+  // そのときに開いているメモをここから読む
+  // The memo open right now. Work that finishes later (or an undo) runs after the render it was
+  // created in, so it reads the currently open memo from here
+  const selectedMemoIdRef = useRef<string | null>(null);
+  selectedMemoIdRef.current = selectedMemo ? String(selectedMemo.id) : null;
+
+  // memoId のメモが開いている間だけ、サーバーの内容で置き換える。閉じたあと（や別のメモを
+  // 開いたあと）に置き換えると、閉じた詳細が開き直したり、別のメモの編集内容がこのメモへ
+  // 保存されたりする。
+  // Replaces the open memo with the server's copy only while memoId is the one open. Doing it
+  // after the detail closed (or another memo opened) would reopen the closed detail, or save the
+  // other memo's edits into this one.
+  const refreshSelectedMemoIfNeeded = useCallback(async (memoId: string | number) => {
+    const targetId = String(memoId);
+    if (selectedMemoIdRef.current !== targetId) return;
     try {
-      const refreshed = await loadMemoDetail(selectedMemo.id);
-      if (refreshed) setSelectedMemo(refreshed);
+      const refreshed = await loadMemoDetail(targetId);
+      if (refreshed && selectedMemoIdRef.current === targetId) setSelectedMemo(refreshed);
     } catch { return; }
-  }, [selectedMemo?.id]);
+  }, []);
 
   const detailHasUnsavedChanges = useMemo(() => {
     if (!selectedMemo) return false;
