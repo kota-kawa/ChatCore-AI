@@ -121,6 +121,58 @@ class MemoSearchRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ESCAPE", sql)
         self.assertIn("%100\\%%", compiled.params.values())
 
+    async def test_keyword_search_matches_hiragana_and_katakana_spellings(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(return_value=0)
+        session.execute = AsyncMock(return_value=_result([]))
+
+        await fetch_memo_summaries(
+            7,
+            limit=10,
+            offset=0,
+            query="ぱすぽーと",
+            date_from="",
+            date_to="",
+            sort="recent",
+            include_archived=False,
+            only_archived=False,
+            pinned_first=False,
+            collection_id=None,
+            semantic_query_embedding=None,
+            session=session,
+        )
+
+        compiled = session.scalar.await_args.args[0].compile(dialect=dialect())
+        # 両方の綴り × タイトル・本文。列には関数をかけず、pg_trgm の索引を使える形のまま。
+        # Both spellings x title and body, with no function on the columns so pg_trgm indexes still apply.
+        self.assertEqual(str(compiled).count("ILIKE"), 4)
+        self.assertNotIn("lower(memo_entries", str(compiled))
+        self.assertIn("%ぱすぽーと%", compiled.params.values())
+        self.assertIn("%パスポート%", compiled.params.values())
+
+    async def test_keyword_search_without_kana_keeps_one_condition_per_column(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(return_value=0)
+        session.execute = AsyncMock(return_value=_result([]))
+
+        await fetch_memo_summaries(
+            7,
+            limit=10,
+            offset=0,
+            query="passport",
+            date_from="",
+            date_to="",
+            sort="recent",
+            include_archived=False,
+            only_archived=False,
+            pinned_first=False,
+            collection_id=None,
+            semantic_query_embedding=None,
+            session=session,
+        )
+
+        self.assertEqual(str(session.scalar.await_args.args[0].compile(dialect=dialect())).count("ILIKE"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

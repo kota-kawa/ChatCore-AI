@@ -16,6 +16,7 @@ from sqlalchemy import (
     exists,
     func,
     insert,
+    or_,
     select,
     update,
 )
@@ -27,7 +28,7 @@ from services.db import session_scope
 from services.embeddings import get_semantic_max_distance
 from services.models import MemoCollection, MemoEntry, SharedMemoEntry
 from services.models.types import Vector
-from services.search_terms import build_like_pattern, split_search_terms
+from services.search_terms import build_like_pattern, kana_variants, split_search_terms
 
 from .memo_constants import (
     COLLECTION_NOT_FOUND_ERROR,
@@ -145,10 +146,17 @@ async def fetch_memo_summaries(
         normalized_query = query.strip()
         if normalized_query and not semantic_embedding:
             for term in split_search_terms(normalized_query):
-                pattern = build_like_pattern(term)
+                # ひらがな・カタカナを区別せず当てるため、語ごとに両方の綴りを OR で並べる。
+                # Match hiragana and katakana alike by OR-ing both spellings of each term.
+                spellings = [build_like_pattern(variant) for variant in kana_variants(term)]
                 conditions.append(
-                    MemoEntry.title.ilike(pattern, escape="\\")
-                    | MemoEntry.ai_response.ilike(pattern, escape="\\")
+                    or_(
+                        *(
+                            column.ilike(pattern, escape="\\")
+                            for pattern in spellings
+                            for column in (MemoEntry.title, MemoEntry.ai_response)
+                        )
+                    )
                 )
         parsed_date_from = date_start(date_from)
         if parsed_date_from is not None:
