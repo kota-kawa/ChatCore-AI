@@ -144,14 +144,23 @@ export async function suggestMemoTitle(aiResponse: string, defaultMessage: strin
 
 // メモの内容を更新し、サーバーが返した最新のメモを返す
 // Update a memo and return the server's view of it
+// keepalive はページを離れる瞬間の保存用。ブラウザは keepalive の本文を合計 64KiB までしか
+// 受け付けないので、収まらない本文では付けない（付けると送信自体が拒否される）。
+// keepalive is for the save fired as the page goes away. Browsers cap keepalive bodies at
+// 64KiB in total, so a larger body goes without it (with it the request would be rejected).
+const KEEPALIVE_BODY_LIMIT_BYTES = 60 * 1024;
+
 export async function updateMemo(
   memoId: string | number,
   input: MemoUpdateInput,
   defaultMessage: string,
+  options: { keepalive?: boolean } = {},
 ): Promise<MemoDetail | undefined> {
+  const body = JSON.stringify(input);
+  const keepalive = Boolean(options.keepalive) && new Blob([body]).size <= KEEPALIVE_BODY_LIMIT_BYTES;
   const { payload } = await memoFetchJsonOrThrow<MemoDetailPayload>(
     `/memo/api/${memoId}`,
-    { method: "PATCH", headers: JSON_HEADERS, credentials: "same-origin", body: JSON.stringify(input) },
+    { method: "PATCH", headers: JSON_HEADERS, credentials: "same-origin", body, keepalive },
     { defaultMessage, hasApplicationError: (data) => !data.memo },
   );
   return payload.memo;

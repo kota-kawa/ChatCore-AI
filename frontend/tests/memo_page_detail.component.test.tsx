@@ -6,6 +6,7 @@ import { useMemoPageDetail } from "../hooks/memo_page/use_memo_page_detail";
 import { loadMemoDetail, updateMemo } from "../lib/memo/api";
 import { DETAIL_AUTOSAVE_DELAY_MS, MEMO_DETAIL_CLOSE_ANIMATION_MS } from "../lib/memo/constants";
 import type { Collection, MemoDetail, MemoListState } from "../lib/memo/types";
+import { showConfirmModal } from "../scripts/core/alert_modal";
 
 vi.mock("../lib/memo/api", () => ({
   loadMemoDetail: vi.fn(),
@@ -13,6 +14,9 @@ vi.mock("../lib/memo/api", () => ({
 }));
 vi.mock("../scripts/core/clipboard", () => ({
   copyTextToClipboard: vi.fn(),
+}));
+vi.mock("../scripts/core/alert_modal", () => ({
+  showConfirmModal: vi.fn(),
 }));
 
 const baseMemo: MemoDetail = { id: 1, title: "a", ai_response: "body" };
@@ -67,6 +71,7 @@ describe("useMemoPageDetail", () => {
       1,
       { title: "b", ai_response: "body", clear_background_color: true },
       expect.any(String),
+      {},
     );
     expect(result.current.detailSaveStatus).toBe("saved");
     expect(result.current.selectedMemo?.title).toBe("b");
@@ -115,6 +120,7 @@ describe("useMemoPageDetail", () => {
       1,
       { title: "a", ai_response: "body", clear_background_color: true, collection_id: 7 },
       expect.any(String),
+      {},
     );
   });
 
@@ -204,5 +210,154 @@ describe("useMemoPageDetail", () => {
     expect(result.current.isMemoDetailClosing).toBe(false);
     expect(result.current.detailEditTitle).toBe("");
     expect(result.current.detailSaveStatus).toBe("idle");
+  });
+
+  it("closes on the last saved content when the body was emptied", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("");
+    });
+
+    await act(async () => {
+      await result.current.closeMemoDetail();
+    });
+    expect(updateMemo).not.toHaveBeenCalled();
+    expect(showFlash).toHaveBeenCalledWith("error", expect.any(String));
+    expect(result.current.isMemoDetailClosing).toBe(true);
+  });
+
+  it("asks before discarding edits that could not be saved on close", async () => {
+    vi.mocked(updateMemo).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("edited");
+    });
+
+    vi.mocked(showConfirmModal).mockResolvedValueOnce(false);
+    await act(async () => {
+      await result.current.closeMemoDetail();
+    });
+    expect(result.current.isMemoDetailClosing).toBe(false);
+    expect(result.current.detailSaveStatus).toBe("error");
+    // fetch の英語メッセージをそのまま見せない
+    // The raw English fetch message is not shown
+    expect(result.current.detailSaveError).not.toBe("Failed to fetch");
+
+    vi.mocked(showConfirmModal).mockResolvedValueOnce(true);
+    await act(async () => {
+      await result.current.closeMemoDetail();
+    });
+    expect(result.current.isMemoDetailClosing).toBe(true);
+  });
+
+  it("saves again when the connection returns after a failed save", async () => {
+    vi.mocked(updateMemo).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("edited");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DETAIL_AUTOSAVE_DELAY_MS);
+    });
+    expect(result.current.detailSaveStatus).toBe("error");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateMemo).toHaveBeenCalledTimes(2);
+    expect(result.current.detailSaveStatus).toBe("saved");
+  });
+
+  it("saves pending edits with keepalive as the page is hidden", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("typed just now");
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateMemo).toHaveBeenCalledTimes(1);
+    expect(updateMemo).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ ai_response: "typed just now" }),
+      expect.any(String),
+      { keepalive: true },
+    );
+
+    // 送信済みなので、待っていた自動保存は重ねて走らない
+    // Already sent, so the pending autosave does not fire on top of it
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DETAIL_AUTOSAVE_DELAY_MS);
+    });
+    expect(updateMemo).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends one save when pagehide and visibilitychange arrive together", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("typed just now");
+    });
+
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("pagehide"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+    } finally {
+      visibility.mockRestore();
+    }
+    expect(updateMemo).toHaveBeenCalledTimes(1);
+    expect(result.current.detailSaveStatus).toBe("saved");
+  });
+
+  it("does not save when the page merely becomes visible again", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("typed just now");
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateMemo).not.toHaveBeenCalled();
+  });
+
+  it("replaces a timeout exception text with the connection message", async () => {
+    vi.mocked(updateMemo).mockRejectedValueOnce(new DOMException("Request timed out", "TimeoutError"));
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("edited");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DETAIL_AUTOSAVE_DELAY_MS);
+    });
+    expect(result.current.detailSaveStatus).toBe("error");
+    expect(result.current.detailSaveError).not.toBe("Request timed out");
   });
 });

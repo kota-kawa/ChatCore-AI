@@ -13,6 +13,7 @@ import type {
   MemoUpdateInput,
 } from "../../lib/memo/types";
 import { parseMemoText } from "../../lib/memo/utils";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { copyTextToClipboard } from "../../scripts/core/clipboard";
 
 type UseMemoPageDetailParams = {
@@ -20,6 +21,14 @@ type UseMemoPageDetailParams = {
   mutate: KeyedMutator<MemoListState>;
   showFlash: (type: FlashState["type"], text: string) => void;
 };
+
+// サーバーの応答を受け取れなかった失敗か。fetch は接続できないと TypeError を、
+// resilientFetch はタイムアウトで DOMException を投げる。
+// Whether the failure means no response came back: fetch throws a TypeError when it cannot
+// connect, and resilientFetch throws a DOMException on timeout.
+function isConnectionFailure(error: unknown) {
+  return error instanceof TypeError || error instanceof DOMException || navigator.onLine === false;
+}
 
 // メモ詳細モーダルの状態と操作（開閉・編集・自動保存・メモエージェント）
 // State and actions for the memo detail modal (open/close, editing, autosave, memo agent)
@@ -42,6 +51,9 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const memoDetailCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailSaveSequenceRef = useRef(0);
+  // 送信中の保存とその内容。同じ内容の保存が重ねて要求されたら、送り直さずこの結果を返す
+  // The save in flight and what it carries; a repeated request for the same content reuses it
+  const detailSaveInFlightRef = useRef<{ key: string; result: Promise<boolean> } | null>(null);
 
   // アンマウント時に閉じるアニメーションのタイマーを破棄する
   // Drop the pending close-animation timer on unmount
@@ -161,19 +173,11 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }
   }, [cancelMemoDetailCloseAnimation]);
 
-  const saveDetailEdit = useCallback(async () => {
-    if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
-    if (!detailEditAiResponse.trim()) {
-      setDetailSaveStatus("error");
-      setDetailSaveError(t("memo.bodyRequired"));
-      return false;
-    }
-    const snapshot = {
-      title: detailEditTitle,
-      collectionId: detailEditCollectionId,
-      aiResponse: detailEditAiResponse,
-      backgroundColor: detailEditBackgroundColor,
-    };
+  const sendDetailEdit = useCallback(async (
+    memoId: string | number,
+    snapshot: { title: string; collectionId: number | null; aiResponse: string; backgroundColor: string | null },
+    options: { keepalive?: boolean },
+  ) => {
     const requestId = ++detailSaveSequenceRef.current;
     setDetailSaveStatus("saving");
     setDetailSaveError("");
@@ -197,7 +201,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
         }
       }
 
-      const updatedMemo = await updateMemo(selectedMemo.id, body, t("memo.memoUpdateFailed"));
+      const updatedMemo = await updateMemo(memoId, body, t("memo.memoUpdateFailed"), options);
       if (requestId === detailSaveSequenceRef.current) {
         if (updatedMemo) {
           // Keep the exact text the user submitted as the saved baseline
@@ -221,30 +225,74 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     } catch (error) {
       if (requestId === detailSaveSequenceRef.current) {
         setDetailSaveStatus("error");
-        setDetailSaveError(error instanceof Error ? error.message : t("memo.memoUpdateFailed"));
+        // サーバーに届かなかった失敗は英語の例外文言しか持たないので、状況が分かる文言に置き換える
+        // A request that never reached the server only carries an English exception text; say what happened instead
+        setDetailSaveError(
+          isConnectionFailure(error) ? t("memo.saveConnectionFailed") : error instanceof Error ? error.message : t("memo.memoUpdateFailed"),
+        );
       }
       return false;
     }
+  }, [collections.length, mutate]);
+
+  const saveDetailEdit = useCallback(async (options: { keepalive?: boolean } = {}) => {
+    if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
+    if (!detailEditAiResponse.trim()) {
+      setDetailSaveStatus("error");
+      setDetailSaveError(t("memo.bodyRequired"));
+      return false;
+    }
+    const snapshot = {
+      title: detailEditTitle,
+      collectionId: detailEditCollectionId,
+      aiResponse: detailEditAiResponse,
+      backgroundColor: detailEditBackgroundColor,
+    };
+    // ページを離れるときは pagehide と visibilitychange が続けて来るうえ、自動保存の送信中に
+    // 重なることもある。同じ内容を二重に送ると、後発の失敗が先発の成功を打ち消してしまう
+    // Leaving the page fires pagehide and visibilitychange back to back, possibly on top of an
+    // autosave in flight. Sending the same content twice lets a late failure undo an early success
+    const saveKey = JSON.stringify([selectedMemo.id, snapshot]);
+    if (detailSaveInFlightRef.current?.key === saveKey) return detailSaveInFlightRef.current.result;
+    const result = sendDetailEdit(selectedMemo.id, snapshot, options);
+    detailSaveInFlightRef.current = { key: saveKey, result };
+    try {
+      return await result;
+    } finally {
+      if (detailSaveInFlightRef.current?.result === result) detailSaveInFlightRef.current = null;
+    }
   }, [
-    collections.length,
     detailEditAiResponse,
     detailEditBackgroundColor,
     detailEditCollectionId,
     detailEditTitle,
     detailHasUnsavedChanges,
-    mutate,
     selectedMemo?.id,
+    sendDetailEdit,
   ]);
 
   const closeMemoDetail = useCallback(async () => {
     if (memoDetailCloseTimerRef.current) return;
     clearDetailAutoSaveTimer();
     if (detailHasUnsavedChanges) {
-      const saved = await saveDetailEdit();
-      if (!saved) return;
+      if (!detailEditAiResponse.trim()) {
+        // 本文が空のメモは保存できない。閉じられなくなるより、最後に保存した内容を残して閉じる
+        // An empty body cannot be saved; close on the last saved content rather than trapping the user
+        showFlash("error", t("memo.emptyBodyNotSaved"));
+      } else if (!(await saveDetailEdit())) {
+        const discard = await showConfirmModal(t("memo.discardUnsavedConfirm"));
+        if (!discard) return;
+      }
     }
     startMemoDetailCloseAnimation();
-  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit, startMemoDetailCloseAnimation]);
+  }, [
+    clearDetailAutoSaveTimer,
+    detailEditAiResponse,
+    detailHasUnsavedChanges,
+    saveDetailEdit,
+    showFlash,
+    startMemoDetailCloseAnimation,
+  ]);
 
   const openMemoAgent = useCallback(async () => {
     if (!selectedMemo?.id) return;
@@ -278,6 +326,34 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     saveDetailEdit,
     selectedMemo,
   ]);
+
+  // 保存に失敗したまま回線が戻ったら、入力を待たずに保存し直す
+  // Once the connection returns after a failed save, save again without waiting for more input
+  useEffect(() => {
+    if (detailSaveStatus !== "error" || !detailHasUnsavedChanges || !detailEditAiResponse.trim()) return;
+    const retry = () => { void saveDetailEdit(); };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [detailEditAiResponse, detailHasUnsavedChanges, detailSaveStatus, saveDetailEdit]);
+
+  // 自動保存の待ち時間のうちにタブを離れる・閉じると入力が消えるので、その瞬間に保存を送る。
+  // スマホではアプリ切り替えで pagehide が来ないことがあるため visibilitychange も見る。
+  // Leaving or closing the tab inside the autosave delay would drop the input, so save at that
+  // moment. Phones may skip pagehide on an app switch, hence visibilitychange as well.
+  useEffect(() => {
+    if (!selectedMemo || !detailHasUnsavedChanges) return;
+    const flush = (event: Event) => {
+      if (event.type === "visibilitychange" && document.visibilityState !== "hidden") return;
+      clearDetailAutoSaveTimer();
+      void saveDetailEdit({ keepalive: true });
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit, selectedMemo]);
 
   useEffect(() => {
     if (!selectedMemo) setIsMemoAgentOpen(false);

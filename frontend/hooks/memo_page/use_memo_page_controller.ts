@@ -36,6 +36,7 @@ export function useMemoPageController() {
   });
 
   const composer = useMemoPageComposer({
+    draftOwnerId: auth.currentUserId,
     mutate: list.mutate,
     showFlash: flash.showFlash,
     setFlashState: flash.setFlashState,

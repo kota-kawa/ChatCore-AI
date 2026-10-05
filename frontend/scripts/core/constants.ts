@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   authStateCachedAt: "chatcore.auth.cachedAt",
   tasksCachePrefix: "chatcore.tasks.v3.",
   setupInfoDraft: "chatcore.setup.infoDraft",
+  memoComposeDraft: "chatcore.memo.composeDraft",
   temporaryModeEnabled: "chatcore.setup.temporaryModeEnabled",
   selectedModel: "chatcore.setup.selectedModel"
 } as const;

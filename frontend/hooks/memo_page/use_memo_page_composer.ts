@@ -12,9 +12,13 @@ import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { createMemo, suggestMemoTitle } from "../../lib/memo/api";
+import { readMemoComposeDraft, writeMemoComposeDraft } from "../../lib/memo/compose_draft";
 import type { FlashState, MemoComposeFormState, MemoListState } from "../../lib/memo/types";
 
 type UseMemoPageComposerParams = {
+  // 書きかけの持ち主。サーバーが利用者を確認するまで、および未ログインでは null
+  // Owner of the unsaved draft; null until the server confirms the user, and for guests
+  draftOwnerId: string | null;
   mutate: KeyedMutator<MemoListState>;
   showFlash: (type: FlashState["type"], text: string) => void;
   setFlashState: Dispatch<SetStateAction<FlashState | null>>;
@@ -22,7 +26,7 @@ type UseMemoPageComposerParams = {
 
 // 新規メモ作成フォーム（クイックキャプチャ）の状態と操作
 // State and actions for the new-memo composer (quick capture)
-export function useMemoPageComposer({ mutate, showFlash, setFlashState }: UseMemoPageComposerParams) {
+export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashState }: UseMemoPageComposerParams) {
   const { t } = useTranslation();
 
   // Form state
@@ -40,6 +44,28 @@ export function useMemoPageComposer({ mutate, showFlash, setFlashState }: UseMem
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 書きかけを端末から復元し、以後の変更を控える。持ち主が確認できるまでは読みも書きもしない。
+  // 「読み込み済みの持ち主」は復元内容と同じ更新でまとめて反映されるので、書き込みは復元後の
+  // 内容で初めて走り、空の初期値が控えを上書きすることはない。
+  // Restore the unsaved memo from the device, then mirror later changes. Nothing is read or
+  // written until the owner is confirmed. The "loaded for" owner is committed in the same update
+  // as the restored content, so the first write already sees that content and the empty initial
+  // state never overwrites the stored draft.
+  const [composeDraftLoadedFor, setComposeDraftLoadedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!draftOwnerId) {
+      setComposeDraftLoadedFor(null);
+      return;
+    }
+    const draft = readMemoComposeDraft(draftOwnerId);
+    if (draft) setFormState((prev) => ({ ...prev, ...draft }));
+    setComposeDraftLoadedFor(draftOwnerId);
+  }, [draftOwnerId]);
+  useEffect(() => {
+    if (!draftOwnerId || composeDraftLoadedFor !== draftOwnerId) return;
+    writeMemoComposeDraft(draftOwnerId, formState);
+  }, [composeDraftLoadedFor, draftOwnerId, formState]);
 
   // 新規メモ作成用テキストエリアの高さを自動調整する副作用
   // Effect to automatically resize the textarea for new memo composition
@@ -102,9 +128,14 @@ export function useMemoPageComposer({ mutate, showFlash, setFlashState }: UseMem
     }
   }, [formState.ai_response, showFlash]);
 
+  // 続きから書けるよう、カーソルは末尾に置く（チェックリストは挿入した「- [ ] 」の後ろになる）
+  // Put the caret at the end so typing continues the text (after the inserted "- [ ] " for checklists)
   const focusComposeTextarea = useCallback(() => {
     window.setTimeout(() => {
-      composeTextareaRef.current?.focus();
+      const textarea = composeTextareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     }, 0);
   }, []);
 
