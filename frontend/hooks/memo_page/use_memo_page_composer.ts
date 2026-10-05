@@ -45,25 +45,27 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 書きかけを端末から復元し、以後の変更を控える。持ち主が確認できるまでは読みも書きもせず、
-  // 復元より先に空の初期値で上書きしないよう、読み込みが済んだ持ち主の分だけ書き込む。
+  // 書きかけを端末から復元し、以後の変更を控える。持ち主が確認できるまでは読みも書きもしない。
+  // 「読み込み済みの持ち主」は復元内容と同じ更新でまとめて反映されるので、書き込みは復元後の
+  // 内容で初めて走り、空の初期値が控えを上書きすることはない。
   // Restore the unsaved memo from the device, then mirror later changes. Nothing is read or
-  // written until the owner is confirmed, and writes happen only for the owner whose draft has
-  // been read, so the empty initial state cannot overwrite the stored draft first.
-  const composeDraftLoadedForRef = useRef<string | null>(null);
+  // written until the owner is confirmed. The "loaded for" owner is committed in the same update
+  // as the restored content, so the first write already sees that content and the empty initial
+  // state never overwrites the stored draft.
+  const [composeDraftLoadedFor, setComposeDraftLoadedFor] = useState<string | null>(null);
   useEffect(() => {
     if (!draftOwnerId) {
-      composeDraftLoadedForRef.current = null;
+      setComposeDraftLoadedFor(null);
       return;
     }
     const draft = readMemoComposeDraft(draftOwnerId);
-    composeDraftLoadedForRef.current = draftOwnerId;
     if (draft) setFormState((prev) => ({ ...prev, ...draft }));
+    setComposeDraftLoadedFor(draftOwnerId);
   }, [draftOwnerId]);
   useEffect(() => {
-    if (!draftOwnerId || composeDraftLoadedForRef.current !== draftOwnerId) return;
+    if (!draftOwnerId || composeDraftLoadedFor !== draftOwnerId) return;
     writeMemoComposeDraft(draftOwnerId, formState);
-  }, [draftOwnerId, formState]);
+  }, [composeDraftLoadedFor, draftOwnerId, formState]);
 
   // 新規メモ作成用テキストエリアの高さを自動調整する副作用
   // Effect to automatically resize the textarea for new memo composition

@@ -306,4 +306,58 @@ describe("useMemoPageDetail", () => {
     });
     expect(updateMemo).toHaveBeenCalledTimes(1);
   });
+
+  it("sends one save when pagehide and visibilitychange arrive together", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("typed just now");
+    });
+
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("pagehide"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+    } finally {
+      visibility.mockRestore();
+    }
+    expect(updateMemo).toHaveBeenCalledTimes(1);
+    expect(result.current.detailSaveStatus).toBe("saved");
+  });
+
+  it("does not save when the page merely becomes visible again", async () => {
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("typed just now");
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateMemo).not.toHaveBeenCalled();
+  });
+
+  it("replaces a timeout exception text with the connection message", async () => {
+    vi.mocked(updateMemo).mockRejectedValueOnce(new DOMException("Request timed out", "TimeoutError"));
+    const { result } = renderHook(() => useDetailHarness());
+    await act(async () => {
+      await result.current.openMemoDetail(1);
+    });
+    act(() => {
+      result.current.setDetailEditAiResponse("edited");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DETAIL_AUTOSAVE_DELAY_MS);
+    });
+    expect(result.current.detailSaveStatus).toBe("error");
+    expect(result.current.detailSaveError).not.toBe("Request timed out");
+  });
 });

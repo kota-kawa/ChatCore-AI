@@ -447,6 +447,7 @@ test("clearAllHomePagePersistedState wipes chat text, generation state, drafts a
   writeStoredHomePageViewState("chat");
   storage.setItem(STORAGE_KEYS.tasksCachePrefix + "list", "[]");
   storage.setItem(STORAGE_KEYS.setupInfoDraft, "draft text");
+  storage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ owner: "1", ai_response: "memo draft" }));
 
   clearAllHomePagePersistedState();
 
@@ -456,6 +457,7 @@ test("clearAllHomePagePersistedState wipes chat text, generation state, drafts a
   assert.equal(readRestorableHomePageViewState(), "setup");
   assert.equal(storage.getItem(STORAGE_KEYS.tasksCachePrefix + "list"), null);
   assert.equal(storage.getItem(STORAGE_KEYS.setupInfoDraft), null);
+  assert.equal(storage.getItem(STORAGE_KEYS.memoComposeDraft), null);
 });
 
 test("reconcileStoredUserScope records the first user without wiping anything", () => {

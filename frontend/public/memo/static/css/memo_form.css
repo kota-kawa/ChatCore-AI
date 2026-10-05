@@ -5221,7 +5221,7 @@ body.memo-page {
   text-align: center;
 }
 
-/* ── 詳細モーダル: フッター（保存状態） / Detail modal: footer ─────── */
+/* ── 詳細モーダル: 保存状態 / Detail modal: save state ─────────────── */
 .memo-modal .memo-modal__autosave-status {
   display: inline-flex;
   align-items: center;
@@ -6832,18 +6832,32 @@ body.memo-page {
   }
 }
 
+/* タイトルと操作列が 1 行に収まらない幅では、1 行目をタイトルと保存状態、2 行目を操作列にする。
+   保存状態を操作列の後ろに並べたままだと、それだけが 3 行目に折り返してヘッダーが伸びる。
+   Where the title and the action row no longer fit on one line, row one holds the title and the
+   save state and row two the actions. Left after the action row, the save state alone would wrap
+   onto a third row and stretch the header. */
+@media (max-width: 1023px) {
+  .memo-modal .memo-modal__heading {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .memo-modal .memo-modal__autosave-status {
+    order: 1;
+  }
+
+  .memo-modal .memo-modal__header-actions {
+    flex-basis: 100%;
+    order: 4;
+  }
+}
+
 @media (max-width: 640px) {
   .memo-modal .memo-modal__header {
     padding-right: 1rem;
   }
 
-  /* 1 行目はタイトルと保存状態、2 行目が操作列。保存状態の右は閉じるボタンの分だけ空ける
-     Row one holds the title and the save state, row two the actions; the save state keeps
-     clear of the close button on its right */
-  .memo-modal .memo-modal__heading {
-    flex: 1 1 0;
-    min-width: 0;
-  }
 
   .memo-modal .memo-modal__header > .cc-modal__close {
     top: 0.85rem;
@@ -6862,8 +6876,9 @@ body.memo-page {
     display: none;
   }
 
+  /* この幅ではヘッダーの右余白が無いので、保存状態の右を閉じるボタンの分だけ空ける
+     The header has no right padding at this width, so keep the save state clear of the close button */
   .memo-modal .memo-modal__autosave-status {
-    order: 1;
     max-width: 11rem;
     margin-right: 3rem;
   }

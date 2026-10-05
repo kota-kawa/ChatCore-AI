@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadMemoList } from "../lib/memo/api";
+import { loadMemoList, updateMemo } from "../lib/memo/api";
 import { DEFAULT_LIMIT, MAX_MEMO_LIST_REQUEST_LIMIT } from "../lib/memo/constants";
 import type { MemoSummary } from "../lib/memo/types";
 import { buildMemoListUrl } from "../lib/memo/utils";
@@ -111,4 +111,30 @@ test("loadMemoList stops once the server runs out of rows", async () => {
   } finally {
     stub.restore();
   }
+});
+
+// ---------------------------------------------------------------------------
+// updateMemo: keepalive is only usable for bodies under the browser's 64KiB cap
+// ---------------------------------------------------------------------------
+
+async function keepaliveSentFor(body: string) {
+  const original = globalThis.fetch;
+  let keepalive: boolean | undefined;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    keepalive = init?.keepalive;
+    return { ok: true, status: 200, json: async () => ({ memo: { id: 1 } }) } as unknown as Response;
+  }) as typeof globalThis.fetch;
+  try {
+    await updateMemo(1, { title: "t", ai_response: body }, "failed", { keepalive: true });
+  } finally {
+    globalThis.fetch = original;
+  }
+  return keepalive;
+}
+
+test("updateMemo sends keepalive for a small body and drops it past the keepalive cap", async () => {
+  assert.equal(await keepaliveSentFor("short"), true);
+  // 日本語は 1 文字 3 バイト。文字数ではなくバイト数で判定する
+  // Japanese is three bytes per character; the limit is measured in bytes, not characters
+  assert.equal(await keepaliveSentFor("あ".repeat(25 * 1024)), false);
 });
