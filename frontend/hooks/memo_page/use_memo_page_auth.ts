@@ -18,6 +18,11 @@ export function useMemoPageAuth() {
   // the server has answered. While false, neither auth-dependent variant renders,
   // so the wrong one is never shown even for a frame.
   const [authUiReady, setAuthUiReady] = useState(false);
+  // サーバーが確認した利用者の id。端末に控えた書きかけの持ち主の照合に使うので、
+  // キャッシュ済みのログイン状態だけでは埋めない。
+  // The user id confirmed by the server. It decides who owns the draft kept on this device,
+  // so the cached logged-in flag alone never fills it.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // キャッシュ済みの認証状態を最初のペイント前に反映する。useEffect だと
   // 未ログインの初期stateが一度描画され、ログイン済みでもゲスト向けUIがちらつく。
@@ -50,10 +55,13 @@ export function useMemoPageAuth() {
         setIsLoggedIn(loggedIn);
         setLoggedInState(loggedIn);
         writeCachedAuthState(loggedIn);
+        const userId = loggedIn ? data.user?.id : null;
+        setCurrentUserId(typeof userId === "number" || typeof userId === "string" ? String(userId) : null);
       } catch {
         if (cancelled) return;
         setIsLoggedIn(false);
         setLoggedInState(false);
+        setCurrentUserId(null);
       } finally {
         if (!cancelled) setAuthUiReady(true);
       }
@@ -65,5 +73,5 @@ export function useMemoPageAuth() {
     };
   }, []);
 
-  return { isLoggedIn, authUiReady };
+  return { isLoggedIn, authUiReady, currentUserId };
 }

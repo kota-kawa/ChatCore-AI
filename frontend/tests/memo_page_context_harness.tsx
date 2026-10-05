@@ -13,6 +13,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   // auth
   isLoggedIn: false,
   authUiReady: true,
+  currentUserId: null,
   // flash
   flashState: null,
   setFlashState: noop,

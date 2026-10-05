@@ -26,8 +26,8 @@ const mutate = mutateMock as unknown as KeyedMutator<MemoListState>;
 const showFlash = vi.fn();
 const setFlashState = vi.fn();
 
-function useComposerHarness() {
-  return useMemoPageComposer({ mutate, showFlash, setFlashState });
+function useComposerHarness(draftOwnerId: string | null = "1") {
+  return useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashState });
 }
 
 describe("useMemoPageComposer", () => {
@@ -179,8 +179,37 @@ describe("useMemoPageComposer", () => {
   });
 
   it("ignores a stored draft that is not valid", () => {
-    localStorage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ ai_response: 3, background_color: "red" }));
+    localStorage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ owner: "1", ai_response: 3, background_color: "red" }));
     const { result } = renderHook(() => useComposerHarness());
     expect(result.current.formState).toEqual(emptyForm);
+  });
+
+  it("never shows one user's draft to another user or to a guest", () => {
+    const owner = renderHook(() => useComposerHarness("1"));
+    act(() => {
+      owner.result.current.setFormState({ ...emptyForm, ai_response: "ユーザー1の書きかけ" });
+    });
+    owner.unmount();
+
+    // 利用者が確認できるまで（および未ログイン）は復元も上書きもしない
+    // Nothing is restored or overwritten until the user is confirmed (and for guests)
+    const guest = renderHook(() => useComposerHarness(null));
+    expect(guest.result.current.formState).toEqual(emptyForm);
+    expect(localStorage.getItem(STORAGE_KEYS.memoComposeDraft)).toContain("ユーザー1の書きかけ");
+    guest.unmount();
+
+    const other = renderHook(() => useComposerHarness("2"));
+    expect(other.result.current.formState).toEqual(emptyForm);
+    expect(localStorage.getItem(STORAGE_KEYS.memoComposeDraft)).toBeNull();
+  });
+
+  it("restores the draft once the user is confirmed after the first render", () => {
+    localStorage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ owner: "1", title: "", ai_response: "後から復元", background_color: null }));
+    const { result, rerender } = renderHook(({ owner }: { owner: string | null }) => useComposerHarness(owner), {
+      initialProps: { owner: null as string | null },
+    });
+    expect(result.current.formState).toEqual(emptyForm);
+    rerender({ owner: "1" });
+    expect(result.current.formState.ai_response).toBe("後から復元");
   });
 });
