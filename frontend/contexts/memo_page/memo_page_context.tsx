@@ -91,6 +91,10 @@ type MemoPageBoardContextValue = Pick<
   | "handleToggleMemoTask"
   | "handleToggleArchive"
   | "handleDeleteMemo"
+  | "handleRestoreMemo"
+  | "handlePurgeMemo"
+  | "handleEmptyTrash"
+  | "emptyingTrash"
   | "copyMemoFullText"
   | "showFlash"
   | "canDragMemos"
@@ -337,6 +341,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       handleToggleMemoTask: controller.handleToggleMemoTask,
       handleToggleArchive: controller.handleToggleArchive,
       handleDeleteMemo: controller.handleDeleteMemo,
+      handleRestoreMemo: controller.handleRestoreMemo,
+      handlePurgeMemo: controller.handlePurgeMemo,
+      handleEmptyTrash: controller.handleEmptyTrash,
+      emptyingTrash: controller.emptyingTrash,
       copyMemoFullText: controller.copyMemoFullText,
       showFlash: controller.showFlash,
       canDragMemos: controller.canDragMemos,
@@ -376,6 +384,10 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.handleToggleMemoTask,
       controller.handleToggleArchive,
       controller.handleDeleteMemo,
+      controller.handleRestoreMemo,
+      controller.handlePurgeMemo,
+      controller.handleEmptyTrash,
+      controller.emptyingTrash,
       controller.copyMemoFullText,
       controller.showFlash,
       controller.canDragMemos,

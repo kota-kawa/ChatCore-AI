@@ -842,12 +842,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
   font-size: 0.9rem;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-flash--success {
-  color: #9a5b10;
-  border-color: rgba(217, 119, 6, 0.28);
-  background: rgba(245, 158, 11, 0.12);
-}
-
 :where(body.memo-page, .memo-page-shell) .memo-flash--error {
   color: #b42318;
   border-color: rgba(248, 113, 113, 0.28);
@@ -7127,6 +7121,99 @@ body.memo-page {
   :where(body.memo-page, .memo-page-shell) .memo-new-fab:focus-visible {
     outline: 3px solid var(--memo-amber-strong);
     outline-offset: 3px;
+  }
+}
+
+/* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ──────────────────
+   スクロール位置に関係なく見え、一覧を押し下げない。面は色の反転（ライトでは濃色面に明色の文字、
+   ダークでは明色面に濃色の文字）で作り、失敗だけ --danger-color の面にする。下端には左に AI の
+   固定ボタン、右に操作メニューのボタン（スマホ幅ではその上に新規作成ボタン）があるので、
+   PC では中央に置き、スマホ幅では左右のボタンの間に収める（収まらなければボタンを次の行へ回す）。
+   Visible wherever the page is scrolled, and it never pushes the list down. The surface is an
+   inversion (light text on a dark surface in light theme, dark on light in dark theme); only a
+   failure uses the --danger-color surface. The bottom edge holds the AI button on the left and the
+   actions-menu button on the right (plus the new-memo button above it on phone widths), so the
+   notice is centred on wide screens and sits between those buttons on phone widths, wrapping its
+   button onto a second line when the message does not leave room. */
+:where(body.memo-page, .memo-page-shell) .memo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-modal-priority, 85);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0 0.5rem;
+  width: max-content;
+  max-width: min(30rem, calc(100vw - 14rem));
+  padding: 0.4rem 0.5rem 0.4rem 1rem;
+  border-radius: 8px;
+  background: var(--memo-text);
+  color: var(--memo-card-strong);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+  box-shadow: var(--memo-shadow);
+  transform: translateX(-50%);
+  animation: memo-toast-in 0.16s ease both;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-toast--error {
+  background: var(--danger-color);
+  color: var(--text-light);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-toast__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-block: 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-toast__action {
+  flex: 0 0 auto;
+  min-width: var(--tap-target-min, 44px);
+  min-height: var(--tap-target-min, 44px);
+  padding: 0 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full, 999px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-toast__action:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+/* 通知の面と同じ文字色の輪を、面から少し離して出す（面と同じ色の輪は見えない）
+   The ring uses the notice's text colour, set off from the surface (a ring in the surface colour would vanish) */
+:where(body.memo-page, .memo-page-shell) .memo-toast__action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@keyframes memo-toast-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.memo-page, .memo-page-shell) .memo-toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) .memo-toast {
+    left: 5.25rem;
+    right: 5.25rem;
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: none;
+    transform: none;
   }
 }
 

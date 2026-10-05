@@ -2,10 +2,10 @@ import { useCallback, useState } from "react";
 import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
-import { deleteMemo, loadMemoDetail, setMemoArchived, setMemoPinned, updateMemo } from "../../lib/memo/api";
+import { deleteMemo, emptyMemoTrash, loadMemoDetail, purgeMemo, restoreMemo, setMemoArchived, setMemoPinned, updateMemo } from "../../lib/memo/api";
 import { autoMemoTitle, isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { toggleTaskMarker, type RenderedTask } from "../../lib/memo/list_editing";
-import type { FlashState, MemoDetail, MemoListState, MemoSummary } from "../../lib/memo/types";
+import type { FlashAction, FlashState, MemoDetail, MemoListState, MemoSummary } from "../../lib/memo/types";
 import { parseMemoText } from "../../lib/memo/utils";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { copyTextToClipboard } from "../../scripts/core/clipboard";
@@ -16,15 +16,15 @@ type UseMemoPageItemActionsParams = {
     updater: (memo: MemoSummary) => MemoSummary | null,
     targetIds: Iterable<string | number>,
   ) => Promise<void>;
-  showFlash: (type: FlashState["type"], text: string) => void;
+  showFlash: (type: FlashState["type"], text: string, action?: FlashAction) => void;
   selectedMemoId: string | number | undefined;
   patchSelectedMemoOptimistically: (memoId: string | number, patch: Partial<MemoDetail>) => void;
   refreshSelectedMemoIfNeeded: () => Promise<void>;
   startMemoDetailCloseAnimation: () => void;
 };
 
-// メモカード単体への操作（ピン・アーカイブ・削除・全文コピー）
-// Actions on a single memo card (pin / archive / delete / copy full text)
+// メモカード単体への操作（ピン・アーカイブ・ゴミ箱への移動と復元・完全削除・全文コピー）とゴミ箱を空にする操作
+// Actions on a single memo card (pin / archive / move to trash, restore, delete for good / copy full text) and emptying the trash
 export function useMemoPageItemActions({
   mutate,
   updateMemoListOptimistically,
@@ -38,6 +38,7 @@ export function useMemoPageItemActions({
 
   const [actionLoadingId, setActionLoadingId] = useState<string>("");
   const [copyingMemoId, setCopyingMemoId] = useState<string>("");
+  const [emptyingTrash, setEmptyingTrash] = useState(false);
 
   const withActionLoading = useCallback(async (memoId: string | number, action: () => Promise<void>) => {
     const id = String(memoId);
@@ -73,11 +74,12 @@ export function useMemoPageItemActions({
     });
   }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, updateMemoListOptimistically, withActionLoading]);
 
-  // アーカイブ状態を切り替えるハンドラー
-  // Handler to toggle the archived state
-  const handleToggleArchive = useCallback(async (memo: MemoSummary) => {
+  // アーカイブ状態を設定する。通常の操作には「元に戻す」を付け、押されたときは逆の状態をこの関数で
+  // 設定し直す（取り消し自体には「元に戻す」を付けない）
+  // Sets the archived state. A normal action carries an undo that sets the opposite state through this
+  // same function (an undo does not carry an undo of its own)
+  const setArchived = useCallback(async (memo: MemoSummary, enabled: boolean, isUndo: boolean) => {
     await withActionLoading(memo.id, async () => {
-      const enabled = !memo.is_archived;
       const archivedAt = enabled ? new Date().toISOString() : null;
       await updateMemoListOptimistically(
         (current) => ({
@@ -90,7 +92,8 @@ export function useMemoPageItemActions({
       patchSelectedMemoOptimistically(memo.id, { is_archived: enabled, archived_at: archivedAt });
       try {
         await setMemoArchived(memo.id, enabled, t("memo.archiveUpdateFailed"));
-        showFlash("success", memo.is_archived ? t("memo.unarchivedSuccess") : t("memo.archivedSuccess"));
+        const text = enabled ? t("memo.archivedSuccess") : t("memo.unarchivedSuccess");
+        showFlash("success", text, isUndo ? undefined : { label: t("memo.undo"), onAction: () => setArchived(memo, !enabled, true) });
         await mutate();
         await refreshSelectedMemoIfNeeded();
       } catch (error) {
@@ -99,18 +102,76 @@ export function useMemoPageItemActions({
         await refreshSelectedMemoIfNeeded();
       }
     });
-  }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, updateMemoListOptimistically, withActionLoading]);
+  }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, t, updateMemoListOptimistically, withActionLoading]);
 
-  // メモを削除するハンドラー
-  // Handler to delete a memo
-  const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
-    const confirmed = await showConfirmModal(t("memo.deleteConfirm", { title: memo.title || t("memo.savedMemo") }));
+  // アーカイブ状態を切り替えるハンドラー
+  // Handler to toggle the archived state
+  const handleToggleArchive = useCallback(
+    (memo: MemoSummary) => setArchived(memo, !memo.is_archived, false),
+    [setArchived],
+  );
+
+  // ゴミ箱から元に戻す。削除直後の「元に戻す」とゴミ箱画面の「元に戻す」で共通。共有リンクは
+  // ゴミ箱へ移した時点で無効になっていて自動では再開しないので、共有していたメモには通知で一言添える
+  // Restores a memo from the trash, shared by the undo right after a delete and the trash screen's
+  // restore button. The share link was revoked when the memo went to the trash and does not resume
+  // on its own, so the notice says so for a memo that had one
+  const handleRestoreMemo = useCallback(async (memo: MemoSummary) => {
+    await withActionLoading(memo.id, async () => {
+      await updateMemoListOptimistically(() => null, [memo.id]);
+      try {
+        await restoreMemo(memo.id, t("memo.restoreFailed"));
+        showFlash("success", memo.share_token ? t("memo.restoredShareOff") : t("memo.restored"));
+      } catch (error) {
+        showFlash("error", error instanceof Error ? error.message : t("memo.restoreFailed"));
+      }
+      await mutate();
+    });
+  }, [mutate, showFlash, t, updateMemoListOptimistically, withActionLoading]);
+
+  // ゴミ箱の 1 件を完全に削除する。取り消せないので確認を挟む
+  // Permanently deletes one trashed memo. It cannot be undone, so confirm first
+  const handlePurgeMemo = useCallback(async (memo: MemoSummary) => {
+    const confirmed = await showConfirmModal(t("memo.purgeConfirm", { title: memo.title || t("memo.savedMemo") }));
     if (!confirmed) return;
     await withActionLoading(memo.id, async () => {
       await updateMemoListOptimistically(() => null, [memo.id]);
       try {
+        await purgeMemo(memo.id, t("memo.purgeFailed"));
+        showFlash("success", t("memo.purged"));
+      } catch (error) {
+        showFlash("error", error instanceof Error ? error.message : t("memo.purgeFailed"));
+      }
+      await mutate();
+    });
+  }, [mutate, showFlash, t, updateMemoListOptimistically, withActionLoading]);
+
+  // ゴミ箱をすべて完全に削除する。絞り込み中の一部ではなくゴミ箱の全件が対象
+  // Permanently deletes everything in the trash (all of it, not just the filtered part)
+  const handleEmptyTrash = useCallback(async () => {
+    if (emptyingTrash) return;
+    const confirmed = await showConfirmModal(t("memo.emptyTrashConfirm"));
+    if (!confirmed) return;
+    setEmptyingTrash(true);
+    try {
+      const deleted = await emptyMemoTrash(t("memo.emptyTrashFailed"));
+      showFlash("success", t("memo.trashEmptied", { count: deleted }));
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : t("memo.emptyTrashFailed"));
+    } finally {
+      setEmptyingTrash(false);
+    }
+    await mutate();
+  }, [emptyingTrash, mutate, showFlash, t]);
+
+  // メモをゴミ箱へ移すハンドラー。確認は挟まず、通知の「元に戻す」で取り消せる
+  // Handler to move a memo to the trash. No confirmation: the notice's undo takes it back
+  const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
+    await withActionLoading(memo.id, async () => {
+      await updateMemoListOptimistically(() => null, [memo.id]);
+      try {
         await deleteMemo(memo.id, t("memo.memoDeleteFailed"));
-        showFlash("success", t("memo.memoDeleted"));
+        showFlash("success", t("memo.movedToTrash"), { label: t("memo.undo"), onAction: () => handleRestoreMemo(memo) });
         if (selectedMemoId && String(selectedMemoId) === String(memo.id)) startMemoDetailCloseAnimation();
         await mutate();
       } catch (error) {
@@ -118,7 +179,7 @@ export function useMemoPageItemActions({
         await mutate();
       }
     });
-  }, [mutate, selectedMemoId, showFlash, startMemoDetailCloseAnimation, updateMemoListOptimistically, withActionLoading]);
+  }, [handleRestoreMemo, mutate, selectedMemoId, showFlash, startMemoDetailCloseAnimation, t, updateMemoListOptimistically, withActionLoading]);
 
   // 一覧のカードに見えているチェック欄を切り替える。カードは本文の先頭だけを表示しているので、
   // 全文を取り直し、見えている欄が全文の先頭と同じ並び・同じ文字であることを確かめてから書き換える。
@@ -187,6 +248,10 @@ export function useMemoPageItemActions({
     handleTogglePin,
     handleToggleArchive,
     handleDeleteMemo,
+    handleRestoreMemo,
+    handlePurgeMemo,
+    handleEmptyTrash,
+    emptyingTrash,
     handleToggleMemoTask,
     copyMemoFullText,
   };

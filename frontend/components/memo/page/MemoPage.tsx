@@ -9,6 +9,7 @@ import { MemoComposer } from "../MemoComposer";
 import { MemoCrawlSummary } from "../MemoCrawlSummary";
 import { MemoDetailModal } from "../MemoDetailModal";
 import { MemoExportModal } from "../MemoExportModal";
+import { MemoFlashToast } from "../MemoFlashToast";
 import { MemoHistoryPanel } from "../MemoHistoryPanel";
 import { MemoNewFab } from "../MemoNewFab";
 import { MemoShareModal } from "../MemoShareModal";
@@ -42,6 +43,7 @@ export default function MemoPage() {
     activeView,
     setActiveView,
     flashState,
+    runFlashAction,
     isBulkMode,
     viewMode,
   } = controller;
@@ -97,12 +99,6 @@ export default function MemoPage() {
               {/* ── Toolbar ── */}
               <MemoToolbar />
 
-            {flashState && (
-              <div className={`memo-flash memo-flash--${flashState.type}`} role="alert">
-                {flashState.text}
-              </div>
-            )}
-
             <MemoCrawlSummary />
 
             {/* Bulk action bar */}
@@ -122,6 +118,9 @@ export default function MemoPage() {
               )}
             </div>
           </div>
+
+          {/* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ── */}
+          <MemoFlashToast flash={flashState} onAction={runFlashAction} />
 
           {/* ── Memo detail modal ── */}
           <MemoDetailModal />

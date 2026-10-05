@@ -18,6 +18,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   flashState: null,
   setFlashState: noop,
   showFlash: noop,
+  runFlashAction: noop,
   // layout
   activeView: "memos",
   setActiveView: noop,
@@ -153,6 +154,10 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   handleToggleMemoTask: asyncNoop,
   handleToggleArchive: asyncNoop,
   handleDeleteMemo: asyncNoop,
+  handleRestoreMemo: asyncNoop,
+  handlePurgeMemo: asyncNoop,
+  handleEmptyTrash: asyncNoop,
+  emptyingTrash: false,
   copyMemoFullText: asyncFalse,
   // share
   isShareModalOpen: false,
