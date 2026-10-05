@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
@@ -38,6 +38,35 @@ export function MemoComposer() {
   const { locale, t } = useTranslation();
   const english = locale === "en";
 
+  // 欄の外を押したら書き終えたものとして扱う。本文があれば保存し、何も書いていなければ畳む。
+  // タイトルや色だけのときは、保存できないのでそのまま残す。スクロールの指の動きでは
+  // 発火しないよう click で受け、body 直下に出る選択肢やダイアログは欄の一部として扱う。
+  // Pressing outside the composer means the memo is done: save it when there is a body, collapse
+  // when nothing was written. With only a title or colour it cannot be saved, so it stays. The
+  // listener uses click so a scrolling touch never fires it, and pickers or dialogs rendered
+  // under body count as part of the composer.
+  const sectionRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const autoSubmittedBodyRef = useRef<string | null>(null);
+  const hasBody = Boolean(formState.ai_response.trim());
+  useEffect(() => {
+    if (!composeIsExpanded || submitting) return undefined;
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || sectionRef.current?.contains(target)) return;
+      if (target.closest("[role='listbox'], [role='menu'], .modal-base, .cc-alert-modal, [data-memo-composer-trigger]")) return;
+      // 同じ内容の保存に失敗したあとは、クリックのたびに送り直さない（「完了」で送り直せる）
+      // After a failed save of the same content, do not resend on every click ("Done" still retries)
+      if (hasBody && autoSubmittedBodyRef.current !== formState.ai_response) {
+        autoSubmittedBodyRef.current = formState.ai_response;
+        formRef.current?.requestSubmit();
+      }
+      else if (!hasComposeDraft) setIsComposeExpanded(false);
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [composeIsExpanded, formState.ai_response, hasBody, hasComposeDraft, setIsComposeExpanded, submitting]);
+
   // タイトルで Enter を押したら保存ではなく本文へ進む（日本語変換の確定の Enter は除く）
   // Enter in the title moves on to the body instead of saving (except the Enter that confirms an IME conversion)
   const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -47,7 +76,7 @@ export function MemoComposer() {
     window.setTimeout(() => composeTextareaRef.current?.focus(), 0);
   };
   return (
-          <section className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
+          <section ref={sectionRef} id="memo-composer" className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
             {!composeIsExpanded ? (
               <div className="memo-quick-capture__collapsed" aria-label={t("memo.new")}>
                 <button
@@ -83,6 +112,7 @@ export function MemoComposer() {
               </div>
             ) : (
               <form
+                ref={formRef}
                 method="post"
                 className="memo-form memo-form--quick"
                 onSubmit={handleSubmitMemo}

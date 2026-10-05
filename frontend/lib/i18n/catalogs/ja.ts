@@ -518,6 +518,7 @@ export const jaMessages = {
   "memo.agentPlaceholder": "このメモについて質問・編集を依頼する...",
   "memo.list": "メモ一覧",
   "memo.noMatchingMemos": "条件に一致するメモがありません。",
+  "memo.noMemosYet": "メモはまだありません。上の入力欄から最初のメモを書いてみましょう。",
   "memo.loadMoreMemos": "メモをもっと読み込む",
   "memo.loadingMore": "読み込み中...",
   "memo.remainingCount": "残り{count}件",

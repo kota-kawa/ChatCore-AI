@@ -249,10 +249,25 @@ describe("ticking a checklist box on a list card", () => {
   });
 });
 
+describe("ticking the first line of a memo whose title came from that line", () => {
+  it("re-derives the title so the card does not show the stale line as a heading", async () => {
+    vi.mocked(updateMemo).mockResolvedValue(undefined);
+    const card: MemoSummary = { id: 8, title: "- [ ] 牛乳", excerpt: "- [ ] 牛乳" };
+    vi.mocked(loadMemoDetail).mockResolvedValue({ id: 8, title: "- [ ] 牛乳", ai_response: "- [ ] 牛乳" });
+    const { result } = renderHook(() => useItemActionsHarness());
+    await act(async () => {
+      await result.current.handleToggleMemoTask(card, 0, [{ label: "牛乳", checked: false }]);
+    });
+    expect(updateMemo).toHaveBeenCalledWith(8, { title: "- [x] 牛乳", ai_response: "- [x] 牛乳" }, expect.any(String));
+    const [updater] = updateMemoListOptimistically.mock.calls.at(-1) as unknown as [(memo: MemoSummary) => MemoSummary];
+    expect(updater(card)).toMatchObject({ title: "- [x] 牛乳", excerpt: "- [x] 牛乳" });
+  });
+});
+
 describe("links inside a list card", () => {
   it("are excluded from the click that opens the card", async () => {
     const { MemoHistoryPanel } = await import("../components/memo/MemoHistoryPanel");
-    const openMemoDetail = vi.fn(async () => undefined);
+    const openMemoDetail = vi.fn(async () => true);
     const memos: MemoSummary[] = [{ id: 1, title: "本", excerpt: "[本](https://example.com/books) を読む" }];
     const controller = createMemoPageControllerStub({
       memos, otherMemos: memos, pinnedMemos: [], totalMemoCount: 1, openMemoDetail,

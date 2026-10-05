@@ -1,9 +1,10 @@
 import React from "react";
 import { createPortal } from "react-dom";
 
+import { isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { parseMemoText } from "../../lib/memo/utils";
 import type { MemoSummary } from "../../lib/memo/types";
-import { formatDateTime } from "../../lib/datetime";
+import { formatDate, formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
@@ -26,6 +27,7 @@ export function MemoHistoryPanel() {
     memoLoadError,
     memoListLoading,
     memos,
+    hasActiveFilters,
   } = useMemoPageListContext();
   const {
     pinnedMemos,
@@ -55,6 +57,7 @@ export function MemoHistoryPanel() {
     handleDeleteMemo,
     handleMemoSectionDragOver,
     handleMemoDrop,
+    showFlash,
   } = useMemoPageBoardContext();
   const { t } = useTranslation();
   return (
@@ -75,7 +78,7 @@ export function MemoHistoryPanel() {
                 <MemoListSkeleton />
               )}
               {!memoLoadError && !memoListLoading && memos.length === 0 && (
-                <div className="memo-history__empty">{t("memo.noMatchingMemos")}</div>
+                <div className="memo-history__empty">{hasActiveFilters ? t("memo.noMatchingMemos") : t("memo.noMemosYet")}</div>
               )}
 
               {memos.length > 0 && (() => {
@@ -152,7 +155,11 @@ export function MemoHistoryPanel() {
                             void openMemoDetail(memoId);
                           }}
                         >
-                          <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
+                          {/* 本文の最初の行がそのままタイトルになっているメモは、題を出すと同じ文が 2 回並ぶ
+                              A memo whose title is just the first line of its body would show that line twice */}
+                          {!isAutoMemoTitle(memo.title, parseMemoText(memo.excerpt)) && (
+                            <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
+                          )}
                           {memo.excerpt && (
                             <MemoMarkdown
                               text={parseMemoText(memo.excerpt)}
@@ -176,7 +183,10 @@ export function MemoHistoryPanel() {
                             {displayDate && (
                               <time className="memo-item__date">
                                 <i className="bi bi-clock" aria-hidden="true"></i>
-                                {displayDate}
+                                {/* 幅の狭い 2 列表示では日付だけにする（CSS が切り替える）
+                                    The narrow two-column layout shows the date only (CSS switches) */}
+                                <span className="memo-item__date-full">{displayDate}</span>
+                                <span className="memo-item__date-short">{formatDate(memo.updated_at || memo.created_at)}</span>
                               </time>
                             )}
                             {memo.is_archived && (
@@ -238,6 +248,31 @@ export function MemoHistoryPanel() {
                                       maxHeight: menuPosition.maxHeight,
                                     }}
                                   >
+                                    {/* スマホの 2 列表示ではカード下のコピー・アーカイブを隠すので、同じ操作をここに置く
+                                        The phone two-column layout hides the copy / archive buttons under the card,
+                                        so the same actions live here */}
+                                    <button
+                                      type="button"
+                                      className="memo-item__dropdown-item memo-item__dropdown-item--compact-only"
+                                      role="menuitem"
+                                      onClick={() => {
+                                        setOpenMenuMemoId("");
+                                        setMenuPosition(null);
+                                        void copyMemoFullText(memo).then((copied) => { if (copied) showFlash("success", t("common.copied")); });
+                                      }}
+                                    >
+                                      <i className="bi bi-files"></i>
+                                      {t("memo.copyFullText")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="memo-item__dropdown-item memo-item__dropdown-item--compact-only"
+                                      role="menuitem"
+                                      onClick={() => { void handleToggleArchive(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
+                                    >
+                                      <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
+                                      {memo.is_archived ? t("memo.unarchive") : t("memo.archive")}
+                                    </button>
                                     <button
                                       type="button"
                                       className="memo-item__dropdown-item"

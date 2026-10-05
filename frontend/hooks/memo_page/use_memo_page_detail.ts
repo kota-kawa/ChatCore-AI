@@ -3,6 +3,7 @@ import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { loadMemoDetail, updateMemo } from "../../lib/memo/api";
+import { autoMemoTitle, isAutoMemoTitle } from "../../lib/memo/auto_title";
 import { DETAIL_AUTOSAVE_DELAY_MS, MEMO_DETAIL_CLOSE_ANIMATION_MS } from "../../lib/memo/constants";
 import type {
   Collection,
@@ -116,6 +117,17 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     selectedMemo,
   ]);
 
+  // タイトルが本文の最初の行から自動で付いたものなら、本文の書き換えに合わせて付け直す。
+  // そのままにすると、最初の行を直したあとも古い行がタイトルとして残り、一覧に同じ内容が
+  // 題と本文の両方で並ぶ。利用者が付けたタイトルには触れない。
+  // When the title is the one derived from the body's first line, re-derive it as the body
+  // changes. Left alone, the old line would stay as the title after the first line is edited and
+  // the list would show the content twice. A title the user wrote is never touched.
+  const updateDetailBody = useCallback((nextBody: string) => {
+    if (isAutoMemoTitle(detailEditTitle, detailEditAiResponse)) setDetailEditTitle(autoMemoTitle(nextBody));
+    setDetailEditAiResponse(nextBody);
+  }, [detailEditAiResponse, detailEditTitle]);
+
   const clearDetailAutoSaveTimer = useCallback(() => {
     if (!detailAutoSaveTimerRef.current) return;
     clearTimeout(detailAutoSaveTimerRef.current);
@@ -140,7 +152,10 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }, MEMO_DETAIL_CLOSE_ANIMATION_MS);
   }, [clearDetailAutoSaveTimer]);
 
-  const openMemoDetail = useCallback(async (memoId: string | number) => {
+  // 開けたかどうかを返す。失敗時は詳細が開かず画面に何も出ないので、ここで通知する
+  // Resolves to whether the memo opened. On failure the detail never opens and nothing would
+  // show, so the error is surfaced here
+  const openMemoDetail = useCallback(async (memoId: string | number): Promise<boolean> => {
     cancelMemoDetailCloseAnimation();
     setIsMemoDetailClosing(false);
     setDetailError("");
@@ -156,7 +171,11 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     detailSaveSequenceRef.current += 1;
     try {
       const memo = await loadMemoDetail(memoId);
-      if (!memo) { setDetailError(t("memo.memoDetailFailed")); return; }
+      if (!memo) {
+        setDetailError(t("memo.memoDetailFailed"));
+        showFlash("error", t("memo.memoDetailFailed"));
+        return false;
+      }
       setDetailEditTitle(memo.title || "");
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
@@ -166,12 +185,16 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       setDetailPreviewMode(Boolean(memo.ai_response?.trim()));
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
+      return true;
     } catch (error) {
-      setDetailError(error instanceof Error ? error.message : t("memo.memoDetailFailed"));
+      const message = error instanceof Error ? error.message : t("memo.memoDetailFailed");
+      setDetailError(message);
+      showFlash("error", message);
+      return false;
     } finally {
       setDetailLoading(false);
     }
-  }, [cancelMemoDetailCloseAnimation]);
+  }, [cancelMemoDetailCloseAnimation, showFlash]);
 
   const sendDetailEdit = useCallback(async (
     memoId: string | number,
@@ -383,7 +406,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     detailEditCollectionId,
     setDetailEditCollectionId,
     detailEditAiResponse,
-    setDetailEditAiResponse,
+    setDetailEditAiResponse: updateDetailBody,
     detailEditBackgroundColor,
     setDetailEditBackgroundColor,
     detailSaveStatus,

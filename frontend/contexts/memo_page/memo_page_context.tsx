@@ -92,6 +92,7 @@ type MemoPageBoardContextValue = Pick<
   | "handleToggleArchive"
   | "handleDeleteMemo"
   | "copyMemoFullText"
+  | "showFlash"
   | "canDragMemos"
   | "canReorderCurrentView"
   | "draggedMemoId"
@@ -337,6 +338,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       handleToggleArchive: controller.handleToggleArchive,
       handleDeleteMemo: controller.handleDeleteMemo,
       copyMemoFullText: controller.copyMemoFullText,
+      showFlash: controller.showFlash,
       canDragMemos: controller.canDragMemos,
       canReorderCurrentView: controller.canReorderCurrentView,
       draggedMemoId: controller.draggedMemoId,
@@ -375,6 +377,7 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.handleToggleArchive,
       controller.handleDeleteMemo,
       controller.copyMemoFullText,
+      controller.showFlash,
       controller.canDragMemos,
       controller.canReorderCurrentView,
       controller.draggedMemoId,

@@ -106,7 +106,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   isMemoAgentOpen: false,
   setIsMemoAgentOpen: noop,
   detailHasUnsavedChanges: false,
-  openMemoDetail: asyncNoop,
+  openMemoDetail: asyncFalse,
   closeMemoDetail: asyncNoop,
   openMemoAgent: asyncNoop,
   saveDetailEdit: async () => true,
