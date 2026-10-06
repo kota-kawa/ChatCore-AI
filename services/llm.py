@@ -698,13 +698,9 @@ def _openai_responses_reasoning_kwargs(
     *,
     generation_phase: str = "default",
 ) -> dict[str, Any]:
-    """Return phase-aware reasoning options for GPT-6 Luna Responses API."""
+    """Keep medium reasoning for Luna answers as well as auxiliary tasks."""
     if model_name == GPT_6_LUNA_MODEL:
-        return {
-            "reasoning": {
-                "effort": "low" if generation_phase in ANSWER_GENERATION_PHASES else "medium"
-            }
-        }
+        return {"reasoning": {"effort": "medium"}}
     return {}
 
 

@@ -695,7 +695,7 @@ class LlmServiceTestCase(unittest.TestCase):
             [{"id": "call-1", "type": "function", "function": {"name": "web_search", "arguments": '{"query":"q"}'}}],
         )
         request_kwargs = mock_openai.responses.create.call_args.kwargs
-        self.assertEqual(request_kwargs["reasoning"], {"effort": "low"})
+        self.assertEqual(request_kwargs["reasoning"], {"effort": "medium"})
         self.assertEqual(request_kwargs["tool_choice"], "auto")
         [tool] = request_kwargs["tools"]
         self.assertEqual(tool["type"], "function")
@@ -705,13 +705,12 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertIs(tool["strict"], False)
         mock_openai.chat.completions.create.assert_not_called()
 
-    def test_luna_reasoning_preserves_answer_and_auxiliary_boundaries(self):
+    def test_luna_reasoning_keeps_medium_effort_for_answers_and_auxiliary_tasks(self):
         for phase in (*sorted(llm.ANSWER_GENERATION_PHASES), "default", "research"):
             with self.subTest(phase=phase):
-                expected = "low" if phase in llm.ANSWER_GENERATION_PHASES else "medium"
                 self.assertEqual(
                     llm._openai_responses_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=phase),
-                    {"reasoning": {"effort": expected}},
+                    {"reasoning": {"effort": "medium"}},
                 )
 
     def test_lower_chat_effort_preserves_groq_auxiliary_and_explicit_settings(self):
@@ -1271,7 +1270,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["groq", "-stream"])
         mock_stream.assert_called_once_with(messages, llm.GROQ_MODEL, tools=tools)
 
-    def test_get_openai_response_stream_uses_low_reasoning_for_final_answer(self):
+    def test_get_openai_response_stream_uses_medium_reasoning_for_final_answer(self):
         """
         OpenAIのレスポンスAPIを用いたストリーミング時に、差分テキストが正しく抽出・出力されることを検証します。
         Verify that OpenAI responses.stream correctly yields text deltas.
@@ -1309,7 +1308,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["openai", "-stream"])
         mock_openai.responses.stream.assert_called_once()
         stream_kwargs = mock_openai.responses.stream.call_args.kwargs
-        self.assertEqual(stream_kwargs["reasoning"], {"effort": "low"})
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "medium"})
         passed_messages = stream_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         [leading_part] = passed_messages[0]["content"]
@@ -1384,7 +1383,7 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(stream_kwargs["max_output_tokens"], llm.max_output_tokens_for_model(llm.GPT_6_LUNA_MODEL, "agent"))
         # Chat Completions ではツールと推論を併用できず、none だと推論が本文へ漏れた（issue #771）。
         # Chat Completions cannot combine tools with reasoning, and "none" leaked reasoning (issue #771).
-        self.assertEqual(stream_kwargs["reasoning"], {"effort": "low"})
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "medium"})
         self.assertEqual(stream_kwargs["tool_choice"], "auto")
         self.assertEqual([tool["name"] for tool in stream_kwargs["tools"]], ["web_search"])
         mock_openai.chat.completions.create.assert_not_called()
