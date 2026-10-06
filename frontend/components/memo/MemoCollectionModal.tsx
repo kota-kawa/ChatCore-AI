@@ -1,6 +1,7 @@
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
+import { useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import {
   useMemoPageListContext,
@@ -29,12 +30,11 @@ function CollectionColorPicker({ id, value, onChange }: CollectionColorPickerPro
             type="button"
             key={c}
             className={`memo-collection-preset${value === c ? " is-active" : ""}`}
-            style={{ background: c }}
             onClick={() => onChange(c)}
             aria-label={c}
             data-tooltip={c}
             data-tooltip-placement="top"
-          />
+          ><span style={{ background: c }} /></button>
         ))}
       </div>
     </div>
@@ -67,6 +67,7 @@ export function MemoCollectionModal() {
   } = useMemoPageModalsContext();
   const { t } = useTranslation();
   const close = () => setIsCollectionPanelOpen(false);
+  const viewportStyle = useMemoViewport(isCollectionPanelOpen);
   return (
     <ModalShell
       isOpen={isCollectionPanelOpen}
@@ -75,6 +76,7 @@ export function MemoCollectionModal() {
       className="cc-modal memo-modal-scope memo-collection-modal"
       labelledBy="collectionPanelTitle"
       initialFocusSelector=".memo-collection-create__input"
+      style={viewportStyle}
     >
       <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1}>
         <header className="cc-modal__header">
@@ -91,6 +93,7 @@ export function MemoCollectionModal() {
             <div className="cc-modal__section-head">
               <h3 className="cc-modal__section-title">{t("memo.create")}</h3>
             </div>
+            <div className="memo-collection-create__name-row">
             <input
               type="text"
               className="memo-collection-create__input"
@@ -109,8 +112,6 @@ export function MemoCollectionModal() {
                 void handleCreateCollection();
               }}
             />
-            <div className="memo-collection-create__footer">
-              <CollectionColorPicker id="new-collection-color" value={newCollectionColor} onChange={setNewCollectionColor} />
               <button
                 type="button"
                 className="cc-modal__btn cc-modal__btn--primary memo-collection-create__btn"
@@ -120,10 +121,14 @@ export function MemoCollectionModal() {
                 <i className="bi bi-plus-lg" aria-hidden="true"></i>{t("memo.create")}
               </button>
             </div>
+            <details className="memo-collection-create__colors">
+              <summary>{t("memo.color")}</summary>
+              <CollectionColorPicker id="new-collection-color" value={newCollectionColor} onChange={setNewCollectionColor} />
+            </details>
           </section>
 
           {/* Collection list */}
-          <section className="cc-modal__section">
+          <section className="cc-modal__section memo-collection-modal__list-section">
             <div className="cc-modal__section-head">
               <h3 className="cc-modal__section-title">{t("memo.collections")}</h3>
               <span className="cc-modal__section-meta">{t("memo.items", { count: collections.length })}</span>
@@ -151,7 +156,7 @@ export function MemoCollectionModal() {
                   ) : (
                     <div className="memo-collection-item__row">
                       <span className="memo-collection-item__dot" style={{ background: col.color }}></span>
-                      <span className="memo-collection-item__name">{col.name}</span>
+                      <span className="memo-collection-item__name" title={col.name}>{col.name}</span>
                       <span className="memo-collection-item__count">{t("memo.items", { count: col.memo_count })}</span>
                       <button
                         type="button"

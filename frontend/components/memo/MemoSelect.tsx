@@ -27,7 +27,7 @@ export function MemoSelect({
   ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   // 開いている間、矢印キーでハイライトしている選択肢のインデックス（未確定の候補、選択とは別）
   // Index of the option currently highlighted by the arrow keys while open (a candidate, not yet committed)
   const [activeIndex, setActiveIndex] = useState(0);
@@ -44,7 +44,22 @@ export function MemoSelect({
   const openMenu = () => {
     if (disabled || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    const viewport = window.visualViewport;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const width = Math.min(Math.max(rect.width, 180), viewportWidth - 16);
+    const below = Math.max(0, viewportBottom - rect.bottom - 14);
+    const above = Math.max(0, rect.top - viewportTop - 14);
+    const desiredHeight = Math.min(280, options.length * 44 + 12);
+    const openAbove = below < desiredHeight && above > below;
+    const maxHeight = Math.min(desiredHeight, openAbove ? above : below);
+    setPos({
+      top: openAbove ? rect.top - maxHeight - 6 : rect.bottom + 6,
+      left: Math.max(8, Math.min(rect.left, viewportWidth - width - 8)),
+      width,
+      maxHeight,
+    });
     setActiveIndex(selectedIndex);
     setOpen(true);
   };
@@ -127,7 +142,10 @@ export function MemoSelect({
       if (!triggerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node))
         setOpen(false);
     };
-    const onScroll = () => setOpen(false);
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     window.addEventListener("scroll", onScroll, true);
     return () => {
@@ -141,10 +159,14 @@ export function MemoSelect({
   useEffect(() => {
     if (!open) return;
     const raf = window.requestAnimationFrame(() => {
-      menuRef.current?.focus();
+      menuRef.current?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(raf);
   }, [open]);
+
+  useEffect(() => {
+    if (open) menuRef.current?.children[activeIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [activeIndex, open]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
 
@@ -157,6 +179,7 @@ export function MemoSelect({
         ref={triggerRef}
         type="button"
         className="memo-select__trigger"
+        title={selectedLabel}
         onClick={toggleOpen}
         onKeyDown={handleTriggerKeyDown}
         disabled={disabled}
@@ -177,7 +200,7 @@ export function MemoSelect({
           tabIndex={-1}
           aria-activedescendant={options[activeIndex] ? getOptionId(activeIndex) : undefined}
           onKeyDown={handleMenuKeyDown}
-          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 99999 }}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight, zIndex: 99999 }}
         >
           {options.map((opt, index) => {
             const isSel = opt.value === value;
