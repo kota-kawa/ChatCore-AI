@@ -46,6 +46,7 @@ export function MemoSidebar() {
                 <button
                   type="button"
                   className={`memo-sidebar-nav__item${isMemosView && activeCollectionId === null && archiveScope === "active" ? " is-active" : ""}`}
+                  aria-label={t("memo.allMemos")}
                   onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("active"); }}
                 >
                   <i className="bi bi-lightning-charge" aria-hidden="true"></i>
@@ -54,6 +55,7 @@ export function MemoSidebar() {
                 <button
                   type="button"
                   className={`memo-sidebar-nav__item${activeView === "context" ? " is-active" : ""}`}
+                  aria-label={t("memo.myContext")}
                   onClick={() => setActiveView("context")}
                 >
                   <i className="bi bi-safe" aria-hidden="true"></i>
@@ -91,6 +93,7 @@ export function MemoSidebar() {
                       <button
                         type="button"
                         className={`memo-sidebar-collection-item memo-sidebar-collection-item--system${archiveScope === "archived" ? " is-active" : ""}`}
+                        aria-label={t("memo.archive")}
                         onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("archived"); }}
                       >
                         <span className="memo-sidebar-collection-icon" aria-hidden="true">
@@ -101,6 +104,7 @@ export function MemoSidebar() {
                       <button
                         type="button"
                         className={`memo-sidebar-collection-item memo-sidebar-collection-item--system${archiveScope === "trash" ? " is-active" : ""}`}
+                        aria-label={t("memo.trash")}
                         onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("trash"); }}
                       >
                         <span className="memo-sidebar-collection-icon" aria-hidden="true">
@@ -113,6 +117,9 @@ export function MemoSidebar() {
                           key={col.id}
                           type="button"
                           className={`memo-sidebar-collection-item${activeCollectionId === col.id ? " is-active" : ""}`}
+                          aria-label={col.name}
+                          data-tooltip={col.name}
+                          data-tooltip-placement="right"
                           onClick={() => { setActiveView("memos"); setActiveCollectionId(col.id); }}
                         >
                           <span className="memo-sidebar-collection-dot" style={{ background: col.color }}></span>
@@ -127,6 +134,7 @@ export function MemoSidebar() {
                     <button
                       type="button"
                       className="memo-sidebar-manage-btn"
+                      aria-label={t("memo.manageCollections")}
                       onClick={() => setIsCollectionPanelOpen(true)}
                     >
                       <i className="bi bi-plus-circle" aria-hidden="true"></i>

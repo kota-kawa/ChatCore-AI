@@ -102,6 +102,8 @@ export function useMemoPageController() {
     isShareModalOpen: share.isShareModalOpen,
     isCollectionPanelOpen: collections.isCollectionPanelOpen,
     isExportModalOpen: exporter.isExportModalOpen,
+    composeIsExpanded: composer.composeIsExpanded,
+    activeView: layout.activeView,
   });
 
   // 各 hook の戻り値キーは互いに素なので、そのまま展開して 1 つのオブジェクトにする

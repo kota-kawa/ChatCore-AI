@@ -11,6 +11,7 @@ import {
 import type { KeyedMutator } from "swr";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useMemoMobileLayout } from "./use_memo_viewport";
 import { createMemo, suggestMemoTitle } from "../../lib/memo/api";
 import { readMemoComposeDraft, writeMemoComposeDraft } from "../../lib/memo/compose_draft";
 import type { FlashState, MemoComposeFormState, MemoListState } from "../../lib/memo/types";
@@ -28,6 +29,7 @@ type UseMemoPageComposerParams = {
 // State and actions for the new-memo composer (quick capture)
 export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashState }: UseMemoPageComposerParams) {
   const { t } = useTranslation();
+  const isMobileLayout = useMemoMobileLayout();
 
   // Form state
   const [formState, setFormState] = useState<MemoComposeFormState>({
@@ -72,10 +74,14 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   useEffect(() => {
     const el = composeTextareaRef.current;
     if (!el) return;
+    if (isMobileLayout) {
+      el.style.removeProperty("height");
+      return;
+    }
     el.style.height = "auto";
     const next = Math.min(el.scrollHeight, 520);
     el.style.height = `${next}px`;
-  }, [formState.ai_response, previewMode, isComposeExpanded]);
+  }, [formState.ai_response, isMobileLayout, previewMode, isComposeExpanded]);
 
   // フォーム入力の変更ハンドラー。入力値をローカルステートに反映する
   // Form input change handler. Reflects input values into local state
@@ -107,7 +113,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     } finally {
       setSubmitting(false);
     }
-  }, [formState, mutate, setFlashState, showFlash]);
+  }, [formState, mutate, setFlashState, showFlash, t]);
 
   // AIによる自動入力補完を実行するハンドラー
   // Handler to execute AI-based auto-completion for inputs
@@ -126,7 +132,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     } finally {
       setAiSuggesting(false);
     }
-  }, [formState.ai_response, showFlash]);
+  }, [formState.ai_response, showFlash, t]);
 
   // 続きから書けるよう、カーソルは末尾に置く（チェックリストは挿入した「- [ ] 」の後ろになる）
   // Put the caret at the end so typing continues the text (after the inserted "- [ ] " for checklists)
@@ -162,7 +168,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
       };
     });
     focusComposeTextarea();
-  }, [focusComposeTextarea]);
+  }, [focusComposeTextarea, t]);
 
   const openComposePalette = useCallback(() => {
     setPreviewMode(false);

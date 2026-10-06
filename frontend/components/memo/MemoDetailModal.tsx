@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
 import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
@@ -6,7 +6,6 @@ import { applyMemoEdits, type MemoEditPayload } from "../../lib/memo/agent_edits
 import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
-import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isSelectionCollapsed, shouldBeginEditingFromClick } from "../../lib/memo/detail_click_to_edit";
 import { toggleTaskMarker, type RenderedTask } from "../../lib/memo/list_editing";
 import { captureMemoEditPosition } from "../../lib/memo/detail_edit_position";
@@ -14,15 +13,14 @@ import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoMarkdown } from "./MemoMarkdown";
-import { MemoSelect } from "./MemoSelect";
+import { MemoDetailOrganizeControls } from "./MemoDetailOrganizeControls";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoDetailEditFocus } from "../../hooks/memo_page/use_memo_detail_edit_focus";
-import { useVisualViewportHeight } from "../../hooks/use_visual_viewport_height";
+import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import {
   useMemoPageBoardContext,
   useMemoPageDetailContext,
-  useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
 
 // ── Memo detail modal ──
@@ -31,19 +29,15 @@ import {
 // Reading / editing sheet on the shared modal surface (cc-modal, xl / reader): the header holds
 // the title input, actions and save state, while the body holds the editor / preview (+ agent).
 export function MemoDetailModal() {
-  const { collections } = useMemoPageListContext();
   const {
     selectedMemo,
     isMemoDetailClosing,
     closeMemoDetail,
     detailEditBackgroundColor,
-    setDetailEditBackgroundColor,
     detailPreviewMode,
     setDetailPreviewMode,
     detailEditTitle,
     setDetailEditTitle,
-    detailEditCollectionId,
-    setDetailEditCollectionId,
     copyDetailFullText,
     isMemoAgentOpen,
     setIsMemoAgentOpen,
@@ -68,14 +62,23 @@ export function MemoDetailModal() {
     memoId: selectedMemo?.id,
   });
 
-  // 画面キーボードに隠れている高さ。レイアウトの高さが縮まない iOS でだけ 0 より大きくなる
-  // Height covered by the on-screen keyboard; above 0 only on iOS, where the layout does not shrink
-  const visualViewportHeight = useVisualViewportHeight(isOpen);
-  // ピンチで拡大している間も表示領域は縮むが、キーボードではないので持ち上げない
-  // Pinch-zooming shrinks the visual viewport too, but that is not a keyboard, so nothing is lifted
-  const keyboardInset = visualViewportHeight === null || (window.visualViewport?.scale ?? 1) > 1.01
-    ? 0
-    : Math.max(0, window.innerHeight - visualViewportHeight);
+  const viewportStyle = useMemoViewport(isOpen);
+  const isMobile = useMemoMobileLayout();
+  const [mobilePane, setMobilePane] = useState<{ memoId: string | number | undefined; agent: boolean }>({ memoId: undefined, agent: false });
+  const agentActive = isMemoAgentOpen && mobilePane.memoId === selectedMemo?.id && mobilePane.agent;
+  const showMemo = !isMobile || !agentActive;
+  const showAgent = !isMobile || agentActive;
+  const selectMemoMode = (preview: boolean) => {
+    setMobilePane({ memoId: selectedMemo?.id, agent: false });
+    setDetailPreviewMode(preview);
+  };
+  const toggleAgent = () => {
+    if (isMobile) {
+      setMobilePane({ memoId: selectedMemo?.id, agent: !agentActive });
+      if (!isMemoAgentOpen) void openMemoAgent();
+    } else if (isMemoAgentOpen) setIsMemoAgentOpen(false);
+    else void openMemoAgent();
+  };
 
   // プレビューのチェック欄をその場で切り替える（保存は既存の自動保存に任せる）
   // Tick a checklist box right in the preview; the existing autosave persists it
@@ -91,8 +94,12 @@ export function MemoDetailModal() {
   const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
-    textareaRef.current?.focus();
-  }, [textareaRef]);
+    setMobilePane({ memoId: selectedMemo?.id, agent: false });
+    setDetailPreviewMode(false);
+    const textarea = textareaRef.current;
+    if (textarea && !textarea.closest("[hidden]")) textarea.focus();
+    else window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [selectedMemo?.id, setDetailPreviewMode, textareaRef]);
 
   // プレビュー面のクリックで編集に入る。リンク・操作部品・ドラッグ選択は通常動作のまま
   // Enter edit mode from a preview click; links, controls and drag selections keep their behaviour
@@ -113,10 +120,11 @@ export function MemoDetailModal() {
   // The title too stays put right after a drag selection (copying)
   const handleTitleClick = useCallback((event: React.MouseEvent<HTMLHeadingElement>) => {
     if (event.defaultPrevented || !isSelectionCollapsed()) return;
+    setMobilePane({ memoId: selectedMemo?.id, agent: false });
     beginEditing("title", captureMemoEditPosition(
       event.currentTarget, detailEditTitle, event.clientX, event.clientY, false,
     ));
-  }, [beginEditing, detailEditTitle]);
+  }, [beginEditing, detailEditTitle, selectedMemo?.id]);
 
   const handlePreviewKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
@@ -159,22 +167,6 @@ export function MemoDetailModal() {
     return { ok: true };
   }, [setDetailEditAiResponse, setDetailEditTitle, t]);
 
-  useEffect(() => {
-    if (!isMemoAgentOpen) return;
-    if (!window.matchMedia("(max-width: 768px)").matches) return;
-
-    const frameId = window.requestAnimationFrame(() => {
-      bodyRef.current?.scrollTo({
-        top: 0,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-      });
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [isMemoAgentOpen]);
-
   const displayTitle = detailEditTitle || selectedMemo?.title || t("memo.savedMemo");
 
   return (
@@ -185,13 +177,13 @@ export function MemoDetailModal() {
       className="cc-modal memo-modal-scope memo-modal"
       labelledBy="memoModalTitle"
       getInitialFocus={getInitialFocus}
+      style={viewportStyle}
     >
       <div
         ref={panelRef}
         className={`cc-modal__panel cc-modal__panel--xl cc-modal__panel--reader memo-modal__content${detailEditBackgroundColor ? " has-accent" : ""}`}
         style={{
           ...(detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } : null),
-          ...(keyboardInset > 0 ? { "--memo-keyboard-inset": `${keyboardInset}px` } : null),
         } as React.CSSProperties}
         tabIndex={-1}
       >
@@ -229,52 +221,35 @@ export function MemoDetailModal() {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={!detailPreviewMode}
-                  className={`cc-modal__tab${!detailPreviewMode ? " is-active" : ""}`}
-                  onClick={() => setDetailPreviewMode(false)}
+                  aria-selected={!detailPreviewMode && showMemo}
+                  className={`cc-modal__tab${!detailPreviewMode && showMemo ? " is-active" : ""}`}
+                  onClick={() => selectMemoMode(false)}
                 >
                   <i className="bi bi-code-slash" aria-hidden="true"></i>{t("common.edit")}
                 </button>
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={detailPreviewMode}
-                  className={`cc-modal__tab${detailPreviewMode ? " is-active" : ""}`}
-                  onClick={() => setDetailPreviewMode(true)}
+                  aria-selected={detailPreviewMode && showMemo}
+                  className={`cc-modal__tab${detailPreviewMode && showMemo ? " is-active" : ""}`}
+                  onClick={() => selectMemoMode(true)}
                   disabled={!detailEditAiResponse.trim()}
                 >
                   <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.preview")}
                 </button>
-              </div>
-              {collections.length > 0 && (
-                <MemoSelect
-                  id="memo-detail-collection"
-                  className="memo-select--detail-collection"
-                  value={String(detailEditCollectionId ?? "")}
-                  onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
-                  options={[
-                    { value: "", label: t("memo.noCollection") },
-                    ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
-                  ]}
-                />
-              )}
-              <div className="memo-modal__color-strip" role="listbox" aria-label={t("memo.backgroundColor")}>
-                {MEMO_COLOR_OPTIONS.map((option) => (
-                  <button
-                    key={option.label}
-                    type="button"
-                    className={`memo-modal__color-option${(detailEditBackgroundColor || "") === option.value ? " is-active" : ""}`}
-                    style={{ "--palette-color": option.color } as React.CSSProperties}
-                    onClick={() => setDetailEditBackgroundColor(option.value || null)}
-                    role="option"
-                    aria-selected={(detailEditBackgroundColor || "") === option.value}
-                    aria-label={t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}
-                    data-tooltip={t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}
-                    data-tooltip-placement="bottom"
-                  >
-                    <span></span>
-                  </button>
-                ))}
+              <button
+                type="button"
+                className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen && showAgent ? " is-active" : ""}`}
+                onClick={toggleAgent}
+                aria-label={!isMobile && isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                role={isMobile ? "tab" : undefined}
+                aria-selected={isMobile ? agentActive : undefined}
+                aria-expanded={isMobile ? undefined : isMemoAgentOpen}
+                data-tooltip={!isMobile && isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                data-tooltip-placement="bottom"
+              >
+                <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
+              </button>
               </div>
               <CopyButton
                 onCopy={copyDetailFullText}
@@ -286,29 +261,11 @@ export function MemoDetailModal() {
                 tooltip="data-tooltip"
                 tooltipPlacement="bottom"
               />
-              <button
-                type="button"
-                className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}
-                onClick={() => {
-                  if (isMemoAgentOpen) {
-                    setIsMemoAgentOpen(false);
-                  } else {
-                    void openMemoAgent();
-                  }
-                }}
-                aria-label={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                aria-expanded={isMemoAgentOpen}
-                data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                data-tooltip-placement="bottom"
-              >
-                <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
-              </button>
+              <MemoDetailOrganizeControls />
             </div>
           )}
-          {/* 保存状態は横スクロールする操作列の外に置く。列の中だとスマホでは画面外へ流れ、
-              保存できていないことに気づけない
-              The save state stays outside the horizontally scrolling action row; inside it the
-              state scrolls off-screen on phones and a failed save goes unnoticed */}
+          {/* 保存状態は操作列と分け、画面幅や表示中の面に関係なく見える位置に置く。
+              Keep save feedback visible independently of the controls and active pane. */}
           {selectedMemo && (
             <span
               className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`}
@@ -333,7 +290,7 @@ export function MemoDetailModal() {
           {!detailLoading && detailError && <div className="memo-modal__state">{detailError}</div>}
           {!detailLoading && selectedMemo && (
             <>
-              <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
+              <section className="memo-modal__edit-form" aria-label={t("memo.content")} hidden={!showMemo}>
                 {detailPreviewMode && (
                   <>
                     <span id="memo-detail-edit-hint" className="memo-modal__edit-hint">{t("memo.clickToEdit")}</span>
@@ -421,7 +378,7 @@ export function MemoDetailModal() {
                 )}
               </section>
               {isMemoAgentOpen && (
-                <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>
+                <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")} hidden={!showAgent}>
                   <div className="memo-modal__agent-header">
                     <span className="memo-modal__agent-header-icon" aria-hidden="true">
                       <img src="/static/ChacoMemo.png" alt="" />

@@ -34,21 +34,17 @@ test("the memo detail modal omits the date and keeps the content switcher in the
   );
 });
 
-test("the memo detail action row stays one line and scrolls horizontally on phones", () => {
-  const mobileCss = memoCss.slice(memoCss.lastIndexOf("@media (max-width: 640px)"));
-  const actionRule = mobileCss.match(/\.memo-modal \.memo-modal__header-actions\s*\{([\s\S]*?)\}/);
-  assert.ok(actionRule, "the mobile memo action row must be styled");
-  assert.match(actionRule[1], /flex-basis:\s*100%/);
-  assert.match(actionRule[1], /overflow-x:\s*auto/);
-  assert.match(actionRule[1], /scrollbar-width:\s*none/);
+test("the memo detail keeps primary actions visible and moves organization into a disclosure", () => {
+  assert.match(memoDetailModal, /<CopyButton/);
+  assert.match(memoDetailModal, /<MemoDetailOrganizeControls/);
+  assert.doesNotMatch(memoDetailModal, /memo-modal__color-strip|memo-select--detail-collection/);
 
-  const modeRule = memoCss.match(/\.memo-modal \.memo-modal__tabs\s*\{([\s\S]*?)\}/);
-  assert.ok(modeRule, "the memo mode switcher must be styled as a compact control");
-  assert.match(modeRule[1], /margin:\s*0/);
-  assert.match(modeRule[1], /border-radius:\s*9px/);
+  const actionRule = memoCss.match(/\.memo-modal \.memo-modal__header-actions\s*\{([\s\S]*?)\}/);
+  assert.ok(actionRule);
+  assert.match(actionRule[1], /overflow:\s*visible/);
 
   const bodyRule = memoCss.match(/\.memo-modal \.memo-modal__body\s*\{([\s\S]*?)\}/);
-  assert.ok(bodyRule, "the memo body must keep a flex layout");
+  assert.ok(bodyRule);
   assert.match(bodyRule[1], /overflow:\s*hidden/);
 });
 
@@ -85,8 +81,8 @@ test("the memo agent panel styles every MiniChat option it turns on", () => {
   assert.match(agentPanel, /iconOnlyClearButton=\{true\}/);
   assert.match(
     memoCss,
-    new RegExp(`${scope}\\.mini-chat-clear-btn--icon-only\\s*\\{[\\s\\S]*?width:\\s*34px`),
-    "the icon-only clear control must stay a compact square",
+    new RegExp(`${scope}\\.mini-chat-clear-btn--icon-only\\s*\\{[\\s\\S]*?width:\\s*var\\(--tap-target-min\\)`),
+    "the icon-only clear control must remain a touch-sized square",
   );
   assert.doesNotMatch(
     memoCss,
