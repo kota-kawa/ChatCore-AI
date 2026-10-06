@@ -6,6 +6,7 @@ const FOCUSABLE_SELECTOR = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
+  "summary",
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
@@ -17,7 +18,9 @@ function getFocusableElements(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
     // 隠れている要素を除外する
     // Exclude hidden elements
-    return !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true";
+    if (element.closest("[hidden], [aria-hidden='true']")) return false;
+    const disclosure = element.closest("details:not([open])");
+    return !disclosure || Boolean(disclosure.querySelector("summary")?.contains(element));
   });
 }
 
@@ -85,7 +88,7 @@ export function useModalFocusTrap({
       // Escapeキーが押された場合の処理
       // Handle the Escape key press
       const onEscape = onEscapeRef.current;
-      if (event.key === "Escape" && onEscape) {
+      if (event.key === "Escape" && onEscape && !event.defaultPrevented) {
         event.preventDefault();
         onEscape();
         return;

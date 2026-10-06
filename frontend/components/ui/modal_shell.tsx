@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
@@ -22,6 +22,7 @@ type ModalShellProps = {
   labelledBy: string;
   // オーバーレイ要素に付与する追加クラス / Extra classes for the overlay element
   className?: string;
+  style?: CSSProperties;
   // オーバーレイ要素の id（既存の DOM/CSS/テスト互換のため） / Overlay element id (for existing DOM/CSS/test compatibility)
   id?: string;
   // 送信中などに背景クリック・Escape での閉じるを無効化する / Block backdrop / Escape close while e.g. submitting
@@ -41,6 +42,7 @@ export function ModalShell({
   onClose,
   labelledBy,
   className,
+  style,
   id,
   dismissDisabled = false,
   getInitialFocus,
@@ -92,6 +94,7 @@ export function ModalShell({
       ref={setOverlayRef}
       id={id}
       className={`${className ? `${className} ` : ""}modal-base${isOpen ? " is-open" : ""}`}
+      style={style}
       role="dialog"
       aria-modal="true"
       aria-hidden={isOpen ? "false" : "true"}

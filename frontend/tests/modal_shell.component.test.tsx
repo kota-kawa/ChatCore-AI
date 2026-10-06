@@ -86,4 +86,33 @@ describe("ModalShell", () => {
     const okButton = screen.getByRole("button", { name: "OK" });
     await vi.waitFor(() => expect(okButton).toHaveFocus());
   });
+
+  it("lets an inner popup consume Escape before closing the dialog", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalShell isOpen onClose={onClose} labelledBy="title">
+        <h2 id="title">Popup</h2>
+        <button onKeyDown={(event) => { if (event.key === "Escape") event.preventDefault(); }}>popup</button>
+      </ModalShell>,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "popup" }), { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps focus past hidden panes and closed disclosure contents", () => {
+    render(
+      <ModalShell isOpen onClose={() => {}} labelledBy="title">
+        <h2 id="title">Controls</h2>
+        <button>first</button>
+        <details><summary>more</summary><button>closed option</button></details>
+        <div hidden><button>hidden pane</button></div>
+      </ModalShell>,
+    );
+    const summary = screen.getByText("more");
+    summary.focus();
+    fireEvent.keyDown(summary, { key: "Tab" });
+    expect(screen.getByRole("button", { name: "first" })).toHaveFocus();
+  });
 });

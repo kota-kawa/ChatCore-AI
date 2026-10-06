@@ -1,16 +1,39 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
 import { parseMemoText } from "../../lib/memo/utils";
 import { MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
 import {
   useMemoPageComposerContext,
   useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
+
+const OUTSIDE_CLICK_EXEMPT_SELECTOR = [
+  "[role='listbox']",
+  "[role='menu']",
+  ".modal-base",
+  ".cc-alert-modal",
+  "[data-memo-composer-trigger]",
+  "[data-memo-composing]",
+].join(", ");
+
+function hasMemoBodyContent(value: string): boolean {
+  return value.split(/\r?\n/u).some((line) => {
+    const content = line.replace(/^\s*(?:>\s*)*/u, "").trim();
+    if (!content) return false;
+    return !/^(?:[-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s*$/u.test(content);
+  });
+}
+
+function pathHasSelector(path: EventTarget[], selector: string): boolean {
+  return path.some((item) => item instanceof Element && item.matches(selector));
+}
 
 // ── Quick capture ──
 export function MemoComposer() {
@@ -37,35 +60,172 @@ export function MemoComposer() {
   } = useMemoPageComposerContext();
   const { locale, t } = useTranslation();
   const english = locale === "en";
-
-  // 欄の外を押したら書き終えたものとして扱う。本文があれば保存し、何も書いていなければ畳む。
-  // タイトルや色だけのときは、保存できないのでそのまま残す。スクロールの指の動きでは
-  // 発火しないよう click で受け、body 直下に出る選択肢やダイアログは欄の一部として扱う。
-  // Pressing outside the composer means the memo is done: save it when there is a body, collapse
-  // when nothing was written. With only a title or colour it cannot be saved, so it stays. The
-  // listener uses click so a scrolling touch never fires it, and pickers or dialogs rendered
-  // under body count as part of the composer.
-  const sectionRef = useRef<HTMLElement>(null);
+  const isMobileLayout = useMemoMobileLayout();
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [mobileDraftDismissed, setMobileDraftDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const paletteTriggerRef = useRef<HTMLButtonElement>(null);
+  const collapsedTextButtonRef = useRef<HTMLButtonElement>(null);
   const autoSubmittedBodyRef = useRef<string | null>(null);
-  const hasBody = Boolean(formState.ai_response.trim());
+  const lastObservedBodyRef = useRef(formState.ai_response);
+  const mobileReturnFocusRef = useRef<HTMLElement | null>(null);
+  const mobileInitialFocusRef = useRef<"body" | "palette">("body");
+  const wasMobileDialogOpenRef = useRef(false);
+
+  const hasBody = hasMemoBodyContent(formState.ai_response);
+  const showExpandedComposer = composeIsExpanded && !(isMobileLayout && mobileDraftDismissed);
+  const mobileDialogOpen = isMobileLayout && showExpandedComposer;
+  const viewportStyle = useMemoViewport(mobileDialogOpen);
+
+  // The floating New button calls the controller directly, so it cannot clear the local
+  // mobile dismissal state through the inline trigger handlers. Capture its native click first.
   useEffect(() => {
-    if (!composeIsExpanded || submitting) return undefined;
+    const handleComposerTriggerClick = (event: MouseEvent) => {
+      const trigger = event.composedPath().find(
+        (item): item is HTMLElement => item instanceof HTMLElement && item.matches("[data-memo-composer-trigger]"),
+      );
+      if (!trigger) return;
+      mobileReturnFocusRef.current = trigger;
+      mobileInitialFocusRef.current = "body";
+      setMobileDraftDismissed(false);
+    };
+    document.addEventListener("click", handleComposerTriggerClick, true);
+    return () => document.removeEventListener("click", handleComposerTriggerClick, true);
+  }, []);
+
+  // Native click paths retain the original ancestors even if React replaces the clicked node
+  // before the document listener runs. This also covers the persistent inline trigger and the
+  // expanded composer portaled into the mobile dialog.
+  useEffect(() => {
+    if (!composeIsExpanded || isMobileLayout || submitting) return undefined;
     const handleOutsideClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element) || sectionRef.current?.contains(target)) return;
-      if (target.closest("[role='listbox'], [role='menu'], .modal-base, .cc-alert-modal, [data-memo-composer-trigger]")) return;
-      // 同じ内容の保存に失敗したあとは、クリックのたびに送り直さない（「完了」で送り直せる）
-      // After a failed save of the same content, do not resend on every click ("Done" still retries)
+      const path = event.composedPath();
+      if (pathHasSelector(path, "[data-memo-composer-root]")) return;
+      if (pathHasSelector(path, OUTSIDE_CLICK_EXEMPT_SELECTOR)) return;
+
       if (hasBody && autoSubmittedBodyRef.current !== formState.ai_response) {
         autoSubmittedBodyRef.current = formState.ai_response;
         formRef.current?.requestSubmit();
+      } else if (!hasComposeDraft) {
+        setIsComposeExpanded(false);
+        setIsComposePaletteOpen(false);
+        setIsMoreOpen(false);
       }
-      else if (!hasComposeDraft) setIsComposeExpanded(false);
     };
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
-  }, [composeIsExpanded, formState.ai_response, hasBody, hasComposeDraft, setIsComposeExpanded, submitting]);
+  }, [composeIsExpanded, formState.ai_response, hasBody, hasComposeDraft, isMobileLayout, setIsComposeExpanded, setIsComposePaletteOpen, submitting]);
+
+  useEffect(() => {
+    if (!mobileDialogOpen) return undefined;
+    document.body.classList.add("memo-compose-open");
+    return () => document.body.classList.remove("memo-compose-open");
+  }, [mobileDialogOpen]);
+
+  useEffect(() => {
+    if (lastObservedBodyRef.current !== formState.ai_response) {
+      lastObservedBodyRef.current = formState.ai_response;
+      autoSubmittedBodyRef.current = null;
+    }
+  }, [formState.ai_response]);
+
+  useEffect(() => {
+    if (!hasComposeDraft && !isComposePaletteOpen) setIsMoreOpen(false);
+  }, [hasComposeDraft, isComposePaletteOpen]);
+
+  useEffect(() => {
+    if (!wasMobileDialogOpenRef.current || mobileDialogOpen) {
+      wasMobileDialogOpenRef.current = mobileDialogOpen;
+      return;
+    }
+    wasMobileDialogOpenRef.current = false;
+
+    if (isMobileLayout && !showExpandedComposer) {
+      const returnTarget = mobileReturnFocusRef.current?.isConnected
+        ? mobileReturnFocusRef.current
+        : collapsedTextButtonRef.current;
+      returnTarget?.focus({ preventScroll: true });
+      return;
+    }
+    if (!isMobileLayout && showExpandedComposer) {
+      composeTextareaRef.current?.focus({ preventScroll: true });
+    }
+  }, [composeTextareaRef, isMobileLayout, mobileDialogOpen, showExpandedComposer]);
+
+  // 欄の外を押したら書き終えたものとして扱う。内容があれば一度だけ自動保存し、
+  // チェック欄の記号だけなら空の項目を作らず、書きかけを控えたまま畳めるようにする。
+  // A body saves once on outside click. A checklist marker alone stays a draft rather than
+  // creating an empty task, and the mobile backdrop uses the same save-or-preserve rule.
+  const dismissMobileComposer = useCallback(() => {
+    setIsComposePaletteOpen(false);
+    setIsMoreOpen(false);
+    if (hasBody) {
+      if (autoSubmittedBodyRef.current !== formState.ai_response) {
+        autoSubmittedBodyRef.current = formState.ai_response;
+        formRef.current?.requestSubmit();
+      }
+      return;
+    }
+
+    if (hasComposeDraft) {
+      setMobileDraftDismissed(true);
+      return;
+    }
+    setIsComposeExpanded(false);
+  }, [formState.ai_response, hasBody, hasComposeDraft, setIsComposeExpanded, setIsComposePaletteOpen]);
+
+  const rememberOpenTarget = (event: React.MouseEvent<HTMLElement>, target: "body" | "palette") => {
+    mobileReturnFocusRef.current = event.currentTarget;
+    mobileInitialFocusRef.current = target;
+    setMobileDraftDismissed(false);
+  };
+
+  const handleOpenText = (event: React.MouseEvent<HTMLButtonElement>) => {
+    rememberOpenTarget(event, "body");
+    setPreviewMode(false);
+    openTextComposer();
+  };
+
+  const handleOpenChecklist = (event: React.MouseEvent<HTMLButtonElement>) => {
+    rememberOpenTarget(event, "body");
+    setPreviewMode(false);
+    openChecklistComposer();
+  };
+
+  const handleOpenCollapsedPalette = (event: React.MouseEvent<HTMLButtonElement>) => {
+    rememberOpenTarget(event, "palette");
+    setIsMoreOpen(true);
+    openComposePalette();
+  };
+
+  const handleExpandedPaletteToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    rememberOpenTarget(event, "palette");
+    setIsMoreOpen(!isComposePaletteOpen);
+    openComposePalette();
+  };
+
+  const handleMoreToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const nextOpen = event.currentTarget.open;
+    setIsMoreOpen(nextOpen);
+    if (!nextOpen && isComposePaletteOpen) setIsComposePaletteOpen(false);
+  };
+
+  const getMobileInitialFocus = useCallback(() => {
+    if (mobileInitialFocusRef.current === "palette") {
+      return paletteTriggerRef.current ?? composeTextareaRef.current ?? titleRef.current;
+    }
+    return composeTextareaRef.current ?? titleRef.current ?? paletteTriggerRef.current;
+  }, [composeTextareaRef]);
+
+  const handleCloseComposer = () => {
+    setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
+    setPreviewMode(false);
+    setIsComposeExpanded(false);
+    setIsComposePaletteOpen(false);
+    setIsMoreOpen(false);
+    setMobileDraftDismissed(false);
+  };
 
   // タイトルで Enter を押したら保存ではなく本文へ進む（日本語変換の確定の Enter は除く）
   // Enter in the title moves on to the body instead of saving (except the Enter that confirms an IME conversion)
@@ -75,183 +235,245 @@ export function MemoComposer() {
     setPreviewMode(false);
     window.setTimeout(() => composeTextareaRef.current?.focus(), 0);
   };
-  return (
-          <section ref={sectionRef} id="memo-composer" className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
-            {!composeIsExpanded ? (
-              <div className="memo-quick-capture__collapsed" aria-label={t("memo.new")}>
-                <button
-                  type="button"
-                  className="memo-quick-capture__text-button"
-                  onClick={openTextComposer}
-                  aria-label={english ? "Create a text memo" : "テキストメモを作成"}
-                >
-                  <span>{english ? "Write a memo…" : "メモを入力..."}</span>
-                </button>
-                <div className="memo-quick-capture__shortcuts" role="toolbar" aria-label={english ? "New memo type" : "新しいメモの種類"}>
-                  <button
-                    type="button"
-                    className="memo-quick-capture__shortcut-btn"
-                    onClick={openChecklistComposer}
-                    aria-label={english ? "Create a checklist" : "チェックリストを作成"}
-                    data-tooltip={english ? "Checklist" : "チェックリスト"}
-                    data-tooltip-placement="top"
-                  >
-                    <i className="bi bi-check2-square" aria-hidden="true"></i>
-                  </button>
-                  <button
-                    type="button"
-                    className="memo-quick-capture__shortcut-btn"
-                    onClick={openComposePalette}
-                    aria-label={english ? "Choose a color" : "色を選択"}
-                    data-tooltip={english ? "Choose a color" : "色を選択"}
-                    data-tooltip-placement="top"
-                  >
-                    <i className="bi bi-palette" aria-hidden="true"></i>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form
-                ref={formRef}
-                method="post"
-                className="memo-form memo-form--quick"
-                onSubmit={handleSubmitMemo}
-                style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
+
+  const renderCollapsedComposer = () => (
+    <div className="memo-quick-capture__collapsed" aria-label={t("memo.new")}>
+      <button
+        ref={collapsedTextButtonRef}
+        type="button"
+        className="memo-quick-capture__text-button"
+        onClick={handleOpenText}
+        aria-label={english ? "Create a text memo" : "テキストメモを作成"}
+      >
+        <span>{english ? "Write a memo…" : "メモを入力..."}</span>
+      </button>
+      <div className="memo-quick-capture__shortcuts" role="toolbar" aria-label={english ? "New memo type" : "新しいメモの種類"}>
+        <button
+          type="button"
+          className="memo-quick-capture__shortcut-btn"
+          onClick={handleOpenChecklist}
+          aria-label={english ? "Create a checklist" : "チェックリストを作成"}
+          data-tooltip={english ? "Checklist" : "チェックリスト"}
+          data-tooltip-placement="top"
+        >
+          <i className="bi bi-check2-square" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          className="memo-quick-capture__shortcut-btn"
+          onClick={handleOpenCollapsedPalette}
+          aria-label={english ? "Choose a color" : "色を選択"}
+          data-tooltip={english ? "Choose a color" : "色を選択"}
+          data-tooltip-placement="top"
+        >
+          <i className="bi bi-palette" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderExpandedComposer = (sectionId: string, mobile: boolean) => (
+    <form
+      ref={formRef}
+      method="post"
+      className="memo-form memo-form--quick"
+      onSubmit={handleSubmitMemo}
+      style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
+    >
+      <div className="memo-quick-capture__header">
+        <h2 id={`${sectionId}-title`} className="sr-only">{t("memo.new")}</h2>
+        <div className="form-group memo-quick-capture__title-group">
+          <label htmlFor={`${sectionId}-memo-title`} className="sr-only">{english ? "Title" : "タイトル"}</label>
+          <input
+            ref={titleRef}
+            id={`${sectionId}-memo-title`}
+            name="title"
+            data-agent-id="memo.title"
+            type="text"
+            className="memo-control memo-quick-capture__title-input"
+            value={formState.title}
+            onChange={handleFormChange}
+            onKeyDown={handleTitleKeyDown}
+            maxLength={255}
+            placeholder={english ? "Title" : "タイトル"}
+            autoFocus={!hasComposeDraft && !mobile}
+          />
+        </div>
+
+        <div className="memo-response-header memo-quick-capture__response-header">
+          <label htmlFor={`${sectionId}-memo-response`} className="sr-only">{english ? "Content" : "本文"}</label>
+          <div className="memo-response-tabs">
+            <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
+              <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
+            </button>
+            <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
+              <i className="bi bi-eye" aria-hidden="true"></i>{english ? "Preview" : "プレビュー"}
+            </button>
+          </div>
+        </div>
+
+        <details
+          className="memo-quick-capture__more"
+          open={isMoreOpen || isComposePaletteOpen}
+          onToggle={handleMoreToggle}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.defaultPrevented || !event.currentTarget.open) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setIsMoreOpen(false);
+            setIsComposePaletteOpen(false);
+            event.currentTarget.querySelector("summary")?.focus();
+          }}
+        >
+          <summary>{t("memo.other")}</summary>
+          <div className="memo-quick-capture__more-panel">
+            <div className="memo-quick-capture__bottom-row">
+              {collections.length > 0 && (
+                <MemoSelect
+                  id={`${sectionId}-collection`}
+                  className="memo-select--quick"
+                  value={String(formState.collection_id ?? "")}
+                  onChange={(value) => setFormState((prev) => ({ ...prev, collection_id: value === "" ? null : Number(value) }))}
+                  options={[
+                    { value: "", label: english ? "No collection" : "コレクションなし" },
+                    ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
+                  ]}
+                />
+              )}
+              <button
+                type="button"
+                className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
+                onClick={() => { void handleAiSuggest(); }}
+                disabled={aiSuggesting || !formState.ai_response.trim()}
+                data-tooltip={english ? "Suggest a title with AI" : "AIがタイトルを提案"}
+                data-tooltip-placement="top"
               >
-                <div className="form-group">
-                  <label htmlFor="title" className="sr-only">{english ? "Title" : "タイトル"}</label>
-                  <input
-                    id="title"
-                    name="title"
-                    data-agent-id="memo.title"
-                    type="text"
-                    className="memo-control memo-quick-capture__title-input"
-                    value={formState.title}
-                    onChange={handleFormChange}
-                    onKeyDown={handleTitleKeyDown}
-                    maxLength={255}
-                    placeholder={english ? "Title" : "タイトル"}
-                    autoFocus={!hasComposeDraft}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div className="memo-response-header memo-quick-capture__response-header">
-                    <label htmlFor="ai_response" className="sr-only">{english ? "Content" : "本文"}</label>
-                    <div className="memo-response-tabs">
-                      <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
-                        <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
+                {aiSuggesting
+                  ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{english ? "Suggesting…" : "提案中..."}</>
+                  : <><i className="bi bi-stars" aria-hidden="true"></i>{english ? "AI title" : "AIタイトル"}</>}
+              </button>
+              <div className="memo-compose-palette">
+                <button
+                  ref={paletteTriggerRef}
+                  type="button"
+                  className={`memo-compose-palette__trigger${isComposePaletteOpen ? " is-active" : ""}`}
+                  onClick={handleExpandedPaletteToggle}
+                  aria-label={english ? "Choose a color" : "色を選択"}
+                  aria-expanded={isComposePaletteOpen}
+                  data-tooltip={english ? "Choose a color" : "色を選択"}
+                  data-tooltip-placement="top"
+                >
+                  <i className="bi bi-palette" aria-hidden="true"></i>
+                </button>
+                {isComposePaletteOpen && (
+                  <div className="memo-compose-palette__menu" role="listbox" aria-label={english ? "Memo background color" : "メモの背景色"}>
+                    {MEMO_COLOR_OPTIONS.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        className={`memo-compose-palette__option${(formState.background_color || "") === option.value ? " is-active" : ""}`}
+                        style={{ "--palette-color": option.color } as React.CSSProperties}
+                        onClick={() => {
+                          setFormState((prev) => ({ ...prev, background_color: option.value || null }));
+                          setIsComposePaletteOpen(false);
+                          setIsMoreOpen(false);
+                        }}
+                        role="option"
+                        aria-selected={(formState.background_color || "") === option.value}
+                      >
+                        <span className={`memo-compose-palette__swatch${option.value ? "" : " memo-compose-palette__swatch--empty"}`}></span>
+                        <span>{t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}</span>
                       </button>
-                      <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
-                        <i className="bi bi-eye" aria-hidden="true"></i>{english ? "Preview" : "プレビュー"}
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                  {previewMode ? (
-                    <div className="memo-preview-pane">
-                      {formState.ai_response.trim()
-                        ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
-                        : <p className="memo-preview-empty">{english ? "There is no text to preview." : "プレビューするテキストがありません。"}</p>}
-                    </div>
-                  ) : (
-                    <textarea
-                      id="ai_response"
-                      name="ai_response"
-                      data-agent-id="memo.ai-response"
-                      ref={composeTextareaRef}
-                      data-memo-editor=""
-                      className="memo-control memo-control--response"
-                      value={formState.ai_response}
-                      onChange={handleFormChange}
-                      placeholder={english ? "Write a memo…" : "メモを入力..."}
-                      rows={1}
-                      required
-                    />
-                  )}
-                  {!previewMode && <MemoFormatToolbar textareaRef={composeTextareaRef} />}
-                </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
 
-                <div className="memo-quick-capture__bottom-row">
-                  {collections.length > 0 && (
-                    <MemoSelect
-                      id="compose_collection"
-                      className="memo-select--quick"
-                      value={String(formState.collection_id ?? "")}
-                      onChange={(v) => setFormState((prev) => ({ ...prev, collection_id: v === "" ? null : Number(v) }))}
-                      options={[
-                        { value: "", label: english ? "No collection" : "コレクションなし" },
-                        ...collections.map((c) => ({ value: String(c.id), label: c.name })),
-                      ]}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
-                    onClick={() => { void handleAiSuggest(); }}
-                    disabled={aiSuggesting || !formState.ai_response.trim()}
-                    data-tooltip={english ? "Suggest a title with AI" : "AIがタイトルを提案"}
-                    data-tooltip-placement="top"
-                  >
-                    {aiSuggesting
-                      ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{english ? "Suggesting…" : "提案中..."}</>
-                      : <><i className="bi bi-stars" aria-hidden="true"></i>{english ? "AI title" : "AIタイトル"}</>}
-                  </button>
-                  <div className="memo-compose-palette">
-                    <button
-                      type="button"
-                      className={`memo-compose-palette__trigger${isComposePaletteOpen ? " is-active" : ""}`}
-                      onClick={openComposePalette}
-                      aria-label={english ? "Choose a color" : "色を選択"}
-                      aria-expanded={isComposePaletteOpen}
-                      data-tooltip={english ? "Choose a color" : "色を選択"}
-                      data-tooltip-placement="top"
-                    >
-                      <i className="bi bi-palette" aria-hidden="true"></i>
-                    </button>
-                    {isComposePaletteOpen && (
-                      <div className="memo-compose-palette__menu" role="listbox" aria-label={english ? "Memo background color" : "メモの背景色"}>
-                        {MEMO_COLOR_OPTIONS.map((option) => (
-                          <button
-                            key={option.label}
-                            type="button"
-                            className={`memo-compose-palette__option${(formState.background_color || "") === option.value ? " is-active" : ""}`}
-                            style={{ "--palette-color": option.color } as React.CSSProperties}
-                            onClick={() => {
-                              setFormState((prev) => ({ ...prev, background_color: option.value || null }));
-                              setIsComposePaletteOpen(false);
-                            }}
-                            role="option"
-                            aria-selected={(formState.background_color || "") === option.value}
-                          >
-                            <span className={`memo-compose-palette__swatch${option.value ? "" : " memo-compose-palette__swatch--empty"}`}></span>
-                            <span>{t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="memo-quick-capture__actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => {
-                        setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-                        setPreviewMode(false);
-                        setIsComposeExpanded(false);
-                        setIsComposePaletteOpen(false);
-                      }}
-                      disabled={submitting}
-                    >
-                      {t("common.close")}
-                    </button>
-                    <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting}>
-                      <i className="bi bi-check2" aria-hidden="true"></i>
-                      {english ? "Done" : "完了"}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
-          </section>
+      <div className="memo-quick-capture__body">
+        <div className="memo-quick-capture__editor">
+          {previewMode ? (
+            <div className="memo-preview-pane">
+              {formState.ai_response.trim()
+                ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
+                : <p className="memo-preview-empty">{english ? "There is no text to preview." : "プレビューするテキストがありません。"}</p>}
+            </div>
+          ) : (
+            <textarea
+              id={`${sectionId}-memo-response`}
+              name="ai_response"
+              data-agent-id="memo.ai-response"
+              ref={composeTextareaRef}
+              data-memo-editor=""
+              className="memo-control memo-control--response"
+              value={formState.ai_response}
+              onChange={handleFormChange}
+              placeholder={english ? "Write a memo…" : "メモを入力..."}
+              rows={1}
+              required
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="memo-quick-capture__footer">
+        {!previewMode && (
+          <div className="memo-quick-capture__formatting">
+            <MemoFormatToolbar textareaRef={composeTextareaRef} />
+          </div>
+        )}
+        <div className="memo-quick-capture__actions">
+          <button type="button" className="secondary-button" onClick={handleCloseComposer} disabled={submitting}>
+            {t("common.close")}
+          </button>
+          <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting || !hasBody}>
+            <i className="bi bi-check2" aria-hidden="true"></i>
+            {english ? "Done" : "完了"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+
+  const renderSection = (options: { id: string; expanded: boolean; className?: string; hidden?: boolean }) => (
+    <section
+      id={options.id}
+      className={`memo-card memo-compose-panel memo-quick-capture${options.expanded ? " is-expanded" : ""}${options.className ? ` ${options.className}` : ""}`}
+      data-memo-composer-root=""
+      aria-hidden={options.hidden ? "true" : undefined}
+      inert={options.hidden}
+    >
+      {options.expanded ? renderExpandedComposer(options.id, options.id === "memo-composer-mobile") : renderCollapsedComposer()}
+    </section>
+  );
+
+  const inlineExpanded = composeIsExpanded && !isMobileLayout;
+  const inlineSection = renderSection({
+    id: "memo-composer",
+    expanded: inlineExpanded,
+    className: isMobileLayout ? "memo-quick-capture--mobile-trigger" : undefined,
+    hidden: mobileDialogOpen,
+  });
+
+  return (
+    <>
+      {inlineSection}
+      <ModalShell
+        isOpen={mobileDialogOpen}
+        onClose={dismissMobileComposer}
+        labelledBy="memo-composer-mobile-title"
+        className="memo-compose-mobile-modal"
+        style={viewportStyle}
+        dismissDisabled={submitting}
+        getInitialFocus={getMobileInitialFocus}
+      >
+        <div className="cc-modal__panel memo-compose-sheet">
+          {mobileDialogOpen && renderSection({ id: "memo-composer-mobile", expanded: true })}
+        </div>
+      </ModalShell>
+    </>
   );
 }
