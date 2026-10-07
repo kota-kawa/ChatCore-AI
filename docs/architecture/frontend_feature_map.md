@@ -35,6 +35,15 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 
 `pages/api/healthz.ts`、`robots.txt.tsx`、`sitemap.xml.tsx` はアプリ画面ではなく Next.js の運用・検索エンジン向けエントリーポイントです。
 
+## メモ本文の編集
+
+`components/memo/MemoEditor.tsx` は新規作成と詳細表示で共用する CodeMirror エディタです。
+Markdown 本文を正本にして、`lib/memo/live_preview.ts` が構文木から整形表示・記法の非表示・
+チェック欄・表やコードの描画を組み立てます。描画する HTML は既存のサニタイザーを通します。
+原文の切り替えは同じエディタの表示設定だけを変えるため、選択範囲と編集履歴を維持します。
+入力と書式操作、外部からの本文更新はエディタの transaction に反映し、保存や AI 編集の適用は
+既存の `hooks/memo_page/` と詳細モーダルが担当します。一覧・共有画面の表示は `MemoMarkdown` を使います。
+
 ## 共有ランタイムと API 層
 
 - `scripts/core/resilient_fetch.ts`: timeout、再試行、ネットワーク切り替え時のリクエストを吸収する一般 fetch 境界です。
