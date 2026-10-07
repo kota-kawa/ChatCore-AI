@@ -85,7 +85,7 @@ describe("useMemoPageDetail", () => {
     await act(async () => {
       await result.current.openMemoDetail(1);
     });
-    expect(result.current.detailPreviewMode).toBe(true);
+    expect(result.current.detailSourceMode).toBe(false);
 
     act(() => {
       result.current.closeMemoDetail();
@@ -99,7 +99,7 @@ describe("useMemoPageDetail", () => {
       await result.current.openMemoDetail(2);
     });
     expect(result.current.selectedMemo?.id).toBe(2);
-    expect(result.current.detailPreviewMode).toBe(false);
+    expect(result.current.detailSourceMode).toBe(false);
   });
 
   it("sends collection flags only when collections exist", async () => {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemoDetailModal } from "../components/memo/MemoDetailModal";
 import { MemoPageContextProvider } from "../contexts/memo_page/memo_page_context";
+import { changeMemoEditor, memoEditorValue } from "./memo_editor_harness";
 import { createMemoPageControllerStub } from "./memo_page_context_harness";
 
 vi.mock("../components/chat_page/MiniChat", () => ({
@@ -14,7 +15,7 @@ vi.mock("../components/chat_page/MiniChat", () => ({
 }));
 
 function DetailHarness() {
-  const [preview, setPreview] = useState(true);
+  const [source, setSource] = useState(false);
   const [body, setBody] = useState("保存済みの本文");
   const [agent, setAgent] = useState(false);
   const [color, setColor] = useState<string | null>(null);
@@ -24,8 +25,8 @@ function DetailHarness() {
     detailEditTitle: "確認用",
     detailEditAiResponse: body,
     setDetailEditAiResponse: setBody,
-    detailPreviewMode: preview,
-    setDetailPreviewMode: setPreview,
+    detailSourceMode: source,
+    setDetailSourceMode: setSource,
     isMemoAgentOpen: agent,
     setIsMemoAgentOpen: setAgent,
     openMemoAgent: async () => { setAgent(true); },
@@ -46,14 +47,14 @@ describe("memo detail on phones", () => {
 
   it("switches between memo and AI without losing either draft", async () => {
     render(<DetailHarness />);
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "内容" }), { target: { value: "未保存の手編集" } });
+    fireEvent.click(screen.getByRole("tab", { name: "メモ" }));
+    changeMemoEditor(screen.getByRole("textbox", { name: "内容" }), "未保存の手編集");
     fireEvent.click(screen.getByRole("tab", { name: "このメモについてAIに質問・編集" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "AI draft" })).toBeVisible());
     expect(screen.queryByRole("textbox", { name: "内容" })).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "AI draft" }), { target: { value: "質問の書きかけ" } });
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
-    expect(screen.getByRole("textbox", { name: "内容" })).toHaveValue("未保存の手編集");
+    fireEvent.click(screen.getByRole("tab", { name: "メモ" }));
+    expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
     expect(screen.queryByRole("textbox", { name: "AI draft" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "このメモについてAIに質問・編集" }));
     expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");

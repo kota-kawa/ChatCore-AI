@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
-// Memo editor: Markdown list editing on a plain textarea
+// Memo editor: Markdown list edits
 // ---------------------------------------------------------------------------
 
 // メモ本文は Markdown のテキストなので、リストの続きやチェックの切り替えは
 // 「どの範囲をどの文字列に置き換え、カーソルをどこへ置くか」という編集として表す。
-// ここは文字列だけを扱い、textarea への反映は lib/memo/textarea_edit.ts が行う。
+// ここは文字列だけを扱い、エディタへの反映は lib/memo/editor.ts が行う。
 // A memo body is Markdown text, so continuing a list or ticking a checkbox is expressed as
 // "replace this range with this text and put the caret here". This module only handles strings;
-// lib/memo/textarea_edit.ts applies the result to a textarea.
+// lib/memo/editor.ts applies the result to the editor.
 
 export interface TextEdit {
   start: number;

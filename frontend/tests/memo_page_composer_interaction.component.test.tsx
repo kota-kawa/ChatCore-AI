@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import type { KeyedMutator } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import { MemoPageContextProvider } from "../contexts/memo_page/memo_page_context
 import { useMemoPageComposer } from "../hooks/memo_page/use_memo_page_composer";
 import { createMemo } from "../lib/memo/api";
 import type { FlashState, MemoListState } from "../lib/memo/types";
+import { changeMemoEditor, memoEditor, memoEditorValue } from "./memo_editor_harness";
 import { createMemoPageControllerStub } from "./memo_page_context_harness";
 
 vi.mock("../lib/memo/api", () => ({
@@ -81,6 +82,31 @@ describe("MemoComposer interactions", () => {
     expect(createMemo).not.toHaveBeenCalled();
   });
 
+  it("focuses after the new checklist marker once the editor mounts", async () => {
+    render(<ComposerHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "チェックリストを作成" }));
+    const body = screen.getByRole("textbox", { name: "本文" });
+    await waitFor(() => expect(body).toHaveFocus());
+    expect(memoEditorValue(body)).toBe("- [ ] ");
+    await waitFor(() => expect(memoEditor(body).state.selection.main.head).toBe("- [ ] ".length));
+  });
+
+  it("does not replay a fulfilled body focus request after choosing a color", async () => {
+    render(<ComposerHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "テキストメモを作成" }));
+    const body = screen.getByRole("textbox", { name: "本文" });
+    await waitFor(() => expect(body).toHaveFocus());
+    changeMemoEditor(body, "本文の途中");
+    act(() => { memoEditor(body).dispatch({ selection: { anchor: 2 } }); });
+    fireEvent.click(screen.getByText("その他", { selector: "summary" }));
+    const palette = screen.getByRole("button", { name: "色を選択" });
+    palette.focus();
+    fireEvent.click(palette);
+    fireEvent.click(await screen.findByRole("option", { name: "レモン" }));
+    expect(body).not.toHaveFocus();
+    expect(memoEditor(body).state.selection.main.head).toBe(2);
+  });
+
   it("does not autosave an empty checklist marker, then saves once after text is entered", async () => {
     render(<ComposerHarness />);
 
@@ -89,7 +115,7 @@ describe("MemoComposer interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "outside" }));
     expect(createMemo).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "本文" }), { target: { value: "- [ ] 牛乳を買う" } });
+    changeMemoEditor(screen.getByRole("textbox", { name: "本文" }), "- [ ] 牛乳を買う");
     fireEvent.click(screen.getByRole("button", { name: "outside" }));
 
     await waitFor(() => expect(createMemo).toHaveBeenCalledTimes(1));
@@ -122,7 +148,7 @@ describe("MemoComposer interactions", () => {
       const dialog = document.querySelector<HTMLElement>(".memo-compose-mobile-modal");
       expect(dialog).toHaveClass("is-open");
       expect(dialog?.querySelector(".memo-compose-sheet .memo-quick-capture.is-expanded")).toBeInTheDocument();
-      expect(dialog?.querySelector("textarea")?.style.height).toBe("");
+      expect(dialog?.querySelector(".cm-content")).toHaveAttribute("contenteditable", "true");
 
       fireEvent.click(dialog!);
       await waitFor(() => expect(document.body.classList.contains("memo-compose-open")).toBe(false));
@@ -137,10 +163,10 @@ describe("MemoComposer interactions", () => {
       fireEvent.click(newFab);
       await waitFor(() => expect(document.querySelector(".memo-compose-mobile-modal")?.classList.contains("is-open")).toBe(true));
       const bodyInput = screen.getByRole("textbox", { name: "本文" });
-      expect(bodyInput).toHaveValue("- [ ] ");
+      expect(memoEditorValue(bodyInput)).toBe("- [ ] ");
       expect(createMemo).not.toHaveBeenCalled();
 
-      fireEvent.change(bodyInput, { target: { value: "- [ ] 牛乳を買う" } });
+      changeMemoEditor(bodyInput, "- [ ] 牛乳を買う");
       fireEvent.click(document.querySelector(".memo-compose-mobile-modal")!);
       await waitFor(() => expect(createMemo).toHaveBeenCalledTimes(1));
       expect(createMemo).toHaveBeenCalledWith(

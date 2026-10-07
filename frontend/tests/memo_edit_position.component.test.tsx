@@ -1,8 +1,8 @@
 import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { MemoMarkdown } from "../components/memo/MemoMarkdown";
-import { alignTextareaToClick, captureMemoEditPosition } from "../lib/memo/detail_edit_position";
+import { captureMemoEditPosition } from "../lib/memo/detail_edit_position";
 import { sourceOffsetAtCaret } from "../lib/memo/markdown_source_positions";
 
 function preview(source: string) {
@@ -87,22 +87,7 @@ describe("memo preview source positions", () => {
     const root = preview("文章");
     root.scrollTop = 350;
     const position = captureMemoEditPosition(root, "文章", 120, 80);
-    const textarea = document.createElement("textarea");
-    alignTextareaToClick(textarea, position);
-    expect(textarea.scrollTop).toBe(350);
+    expect(position.scrollTop).toBe(350);
     expect(position.offset).toBeNull();
-  });
-
-  it("aligns the measured wrapped line with the click and removes the mirror", () => {
-    const textarea = document.createElement("textarea");
-    textarea.value = "長い段落".repeat(200);
-    textarea.style.lineHeight = "24px";
-    Object.defineProperties(textarea, { clientWidth: { value: 420 }, clientHeight: { value: 400 } });
-    vi.spyOn(textarea, "getBoundingClientRect").mockReturnValue({ top: 100 } as DOMRect);
-    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{ top: 800, height: 20 }] as unknown as DOMRectList);
-    const childCount = document.body.childElementCount;
-    alignTextareaToClick(textarea, { offset: 600, clientY: 210, scrollTop: 100 });
-    expect(textarea.scrollTop).toBe(700);
-    expect(document.body.childElementCount).toBe(childCount);
   });
 });

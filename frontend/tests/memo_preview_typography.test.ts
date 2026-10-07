@@ -24,7 +24,7 @@ function lineHeightOf(selector: string) {
 // Preview and editor share one line-height so switching never shifts the lines of a plain memo
 test("the memo preview and the detail editor use the same line-height", () => {
   const preview = lineHeightOf(":where(body.memo-page, .memo-page-shell) .memo-preview-content");
-  const editor = lineHeightOf(".memo-modal .memo-modal__edit-textarea");
+  const editor = lineHeightOf(".memo-live-editor .cm-scroller");
   assert.equal(editor, preview);
   assert.match(
     ruleBody(":where(body.memo-page, .memo-page-shell) .memo-preview-content .memo-preserved-blank-line,\n:where(body.memo-page, .memo-page-shell) .memo-item__excerpt .memo-preserved-blank-line"),

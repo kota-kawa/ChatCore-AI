@@ -13,6 +13,16 @@ Save a useful AI response as a memo and give it a descriptive title. Memo text i
 
 Open recent memos to review or copy their contents. Check generated text before treating it as authoritative or forwarding it to others.
 
+## Edit a memo
+
+New memos and memo details use an editable formatted view. Markdown syntax appears only around
+formatted content containing the cursor. Toggle checklist boxes in place. Click a table or code block,
+or move the cursor into it with the keyboard, to edit its Markdown source.
+
+Use Source to view and edit the complete Markdown, and press it again to return to the formatted view.
+Switching preserves your cursor and undo history. Changes in memo details save automatically, with
+save status shown at the top. Use Done to save a new memo.
+
 ## Delete a memo and the trash
 
 Deleting a memo moves it to the trash without asking, and a notice with an Undo button appears at the bottom of the screen. The notice fades after a few seconds, but you can still restore the memo from the trash afterwards. Archiving, and the bulk actions that move memos to the trash or archive them, show the same Undo.

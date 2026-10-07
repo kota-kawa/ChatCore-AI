@@ -1625,9 +1625,9 @@ html[data-cc-auth="in"] .memo-guest-intro {
   overflow: auto;
 }
 
-/* 行間は編集面の textarea（.memo-modal__edit-textarea）と同じ値にそろえる。プレビューと編集を
+/* 行間はライブエディタ（.memo-live-editor .cm-scroller）と同じ値にそろえる。プレビューと編集を
    行き来したとき、見出しの無い普通のメモで行位置が一切動かないようにするため。
-   The line-height matches the editor textarea (.memo-modal__edit-textarea) so that switching
+   The line-height matches the live editor (.memo-live-editor .cm-scroller) so that switching
    between preview and edit never shifts the lines of a plain memo. */
 :where(body.memo-page, .memo-page-shell) .memo-preview-content {
   font-size: 1rem;
@@ -4935,20 +4935,6 @@ body.memo-page {
   min-height: 40px;
 }
 
-/* タイトルもクリックで編集に入る（マウス向けの近道）
-   The title also switches to its input on click (a mouse shortcut) */
-.memo-modal .memo-modal__title--editable {
-  cursor: text;
-}
-
-@media (hover: hover) {
-  .memo-modal .memo-modal__title--editable:hover {
-    text-decoration: underline dotted;
-    text-decoration-color: var(--modal-text-muted);
-    text-underline-offset: 0.2em;
-  }
-}
-
 /* font-size を変えるときは base/form_zoom_guard.css の書き戻しも同じ値に揃えること。
    Keep the write-back in base/form_zoom_guard.css in step when this font-size changes. */
 .memo-modal .memo-modal__title-input {
@@ -5173,8 +5159,7 @@ body.memo-page {
   padding-right: 0;
 }
 
-.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__edit-textarea,
-.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__preview-pane {
+.memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-live-editor .cm-content {
   padding-right: 1.25rem;
 }
 
@@ -5191,100 +5176,176 @@ body.memo-page {
   min-height: 0;
 }
 
-.memo-modal .memo-modal__edit-textarea {
-  flex: 1 1 auto;
-  width: 100%;
+/* One Markdown document owns both the formatted view and source mode. */
+.memo-live-editor {
+  min-width: 0;
   min-height: 0;
-  margin: 0;
-  padding: 0.25rem 0;
-  border: 0;
-  border-radius: 0;
+  color: var(--text-dark);
+}
+
+.memo-live-editor .cm-editor {
+  height: 100%;
   background: transparent;
-  box-shadow: none;
-  color: var(--modal-text);
-  font: inherit;
   font-size: 1rem;
-  /* .memo-preview-content と同じ値。memo_preview_typography.test.ts が一致を検証する
-     Same value as .memo-preview-content; memo_preview_typography.test.ts asserts they match */
+}
+
+.memo-live-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.memo-live-editor .cm-scroller {
+  overflow: auto;
+  font-family: inherit;
   line-height: 1.68;
-  resize: none;
-  /* base/global.css の :where(textarea) 既定は軌道に色が付く。プレビュー面と編集面で
-     スクロールバーの見た目が変わらないよう、ここで同じ指定に揃える。
-     The :where(textarea) default in base/global.css paints the track; match the preview
-     pane so the scrollbar does not change between reading and editing. */
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-/* プレビュー中は隠す（flex の指定が hidden 属性に勝たないよう明示する）
-   Hidden during the preview (explicit so the flex rules never beat the hidden attribute) */
-.memo-modal .memo-modal__edit-textarea[hidden] {
-  display: none;
-}
-
-.memo-modal .memo-modal__edit-textarea:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-.memo-modal .memo-modal__edit-textarea::placeholder {
-  color: var(--modal-text-muted);
-}
-
-.memo-modal .memo-modal__preview-pane {
-  flex: 1 1 auto;
-  min-height: 0;
+.memo-live-editor .cm-content {
+  min-height: 120px;
   padding: 0.25rem 0;
-  overflow-y: auto;
-  border: 0;
-  background: transparent;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+  caret-color: currentColor;
+  overflow-wrap: anywhere;
 }
 
-/* プレビュー面はクリック（Enter）でそのまま編集に入れる。読む面に見えたまま「触れる」ことが
-   分かるよう、text カーソルとホバー／フォーカス時のヒントだけで示し、面の見た目は変えない。
-   The preview switches to the editor on click (or Enter). It still reads as a document, so the
-   affordance is only a text cursor plus a hint on hover / focus; the surface itself is unchanged. */
-.memo-modal .memo-modal__preview-pane--editable {
-  border-radius: 8px;
-  cursor: text;
-  outline: none;
+.memo-live-editor .cm-line {
+  padding: 0;
 }
 
-.memo-modal .memo-modal__preview-pane--editable:focus-visible {
+.memo-live-editor .cm-placeholder {
+  color: var(--text-secondary);
 }
 
-.memo-modal .memo-modal__edit-hint {
-  position: absolute;
-  top: 0.35rem;
-  right: 1rem;
-  z-index: 1;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  background: var(--modal-surface-muted);
+.memo-live-editor--source .cm-scroller {
+  font-family: var(--font-mono, monospace);
+}
+
+.memo-modal .memo-live-editor {
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--modal-text);
+}
+
+.memo-modal .memo-live-editor .cm-content {
+  min-height: 100%;
+  padding-right: 1.25rem;
+}
+
+.memo-modal .memo-live-editor .cm-placeholder {
   color: var(--modal-text-muted);
-  font-size: 0.72rem;
-  line-height: 1.4;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
 }
 
-.memo-modal .memo-modal__edit-form:has(.memo-modal__preview-pane--editable:focus-visible) .memo-modal__edit-hint {
-  opacity: 1;
+.memo-form--quick .memo-live-editor .cm-scroller {
+  max-height: 520px;
 }
 
-@media (hover: hover) {
-  .memo-modal .memo-modal__edit-form:has(.memo-modal__preview-pane--editable:hover) .memo-modal__edit-hint {
-    opacity: 1;
+.memo-form--quick .memo-live-editor .cm-content {
+  padding: 0.55rem 1rem 0.85rem;
+}
+
+.memo-live-preview__heading {
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.memo-live-preview__heading--1 { font-size: 1.25rem; }
+.memo-live-preview__heading--2 { font-size: 1.125rem; }
+.memo-live-preview__heading--3 { font-size: 1rem; }
+.memo-live-preview__strong { font-weight: 700; }
+.memo-live-preview__emphasis { font-style: italic; }
+.memo-live-preview__strike { text-decoration: line-through; }
+
+.memo-live-preview__code {
+  padding: 0.1em 0.25em;
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  font-family: var(--font-mono, monospace);
+}
+
+.memo-live-preview__link {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.memo-modal .memo-live-preview__link {
+  color: var(--modal-accent);
+}
+
+.memo-live-preview__quote {
+  border-left: 3px solid var(--border-default);
+  padding-left: 0.75rem !important;
+  color: var(--text-secondary);
+}
+
+.memo-live-preview__task-target {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-target-min);
+  min-height: var(--tap-target-min);
+  margin: -0.4rem 0;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.memo-live-preview__checkbox {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--primary-color);
+}
+
+.memo-modal .memo-live-preview__checkbox {
+  accent-color: var(--modal-accent);
+}
+
+.memo-live-preview__rendered {
+  cursor: text;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.memo-live-preview__rendered pre {
+  padding: 0.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  white-space: pre;
+  font-family: monospace;
+}
+
+.memo-live-preview__rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
+.memo-modal__document-actions {
+  flex: 0 0 auto;
+  color: var(--modal-text-muted);
+  font-size: 0.8rem;
+}
+
+.memo-modal__panes {
+  display: contents;
+}
+
+.memo-modal__document-actions > summary {
+  min-height: var(--tap-target-min);
+  cursor: pointer;
+  align-content: center;
+}
+
+@media (max-width: 768px) {
+  .memo-compose-sheet .memo-live-editor,
+  .memo-compose-sheet .memo-live-editor .cm-editor {
+    height: 100%;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .memo-modal .memo-modal__edit-hint {
-    transition: none;
+  .memo-compose-sheet .memo-live-editor .cm-scroller {
+    max-height: none;
+  }
+  .memo-compose-sheet .memo-live-editor .cm-content {
+    min-height: 100%;
   }
 }
 
@@ -7343,8 +7404,7 @@ body.memo-page {
     padding: 0.5rem 1rem 0.75rem;
   }
 
-  .memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__edit-textarea,
-  .memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-modal__preview-pane {
+  .memo-modal .memo-modal__body:not(.memo-modal__body--with-agent) .memo-live-editor .cm-content {
     padding-right: 1rem;
   }
 

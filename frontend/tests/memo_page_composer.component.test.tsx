@@ -130,33 +130,6 @@ describe("useMemoPageComposer", () => {
     expect(result.current.formState.ai_response).toBe("abc\n- [ ] ");
   });
 
-  it("puts the caret after the inserted checklist marker", () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useComposerHarness());
-      const textarea = document.createElement("textarea");
-      document.body.append(textarea);
-      result.current.composeTextareaRef.current = textarea;
-
-      act(() => {
-        result.current.openChecklistComposer();
-      });
-      // 実画面では React が value を反映した後にタイマーが走る
-      // On the real page React has applied the value before the timer fires
-      textarea.value = result.current.formState.ai_response;
-      act(() => {
-        vi.runAllTimers();
-      });
-
-      expect(document.activeElement).toBe(textarea);
-      expect(textarea.selectionStart).toBe("- [ ] ".length);
-      expect(textarea.selectionEnd).toBe("- [ ] ".length);
-      textarea.remove();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("restores an unsaved draft after a remount and forgets it once saved", async () => {
     const first = renderHook(() => useComposerHarness());
     act(() => {

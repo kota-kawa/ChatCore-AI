@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
-import { isImeConfirmKey } from "../../lib/memo/textarea_edit";
-import { parseMemoText } from "../../lib/memo/utils";
+import { isImeConfirmKey } from "../../lib/memo/ime";
 import { MemoFormatToolbar } from "./MemoFormatToolbar";
-import { MemoMarkdown } from "./MemoMarkdown";
+import { MemoEditor } from "./MemoEditor";
 import { MemoSelect } from "./MemoSelect";
 import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
@@ -46,9 +45,10 @@ export function MemoComposer() {
     handleSubmitMemo,
     formState,
     handleFormChange,
-    previewMode,
-    setPreviewMode,
-    composeTextareaRef,
+    sourceMode,
+    setSourceMode,
+    composeEditorRef,
+    composeFocusRequest,
     setFormState,
     aiSuggesting,
     handleAiSuggest,
@@ -149,9 +149,9 @@ export function MemoComposer() {
       return;
     }
     if (!isMobileLayout && showExpandedComposer) {
-      composeTextareaRef.current?.focus({ preventScroll: true });
+      composeEditorRef.current?.focus();
     }
-  }, [composeTextareaRef, isMobileLayout, mobileDialogOpen, showExpandedComposer]);
+  }, [composeEditorRef, isMobileLayout, mobileDialogOpen, showExpandedComposer]);
 
   // 欄の外を押したら書き終えたものとして扱う。内容があれば一度だけ自動保存し、
   // チェック欄の記号だけなら空の項目を作らず、書きかけを控えたまま畳めるようにする。
@@ -183,13 +183,13 @@ export function MemoComposer() {
 
   const handleOpenText = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setPreviewMode(false);
+    setSourceMode(false);
     openTextComposer();
   };
 
   const handleOpenChecklist = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setPreviewMode(false);
+    setSourceMode(false);
     openChecklistComposer();
   };
 
@@ -213,14 +213,14 @@ export function MemoComposer() {
 
   const getMobileInitialFocus = useCallback(() => {
     if (mobileInitialFocusRef.current === "palette") {
-      return paletteTriggerRef.current ?? composeTextareaRef.current ?? titleRef.current;
+      return paletteTriggerRef.current ?? composeEditorRef.current?.contentDOM ?? titleRef.current;
     }
-    return composeTextareaRef.current ?? titleRef.current ?? paletteTriggerRef.current;
-  }, [composeTextareaRef]);
+    return composeEditorRef.current?.contentDOM ?? titleRef.current ?? paletteTriggerRef.current;
+  }, [composeEditorRef]);
 
   const handleCloseComposer = () => {
     setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-    setPreviewMode(false);
+    setSourceMode(false);
     setIsComposeExpanded(false);
     setIsComposePaletteOpen(false);
     setIsMoreOpen(false);
@@ -232,8 +232,7 @@ export function MemoComposer() {
   const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
-    setPreviewMode(false);
-    window.setTimeout(() => composeTextareaRef.current?.focus(), 0);
+    composeEditorRef.current?.focus();
   };
 
   const renderCollapsedComposer = () => (
@@ -302,14 +301,15 @@ export function MemoComposer() {
 
         <div className="memo-response-header memo-quick-capture__response-header">
           <label htmlFor={`${sectionId}-memo-response`} className="sr-only">{english ? "Content" : "本文"}</label>
-          <div className="memo-response-tabs">
-            <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
-              <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
-            </button>
-            <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
-              <i className="bi bi-eye" aria-hidden="true"></i>{english ? "Preview" : "プレビュー"}
-            </button>
-          </div>
+          <button
+            type="button"
+            className={`memo-response-tab${sourceMode ? " is-active" : ""}`}
+            aria-label={t("memo.markdownSource")}
+            aria-pressed={sourceMode}
+            onClick={() => { setSourceMode(!sourceMode); composeEditorRef.current?.focus(); }}
+          >
+            <i className="bi bi-code-slash" aria-hidden="true"></i>{t("memo.markdownSourceShort")}
+          </button>
         </div>
 
         <details
@@ -395,36 +395,24 @@ export function MemoComposer() {
 
       <div className="memo-quick-capture__body">
         <div className="memo-quick-capture__editor">
-          {previewMode ? (
-            <div className="memo-preview-pane">
-              {formState.ai_response.trim()
-                ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
-                : <p className="memo-preview-empty">{english ? "There is no text to preview." : "プレビューするテキストがありません。"}</p>}
-            </div>
-          ) : (
-            <textarea
-              id={`${sectionId}-memo-response`}
-              name="ai_response"
-              data-agent-id="memo.ai-response"
-              ref={composeTextareaRef}
-              data-memo-editor=""
-              className="memo-control memo-control--response"
-              value={formState.ai_response}
-              onChange={handleFormChange}
-              placeholder={english ? "Write a memo…" : "メモを入力..."}
-              rows={1}
-              required
-            />
-          )}
+          <MemoEditor
+            id={`${sectionId}-memo-response`}
+            agentId="memo.ai-response"
+            editorRef={composeEditorRef}
+            focusRequest={composeFocusRequest}
+            value={formState.ai_response}
+            onChange={(value) => setFormState((prev) => ({ ...prev, ai_response: value }))}
+            sourceMode={sourceMode}
+            label={english ? "Content" : "本文"}
+            placeholder={english ? "Write a memo…" : "メモを入力..."}
+          />
         </div>
       </div>
 
       <div className="memo-quick-capture__footer">
-        {!previewMode && (
-          <div className="memo-quick-capture__formatting">
-            <MemoFormatToolbar textareaRef={composeTextareaRef} />
-          </div>
-        )}
+        <div className="memo-quick-capture__formatting">
+          <MemoFormatToolbar editorRef={composeEditorRef} />
+        </div>
         <div className="memo-quick-capture__actions">
           <button type="button" className="secondary-button" onClick={handleCloseComposer} disabled={submitting}>
             {t("common.close")}

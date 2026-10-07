@@ -200,7 +200,7 @@ describe("MemoComposer outside click", () => {
 describe("MemoDetailModal actions while reading", () => {
   const memo: MemoDetail = { id: 3, title: "旅行", ai_response: "本文", is_pinned: true };
 
-  function renderDetail(previewMode: boolean) {
+  function renderDetail(sourceMode: boolean) {
     const handlers = {
       handleTogglePin: vi.fn(async () => undefined),
       handleToggleArchive: vi.fn(async () => undefined),
@@ -210,7 +210,7 @@ describe("MemoDetailModal actions while reading", () => {
     };
     const controller = createMemoPageControllerStub({
       selectedMemo: memo,
-      detailPreviewMode: previewMode,
+      detailSourceMode: sourceMode,
       detailEditTitle: "旅行",
       detailEditAiResponse: "本文",
       detailSaveStatus: "saved",
@@ -226,6 +226,7 @@ describe("MemoDetailModal actions while reading", () => {
 
   it("offers pin, archive, share and delete for the open memo", async () => {
     const handlers = renderDetail(true);
+    fireEvent.click(screen.getByText("操作", { selector: "summary" }));
     const toolbar = screen.getByRole("toolbar", { name: "操作" });
     expect(toolbar).not.toBeNull();
 
@@ -245,9 +246,9 @@ describe("MemoDetailModal actions while reading", () => {
     expect(handlers.handleDeleteMemo).toHaveBeenCalledWith(memo);
   });
 
-  it("gives the slot to the formatting toolbar while editing", () => {
-    renderDetail(false);
-    expect(screen.queryByRole("toolbar", { name: "操作" })).toBeNull();
+  it("keeps formatting available in source mode", () => {
+    renderDetail(true);
+    expect(screen.getByText("操作", { selector: "summary" }).parentElement).not.toHaveAttribute("open");
     expect(screen.queryByRole("toolbar", { name: "書式" })).not.toBeNull();
   });
 });
