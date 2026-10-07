@@ -7759,40 +7759,20 @@ body.memo-page {
   }
 
   .memo-modal .memo-modal__agent-panel {
-    flex: 0 0 clamp(96px, 45%, 240px);
+    flex: 0 0 clamp(128px, 55%, 340px);
     min-height: 0;
     width: 100%;
     order: 0;
   }
 
-  /* ヘッダーのチャコボタンで開閉できるため、本文の横に重複する見出しを置かない。
-     The main header already toggles Chaco; keep this compact area for the conversation. */
   .memo-modal .memo-modal__agent-header {
-    display: none;
-  }
-
-  .memo-modal .memo-modal__agent-panel .mini-chat-input-area {
+    min-height: var(--tap-target-min);
     padding: 0.25rem 0.5rem;
   }
 
-  .memo-modal .memo-modal__agent-panel .mini-chat-messages {
-    padding: 0.5rem;
-  }
-
-  .memo-modal .memo-modal__agent-panel .mini-chat-placeholder {
-    min-height: 0;
-    padding: 0;
-  }
-
-  .memo-modal .memo-modal__agent-panel .mini-chat-robot-icon,
-  .memo-modal .memo-modal__agent-panel .mini-chat-placeholder > strong,
-  .memo-modal .memo-modal__agent-panel .mini-chat-placeholder > p {
+  .memo-modal .memo-modal__agent-header-icon,
+  .memo-modal .memo-modal__agent-label {
     display: none;
-  }
-
-  .memo-modal .memo-modal__agent-panel .mini-chat-suggestions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-width: none;
   }
 
   .memo-collection-modal .memo-collection-modal__body {
