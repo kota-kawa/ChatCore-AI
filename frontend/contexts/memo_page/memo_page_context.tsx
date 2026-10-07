@@ -59,14 +59,15 @@ type MemoPageComposerContextValue = Pick<
   MemoPageControllerState,
   | "formState"
   | "setFormState"
-  | "previewMode"
-  | "setPreviewMode"
+  | "sourceMode"
+  | "setSourceMode"
   | "submitting"
   | "aiSuggesting"
   | "isComposePaletteOpen"
   | "setIsComposePaletteOpen"
   | "setIsComposeExpanded"
-  | "composeTextareaRef"
+  | "composeEditorRef"
+  | "composeFocusRequest"
   | "handleFormChange"
   | "handleSubmitMemo"
   | "handleAiSuggest"
@@ -133,8 +134,8 @@ type MemoPageDetailContextValue = Pick<
   | "closeMemoDetail"
   | "detailEditBackgroundColor"
   | "setDetailEditBackgroundColor"
-  | "detailPreviewMode"
-  | "setDetailPreviewMode"
+  | "detailSourceMode"
+  | "setDetailSourceMode"
   | "detailEditTitle"
   | "setDetailEditTitle"
   | "detailEditCollectionId"
@@ -292,14 +293,15 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
     () => ({
       formState: controller.formState,
       setFormState: controller.setFormState,
-      previewMode: controller.previewMode,
-      setPreviewMode: controller.setPreviewMode,
+      sourceMode: controller.sourceMode,
+      setSourceMode: controller.setSourceMode,
       submitting: controller.submitting,
       aiSuggesting: controller.aiSuggesting,
       isComposePaletteOpen: controller.isComposePaletteOpen,
       setIsComposePaletteOpen: controller.setIsComposePaletteOpen,
       setIsComposeExpanded: controller.setIsComposeExpanded,
-      composeTextareaRef: controller.composeTextareaRef,
+      composeEditorRef: controller.composeEditorRef,
+      composeFocusRequest: controller.composeFocusRequest,
       handleFormChange: controller.handleFormChange,
       handleSubmitMemo: controller.handleSubmitMemo,
       handleAiSuggest: controller.handleAiSuggest,
@@ -312,14 +314,15 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
     [
       controller.formState,
       controller.setFormState,
-      controller.previewMode,
-      controller.setPreviewMode,
+      controller.sourceMode,
+      controller.setSourceMode,
       controller.submitting,
       controller.aiSuggesting,
       controller.isComposePaletteOpen,
       controller.setIsComposePaletteOpen,
       controller.setIsComposeExpanded,
-      controller.composeTextareaRef,
+      controller.composeEditorRef,
+      controller.composeFocusRequest,
       controller.handleFormChange,
       controller.handleSubmitMemo,
       controller.handleAiSuggest,
@@ -427,8 +430,8 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       closeMemoDetail: controller.closeMemoDetail,
       detailEditBackgroundColor: controller.detailEditBackgroundColor,
       setDetailEditBackgroundColor: controller.setDetailEditBackgroundColor,
-      detailPreviewMode: controller.detailPreviewMode,
-      setDetailPreviewMode: controller.setDetailPreviewMode,
+      detailSourceMode: controller.detailSourceMode,
+      setDetailSourceMode: controller.setDetailSourceMode,
       detailEditTitle: controller.detailEditTitle,
       setDetailEditTitle: controller.setDetailEditTitle,
       detailEditCollectionId: controller.detailEditCollectionId,
@@ -451,8 +454,8 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
       controller.closeMemoDetail,
       controller.detailEditBackgroundColor,
       controller.setDetailEditBackgroundColor,
-      controller.detailPreviewMode,
-      controller.setDetailPreviewMode,
+      controller.detailSourceMode,
+      controller.setDetailSourceMode,
       controller.detailEditTitle,
       controller.setDetailEditTitle,
       controller.detailEditCollectionId,

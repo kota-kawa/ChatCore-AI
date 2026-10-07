@@ -16,6 +16,7 @@ import { showConfirmModal } from "../../scripts/core/alert_modal";
 import type { Locale } from "../i18n/config";
 import { readMemoEditStep, type MemoEditPayload } from "../memo/agent_edits";
 import { miniChatCopy } from "./mini_chat_copy";
+import { memoEditorViews } from "../memo/editor";
 
 // アクション実行中の進捗状態を追跡する型定義
 // Tracks which step is currently running and which steps have already completed
@@ -474,10 +475,15 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-// セレクタで指定した input/textarea に値を設定し、結果を返す
-// Sets a value on the matched input or textarea and returns whether it was applied
+// Sets a value on an input, textarea, or registered memo editor.
 function setInputValue(selector: string, value: string, locale: Locale): StepExecutionResult {
-  const el = getElement<HTMLInputElement | HTMLTextAreaElement>(selector);
+  const el = getElement<HTMLElement>(selector);
+  const editor = el ? memoEditorViews.get(el) : undefined;
+  if (editor) {
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value }, userEvent: "input" });
+    const ok = editor.state.doc.toString() === value.replace(/\r\n?/g, "\n");
+    return { ok, message: ok ? undefined : miniChatCopy(locale, "inputApplyFailed", { target: selector }) };
+  }
   if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) {
     return { ok: false, message: miniChatCopy(locale, "inputMissing", { target: selector }) };
   }
@@ -637,9 +643,11 @@ async function verifyStep(step: ActionStep, locale: Locale): Promise<StepExecuti
   }
 
   if (step.action === "input" && step.selector) {
-    const el = getElement<HTMLInputElement | HTMLTextAreaElement>(step.selector);
+    const el = getElement<HTMLElement>(step.selector);
     const expected = step.value ?? "";
-    return { ok: Boolean(el && "value" in el && el.value === expected), message: miniChatCopy(locale, "inputNotVerified", { target: step.selector }) };
+    const editor = el ? memoEditorViews.get(el) : undefined;
+    const ok = editor ? editor.state.doc.toString() === expected.replace(/\r\n?/g, "\n") : Boolean(el && "value" in el && el.value === expected);
+    return { ok, message: miniChatCopy(locale, "inputNotVerified", { target: step.selector }) };
   }
   if (step.action === "select" && step.selector) {
     const el = getElement<HTMLSelectElement>(step.selector);

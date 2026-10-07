@@ -1,9 +1,10 @@
 import type { MouseEvent, RefObject } from "react";
+import type { EditorView } from "@codemirror/view";
 
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 import { indentLines, toggleLineFormat, type MemoLineFormat, type TextEdit } from "../../lib/memo/list_editing";
-import { applyTextEdit } from "../../lib/memo/textarea_edit";
+import { applyMemoEditorEdit } from "../../lib/memo/editor";
 
 // ── Memo body formatting toolbar ──
 // 記号を手で打たずに、カーソルのある行（選択中の行）へリストや見出しを付け外しする。
@@ -30,14 +31,15 @@ const FORMAT_ACTIONS: FormatAction[] = [
 
 const keepEditorFocus = (event: MouseEvent) => event.preventDefault();
 
-export function MemoFormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaElement | null> }) {
+export function MemoFormatToolbar({ editorRef }: { editorRef: RefObject<EditorView | null> }) {
   const { t } = useTranslation();
   const run = (action: FormatAction) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const edit = action.edit(textarea.value, textarea.selectionStart, textarea.selectionEnd);
-    if (edit) applyTextEdit(textarea, edit);
-    else textarea.focus({ preventScroll: true });
+    const editor = editorRef.current;
+    if (!editor) return;
+    const { from, to } = editor.state.selection.main;
+    const edit = action.edit(editor.state.doc.toString(), from, to);
+    if (edit) applyMemoEditorEdit(editor, edit);
+    else editor.focus();
   };
   return (
     <div className="memo-format-toolbar" role="toolbar" aria-label={t("memo.format.toolbar")}>

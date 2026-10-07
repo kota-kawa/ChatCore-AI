@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoDetailModal } from "../components/memo/MemoDetailModal";
 import { MemoMarkdown } from "../components/memo/MemoMarkdown";
 import { MemoPageContextProvider } from "../contexts/memo_page/memo_page_context";
-import { useMemoListContinuation } from "../hooks/memo_page/use_memo_list_continuation";
 import { useMemoPageItemActions } from "../hooks/memo_page/use_memo_page_item_actions";
 import { loadMemoDetail, updateMemo } from "../lib/memo/api";
 import type { MemoDetail, MemoListState, MemoSummary } from "../lib/memo/types";
+import { memoEditor, memoEditorValue } from "./memo_editor_harness";
 import { createMemoPageControllerStub } from "./memo_page_context_harness";
 
 vi.mock("../components/chat_page/MiniChat", () => ({ MiniChat: () => null }));
@@ -73,13 +73,13 @@ describe("MemoMarkdown checklists and links", () => {
 const memo: MemoDetail = { id: 1, title: "旅行", ai_response: CHECKLIST };
 
 function DetailHarness() {
-  const [detailPreviewMode, setDetailPreviewMode] = useState(true);
+  const [detailSourceMode, setDetailSourceMode] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("旅行");
   const [detailEditAiResponse, setDetailEditAiResponse] = useState(CHECKLIST);
   const controller = createMemoPageControllerStub({
     selectedMemo: memo,
-    detailPreviewMode,
-    setDetailPreviewMode,
+    detailSourceMode,
+    setDetailSourceMode,
     detailEditTitle,
     setDetailEditTitle,
     detailEditAiResponse,
@@ -93,100 +93,50 @@ function DetailHarness() {
   );
 }
 
-function bodyTextarea() {
-  return document.getElementById("memo-detail-ai-response") as HTMLTextAreaElement;
+function bodyEditor() {
+  return screen.getByRole("textbox", { name: "内容" });
 }
 
 describe("MemoDetailModal editing", () => {
-  it("ticks a checklist box in the preview without entering edit mode", () => {
+  it("ticks a checklist box in place", () => {
     render(<DetailHarness />);
-    fireEvent.click(boxes(screen.getByRole("tabpanel"))[0]);
-
-    expect(bodyTextarea().value).toBe(CHECKLIST.replace("- [ ] パスポート", "- [x] パスポート"));
-    expect(bodyTextarea().hidden).toBe(true);
-    expect(screen.queryByRole("tabpanel")).not.toBeNull();
+    fireEvent.click(boxes(bodyEditor())[0]);
+    expect(memoEditorValue(bodyEditor())).toBe(CHECKLIST.replace("- [ ] パスポート", "- [x] パスポート"));
+    expect(screen.getByRole("button", { name: "Markdown原文" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("keeps the same textarea across preview and edit so its caret and undo history survive", () => {
+  it("keeps the same editor and selection across source mode changes", () => {
     render(<DetailHarness />);
-    const textarea = bodyTextarea();
-    expect(textarea.hidden).toBe(true);
-
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
-    expect(bodyTextarea()).toBe(textarea);
-    expect(textarea.hidden).toBe(false);
-    textarea.setSelectionRange(4, 4);
-
-    fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
-    expect(bodyTextarea()).toBe(textarea);
-    expect(document.activeElement).toBe(textarea);
-    expect(textarea.selectionStart).toBe(4);
+    const element = bodyEditor();
+    const editor = memoEditor(element);
+    act(() => { editor.dispatch({ selection: { anchor: 4 } }); });
+    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    expect(bodyEditor()).toBe(element);
+    expect(memoEditor(bodyEditor())).toBe(editor);
+    expect(editor.state.selection.main.head).toBe(4);
   });
 
-  it("shows the formatting toolbar only while editing and formats the caret line", () => {
+  it("always offers formatting and applies it to the caret line", () => {
     render(<DetailHarness />);
-    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
-    const textarea = bodyTextarea();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    expect(screen.getByRole("toolbar", { name: "書式" })).toBeVisible();
+    const editor = memoEditor(bodyEditor());
+    act(() => { editor.dispatch({ selection: { anchor: editor.state.doc.length } }); });
     fireEvent.click(screen.getByRole("button", { name: "箇条書き" }));
-    expect(textarea.value.endsWith("- [本](https://example.com/books)")).toBe(true);
-    expect(document.activeElement).toBe(textarea);
+    expect(editor.state.doc.toString().endsWith("- [本](https://example.com/books)")).toBe(true);
+    expect(document.activeElement).toBe(bodyEditor());
   });
 
-  it("moves from the title to the body on Enter, but not while an IME is composing", () => {
+  it("moves from the title to the body on Enter, except during IME confirmation", () => {
     render(<DetailHarness />);
-    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
     const title = screen.getByRole("textbox", { name: "タイトル" });
     title.focus();
-
     fireEvent.keyDown(title, { key: "Enter", isComposing: true });
     expect(document.activeElement).toBe(title);
+    fireEvent.keyDown(title, { key: "Enter", keyCode: 229 });
+    expect(document.activeElement).toBe(title);
     fireEvent.keyDown(title, { key: "Enter" });
-    expect(document.activeElement).toBe(bodyTextarea());
-  });
-});
-
-function ContinuationHarness() {
-  useMemoListContinuation();
-  const [value, setValue] = useState("- [ ] 卵");
-  return (
-    <>
-      <textarea aria-label="memo" data-memo-editor="" value={value} onChange={(event) => setValue(event.target.value)} />
-      <textarea aria-label="other" defaultValue="- [ ] 卵" />
-    </>
-  );
-}
-
-function pressEnter(textarea: HTMLTextAreaElement, init: InputEventInit = {}) {
-  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  const event = new InputEvent("beforeinput", { inputType: "insertLineBreak", bubbles: true, cancelable: true, ...init });
-  act(() => {
-    textarea.dispatchEvent(event);
-  });
-  return event.defaultPrevented;
-}
-
-describe("useMemoListContinuation", () => {
-  it("continues the list in a memo editor and leaves other textareas alone", () => {
-    render(<ContinuationHarness />);
-    const editor = screen.getByRole("textbox", { name: "memo" }) as HTMLTextAreaElement;
-    expect(pressEnter(editor)).toBe(true);
-    expect(editor.value).toBe("- [ ] 卵\n- [ ] ");
-    expect(editor.selectionStart).toBe(editor.value.length);
-
-    const other = screen.getByRole("textbox", { name: "other" }) as HTMLTextAreaElement;
-    expect(pressEnter(other)).toBe(false);
-    expect(other.value).toBe("- [ ] 卵");
-  });
-
-  it("does not act on the Enter that confirms an IME conversion", () => {
-    render(<ContinuationHarness />);
-    const editor = screen.getByRole("textbox", { name: "memo" }) as HTMLTextAreaElement;
-    expect(pressEnter(editor, { isComposing: true })).toBe(false);
-    expect(editor.value).toBe("- [ ] 卵");
+    expect(document.activeElement).toBe(bodyEditor());
   });
 });
 

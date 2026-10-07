@@ -41,7 +41,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
   const [isMemoDetailClosing, setIsMemoDetailClosing] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
-  const [detailPreviewMode, setDetailPreviewMode] = useState(true);
+  const [detailSourceMode, setDetailSourceMode] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
   const [detailEditAiResponse, setDetailEditAiResponse] = useState("");
@@ -76,7 +76,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       detailAutoSaveTimerRef.current = null;
     }
     detailSaveSequenceRef.current += 1;
-    setDetailPreviewMode(true);
+    setDetailSourceMode(false);
     setDetailEditTitle("");
     setDetailEditCollectionId(null);
     setDetailEditAiResponse("");
@@ -174,7 +174,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     setIsMemoDetailClosing(false);
     setDetailError("");
     setDetailLoading(true);
-    setDetailPreviewMode(true);
+    setDetailSourceMode(false);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
     setIsMemoAgentOpen(false);
@@ -194,9 +194,7 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
       setDetailEditBackgroundColor(memo.background_color ?? null);
-      // 本文が空なら読むものが無いので、最初から書ける状態で開く
-      // An empty body has nothing to read, so open straight into the editor
-      setDetailPreviewMode(Boolean(memo.ai_response?.trim()));
+      setDetailSourceMode(false);
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
       return true;
@@ -413,8 +411,8 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     isMemoDetailClosing,
     detailLoading,
     detailError,
-    detailPreviewMode,
-    setDetailPreviewMode,
+    detailSourceMode,
+    setDetailSourceMode,
     detailEditTitle,
     setDetailEditTitle,
     detailEditCollectionId,

@@ -9,9 +9,9 @@ import {
   type SetStateAction,
 } from "react";
 import type { KeyedMutator } from "swr";
+import type { EditorView } from "@codemirror/view";
 
 import { useTranslation } from "../../contexts/locale_context";
-import { useMemoMobileLayout } from "./use_memo_viewport";
 import { createMemo, suggestMemoTitle } from "../../lib/memo/api";
 import { readMemoComposeDraft, writeMemoComposeDraft } from "../../lib/memo/compose_draft";
 import type { FlashState, MemoComposeFormState, MemoListState } from "../../lib/memo/types";
@@ -29,7 +29,6 @@ type UseMemoPageComposerParams = {
 // State and actions for the new-memo composer (quick capture)
 export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashState }: UseMemoPageComposerParams) {
   const { t } = useTranslation();
-  const isMobileLayout = useMemoMobileLayout();
 
   // Form state
   const [formState, setFormState] = useState<MemoComposeFormState>({
@@ -38,14 +37,15 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     collection_id: null,
     background_color: null,
   });
-  const [previewMode, setPreviewMode] = useState(false);
+  const [sourceMode, setSourceMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
 
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
-  const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composeEditorRef = useRef<EditorView | null>(null);
+  const [composeFocusRequest, setComposeFocusRequest] = useState(0);
 
   // 書きかけを端末から復元し、以後の変更を控える。持ち主が確認できるまでは読みも書きもしない。
   // 「読み込み済みの持ち主」は復元内容と同じ更新でまとめて反映されるので、書き込みは復元後の
@@ -69,20 +69,6 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     writeMemoComposeDraft(draftOwnerId, formState);
   }, [composeDraftLoadedFor, draftOwnerId, formState]);
 
-  // 新規メモ作成用テキストエリアの高さを自動調整する副作用
-  // Effect to automatically resize the textarea for new memo composition
-  useEffect(() => {
-    const el = composeTextareaRef.current;
-    if (!el) return;
-    if (isMobileLayout) {
-      el.style.removeProperty("height");
-      return;
-    }
-    el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, 520);
-    el.style.height = `${next}px`;
-  }, [formState.ai_response, isMobileLayout, previewMode, isComposeExpanded]);
-
   // フォーム入力の変更ハンドラー。入力値をローカルステートに反映する
   // Form input change handler. Reflects input values into local state
   const handleFormChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -103,7 +89,8 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     try {
       await createMemo(formState, t("memo.memoSaveFailed"));
       setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-      setPreviewMode(false);
+      setSourceMode(false);
+      setComposeFocusRequest(0);
       setIsComposeExpanded(false);
       setIsComposePaletteOpen(false);
       showFlash("success", t("memo.memoSaved"));
@@ -136,24 +123,19 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
 
   // 続きから書けるよう、カーソルは末尾に置く（チェックリストは挿入した「- [ ] 」の後ろになる）
   // Put the caret at the end so typing continues the text (after the inserted "- [ ] " for checklists)
-  const focusComposeTextarea = useCallback(() => {
-    window.setTimeout(() => {
-      const textarea = composeTextareaRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    }, 0);
+  const requestComposeFocus = useCallback(() => {
+    setComposeFocusRequest((request) => request + 1);
   }, []);
 
   const openTextComposer = useCallback(() => {
-    setPreviewMode(false);
+    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
-    focusComposeTextarea();
-  }, [focusComposeTextarea]);
+    requestComposeFocus();
+  }, [requestComposeFocus]);
 
   const openChecklistComposer = useCallback(() => {
-    setPreviewMode(false);
+    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
     setFormState((prev) => {
@@ -167,11 +149,12 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
           : nextChecklistLine,
       };
     });
-    focusComposeTextarea();
-  }, [focusComposeTextarea, t]);
+    requestComposeFocus();
+  }, [requestComposeFocus, t]);
 
   const openComposePalette = useCallback(() => {
-    setPreviewMode(false);
+    setComposeFocusRequest(0);
+    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen((open) => !open);
   }, []);
@@ -186,14 +169,15 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   return {
     formState,
     setFormState,
-    previewMode,
-    setPreviewMode,
+    sourceMode,
+    setSourceMode,
     submitting,
     aiSuggesting,
     isComposePaletteOpen,
     setIsComposePaletteOpen,
     setIsComposeExpanded,
-    composeTextareaRef,
+    composeEditorRef,
+    composeFocusRequest,
     handleFormChange,
     handleSubmitMemo,
     handleAiSuggest,

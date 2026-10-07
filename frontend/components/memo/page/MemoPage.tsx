@@ -18,7 +18,6 @@ import { MemoToolbar } from "../MemoToolbar";
 import { MyContextPanel } from "../MyContextPanel";
 import { MemoViewSwitcher } from "../MemoViewSwitcher";
 import { MemoPageContextProvider } from "../../../contexts/memo_page/memo_page_context";
-import { useMemoListContinuation } from "../../../hooks/memo_page/use_memo_list_continuation";
 import { useMemoPageController } from "../../../hooks/memo_page/use_memo_page_controller";
 import { memoPageDescription, memoStructuredData } from "../../../lib/memo/constants";
 
@@ -35,7 +34,6 @@ import { memoPageDescription, memoStructuredData } from "../../../lib/memo/const
 export default function MemoPage() {
   const { locale, t } = useTranslation();
   const controller = useMemoPageController();
-  useMemoListContinuation();
   const {
     isLoggedIn,
     authUiReady,

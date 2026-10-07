@@ -15,7 +15,7 @@ const globalCss = readFileSync(
   "utf8",
 );
 
-test("the memo detail modal omits the date and keeps the content switcher in the header", () => {
+test("the memo detail modal omits the date and keeps the source toggle in the header", () => {
   assert.doesNotMatch(memoDetailModal, /formatDateTime|memo-modal__date/);
 
   const headerActionsStart = memoDetailModal.indexOf("memo-modal__header-actions");
@@ -24,8 +24,8 @@ test("the memo detail modal omits the date and keeps the content switcher in the
   assert.ok(bodyStart > headerActionsStart, "the body must follow the header action row");
   assert.match(
     memoDetailModal.slice(headerActionsStart, bodyStart),
-    /memo-modal__tabs[\s\S]*role="tablist"/,
-    "edit and preview controls must live in the header action row",
+    /memo-modal__tabs[\s\S]*role="group"/,
+    "the source toggle must live in the header action row",
   );
   assert.doesNotMatch(
     memoDetailModal.slice(bodyStart),
@@ -124,24 +124,8 @@ test("the memo detail scrollbar sits on the panel edge like every other modal", 
   assert.ok(singlePanePadding, "the single-pane body must drop its right padding");
   assert.match(singlePanePadding[1], /padding-right:\s*0/);
 
-  for (const pane of ["memo-modal__edit-textarea", "memo-modal__preview-pane"]) {
-    assert.match(
-      memoCss,
-      new RegExp(
-        `\\.memo-modal__body:not\\(\\.memo-modal__body--with-agent\\) \\.${pane}[\\s\\S]*?padding-right:`,
-      ),
-      `the right padding must move onto .${pane}, which is what actually scrolls`,
-    );
-  }
-
-  // 読む面と書く面でバーの見た目が変わらないこと（textarea は global.css の既定だと軌道に色が付く）
-  // Reading and editing must show the same bar (the global.css textarea default paints the track)
-  const textareaRule = memoCss.match(/\.memo-modal \.memo-modal__edit-textarea\s*\{([\s\S]*?)\}/);
-  const previewRule = memoCss.match(/\.memo-modal \.memo-modal__preview-pane\s*\{([\s\S]*?)\}/);
-  assert.ok(textareaRule && previewRule, "both memo panes must be styled");
-  for (const rule of [textareaRule[1], previewRule[1]]) {
-    assert.match(rule, /scrollbar-color:\s*var\(--scrollbar-thumb\) transparent/);
-  }
+  assert.match(memoCss, /\.memo-modal__body:not\(\.memo-modal__body--with-agent\) \.memo-live-editor \.cm-content[\s\S]*?padding-right:/);
+  assert.match(memoCss, /\.memo-live-editor \.cm-scroller\s*\{[\s\S]*?scrollbar-color:\s*var\(--scrollbar-thumb\) transparent/);
 
   // エージェント面を縦積みにする幅では本文自身がスクロール側に変わるので、そこは溝を確保する
   // At the width that stacks the agent panel the body becomes the scroller, so it keeps a gutter
