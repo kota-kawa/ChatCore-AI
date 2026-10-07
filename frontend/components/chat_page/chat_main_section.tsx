@@ -709,6 +709,7 @@ function ChatMainSectionComponent() {
                 ref={chatInputRef}
                 id="user-input"
                 rows={1}
+                aria-describedby={chatInput.length > MAX_CHAT_MESSAGE_LENGTH ? "chat-input-error" : undefined}
                 placeholder={
                   isChatLaunching
                     ? (english ? "Preparing chat…" : "チャットを準備しています...")
@@ -746,13 +747,9 @@ function ChatMainSectionComponent() {
                 <div className="send-btn-spinner"></div>
               </button>
             </div>
-            {chatInput.length > 0 && (
-              // 文字数カウンターを表示し、上限超過時は赤色でエラー状態を知らせる。
-              // Show character counter; turns red to warn when the limit is exceeded.
-              <div className={`chat-input-counter${chatInput.length > MAX_CHAT_MESSAGE_LENGTH ? " chat-input-counter--over" : ""}`}>
-                {chatInput.length > MAX_CHAT_MESSAGE_LENGTH
-                  ? (english ? `Character limit exceeded (${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()})` : `文字数制限を超えています（${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字）`)
-                  : (english ? `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()} characters` : `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字`)}
+            {chatInput.length > MAX_CHAT_MESSAGE_LENGTH && (
+              <div id="chat-input-error" className="chat-input-error" role="alert">
+                {english ? "Character limit exceeded." : "文字数制限を超えています。"}
               </div>
             )}
           </div>
