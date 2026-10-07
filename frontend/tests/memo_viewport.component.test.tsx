@@ -100,6 +100,47 @@ afterEach(() => {
 });
 
 describe("useMemoViewport", () => {
+  it("preserves the editing surface while the visual viewport shrinks and pans", () => {
+    const input = document.createElement("textarea");
+    document.body.append(input);
+    input.focus();
+    const { result, unmount } = renderHook(() => useMemoViewport(true, true));
+    setVisualViewport({ height: 500, offsetTop: 60 });
+    dispatchViewportEvent(window, "resize");
+    flushFrames();
+    expect(cssValue(result.current, "--memo-surface-height")).toBe("844px");
+    expect(cssValue(result.current, "--memo-surface-inset")).toBe("344px");
+    expect(cssValue(result.current, "--memo-viewport-height")).toBe("500px");
+    expect(cssValue(result.current, "--memo-viewport-top")).toBe("60px");
+    unmount();
+    input.remove();
+  });
+
+  it("keeps the editing height when Android also shrinks the layout viewport", () => {
+    const input = document.createElement("textarea");
+    document.body.append(input);
+    input.focus();
+    const { result, unmount } = renderHook(() => useMemoViewport(true, true));
+    setInnerHeight(500);
+    setVisualViewport({ height: 500 });
+    dispatchViewportEvent(window, "resize");
+    flushFrames();
+    expect(cssValue(result.current, "--memo-surface-height")).toBe("844px");
+    expect(cssValue(result.current, "--memo-surface-inset")).toBe("344px");
+    input.blur();
+    dispatchViewportEvent(window, "resize");
+    flushFrames();
+    expect(cssValue(result.current, "--memo-surface-height")).toBe("844px");
+    setInnerHeight(844);
+    setVisualViewport();
+    dispatchViewportEvent(window, "resize");
+    flushFrames();
+    expect(cssValue(result.current, "--memo-surface-height")).toBe("844px");
+    expect(cssValue(result.current, "--memo-surface-inset")).toBe("0px");
+    unmount();
+    input.remove();
+  });
+
   it("uses the iOS visual height and calculates the keyboard inset", () => {
     setVisualViewport({ height: 500 });
     const { result } = renderHook(() => useMemoViewport(true));

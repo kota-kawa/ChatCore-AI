@@ -50,27 +50,15 @@ export function MemoDetailModal() {
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
   const editorRef = useRef<EditorView | null>(null);
 
-  const viewportStyle = useMemoViewport(isOpen);
   const isMobile = useMemoMobileLayout();
+  const viewportStyle = useMemoViewport(isOpen, isMobile);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const formatToolbarId = useId();
-  const [mobilePane, setMobilePane] = useState<{ memoId: string | number | undefined; agent: boolean }>({ memoId: undefined, agent: false });
-  const agentActive = isMemoAgentOpen && mobilePane.memoId === selectedMemo?.id && mobilePane.agent;
-  const showMemo = !isMobile || !agentActive;
-  const showAgent = !isMobile || agentActive;
-  const selectMemo = () => {
-    setMobilePane({ memoId: selectedMemo?.id, agent: false });
-  };
-  const toggleSource = () => {
-    selectMemo();
-    setDetailSourceMode(!detailSourceMode);
-    editorRef.current?.focus();
+  const selectDisplayMode = (source: boolean) => {
+    setDetailSourceMode(source);
   };
   const toggleAgent = () => {
-    if (isMobile) {
-      setMobilePane({ memoId: selectedMemo?.id, agent: !agentActive });
-      if (!isMemoAgentOpen) void openMemoAgent();
-    } else if (isMemoAgentOpen) setIsMemoAgentOpen(false);
+    if (isMemoAgentOpen) setIsMemoAgentOpen(false);
     else void openMemoAgent();
   };
 
@@ -78,9 +66,8 @@ export function MemoDetailModal() {
   const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
-    setMobilePane({ memoId: selectedMemo?.id, agent: false });
     editorRef.current?.focus();
-  }, [selectedMemo?.id]);
+  }, []);
 
   // 開いた直後はパネル自体へフォーカスし、操作ボタンを勝手に選ばない
   // Focus the panel itself on open instead of jumping to the first action button
@@ -156,41 +143,35 @@ export function MemoDetailModal() {
               <div className="cc-modal__tabs memo-modal__tabs" role="group" aria-label={t("memo.content")}>
                 <button
                   type="button"
+                  aria-pressed={!detailSourceMode}
+                  className={`cc-modal__tab${!detailSourceMode ? " is-active" : ""}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectDisplayMode(false)}
+                >
+                  <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.formattedView")}
+                </button>
+                <button
+                  type="button"
                   aria-pressed={detailSourceMode}
                   className={`cc-modal__tab${detailSourceMode ? " is-active" : ""}`}
-                  onClick={toggleSource}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectDisplayMode(true)}
                   aria-label={t("memo.markdownSource")}
-                  title={t("memo.markdownSource")}
                 >
                   <i className="bi bi-code-slash" aria-hidden="true"></i>{t("memo.markdownSourceShort")}
                 </button>
-                <div className="memo-modal__panes" role={isMobile ? "tablist" : undefined} aria-label={isMobile ? t("memo.content") : undefined}>
-                  {isMobile && (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={showMemo}
-                      className={`cc-modal__tab${showMemo ? " is-active" : ""}`}
-                      onClick={selectMemo}
-                    >
-                      <i className="bi bi-journal-text" aria-hidden="true"></i>{t("nav.memo")}
-                    </button>
-                  )}
-                  <button
-                  type="button"
-                  className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen && showAgent ? " is-active" : ""}`}
-                  onClick={toggleAgent}
-                  aria-label={!isMobile && isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                  role={isMobile ? "tab" : undefined}
-                  aria-selected={isMobile ? agentActive : undefined}
-                  aria-expanded={isMobile ? undefined : isMemoAgentOpen}
-                  data-tooltip={!isMobile && isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                  data-tooltip-placement="bottom"
-                  >
-                  <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
-                  </button>
-                </div>
               </div>
+              <button
+                type="button"
+                className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}
+                onClick={toggleAgent}
+                aria-label={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                aria-expanded={isMemoAgentOpen}
+                data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                data-tooltip-placement="bottom"
+              >
+                <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
+              </button>
               <CopyButton
                 onCopy={copyDetailFullText}
                 label={t("memo.copyFullText")}
@@ -219,7 +200,7 @@ export function MemoDetailModal() {
               {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
             </span>
           )}
-          {isMobile && showMemo && (
+          {isMobile && (
             <MemoFormatToggle
               open={formattingOpen}
               onToggle={() => setFormattingOpen((open) => !open)}
@@ -237,7 +218,7 @@ export function MemoDetailModal() {
           {!detailLoading && detailError && <div className="memo-modal__state">{detailError}</div>}
           {!detailLoading && selectedMemo && (
             <>
-              <section className="memo-modal__edit-form" aria-label={t("memo.content")} hidden={!showMemo}>
+              <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
                 <MemoEditor
                   key={selectedMemo.id}
                   editorRef={editorRef}
@@ -251,7 +232,7 @@ export function MemoDetailModal() {
                 <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={isMobile && !formattingOpen} />
               </section>
               {isMemoAgentOpen && (
-                <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")} hidden={!showAgent}>
+                <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>
                   <div className="memo-modal__agent-header">
                     <span className="memo-modal__agent-header-icon" aria-hidden="true">
                       <img src="/static/ChacoMemo.png" alt="" />

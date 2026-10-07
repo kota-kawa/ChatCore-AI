@@ -45,6 +45,25 @@ function DetailHarness({ body = BODY, agentOpen = false }: { body?: string; agen
 }
 
 describe("MemoDetailModal live editing", () => {
+  it("selects formatted or source display explicitly without starting text input", () => {
+    render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う"} />);
+    const source = screen.getByRole("button", { name: "Markdown原文" });
+    const formatted = screen.getByRole("button", { name: "整形表示" });
+    const editor = screen.getByRole("textbox", { name: "内容" });
+    expect(formatted).toHaveAttribute("aria-pressed", "true");
+    expect(source).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(source);
+    fireEvent.click(source);
+    expect(source).toHaveAttribute("aria-pressed", "true");
+    expect(formatted).toHaveAttribute("aria-pressed", "false");
+    expect(editor).not.toHaveFocus();
+    fireEvent.click(formatted);
+    expect(source).toHaveAttribute("aria-pressed", "false");
+    expect(formatted).toHaveAttribute("aria-pressed", "true");
+    expect(editor).not.toHaveFocus();
+    expect(memoEditorValue(editor)).toBe("# 買い物\n\n**牛乳**を買う");
+  });
+
   it("opens with an editable formatted document and a source toggle", () => {
     render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う"} />);
     expect(screen.getByRole("textbox", { name: "内容" })).toHaveAttribute("contenteditable", "true");

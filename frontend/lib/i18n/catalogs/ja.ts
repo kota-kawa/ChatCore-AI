@@ -500,6 +500,7 @@ export const jaMessages = {
   "memo.awaitingAutosave": "自動保存待ち",
   "memo.autosaveFailed": "自動保存に失敗しました",
   "memo.loadingMemo": "メモを読み込んでいます...",
+  "memo.formattedView": "整形表示",
   "memo.markdownSource": "Markdown原文",
   "memo.markdownSourceShort": "原文",
   "memo.format.toolbar": "書式",

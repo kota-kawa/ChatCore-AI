@@ -385,24 +385,6 @@ template.innerHTML = `
       }
     }
 
-    /* メモでも位置とサイズは共通のフローティングボタンに合わせる。
-       Memo navigation shares the floating position and size used elsewhere. */
-    :host([data-memo-page]) .actions-menu .btn--menu {
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-sm);
-      background: var(--surface-primary);
-      box-shadow: none;
-      animation: none !important;
-      transform: none;
-      filter: none;
-    }
-    :host([data-memo-page]) .btn--menu:after,
-    :host([data-memo-page]) .btn--menu:before,
-    :host([data-memo-page]) .btn--menu span {
-      width: 20px;
-      height: 2px;
-      background: var(--text-secondary);
-    }
   </style>
 
   <!-- チェックボックス（メニュー開閉用） -->

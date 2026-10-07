@@ -111,7 +111,7 @@ describe("MemoDetailModal editing", () => {
     const editor = memoEditor(element);
     act(() => { editor.dispatch({ selection: { anchor: 4 } }); });
     fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
-    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
     expect(bodyEditor()).toBe(element);
     expect(memoEditor(bodyEditor())).toBe(editor);
     expect(editor.state.selection.main.head).toBe(4);
