@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
 import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
@@ -9,7 +9,7 @@ import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { isImeConfirmKey } from "../../lib/memo/ime";
 import { MemoEditor } from "./MemoEditor";
-import { MemoFormatToolbar } from "./MemoFormatToolbar";
+import { MemoFormatToggle, MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoDetailOrganizeControls } from "./MemoDetailOrganizeControls";
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
@@ -52,6 +52,8 @@ export function MemoDetailModal() {
 
   const viewportStyle = useMemoViewport(isOpen);
   const isMobile = useMemoMobileLayout();
+  const [formattingOpen, setFormattingOpen] = useState(false);
+  const formatToolbarId = useId();
   const [mobilePane, setMobilePane] = useState<{ memoId: string | number | undefined; agent: boolean }>({ memoId: undefined, agent: false });
   const agentActive = isMemoAgentOpen && mobilePane.memoId === selectedMemo?.id && mobilePane.agent;
   const showMemo = !isMobile || !agentActive;
@@ -217,6 +219,14 @@ export function MemoDetailModal() {
               {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
             </span>
           )}
+          {isMobile && showMemo && (
+            <MemoFormatToggle
+              open={formattingOpen}
+              onToggle={() => setFormattingOpen((open) => !open)}
+              toolbarId={formatToolbarId}
+              className="memo-modal__format-toggle"
+            />
+          )}
           <ModalCloseButton label={t("common.close")} onClick={() => { void closeMemoDetail(); }} />
         </header>
 
@@ -238,7 +248,7 @@ export function MemoDetailModal() {
                   label={t("memo.content")}
                   placeholder={t("memo.writePlaceholder")}
                 />
-                <MemoFormatToolbar editorRef={editorRef} />
+                <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={isMobile && !formattingOpen} />
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")} hidden={!showAgent}>

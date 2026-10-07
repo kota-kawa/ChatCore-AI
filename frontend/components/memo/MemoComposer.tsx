@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isImeConfirmKey } from "../../lib/memo/ime";
-import { MemoFormatToolbar } from "./MemoFormatToolbar";
+import { MemoFormatToggle, MemoFormatToolbar } from "./MemoFormatToolbar";
 import { MemoEditor } from "./MemoEditor";
 import { MemoSelect } from "./MemoSelect";
 import { ModalShell } from "../ui/modal_shell";
@@ -62,6 +62,7 @@ export function MemoComposer() {
   const english = locale === "en";
   const isMobileLayout = useMemoMobileLayout();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [formattingOpen, setFormattingOpen] = useState(false);
   const [mobileDraftDismissed, setMobileDraftDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -310,6 +311,13 @@ export function MemoComposer() {
           >
             <i className="bi bi-code-slash" aria-hidden="true"></i>{t("memo.markdownSourceShort")}
           </button>
+          {mobile && (
+            <MemoFormatToggle
+              open={formattingOpen}
+              onToggle={() => setFormattingOpen((open) => !open)}
+              toolbarId={`${sectionId}-formatting`}
+            />
+          )}
         </div>
 
         <details
@@ -411,7 +419,7 @@ export function MemoComposer() {
 
       <div className="memo-quick-capture__footer">
         <div className="memo-quick-capture__formatting">
-          <MemoFormatToolbar editorRef={composeEditorRef} />
+          <MemoFormatToolbar id={`${sectionId}-formatting`} editorRef={composeEditorRef} hidden={mobile && !formattingOpen} />
         </div>
         <div className="memo-quick-capture__actions">
           <button type="button" className="secondary-button" onClick={handleCloseComposer} disabled={submitting}>

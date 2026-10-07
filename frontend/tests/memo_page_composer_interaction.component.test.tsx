@@ -188,4 +188,33 @@ describe("MemoComposer interactions", () => {
       document.body.classList.remove("memo-compose-open");
     }
   });
+
+  it("lets a phone composer format the current line on demand without submitting", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    try {
+      render(<ComposerHarness />);
+      fireEvent.click(screen.getByRole("button", { name: "テキストメモを作成" }));
+      const body = screen.getByRole("textbox", { name: "本文" });
+      changeMemoEditor(body, "最初の行\n次の行");
+      const editor = memoEditor(body);
+      act(() => { editor.dispatch({ selection: { anchor: editor.state.doc.length } }); editor.focus(); });
+      const toggle = screen.getByRole("button", { name: "書式" });
+      expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+      fireEvent.mouseDown(toggle);
+      fireEvent.click(toggle);
+      expect(screen.getByRole("toolbar", { name: "書式" })).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "見出し" }));
+      expect(memoEditorValue(body)).toBe("最初の行\n## 次の行");
+      expect(body).toHaveFocus();
+      fireEvent.click(toggle);
+      expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+      expect(createMemo).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "完了" }));
+      await waitFor(() => expect(createMemo).toHaveBeenCalledWith(
+        expect.objectContaining({ ai_response: "最初の行\n## 次の行" }), expect.any(String),
+      ));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

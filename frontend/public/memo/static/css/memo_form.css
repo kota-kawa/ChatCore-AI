@@ -1738,6 +1738,26 @@ html[data-cc-auth="in"] .memo-guest-intro {
   scrollbar-width: none;
 }
 :where(body.memo-page, .memo-page-shell) .memo-format-toolbar::-webkit-scrollbar { display: none; }
+:where(body.memo-page, .memo-page-shell) .memo-format-toolbar[hidden] { display: none; }
+:where(body.memo-page, .memo-page-shell) .memo-format-toggle {
+  min-width: var(--tap-target-min);
+  min-height: var(--tap-target-min);
+  padding: 0 0.5rem;
+  border: 1px solid var(--modal-border, var(--memo-border));
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+:where(body.memo-page, .memo-page-shell) .memo-format-toggle[aria-expanded="true"] {
+  background: var(--modal-surface-muted, var(--surface-secondary));
+}
+:where(body.memo-page, .memo-page-shell) .memo-format-toggle:focus-visible {
+  outline: 2px solid var(--modal-accent, var(--memo-amber-strong));
+  outline-offset: -2px;
+}
 :where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn {
   display: inline-flex;
   flex: 0 0 auto;
@@ -7651,7 +7671,7 @@ body.memo-page {
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-format-toolbar {
-    display: none;
+    padding-top: 0;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-item__open--content {
@@ -7689,6 +7709,16 @@ body.memo-page {
     max-width: 8rem;
     margin-right: 3rem;
     font-size: 0.72rem;
+  }
+
+  .memo-modal .memo-modal__header:has(.memo-modal__format-toggle) .memo-modal__autosave-status {
+    margin-right: 0;
+    max-width: 6rem;
+  }
+
+  .memo-modal .memo-modal__format-toggle {
+    order: 2;
+    margin-right: 3rem;
   }
 
   .memo-modal .memo-modal__header > .cc-modal__close {
