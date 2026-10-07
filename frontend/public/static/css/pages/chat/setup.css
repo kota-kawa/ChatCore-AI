@@ -419,15 +419,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   background: rgba(16, 72, 50, 0.58);
 }
 
-:where(body.chat-page, .chat-page-shell) .setup-info-counter {
+:where(body.chat-page, .chat-page-shell) .setup-info-error {
   text-align: right;
   font-size: var(--text-md, 1rem);
-  color: var(--text-muted, #9ca3af);
-  transition: color var(--transition-normal, 0.2s ease);
-}
-
-:where(body.chat-page, .chat-page-shell) .setup-info-counter--over {
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color);
   font-weight: 600;
 }
 

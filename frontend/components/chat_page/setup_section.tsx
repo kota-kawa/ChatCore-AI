@@ -604,7 +604,7 @@ function SetupSectionComponent() {
                 id="setup-info"
                 data-agent-id="chat.setup-message"
                 rows={4}
-                aria-describedby={setupInfo.length > 0 ? "setup-info-counter" : undefined}
+                aria-describedby={!isSetupInfoWithinLimit ? "setup-info-error" : undefined}
                 placeholder={t("home.inputPlaceholder")}
                 value={setupInfo}
                 onChange={(event) => {
@@ -683,16 +683,9 @@ function SetupSectionComponent() {
               </button>
             </div>
           </div>
-          {/* 文字数カウンター：制限超過時はalertロールで警告を通知 / Character counter that switches to alert role when the limit is exceeded */}
-          {setupInfo.length > 0 && (
-            <div
-              id="setup-info-counter"
-              className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}
-              role={setupInfo.length > MAX_SETUP_INFO_LENGTH ? "alert" : "status"}
-            >
-              {setupInfo.length > MAX_SETUP_INFO_LENGTH
-                ? `文字数制限を超えています（${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字）`
-                : `${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字`}
+          {!isSetupInfoWithinLimit && (
+            <div id="setup-info-error" className="setup-info-error" role="alert">
+              {locale === "en" ? "Character limit exceeded." : "文字数制限を超えています。"}
             </div>
           )}
         </div>

@@ -705,19 +705,13 @@
   border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
-/* 文字数カウンター */
-:where(body.chat-page, .chat-page-shell) .chat-input-counter {
+:where(body.chat-page, .chat-page-shell) .chat-input-error {
   max-width: 800px;
   margin: 0.3rem auto 0;
   text-align: right;
   font-size: var(--text-xs, 0.75rem);
-  color: var(--text-muted, #9ca3af);
   padding: 0 0.5rem;
-  transition: color var(--transition-normal, 0.2s ease);
-}
-
-:where(body.chat-page, .chat-page-shell) .chat-input-counter--over {
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color);
   font-weight: 600;
 }
 
