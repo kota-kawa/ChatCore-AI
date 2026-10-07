@@ -69,19 +69,23 @@ describe("memo detail on phones", () => {
     expect(body).toHaveFocus();
   });
 
-  it("switches between memo and AI without losing either draft", async () => {
+  it("keeps the memo and AI visible together without losing either draft", async () => {
     render(<DetailHarness />);
-    fireEvent.click(screen.getByRole("tab", { name: "メモ" }));
+    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
     changeMemoEditor(screen.getByRole("textbox", { name: "内容" }), "未保存の手編集");
-    fireEvent.click(screen.getByRole("tab", { name: "このメモについてAIに質問・編集" }));
+    fireEvent.click(screen.getByRole("button", { name: "このメモについてAIに質問・編集" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "AI draft" })).toBeVisible());
-    expect(screen.queryByRole("textbox", { name: "内容" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "AI draft" }), { target: { value: "質問の書きかけ" } });
-    fireEvent.click(screen.getByRole("tab", { name: "メモ" }));
+    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
     expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
-    expect(screen.queryByRole("textbox", { name: "AI draft" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "このメモについてAIに質問・編集" }));
     expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
+    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
+    expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
+    fireEvent.click(screen.getAllByRole("button", { name: "メモチャットを閉じる" })[0]);
+    expect(screen.queryByRole("textbox", { name: "AI draft" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
   });
 
   it("offers color and collection controls through a dismissible disclosure", () => {

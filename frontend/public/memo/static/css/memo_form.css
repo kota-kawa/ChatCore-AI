@@ -5029,7 +5029,10 @@ body.memo-page {
 
 .memo-modal .memo-modal__tabs .cc-modal__tab.is-active {
   background: var(--modal-surface);
-  color: var(--modal-text);
+  color: var(--modal-accent);
+  outline: 1px solid var(--modal-accent);
+  outline-offset: -1px;
+  font-weight: 700;
 }
 
 .memo-modal .memo-modal__tabs .cc-modal__tab:disabled {
@@ -5335,10 +5338,6 @@ body.memo-page {
 .memo-live-preview__rendered img {
   max-width: 100%;
   height: auto;
-}
-
-.memo-modal__panes {
-  display: contents;
 }
 
 @media (max-width: 768px) {
@@ -7512,7 +7511,7 @@ body.memo-page {
 .memo-compose-mobile-modal {
   top: var(--memo-viewport-top, 0px);
   bottom: auto;
-  height: var(--memo-viewport-height, 100dvh);
+  height: var(--memo-surface-height, var(--memo-viewport-height, 100dvh));
 }
 
 .memo-modal-scope .cc-modal__panel {
@@ -7591,11 +7590,6 @@ body.memo-page {
   justify-items: center;
   overflow: visible;
   padding: 0.25rem;
-}
-
-.memo-modal .memo-modal__edit-form[hidden],
-.memo-modal .memo-modal__agent-panel[hidden] {
-  display: none;
 }
 
 .memo-collection-modal .memo-collection-modal__body {
@@ -7743,18 +7737,29 @@ body.memo-page {
     padding: 0 0.35rem;
   }
 
+  .memo-modal .memo-modal__tabs .cc-modal__tab i {
+    display: none;
+  }
+
   .memo-modal .memo-modal__body {
-    padding-bottom: max(0px, calc(env(safe-area-inset-bottom, 0px) - var(--memo-viewport-bottom, 0px)));
+    padding-bottom: calc(var(--memo-surface-inset, 0px) + max(0px, calc(env(safe-area-inset-bottom, 0px) - var(--memo-viewport-bottom, 0px))));
   }
 
   .memo-modal .memo-modal__body--with-agent {
+    flex-direction: column;
+    gap: 0.5rem;
     overflow: hidden;
     scrollbar-gutter: auto;
   }
 
-  .memo-modal .memo-modal__body--with-agent .memo-modal__edit-form,
-  .memo-modal .memo-modal__agent-panel {
+  .memo-modal .memo-modal__body--with-agent .memo-modal__edit-form {
     flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .memo-modal .memo-modal__agent-panel {
+    flex: 0 0 clamp(128px, 55%, 340px);
     min-height: 0;
     width: 100%;
     order: 0;
@@ -7858,6 +7863,8 @@ body.memo-page {
 
 @media (max-width: 768px) {
   .memo-compose-mobile-modal .memo-compose-sheet {
+    padding-bottom: var(--memo-surface-inset, 0px);
+    background: var(--memo-card-strong);
     display: flex;
     flex-direction: column;
   }
@@ -7955,30 +7962,6 @@ body.memo-page {
 }
 
 @media (max-width: 768px) {
-  body.memo-page .global-ai-agent-button[data-memo-page] {
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
-    background: var(--surface-primary);
-    color: var(--text-dark);
-    box-shadow: none !important;
-    transform: none;
-  }
-
-  body.memo-page .global-ai-agent-button[data-memo-page]::before,
-  body.memo-page .global-ai-agent-button[data-memo-page]::after {
-    display: none;
-  }
-
-  body.memo-page .global-ai-agent-button[data-memo-page]:focus-visible {
-    box-shadow: var(--focus-ring) !important;
-  }
-
-  body.memo-page .global-ai-agent-button[data-memo-page] .global-ai-agent-icon {
-    width: 32px;
-    height: 32px;
-    filter: none;
-  }
-
   body.memo-page.memo-compose-open .global-ai-agent-button {
     display: none;
   }

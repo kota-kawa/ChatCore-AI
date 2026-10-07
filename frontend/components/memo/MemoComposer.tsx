@@ -77,7 +77,7 @@ export function MemoComposer() {
   const hasBody = hasMemoBodyContent(formState.ai_response);
   const showExpandedComposer = composeIsExpanded && !(isMobileLayout && mobileDraftDismissed);
   const mobileDialogOpen = isMobileLayout && showExpandedComposer;
-  const viewportStyle = useMemoViewport(mobileDialogOpen);
+  const viewportStyle = useMemoViewport(mobileDialogOpen, true);
 
   // The floating New button calls the controller directly, so it cannot clear the local
   // mobile dismissal state through the inline trigger handlers. Capture its native click first.

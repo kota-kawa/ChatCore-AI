@@ -282,6 +282,7 @@ export const enMessages = {
   "memo.titleLabel": "Title", "memo.backgroundColor": "Memo background color", "memo.copyFullText": "Copy full text",
   "memo.closeAgent": "Close memo chat", "memo.askAgent": "Ask AI about or edit this memo", "memo.saved": "Saved",
   "memo.awaitingAutosave": "Waiting to autosave", "memo.autosaveFailed": "Autosave failed", "memo.loadingMemo": "Loading memo…",
+  "memo.formattedView": "Formatted",
   "memo.markdownSource": "Markdown source",
   "memo.markdownSourceShort": "Source",
   "memo.format.toolbar": "Formatting", "memo.format.task": "Checklist", "memo.format.bullet": "Bulleted list", "memo.format.number": "Numbered list",

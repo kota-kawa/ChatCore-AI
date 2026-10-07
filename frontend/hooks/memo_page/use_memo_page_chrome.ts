@@ -1,14 +1,12 @@
 import { useEffect } from "react";
 
-import type { MemoDetail, MemoView } from "../../lib/memo/types";
-import { useMemoMobileLayout } from "./use_memo_viewport";
+import type { MemoDetail } from "../../lib/memo/types";
 
 type UseMemoPageChromeParams = {
   selectedMemo: MemoDetail | null;
   isShareModalOpen: boolean;
   isCollectionPanelOpen: boolean;
   isExportModalOpen: boolean;
-  activeView: MemoView;
 };
 
 // ページ全体の副作用（body クラス・カスタム要素の読み込み・モーダル開閉時のスクロール制御）
@@ -18,21 +16,7 @@ export function useMemoPageChrome({
   isShareModalOpen,
   isCollectionPanelOpen,
   isExportModalOpen,
-  activeView,
 }: UseMemoPageChromeParams) {
-  const isMobile = useMemoMobileLayout();
-  useEffect(() => {
-    const menu = document.querySelector<HTMLElement>("action-menu");
-    const agentButton = document.querySelector<HTMLElement>(".global-ai-agent-button");
-    const memoAppearance = isMobile && activeView === "memos";
-    menu?.toggleAttribute("data-memo-page", memoAppearance);
-    agentButton?.toggleAttribute("data-memo-page", memoAppearance);
-    return () => {
-      menu?.removeAttribute("data-memo-page");
-      agentButton?.removeAttribute("data-memo-page");
-    };
-  }, [activeView, isMobile]);
-
   // ページマウント時にカスタム要素の読み込みやボディのクラス設定を行う副作用
   // Effect to add body class and import custom elements on mount
   useEffect(() => {

@@ -8,12 +8,15 @@ type ViewportSnapshot = {
   height: number;
   top: number;
   bottom: number;
+  surfaceHeight: number;
 };
 
 type MemoViewportStyle = CSSProperties & {
   "--memo-viewport-height": string;
   "--memo-viewport-top": string;
   "--memo-viewport-bottom": string;
+  "--memo-surface-height": string;
+  "--memo-surface-inset": string;
 };
 
 function finiteOr(value: number, fallback: number): number {
@@ -33,7 +36,7 @@ function readViewport(): ViewportSnapshot {
     : Math.max(0, finiteOr(visualViewport.offsetTop, 0));
   const bottom = Math.max(0, layoutHeight - height - top);
 
-  return { layoutHeight, height, top, bottom };
+  return { layoutHeight, height, top, bottom, surfaceHeight: height };
 }
 
 function toViewportStyle(snapshot: ViewportSnapshot): MemoViewportStyle {
@@ -41,6 +44,8 @@ function toViewportStyle(snapshot: ViewportSnapshot): MemoViewportStyle {
     "--memo-viewport-height": `${snapshot.height}px`,
     "--memo-viewport-top": `${snapshot.top}px`,
     "--memo-viewport-bottom": `${snapshot.bottom}px`,
+    "--memo-surface-height": `${snapshot.surfaceHeight}px`,
+    "--memo-surface-inset": `${Math.max(0, snapshot.surfaceHeight - snapshot.height)}px`,
   };
 }
 
@@ -48,10 +53,11 @@ function sameSnapshot(left: ViewportSnapshot | undefined, right: ViewportSnapsho
   return left?.layoutHeight === right.layoutHeight
     && left.height === right.height
     && left.top === right.top
-    && left.bottom === right.bottom;
+    && left.bottom === right.bottom
+    && left.surfaceHeight === right.surfaceHeight;
 }
 
-export function useMemoViewport(enabled: boolean): CSSProperties | undefined {
+export function useMemoViewport(enabled: boolean, preserveEditingHeight = false): CSSProperties | undefined {
   const [snapshot, setSnapshot] = useState<ViewportSnapshot>();
 
   useEffect(() => {
@@ -63,10 +69,19 @@ export function useMemoViewport(enabled: boolean): CSSProperties | undefined {
     const visualViewport = window.visualViewport;
     let frameId: number | null = null;
     let settleTimer: number | null = null;
+    let surfaceHeight = window.innerHeight;
+    let layoutWidth = window.innerWidth;
 
     const measure = () => {
       frameId = null;
       const next = readViewport();
+      if (preserveEditingHeight) {
+        // キーボードの開閉途中でフォーカスがボタンへ移っても、縮小を面の高さへ反映しない。
+        // Keep the surface stable through keyboard transitions, including temporary button focus.
+        if (window.innerWidth !== layoutWidth || next.layoutHeight > surfaceHeight) surfaceHeight = next.layoutHeight;
+        layoutWidth = window.innerWidth;
+        next.surfaceHeight = surfaceHeight;
+      }
       setSnapshot((current) => (sameSnapshot(current, next) ? current : next));
     };
 
@@ -99,7 +114,7 @@ export function useMemoViewport(enabled: boolean): CSSProperties | undefined {
       visualViewport?.removeEventListener("scroll", scheduleMeasure);
       document.removeEventListener("focusout", scheduleSettleMeasure);
     };
-  }, [enabled]);
+  }, [enabled, preserveEditingHeight]);
 
   return enabled && snapshot ? toViewportStyle(snapshot) : undefined;
 }
