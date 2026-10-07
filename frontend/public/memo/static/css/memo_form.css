@@ -3504,12 +3504,6 @@ body.memo-page {
     margin-right: 0;
   }
 
-  /* When expanded filters keep the actions beside the heading, retain space
-     for the fixed top-right user/login icon. */
-  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open .memo-toolbar__actions {
-    margin-right: 3.6rem;
-  }
-
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__search {
     flex: 1 1 auto;
     width: auto;
@@ -3526,31 +3520,34 @@ body.memo-page {
     min-width: 0;
   }
 
-  /* Stack the search/action row below the title so it never collides with the
-     fixed top-right user icon and stays fully visible on small screens. */
-  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card:not(.is-filters-open) {
-    grid-template-columns: 1fr;
+  /* 検索と操作を同じ段に収め、一覧へ表示領域を返す。
+     Search and actions share a row to leave more room for the memo list. */
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card:not(.is-filters-open),
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open {
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "brand"
-      "actions"
-      "search";
-    row-gap: 0.5rem;
+      "brand brand"
+      "search actions";
+    column-gap: 0.25rem;
+    row-gap: 0.25rem;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open {
-    grid-template-columns: 1fr;
     grid-template-areas:
-      "brand"
-      "actions"
-      "search"
-      "mobile-controls";
+      "brand brand"
+      "search actions"
+      "mobile-controls mobile-controls";
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar__brand {
+    min-height: var(--tap-target-min);
   }
 
   /* Keep the mobile view switcher visually separate from the toolbar below it.
      The parent container intentionally has no generic gap, so the tab control
      needs its own spacing before the search and action controls. */
   :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
   }
 
   @media (max-width: 420px) {
@@ -3582,8 +3579,8 @@ body.memo-page {
 
   :where(body.memo-page, .memo-page-shell) .memo-quick-capture {
     width: calc(100% - 1.5rem);
-    margin-top: 1rem;
-    margin-bottom: 1.25rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-quick-capture__bottom-row {
@@ -5320,20 +5317,8 @@ body.memo-page {
   height: auto;
 }
 
-.memo-modal__document-actions {
-  flex: 0 0 auto;
-  color: var(--modal-text-muted);
-  font-size: 0.8rem;
-}
-
 .memo-modal__panes {
   display: contents;
-}
-
-.memo-modal__document-actions > summary {
-  min-height: var(--tap-target-min);
-  cursor: pointer;
-  align-content: center;
 }
 
 @media (max-width: 768px) {
@@ -6967,17 +6952,12 @@ body.memo-page {
 
 /* ── 詳細モーダル: 読んでいる間の操作 / Detail modal: actions while reading ───── */
 .memo-modal .memo-modal__memo-actions {
-  display: flex;
-  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.25rem;
-  overflow-x: auto;
-  border-top: 1px solid var(--modal-border-soft);
-  padding-top: 0.25rem;
-  scrollbar-width: none;
-}
-
-.memo-modal .memo-modal__memo-actions::-webkit-scrollbar {
-  display: none;
+  border-bottom: 1px solid var(--modal-border-soft);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .memo-modal .memo-modal__memo-action {
@@ -6993,7 +6973,8 @@ body.memo-page {
   color: var(--modal-text-muted);
   font-size: 0.82rem;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -7730,6 +7711,10 @@ body.memo-page {
     padding: 0 0.35rem;
   }
 
+  .memo-modal .memo-modal__body {
+    padding-bottom: max(0px, calc(env(safe-area-inset-bottom, 0px) - var(--memo-viewport-bottom, 0px)));
+  }
+
   .memo-modal .memo-modal__body--with-agent {
     overflow: hidden;
     scrollbar-gutter: auto;
@@ -7751,10 +7736,6 @@ body.memo-page {
   .memo-modal .memo-modal__agent-header-icon,
   .memo-modal .memo-modal__agent-label {
     display: none;
-  }
-
-  .memo-modal .memo-modal__memo-actions {
-    flex-wrap: wrap;
   }
 
   .memo-collection-modal .memo-collection-modal__body {
@@ -7959,12 +7940,33 @@ body.memo-page action-menu[data-memo-page][data-memo-composing] {
   body.memo-page .global-ai-agent-button[data-memo-page] {
     position: absolute;
     top: var(--memo-menu-top, 4.5rem);
-    right: calc(var(--tap-target-min) + 1rem);
+    right: calc(var(--tap-target-min) + 1.75rem);
     bottom: auto;
     left: auto;
     width: var(--tap-target-min);
     height: var(--tap-target-min);
     z-index: var(--z-floating-controls);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-primary);
+    color: var(--text-dark);
+    box-shadow: none !important;
+    transform: none;
+  }
+
+  body.memo-page .global-ai-agent-button[data-memo-page]::before,
+  body.memo-page .global-ai-agent-button[data-memo-page]::after {
+    display: none;
+  }
+
+  body.memo-page .global-ai-agent-button[data-memo-page]:focus-visible {
+    box-shadow: var(--focus-ring) !important;
+  }
+
+  body.memo-page .global-ai-agent-button[data-memo-page] .global-ai-agent-icon {
+    width: 32px;
+    height: 32px;
+    filter: none;
   }
 
   body.memo-page.memo-compose-open .global-ai-agent-button {

@@ -390,7 +390,7 @@ template.innerHTML = `
     :host([data-memo-page]) .actions-menu,
     :host([data-memo-composing]) .actions-menu {
       top: var(--memo-menu-top, 8px);
-      right: 8px;
+      right: 20px;
       bottom: auto;
       width: var(--tap-target-min);
       height: var(--tap-target-min);
@@ -402,6 +402,26 @@ template.innerHTML = `
     :host([data-memo-composing]) .actions-menu .btn--menu {
       width: var(--tap-target-min) !important;
       height: var(--tap-target-min) !important;
+    }
+    :host([data-memo-page]) .actions-menu .btn--menu,
+    :host([data-memo-composing]) .actions-menu .btn--menu {
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      background: var(--surface-primary);
+      box-shadow: none;
+      animation: none !important;
+      transform: none;
+      filter: none;
+    }
+    :host([data-memo-page]) .btn--menu:after,
+    :host([data-memo-page]) .btn--menu:before,
+    :host([data-memo-page]) .btn--menu span,
+    :host([data-memo-composing]) .btn--menu:after,
+    :host([data-memo-composing]) .btn--menu:before,
+    :host([data-memo-composing]) .btn--menu span {
+      width: 20px;
+      height: 2px;
+      background: var(--text-secondary);
     }
     :host([data-memo-page]) #actionMenuButton:checked + .actions-menu > .btn--share,
     :host([data-memo-composing]) #actionMenuButton:checked + .actions-menu > .btn--share {

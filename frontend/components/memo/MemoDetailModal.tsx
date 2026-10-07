@@ -15,7 +15,6 @@ import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
 import {
-  useMemoPageBoardContext,
   useMemoPageDetailContext,
 } from "../../contexts/memo_page/memo_page_context";
 
@@ -46,7 +45,6 @@ export function MemoDetailModal() {
     detailEditAiResponse,
     setDetailEditAiResponse,
   } = useMemoPageDetailContext();
-  const { actionLoadingId, handleTogglePin, handleToggleArchive, handleDeleteMemo, openShareModal } = useMemoPageBoardContext();
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
@@ -241,51 +239,6 @@ export function MemoDetailModal() {
                   placeholder={t("memo.writePlaceholder")}
                 />
                 <MemoFormatToolbar editorRef={editorRef} />
-                <details className="memo-modal__document-actions">
-                  <summary>{t("memo.actions")}</summary>
-                  <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
-                    <button
-                      type="button"
-                      className={`memo-modal__memo-action${selectedMemo.is_pinned ? " is-active" : ""}`}
-                      onClick={() => { void handleTogglePin(selectedMemo); }}
-                      disabled={actionLoadingId === String(selectedMemo.id)}
-                      aria-pressed={Boolean(selectedMemo.is_pinned)}
-                    >
-                      <i className={`bi ${selectedMemo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`} aria-hidden="true"></i>
-                      {selectedMemo.is_pinned ? t("memo.unpin") : t("memo.pin")}
-                    </button>
-                    <button
-                      type="button"
-                      className="memo-modal__memo-action"
-                      onClick={() => { void handleToggleArchive(selectedMemo); }}
-                      disabled={actionLoadingId === String(selectedMemo.id)}
-                    >
-                      <i className={`bi ${selectedMemo.is_archived ? "bi-archive-fill" : "bi-archive"}`} aria-hidden="true"></i>
-                      {selectedMemo.is_archived ? t("memo.unarchive") : t("memo.archive")}
-                    </button>
-                    {/* 共有設定は別のモーダル。重ねて開くと Esc やタブ移動を 2 つのモーダルが取り合うので、
-                        先にこの詳細を閉じる（未保存の編集は閉じる処理が保存する）
-                        Share settings is another modal. Stacked, the two would fight over Esc and Tab,
-                        so this detail closes first (closing saves any pending edit) */}
-                    <button
-                      type="button"
-                      className="memo-modal__memo-action"
-                      onClick={() => { void closeMemoDetail().then(() => openShareModal(selectedMemo)); }}
-                    >
-                      <i className="bi bi-share" aria-hidden="true"></i>
-                      {t("memo.shareSettings")}
-                    </button>
-                    <button
-                      type="button"
-                      className="memo-modal__memo-action"
-                      onClick={() => { void handleDeleteMemo(selectedMemo); }}
-                      disabled={actionLoadingId === String(selectedMemo.id)}
-                    >
-                      <i className="bi bi-trash3" aria-hidden="true"></i>
-                      {t("common.delete")}
-                    </button>
-                  </div>
-                </details>
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")} hidden={!showAgent}>
