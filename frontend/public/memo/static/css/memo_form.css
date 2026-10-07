@@ -3479,10 +3479,10 @@ body.memo-page {
     row-gap: 0.5rem;
   }
 
-  /* The heading leaves space for navigation and support; longer collection
-     names are truncated here and remain available through the picker. */
+  /* ナビゲーションは共通の画面下配置。見出しは全幅を使える。
+     Shared navigation stays at the bottom, leaving the heading full width. */
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__brand {
-    padding-right: 6.5rem;
+    padding-right: 0;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__title :is(h1, h2) {
@@ -7106,7 +7106,9 @@ body.memo-page {
   :where(body.memo-page, .memo-page-shell) .memo-new-fab {
     position: fixed;
     right: 1.25rem;
-    bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+    /* 下のナビゲーションを展開しても新規作成に重ならない位置。
+       Keep the new-memo button above the expanded navigation. */
+    bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
     z-index: var(--z-floating-action-menu, 60);
     display: inline-flex;
     align-items: center;
@@ -7648,8 +7650,8 @@ body.memo-page {
     overflow: hidden;
   }
 
-  :where(body.memo-page, .memo-page-shell) .memo-item__excerpt {
-    -webkit-line-clamp: 3;
+  :where(body.memo-page, .memo-page-shell) .memo-format-toolbar {
+    display: none;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-item__open--content {
@@ -7913,20 +7915,6 @@ body.memo-page {
   min-height: var(--tap-target-min);
 }
 
-body.memo-page action-menu[data-memo-page] {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 0;
-  z-index: var(--z-floating-controls);
-}
-
-body.memo-page action-menu[data-memo-page][data-memo-composing] {
-  position: fixed;
-  z-index: var(--z-modal-priority);
-}
-
 :where(body.memo-page, .memo-page-shell) .is-sidebar-collapsed .memo-sidebar-header {
   justify-content: center;
   padding: 0.35rem;
@@ -7938,14 +7926,6 @@ body.memo-page action-menu[data-memo-page][data-memo-composing] {
 
 @media (max-width: 768px) {
   body.memo-page .global-ai-agent-button[data-memo-page] {
-    position: absolute;
-    top: var(--memo-menu-top, 4.5rem);
-    right: calc(var(--tap-target-min) + 1.75rem);
-    bottom: auto;
-    left: auto;
-    width: var(--tap-target-min);
-    height: var(--tap-target-min);
-    z-index: var(--z-floating-controls);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
     background: var(--surface-primary);
