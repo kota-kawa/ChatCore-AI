@@ -226,7 +226,7 @@ describe("MemoDetailModal actions while reading", () => {
 
   it("offers pin, archive, share and delete for the open memo", async () => {
     const handlers = renderDetail(true);
-    fireEvent.click(screen.getByText("操作", { selector: "summary" }));
+    fireEvent.click(screen.getByLabelText("その他の操作"));
     const toolbar = screen.getByRole("toolbar", { name: "操作" });
     expect(toolbar).not.toBeNull();
 
@@ -248,7 +248,7 @@ describe("MemoDetailModal actions while reading", () => {
 
   it("keeps formatting available in source mode", () => {
     renderDetail(true);
-    expect(screen.getByText("操作", { selector: "summary" }).parentElement).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("その他の操作")).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("toolbar", { name: "書式" })).not.toBeNull();
   });
 });

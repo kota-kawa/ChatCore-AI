@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemoDetailModal } from "../components/memo/MemoDetailModal";
 import { MemoPageContextProvider } from "../contexts/memo_page/memo_page_context";
-import { changeMemoEditor, memoEditorValue } from "./memo_editor_harness";
+import { changeMemoEditor, memoEditor, memoEditorValue } from "./memo_editor_harness";
 import { createMemoPageControllerStub } from "./memo_page_context_harness";
 
 vi.mock("../components/chat_page/MiniChat", () => ({
@@ -44,6 +44,30 @@ describe("memo detail on phones", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   });
   afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("opens formatting only on request and preserves the caret and draft when closing", () => {
+    render(<DetailHarness />);
+    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+    const body = screen.getByRole("textbox", { name: "内容" });
+    changeMemoEditor(body, "最初の行\n編集中の行");
+    const editor = memoEditor(body);
+    act(() => { editor.dispatch({ selection: { anchor: editor.state.doc.length } }); editor.focus(); });
+    const toggle = screen.getByRole("button", { name: "書式" });
+    fireEvent.mouseDown(toggle);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("toolbar", { name: "書式" })).toHaveAttribute("id", toggle.getAttribute("aria-controls"));
+    expect(body).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "箇条書き" }));
+    expect(memoEditorValue(body)).toBe("最初の行\n- 編集中の行");
+    const caret = editor.state.selection.main.head;
+    fireEvent.mouseDown(toggle);
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+    expect(editor.state.selection.main.head).toBe(caret);
+    expect(memoEditorValue(body)).toBe("最初の行\n- 編集中の行");
+    expect(body).toHaveFocus();
+  });
 
   it("switches between memo and AI without losing either draft", async () => {
     render(<DetailHarness />);

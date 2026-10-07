@@ -31,7 +31,32 @@ const FORMAT_ACTIONS: FormatAction[] = [
 
 const keepEditorFocus = (event: MouseEvent) => event.preventDefault();
 
-export function MemoFormatToolbar({ editorRef }: { editorRef: RefObject<EditorView | null> }) {
+export function MemoFormatToggle({ open, onToggle, toolbarId, className = "" }: {
+  open: boolean;
+  onToggle: () => void;
+  toolbarId: string;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      className={`memo-format-toggle ${className}`}
+      aria-expanded={open}
+      aria-controls={toolbarId}
+      onMouseDown={keepEditorFocus}
+      onClick={onToggle}
+    >
+      {t("memo.format.toolbar")}
+    </button>
+  );
+}
+
+export function MemoFormatToolbar({ editorRef, id, hidden = false }: {
+  editorRef: RefObject<EditorView | null>;
+  id?: string;
+  hidden?: boolean;
+}) {
   const { t } = useTranslation();
   const run = (action: FormatAction) => {
     const editor = editorRef.current;
@@ -42,7 +67,7 @@ export function MemoFormatToolbar({ editorRef }: { editorRef: RefObject<EditorVi
     else editor.focus();
   };
   return (
-    <div className="memo-format-toolbar" role="toolbar" aria-label={t("memo.format.toolbar")}>
+    <div id={id} hidden={hidden} className="memo-format-toolbar" role="toolbar" aria-label={t("memo.format.toolbar")}>
       {FORMAT_ACTIONS.map((action) => (
         <button
           key={action.labelKey}

@@ -102,7 +102,6 @@ export function useMemoPageController() {
     isShareModalOpen: share.isShareModalOpen,
     isCollectionPanelOpen: collections.isCollectionPanelOpen,
     isExportModalOpen: exporter.isExportModalOpen,
-    composeIsExpanded: composer.composeIsExpanded,
     activeView: layout.activeView,
   });
 
