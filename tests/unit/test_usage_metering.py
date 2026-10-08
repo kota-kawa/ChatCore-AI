@@ -79,11 +79,42 @@ class UsagePricingTests(unittest.TestCase):
             llm.GPT_OSS_120B_MODEL,
             llm.GPT_OSS_20B_MODEL,
             llm.CLAUDE_HAIKU_4_5_MODEL,
+            llm.CLAUDE_HAIKU_5_5_MODEL,
         ):
             with self.subTest(model_name=model_name), self.assertNoLogs(
                 "services.usage_pricing", level="WARNING"
             ):
                 token_cost_nano_usd(model_name, input_tokens=1, output_tokens=1)
+
+    def test_haiku_5_5_price_tier_includes_all_cached_input(self):
+        for total_input in (99_999, 100_000, 100_001):
+            with self.subTest(total_input=total_input):
+                cached, written, output = 60_000, 20_000, 1_000
+                factor = 5 if total_input > 100_000 else 1
+                cost = token_cost_nano_usd(
+                    llm.CLAUDE_HAIKU_5_5_MODEL,
+                    input_tokens=total_input,
+                    cached_input_tokens=cached,
+                    cache_write_input_tokens=written,
+                    output_tokens=output,
+                )
+                self.assertEqual(cost, factor * (
+                    (total_input - cached - written) * 100 + cached * 10 + written * 125 + output * 500
+                ))
+
+    def test_haiku_5_5_provider_usage_selects_long_context_tier(self):
+        from services.llm_usage import record_claude_usage
+
+        records = []
+        set_usage_sink(records.append)
+        self.addCleanup(set_usage_sink, lambda _increment: None)
+        record_claude_usage(llm.CLAUDE_HAIKU_5_5_MODEL, {
+            "input_tokens": 20_001,
+            "cache_read_input_tokens": 60_000,
+            "cache_creation_input_tokens": 20_000,
+            "output_tokens": 1_000,
+        })
+        self.assertEqual(records[0].cost_nano_usd, 20_001 * 500 + 60_000 * 50 + 20_000 * 625 + 1_000 * 2_500)
 
 
 class UsageDateTests(unittest.TestCase):

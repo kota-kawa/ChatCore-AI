@@ -236,11 +236,6 @@ export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
-// Claude 系は現在は選択肢に出していない。バックエンドの Claude 経路（services/llm.py）と
-// 説明文のカタログキー chat.modelCarefulWriting は残してあるので、再び出すときは
-// ここへ 1 件足すだけでよい。
-// Claude models are not offered right now. The backend Claude path (services/llm.py) and the
-// chat.modelCarefulWriting catalog key are kept, so offering one again only needs an entry here.
 export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "openai/gpt-oss-120b",
@@ -259,5 +254,11 @@ export const MODEL_OPTIONS: ModelOption[] = [
     label: "Qwen 3.8 27B",
     descriptionKey: "chat.modelDeepThinking",
     shortLabel: "Qwen 3.8 27B",
+  },
+  {
+    value: "claude-haiku-5-5",
+    label: "Claude Haiku 5.5",
+    descriptionKey: "chat.modelCarefulWriting",
+    shortLabel: "Claude Haiku 5.5",
   },
 ];

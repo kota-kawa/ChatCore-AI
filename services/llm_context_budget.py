@@ -37,6 +37,7 @@ GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
 GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_HAIKU_5_5_MODEL = "claude-haiku-5-5"
 
 # Known windows are kept per model so a deployment can safely run different
 # providers in the same process.  The fallback is substantially smaller than
@@ -47,6 +48,7 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     QWEN_3_8_27B_MODEL: 131_072,
     GPT_6_LUNA_MODEL: 128_000,
     CLAUDE_HAIKU_4_5_MODEL: 200_000,
+    CLAUDE_HAIKU_5_5_MODEL: 1_000_000,
 }
 DEFAULT_CONTEXT_WINDOW_TOKENS = 65_536
 UNKNOWN_MODEL_CONTEXT_WINDOW_TOKENS = DEFAULT_CONTEXT_WINDOW_TOKENS

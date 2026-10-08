@@ -7,6 +7,7 @@ QWEN_3_8_27B_MAX_OUTPUT_TOKENS = 16_384
 
 MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
     QWEN_3_8_27B_MODEL: QWEN_3_8_27B_MAX_OUTPUT_TOKENS,
+    "claude-haiku-5-5": 128_000,
 }
 
 

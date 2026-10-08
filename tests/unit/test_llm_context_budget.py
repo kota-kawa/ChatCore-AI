@@ -42,6 +42,12 @@ class LlmContextBudgetTestCase(unittest.TestCase):
             min(MODEL_CONTEXT_WINDOWS.values()),
         )
 
+    def test_haiku_5_5_context_and_output_limits(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(get_model_context_window("claude-haiku-5-5"), 1_000_000)
+        with patch.dict(os.environ, {"LLM_MAX_TOKENS_ANSWER": "200000"}):
+            self.assertEqual(get_output_reserved_tokens("agent", "claude-haiku-5-5"), 128_000)
+
     def test_model_specific_context_override_wins_over_global_override(self):
         with patch.dict(
             os.environ,

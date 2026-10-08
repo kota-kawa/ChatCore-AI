@@ -1,8 +1,8 @@
 """Provider price table used to turn API usage into a cost.
 
-料金は各プロバイダの公開価格（2026-09-23 時点）を写したものです。価格改定や
+料金は各プロバイダの公開価格（Haiku 5.5 は 2026-10-08、ほかは 2026-09-23 時点）を写したものです。価格改定や
 モデル追加のときはこの表を更新してください。
-Prices mirror each provider's public price list as of 2026-09-23. Update this table
+Prices mirror each provider's public price list (Haiku 5.5: 2026-10-08; others: 2026-09-23). Update this table
 when a provider changes its prices or a model is added.
 
 金額は整数のナノドル（1e-9 USD）で扱います。「1M トークンあたり $X」は
@@ -58,6 +58,8 @@ TOKEN_PRICES: dict[str, TokenPrice] = {
     "claude-haiku-4-5-20251001": TokenPrice(
         input=1_000, cached_input=100, cache_write=1_250, output=5_000
     ),
+    # https://platform.claude.com/docs/en/models/haiku-5-5/overview
+    "claude-haiku-5-5": TokenPrice(input=100, cached_input=10, cache_write=125, output=500),
     # OpenAI embeddings are billed on input only.
     "text-embedding-3-small": TokenPrice(input=20, output=0),
 }
@@ -69,6 +71,9 @@ FALLBACK_TOKEN_PRICE = TokenPrice(input=1_000, cached_input=1_000, output=5_000)
 
 # Brave Search API: $5 per 1,000 requests.
 BRAVE_WEB_SEARCH_REQUEST_NANO_USD = 5_000_000
+
+HAIKU_5_5_LONG_CONTEXT_THRESHOLD = 100_000
+HAIKU_5_5_LONG_CONTEXT_PRICE = TokenPrice(input=500, cached_input=50, cache_write=625, output=2_500)
 
 
 def token_price_for_model(model_name: str) -> TokenPrice:
@@ -95,8 +100,14 @@ def token_cost_nano_usd(
     cache, which matches how OpenAI and Groq report usage.
     """
 
-    price = token_price_for_model(model_name)
     total_input = max(input_tokens, 0)
+    # 境界はキャッシュを含む入力総量で判定し、超過時は出力も高い単価になる。
+    # The threshold includes cached input, and the higher tier also applies to output.
+    price = (
+        HAIKU_5_5_LONG_CONTEXT_PRICE
+        if model_name == "claude-haiku-5-5" and total_input > HAIKU_5_5_LONG_CONTEXT_THRESHOLD
+        else token_price_for_model(model_name)
+    )
     cached = min(max(cached_input_tokens, 0), total_input)
     written = min(max(cache_write_input_tokens, 0), total_input - cached)
     uncached = total_input - cached - written
@@ -106,4 +117,3 @@ def token_cost_nano_usd(
         + written * price.cache_write_or_input()
         + max(output_tokens, 0) * price.output
     )
-

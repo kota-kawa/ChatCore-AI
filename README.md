@@ -50,6 +50,7 @@ Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** s
 - **Chat room sharing** via public URLs and SNS link sharing
 - **Prompt sharing** with search and public visibility controls
 - **Groq / Claude / OpenAI** integrations for LLM responses
+- **Claude Haiku 5.5** selectable for text chat (`ANTHROPIC_API_KEY` required)
 
 ## Tech Stack
 - **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
@@ -240,6 +241,7 @@ ChatGPT などの AI チャットサービスを日常的に使うなかで、�
 - **チャット共有リンク**（URL/SNS 共有）
 - **プロンプト共有**（公開・検索）
 - **Groq / Claude / OpenAI 連携**
+- **Claude Haiku 5.5** をテキストチャットで選択可能（`ANTHROPIC_API_KEY` が必要）
 
 ## 技術スタック
 - **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
