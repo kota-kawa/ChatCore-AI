@@ -8,9 +8,9 @@ import { MemoEditor } from "../components/memo/MemoEditor";
 import { changeMemoEditor, memoEditor, memoEditorValue } from "./memo_editor_harness";
 import { executeActionSteps } from "../lib/chat_page/mini_chat_runtime";
 
-function Harness({ initial = "# 見出し\n\n本文 **強調** と *斜体*\n\n- [ ] 牛乳\n\n```js\nconst a = 1;\n```\n\n| A | B |\n|---|---|\n| C | D |" }) {
+function Harness({ initial = "# 見出し\n\n本文 **強調** と *斜体*\n\n- [ ] 牛乳\n\n```js\nconst a = 1;\n```\n\n| A | B |\n|---|---|\n| C | D |", editing = false }) {
   const [value, setValue] = useState(initial);
-  const [source, setSource] = useState(false);
+  const [source, setSource] = useState(editing);
   const ref = useRef<EditorView | null>(null);
   return <>
     <MemoEditor value={value} onChange={setValue} sourceMode={source} editorRef={ref} label="本文" placeholder="メモを入力" id="test-editor" />
@@ -32,25 +32,32 @@ describe("MemoEditor", () => {
     expect(screen.getByTestId("stored").textContent).toBe(memoEditorValue(element()));
   });
 
-  it("reveals only the formatted content containing the caret", () => {
+  it("keeps the formatted document stable when clicked, focused or selected", () => {
     render(<Harness />);
     const view = memoEditor(element());
     act(() => {
       view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("強調") + 1 } });
       view.focus();
     });
-    expect(element()).toHaveTextContent("**強調**");
+    fireEvent.click(document.querySelector("td")!);
+    fireEvent.click(document.querySelector("pre code")!);
+    expect(element()).toHaveAttribute("contenteditable", "false");
+    expect(element()).toHaveAttribute("aria-readonly", "true");
+    expect(view.state.readOnly).toBe(true);
+    expect(document.querySelector(".memo-live-preview__strong")).toHaveTextContent(/^強調$/);
+    expect(element()).not.toHaveTextContent("**強調**");
     expect(document.querySelector(".memo-live-preview__heading")).toHaveTextContent("見出し");
     expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(document.querySelector("pre code")).toHaveTextContent("const a = 1;");
   });
 
-  it("renders ordered list numbering and reveals only the active source marker", () => {
+  it("keeps ordered list numbering stable when the selection moves", () => {
     render(<Harness initial={"3) first\n8) second\n\n別の段落"} />);
     expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
     const view = memoEditor(element());
     act(() => { view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("second") } }); view.focus(); });
-    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3."]);
-    expect(element()).toHaveTextContent("8) second");
+    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
+    expect(element()).not.toHaveTextContent("8) second");
     expect(screen.getByTestId("stored").textContent).toBe("3) first\n8) second\n\n別の段落");
   });
 
@@ -63,7 +70,7 @@ describe("MemoEditor", () => {
   });
 
   it("preserves the undo history across source mode and external updates", () => {
-    render(<Harness initial="元の本文" />);
+    render(<Harness initial="元の本文" editing />);
     const view = memoEditor(element());
     changeMemoEditor(element(), "手編集");
     fireEvent.click(screen.getByText("原文", { selector: "button" }));
@@ -79,7 +86,7 @@ describe("MemoEditor", () => {
   });
 
   it("continues checklists and exits an empty item with the mobile input event", () => {
-    render(<Harness initial="- [x] 卵" />);
+    render(<Harness initial="- [x] 卵" editing />);
     const view = memoEditor(element());
     act(() => { view.dispatch({ selection: { anchor: view.state.doc.length } }); view.focus(); });
     fireEvent.keyDown(element(), { key: "Enter", keyCode: 13 });
@@ -88,8 +95,16 @@ describe("MemoEditor", () => {
     expect(memoEditorValue(element())).toBe("- [x] 卵\n");
   });
 
+  it("ignores mobile line-break input in the reading view", () => {
+    render(<Harness initial="- [ ] 卵" />);
+    const view = memoEditor(element());
+    act(() => { view.dispatch({ selection: { anchor: view.state.doc.length } }); });
+    act(() => { element().dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true })); });
+    expect(memoEditorValue(element())).toBe("- [ ] 卵");
+  });
+
   it("does not continue the list during Japanese composition", () => {
-    render(<Harness initial="- [ ] 日本語" />);
+    render(<Harness initial="- [ ] 日本語" editing />);
     const view = memoEditor(element());
     act(() => { view.dispatch({ selection: { anchor: view.state.doc.length } }); });
     act(() => { element().dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", isComposing: true, bubbles: true, cancelable: true })); });
@@ -98,7 +113,7 @@ describe("MemoEditor", () => {
 
   it("edits legacy JSON-string memos without changing their storage format", () => {
     const initial = JSON.stringify("# 見出し\n\n本文");
-    render(<Harness initial={initial} />);
+    render(<Harness initial={initial} editing />);
     expect(memoEditorValue(element())).toBe("# 見出し\n\n本文");
     expect(screen.getByTestId("stored").textContent).toBe(initial);
     changeMemoEditor(element(), "# 見出し\n\n変更後");
@@ -106,7 +121,7 @@ describe("MemoEditor", () => {
   });
 
   it("keeps list-looking text in code blocks as code on Enter", () => {
-    render(<Harness initial={"```text\n- example\n```"} />);
+    render(<Harness initial={"```text\n- example\n```"} editing />);
     const view = memoEditor(element());
     act(() => { view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("example") + 7 } }); view.focus(); });
     fireEvent.keyDown(element(), { key: "Enter", keyCode: 13 });
@@ -114,7 +129,7 @@ describe("MemoEditor", () => {
   });
 
   it("accepts the existing page agent's input action and makes it undoable", async () => {
-    render(<Harness initial="元の本文" />);
+    render(<Harness initial="元の本文" editing />);
     vi.spyOn(element(), "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 300, 100));
     await act(async () => {
       const result = await executeActionSteps([{ action: "input", selector: "#test-editor", value: "# 入力したメモ", risk: "low", description: "メモ本文を入力する" }], {

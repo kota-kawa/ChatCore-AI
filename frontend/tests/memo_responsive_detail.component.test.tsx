@@ -53,6 +53,8 @@ describe("memo detail on phones", () => {
   it("opens formatting only on request and preserves the caret and draft when closing", () => {
     render(<DetailHarness />);
     expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "書式" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
     const body = screen.getByRole("textbox", { name: "内容" });
     changeMemoEditor(body, "最初の行\n編集中の行");
     const editor = memoEditor(body);
@@ -76,8 +78,9 @@ describe("memo detail on phones", () => {
 
   it("keeps the memo and AI visible together without losing either draft", async () => {
     render(<DetailHarness />);
-    const sourceToggle = screen.getByRole("button", { name: "Markdown原文" });
-    expect(sourceToggle).toHaveAttribute("aria-pressed", "false");
+    const sourceToggle = screen.getByRole("button", { name: "編集" });
+    expect(screen.getByRole("textbox", { name: "内容" })).toHaveAttribute("contenteditable", "false");
+    fireEvent.click(sourceToggle);
     changeMemoEditor(screen.getByRole("textbox", { name: "内容" }), "未保存の手編集");
     const more = screen.getByLabelText("その他の操作");
     fireEvent.click(more);
@@ -87,12 +90,13 @@ describe("memo detail on phones", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "AI draft" })).toBeVisible());
     expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "AI draft" }), { target: { value: "質問の書きかけ" } });
-    fireEvent.click(sourceToggle);
-    expect(sourceToggle).toHaveAttribute("aria-pressed", "true");
+    expect(sourceToggle).toHaveAccessibleName("表示");
+    expect(screen.getByRole("textbox", { name: "内容" })).toHaveAttribute("contenteditable", "true");
     expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
     expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
     fireEvent.click(sourceToggle);
-    expect(sourceToggle).toHaveAttribute("aria-pressed", "false");
+    expect(sourceToggle).toHaveAccessibleName("編集");
+    expect(screen.getByRole("textbox", { name: "内容" })).toHaveAttribute("contenteditable", "false");
     expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
     fireEvent.click(screen.getAllByRole("button", { name: "メモチャットを閉じる" })[0]);
     expect(screen.queryByRole("textbox", { name: "AI draft" })).toBeNull();

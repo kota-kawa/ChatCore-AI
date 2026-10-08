@@ -102,7 +102,7 @@ describe("MemoDetailModal editing", () => {
     render(<DetailHarness />);
     fireEvent.click(boxes(bodyEditor())[0]);
     expect(memoEditorValue(bodyEditor())).toBe(CHECKLIST.replace("- [ ] パスポート", "- [x] パスポート"));
-    expect(screen.getByRole("button", { name: "Markdown原文" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "編集" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("keeps the same editor and selection across source mode changes", () => {
@@ -110,15 +110,17 @@ describe("MemoDetailModal editing", () => {
     const element = bodyEditor();
     const editor = memoEditor(element);
     act(() => { editor.dispatch({ selection: { anchor: 4 } }); });
-    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
     fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
     expect(bodyEditor()).toBe(element);
     expect(memoEditor(bodyEditor())).toBe(editor);
     expect(editor.state.selection.main.head).toBe(4);
   });
 
-  it("always offers formatting and applies it to the caret line", () => {
+  it("offers formatting while editing and applies it to the caret line", () => {
     render(<DetailHarness />);
+    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
     expect(screen.getByRole("toolbar", { name: "書式" })).toBeVisible();
     const editor = memoEditor(bodyEditor());
     act(() => { editor.dispatch({ selection: { anchor: editor.state.doc.length } }); });

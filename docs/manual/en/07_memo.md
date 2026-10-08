@@ -15,13 +15,15 @@ Open recent memos to review or copy their contents. Check generated text before 
 
 ## Edit a memo
 
-New memos and memo details use an editable formatted view. Markdown syntax appears only around
-formatted content containing the cursor. Toggle checklist boxes in place. Click a table or code block,
-or move the cursor into it with the keyboard, to edit its Markdown source.
+Saved memos open in a formatted reading view. Clicking or tapping the text does not change the
+appearance of headings, emphasis, tables, or code blocks. Checklist boxes can still be toggled in place.
 
-Use Source to view and edit the complete Markdown, and press it again to return to the formatted view.
-Switching preserves your cursor and undo history. Changes in memo details save automatically, with
-save status shown at the top. Use Done to save a new memo.
+Press Edit to change the Markdown text and use the formatting buttons. Return to Formatted view
+on a computer, or View on a phone, to read the memo. Switching preserves your text and undo history.
+Changes in memo details save automatically, with save status shown at the top.
+
+New memos open ready for input. Use Preview to check their appearance and Edit to keep writing.
+Press Save when finished.
 
 ## Delete a memo and the trash
 

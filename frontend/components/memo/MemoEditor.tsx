@@ -5,7 +5,7 @@ import { defaultKeymap, history, historyKeymap, redo } from "@codemirror/command
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
 
-import { memoEditorFocusChanged, memoLivePreview } from "../../lib/memo/live_preview";
+import { memoLivePreview } from "../../lib/memo/live_preview";
 import { applyMemoEditorEdit, memoEditorViews } from "../../lib/memo/editor";
 import { continueListOnEnter } from "../../lib/memo/list_editing";
 
@@ -32,6 +32,7 @@ function editorText(value: string) {
 export function MemoEditor({ value, onChange, sourceMode, editorRef, label, placeholder, id, agentId, focusRequest = 0 }: MemoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const preview = useRef(new Compartment());
+  const editing = useRef(new Compartment());
   const attributes = useRef(new Compartment());
   const initialProps = useEffectEvent(() => ({ value, label, placeholder, id, agentId }));
   const notifyChange = useEffectEvent((text: string) => {
@@ -43,7 +44,7 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
     if (!hostRef.current) return;
     const initial = initialProps();
     const continueList = (view: EditorView) => {
-      if (view.composing) return false;
+      if (view.state.readOnly || view.composing) return false;
       const { from, to } = view.state.selection.main;
       for (let node = syntaxTree(view.state).resolveInner(from, -1); node; node = node.parent!) {
         if (["FencedCode", "CodeBlock", "InlineCode"].includes(node.name)) return false;
@@ -63,6 +64,7 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
           Prec.high(keymap.of([{ key: "Enter", run: continueList }, { key: "Mod-Shift-z", run: redo }, ...historyKeymap, ...defaultKeymap])),
           EditorView.lineWrapping,
           preview.current.of([]),
+          editing.current.of([]),
           attributes.current.of([]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !update.transactions.some((transaction) => transaction.annotation(Transaction.userEvent) === "input.external")) {
@@ -90,14 +92,24 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
   useEffect(() => {
     const view = editorRef.current;
     if (!view) return;
+    const wasReadOnly = view.state.readOnly;
     view.dispatch({ effects: [
       preview.current.reconfigure(sourceMode ? [] : memoLivePreview),
-      memoEditorFocusChanged.of(view.hasFocus),
+      editing.current.reconfigure([
+        EditorState.readOnly.of(!sourceMode),
+        EditorView.editable.of(sourceMode),
+      ]),
       attributes.current.reconfigure([
-        EditorView.contentAttributes.of({ id, "aria-label": label, "data-agent-id": agentId ?? "", "aria-multiline": "true" }),
+        EditorView.contentAttributes.of({
+          id, "aria-label": label, "data-agent-id": agentId ?? "", "aria-multiline": "true", "aria-readonly": String(!sourceMode),
+        }),
         editorPlaceholder(placeholder),
       ]),
     ] });
+    // プレビューからの復帰では、編集中だった選択位置を保ってキーボードを戻す。
+    // Resume editing at the existing selection when leaving the preview.
+    if (sourceMode && wasReadOnly) view.focus();
+    if (!sourceMode && view.hasFocus) view.contentDOM.blur();
   }, [sourceMode, editorRef, label, placeholder, id, agentId]);
 
   useEffect(() => {

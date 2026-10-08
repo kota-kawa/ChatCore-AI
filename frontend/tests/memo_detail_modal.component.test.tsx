@@ -45,9 +45,9 @@ function DetailHarness({ body = BODY, agentOpen = false }: { body?: string; agen
 }
 
 describe("MemoDetailModal live editing", () => {
-  it("selects formatted or source display explicitly without starting text input", () => {
+  it("starts editing only through Edit and returns to a stable formatted view", () => {
     render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う"} />);
-    const source = screen.getByRole("button", { name: "Markdown原文" });
+    const source = screen.getByRole("button", { name: "編集" });
     const formatted = screen.getByRole("button", { name: "整形表示" });
     const editor = screen.getByRole("textbox", { name: "内容" });
     expect(formatted).toHaveAttribute("aria-pressed", "true");
@@ -56,25 +56,33 @@ describe("MemoDetailModal live editing", () => {
     fireEvent.click(source);
     expect(source).toHaveAttribute("aria-pressed", "true");
     expect(formatted).toHaveAttribute("aria-pressed", "false");
-    expect(editor).not.toHaveFocus();
+    expect(editor).toHaveFocus();
+    expect(editor).toHaveAttribute("contenteditable", "true");
     fireEvent.click(formatted);
     expect(source).toHaveAttribute("aria-pressed", "false");
     expect(formatted).toHaveAttribute("aria-pressed", "true");
     expect(editor).not.toHaveFocus();
+    expect(editor).toHaveAttribute("contenteditable", "false");
+    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
     expect(memoEditorValue(editor)).toBe("# 買い物\n\n**牛乳**を買う");
   });
 
-  it("opens with an editable formatted document and a source toggle", () => {
-    render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う"} />);
-    expect(screen.getByRole("textbox", { name: "内容" })).toHaveAttribute("contenteditable", "true");
+  it("opens for reading and preserves tables and emphasis on body clicks", () => {
+    render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う\n\n| A | B |\n|---|---|\n| C | D |"} />);
+    const editor = screen.getByRole("textbox", { name: "内容" });
+    expect(editor).toHaveAttribute("contenteditable", "false");
+    fireEvent.click(document.querySelector(".memo-live-preview__strong")!);
+    fireEvent.click(screen.getByRole("cell", { name: "D" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
     expect(document.querySelector(".memo-live-preview__heading")).toHaveTextContent("買い物");
     expect(document.querySelector(".memo-live-preview__strong")).toHaveTextContent("牛乳");
     expect(screen.queryByRole("tab", { name: "プレビュー" })).toBeNull();
-    const source = screen.getByRole("button", { name: "Markdown原文" });
+    const source = screen.getByRole("button", { name: "編集" });
     expect(source).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(source);
     expect(source).toHaveAttribute("aria-pressed", "true");
-    expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("# 買い物\n\n**牛乳**を買う");
+    expect(editor).toHaveAttribute("contenteditable", "true");
+    expect(memoEditorValue(editor)).toBe("# 買い物\n\n**牛乳**を買う\n\n| A | B |\n|---|---|\n| C | D |");
   });
 
   it("keeps links safe and opens them in another tab", () => {
@@ -109,6 +117,7 @@ describe("MemoDetailModal agent edits", () => {
   // Returns the handler from the first render, so the tests prove later manual edits are read through the ref
   function renderWithAgent() {
     render(<DetailHarness body={AGENT_BODY} agentOpen />);
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
     const onMemoEdit = miniChatMock.mock.calls[0]?.[0].onMemoEdit;
     expect(onMemoEdit).toBeTypeOf("function");
     const editor = screen.getByRole("textbox", { name: "内容" });

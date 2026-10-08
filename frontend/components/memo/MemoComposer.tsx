@@ -184,13 +184,13 @@ export function MemoComposer() {
 
   const handleOpenText = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setSourceMode(false);
+    setSourceMode(true);
     openTextComposer();
   };
 
   const handleOpenChecklist = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setSourceMode(false);
+    setSourceMode(true);
     openChecklistComposer();
   };
 
@@ -221,7 +221,7 @@ export function MemoComposer() {
 
   const handleCloseComposer = () => {
     setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-    setSourceMode(false);
+    setSourceMode(true);
     setIsComposeExpanded(false);
     setIsComposePaletteOpen(false);
     setIsMoreOpen(false);
@@ -281,7 +281,11 @@ export function MemoComposer() {
       style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
     >
       <div className="memo-quick-capture__header">
-        <h2 id={`${sectionId}-title`} className="sr-only">{t("memo.new")}</h2>
+        <div className="memo-quick-capture__heading">
+          <i className="bi bi-pencil-square" aria-hidden="true"></i>
+          <h2 id={`${sectionId}-title`}>{t("memo.new")}</h2>
+          <span className="memo-quick-capture__mode-label">{t(sourceMode ? "memo.editingMarkdown" : "memo.preview")}</span>
+        </div>
         <div className="form-group memo-quick-capture__title-group">
           <label htmlFor={`${sectionId}-memo-title`} className="sr-only">{english ? "Title" : "タイトル"}</label>
           <input
@@ -295,7 +299,7 @@ export function MemoComposer() {
             onChange={handleFormChange}
             onKeyDown={handleTitleKeyDown}
             maxLength={255}
-            placeholder={english ? "Title" : "タイトル"}
+            placeholder={english ? "Title (optional)" : "タイトル（任意）"}
             autoFocus={!hasComposeDraft && !mobile}
           />
         </div>
@@ -304,14 +308,19 @@ export function MemoComposer() {
           <label htmlFor={`${sectionId}-memo-response`} className="sr-only">{english ? "Content" : "本文"}</label>
           <button
             type="button"
-            className={`memo-response-tab${sourceMode ? " is-active" : ""}`}
-            aria-label={t("memo.markdownSource")}
-            aria-pressed={sourceMode}
-            onClick={() => { setSourceMode(!sourceMode); composeEditorRef.current?.focus(); }}
+            className={`memo-response-tab${!sourceMode ? " is-active" : ""}`}
+            aria-label={t(sourceMode ? "memo.preview" : "common.edit")}
+            onClick={() => {
+              if (sourceMode) {
+                setSourceMode(false);
+                setFormattingOpen(false);
+              } else setSourceMode(true);
+            }}
           >
-            <i className="bi bi-code-slash" aria-hidden="true"></i>{t("memo.markdownSourceShort")}
+            <i className={`bi ${sourceMode ? "bi-eye" : "bi-pencil"}`} aria-hidden="true"></i>
+            {t(sourceMode ? "memo.preview" : "common.edit")}
           </button>
-          {mobile && (
+          {mobile && sourceMode && (
             <MemoFormatToggle
               open={formattingOpen}
               onToggle={() => setFormattingOpen((open) => !open)}
@@ -333,7 +342,7 @@ export function MemoComposer() {
             event.currentTarget.querySelector("summary")?.focus();
           }}
         >
-          <summary>{t("memo.other")}</summary>
+          <summary><i className="bi bi-sliders" aria-hidden="true"></i>{t("memo.other")}</summary>
           <div className="memo-quick-capture__more-panel">
             <div className="memo-quick-capture__bottom-row">
               {collections.length > 0 && (
@@ -419,7 +428,7 @@ export function MemoComposer() {
 
       <div className="memo-quick-capture__footer">
         <div className="memo-quick-capture__formatting">
-          <MemoFormatToolbar id={`${sectionId}-formatting`} editorRef={composeEditorRef} hidden={mobile && !formattingOpen} />
+          <MemoFormatToolbar id={`${sectionId}-formatting`} editorRef={composeEditorRef} hidden={!sourceMode || (mobile && !formattingOpen)} />
         </div>
         <div className="memo-quick-capture__actions">
           <button type="button" className="secondary-button" onClick={handleCloseComposer} disabled={submitting}>
@@ -427,7 +436,7 @@ export function MemoComposer() {
           </button>
           <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting || !hasBody}>
             <i className="bi bi-check2" aria-hidden="true"></i>
-            {english ? "Done" : "完了"}
+            {t(submitting ? "common.saving" : "common.save")}
           </button>
         </div>
       </div>
