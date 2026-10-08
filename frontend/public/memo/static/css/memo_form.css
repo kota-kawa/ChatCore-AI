@@ -7715,26 +7715,28 @@ body.memo-page {
   }
 
   /* スマホではキーボード表示中も本文を広く使えるよう、ヘッダーを 1 段に収める。
-     並びは タイトル → 保存状態 → 原文の切り替え → 書式 → その他の操作 → 閉じる
+     並びは タイトル → 保存状態 → 原文の切り替え → 書式 → その他の操作 → 閉じる。
+     右の余白は絶対配置の閉じるボタンの分
      Phones keep the header on one row so the body stays roomy with the keyboard up.
-     Order: title, save state, source toggle, formatting, more actions, close */
+     Order: title, save state, source toggle, formatting, more actions, close.
+     The right padding leaves room for the absolutely placed close button */
   .memo-modal .memo-modal__header {
     flex-wrap: nowrap;
     gap: 0.25rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 3.5rem 0.5rem 0.75rem;
   }
 
   .memo-modal .memo-modal__heading {
     flex: 1 1 0;
-    min-width: 0;
+    min-width: 4.5rem;
   }
 
-  /* 保存状態はアイコンだけにする。失敗の理由だけは文字で残す
-     The save state shrinks to its icon; only a failure keeps its text */
+  /* 保存状態はアイコンだけにする。失敗の理由だけは文字で残し、幅が足りなければ縮める
+     The save state shrinks to its icon; only a failure keeps its text, and gives way when space is short */
   .memo-modal .memo-modal__autosave-status {
     order: 1;
     gap: 0;
-    margin-right: 3rem;
+    margin-right: 0;
     font-size: 0;
   }
 
@@ -7743,13 +7745,10 @@ body.memo-page {
   }
 
   .memo-modal .memo-modal__autosave-status--error {
+    flex: 0 1 auto;
     gap: 0.3rem;
     max-width: 6rem;
     font-size: 0.72rem;
-  }
-
-  .memo-modal .memo-modal__header:has(.memo-modal__header-actions) .memo-modal__autosave-status {
-    margin-right: 0;
   }
 
   /* 操作列の箱を外し、中のボタンをヘッダーの並びへ直接入れる
@@ -7766,15 +7765,14 @@ body.memo-page {
     order: 3;
   }
 
-  /* 右端の要素は、絶対配置の閉じるボタンの分だけ空ける。メニューは画面の右端に揃える
-     The last item leaves room for the absolutely placed close button; the menu aligns to the screen edge */
   .memo-modal .memo-modal__header-actions > .memo-modal__organize {
     order: 4;
-    margin-right: 3rem;
   }
 
+  /* メニューは画面の右端に揃える
+     The menu aligns to the screen edge */
   .memo-modal .memo-modal__organize-panel {
-    right: -3rem;
+    right: -2.75rem;
   }
 
   .memo-modal .memo-modal__header > .cc-modal__close {

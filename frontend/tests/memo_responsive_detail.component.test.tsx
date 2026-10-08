@@ -83,6 +83,7 @@ describe("memo detail on phones", () => {
     fireEvent.click(more);
     fireEvent.click(screen.getByRole("button", { name: "メモのチャコ" }));
     expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(more).toHaveFocus();
     await waitFor(() => expect(screen.getByRole("textbox", { name: "AI draft" })).toBeVisible());
     expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "AI draft" }), { target: { value: "質問の書きかけ" } });

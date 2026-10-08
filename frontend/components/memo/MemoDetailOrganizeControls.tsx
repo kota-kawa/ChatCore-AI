@@ -34,6 +34,13 @@ export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrg
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [open]);
 
+  // 閉じると中のボタンが消えるので、フォーカスを開くボタンへ戻す
+  // Closing hides the focused item, so return focus to the trigger
+  const closeMenu = () => {
+    setOpen(false);
+    ref.current?.querySelector("summary")?.focus();
+  };
+
   return (
     <details
       ref={ref}
@@ -43,8 +50,7 @@ export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrg
         if (event.key !== "Escape" || !open || event.defaultPrevented) return;
         event.preventDefault();
         event.stopPropagation();
-        setOpen(false);
-        ref.current?.querySelector("summary")?.focus();
+        closeMenu();
       }}
     >
       <summary
@@ -58,7 +64,7 @@ export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrg
       <div className="memo-modal__organize-panel">
         {selectedMemo && (
           <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
-            {renderExtraActions?.(() => setOpen(false))}
+            {renderExtraActions?.(closeMenu)}
             <button
               type="button"
               className={`memo-modal__memo-action${selectedMemo.is_pinned ? " is-active" : ""}`}
