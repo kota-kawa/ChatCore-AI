@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoPageBoardContext, useMemoPageDetailContext, useMemoPageListContext } from "../../contexts/memo_page/memo_page_context";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { MemoSelect } from "./MemoSelect";
 
-export function MemoDetailOrganizeControls() {
+type MemoDetailOrganizeControlsProps = {
+  // 操作の先頭に足す項目。受け取った関数でこのメニューを閉じられる
+  // Extra items placed before the actions; the function they receive closes this menu
+  renderExtraActions?: (closeMenu: () => void) => ReactNode;
+};
+
+export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrganizeControlsProps) {
   const { t } = useTranslation();
   const { collections } = useMemoPageListContext();
   const { actionLoadingId, handleTogglePin, handleToggleArchive, handleDeleteMemo, openShareModal } = useMemoPageBoardContext();
@@ -52,6 +58,7 @@ export function MemoDetailOrganizeControls() {
       <div className="memo-modal__organize-panel">
         {selectedMemo && (
           <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
+            {renderExtraActions?.(() => setOpen(false))}
             <button
               type="button"
               className={`memo-modal__memo-action${selectedMemo.is_pinned ? " is-active" : ""}`}

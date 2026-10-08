@@ -7714,8 +7714,13 @@ body.memo-page {
     border-radius: 0;
   }
 
+  /* スマホではキーボード表示中も本文を広く使えるよう、ヘッダーを 1 段に収める。
+     並びは タイトル → 保存状態 → 原文の切り替え → 書式 → その他の操作 → 閉じる
+     Phones keep the header on one row so the body stays roomy with the keyboard up.
+     Order: title, save state, source toggle, formatting, more actions, close */
   .memo-modal .memo-modal__header {
-    gap: 0.35rem;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
     padding: 0.5rem 0.75rem;
   }
 
@@ -7724,47 +7729,57 @@ body.memo-page {
     min-width: 0;
   }
 
+  /* 保存状態はアイコンだけにする。失敗の理由だけは文字で残す
+     The save state shrinks to its icon; only a failure keeps its text */
   .memo-modal .memo-modal__autosave-status {
     order: 1;
-    max-width: 8rem;
+    gap: 0;
     margin-right: 3rem;
+    font-size: 0;
+  }
+
+  .memo-modal .memo-modal__autosave-status i {
+    font-size: 1rem;
+  }
+
+  .memo-modal .memo-modal__autosave-status--error {
+    gap: 0.3rem;
+    max-width: 6rem;
     font-size: 0.72rem;
   }
 
-  .memo-modal .memo-modal__header:has(.memo-modal__format-toggle) .memo-modal__autosave-status {
+  .memo-modal .memo-modal__header:has(.memo-modal__header-actions) .memo-modal__autosave-status {
     margin-right: 0;
-    max-width: 6rem;
+  }
+
+  /* 操作列の箱を外し、中のボタンをヘッダーの並びへ直接入れる
+     Unwrap the action row so its buttons join the header row directly */
+  .memo-modal .memo-modal__header-actions {
+    display: contents;
+  }
+
+  .memo-modal .memo-modal__header-actions > * {
+    order: 2;
   }
 
   .memo-modal .memo-modal__format-toggle {
-    order: 2;
+    order: 3;
+  }
+
+  /* 右端の要素は、絶対配置の閉じるボタンの分だけ空ける。メニューは画面の右端に揃える
+     The last item leaves room for the absolutely placed close button; the menu aligns to the screen edge */
+  .memo-modal .memo-modal__header-actions > .memo-modal__organize {
+    order: 4;
     margin-right: 3rem;
+  }
+
+  .memo-modal .memo-modal__organize-panel {
+    right: -3rem;
   }
 
   .memo-modal .memo-modal__header > .cc-modal__close {
     top: 0.5rem;
     right: 0.5rem;
-  }
-
-  .memo-modal .memo-modal__header-actions {
-    flex: 0 0 100%;
-    flex-wrap: nowrap;
-    gap: 0.35rem;
-  }
-
-  .memo-modal .memo-modal__tabs {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .memo-modal .memo-modal__tabs .cc-modal__tab {
-    flex: 1;
-    min-width: 0;
-    padding: 0 0.35rem;
-  }
-
-  .memo-modal .memo-modal__tabs .cc-modal__tab i {
-    display: none;
   }
 
   .memo-modal .memo-modal__body {
