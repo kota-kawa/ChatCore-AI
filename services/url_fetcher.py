@@ -6,12 +6,13 @@ import re
 import socket
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from typing import TypeVar
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
@@ -37,6 +38,10 @@ MAX_LINK_URL_CHARS = 1_000
 MAX_LINK_TEXT_CHARS = 240
 MAX_LINK_CONTEXT_CHARS = 320
 MAX_IMAGES_PER_DOCUMENT = 20
+MAX_IMAGE_RESPONSE_BYTES = 4_000_000  # raw cap for one proxied image
+# ブラウザが <img> で描けるラスタ形式だけ。SVG はスクリプトを含められるので中継しない。
+# Raster formats a browser renders in <img> only; SVG can carry script and is never relayed.
+FETCHABLE_IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"})
 
 # URL抽出用の正規表現
 # Regular expression to extract URLs
@@ -54,6 +59,12 @@ _FETCH_HEADERS = {
     "Accept": "text/html,text/plain,application/xhtml+xml;q=0.9,*/*;q=0.5",
     "Accept-Language": "ja,en;q=0.9",
 }
+_IMAGE_FETCH_HEADERS = {
+    "User-Agent": _FETCH_HEADERS["User-Agent"],
+    "Accept": "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9",
+}
+
+_FetchResult = TypeVar("_FetchResult")
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,14 @@ class FetchedImage:
     alt: str = ""
     title: str = ""
     kind: str = "image"
+
+
+@dataclass(frozen=True)
+class FetchedImageContent:
+    """Bytes of one fetched image and the media type the origin declared."""
+
+    media_type: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -460,125 +479,175 @@ def _resolve_safe_ip(url: str) -> str | None:
         return safe_ips[0]
 
 
-def _fetch_url_document_impl(url: str) -> FetchedUrlDocument | None:
-    """単一のURLを取得し、本文・最終URL・追跡可能リンクを返す。
+@contextmanager
+def _open_validated_response(
+    url: str,
+    *,
+    deadline: float,
+    headers: dict[str, str],
+) -> Iterator[tuple[requests.Response, str] | None]:
+    """リダイレクトを辿った先の応答と最終URLを渡す。安全に辿れなければ None を渡す。
 
-    Fetch a single URL and return readable content plus discovered links.
+    Yield the first non-redirect response with its final URL, or None when a hop is unsafe.
 
     Redirects are followed manually (up to MAX_REDIRECT_HOPS) and every hop
     is re-validated against the global-IP requirement so an attacker-controlled
     server cannot 302 us into the metadata service. DNS resolution is
     pinned to the IP we validated at SSRF-check time so a rebinding flip
-    between check and connect cannot reach an internal address.
+    between check and connect cannot reach an internal address. The pin stays
+    active while the caller reads the body.
     """
     current_url = url
     host_to_ip: dict[str, str] = {}
-    deadline = time.monotonic() + URL_FETCH_TIMEOUT
 
     for _hop in range(MAX_REDIRECT_HOPS + 1):
         if time.monotonic() >= deadline:
-            return None
+            break
         normalized_current_url = canonicalize_url(current_url)
         if normalized_current_url is None:
-            return None
+            break
         current_url = normalized_current_url
         ip = _resolve_safe_ip(current_url)
         if ip is None:
-            return None
+            break
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return None
+            break
         hostname = urlparse(current_url).hostname
         if hostname is None:
-            return None
+            break
         host_to_ip[hostname] = ip
 
-        try:
-            with _new_direct_session() as session, _pin_dns(host_to_ip):
-                response = session.get(
-                    current_url,
-                    headers=_FETCH_HEADERS,
-                    timeout=remaining,
-                    allow_redirects=False,
-                    stream=True,
-                )
-                try:
-                    if response.status_code in _REDIRECT_STATUS_CODES:
-                        location = response.headers.get("Location")
-                        if not location:
-                            return None
-                        # リダイレクト先も次ループで再度 SSRF 検査する。
-                        # requests の自動リダイレクトを使わないのは、各 hop の検査と DNS pinning を挟むため。
-                        # Redirects are manually validated and resolved in the next iteration.
-                        current_url = urljoin(current_url, location)
-                        continue
+        with _new_direct_session() as session, _pin_dns(host_to_ip):
+            response = session.get(
+                current_url,
+                headers=headers,
+                timeout=remaining,
+                allow_redirects=False,
+                stream=True,
+            )
+            try:
+                if response.status_code in _REDIRECT_STATUS_CODES:
+                    location = response.headers.get("Location")
+                    if not location:
+                        break
+                    # リダイレクト先も次ループで再度 SSRF 検査する。
+                    # requests の自動リダイレクトを使わないのは、各 hop の検査と DNS pinning を挟むため。
+                    # Redirects are manually validated and resolved in the next iteration.
+                    current_url = urljoin(current_url, location)
+                    continue
+                yield response, current_url
+                return
+            finally:
+                response.close()
 
-                    response.raise_for_status()
-                    content_type = response.headers.get("content-type", "").lower()
-                    media_type = content_type.split(";", 1)[0].strip()
-                    is_html = media_type == "text/html"
-                    is_plain = media_type == "text/plain"
-                    if not (is_html or is_plain):
-                        return None
+    yield None
 
-                    chunks: list[bytes] = []
-                    total = 0
-                    for chunk in response.iter_content(chunk_size=16_384):
-                        if time.monotonic() >= deadline:
-                            return None
-                        remaining_bytes = MAX_URL_RESPONSE_BYTES - total
-                        chunks.append(chunk[:remaining_bytes])
-                        total += min(len(chunk), remaining_bytes)
-                        if total >= MAX_URL_RESPONSE_BYTES:
-                            # LLM 文脈に入れる抜粋用途なので、巨大ページは先頭だけ読んで打ち切る。
-                            # メモリ消費と応答待ち時間を URL 1 件ごとに固定上限へ収めるため。
-                            # Truncate large pages to keep memory usage and latency bounded.
-                            break
 
-                    # ここで response.apparent_encoding は使えない。内部で
-                    # response.content を参照するが、上の iter_content で
-                    # ストリームを読み切っているため RuntimeError になる。
-                    # 受信済みの bytes だけから文字コードを判定する。
-                    # response.apparent_encoding cannot be used here: it reads
-                    # response.content, which raises RuntimeError once the stream
-                    # above has been drained. Resolve the charset from the bytes
-                    # we already hold instead.
-                    raw = decode_response_body(
-                        b"".join(chunks),
-                        content_type=content_type,
-                        is_html=is_html,
-                    )
-                    if is_html:
-                        document = _extract_document_from_html(
-                            raw,
-                            requested_url=url,
-                            final_url=current_url,
-                        )
-                        return document if document.text else None
-                    text = raw[:MAX_URL_TEXT_CHARS]
-                    if not text:
-                        return None
-                    return FetchedUrlDocument(
-                        requested_url=url,
-                        final_url=current_url,
-                        title="",
-                        text=text,
-                    )
-                finally:
-                    response.close()
-        except Exception:
-            logger.debug("Failed to fetch URL %s", url_for_logging(current_url))
+def _read_response_body(response: requests.Response, *, deadline: float, max_bytes: int) -> bytes | None:
+    """Read at most *max_bytes* of the body, or None once the deadline passes."""
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=16_384):
+        if time.monotonic() >= deadline:
             return None
+        remaining_bytes = max_bytes - total
+        chunks.append(chunk[:remaining_bytes])
+        total += min(len(chunk), remaining_bytes)
+        if total >= max_bytes:
+            break
+    return b"".join(chunks)
 
-    return None
+
+def _fetch_url_document_impl(url: str) -> FetchedUrlDocument | None:
+    """単一のURLを取得し、本文・最終URL・追跡可能リンクを返す。
+
+    Fetch a single URL and return readable content plus discovered links.
+    """
+    deadline = time.monotonic() + URL_FETCH_TIMEOUT
+    try:
+        with _open_validated_response(url, deadline=deadline, headers=_FETCH_HEADERS) as opened:
+            if opened is None:
+                return None
+            response, final_url = opened
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").lower()
+            media_type = content_type.split(";", 1)[0].strip()
+            is_html = media_type == "text/html"
+            is_plain = media_type == "text/plain"
+            if not (is_html or is_plain):
+                return None
+
+            # LLM 文脈に入れる抜粋用途なので、巨大ページは先頭だけ読んで打ち切る。
+            # メモリ消費と応答待ち時間を URL 1 件ごとに固定上限へ収めるため。
+            # Truncate large pages to keep memory usage and latency bounded.
+            body = _read_response_body(response, deadline=deadline, max_bytes=MAX_URL_RESPONSE_BYTES)
+            if body is None:
+                return None
+
+            # ここで response.apparent_encoding は使えない。内部で
+            # response.content を参照するが、上の iter_content で
+            # ストリームを読み切っているため RuntimeError になる。
+            # 受信済みの bytes だけから文字コードを判定する。
+            # response.apparent_encoding cannot be used here: it reads
+            # response.content, which raises RuntimeError once the stream
+            # above has been drained. Resolve the charset from the bytes
+            # we already hold instead.
+            raw = decode_response_body(
+                body,
+                content_type=content_type,
+                is_html=is_html,
+            )
+            if is_html:
+                document = _extract_document_from_html(
+                    raw,
+                    requested_url=url,
+                    final_url=final_url,
+                )
+                return document if document.text else None
+            text = raw[:MAX_URL_TEXT_CHARS]
+            if not text:
+                return None
+            return FetchedUrlDocument(
+                requested_url=url,
+                final_url=final_url,
+                title="",
+                text=text,
+            )
+    except Exception:
+        logger.debug("Failed to fetch URL %s", url_for_logging(url))
+        return None
 
 
-def fetch_url_document(url: str) -> FetchedUrlDocument | None:
+def _fetch_image_content_impl(url: str) -> FetchedImageContent | None:
+    """Fetch one raster image under the same SSRF guard as page fetches."""
+    deadline = time.monotonic() + URL_FETCH_TIMEOUT
+    try:
+        with _open_validated_response(url, deadline=deadline, headers=_IMAGE_FETCH_HEADERS) as opened:
+            if opened is None:
+                return None
+            response, _final_url = opened
+            response.raise_for_status()
+            media_type = response.headers.get("content-type", "").lower().split(";", 1)[0].strip()
+            if media_type not in FETCHABLE_IMAGE_MEDIA_TYPES:
+                return None
+            # 上限を1バイト超えるまで読み、切り詰めた画像を返さずに大きすぎる画像として捨てる。
+            # Read one byte past the cap so an oversized image is dropped instead of truncated.
+            data = _read_response_body(response, deadline=deadline, max_bytes=MAX_IMAGE_RESPONSE_BYTES + 1)
+            if not data or len(data) > MAX_IMAGE_RESPONSE_BYTES:
+                return None
+            return FetchedImageContent(media_type=media_type, data=data)
+    except Exception:
+        logger.debug("Failed to fetch image %s", url_for_logging(url))
+        return None
+
+
+def _run_bounded_fetch(fetch_impl: Callable[[str], _FetchResult | None], url: str) -> _FetchResult | None:
     """Return within one URL's waiting limit while bounding unfinished network workers globally."""
     if not _fetch_slots.acquire(blocking=False):
         return None
     try:
-        future = _fetch_executor.submit(_fetch_url_document_impl, url)
+        future = _fetch_executor.submit(fetch_impl, url)
     except Exception:
         _fetch_slots.release()
         return None
@@ -592,6 +661,16 @@ def fetch_url_document(url: str) -> FetchedUrlDocument | None:
     except Exception:
         logger.debug("Failed to fetch URL %s", url_for_logging(url))
         return None
+
+
+def fetch_url_document(url: str) -> FetchedUrlDocument | None:
+    """Fetch one page through the bounded worker pool."""
+    return _run_bounded_fetch(_fetch_url_document_impl, url)
+
+
+def fetch_image_content(url: str) -> FetchedImageContent | None:
+    """Fetch one image through the bounded worker pool."""
+    return _run_bounded_fetch(_fetch_image_content_impl, url)
 
 
 def fetch_url_content(url: str) -> str | None:
