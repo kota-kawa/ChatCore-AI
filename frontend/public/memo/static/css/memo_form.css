@@ -131,7 +131,7 @@ body.memo-page.modal-open {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 7px;
+  border-radius: 50%;
   transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
 }
@@ -521,7 +521,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
     gap: 0.35rem;
     padding: 0.35rem;
     border: 1px solid var(--memo-border);
-    border-radius: 14px;
+    border-radius: var(--radius-full);
     background: var(--memo-card);
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
   }
@@ -533,7 +533,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
     gap: 0.45rem;
     min-width: 0;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--radius-full);
     padding: 0.65rem 0.75rem;
     color: var(--memo-text-muted);
     background: transparent;
@@ -734,7 +734,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
   gap: 0.55rem;
   background: var(--memo-card-strong);
   border: 1px solid rgba(191, 122, 23, 0.22);
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   padding: 0.58rem 0.68rem;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
@@ -1392,7 +1392,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
   height: 42px;
   min-height: 42px;
   border: 1px solid rgba(191, 122, 23, 0.22);
-  border-radius: 12px;
+  border-radius: 50%;
   background: var(--memo-card-strong);
   color: #8f5a17;
   padding: 0;
@@ -1854,7 +1854,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-select__trigger {
   width: 100%;
   min-height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   border: 1px solid rgba(191, 122, 23, 0.24);
   background: var(--memo-card-strong);
   color: var(--memo-text);
@@ -1909,7 +1909,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
   min-height: 34px;
   font-size: 0.82rem;
   padding: 0.3rem 0.62rem;
-  border-radius: 8px;
+  border-radius: var(--radius-full);
 }
 
 /* Menu – rendered at document.body via portal, position set inline */
@@ -2546,7 +2546,7 @@ body.memo-page {
   height: var(--tap-target-min);
   min-height: var(--tap-target-min);
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 50%;
   background: transparent;
   color: #5f6368;
   font-size: 1.05rem;
@@ -2636,7 +2636,7 @@ body.memo-page {
   min-height: 40px;
   margin-top: 0.7rem;
   border: 1px solid rgba(217, 119, 6, 0.24);
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   background: rgba(217, 119, 6, 0.06);
   color: #8f5a17;
   font: inherit;
@@ -2655,7 +2655,7 @@ body.memo-page {
   width: 100%;
   min-height: 42px;
   border: 1px solid rgba(60, 64, 67, 0.14);
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   padding: 0.5rem 0.85rem;
   background: rgba(248, 250, 253, 0.9);
   box-shadow: none;
@@ -2727,7 +2727,7 @@ body.memo-page {
   margin: 1.5rem auto 1.75rem;
   padding: 0;
   overflow: visible;
-  border-radius: 10px;
+  border-radius: var(--radius-2xl);
   background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow:
@@ -2755,7 +2755,7 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__collapsed {
   width: 100%;
   min-height: 46px;
-  border-radius: 10px;
+  border-radius: var(--radius-2xl);
   background: transparent;
   color: #5f6368;
   padding: 0.5rem 0.75rem 0.5rem 1rem;
@@ -2780,7 +2780,7 @@ body.memo-page {
   min-height: 36px;
   flex: 1 1 auto;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   background: transparent;
   color: inherit;
   padding: 0;
@@ -2846,6 +2846,14 @@ body.memo-page {
     background-color 160ms ease,
     transform 160ms ease,
     color 160ms ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__formatting .memo-format-toolbar__btn {
+  border-radius: 50%;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-format-toggle {
+  border-radius: var(--radius-full);
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__shortcut-btn i {
@@ -3423,9 +3431,12 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-select__trigger,
 :where(body.memo-page, .memo-page-shell) .memo-control {
   border-color: #dadce0;
-  border-radius: 8px;
   background: #fff;
   color: #202124;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-control {
+  border-radius: 8px;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-select.is-open .memo-select__trigger,
@@ -4379,7 +4390,7 @@ body.memo-page {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   padding: 0.6rem 1rem;
   font-weight: 700;
   font-size: 0.9rem;
@@ -4419,7 +4430,7 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-context__status-toggle {
   display: inline-flex;
   border: 1px solid var(--memo-border);
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
@@ -4600,7 +4611,7 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions button,
 :where(body.memo-page, .memo-page-shell) .memo-context-candidates__load-more {
   border: 1px solid var(--memo-border);
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   padding: 0.35rem 0.6rem;
   color: var(--memo-text-muted);
   background: transparent;
@@ -4724,7 +4735,7 @@ body.memo-page {
   align-items: center;
   gap: 0.35rem;
   border: 1px solid var(--memo-border);
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--memo-text-muted);
   padding: 0.35rem 0.7rem;
@@ -4752,7 +4763,7 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-context__load-more {
   min-width: 10rem;
   border: 1px solid var(--memo-border);
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   padding: 0.55rem 1rem;
   color: var(--memo-text);
   background: var(--memo-card);
@@ -4849,6 +4860,12 @@ body.memo-page {
   line-height: 1.5;
   box-shadow: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* モーダル内のセレクトは共通モーダルの入力欄と同じ角丸に揃える（ページ本体はピル型）
+   Selects inside modals keep the shared modal field radius; the page itself uses pills */
+.memo-modal-scope .memo-select__trigger {
+  border-radius: 8px;
 }
 
 .memo-modal-scope .memo-collection-create__input:focus,
