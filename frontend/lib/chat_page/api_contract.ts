@@ -8,6 +8,7 @@ import type {
   ChatRoomMode,
   ChatRoomsPage,
   ChatRoomsPagination,
+  GenerativeUiArtifactImage,
   GenerativeUiArtifactV1,
   GenerativeUiArtifactStatusState,
   GenerativeUiArtifactStatusV1,
@@ -102,6 +103,38 @@ function normalizeArtifactStatus(raw: unknown): GenerativeUiArtifactStatusV1 | n
   return artifactStatus(state, normalizeReasonCode(source.reason_code ?? source.reasonCode, state));
 }
 
+// 生成UIの画像は、サーバーが署名した中継パスだけを通す。iframe の HTML と CSP にそのまま入るため、
+// パスの形をここで確かめ、外部URLや余計な文字を含むものは落とす。
+// Only the relay paths the server signed pass as generated-UI images. They are written straight into
+// the iframe HTML and its CSP, so the path shape is checked here and anything else is dropped.
+const ARTIFACT_IMAGE_PATH_PATTERN = /^\/api\/chat\/web-images\/[0-9a-f]{32}\/[A-Za-z0-9_-]{1,4000}$/;
+const MAX_ARTIFACT_IMAGES = 5;
+
+function normalizeArtifactImages(rawImages: unknown): GenerativeUiArtifactImage[] {
+  if (!Array.isArray(rawImages)) return [];
+  const images: GenerativeUiArtifactImage[] = [];
+  rawImages.forEach((rawImage) => {
+    const record = asRecord(rawImage);
+    const ref = record.ref;
+    const url = optionalString(record.url);
+    const alt = optionalString(record.alt);
+    // サーバーは source_url、正規化済みのパーツは sourceUrl を持つ（localStorage からの読み戻し）。
+    // The server sends source_url while an already-normalized part carries sourceUrl (localStorage round trip).
+    const sourceUrl = optionalString(record.source_url ?? record.sourceUrl);
+    const sourceTitle = optionalString(record.source_title ?? record.sourceTitle);
+    if (typeof ref !== "number" || !Number.isInteger(ref) || ref < 1 || ref > MAX_ARTIFACT_IMAGES) return;
+    if (!url || !ARTIFACT_IMAGE_PATH_PATTERN.test(url) || !alt || !sourceUrl) return;
+    if (images.some((image) => image.ref === ref)) return;
+    try {
+      if (!/^https?:$/.test(new URL(sourceUrl).protocol)) return;
+    } catch {
+      return;
+    }
+    images.push({ ref, url, alt, sourceUrl, ...(sourceTitle ? { sourceTitle } : {}) });
+  });
+  return images;
+}
+
 type NormalizedArtifact = {
   artifact: GenerativeUiArtifactV1 | null;
   status?: GenerativeUiArtifactStatusV1;
@@ -132,6 +165,7 @@ function normalizeArtifact(raw: unknown): NormalizedArtifact {
   const libraries = rawLibraries
     ? rawLibraries.filter((library): library is "three" => library === "three")
     : undefined;
+  const images = normalizeArtifactImages(record.images);
   // 未対応ライブラリを参照したままのコードはサーバー側（services/generative_ui.py）で
   // 拒否済み。ここで更に厳しくすると、その検証より前に保存された履歴まで表示できなくなる。
   // Code that still references an unsupported library is already rejected server-side in
@@ -144,6 +178,7 @@ function normalizeArtifact(raw: unknown): NormalizedArtifact {
       ...(description ? { description } : {}),
       ...(height ? { height } : {}),
       ...(libraries && libraries.length > 0 ? { libraries } : {}),
+      ...(images.length > 0 ? { images } : {}),
       html,
       css,
       js,

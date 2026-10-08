@@ -164,6 +164,7 @@ export const jaMessages = {
   "chat.generatedUiUnavailableHint": "モデルの出力が不完全だったため、本文のみを表示しています。",
   "chat.generatedUiBlank": "生成UIは読み込めましたが、表示できる内容がありませんでした。",
   "chat.generatedUiNavigationBlocked": "生成UIが別のページへ移動しようとしたため、安全のため表示を停止しました。",
+  "chat.generatedUiImageSources": "画像の出典",
   "chat.choiceMultipleHint": "当てはまるものをすべて選んでください",
   "chat.choiceSubmit": "選択して送信",
   "chat.choiceSeparator": "、",

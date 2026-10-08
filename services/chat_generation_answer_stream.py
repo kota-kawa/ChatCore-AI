@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from services.generative_ui import normalize_response_with_artifacts
+from services.generative_ui_images import attach_web_search_images_to_artifacts
 from services.message_parts_display import (
     GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
@@ -291,6 +292,15 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                             for part in streaming_parts_update["parts"]
                         ],
                     }
+                # 生成UIが番号で参照した検索画像を、ストリーム中の表示でも読み込めるようにする。
+                # Let a streamed generated UI load the search images it references by number.
+                streaming_parts_update = {
+                    **streaming_parts_update,
+                    "parts": attach_web_search_images_to_artifacts(
+                        streaming_parts_update["parts"],
+                        state.selected_web_search_images,
+                    ),
+                }
                 stream_image_parts = build_web_search_image_parts(state.selected_web_search_images)
                 streaming_parts_update = _with_revealed_stream_images(
                     streaming_parts_update,

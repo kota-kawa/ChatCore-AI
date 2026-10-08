@@ -69,7 +69,7 @@ _GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE = """
 This is the final output contract to apply right before you answer, using the UI_MODE chosen under the Generative UI Skill (NONE / 2D / 3D). Never output UI_MODE itself.
 
 Visual exclusivity:
-- Generated UI and web-search image parts are mutually exclusive within one turn. If UI_MODE is 2D or 3D, output the generated UI only; the application will suppress any web-search images. When UI_MODE is NONE, do not create an Artifact merely to accompany images.
+- Generated UI and web-search image parts are mutually exclusive within one turn. If UI_MODE is 2D or 3D, output the generated UI only; the application will not attach web-search images beside it, and the only way to show one is inside the Artifact through `generated_ui_images` (see the sandbox requirements below). When UI_MODE is NONE, do not create an Artifact merely to accompany images.
 - If UI_MODE is NONE and the application shows web-search images, a separate selection pass using the selected conversation model has already decided their inline placement. Do not emit image or image-link markup in the prose.
 - Never substitute links for a requested visual. Replying to "show me photos of X" with gallery, image-search, or photo-library URLs, or with one link per item, is prohibited; describe the appearance in prose as well and let the application attach suitable images.
 
@@ -92,6 +92,7 @@ The Artifact runs in an isolated sandbox; violating these hard requirements reje
 - No code from strings: eval, new Function, and setTimeout or setInterval called with a string are unavailable.
 - No access to the surrounding page: window.parent, top, opener, postMessage, and any assignment to location are unavailable.
 - No external resources: every image, font, and stylesheet must be inline, a data: URI, or an inline SVG. External URLs are stripped, and @import is removed.
+- Web-search images are the single exception. When a web_search result in this turn lists `generated_ui_images`, write an entry's `ref` exactly where an image URL goes: `<img src="web-image:1" alt="...">` in html, the string "web-image:1" as an img src in js, or `url(web-image:1)` in css. Use them when the real appearance helps the subject, match each image to its item by the listed alt and source_title, give every image an alt and a fixed-size box with object-fit:cover, and keep the layout complete if an image fails to load. Use only the listed refs. Without a list, use no photos: never write an http(s) image URL and never invent a ref.
 - No script, iframe, object, embed, link, meta, or base tags in html. Put JavaScript in js and CSS in css, never inside html.
 - Keep html and css within 12000 characters each and js within 18000, with roughly 36000 in total. Prefer well under those limits and narrow long data to representative examples.
 - height must be between 160 and 900.

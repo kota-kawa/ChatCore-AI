@@ -5,12 +5,17 @@ import { useTranslation } from "../../contexts/locale_context";
 
 // サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
 // scriptSourcesには、インラインに加えて許可するローカル配信ライブラリのURLだけを渡す
+// imageSourcesには、検索画像を参照するArtifactのときだけ自オリジンの中継パスを渡す。外部ホストを
+// 許すと、生成されたJSが画像URLに会話内容を載せて送れるため、許可するのはこのパスに限る
 // Content Security Policy for sandbox iframe (fully blocks external connections, forms, etc.)
 // scriptSources receives only the locally served library URLs allowed in addition to inline
-function buildSandboxCsp(scriptSources: string[]) {
+// imageSources receives the same-origin relay path, and only for an artifact that references search
+// images. Allowing an external host would let generated JS ship conversation content in an image
+// URL, so this path is the only one ever allowed
+function buildSandboxCsp(scriptSources: string[], imageSources: string[]) {
   return [
     "default-src 'none'",
-    "img-src data: blob:",
+    `img-src ${["data:", "blob:", ...imageSources].join(" ")}`,
     "style-src 'unsafe-inline'",
     `script-src ${["'unsafe-inline'", ...scriptSources].join(" ")}`,
     "connect-src 'none'",
@@ -26,6 +31,23 @@ function buildSandboxCsp(scriptSources: string[]) {
 // Path of the locally served Three.js (UMD build); CDNs are blocked by the CSP,
 // so it is served from our own origin
 const THREE_VENDOR_SCRIPT_PATH = "/static/js/vendor/three.min.js";
+
+// 検索画像の中継パス。services/web_search_image_proxy.py と同じ値
+// Relay path for search images; same value as services/web_search_image_proxy.py
+const WEB_IMAGE_PROXY_PATH_PREFIX = "/api/chat/web-images/";
+const WEB_IMAGE_REFERENCE_PATTERN = /web-image:(\d{1,2})(?!\d)/g;
+// 一覧に無い番号の代わりに置く透明な1画素。未知のスキームを読みに行って CSP 違反を出さないため
+// Transparent pixel placed for an unlisted number, so no unknown scheme is requested and blocked by CSP
+const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+
+// Artifact が書いた web-image:N を、サーバーが署名した中継URL（自オリジンの絶対URL）へ置き換える
+// Replace each web-image:N the artifact wrote with the relay URL the server signed (absolute, same origin)
+function resolveWebImageReferences(source: string, artifact: GenerativeUiArtifactV1, origin: string) {
+  return source.replace(WEB_IMAGE_REFERENCE_PATTERN, (_match, rawRef: string) => {
+    const image = artifact.images?.find((candidate) => candidate.ref === Number(rawRef));
+    return image ? `${origin}${image.url}` : TRANSPARENT_PIXEL;
+  });
+}
 
 // アーティファクトが要求するライブラリを、自オリジンの絶対URLに解決する
 // Resolve the libraries requested by the artifact into absolute same-origin URLs
@@ -126,9 +148,11 @@ function escapeStyle(value: string) {
 // Generate the srcdoc HTML to embed an artifact in an iframe (includes CSP and auto-height script)
 export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, english = false) {
   const title = escapeHtmlAttribute(artifact.title);
-  const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${artifact.css || ""}`);
-  const js = escapeScript(artifact.js || "");
-  const html = artifact.html || "";
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${resolveWebImageReferences(artifact.css || "", artifact, origin)}`);
+  const js = escapeScript(resolveWebImageReferences(artifact.js || "", artifact, origin));
+  const html = resolveWebImageReferences(artifact.html || "", artifact, origin);
+  const imageSources = artifact.images?.length ? [`${origin}${WEB_IMAGE_PROXY_PATH_PREFIX}`] : [];
   const libraryScriptUrls = resolveLibraryScriptUrls(artifact);
   const threeCompatibilityScript = buildThreeCompatibilityScript(artifact);
   const libraryScriptTags = libraryScriptUrls
@@ -309,6 +333,12 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   document.addEventListener("securitypolicyviolation", function(event){
     if (!cspViolation) cspViolation = String((event && event.violatedDirective) || "csp");
   });
+  // 読み込めなかった画像は隠す。元サイトの削除や取得失敗で、壊れた画像の印がレイアウトに残らないようにする。
+  // Hide an image that failed to load, so a deleted or unreachable source leaves no broken-image mark.
+  document.addEventListener("error", function(event){
+    var target = event && event.target;
+    if (target && target.tagName === "IMG") target.style.display = "none";
+  }, true);
   if (typeof ResizeObserver === "function") {
     try { new ResizeObserver(requestHeight).observe(document.documentElement); } catch (_) {}
     try { new ResizeObserver(requestHeight).observe(root()); } catch (_) {}
@@ -324,7 +354,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(buildSandboxCsp(libraryScriptUrls))}">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(buildSandboxCsp(libraryScriptUrls, imageSources))}">
 <title>${title}</title>
 <style>${css}</style>
 ${libraryScriptTags}
@@ -355,6 +385,25 @@ try {
 </script>
 </body>
 </html>`;
+}
+
+// 参照している画像の出典ページを、同じページを重ねずに並べる。題名が無ければホスト名を出す
+// List the source pages of the referenced images without repeating a page; the hostname stands in for a missing title
+function listImageSources(artifact: GenerativeUiArtifactV1) {
+  const sources: { url: string; label: string }[] = [];
+  (artifact.images || []).forEach((image) => {
+    if (sources.some((source) => source.url === image.sourceUrl)) return;
+    let label = image.sourceTitle || "";
+    if (!label) {
+      try {
+        label = new URL(image.sourceUrl).hostname;
+      } catch {
+        return;
+      }
+    }
+    sources.push({ url: image.sourceUrl, label });
+  });
+  return sources;
 }
 
 // サンドボックスアーティファクトフレームのprops型定義
@@ -584,6 +633,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   // 失敗（例外・CSP遮断・タイムアウト）は同じ「実行できなかった」文言でまとめる。
   // navigation_blocked gets its own message once the frame has been destroyed, blank gets
   // its own too, and the remaining failures (exception, CSP block, timeout) share one message.
+  const imageSources = useMemo(() => listImageSources(artifact), [artifact]);
   const runtimeFailed = runtimeState !== "" && runtimeState !== "ready";
   const navigationBlocked = runtimeState === "navigation_blocked";
   const runtimeMessage = runtimeState === "blank"
@@ -628,6 +678,24 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
       {runtimeMessage ? (
         <p className="sandbox-artifact__error" data-runtime-state={runtimeState}>
           {runtimeMessage}
+        </p>
+      ) : null}
+      {imageSources.length > 0 ? (
+        // iframe の中のリンクは開けないので、画像の出典は枠の外に出す。
+        // Links inside the iframe cannot open, so image sources are credited outside the frame.
+        <p className="sandbox-artifact__image-sources">
+          <span className="sandbox-artifact__image-sources-label">{t("chat.generatedUiImageSources")}</span>
+          {imageSources.map((source) => (
+            <a
+              key={source.url}
+              className="sandbox-artifact__image-source"
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {source.label}
+            </a>
+          ))}
         </p>
       ) : null}
     </section>

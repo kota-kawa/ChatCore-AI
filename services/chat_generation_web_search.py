@@ -21,6 +21,7 @@ from .chat_tool_calls import (
     _tool_argument_text,
     _tool_result_message,
 )
+from .generative_ui_images import GENERATED_UI_IMAGES_TOOL_KEY, build_generated_ui_image_catalog
 from .web_search import (
     WEB_SEARCH_ERROR_QUOTA_EXCEEDED,
     WEB_SEARCH_ERROR_REQUEST_FAILED,
@@ -358,6 +359,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
             cached=True,
             telemetry=state.telemetry,
         )
+        tool_payload = self._with_generated_ui_images(state, tool_payload)
         state.current_messages.append(
             _tool_result_message(
                 tool_call,
@@ -421,12 +423,30 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
             state.evidence_context_budget,
             telemetry=state.telemetry,
         )
+        tool_payload = self._with_generated_ui_images(state, tool_payload)
         state.current_messages.append(
             _tool_result_message(
                 tool_call,
                 tool_payload,
             )
         )
+
+    # このターンで選定済みの検索画像を、生成UIが番号で参照できる一覧としてツール結果へ添える。
+    # 生成UIを出さないターン（利用者が不要と書いた、または判定が NONE）では添えない。
+    # Add the images selected so far this turn to the tool result as a list a generated UI can
+    # reference by number. Turns that produce no generated UI (the user refused one, or the
+    # decision is NONE) get no list.
+    def _with_generated_ui_images(
+        self,
+        state: ChatTurnRunState,
+        tool_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._explicit_ui_opt_out or str(self._ui_mode or "").strip().upper() == "NONE":
+            return tool_payload
+        catalog = build_generated_ui_image_catalog(state.selected_web_search_images)
+        if not catalog:
+            return tool_payload
+        return {**tool_payload, GENERATED_UI_IMAGES_TOOL_KEY: catalog}
 
     # 月間上限に達した検索を、ターンを落とさずに記録・通知するフェーズ。
     # The phase that records and announces a quota-exhausted search without failing the turn.

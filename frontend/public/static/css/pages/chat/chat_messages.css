@@ -461,6 +461,32 @@
   line-height: 1.45;
 }
 
+/* 生成UIが使った検索画像の出典。枠の下に小さく並べ、長い題名は1行で省略する。
+   Sources of the search images a generated UI used: a small row under the frame, with long
+   titles truncated to one line. */
+:where(body.chat-page, .chat-page-shell) .sandbox-artifact .sandbox-artifact__image-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+:where(body.chat-page, .chat-page-shell) .sandbox-artifact .sandbox-artifact__image-source {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary, #6b7280);
+  text-decoration: underline;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 生成UIを表示できなかったことを伝える通知。本文と同じ幅で、警告としてだけ目立たせる。 */
 /* Notice shown when a generated UI could not be displayed: body width, warning weight only. */
 :where(body.chat-page, .chat-page-shell) .generative-ui-status {

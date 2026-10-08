@@ -49,6 +49,7 @@ from .chat_url_context import PastedUrlPage
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .chat_workspace_tools.runner import WorkspaceToolRunner
 from .chat_write_claim_guard import _unconfirmed_write_claim_fallback
+from .generative_ui_images import attach_web_search_images_to_artifacts
 from .selected_reference_context import SelectedReferenceLookupTrace
 from .web_search import WebSearchResult
 from .web_search_images import append_web_search_image_parts
@@ -394,6 +395,10 @@ class ChatGenerationJobBase:
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
         if self._selected_web_search_images:
+            message_parts = attach_web_search_images_to_artifacts(
+                message_parts,
+                self._selected_web_search_images,
+            )
             message_parts = append_web_search_image_parts(
                 message_parts,
                 self._selected_web_search_images,

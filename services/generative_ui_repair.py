@@ -80,8 +80,10 @@ def build_artifact_repair_messages(
         "must hold one valid JSON object containing version, title, description, height, html, css, "
         "and js, with every embedded quote, newline, and backslash escaped so the block parses as "
         "valid JSON. The html must contain id=\"app\" and the js must be syntactically complete. "
-        "Use no network, external resources, imports, storage, or parent-page access. Keep the "
-        "result compact enough to finish, and include the closing brace and closing fence."
+        "Use no network, external resources, imports, storage, or parent-page access; the one "
+        "allowed image source is a `web-image:N` reference the previous answer already used, kept "
+        "exactly as written. Keep the result compact enough to finish, and include the closing "
+        "brace and closing fence."
     )
     messages: list[dict[str, Any]] = []
     if raw_text.strip():
