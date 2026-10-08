@@ -23,8 +23,12 @@ import binascii
 import hashlib
 import hmac
 import re
+import threading
+import time
+from collections import OrderedDict
 
 from services.runtime_config import get_session_secret_key
+from services.url_fetcher import URL_FETCH_TIMEOUT, FetchedImageContent, fetch_image_content
 
 WEB_SEARCH_IMAGE_PROXY_PATH_PREFIX = "/api/chat/web-images/"
 
@@ -40,6 +44,91 @@ _SIGNING_CONTEXT = b"web-search-image-proxy:v1:"
 # 秘密鍵が無い開発環境でもパスの形は保つ。本番は app.py が FASTAPI_SECRET_KEY を必須にしている。
 # Keeps the path shape in development without a key; app.py requires FASTAPI_SECRET_KEY in production.
 _DEVELOPMENT_SIGNING_SECRET = "web-search-image-proxy-development-secret"
+
+
+# 取得結果を持つ時間。この間は、ブラウザが同じパスを何度開いても元サイトへは取りに行かない。
+# 生成された JavaScript が取得の回数や間隔で元サイトへ情報を送る経路を塞ぐためで、失敗も覚える。
+# How long a fetch outcome is kept. Within it, no number of requests for the same path reaches the
+# origin again, which closes the channel where generated JavaScript signals the origin through
+# how often or when it loads an image. Failures are remembered too.
+IMAGE_CACHE_TTL_SECONDS = 86_400
+IMAGE_FAILURE_TTL_SECONDS = 600
+MAX_IMAGE_CACHE_BYTES = 32_000_000
+# 中継が同時に使える取得の数。URL 取得と共有する枠（services/url_fetcher.py）を、未認証の中継が
+# 使い切ってチャットのページ取得を止めないよう、その一部に抑える。
+# How many fetches the relay may run at once. It keeps the unauthenticated relay to a share of the
+# slots it has in common with page fetches (services/url_fetcher.py), so it cannot starve them.
+MAX_CONCURRENT_IMAGE_RELAY_FETCHES = 4
+
+_cache_lock = threading.Lock()
+_image_cache: OrderedDict[str, tuple[float, FetchedImageContent | None]] = OrderedDict()
+_image_cache_bytes = 0
+_inflight_fetches: dict[str, threading.Event] = {}
+_relay_slots = threading.BoundedSemaphore(MAX_CONCURRENT_IMAGE_RELAY_FETCHES)
+
+
+def _cached_image(image_url: str) -> tuple[bool, FetchedImageContent | None]:
+    entry = _image_cache.get(image_url)
+    if entry is None:
+        return False, None
+    expires_at, image = entry
+    if expires_at <= time.monotonic():
+        _drop_cached_image(image_url)
+        return False, None
+    _image_cache.move_to_end(image_url)
+    return True, image
+
+
+def _drop_cached_image(image_url: str) -> None:
+    global _image_cache_bytes
+    _, image = _image_cache.pop(image_url)
+    if image is not None:
+        _image_cache_bytes -= len(image.data)
+
+
+def _store_image(image_url: str, image: FetchedImageContent | None) -> None:
+    global _image_cache_bytes
+    if image_url in _image_cache:
+        _drop_cached_image(image_url)
+    ttl = IMAGE_CACHE_TTL_SECONDS if image is not None else IMAGE_FAILURE_TTL_SECONDS
+    _image_cache[image_url] = (time.monotonic() + ttl, image)
+    if image is not None:
+        _image_cache_bytes += len(image.data)
+    while _image_cache_bytes > MAX_IMAGE_CACHE_BYTES and len(_image_cache) > 1:
+        _drop_cached_image(next(iter(_image_cache)))
+
+
+def load_web_search_image(image_url: str) -> FetchedImageContent | None:
+    """Return the image for a signed URL, fetching the origin at most once per cache period."""
+    with _cache_lock:
+        cached, image = _cached_image(image_url)
+        if cached:
+            return image
+        pending = _inflight_fetches.get(image_url)
+        if pending is None:
+            _inflight_fetches[image_url] = threading.Event()
+    if pending is not None:
+        # 同じ画像を取得中の要求があれば、その結果を待って共有する。
+        # Another request is already fetching this image; wait for it and share the outcome.
+        pending.wait(URL_FETCH_TIMEOUT + 1)
+        with _cache_lock:
+            return _cached_image(image_url)[1]
+
+    try:
+        if not _relay_slots.acquire(blocking=False):
+            # 混雑で取得しなかった場合は失敗として覚えない。元サイトへは何も送っていない。
+            # A fetch skipped for load is not remembered as a failure; nothing reached the origin.
+            return None
+        try:
+            image = fetch_image_content(image_url)
+        finally:
+            _relay_slots.release()
+        with _cache_lock:
+            _store_image(image_url, image)
+        return image
+    finally:
+        with _cache_lock:
+            _inflight_fetches.pop(image_url).set()
 
 
 def _signature(image_url: str) -> str:

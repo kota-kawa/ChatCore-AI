@@ -15,9 +15,8 @@ from fastapi.responses import Response
 
 from services.async_utils import run_blocking
 from services.error_messages import ERROR_CHAT_IMAGE_NOT_FOUND
-from services.url_fetcher import fetch_image_content
 from services.web import jsonify
-from services.web_search_image_proxy import resolve_web_search_image_proxy_url
+from services.web_search_image_proxy import load_web_search_image, resolve_web_search_image_proxy_url
 
 from . import chat_bp
 
@@ -27,7 +26,7 @@ async def get_web_search_image(signature: str, token: str):
     image_url = resolve_web_search_image_proxy_url(signature, token)
     if image_url is None:
         return jsonify({"error": ERROR_CHAT_IMAGE_NOT_FOUND}, status_code=404)
-    image = await run_blocking(fetch_image_content, image_url)
+    image = await run_blocking(load_web_search_image, image_url)
     if image is None:
         return jsonify({"error": ERROR_CHAT_IMAGE_NOT_FOUND}, status_code=404)
     # 公開Webの画像なので共有キャッシュに載せてよい。元サイトの差し替えに追従できるよう1日で切る。
