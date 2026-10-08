@@ -167,6 +167,14 @@
   margin-right: 3rem;
 }
 
+@media (min-width: 769px) {
+  /* 未ログイン時はアイコンより幅のあるログインボタンを避ける。
+     Guests need room for the wider login button rather than just the user icon. */
+  .chat-page-shell[data-authenticated="false"] .header-right {
+    margin-right: 12rem;
+  }
+}
+
 :where(body.chat-page, .chat-page-shell) .chat-header .icon-button {
   border-radius: 50%;
   width: 2.75rem;
