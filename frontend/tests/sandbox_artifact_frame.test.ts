@@ -53,15 +53,16 @@ test("buildSandboxArtifactSrcDoc includes restrictive CSP and escapes script end
 });
 
 const imagePath = `/api/chat/web-images/${"a".repeat(32)}/aHR0cHM6Ly9leGFtcGxlLmNvbS9hLmpwZw`;
+const otherImagePath = `/api/chat/web-images/${"b".repeat(32)}/aHR0cHM6Ly9leGFtcGxlLmNvbS9iLmpwZw`;
 const imageArtifact: GenerativeUiArtifactV1 = {
   ...artifact,
   html: '<div id="app"><img src="web-image:1" alt="Temple"><img src="web-image:4" alt="Unlisted"></div>',
   css: "#app{background:url(web-image:1)}",
   js: 'const hero = "web-image:1"; const tenth = "web-image:10";',
   images: [
-    { ref: 1, url: imagePath, alt: "Temple", sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
-    { ref: 2, url: imagePath, alt: "Gate", sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
-    { ref: 3, url: imagePath, alt: "Garden", sourceUrl: "https://garden.example.org/page" },
+    { ref: 1, url: imagePath, sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
+    { ref: 2, url: otherImagePath, sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
+    { ref: 3, url: imagePath, sourceUrl: "https://garden.example.org/page" },
   ],
 };
 
@@ -76,7 +77,10 @@ test("buildSandboxArtifactSrcDoc resolves numbered images to the signed relay pa
   assert.match(srcDoc, /<img src="data:image\/gif;base64,[^"]+" alt="Unlisted">/);
   assert.match(srcDoc, /const tenth = "data:image\/gif;base64,/);
   assert.doesNotMatch(srcDoc, /web-image:\d/);
-  assert.match(srcDoc, /img-src data: blob: \/api\/chat\/web-images\/;/);
+  // 許可するのは参照している画像のパスそのものだけで、中継パス全体は開けない。
+  // Only the exact paths of the referenced images are allowed, never the whole relay path.
+  assert.ok(srcDoc.includes(`img-src data: blob: ${imagePath} ${otherImagePath} ${imagePath};`));
+  assert.doesNotMatch(srcDoc, /img-src[^;]*\/api\/chat\/web-images\/[ ;]/);
 });
 
 test("buildSandboxArtifactSrcDoc keeps img-src closed for artifacts without search images", () => {

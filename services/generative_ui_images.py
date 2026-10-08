@@ -43,7 +43,6 @@ class GenerativeUiImageV1(BaseModel):
 
     ref: int = Field(ge=1, le=MAX_WEB_SEARCH_IMAGES_PER_REPLY)
     url: str
-    alt: str = Field(min_length=1, max_length=180)
     source_url: str = Field(max_length=1000)
     source_title: str = Field(default="", max_length=160)
 
@@ -136,16 +135,20 @@ def attach_web_search_images_to_artifacts(
         if part.get("type") not in GENERATIVE_UI_PART_TYPES or not isinstance(artifact, dict):
             attached_parts.append(part)
             continue
-        images = [
-            {
-                "ref": number,
-                "url": build_web_search_image_proxy_path(numbered_images[number]["url"]),
-                "alt": numbered_images[number]["alt"] or "Web検索結果の画像",
-                "source_url": numbered_images[number]["source_url"],
-                "source_title": numbered_images[number]["source_title"],
-            }
-            for number in _referenced_image_numbers(artifact)
-            if number in numbered_images
-        ]
+        # 検証を通らない画像（中継パスに収まらない長さのURLなど）は、保存する前にここで外す。
+        # Images that would fail validation, such as a URL too long for a relay path, are left
+        # out here rather than stored.
+        images = valid_generated_ui_images(
+            [
+                {
+                    "ref": number,
+                    "url": build_web_search_image_proxy_path(numbered_images[number]["url"]),
+                    "source_url": numbered_images[number]["source_url"],
+                    "source_title": numbered_images[number]["source_title"],
+                }
+                for number in _referenced_image_numbers(artifact)
+                if number in numbered_images
+            ]
+        )
         attached_parts.append({**part, "artifact": {**artifact, "images": images}} if images else part)
     return attached_parts

@@ -66,7 +66,6 @@ export type GenerativeUiArtifactLibrary = "three";
 export type GenerativeUiArtifactImage = {
   ref: number;
   url: string;
-  alt: string;
   sourceUrl: string;
   sourceTitle?: string;
 };

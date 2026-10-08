@@ -39,6 +39,7 @@ MAX_LINK_TEXT_CHARS = 240
 MAX_LINK_CONTEXT_CHARS = 320
 MAX_IMAGES_PER_DOCUMENT = 20
 MAX_IMAGE_RESPONSE_BYTES = 4_000_000  # raw cap for one proxied image
+MAX_CONCURRENT_IMAGE_FETCHES = 4
 # ブラウザが <img> で描けるラスタ形式だけ。SVG はスクリプトを含められるので中継しない。
 # Raster formats a browser renders in <img> only; SVG can carry script and is never relayed.
 FETCHABLE_IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"})
@@ -51,6 +52,12 @@ _BLOCKED_HOSTNAMES = frozenset({"localhost"})
 _REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
 _fetch_slots = threading.BoundedSemaphore(MAX_CONCURRENT_URL_FETCHES)
 _fetch_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_URL_FETCHES, thread_name_prefix="url-fetch")
+# 画像の取得は未認証の中継から呼ばれるため、ページ取得とは別の枠と実行プールで動かす。
+# 画像の取得がどれだけ滞っても、チャットのページ取得の枠は減らない。
+# Image fetches are driven by an unauthenticated relay, so they run on their own slots and pool.
+# However many of them stall, the page-fetch slots are untouched.
+_image_fetch_slots = threading.BoundedSemaphore(MAX_CONCURRENT_IMAGE_FETCHES)
+_image_fetch_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_IMAGE_FETCHES, thread_name_prefix="image-fetch")
 
 # リクエストヘッダー
 # Request headers
@@ -84,6 +91,10 @@ class FetchedImage:
     alt: str = ""
     title: str = ""
     kind: str = "image"
+
+
+class FetchSlotsBusyError(Exception):
+    """No fetch slot was free, so nothing was requested from the origin."""
 
 
 @dataclass(frozen=True)
@@ -642,17 +653,26 @@ def _fetch_image_content_impl(url: str) -> FetchedImageContent | None:
         return None
 
 
-def _run_bounded_fetch(fetch_impl: Callable[[str], _FetchResult | None], url: str) -> _FetchResult | None:
-    """Return within one URL's waiting limit while bounding unfinished network workers globally."""
-    if not _fetch_slots.acquire(blocking=False):
-        return None
+def _run_bounded_fetch(
+    fetch_impl: Callable[[str], _FetchResult | None],
+    url: str,
+    *,
+    slots: threading.BoundedSemaphore,
+    executor: ThreadPoolExecutor,
+) -> _FetchResult | None:
+    """Return within one URL's waiting limit while bounding unfinished network workers globally.
+
+    Raises FetchSlotsBusyError when no slot is free, before anything is sent to the origin.
+    """
+    if not slots.acquire(blocking=False):
+        raise FetchSlotsBusyError
     try:
-        future = _fetch_executor.submit(fetch_impl, url)
+        future = executor.submit(fetch_impl, url)
     except Exception:
-        _fetch_slots.release()
+        slots.release()
         return None
     # A timed-out DNS or read can continue; retain its slot until the worker actually exits.
-    future.add_done_callback(lambda _future: _fetch_slots.release())
+    future.add_done_callback(lambda _future: slots.release())
     try:
         return future.result(timeout=URL_FETCH_TIMEOUT)
     except FuturesTimeoutError:
@@ -665,12 +685,19 @@ def _run_bounded_fetch(fetch_impl: Callable[[str], _FetchResult | None], url: st
 
 def fetch_url_document(url: str) -> FetchedUrlDocument | None:
     """Fetch one page through the bounded worker pool."""
-    return _run_bounded_fetch(_fetch_url_document_impl, url)
+    try:
+        return _run_bounded_fetch(_fetch_url_document_impl, url, slots=_fetch_slots, executor=_fetch_executor)
+    except FetchSlotsBusyError:
+        return None
 
 
 def fetch_image_content(url: str) -> FetchedImageContent | None:
-    """Fetch one image through the bounded worker pool."""
-    return _run_bounded_fetch(_fetch_image_content_impl, url)
+    """Fetch one image through the image worker pool.
+
+    Raises FetchSlotsBusyError when every image slot is taken, so the caller can tell "not
+    attempted" apart from an origin that failed.
+    """
+    return _run_bounded_fetch(_fetch_image_content_impl, url, slots=_image_fetch_slots, executor=_image_fetch_executor)
 
 
 def fetch_url_content(url: str) -> str | None:

@@ -5,13 +5,13 @@ import { useTranslation } from "../../contexts/locale_context";
 
 // サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
 // scriptSourcesには、インラインに加えて許可するローカル配信ライブラリのURLだけを渡す
-// imageSourcesには、検索画像を参照するArtifactのときだけ自オリジンの中継パスを渡す。外部ホストを
-// 許すと、生成されたJSが画像URLに会話内容を載せて送れるため、許可するのはこのパスに限る
+// imageSourcesには、Artifactが参照する検索画像の中継URLだけを1件ずつ渡す（末尾に / が無いので
+// 完全一致）。外部ホストや中継パス全体を許すと、生成されたJSが画像URLに会話内容を載せて送れる
 // Content Security Policy for sandbox iframe (fully blocks external connections, forms, etc.)
 // scriptSources receives only the locally served library URLs allowed in addition to inline
-// imageSources receives the same-origin relay path, and only for an artifact that references search
-// images. Allowing an external host would let generated JS ship conversation content in an image
-// URL, so this path is the only one ever allowed
+// imageSources receives the relay URL of each search image the artifact references, one by one
+// (no trailing slash, so each is an exact match). Allowing an external host, or the whole relay
+// path, would let generated JS ship conversation content in an image URL
 function buildSandboxCsp(scriptSources: string[], imageSources: string[]) {
   return [
     "default-src 'none'",
@@ -32,9 +32,6 @@ function buildSandboxCsp(scriptSources: string[], imageSources: string[]) {
 // so it is served from our own origin
 const THREE_VENDOR_SCRIPT_PATH = "/static/js/vendor/three.min.js";
 
-// 検索画像の中継パス。services/web_search_image_proxy.py と同じ値
-// Relay path for search images; same value as services/web_search_image_proxy.py
-const WEB_IMAGE_PROXY_PATH_PREFIX = "/api/chat/web-images/";
 const WEB_IMAGE_REFERENCE_PATTERN = /web-image:(\d{1,2})(?!\d)/g;
 // 一覧に無い番号の代わりに置く透明な1画素。未知のスキームを読みに行って CSP 違反を出さないため
 // Transparent pixel placed for an unlisted number, so no unknown scheme is requested and blocked by CSP
@@ -152,7 +149,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${resolveWebImageReferences(artifact.css || "", artifact, origin)}`);
   const js = escapeScript(resolveWebImageReferences(artifact.js || "", artifact, origin));
   const html = resolveWebImageReferences(artifact.html || "", artifact, origin);
-  const imageSources = artifact.images?.length ? [`${origin}${WEB_IMAGE_PROXY_PATH_PREFIX}`] : [];
+  const imageSources = (artifact.images || []).map((image) => `${origin}${image.url}`);
   const libraryScriptUrls = resolveLibraryScriptUrls(artifact);
   const threeCompatibilityScript = buildThreeCompatibilityScript(artifact);
   const libraryScriptTags = libraryScriptUrls

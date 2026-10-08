@@ -8,7 +8,7 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.web_search_image_media import get_web_search_image
 from services import web_search_image_proxy
@@ -23,7 +23,7 @@ from services.generative_ui_images import (
     attach_web_search_images_to_artifacts,
     build_generated_ui_image_catalog,
 )
-from services.url_fetcher import FetchedImageContent
+from services.url_fetcher import FetchedImageContent, FetchSlotsBusyError
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
 from services.web_search_image_proxy import (
     WEB_SEARCH_IMAGE_PROXY_PATH_PREFIX,
@@ -93,10 +93,10 @@ class WebSearchImageRouteTests(unittest.TestCase):
     def test_signed_path_relays_the_fetched_image(self):
         signature, token = _split_proxy_path(build_web_search_image_proxy_path(_SELECTIONS[0]["url"]))
         fetched = FetchedImageContent(media_type="image/jpeg", data=b"\xff\xd8jpeg-bytes")
-        with patch("blueprints.chat.web_search_image_media.load_web_search_image", return_value=fetched) as fetch:
+        with patch("blueprints.chat.web_search_image_media.load_web_search_image", AsyncMock(return_value=fetched)) as fetch:
             response = asyncio.run(get_web_search_image(signature, token))
 
-        fetch.assert_called_once_with(_SELECTIONS[0]["url"])
+        fetch.assert_awaited_once_with(_SELECTIONS[0]["url"])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.media_type, "image/jpeg")
         self.assertEqual(response.body, fetched.data)
@@ -105,15 +105,15 @@ class WebSearchImageRouteTests(unittest.TestCase):
     def test_unsigned_url_is_never_fetched(self):
         signature, _ = _split_proxy_path(build_web_search_image_proxy_path(_SELECTIONS[0]["url"]))
         _, other_token = _split_proxy_path(build_web_search_image_proxy_path("http://169.254.169.254/latest/meta-data"))
-        with patch("blueprints.chat.web_search_image_media.load_web_search_image") as fetch:
+        with patch("blueprints.chat.web_search_image_media.load_web_search_image", AsyncMock()) as fetch:
             response = asyncio.run(get_web_search_image(signature, other_token))
 
-        fetch.assert_not_called()
+        fetch.assert_not_awaited()
         self.assertEqual(response.status_code, 404)
 
     def test_failed_fetch_answers_404(self):
         signature, token = _split_proxy_path(build_web_search_image_proxy_path(_SELECTIONS[0]["url"]))
-        with patch("blueprints.chat.web_search_image_media.load_web_search_image", return_value=None):
+        with patch("blueprints.chat.web_search_image_media.load_web_search_image", AsyncMock(return_value=None)):
             response = asyncio.run(get_web_search_image(signature, token))
 
         self.assertEqual(response.status_code, 404)
@@ -125,54 +125,66 @@ class WebSearchImageRelayCacheTests(unittest.TestCase):
         web_search_image_proxy._image_cache_bytes = 0
         self.addCleanup(web_search_image_proxy._image_cache.clear)
 
-    def test_repeated_requests_reach_the_origin_once(self):
+    def _load(self, *urls: str) -> list:
+        async def load_all():
+            return await asyncio.gather(*(web_search_image_proxy.load_web_search_image(url) for url in urls))
+
+        return asyncio.run(load_all())
+
+    def test_repeated_and_overlapping_requests_reach_the_origin_once(self):
+        url = "https://images.example.com/a.png"
         fetched = FetchedImageContent(media_type="image/png", data=b"png-bytes")
         with patch.object(web_search_image_proxy, "fetch_image_content", return_value=fetched) as fetch:
-            results = [web_search_image_proxy.load_web_search_image("https://images.example.com/a.png") for _ in range(5)]
+            overlapping = self._load(url, url, url)
+            later = self._load(url)
 
-        self.assertEqual(results, [fetched] * 5)
-        fetch.assert_called_once_with("https://images.example.com/a.png")
+        self.assertEqual([*overlapping, *later], [fetched] * 4)
+        fetch.assert_called_once_with(url)
+        self.assertEqual(web_search_image_proxy._inflight_fetches, {})
 
     def test_failures_are_remembered_and_expire(self):
         url = "https://images.example.com/gone.png"
         with patch.object(web_search_image_proxy, "fetch_image_content", return_value=None) as fetch:
-            self.assertIsNone(web_search_image_proxy.load_web_search_image(url))
-            self.assertIsNone(web_search_image_proxy.load_web_search_image(url))
+            self.assertEqual(self._load(url), [None])
+            self.assertEqual(self._load(url), [None])
             self.assertEqual(fetch.call_count, 1)
 
             expires_at, _ = web_search_image_proxy._image_cache[url]
             with patch.object(web_search_image_proxy.time, "monotonic", return_value=expires_at + 1):
-                self.assertIsNone(web_search_image_proxy.load_web_search_image(url))
+                self.assertEqual(self._load(url), [None])
             self.assertEqual(fetch.call_count, 2)
 
-    def test_cache_evicts_oldest_images_past_the_byte_cap(self):
+    def test_cache_evicts_oldest_entries_past_the_byte_and_entry_caps(self):
         def fetch(url):
             return FetchedImageContent(media_type="image/png", data=url.encode() + b"x" * 40)
 
+        urls = [f"https://images.example.com/{name}.png" for name in ("a", "b", "c")]
         with (
             patch.object(web_search_image_proxy, "fetch_image_content", side_effect=fetch),
             patch.object(web_search_image_proxy, "MAX_IMAGE_CACHE_BYTES", 150),
         ):
-            for name in ("a", "b", "c"):
-                web_search_image_proxy.load_web_search_image(f"https://images.example.com/{name}.png")
-
-        self.assertEqual(list(web_search_image_proxy._image_cache), [f"https://images.example.com/{name}.png" for name in ("b", "c")])
+            for url in urls:
+                self._load(url)
+        self.assertEqual(list(web_search_image_proxy._image_cache), urls[1:])
         self.assertLessEqual(web_search_image_proxy._image_cache_bytes, 150)
 
-    def test_relay_does_not_fetch_or_remember_a_failure_when_its_slots_are_taken(self):
+        with (
+            patch.object(web_search_image_proxy, "fetch_image_content", return_value=None),
+            patch.object(web_search_image_proxy, "MAX_IMAGE_CACHE_ENTRIES", 2),
+        ):
+            for name in ("d", "e", "f"):
+                self._load(f"https://images.example.com/{name}.png")
+        self.assertEqual(len(web_search_image_proxy._image_cache), 2)
+
+    def test_busy_image_slots_are_not_remembered_as_a_failure(self):
         url = "https://images.example.com/busy.png"
-        slot_count = web_search_image_proxy.MAX_CONCURRENT_IMAGE_RELAY_FETCHES
-        slots = [web_search_image_proxy._relay_slots.acquire(blocking=False) for _ in range(slot_count)]
-        try:
-            self.assertTrue(all(slots))
-            with patch.object(web_search_image_proxy, "fetch_image_content") as fetch:
-                self.assertIsNone(web_search_image_proxy.load_web_search_image(url))
-            fetch.assert_not_called()
-        finally:
-            for _ in slots:
-                web_search_image_proxy._relay_slots.release()
+        fetched = FetchedImageContent(media_type="image/png", data=b"png-bytes")
+        with patch.object(web_search_image_proxy, "fetch_image_content", side_effect=FetchSlotsBusyError):
+            self.assertEqual(self._load(url), [None])
         self.assertNotIn(url, web_search_image_proxy._image_cache)
-        self.assertEqual(web_search_image_proxy._inflight_fetches, {})
+
+        with patch.object(web_search_image_proxy, "fetch_image_content", return_value=fetched):
+            self.assertEqual(self._load(url), [fetched])
 
 
 class ArtifactImageReferenceValidationTests(unittest.TestCase):
@@ -198,7 +210,6 @@ class ArtifactImageReferenceValidationTests(unittest.TestCase):
         signed = {
             "ref": 1,
             "url": build_web_search_image_proxy_path(_SELECTIONS[0]["url"]),
-            "alt": "長谷寺の観音堂",
             "source_url": "https://travel.example.com/hasedera",
             "source_title": "長谷寺ガイド",
         }
@@ -244,7 +255,16 @@ class AttachWebSearchImagesTests(unittest.TestCase):
             _SELECTIONS[1]["url"],
         )
         self.assertEqual(images[0]["source_url"], _SELECTIONS[1]["source_url"])
-        self.assertEqual(images[0]["alt"], "鎌倉大仏")
+        self.assertEqual(images[0]["source_title"], "鎌倉大仏の歩き方")
+
+    def test_image_whose_url_does_not_fit_a_relay_path_is_left_out(self):
+        long_url = "https://images.example.com/" + "あ" * 1500 + ".jpg"
+        parts = self._parts(html='<div id="app"><img src="web-image:1" alt="a"><img src="web-image:2" alt="b"></div>')
+
+        attached = attach_web_search_images_to_artifacts(parts, [{**_SELECTIONS[0], "url": long_url}, _SELECTIONS[1]])
+
+        assert attached is not None
+        self.assertEqual([image["ref"] for image in attached[1]["artifact"]["images"]], [2])
 
     def test_artifact_without_references_or_selections_is_unchanged(self):
         parts = self._parts()

@@ -18,17 +18,18 @@ arbitrary URL.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
 import hmac
 import re
-import threading
 import time
 from collections import OrderedDict
 
+from services.async_utils import run_blocking
 from services.runtime_config import get_session_secret_key
-from services.url_fetcher import URL_FETCH_TIMEOUT, FetchedImageContent, fetch_image_content
+from services.url_fetcher import FetchedImageContent, FetchSlotsBusyError, fetch_image_content
 
 WEB_SEARCH_IMAGE_PROXY_PATH_PREFIX = "/api/chat/web-images/"
 
@@ -54,17 +55,15 @@ _DEVELOPMENT_SIGNING_SECRET = "web-search-image-proxy-development-secret"
 IMAGE_CACHE_TTL_SECONDS = 86_400
 IMAGE_FAILURE_TTL_SECONDS = 600
 MAX_IMAGE_CACHE_BYTES = 32_000_000
-# 中継が同時に使える取得の数。URL 取得と共有する枠（services/url_fetcher.py）を、未認証の中継が
-# 使い切ってチャットのページ取得を止めないよう、その一部に抑える。
-# How many fetches the relay may run at once. It keeps the unauthenticated relay to a share of the
-# slots it has in common with page fetches (services/url_fetcher.py), so it cannot starve them.
-MAX_CONCURRENT_IMAGE_RELAY_FETCHES = 4
+MAX_IMAGE_CACHE_ENTRIES = 512
 
-_cache_lock = threading.Lock()
+# 保持と取得中の一覧はイベントループのスレッドだけが触る。待ち合わせをスレッドではなく
+# タスクで行うのは、同じ画像への要求が重なってもブロッキング用のスレッドを占有しないため。
+# The cache and the in-flight map are touched only on the event-loop thread. Waiting is done with
+# tasks rather than threads so overlapping requests for one image never hold blocking workers.
 _image_cache: OrderedDict[str, tuple[float, FetchedImageContent | None]] = OrderedDict()
 _image_cache_bytes = 0
-_inflight_fetches: dict[str, threading.Event] = {}
-_relay_slots = threading.BoundedSemaphore(MAX_CONCURRENT_IMAGE_RELAY_FETCHES)
+_inflight_fetches: dict[str, asyncio.Future[FetchedImageContent | None]] = {}
 
 
 def _cached_image(image_url: str) -> tuple[bool, FetchedImageContent | None]:
@@ -94,41 +93,36 @@ def _store_image(image_url: str, image: FetchedImageContent | None) -> None:
     _image_cache[image_url] = (time.monotonic() + ttl, image)
     if image is not None:
         _image_cache_bytes += len(image.data)
-    while _image_cache_bytes > MAX_IMAGE_CACHE_BYTES and len(_image_cache) > 1:
+    while len(_image_cache) > 1 and (
+        _image_cache_bytes > MAX_IMAGE_CACHE_BYTES or len(_image_cache) > MAX_IMAGE_CACHE_ENTRIES
+    ):
         _drop_cached_image(next(iter(_image_cache)))
 
 
-def load_web_search_image(image_url: str) -> FetchedImageContent | None:
-    """Return the image for a signed URL, fetching the origin at most once per cache period."""
-    with _cache_lock:
-        cached, image = _cached_image(image_url)
-        if cached:
-            return image
-        pending = _inflight_fetches.get(image_url)
-        if pending is None:
-            _inflight_fetches[image_url] = threading.Event()
-    if pending is not None:
-        # 同じ画像を取得中の要求があれば、その結果を待って共有する。
-        # Another request is already fetching this image; wait for it and share the outcome.
-        pending.wait(URL_FETCH_TIMEOUT + 1)
-        with _cache_lock:
-            return _cached_image(image_url)[1]
-
+async def _fetch_and_store_image(image_url: str) -> FetchedImageContent | None:
     try:
-        if not _relay_slots.acquire(blocking=False):
-            # 混雑で取得しなかった場合は失敗として覚えない。元サイトへは何も送っていない。
-            # A fetch skipped for load is not remembered as a failure; nothing reached the origin.
-            return None
-        try:
-            image = fetch_image_content(image_url)
-        finally:
-            _relay_slots.release()
-        with _cache_lock:
-            _store_image(image_url, image)
+        image = await run_blocking(fetch_image_content, image_url)
+    except FetchSlotsBusyError:
+        # 混雑で取得しなかった場合は失敗として覚えない。元サイトへは何も送っていない。
+        # A fetch skipped for load is not remembered as a failure; nothing reached the origin.
+        return None
+    _store_image(image_url, image)
+    return image
+
+
+async def load_web_search_image(image_url: str) -> FetchedImageContent | None:
+    """Return the image for a signed URL, fetching the origin at most once per cache period."""
+    cached, image = _cached_image(image_url)
+    if cached:
         return image
-    finally:
-        with _cache_lock:
-            _inflight_fetches.pop(image_url).set()
+    pending = _inflight_fetches.get(image_url)
+    if pending is None:
+        pending = asyncio.ensure_future(_fetch_and_store_image(image_url))
+        _inflight_fetches[image_url] = pending
+        pending.add_done_callback(lambda _done: _inflight_fetches.pop(image_url, None))
+    # 要求の1つが切断されても、他の要求と共有している取得は止めない。
+    # One disconnected request must not cancel the fetch the other requests share.
+    return await asyncio.shield(pending)
 
 
 def _signature(image_url: str) -> str:
