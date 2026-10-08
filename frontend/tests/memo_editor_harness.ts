@@ -1,8 +1,8 @@
 import { act } from "@testing-library/react";
-import { EditorView } from "@codemirror/view";
+import { memoEditorViews, type MemoEditorHandle } from "../lib/memo/editor";
 
-export function memoEditor(element: HTMLElement): EditorView {
-  const view = EditorView.findFromDOM(element);
+export function memoEditor(element: HTMLElement): MemoEditorHandle {
+  const view = memoEditorViews.get(element);
   if (!view) throw new Error("Memo editor is not mounted");
   return view;
 }

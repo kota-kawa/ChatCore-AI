@@ -70,29 +70,25 @@ describe("MemoComposer interactions", () => {
     expect(createMemo).not.toHaveBeenCalled();
   });
 
-  it("starts with stable editing and previews only on request without losing the draft", async () => {
+  it("keeps formatted text editable and puts Markdown in the additional actions", () => {
     render(<ComposerHarness />);
     fireEvent.click(screen.getByRole("button", { name: "テキストメモを作成" }));
     const body = screen.getByRole("textbox", { name: "本文" });
     const editor = memoEditor(body);
     const value = "**買い物**\n\n| 品目 | 数量 |\n|---|---|\n| 牛乳 | 1 |";
-    expect(body).toHaveAttribute("contenteditable", "true");
     changeMemoEditor(body, value);
     act(() => { editor.dispatch({ selection: { anchor: 2 } }); });
-    fireEvent.click(screen.getByRole("textbox", { name: "タイトル" }));
-    expect(body).toHaveTextContent("**買い物**");
-    fireEvent.click(screen.getByRole("button", { name: "プレビュー" }));
-    expect(body).toHaveAttribute("contenteditable", "false");
     fireEvent.click(screen.getByRole("cell", { name: "牛乳" }));
     expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
-    expect(createMemo).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "編集" }));
-    await waitFor(() => expect(body).toHaveFocus());
     expect(body).toHaveAttribute("contenteditable", "true");
-    expect(memoEditor(body)).toBe(editor);
-    expect(memoEditorValue(body)).toBe(value);
-    expect(editor.state.selection.main.head).toBe(2);
+    expect(body).not.toHaveTextContent("**買い物**");
+    fireEvent.click(screen.getByText("その他", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    const source = screen.getByRole("textbox", { name: "本文" });
+    expect(source).toHaveTextContent("**買い物**");
+    expect(memoEditor(source)).toBe(editor);
+    expect(memoEditorValue(source)).toBe(value);
+    expect(createMemo).not.toHaveBeenCalled();
   });
 
   it("opens the palette from its collapsed shortcut without submitting the opening click", () => {
@@ -220,7 +216,7 @@ describe("MemoComposer interactions", () => {
       render(<ComposerHarness />);
       fireEvent.click(screen.getByRole("button", { name: "テキストメモを作成" }));
       const body = screen.getByRole("textbox", { name: "本文" });
-      changeMemoEditor(body, "最初の行\n次の行");
+      changeMemoEditor(body, "最初の行\n\n次の行");
       const editor = memoEditor(body);
       act(() => { editor.dispatch({ selection: { anchor: editor.state.doc.length } }); editor.focus(); });
       const toggle = screen.getByRole("button", { name: "書式" });
@@ -229,14 +225,14 @@ describe("MemoComposer interactions", () => {
       fireEvent.click(toggle);
       expect(screen.getByRole("toolbar", { name: "書式" })).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "見出し" }));
-      expect(memoEditorValue(body)).toBe("最初の行\n## 次の行");
+      expect(memoEditorValue(body)).toBe("最初の行\n\n## 次の行");
       expect(body).toHaveFocus();
       fireEvent.click(toggle);
       expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
       expect(createMemo).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "保存" }));
       await waitFor(() => expect(createMemo).toHaveBeenCalledWith(
-        expect.objectContaining({ ai_response: "最初の行\n## 次の行" }), expect.any(String),
+        expect.objectContaining({ ai_response: "最初の行\n\n## 次の行" }), expect.any(String),
       ));
     } finally {
       vi.unstubAllGlobals();

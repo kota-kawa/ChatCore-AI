@@ -1,32 +1,27 @@
 import type { MouseEvent, RefObject } from "react";
-import type { EditorView } from "@codemirror/view";
+import type { MemoEditorHandle, MemoFormat } from "../../lib/memo/editor";
 
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
-import { indentLines, toggleLineFormat, type MemoLineFormat, type TextEdit } from "../../lib/memo/list_editing";
-import { applyMemoEditorEdit } from "../../lib/memo/editor";
 
 // ── Memo body formatting toolbar ──
-// 記号を手で打たずに、カーソルのある行（選択中の行）へリストや見出しを付け外しする。
+// 記号を手で打たずに、選択した段落へリストや見出しを付け外しする（原文では行単位）。
 // 押してもキーボードが閉じないよう、ボタンはフォーカスを奪わない。
-// Adds or removes list / heading markers on the caret line (or the selected lines) without typing
-// the symbols. The buttons never take focus, so the on-screen keyboard stays open.
+// Formats selected rich-text blocks, or lines in source mode, without typing Markdown symbols.
+// The buttons never take focus, so the on-screen keyboard stays open.
 type FormatAction = {
   labelKey: MessageKey;
   icon: string;
-  edit: (value: string, start: number, end: number) => TextEdit | null;
+  format: MemoFormat;
 };
 
-const lineFormat = (format: MemoLineFormat) => (value: string, start: number, end: number) =>
-  toggleLineFormat(value, start, end, format);
-
 const FORMAT_ACTIONS: FormatAction[] = [
-  { labelKey: "memo.format.task", icon: "bi-check2-square", edit: lineFormat("task") },
-  { labelKey: "memo.format.bullet", icon: "bi-list-ul", edit: lineFormat("bullet") },
-  { labelKey: "memo.format.number", icon: "bi-list-ol", edit: lineFormat("number") },
-  { labelKey: "memo.format.heading", icon: "bi-type-h2", edit: lineFormat("heading") },
-  { labelKey: "memo.format.outdent", icon: "bi-text-indent-right", edit: (value, start, end) => indentLines(value, start, end, -1) },
-  { labelKey: "memo.format.indent", icon: "bi-text-indent-left", edit: (value, start, end) => indentLines(value, start, end, 1) },
+  { labelKey: "memo.format.task", icon: "bi-check2-square", format: "task" },
+  { labelKey: "memo.format.bullet", icon: "bi-list-ul", format: "bullet" },
+  { labelKey: "memo.format.number", icon: "bi-list-ol", format: "number" },
+  { labelKey: "memo.format.heading", icon: "bi-type-h2", format: "heading" },
+  { labelKey: "memo.format.outdent", icon: "bi-text-indent-right", format: "outdent" },
+  { labelKey: "memo.format.indent", icon: "bi-text-indent-left", format: "indent" },
 ];
 
 const keepEditorFocus = (event: MouseEvent) => event.preventDefault();
@@ -53,7 +48,7 @@ export function MemoFormatToggle({ open, onToggle, toolbarId, className = "" }: 
 }
 
 export function MemoFormatToolbar({ editorRef, id, hidden = false }: {
-  editorRef: RefObject<EditorView | null>;
+  editorRef: RefObject<MemoEditorHandle | null>;
   id?: string;
   hidden?: boolean;
 }) {
@@ -61,10 +56,7 @@ export function MemoFormatToolbar({ editorRef, id, hidden = false }: {
   const run = (action: FormatAction) => {
     const editor = editorRef.current;
     if (!editor) return;
-    const { from, to } = editor.state.selection.main;
-    const edit = action.edit(editor.state.doc.toString(), from, to);
-    if (edit) applyMemoEditorEdit(editor, edit);
-    else editor.focus();
+    editor.format(action.format);
   };
   return (
     <div id={id} hidden={hidden} className="memo-format-toolbar" role="toolbar" aria-label={t("memo.format.toolbar")}>

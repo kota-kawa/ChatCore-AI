@@ -282,7 +282,6 @@ export const enMessages = {
   "memo.agentEditConflict": "The memo has changed since this edit was prepared, so it could not be applied. Please ask for the edit again.",
   "memo.titleLabel": "Title", "memo.backgroundColor": "Memo background color", "memo.copyFullText": "Copy full text",
   "memo.closeAgent": "Close memo chat", "memo.askAgent": "Ask AI about or edit this memo", "memo.saved": "Saved",
-  "memo.view": "View", "memo.preview": "Preview", "memo.editingMarkdown": "Editing (Markdown)",
   "memo.awaitingAutosave": "Waiting to autosave", "memo.autosaveFailed": "Autosave failed", "memo.loadingMemo": "Loading memo…",
   "memo.formattedView": "Formatted",
   "memo.markdownSource": "Markdown source",

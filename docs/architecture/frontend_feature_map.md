@@ -37,14 +37,14 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 
 ## メモ本文の編集
 
-`components/memo/MemoEditor.tsx` は新規作成と詳細表示で共用する CodeMirror エディタです。
-Markdown 本文を正本にして、`lib/memo/live_preview.ts` が構文木から整形表示・記法の非表示・
-チェック欄・表やコードの描画を組み立てます。描画する HTML は既存のサニタイザーを通します。
-整形表示ではエディタを読み取り専用にし、フォーカスや選択位置で描画を切り替えません。
-明示的な「編集」で Markdown 原文の入力へ切り替えます。新規作成は編集から始め、
-「プレビュー」で整形表示へ切り替えます。同じエディタの表示設定と編集可否だけを変えるため、
-選択範囲と編集履歴を維持します。整形表示のチェック欄は専用の transaction で切り替えられます。
-入力と書式操作、外部からの本文更新はエディタの transaction に反映し、保存や AI 編集の適用は
+`components/memo/MemoEditor.tsx` は新規作成と詳細表示で共用するエディタです。
+通常の本文は Tiptap のリッチテキストで直接編集し、原文は追加操作メニューから CodeMirror で開きます。
+`lib/memo/rich_editor.ts` が Markdown・表・チェックリストの拡張と書式操作を組み立てます。
+Markdown 本文と取り消し履歴は CodeMirror の document を正本にし、リッチテキストの変更も
+同じ transaction に反映します。`lib/memo/editor.ts` の操作契約をページの ref と入力ランタイムで共有し、
+`lib/memo/markdown_source_positions.ts` が表示と原文の選択位置を対応付けます。
+リッチテキストの入力を原文へ変換すると Markdown の空白や記号表記が正規化されることがあります。
+保存や AI 編集の適用は
 既存の `hooks/memo_page/` と詳細モーダルが担当します。一覧・共有画面の表示は `MemoMarkdown` を使います。
 
 ## 共有ランタイムと API 層

@@ -61,7 +61,7 @@ export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrg
       >
         <i className="bi bi-three-dots" aria-hidden="true" />
       </summary>
-      <div className="memo-modal__organize-panel">
+      <div className="memo-modal__organize-panel" hidden={!open}>
         {selectedMemo && (
           <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
             {renderExtraActions?.(closeMenu)}
