@@ -36,6 +36,7 @@ from .chat_generation_job_base import (
 )
 from .chat_generation_turn import ChatTurnRunState
 from .chat_write_claim_guard import _unconfirmed_write_claim_fallback
+from .generative_ui_images import attach_web_search_images_to_artifacts
 from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -459,6 +460,12 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         # citation resolution, realize the placement plan returned by the selector
         # so persisted history matches what the stream revealed.
         if state.selected_web_search_images:
+            # 生成UIは検索画像パーツと排他だが、番号で参照した画像は生成UIの中に表示する。
+            # A generated UI excludes image parts, yet shows the images it references by number.
+            message_parts = attach_web_search_images_to_artifacts(
+                message_parts,
+                state.selected_web_search_images,
+            )
             message_parts = append_web_search_image_parts(
                 message_parts,
                 state.selected_web_search_images,

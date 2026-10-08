@@ -138,6 +138,47 @@ test("normalizers keep valid sandbox artifact parts", () => {
   assert.equal(response.parts?.[0]?.type, "sandbox_artifact");
 });
 
+test("normalizers keep only signed relay paths as generated UI images", () => {
+  const signedPath = `/api/chat/web-images/${"a".repeat(32)}/aHR0cHM6Ly9leGFtcGxlLmNvbS9hLmpwZw`;
+  const image = { ref: 1, url: signedPath, source_url: "https://example.com/temple", source_title: "Guide" };
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [
+      {
+        type: "sandbox_artifact",
+        artifact: {
+          version: 1,
+          title: "Gallery",
+          html: '<div id="app"><img src="web-image:1" alt="Temple"></div>',
+          css: "",
+          js: "",
+          images: [
+            image,
+            { ...image, ref: 2, url: "https://attacker.example/?leak=1" },
+            { ...image, ref: 3, url: `${signedPath}" onerror="alert(1)` },
+            { ...image, ref: 4, source_url: "javascript:alert(1)" },
+            { ...image, ref: 9 },
+            { ...image, source_title: "Duplicate ref" },
+          ],
+        },
+      },
+    ],
+  });
+
+  const part = response.parts?.[0];
+  assert.equal(part?.type, "sandbox_artifact");
+  const images = part?.type === "sandbox_artifact" ? part.artifact.images : undefined;
+  assert.deepEqual(images, [
+    { ref: 1, url: signedPath, sourceUrl: "https://example.com/temple", sourceTitle: "Guide" },
+  ]);
+
+  // 正規化済みの形（localStorage からの読み戻し）も同じ結果になる。
+  // The already-normalized shape (localStorage round trip) yields the same result.
+  const restored = normalizeChatResponsePayload({ response: "answer", parts: response.parts });
+  const restoredPart = restored.parts?.[0];
+  assert.deepEqual(restoredPart?.type === "sandbox_artifact" ? restoredPart.artifact.images : undefined, images);
+});
+
 test("normalizers keep safe web-search image parts", () => {
   const response = normalizeChatResponsePayload({
     response: "answer",

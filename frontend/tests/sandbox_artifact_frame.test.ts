@@ -52,6 +52,70 @@ test("buildSandboxArtifactSrcDoc includes restrictive CSP and escapes script end
   assert.match(srcDoc, /<\\\/script>/);
 });
 
+const imagePath = `/api/chat/web-images/${"a".repeat(32)}/aHR0cHM6Ly9leGFtcGxlLmNvbS9hLmpwZw`;
+const otherImagePath = `/api/chat/web-images/${"b".repeat(32)}/aHR0cHM6Ly9leGFtcGxlLmNvbS9iLmpwZw`;
+const imageArtifact: GenerativeUiArtifactV1 = {
+  ...artifact,
+  html: '<div id="app"><img src="web-image:1" alt="Temple"><img src="web-image:4" alt="Unlisted"></div>',
+  css: "#app{background:url(web-image:1)}",
+  js: 'const hero = "web-image:1"; const tenth = "web-image:10";',
+  images: [
+    { ref: 1, url: imagePath, sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
+    { ref: 2, url: otherImagePath, sourceUrl: "https://example.com/temple", sourceTitle: "Temple guide" },
+    { ref: 3, url: imagePath, sourceUrl: "https://garden.example.org/page" },
+  ],
+};
+
+test("buildSandboxArtifactSrcDoc resolves numbered images to the signed relay path only", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc(imageArtifact);
+
+  assert.match(srcDoc, new RegExp(`<img src="${imagePath}" alt="Temple">`));
+  assert.match(srcDoc, new RegExp(`background:url\\(${imagePath}\\)`));
+  assert.match(srcDoc, new RegExp(`const hero = "${imagePath}"`));
+  // 一覧に無い番号は透明な1画素になり、未解決の参照は残らない。
+  // An unlisted number becomes a transparent pixel, and no unresolved reference is left.
+  assert.match(srcDoc, /<img src="data:image\/gif;base64,[^"]+" alt="Unlisted">/);
+  assert.match(srcDoc, /const tenth = "data:image\/gif;base64,/);
+  assert.doesNotMatch(srcDoc, /web-image:\d/);
+  // 許可するのは参照している画像のパスそのものだけで、中継パス全体は開けない。
+  // Only the exact paths of the referenced images are allowed, never the whole relay path.
+  assert.ok(srcDoc.includes(`img-src data: blob: ${imagePath} ${otherImagePath} ${imagePath};`));
+  assert.doesNotMatch(srcDoc, /img-src[^;]*\/api\/chat\/web-images\/[ ;]/);
+});
+
+test("buildSandboxArtifactSrcDoc keeps img-src closed for artifacts without search images", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({ ...artifact, html: '<div id="app"><img src="web-image:1" alt=""></div>' });
+
+  assert.match(srcDoc, /img-src data: blob:;/);
+  assert.doesNotMatch(srcDoc, /api\/chat\/web-images/);
+  assert.doesNotMatch(srcDoc, /web-image:\d/);
+});
+
+test("SandboxArtifactFrame credits each image source page once, outside the iframe", () => {
+  const markup = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact: imageArtifact }));
+
+  assert.equal(markup.match(/class="sandbox-artifact__image-source"/g)?.length, 2);
+  assert.match(markup, /href="https:\/\/example\.com\/temple"[^>]*>Temple guide</);
+  assert.match(markup, /href="https:\/\/garden\.example\.org\/page"[^>]*>garden\.example\.org</);
+  assert.match(markup, /rel="noopener noreferrer"/);
+
+  const plain = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact }));
+  assert.doesNotMatch(plain, /sandbox-artifact__image-sources/);
+});
+
+test("sandbox hides an image that failed to load", () => {
+  const dom = new JSDOM(buildSandboxArtifactSrcDoc(imageArtifact), { runScripts: "dangerously", pretendToBeVisual: true });
+  const image = dom.window.document.querySelector("img");
+  assert.ok(image);
+
+  const failure = dom.window.document.createEvent("Event");
+  failure.initEvent("error", false, false);
+  image.dispatchEvent(failure);
+
+  assert.equal(image.style.display, "none");
+  dom.window.close();
+});
+
 test("buildSandboxArtifactSrcDoc wraps generated markup in a stable root shell", () => {
   const srcDoc = buildSandboxArtifactSrcDoc(artifact);
 

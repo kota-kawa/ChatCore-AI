@@ -446,6 +446,93 @@ class FetchUrlContentTest(unittest.TestCase):
         assert result is not None
         self.assertIn("Hello world", result)
 
+    # 画像の取得は、ラスタ画像の種類と大きさの上限を満たすものだけを返すことを検証します。
+    # Verify image fetching returns only raster images within the size cap.
+    def test_fetch_image_content_returns_bytes_for_a_raster_image(self):
+        resp = self._make_response(b"\x89PNG-bytes", content_type="image/png")
+        with (
+            patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
+            patch("requests.Session.get", return_value=resp),
+        ):
+            image = url_fetcher.fetch_image_content("https://example.com/photo.png")
+        assert image is not None
+        self.assertEqual(image.media_type, "image/png")
+        self.assertEqual(image.data, b"\x89PNG-bytes")
+        self.assertTrue(resp.closed)
+
+    def test_fetch_image_content_rejects_non_raster_and_oversized_bodies(self):
+        for content_type, body in (
+            ("image/svg+xml", b"<svg onload='alert(1)'/>"),
+            ("text/html", b"<html></html>"),
+            ("image/png", b"x" * 65),
+            ("image/png", b""),
+        ):
+            with self.subTest(content_type=content_type, size=len(body)):
+                resp = self._make_response(body, content_type=content_type)
+                with (
+                    patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
+                    patch("requests.Session.get", return_value=resp),
+                    patch.object(url_fetcher, "MAX_IMAGE_RESPONSE_BYTES", 64),
+                ):
+                    self.assertIsNone(url_fetcher.fetch_image_content("https://example.com/photo.png"))
+
+    def test_fetch_image_content_revalidates_a_redirect_to_an_internal_address(self):
+        redirect = self._make_response(b"", status_code=302, headers={"Location": "http://169.254.169.254/latest"})
+
+        def resolve(host, *_args, **_kwargs):
+            return _dns_answer("169.254.169.254" if host == "169.254.169.254" else "93.184.216.34")
+
+        with (
+            patch("socket.getaddrinfo", side_effect=resolve),
+            patch("requests.Session.get", return_value=redirect) as get,
+        ):
+            self.assertIsNone(url_fetcher.fetch_image_content("https://example.com/photo.png"))
+        self.assertEqual(get.call_count, 1)
+
+    # 画像の取得はページ取得とは別の枠を使い、枠が埋まっていれば何も取得せずに混雑を知らせることを検証します。
+    # Verify image fetches use their own slots and report a full pool without fetching anything.
+    def test_fetch_image_content_reports_busy_slots_without_touching_page_slots(self):
+        slot_count = url_fetcher.MAX_CONCURRENT_IMAGE_FETCHES
+        held = [url_fetcher._image_fetch_slots.acquire(blocking=False) for _ in range(slot_count)]
+        try:
+            self.assertTrue(all(held))
+            with (
+                patch.object(url_fetcher, "_fetch_image_content_impl") as fetch,
+                self.assertRaises(url_fetcher.FetchSlotsBusyError),
+            ):
+                url_fetcher.fetch_image_content("https://example.com/photo.png")
+            fetch.assert_not_called()
+            # ページ取得は画像の混雑に影響されない。
+            # Page fetches are unaffected by a saturated image pool.
+            resp = self._make_response(b"<html><body><p>Hello world</p></body></html>")
+            with (
+                patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
+                patch("requests.Session.get", return_value=resp),
+            ):
+                self.assertIsNotNone(url_fetcher.fetch_url_document("https://example.com"))
+        finally:
+            for _ in held:
+                url_fetcher._image_fetch_slots.release()
+
+    def test_timed_out_image_fetch_keeps_its_slot_until_the_worker_exits(self):
+        release = Event()
+        try:
+            with (
+                patch.object(url_fetcher, "URL_FETCH_TIMEOUT", 0.05),
+                patch.object(url_fetcher, "_fetch_image_content_impl", side_effect=lambda _url: release.wait(2)),
+            ):
+                for _ in range(url_fetcher.MAX_CONCURRENT_IMAGE_FETCHES):
+                    self.assertIsNone(url_fetcher.fetch_image_content("https://example.com/slow.png"))
+                with self.assertRaises(url_fetcher.FetchSlotsBusyError):
+                    url_fetcher.fetch_image_content("https://example.com/slow.png")
+        finally:
+            release.set()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and not url_fetcher._image_fetch_slots.acquire(blocking=False):
+            time.sleep(0.01)
+        else:
+            url_fetcher._image_fetch_slots.release()
+
     def test_fetch_url_document_returns_final_url_title_and_links(self):
         responses = iter(
             [

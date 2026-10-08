@@ -14,6 +14,11 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from services.generative_ui_escaping import repair_over_escaped_sources
+from services.generative_ui_images import (
+    GenerativeUiImageV1,
+    is_web_image_reference,
+    valid_generated_ui_images,
+)
 from services.generative_ui_intent import (
     inject_generative_ui_mode_instruction,
     is_explicit_generative_ui_opt_out,
@@ -59,7 +64,10 @@ from services.interactive_buttons import (
     validate_interactive_buttons_payload,
 )
 from services.llm import LlmOutputLimitError
-from services.message_parts_display import normalize_message_parts_for_display
+from services.message_parts_display import (
+    MAX_WEB_SEARCH_IMAGES_PER_REPLY,
+    normalize_message_parts_for_display,
+)
 from services.tool_approval_parts import (
     TOOL_APPROVAL_PART_TYPE,
     ToolApprovalValidationError,
@@ -301,6 +309,9 @@ class GenerativeUiArtifactV1(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     height: int | None = Field(default=None, ge=MIN_ARTIFACT_HEIGHT, le=MAX_ARTIFACT_HEIGHT)
     libraries: list[Literal["three"]] | None = Field(default=None, max_length=4)
+    # サーバーが選んだ検索画像のうち、このArtifactが番号で参照しているもの。
+    # The server-selected search images this Artifact references by number.
+    images: list[GenerativeUiImageV1] | None = Field(default=None, max_length=MAX_WEB_SEARCH_IMAGES_PER_REPLY)
     html: str = Field(default="", max_length=MAX_ARTIFACT_HTML_CHARS)
     css: str = Field(default="", max_length=MAX_ARTIFACT_CSS_CHARS)
     js: str = Field(default="", max_length=MAX_ARTIFACT_JS_CHARS)
@@ -1095,13 +1106,14 @@ def _is_safe_javascript_fragment(value: str) -> bool:
     return True
 
 
-# URLやリソースのURLが、安全なプロトコル（http, https等）で始まっているかを検証します。
-# Validate that resource URLs use safe, allowed protocol schemes.
+# リソースのURLが、外部へ接続しない形（data: / blob: / ページ内参照 / 検索画像の番号参照）かを検証します。
+# Validate that a resource URL cannot reach the network on its own: data:, blob:, an in-page
+# reference, or a numbered web-search image reference.
 def _is_safe_resource_url(value: str) -> bool:
     url = value.strip()
     if not url:
         return True
-    return url.startswith(("data:", "blob:", "#"))
+    return url.startswith(("data:", "blob:", "#")) or is_web_image_reference(url)
 
 
 # CSS定義から危険な @import や url() 表現を除去・サニタイズします。
@@ -1115,7 +1127,7 @@ def _sanitize_css(value: str) -> str:
     # Inspect and replace url() references in CSS blocks with safe values.
     def replace_url(match: re.Match[str]) -> str:
         url = match.group("value").strip()
-        if url.startswith(("data:", "blob:", "#")):
+        if url.startswith(("data:", "blob:", "#")) or is_web_image_reference(url):
             return match.group(0)
         return "url(\"data:,\")"
 
@@ -1290,6 +1302,9 @@ def _prepare_artifact_payload(payload: Any) -> tuple[Any, list[str]]:
     }
     if libraries:
         prepared["libraries"] = libraries
+    images = valid_generated_ui_images(payload.get("images"))
+    if images:
+        prepared["images"] = images
     if prepared["description"] is None:
         prepared.pop("description")
     return prepared, dropped_libraries

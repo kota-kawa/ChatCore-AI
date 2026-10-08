@@ -60,12 +60,23 @@ export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 // Identifier of a locally served library available inside the sandbox.
 export type GenerativeUiArtifactLibrary = "three";
 
+// 生成UIが番号（web-image:N）で参照する Web 検索画像。url はサーバーが署名した自オリジンの中継パス
+// A web-search image a generated UI references by number (web-image:N); url is the same-origin
+// relay path the server signed
+export type GenerativeUiArtifactImage = {
+  ref: number;
+  url: string;
+  sourceUrl: string;
+  sourceTitle?: string;
+};
+
 export type GenerativeUiArtifactV1 = {
   version: 1;
   title: string;
   description?: string;
   height?: number;
   libraries?: GenerativeUiArtifactLibrary[];
+  images?: GenerativeUiArtifactImage[];
   html: string;
   css: string;
   js: string;

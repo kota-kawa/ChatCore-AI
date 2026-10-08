@@ -21,6 +21,7 @@
 - [0015: 有効な Skill を回答前に選択する](0015-preselect-enabled-skills.md)
 - [0016: マイコンテキストの事実に本人の確認状態を持たせる](0016-context-fact-confirmation.md)
 - [0017: アカウント切り替えは待機セッションの入れ替えで行う](0017-parked-sessions-for-account-switching.md)
+- [0018: 生成UIの中の検索画像は、署名付きの自オリジン中継だけで読み込ませる](0018-signed-relay-for-generated-ui-images.md)
 
 ## 追加・更新の基準
 

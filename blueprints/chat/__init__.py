@@ -90,6 +90,7 @@ from . import (  # noqa: F401, E402
     tool_approvals,
     usage,
     views,
+    web_search_image_media,
 )
 
 __all__ = [
