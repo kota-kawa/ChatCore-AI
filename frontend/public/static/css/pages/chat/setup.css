@@ -1088,6 +1088,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 @media (max-width: 576px) {
+  /* モデル一覧は入力欄の上へ開き、画面下の固定ボタンと重ならないようにする。
+     Open the model list upward to keep it clear of the fixed bottom controls. */
+  :where(body.chat-page, .chat-page-shell) .model-select-menu {
+    top: auto;
+    bottom: calc(100% + 0.45rem);
+  }
+
   :where(body.chat-page, .chat-page-shell) #setup-container {
     --setup-container-padding-y: 0;
     --setup-container-padding-x: var(--chat-mobile-gutter, 1rem);

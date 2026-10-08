@@ -87,6 +87,52 @@ class LlmServiceTestCase(unittest.TestCase):
     Test class for verifying API client routing, error mapping, and streaming parsing in LLM service integration.
     """
 
+    def test_haiku_5_5_is_valid_and_keeps_legacy_haiku_available(self):
+        self.assertEqual(llm.CLAUDE_DEFAULT_MODEL, "claude-haiku-5-5")
+        for model in (llm.CLAUDE_HAIKU_5_5_MODEL, llm.CLAUDE_HAIKU_4_5_MODEL):
+            with self.subTest(model=model):
+                llm.validate_model_name(model)
+                self.assertTrue(llm.is_claude_model(model))
+                self.assertTrue(llm.is_streaming_model(model))
+
+    def test_haiku_5_5_requests_disable_thinking_and_cap_output(self):
+        messages = [{"role": "user", "content": "こんにちは"}]
+        for model in (llm.CLAUDE_HAIKU_5_5_MODEL, llm.CLAUDE_HAIKU_4_5_MODEL):
+            for streaming in (False, True):
+                with self.subTest(model=model, streaming=streaming):
+                    client = MagicMock()
+                    client.messages.create.return_value = (
+                        _MockStream() if streaming else SimpleNamespace(content=[])
+                    )
+                    with patch.object(llm, "claude_client", client), patch.object(llm, "LLM_MAX_TOKENS", 200_000):
+                        if streaming:
+                            list(llm.get_llm_response_stream(messages, model))
+                        else:
+                            llm.get_llm_response(messages, model)
+                    kwargs = client.messages.create.call_args.kwargs
+                    self.assertEqual(kwargs["model"], model)
+                    self.assertEqual(kwargs["messages"][-1]["role"], "user")
+                    for parameter in ("temperature", "top_p", "top_k"):
+                        self.assertNotIn(parameter, kwargs)
+                    if model == llm.CLAUDE_HAIKU_5_5_MODEL:
+                        self.assertEqual(kwargs["thinking"], {"type": "disabled"})
+                        self.assertEqual(kwargs["max_tokens"], 128_000)
+                    else:
+                        self.assertNotIn("thinking", kwargs)
+                        self.assertEqual(kwargs["max_tokens"], 200_000)
+
+    def test_haiku_5_5_json_requests_use_claude_adapter(self):
+        client = MagicMock()
+        client.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text='{"selected_skill_ids":[],"ui_mode":"NONE"}')]
+        )
+        with patch.object(llm, "claude_client", client):
+            result = llm.get_llm_json_response(
+                [{"role": "user", "content": "Return JSON."}], llm.CLAUDE_HAIKU_5_5_MODEL
+            )
+        self.assertEqual(json.loads(result), {"selected_skill_ids": [], "ui_mode": "NONE"})
+        self.assertEqual(client.messages.create.call_args.kwargs["thinking"], {"type": "disabled"})
+
     # docstring は文字列リテラルなので折り返すと本文が変わるため、行長チェックのみ除外します。
     # The docstring is a string literal whose text would change if rewrapped, so only the line-length rule is waived.
     def test_prepare_openai_responses_input_converts_system_to_developer_and_reenables_markdown(self):
@@ -544,7 +590,7 @@ class LlmServiceTestCase(unittest.TestCase):
         ):
             self.assertEqual(llm.GROQ_MODEL, llm.GPT_OSS_120B_MODEL)
             self.assertEqual(llm.OPENAI_DEFAULT_MODEL, llm.GPT_6_LUNA_MODEL)
-            self.assertEqual(llm.CLAUDE_DEFAULT_MODEL, llm.CLAUDE_HAIKU_4_5_MODEL)
+            self.assertEqual(llm.CLAUDE_DEFAULT_MODEL, llm.CLAUDE_HAIKU_5_5_MODEL)
 
     def test_get_claude_response_redacts_anthropic_api_keys(self):
         mock_claude = MagicMock()

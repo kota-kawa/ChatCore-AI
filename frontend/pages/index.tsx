@@ -123,7 +123,7 @@ export default function HomePage() {
       />
 
       <HomePageContextProvider controller={controller}>
-        <div className="chat-page-shell cc-page-rise">
+        <div className="chat-page-shell cc-page-rise" data-authenticated={loggedIn}>
           {/* 検索エンジン・支援技術向けのページ見出し（視覚的には非表示） */}
           {/* Page heading for search engines and assistive tech (visually hidden) */}
           <h1 className="sr-only">{t("home.seoTitle")}</h1>

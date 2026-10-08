@@ -72,15 +72,16 @@ LIGHTWEIGHT_TASK_REASONING_EFFORT: Literal["low", "medium", "high"] = "high"
 QWEN_3_8_27B_MODEL = "qwen/qwen3.8-27b"
 GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_HAIKU_5_5_MODEL = "claude-haiku-5-5"
 GPT_OSS_MODELS = {GPT_OSS_20B_MODEL, GPT_OSS_120B_MODEL}
 GROQ_MODEL = GPT_OSS_120B_MODEL
 OPENAI_DEFAULT_MODEL = GPT_6_LUNA_MODEL
-CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
-# 対応モデル（Claude Haiku / gpt-oss / Qwen / gpt-6-luna）はいずれも思考トークンがこの上限に
-# 含まれる。4096では生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
+CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_5_5_MODEL
+# 思考を使うモデルでは思考トークンもこの上限に含まれる。4096では
+# 生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
 # ため、既定値を引き上げる。モデル固有の出力上限は送信前に適用する。
-# All supported models (Claude Haiku / gpt-oss / Qwen / gpt-6-luna) count reasoning tokens
-# against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
+# Models using reasoning count reasoning tokens against this cap.
+# 4096 frequently truncated generative UI output (up to ~8000 chars of
 # code) mid-stream, so raise the default. Provider-specific hard caps are applied below before
 # a request is sent.
 LLM_MAX_TOKENS = env_int("LLM_MAX_TOKENS", 16384)
@@ -169,7 +170,7 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 # サポート対象モデルを明示し、入力バリデーションの単一情報源にする
 # Keep supported model names explicit as the single validation source.
 # Valid model names
-VALID_CLAUDE_MODELS = {CLAUDE_DEFAULT_MODEL, CLAUDE_HAIKU_4_5_MODEL}
+VALID_CLAUDE_MODELS = {CLAUDE_HAIKU_5_5_MODEL, CLAUDE_HAIKU_4_5_MODEL}
 VALID_GROQ_MODELS = {
     GROQ_MODEL,
     GPT_OSS_120B_MODEL,
@@ -1530,6 +1531,16 @@ def _claude_response_text(content_blocks: Any) -> str:
     )
 
 
+def _claude_thinking_kwargs(model_name: str) -> dict[str, Any]:
+    # 判断ループは文脈とツールを更新するため、署名付き思考の再送に必要な不変の
+    # prefix を持たない。Haiku 5.5 の既定の adaptive thinking を明示的に無効にする。
+    # The loop updates context and tools instead of retaining an immutable prefix for
+    # signed thinking blocks. Disable Haiku 5.5's default adaptive thinking explicitly.
+    if model_name == CLAUDE_HAIKU_5_5_MODEL:
+        return {"thinking": {"type": "disabled"}}
+    return {}
+
+
 # Claude Messages APIを呼び出してテキスト応答または関数呼び出しデータを取得する
 # Call the Claude Messages API to retrieve text responses or function-call details.
 def get_claude_response(
@@ -1550,7 +1561,8 @@ def get_claude_response(
         request_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": claude_messages,
-            "max_tokens": LLM_MAX_TOKENS,
+            "max_tokens": max_output_tokens_for_model(model_name),
+            **_claude_thinking_kwargs(model_name),
         }
         if system_blocks is not None:
             request_kwargs["system"] = system_blocks
@@ -1603,6 +1615,7 @@ def get_claude_response_stream(
             "messages": claude_messages,
             "max_tokens": max_output_tokens_for_model(model_name, generation_phase),
             "stream": True,
+            **_claude_thinking_kwargs(model_name),
         }
         if system_blocks is not None:
             request_kwargs["system"] = system_blocks
