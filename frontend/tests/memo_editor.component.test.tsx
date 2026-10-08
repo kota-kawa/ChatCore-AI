@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
-import { EditorView } from "@codemirror/view";
-import { redo, undo } from "@codemirror/commands";
+import type { MemoEditorHandle } from "../lib/memo/editor";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemoEditor } from "../components/memo/MemoEditor";
@@ -11,7 +10,7 @@ import { executeActionSteps } from "../lib/chat_page/mini_chat_runtime";
 function Harness({ initial = "# 見出し\n\n本文 **強調** と *斜体*\n\n- [ ] 牛乳\n\n```js\nconst a = 1;\n```\n\n| A | B |\n|---|---|\n| C | D |", editing = false }) {
   const [value, setValue] = useState(initial);
   const [source, setSource] = useState(editing);
-  const ref = useRef<EditorView | null>(null);
+  const ref = useRef<MemoEditorHandle | null>(null);
   return <>
     <MemoEditor value={value} onChange={setValue} sourceMode={source} editorRef={ref} label="本文" placeholder="メモを入力" id="test-editor" />
     <button onClick={() => setSource(!source)}>原文</button>
@@ -25,14 +24,15 @@ const element = () => screen.getByRole("textbox", { name: "本文" });
 describe("MemoEditor", () => {
   it("renders Markdown while keeping its source unchanged", () => {
     render(<Harness />);
-    expect(document.querySelector(".memo-live-preview__heading")).toHaveTextContent("見出し");
-    expect(document.querySelector(".memo-live-preview__strong")).toHaveTextContent("強調");
+    expect(document.querySelector("h1")).toHaveTextContent("見出し");
+    expect(document.querySelector("strong")).toHaveTextContent("強調");
     expect(screen.getByRole("checkbox", { name: "牛乳" })).not.toBeChecked();
-    expect(screen.getByRole("table")).toHaveTextContent("A B C D");
+    expect(screen.getByRole("columnheader", { name: "A" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "D" })).toBeInTheDocument();
     expect(screen.getByTestId("stored").textContent).toBe(memoEditorValue(element()));
   });
 
-  it("keeps the formatted document stable when clicked, focused or selected", () => {
+  it("keeps formatted content editable without showing Markdown on clicks", () => {
     render(<Harness />);
     const view = memoEditor(element());
     act(() => {
@@ -41,32 +41,37 @@ describe("MemoEditor", () => {
     });
     fireEvent.click(document.querySelector("td")!);
     fireEvent.click(document.querySelector("pre code")!);
-    expect(element()).toHaveAttribute("contenteditable", "false");
-    expect(element()).toHaveAttribute("aria-readonly", "true");
-    expect(view.state.readOnly).toBe(true);
-    expect(document.querySelector(".memo-live-preview__strong")).toHaveTextContent(/^強調$/);
+    expect(element()).toHaveAttribute("contenteditable", "true");
+    expect(document.querySelector("strong")).toHaveTextContent(/^強調$/);
     expect(element()).not.toHaveTextContent("**強調**");
-    expect(document.querySelector(".memo-live-preview__heading")).toHaveTextContent("見出し");
+    expect(document.querySelector("h1")).toHaveTextContent("見出し");
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(document.querySelector("pre code")).toHaveTextContent("const a = 1;");
+    expect(document.querySelector(".memo-rich-code-language")).toHaveTextContent("js");
+    expect(document.querySelector(".hljs-keyword")).toHaveTextContent("const");
   });
 
-  it("keeps ordered list numbering stable when the selection moves", () => {
-    render(<Harness initial={"3) first\n8) second\n\n別の段落"} />);
-    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
-    const view = memoEditor(element());
-    act(() => { view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("second") } }); view.focus(); });
-    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
-    expect(element()).not.toHaveTextContent("8) second");
-    expect(screen.getByTestId("stored").textContent).toBe("3) first\n8) second\n\n別の段落");
+  it("renders ordered lists and keeps their original source until changed", () => {
+    render(<Harness initial={"3) first\n8) second"} />);
+    expect(document.querySelector("ol")).toHaveAttribute("start", "3");
+    expect(document.querySelectorAll("li")).toHaveLength(2);
+    expect(memoEditorValue(element())).toBe("3) first\n8) second");
   });
 
-  it("keeps numbering when toggling an ordered checklist", () => {
-    render(<Harness initial={"3) [ ] first\n8) [x] second"} />);
-    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
+  it("toggles a formatted checklist without exposing the source", () => {
+    render(<Harness initial={"- [ ] first\n- [x] second"} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "second" }));
-    expect(screen.getByTestId("stored").textContent).toBe("3) [ ] first\n8) [ ] second");
-    expect(Array.from(document.querySelectorAll(".memo-live-preview__list-mark"), (mark) => mark.textContent)).toEqual(["3.", "4."]);
+    expect(memoEditorValue(element())).toContain("- [ ] second");
+    expect(element()).not.toHaveTextContent("[ ]");
+  });
+
+  it("keeps numbered checklist items editable with their numbering", () => {
+    render(<Harness initial={"3) [ ] first\n8) [x] second"} />);
+    expect(document.querySelector("ol")).toHaveAttribute("start", "3");
+    expect(screen.getByRole("checkbox", { name: "second" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "first" }));
+    expect(memoEditorValue(element())).toContain("3. [x] first");
+    expect(memoEditorValue(element())).toContain("4. [x] second");
   });
 
   it("preserves the undo history across source mode and external updates", () => {
@@ -77,11 +82,11 @@ describe("MemoEditor", () => {
     fireEvent.click(screen.getByText("原文", { selector: "button" }));
     expect(memoEditor(element())).toBe(view);
     fireEvent.click(screen.getByText("外部更新"));
-    act(() => { undo(view); });
+    act(() => { view.undo(); });
     expect(screen.getByTestId("stored")).toHaveTextContent("手編集");
-    act(() => { undo(view); });
+    act(() => { view.undo(); });
     expect(screen.getByTestId("stored")).toHaveTextContent("元の本文");
-    act(() => { redo(view); });
+    act(() => { view.redo(); });
     expect(screen.getByTestId("stored")).toHaveTextContent("手編集");
   });
 
@@ -95,12 +100,15 @@ describe("MemoEditor", () => {
     expect(memoEditorValue(element())).toBe("- [x] 卵\n");
   });
 
-  it("ignores mobile line-break input in the reading view", () => {
-    render(<Harness initial="- [ ] 卵" />);
+  it("keeps a table and rich formatting across source display changes", () => {
+    render(<Harness />);
     const view = memoEditor(element());
-    act(() => { view.dispatch({ selection: { anchor: view.state.doc.length } }); });
-    act(() => { element().dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true })); });
-    expect(memoEditorValue(element())).toBe("- [ ] 卵");
+    fireEvent.click(screen.getByText("原文", { selector: "button" }));
+    expect(element()).toHaveTextContent("**強調**");
+    fireEvent.click(screen.getByText("原文", { selector: "button" }));
+    expect(memoEditor(element())).toBe(view);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(document.querySelector("strong")).toHaveTextContent("強調");
   });
 
   it("does not continue the list during Japanese composition", () => {
@@ -139,7 +147,7 @@ describe("MemoEditor", () => {
       expect(result).toEqual({ ok: true });
     });
     expect(screen.getByTestId("stored")).toHaveTextContent("# 入力したメモ");
-    act(() => { undo(memoEditor(element())); });
+    act(() => { memoEditor(element()).undo(); });
     expect(screen.getByTestId("stored")).toHaveTextContent("元の本文");
   });
 

@@ -15,23 +15,11 @@ const globalCss = readFileSync(
   "utf8",
 );
 
-test("the memo detail modal omits the date and keeps the source toggle in the header", () => {
+test("the memo detail puts source display in additional actions", () => {
   assert.doesNotMatch(memoDetailModal, /formatDateTime|memo-modal__date/);
-
-  const headerActionsStart = memoDetailModal.indexOf("memo-modal__header-actions");
-  const bodyStart = memoDetailModal.indexOf("memo-modal__body");
-  assert.ok(headerActionsStart >= 0, "the modal must have a header action row");
-  assert.ok(bodyStart > headerActionsStart, "the body must follow the header action row");
-  assert.match(
-    memoDetailModal.slice(headerActionsStart, bodyStart),
-    /memo-modal__tabs[\s\S]*role="group"/,
-    "the source toggle must live in the header action row",
-  );
-  assert.doesNotMatch(
-    memoDetailModal.slice(bodyStart),
-    /memo-modal__tabs/,
-    "the body must not spend vertical space on a separate tab row",
-  );
+  assert.doesNotMatch(memoDetailModal, /memo-modal__tabs/);
+  assert.match(memoDetailModal, /memo\.markdownSource/);
+  assert.match(memoDetailModal, /<MemoDetailOrganizeControls renderExtraActions=\{renderMenuActions\}/);
 });
 
 test("the memo detail keeps primary actions visible and moves organization into a disclosure", () => {

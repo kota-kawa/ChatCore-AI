@@ -184,13 +184,13 @@ export function MemoComposer() {
 
   const handleOpenText = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setSourceMode(true);
+    setSourceMode(false);
     openTextComposer();
   };
 
   const handleOpenChecklist = (event: React.MouseEvent<HTMLButtonElement>) => {
     rememberOpenTarget(event, "body");
-    setSourceMode(true);
+    setSourceMode(false);
     openChecklistComposer();
   };
 
@@ -221,7 +221,7 @@ export function MemoComposer() {
 
   const handleCloseComposer = () => {
     setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-    setSourceMode(true);
+    setSourceMode(false);
     setIsComposeExpanded(false);
     setIsComposePaletteOpen(false);
     setIsMoreOpen(false);
@@ -284,7 +284,6 @@ export function MemoComposer() {
         <div className="memo-quick-capture__heading">
           <i className="bi bi-pencil-square" aria-hidden="true"></i>
           <h2 id={`${sectionId}-title`}>{t("memo.new")}</h2>
-          <span className="memo-quick-capture__mode-label">{t(sourceMode ? "memo.editingMarkdown" : "memo.preview")}</span>
         </div>
         <div className="form-group memo-quick-capture__title-group">
           <label htmlFor={`${sectionId}-memo-title`} className="sr-only">{english ? "Title" : "タイトル"}</label>
@@ -306,21 +305,7 @@ export function MemoComposer() {
 
         <div className="memo-response-header memo-quick-capture__response-header">
           <label htmlFor={`${sectionId}-memo-response`} className="sr-only">{english ? "Content" : "本文"}</label>
-          <button
-            type="button"
-            className={`memo-response-tab${!sourceMode ? " is-active" : ""}`}
-            aria-label={t(sourceMode ? "memo.preview" : "common.edit")}
-            onClick={() => {
-              if (sourceMode) {
-                setSourceMode(false);
-                setFormattingOpen(false);
-              } else setSourceMode(true);
-            }}
-          >
-            <i className={`bi ${sourceMode ? "bi-eye" : "bi-pencil"}`} aria-hidden="true"></i>
-            {t(sourceMode ? "memo.preview" : "common.edit")}
-          </button>
-          {mobile && sourceMode && (
+          {mobile && (
             <MemoFormatToggle
               open={formattingOpen}
               onToggle={() => setFormattingOpen((open) => !open)}
@@ -342,8 +327,17 @@ export function MemoComposer() {
             event.currentTarget.querySelector("summary")?.focus();
           }}
         >
-          <summary><i className="bi bi-sliders" aria-hidden="true"></i>{t("memo.other")}</summary>
-          <div className="memo-quick-capture__more-panel">
+          <summary onClick={(event) => {
+            event.preventDefault();
+            const open = !(isMoreOpen || isComposePaletteOpen);
+            setIsMoreOpen(open);
+            if (!open) setIsComposePaletteOpen(false);
+          }}><i className="bi bi-three-dots" aria-hidden="true"></i>{t("memo.other")}</summary>
+          <div className="memo-quick-capture__more-panel" hidden={!(isMoreOpen || isComposePaletteOpen)}>
+            <button type="button" className="memo-ai-suggest-btn" onClick={() => { setSourceMode(!sourceMode); setIsMoreOpen(false); }}>
+              <i className={`bi ${sourceMode ? "bi-eye" : "bi-code-slash"}`} aria-hidden="true"></i>
+              {t(sourceMode ? "memo.formattedView" : "memo.markdownSource")}
+            </button>
             <div className="memo-quick-capture__bottom-row">
               {collections.length > 0 && (
                 <MemoSelect
@@ -428,7 +422,7 @@ export function MemoComposer() {
 
       <div className="memo-quick-capture__footer">
         <div className="memo-quick-capture__formatting">
-          <MemoFormatToolbar id={`${sectionId}-formatting`} editorRef={composeEditorRef} hidden={!sourceMode || (mobile && !formattingOpen)} />
+          <MemoFormatToolbar id={`${sectionId}-formatting`} editorRef={composeEditorRef} hidden={mobile && !formattingOpen} />
         </div>
         <div className="memo-quick-capture__actions">
           <button type="button" className="secondary-button" onClick={handleCloseComposer} disabled={submitting}>

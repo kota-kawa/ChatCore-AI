@@ -1,4 +1,4 @@
-import type { EditorView } from "@codemirror/view";
+import type { MemoEditorHandle } from "../../lib/memo/editor";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
@@ -50,58 +50,42 @@ export function MemoDetailModal() {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
-  const editorRef = useRef<EditorView | null>(null);
+  const editorRef = useRef<MemoEditorHandle | null>(null);
 
   const isMobile = useMemoMobileLayout();
   const viewportStyle = useMemoViewport(isOpen, isMobile);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const formatToolbarId = useId();
-  const selectDisplayMode = (source: boolean) => {
-    setDetailSourceMode(source);
-    if (!source) setFormattingOpen(false);
-  };
-  const selectedMemoId = selectedMemo?.id;
-  useEffect(() => {
-    if (detailSourceMode && selectedMemoId !== undefined) editorRef.current?.focus();
-  }, [detailSourceMode, selectedMemoId]);
   const { copied, run: runCopy } = useCopyFeedback();
   const toggleAgent = () => {
     if (isMemoAgentOpen) setIsMemoAgentOpen(false);
     else void openMemoAgent();
   };
 
-  // スマホの「その他の操作」に足す AI とコピー。AI を開くときはメニューを閉じて面を空ける
-  // The AI and copy actions added to "more actions" on phones; opening the AI closes the menu to clear the view
-  const renderMobileMenuActions = (closeMenu: () => void) => (
+  // 原文表示は追加操作へまとめ、スマホではコピーも同じメニューに置く。
+  // Source display lives in the additional actions, alongside copying on phones.
+  const renderMenuActions = (closeMenu: () => void) => (
     <>
-      <button
-        type="button"
-        className={`memo-modal__memo-action${isMemoAgentOpen ? " is-active" : ""}`}
-        aria-pressed={isMemoAgentOpen}
-        onClick={() => { closeMenu(); toggleAgent(); }}
-      >
-        <i className="bi bi-chat-dots" aria-hidden="true"></i>
-        {t("memo.agentTitle")}
+      <button type="button" className="memo-modal__memo-action" onClick={() => { setDetailSourceMode(!detailSourceMode); closeMenu(); }}>
+        <i className={`bi ${detailSourceMode ? "bi-eye" : "bi-code-slash"}`} aria-hidden="true"></i>
+        {t(detailSourceMode ? "memo.formattedView" : "memo.markdownSource")}
       </button>
-      <button
-        type="button"
-        className="memo-modal__memo-action"
-        onClick={() => { void runCopy(copyDetailFullText); }}
-      >
-        <i className={`bi ${copied ? COPY_SUCCESS_ICON : "bi-files"}`} aria-hidden="true"></i>
-        {copied ? t("common.copied") : t("memo.copyFullText")}
-      </button>
+      {isMobile && (
+        <button type="button" className="memo-modal__memo-action" onClick={() => { void runCopy(copyDetailFullText); }}>
+          <i className={`bi ${copied ? COPY_SUCCESS_ICON : "bi-files"}`} aria-hidden="true"></i>
+          {copied ? t("common.copied") : t("memo.copyFullText")}
+        </button>
+      )}
     </>
   );
 
-  // タイトルの Enter は本文の編集へ進む。日本語変換の確定では切り替えない。
-  // Enter in the title starts body editing, except when confirming IME input.
+  // タイトルの Enter は表示中の本文へ進む。日本語変換の確定では切り替えない。
+  // Enter in the title moves to the visible body, except when confirming IME input.
   const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
-    setDetailSourceMode(true);
     editorRef.current?.focus();
-  }, [setDetailSourceMode]);
+  }, []);
 
   // 開いた直後はパネル自体へフォーカスし、操作ボタンを勝手に選ばない
   // Focus the panel itself on open instead of jumping to the first action button
@@ -174,68 +158,30 @@ export function MemoDetailModal() {
           </div>
           {selectedMemo && (
             <div className="memo-modal__header-actions">
-              {/* スマホではヘッダーを 1 段に収めるため、表示の切り替えは 1 つのボタンにまとめ、
-                  AI とコピーは「その他の操作」の中に置く
-                  On phones the header stays on one row: the view switch collapses into a single
-                  toggle, and the AI and copy actions live under "more actions" */}
-              {isMobile ? (
-                <button
-                  type="button"
-                  aria-label={t(detailSourceMode ? "memo.view" : "common.edit")}
-                  className={`memo-modal__icon-btn memo-modal__edit-toggle${detailSourceMode ? " is-active" : ""}`}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectDisplayMode(!detailSourceMode)}
-                >
-                  <i className={`bi ${detailSourceMode ? "bi-eye" : "bi-pencil"}`} aria-hidden="true"></i>
-                  <span>{t(detailSourceMode ? "memo.view" : "common.edit")}</span>
-                </button>
-              ) : (
-                <>
-                  <div className="cc-modal__tabs memo-modal__tabs" role="group" aria-label={t("memo.content")}>
-                    <button
-                      type="button"
-                      aria-pressed={!detailSourceMode}
-                      className={`cc-modal__tab${!detailSourceMode ? " is-active" : ""}`}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => selectDisplayMode(false)}
-                    >
-                      <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.formattedView")}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={detailSourceMode}
-                      className={`cc-modal__tab${detailSourceMode ? " is-active" : ""}`}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => selectDisplayMode(true)}
-                      aria-label={t("common.edit")}
-                    >
-                      <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}
-                    onClick={toggleAgent}
-                    aria-label={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                    aria-expanded={isMemoAgentOpen}
-                    data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
-                    data-tooltip-placement="bottom"
-                  >
-                    <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
-                  </button>
-                  <CopyButton
-                    onCopy={copyDetailFullText}
-                    label={t("memo.copyFullText")}
-                    copiedLabel={t("common.copied")}
-                    className="memo-modal__icon-btn"
-                    copiedClassName="is-copied"
-                    idleIcon="bi-files"
-                    tooltip="data-tooltip"
-                    tooltipPlacement="bottom"
-                  />
-                </>
+              <button
+                type="button"
+                className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}
+                onClick={toggleAgent}
+                aria-label={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                aria-expanded={isMemoAgentOpen}
+                data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
+                data-tooltip-placement="bottom"
+              >
+                <img src="/static/ChacoMemo.png" alt="" aria-hidden="true" />
+              </button>
+              {!isMobile && (
+              <CopyButton
+                onCopy={copyDetailFullText}
+                label={t("memo.copyFullText")}
+                copiedLabel={t("common.copied")}
+                className="memo-modal__icon-btn"
+                copiedClassName="is-copied"
+                idleIcon="bi-files"
+                tooltip="data-tooltip"
+                tooltipPlacement="bottom"
+              />
               )}
-              <MemoDetailOrganizeControls renderExtraActions={isMobile ? renderMobileMenuActions : undefined} />
+              <MemoDetailOrganizeControls renderExtraActions={renderMenuActions} />
             </div>
           )}
           {/* 保存状態は操作列と分け、画面幅や表示中の面に関係なく見える位置に置く。
@@ -253,7 +199,7 @@ export function MemoDetailModal() {
               {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
             </span>
           )}
-          {isMobile && detailSourceMode && (
+          {isMobile && (
             <MemoFormatToggle
               open={formattingOpen}
               onToggle={() => setFormattingOpen((open) => !open)}
@@ -272,7 +218,6 @@ export function MemoDetailModal() {
           {!detailLoading && selectedMemo && (
             <>
               <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
-                {detailSourceMode && <p className="memo-modal__edit-hint">{t("memo.editingMarkdown")}</p>}
                 <MemoEditor
                   key={selectedMemo.id}
                   editorRef={editorRef}
@@ -283,7 +228,7 @@ export function MemoDetailModal() {
                   label={t("memo.content")}
                   placeholder={t("memo.writePlaceholder")}
                 />
-                <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={!detailSourceMode || (isMobile && !formattingOpen)} />
+                <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={isMobile && !formattingOpen} />
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>

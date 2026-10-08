@@ -45,44 +45,25 @@ function DetailHarness({ body = BODY, agentOpen = false }: { body?: string; agen
 }
 
 describe("MemoDetailModal live editing", () => {
-  it("starts editing only through Edit and returns to a stable formatted view", () => {
-    render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う"} />);
-    const source = screen.getByRole("button", { name: "編集" });
-    const formatted = screen.getByRole("button", { name: "整形表示" });
-    const editor = screen.getByRole("textbox", { name: "内容" });
-    expect(formatted).toHaveAttribute("aria-pressed", "true");
-    expect(source).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(source);
-    fireEvent.click(source);
-    expect(source).toHaveAttribute("aria-pressed", "true");
-    expect(formatted).toHaveAttribute("aria-pressed", "false");
-    expect(editor).toHaveFocus();
-    expect(editor).toHaveAttribute("contenteditable", "true");
-    fireEvent.click(formatted);
-    expect(source).toHaveAttribute("aria-pressed", "false");
-    expect(formatted).toHaveAttribute("aria-pressed", "true");
-    expect(editor).not.toHaveFocus();
-    expect(editor).toHaveAttribute("contenteditable", "false");
-    expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
-    expect(memoEditorValue(editor)).toBe("# 買い物\n\n**牛乳**を買う");
-  });
-
-  it("opens for reading and preserves tables and emphasis on body clicks", () => {
-    render(<DetailHarness body={"# 買い物\n\n**牛乳**を買う\n\n| A | B |\n|---|---|\n| C | D |"} />);
-    const editor = screen.getByRole("textbox", { name: "内容" });
-    expect(editor).toHaveAttribute("contenteditable", "false");
-    fireEvent.click(document.querySelector(".memo-live-preview__strong")!);
+  it("edits the formatted body directly and opens source only from the menu", () => {
+    const value = "# 買い物\n\n**牛乳**を買う\n\n| A | B |\n|---|---|\n| C | D |";
+    render(<DetailHarness body={value} />);
+    const rich = screen.getByRole("textbox", { name: "内容" });
+    expect(rich).toHaveAttribute("contenteditable", "true");
+    fireEvent.click(document.querySelector("strong")!);
     fireEvent.click(screen.getByRole("cell", { name: "D" }));
     expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(document.querySelector(".memo-live-preview__heading")).toHaveTextContent("買い物");
-    expect(document.querySelector(".memo-live-preview__strong")).toHaveTextContent("牛乳");
-    expect(screen.queryByRole("tab", { name: "プレビュー" })).toBeNull();
-    const source = screen.getByRole("button", { name: "編集" });
-    expect(source).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(source);
-    expect(source).toHaveAttribute("aria-pressed", "true");
-    expect(editor).toHaveAttribute("contenteditable", "true");
-    expect(memoEditorValue(editor)).toBe("# 買い物\n\n**牛乳**を買う\n\n| A | B |\n|---|---|\n| C | D |");
+    expect(rich).not.toHaveTextContent("**牛乳**");
+    expect(screen.queryByText("編集中（Markdown）")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Markdown原文" })).toBeNull();
+    const editor = memoEditorValue(rich);
+    fireEvent.click(screen.getByLabelText("その他の操作"));
+    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
+    expect(screen.getByRole("textbox", { name: "内容" })).toHaveTextContent("**牛乳**");
+    fireEvent.click(screen.getByLabelText("その他の操作"));
+    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe(editor);
   });
 
   it("keeps links safe and opens them in another tab", () => {
@@ -117,7 +98,6 @@ describe("MemoDetailModal agent edits", () => {
   // Returns the handler from the first render, so the tests prove later manual edits are read through the ref
   function renderWithAgent() {
     render(<DetailHarness body={AGENT_BODY} agentOpen />);
-    fireEvent.click(screen.getByRole("button", { name: "編集" }));
     const onMemoEdit = miniChatMock.mock.calls[0]?.[0].onMemoEdit;
     expect(onMemoEdit).toBeTypeOf("function");
     const editor = screen.getByRole("textbox", { name: "内容" });

@@ -74,7 +74,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   // composer
   formState: { ai_response: "", title: "", collection_id: null, background_color: null },
   setFormState: noop,
-  sourceMode: true,
+  sourceMode: false,
   setSourceMode: noop,
   submitting: false,
   aiSuggesting: false,

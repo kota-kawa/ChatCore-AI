@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { KeyedMutator } from "swr";
-import type { EditorView } from "@codemirror/view";
+import type { MemoEditorHandle } from "../../lib/memo/editor";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { createMemo, suggestMemoTitle } from "../../lib/memo/api";
@@ -37,14 +37,14 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     collection_id: null,
     background_color: null,
   });
-  const [sourceMode, setSourceMode] = useState(true);
+  const [sourceMode, setSourceMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
 
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
-  const composeEditorRef = useRef<EditorView | null>(null);
+  const composeEditorRef = useRef<MemoEditorHandle | null>(null);
   const [composeFocusRequest, setComposeFocusRequest] = useState(0);
 
   // 書きかけを端末から復元し、以後の変更を控える。持ち主が確認できるまでは読みも書きもしない。
@@ -89,7 +89,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     try {
       await createMemo(formState, t("memo.memoSaveFailed"));
       setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-      setSourceMode(true);
+      setSourceMode(false);
       setComposeFocusRequest(0);
       setIsComposeExpanded(false);
       setIsComposePaletteOpen(false);
@@ -128,14 +128,14 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   }, []);
 
   const openTextComposer = useCallback(() => {
-    setSourceMode(true);
+    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
     requestComposeFocus();
   }, [requestComposeFocus]);
 
   const openChecklistComposer = useCallback(() => {
-    setSourceMode(true);
+    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
     setFormState((prev) => {
