@@ -5346,7 +5346,7 @@ body.memo-page {
 }
 
 .memo-live-preview__rendered {
-  cursor: text;
+  cursor: auto;
   max-width: 100%;
   white-space: normal;
 }
@@ -7741,7 +7741,7 @@ body.memo-page {
 
   .memo-modal .memo-modal__heading {
     flex: 1 1 0;
-    min-width: 4.5rem;
+    min-width: 2.5rem;
   }
 
   /* 保存状態はアイコンだけにする。失敗の理由だけは文字で残し、幅が足りなければ縮める
@@ -7868,6 +7868,28 @@ body.memo-page {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__mode-label {
+  margin-left: auto;
+  color: var(--memo-text-muted);
+  font-size: 0.75rem;
+}
+
+.memo-modal .memo-modal__edit-toggle {
+  width: auto;
+  padding-inline: 0.65rem;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.memo-modal .memo-modal__edit-hint {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--modal-border);
+  color: var(--modal-text-muted);
+  font-size: 0.75rem;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-group {

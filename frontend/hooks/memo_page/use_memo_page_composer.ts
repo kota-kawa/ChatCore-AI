@@ -37,7 +37,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     collection_id: null,
     background_color: null,
   });
-  const [sourceMode, setSourceMode] = useState(false);
+  const [sourceMode, setSourceMode] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
 
@@ -89,7 +89,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
     try {
       await createMemo(formState, t("memo.memoSaveFailed"));
       setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
-      setSourceMode(false);
+      setSourceMode(true);
       setComposeFocusRequest(0);
       setIsComposeExpanded(false);
       setIsComposePaletteOpen(false);
@@ -128,14 +128,14 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   }, []);
 
   const openTextComposer = useCallback(() => {
-    setSourceMode(false);
+    setSourceMode(true);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
     requestComposeFocus();
   }, [requestComposeFocus]);
 
   const openChecklistComposer = useCallback(() => {
-    setSourceMode(false);
+    setSourceMode(true);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen(false);
     setFormState((prev) => {
@@ -154,7 +154,6 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
 
   const openComposePalette = useCallback(() => {
     setComposeFocusRequest(0);
-    setSourceMode(false);
     setIsComposeExpanded(true);
     setIsComposePaletteOpen((open) => !open);
   }, []);

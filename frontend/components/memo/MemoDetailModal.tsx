@@ -22,9 +22,9 @@ import {
 
 // ── Memo detail modal ──
 // 本文を読む／編集する面。共通モーダル面（cc-modal）の読む面サイズ（xl / reader）に、
-// ヘッダー＝タイトル入力と操作・保存状態、本文＝ライブエディタ（＋エージェント）を置く。
+// ヘッダー＝タイトル入力と操作・保存状態、本文＝閲覧／明示的な編集（＋エージェント）を置く。
 // Reading / editing sheet on the shared modal surface (cc-modal, xl / reader): the header holds
-// the title input, actions and save state, while the body holds the live editor (+ agent).
+// the title input, actions and save state, while the body switches explicitly between reading and editing (+ agent).
 export function MemoDetailModal() {
   const {
     selectedMemo,
@@ -58,7 +58,12 @@ export function MemoDetailModal() {
   const formatToolbarId = useId();
   const selectDisplayMode = (source: boolean) => {
     setDetailSourceMode(source);
+    if (!source) setFormattingOpen(false);
   };
+  const selectedMemoId = selectedMemo?.id;
+  useEffect(() => {
+    if (detailSourceMode && selectedMemoId !== undefined) editorRef.current?.focus();
+  }, [detailSourceMode, selectedMemoId]);
   const { copied, run: runCopy } = useCopyFeedback();
   const toggleAgent = () => {
     if (isMemoAgentOpen) setIsMemoAgentOpen(false);
@@ -89,12 +94,14 @@ export function MemoDetailModal() {
     </>
   );
 
-  // Enter in the title moves to the same live editor, except when confirming IME input.
+  // タイトルの Enter は本文の編集へ進む。日本語変換の確定では切り替えない。
+  // Enter in the title starts body editing, except when confirming IME input.
   const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isImeConfirmKey(event)) return;
     event.preventDefault();
+    setDetailSourceMode(true);
     editorRef.current?.focus();
-  }, []);
+  }, [setDetailSourceMode]);
 
   // 開いた直後はパネル自体へフォーカスし、操作ボタンを勝手に選ばない
   // Focus the panel itself on open instead of jumping to the first action button
@@ -174,13 +181,13 @@ export function MemoDetailModal() {
               {isMobile ? (
                 <button
                   type="button"
-                  aria-pressed={detailSourceMode}
-                  aria-label={t("memo.markdownSource")}
-                  className={`memo-modal__icon-btn${detailSourceMode ? " is-active" : ""}`}
+                  aria-label={t(detailSourceMode ? "memo.view" : "common.edit")}
+                  className={`memo-modal__icon-btn memo-modal__edit-toggle${detailSourceMode ? " is-active" : ""}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectDisplayMode(!detailSourceMode)}
                 >
-                  <i className="bi bi-code-slash" aria-hidden="true"></i>
+                  <i className={`bi ${detailSourceMode ? "bi-eye" : "bi-pencil"}`} aria-hidden="true"></i>
+                  <span>{t(detailSourceMode ? "memo.view" : "common.edit")}</span>
                 </button>
               ) : (
                 <>
@@ -200,9 +207,9 @@ export function MemoDetailModal() {
                       className={`cc-modal__tab${detailSourceMode ? " is-active" : ""}`}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => selectDisplayMode(true)}
-                      aria-label={t("memo.markdownSource")}
+                      aria-label={t("common.edit")}
                     >
-                      <i className="bi bi-code-slash" aria-hidden="true"></i>{t("memo.markdownSourceShort")}
+                      <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
                     </button>
                   </div>
                   <button
@@ -246,7 +253,7 @@ export function MemoDetailModal() {
               {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
             </span>
           )}
-          {isMobile && (
+          {isMobile && detailSourceMode && (
             <MemoFormatToggle
               open={formattingOpen}
               onToggle={() => setFormattingOpen((open) => !open)}
@@ -265,6 +272,7 @@ export function MemoDetailModal() {
           {!detailLoading && selectedMemo && (
             <>
               <section className="memo-modal__edit-form" aria-label={t("memo.content")}>
+                {detailSourceMode && <p className="memo-modal__edit-hint">{t("memo.editingMarkdown")}</p>}
                 <MemoEditor
                   key={selectedMemo.id}
                   editorRef={editorRef}
@@ -275,7 +283,7 @@ export function MemoDetailModal() {
                   label={t("memo.content")}
                   placeholder={t("memo.writePlaceholder")}
                 />
-                <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={isMobile && !formattingOpen} />
+                <MemoFormatToolbar id={formatToolbarId} editorRef={editorRef} hidden={!detailSourceMode || (isMobile && !formattingOpen)} />
               </section>
               {isMemoAgentOpen && (
                 <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>
