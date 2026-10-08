@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoPageBoardContext, useMemoPageDetailContext, useMemoPageListContext } from "../../contexts/memo_page/memo_page_context";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { MemoSelect } from "./MemoSelect";
 
-export function MemoDetailOrganizeControls() {
+type MemoDetailOrganizeControlsProps = {
+  // 操作の先頭に足す項目。受け取った関数でこのメニューを閉じられる
+  // Extra items placed before the actions; the function they receive closes this menu
+  renderExtraActions?: (closeMenu: () => void) => ReactNode;
+};
+
+export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrganizeControlsProps) {
   const { t } = useTranslation();
   const { collections } = useMemoPageListContext();
   const { actionLoadingId, handleTogglePin, handleToggleArchive, handleDeleteMemo, openShareModal } = useMemoPageBoardContext();
@@ -28,6 +34,13 @@ export function MemoDetailOrganizeControls() {
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [open]);
 
+  // 閉じると中のボタンが消えるので、フォーカスを開くボタンへ戻す
+  // Closing hides the focused item, so return focus to the trigger
+  const closeMenu = () => {
+    setOpen(false);
+    ref.current?.querySelector("summary")?.focus();
+  };
+
   return (
     <details
       ref={ref}
@@ -37,8 +50,7 @@ export function MemoDetailOrganizeControls() {
         if (event.key !== "Escape" || !open || event.defaultPrevented) return;
         event.preventDefault();
         event.stopPropagation();
-        setOpen(false);
-        ref.current?.querySelector("summary")?.focus();
+        closeMenu();
       }}
     >
       <summary
@@ -52,6 +64,7 @@ export function MemoDetailOrganizeControls() {
       <div className="memo-modal__organize-panel">
         {selectedMemo && (
           <div className="memo-modal__memo-actions" role="toolbar" aria-label={t("memo.actions")}>
+            {renderExtraActions?.(closeMenu)}
             <button
               type="button"
               className={`memo-modal__memo-action${selectedMemo.is_pinned ? " is-active" : ""}`}

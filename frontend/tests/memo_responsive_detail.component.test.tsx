@@ -14,6 +14,10 @@ vi.mock("../components/chat_page/MiniChat", () => ({
   },
 }));
 
+// harness の再レンダーで別物にならないよう、モジュールで 1 つだけ持つ
+// Kept at module scope so harness re-renders do not swap it for a new mock
+const copyDetailFullText = vi.fn(async () => true);
+
 function DetailHarness() {
   const [source, setSource] = useState(false);
   const [body, setBody] = useState("保存済みの本文");
@@ -27,6 +31,7 @@ function DetailHarness() {
     setDetailEditAiResponse: setBody,
     detailSourceMode: source,
     setDetailSourceMode: setSource,
+    copyDetailFullText,
     isMemoAgentOpen: agent,
     setIsMemoAgentOpen: setAgent,
     openMemoAgent: async () => { setAgent(true); },
@@ -71,21 +76,40 @@ describe("memo detail on phones", () => {
 
   it("keeps the memo and AI visible together without losing either draft", async () => {
     render(<DetailHarness />);
-    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
+    const sourceToggle = screen.getByRole("button", { name: "Markdown原文" });
+    expect(sourceToggle).toHaveAttribute("aria-pressed", "false");
     changeMemoEditor(screen.getByRole("textbox", { name: "内容" }), "未保存の手編集");
-    fireEvent.click(screen.getByRole("button", { name: "このメモについてAIに質問・編集" }));
+    const more = screen.getByLabelText("その他の操作");
+    fireEvent.click(more);
+    fireEvent.click(screen.getByRole("button", { name: "メモのチャコ" }));
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(more).toHaveFocus();
     await waitFor(() => expect(screen.getByRole("textbox", { name: "AI draft" })).toBeVisible());
     expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "AI draft" }), { target: { value: "質問の書きかけ" } });
-    fireEvent.click(screen.getByRole("button", { name: "整形表示" }));
+    fireEvent.click(sourceToggle);
+    expect(sourceToggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
     expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
-    expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
-    fireEvent.click(screen.getByRole("button", { name: "Markdown原文" }));
-    expect(screen.getByRole("textbox", { name: "AI draft" })).toHaveValue("質問の書きかけ");
+    fireEvent.click(sourceToggle);
+    expect(sourceToggle).toHaveAttribute("aria-pressed", "false");
     expect(memoEditorValue(screen.getByRole("textbox", { name: "内容" }))).toBe("未保存の手編集");
     fireEvent.click(screen.getAllByRole("button", { name: "メモチャットを閉じる" })[0]);
     expect(screen.queryByRole("textbox", { name: "AI draft" })).toBeNull();
     expect(screen.getByRole("textbox", { name: "内容" })).toBeVisible();
+  });
+
+  it("keeps the header to one row by moving the view tabs, AI and copy out of it", async () => {
+    render(<DetailHarness />);
+    expect(screen.queryByRole("button", { name: "整形表示" })).toBeNull();
+    fireEvent.click(screen.getByLabelText("その他の操作"));
+    const toolbar = screen.getByRole("toolbar", { name: "操作" });
+    expect(toolbar).toContainElement(screen.getByRole("button", { name: "メモのチャコ" }));
+    expect(toolbar).toContainElement(screen.getByRole("button", { name: "全文をコピー" }));
+    fireEvent.click(screen.getByRole("button", { name: "全文をコピー" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "コピーしました" })).toBeVisible());
+    expect(copyDetailFullText).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("その他の操作")).toHaveAttribute("aria-expanded", "true");
   });
 
   it("offers color and collection controls through a dismissible disclosure", () => {
