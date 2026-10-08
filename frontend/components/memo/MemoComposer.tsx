@@ -281,7 +281,10 @@ export function MemoComposer() {
       style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
     >
       <div className="memo-quick-capture__header">
-        <h2 id={`${sectionId}-title`} className="sr-only">{t("memo.new")}</h2>
+        <div className="memo-quick-capture__heading">
+          <i className="bi bi-pencil-square" aria-hidden="true"></i>
+          <h2 id={`${sectionId}-title`}>{t("memo.new")}</h2>
+        </div>
         <div className="form-group memo-quick-capture__title-group">
           <label htmlFor={`${sectionId}-memo-title`} className="sr-only">{english ? "Title" : "タイトル"}</label>
           <input
@@ -295,7 +298,7 @@ export function MemoComposer() {
             onChange={handleFormChange}
             onKeyDown={handleTitleKeyDown}
             maxLength={255}
-            placeholder={english ? "Title" : "タイトル"}
+            placeholder={english ? "Title (optional)" : "タイトル（任意）"}
             autoFocus={!hasComposeDraft && !mobile}
           />
         </div>
@@ -333,7 +336,7 @@ export function MemoComposer() {
             event.currentTarget.querySelector("summary")?.focus();
           }}
         >
-          <summary>{t("memo.other")}</summary>
+          <summary><i className="bi bi-sliders" aria-hidden="true"></i>{t("memo.other")}</summary>
           <div className="memo-quick-capture__more-panel">
             <div className="memo-quick-capture__bottom-row">
               {collections.length > 0 && (
@@ -427,7 +430,7 @@ export function MemoComposer() {
           </button>
           <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting || !hasBody}>
             <i className="bi bi-check2" aria-hidden="true"></i>
-            {english ? "Done" : "完了"}
+            {t(submitting ? "common.saving" : "common.save")}
           </button>
         </div>
       </div>

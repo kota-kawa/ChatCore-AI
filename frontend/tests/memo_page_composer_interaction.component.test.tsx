@@ -111,7 +111,7 @@ describe("MemoComposer interactions", () => {
     render(<ComposerHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "チェックリストを作成" }));
-    expect(screen.getByRole("button", { name: "完了" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "outside" }));
     expect(createMemo).not.toHaveBeenCalled();
 
@@ -209,7 +209,7 @@ describe("MemoComposer interactions", () => {
       fireEvent.click(toggle);
       expect(screen.queryByRole("toolbar", { name: "書式" })).toBeNull();
       expect(createMemo).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "完了" }));
+      fireEvent.click(screen.getByRole("button", { name: "保存" }));
       await waitFor(() => expect(createMemo).toHaveBeenCalledWith(
         expect.objectContaining({ ai_response: "最初の行\n## 次の行" }), expect.any(String),
       ));

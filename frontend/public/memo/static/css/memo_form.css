@@ -7841,23 +7841,61 @@ body.memo-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: 0.25rem 0.75rem;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem 0.75rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.25rem;
+  color: var(--memo-text);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__heading > i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--memo-amber-soft);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-group {
   grid-column: 1 / -1;
+  margin: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input {
+  padding: 0.5rem 0;
+  animation: none;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__response-header {
   justify-content: flex-start;
   padding: 0;
+  gap: 0.5rem;
+  animation: none;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__more > summary {
   display: flex;
   align-items: center;
+  gap: 0.4rem;
   min-height: var(--tap-target-min);
   padding-inline: 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--surface-secondary);
   cursor: pointer;
   color: var(--memo-text);
   list-style: none;
@@ -7877,6 +7915,7 @@ body.memo-page {
   padding: 0.5rem;
   overflow-y: auto;
   border: 1px solid var(--memo-border);
+  border-radius: var(--radius-md);
   background: var(--memo-card-strong);
   box-shadow: var(--shadow-md);
 }
@@ -7903,14 +7942,73 @@ body.memo-page {
   min-height: 0;
 }
 
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__editor .memo-live-editor .cm-content {
+  padding: 0.5rem 1.5rem 1.25rem;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
   flex: 0 0 auto;
-  padding: 0.25rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--memo-border);
 }
 
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__formatting {
+  min-width: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__formatting:has([hidden]) {
+  display: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__formatting .memo-format-toolbar {
+  padding: 0;
+  border: 0;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0;
+  width: auto;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__actions .primary-button {
+  min-width: 6rem;
+  background: var(--memo-amber-strong);
+  color: var(--memo-text);
+  box-shadow: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__actions .primary-button:hover:not(:disabled) {
+  background: var(--memo-amber-strong);
+  box-shadow: none;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__actions .primary-button {
+  color: var(--surface-primary);
+}
+
+/* 選んだメモ色を濃色の面へ薄く混ぜ、ダークテーマでも本文と操作を読めるようにする。
+   Tint the dark composer surface with the chosen memo color to keep text and controls readable. */
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-form--quick {
+  background: color-mix(in srgb, var(--memo-compose-color, var(--memo-card-strong)) 18%, var(--memo-card-strong));
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-quick-capture__actions .primary-button:focus-visible {
+  outline: 3px solid var(--memo-amber-strong);
+  outline-offset: 3px;
+}
+
+@media (min-width: 769px) {
+  :where(body.memo-page, .memo-page-shell) .memo-quick-capture__editor .memo-live-editor .cm-content {
+    min-height: 11rem;
+  }
 }
 
 @media (max-width: 768px) {
@@ -7948,10 +8046,21 @@ body.memo-page {
 
   body.memo-page .memo-compose-sheet .memo-quick-capture__header {
     flex: 0 0 auto;
+    padding: 1rem 1rem 0.5rem;
   }
 
   body.memo-page .memo-compose-sheet .memo-quick-capture__title-group {
-    padding-right: 3rem;
+    padding-right: 0;
+  }
+
+  body.memo-page .memo-compose-sheet .memo-quick-capture__editor .memo-live-editor .cm-content {
+    padding: 0.5rem 1rem 1rem;
+  }
+
+  body.memo-page .memo-compose-sheet .memo-quick-capture__footer {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   }
 
   body.memo-page .memo-compose-sheet .memo-quick-capture__body,
