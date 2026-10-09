@@ -29,3 +29,11 @@
 
 - これで `npm run typecheck`／`npm run lint`／`npm run test`（`test:logic` と `test:components` を順に実行）が動きます。
 - リンク先の共有ツリーを壊すため、worktree では `npm install`／`npm ci`／`npm update` を実行しないでください。
+
+## 作業終了後の worktree 削除
+
+- 使い終わった作業用 worktree は残さず削除します。必要な成果のコミット・push・PR 作成が済み、追加の検証・修正で使う予定がなくなった時点が削除のタイミングです。PR が未マージでも、この条件を満たしていれば削除します。
+- 削除前に対象 worktree の `git status --short --untracked-files=all` を確認し、未コミット・未追跡の必要なファイルが残っていないことと、必要なコミットがリモートへ push 済みであることを確認します。git 管理外・ignore 対象のファイルにも必要なものがあれば退避し、未保存の成果がある場合は削除を保留してユーザーへ報告してください。
+- 対象 worktree を使っている自分の開発サーバー・テストプロセス・サブエージェントを終了させ、共有ツリーなど対象外のディレクトリへ移動してから `git worktree remove <worktree>` を実行します。`rm -rf` や `git worktree remove --force` で変更を強制的に破棄してはいけません。
+- 削除後は `git worktree list` で対象が登録から消えたことを確認します。worktree の削除とブランチの削除は別の操作です。PR が参照しているブランチは残してください。
+- この手順で削除するのは自分の担当作業で使い終わった worktree だけです。共有ツリーや他の担当者の worktree は無断で削除しないでください。
