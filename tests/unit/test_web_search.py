@@ -1246,7 +1246,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         del result
         content = web_search.build_web_search_evidence_policy_message()["content"]
 
-        self.assertIn("do not disprove it", content)
+        self.assertIn("Silent sources do not disprove a claim", content)
         self.assertIn("the sources do not cover it", content)
         self.assertIn("label that part as inference", content)
 
