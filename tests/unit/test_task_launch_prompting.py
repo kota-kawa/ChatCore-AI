@@ -78,7 +78,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # English: Verify that base system prompt includes user facing markdown formatting rules.
     def test_base_system_prompt_includes_user_facing_markdown_formatting_rules(self):
         self.assertIn("use clear Markdown", BASE_SYSTEM_PROMPT)
-        self.assertIn("direct answer or conclusion", BASE_SYSTEM_PROMPT)
+        self.assertIn("recommendation directly, and lead with the conclusion", BASE_SYSTEM_PROMPT)
         self.assertIn("bullets for factors or steps", BASE_SYSTEM_PROMPT)
         self.assertIn("comparison axes", BASE_SYSTEM_PROMPT)
         self.assertIn("code blocks labelled with their language", BASE_SYSTEM_PROMPT)
@@ -97,15 +97,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     def test_base_system_prompt_matches_answer_depth_and_warmth_to_the_users_goal(self):
         rules = BASE_SYSTEM_PROMPT.split("## Natural conversation and answer quality\n", 1)[1].split("\n## ", 1)[0]
 
-        self.assertIn("what they need to understand or decide, not the length of their message", rules)
-        self.assertIn("For explanations, advice, and comparisons, develop the important reasons", rules)
+        self.assertIn("what the user needs to understand or decide, not the length of their message", rules)
+        self.assertIn("Develop relevant reasons", rules)
         self.assertIn("concrete example or practical next step when it helps", rules)
-        self.assertIn("do not stop at a bare conclusion or a list of keywords", rules)
-        self.assertIn("brief explanation with one small example over a definition alone", rules)
-        self.assertIn("simple factual confirmations and explicit requests for a short answer brief", rules)
-        self.assertIn("without dropping conditions needed to keep the answer accurate", rules)
-        self.assertIn("prerequisite or recovery step that makes it work", rules)
-        self.assertIn("rather than padding it with repetition", rules)
+        self.assertIn("do not stop at a bare conclusion", rules)
+        self.assertIn("explain unfamiliar concepts with a small example", rules)
+        self.assertIn("simple confirmations and explicit short-answer requests brief", rules)
+        self.assertIn("retaining essential conditions", rules)
+        self.assertIn("prerequisites or recovery steps for a fallback or retry", rules)
+        self.assertIn("Stop when sufficiently answered, without repetition", rules)
         self.assertIn("acknowledge that specific experience", rules)
         self.assertIn("including the context that makes it difficult for them", rules)
         self.assertIn("suggest one manageable first step", rules)
@@ -135,6 +135,11 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("## Conversation continuity", BASE_SYSTEM_PROMPT)
         self.assertIn("resolve omitted subjects and comparison targets", BASE_SYSTEM_PROMPT)
         self.assertIn("reassess that point", BASE_SYSTEM_PROMPT)
+        rules = BASE_SYSTEM_PROMPT.split("## Conversation continuity\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("answer the new request", rules)
+        self.assertIn("an estimate after facts or a recommendation after comparison", rules)
+        self.assertIn("Preserve subject, scope, and constraints", rules)
+        self.assertIn("Repeat facts or caveats only when needed", rules)
 
     # 日本語: 否定疑問文を含む確認には、はい・いいえを強制せず命題を一度だけ明確に答える。
     # English: Confirmations answer the proposition once without forcing yes/no polarity.
@@ -149,8 +154,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         # The mandatory closing restatement was removed (issue #774).
         self.assertNotIn("closing-verdict", BASE_SYSTEM_PROMPT)
 
-    # 日本語: 判断を求める回答の冒頭と末尾で、同じ明確な結論を必須としていることを検証します。
-    # English: Verify judgments require the same clear verdict at both the opening and closing.
+    # 日本語: 判断の結論を冒頭で示し、根拠に応じた強さで述べる規則を検証します。
+    # English: Verify judgments lead with a conclusion calibrated to the evidence.
     def test_base_system_prompt_matches_conclusion_strength_to_evidence(self):
         evidence_rules = BASE_SYSTEM_PROMPT.split("## Evidence and certainty\n", 1)[1].split("\n## ", 1)[0]
         self.assertIn("put the answer in the first sentence", evidence_rules)
@@ -242,6 +247,13 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("conditional estimate with a plain confidence signal", BASE_SYSTEM_PROMPT)
         self.assertIn('instead of stopping at "it depends"', BASE_SYSTEM_PROMPT)
         self.assertIn("still give a default recommendation", BASE_SYSTEM_PROMPT)
+        evidence_rules = BASE_SYSTEM_PROMPT.split("## Evidence and certainty\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("On the first request", evidence_rules)
+        self.assertIn("concrete months or windows, amounts or ranges", evidence_rules)
+        self.assertIn("Missing official information alone does not prevent an estimate", evidence_rules)
+        self.assertIn("broader ranges for weak analogies, not exact dates or probabilities", evidence_rules)
+        self.assertIn("Name the supported scope and briefly distinguish unresolved parts", evidence_rules)
+        self.assertIn("For confirmed-facts-only requests, omit predictions", evidence_rules)
 
     # 日本語: 検索文脈が無い場合の推論と再検索の原則が、ベースプロンプトへ一元化されていることを検証します。
     # English: Verify that reasoning without search context and retry rules are centralized in the base prompt.

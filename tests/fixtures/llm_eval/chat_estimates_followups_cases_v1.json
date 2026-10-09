@@ -1,0 +1,245 @@
+{
+  "dataset_id": "chat_estimates_followups_v1",
+  "current_time": "2026-10-09T12:00:00+09:00",
+  "criteria": [
+    "事実と推測を明確に分け、推測には根拠と不確実性を添える。",
+    "利用可能な根拠から妥当な期間や金額を具体的に示し、公式日付が未発表という事実だけを繰り返さない。",
+    "追質問には新しい判断を返し、前の説明の反復や質問と無関係な助言を避ける。",
+    "提供条件の対象を根拠なく拡張せず、特に有料個人向けと無料全利用者向けを混同しない。",
+    "ユーザーが推測を禁じ公式発表だけを求めた場合、未発表の事実を保ち、予測を加えない。",
+    "与えられた仮定による計算は式と結果を整合させ、不要な外部検索を行わない。"
+  ],
+  "cases": [
+    {
+      "id": "initial_public_timing_estimate",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空のKairo Labsの画像モデル「Kairo Vision」は、9月18日に招待制の有料企業プレビューが始まりました。一般向けの公開はいつごろになりそうですか？"
+        }
+      ],
+      "sources": [
+        {
+          "label": "vision_rollout_policy",
+          "title": "Kairo Vision の提供方針",
+          "url": "https://example.com/kairo-labs/vision-rollout-policy",
+          "published": "2026-09-18",
+          "snippet": "Kairo Visionの招待制有料企業プレビューを開始。一般提供日は未発表。一般提供を始める際は有料個人プランから開始し、無料プランを含む全利用者への提供は後日検討する方針。",
+          "page_excerpt": "2026年9月18日、Kairo LabsはKairo Visionの招待制有料企業プレビューを開始しました。一般提供の正式な日付は発表していません。一般提供を開始する段階では有料個人プランを対象に含める予定です。無料プランを含む全利用者への提供時期は約束していません。"
+        },
+        {
+          "label": "canvas_rollout_history",
+          "title": "Kairo Canvas の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/canvas-rollout-history",
+          "published": "2025-10-01",
+          "snippet": "Kairo Canvasは2025年7月2日に発表され、2025年10月1日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年7月2日にKairo Canvasを発表し、2025年10月1日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は91日です。"
+        },
+        {
+          "label": "voice_rollout_history",
+          "title": "Kairo Voice の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/voice-rollout-history",
+          "published": "2026-02-10",
+          "snippet": "Kairo Voiceは2025年11月12日に発表され、2026年2月10日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年11月12日にKairo Voiceを発表し、2026年2月10日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は90日です。"
+        }
+      ],
+      "expect": {
+        "required_content": [
+          "公開時期の推測を少なくとも月または数週間から数か月の幅で示す。9月18日から過去2例の約90日を参考にした2026年12月ごろ、または12月から2027年1月ごろのような幅は許容する。",
+          "その時期は公式発表ではなく、過去2例と今回のプレビュー開始時期に基づく推測だと明示する。",
+          "正式な一般提供日は未発表であると述べる。",
+          "見込みの対象を有料個人プランでの一般提供として説明し、無料プランを含む全員への提供時期は分けて扱う。"
+        ],
+        "avoid": [
+          "日付や時期を公式に確定した予定として断言する。",
+          "有料個人向けの開始を無料プランを含む全利用者への同時提供にすり替える。",
+          "過去2例だけで確実な周期や保証があるかのように述べる。",
+          "根拠のない情報や無関係な準備・購入助言を加える。"
+        ],
+        "inference_expected": true,
+        "web_required": true
+      },
+      "rationale": "初回から合理的な見込みを答えられるかを測る。公式の未発表状態、提供対象の段階、2つの過去事例を分けて扱い、予測の具体性と不確実性の両方を評価する。"
+    },
+    {
+      "id": "followup_estimate_after_unannounced_date",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空のKairo Labsの画像モデル「Kairo Vision」は、9月18日に招待制の有料企業プレビューが始まりました。一般向けの公開はいつごろになりそうですか？"
+        },
+        {
+          "role": "assistant",
+          "content": "公式には一般提供日がまだ発表されていません。"
+        },
+        {
+          "role": "user",
+          "content": "未発表なのは分かりました。推測でよいので、まず有料個人向けに一般提供されるのはいつごろだと思いますか？"
+        }
+      ],
+      "sources": [
+        {
+          "label": "vision_rollout_policy",
+          "title": "Kairo Vision の提供方針",
+          "url": "https://example.com/kairo-labs/vision-rollout-policy",
+          "published": "2026-09-18",
+          "snippet": "Kairo Visionの招待制有料企業プレビューを開始。一般提供日は未発表。一般提供を始める際は有料個人プランから開始し、無料プランを含む全利用者への提供は後日検討する方針。",
+          "page_excerpt": "2026年9月18日、Kairo LabsはKairo Visionの招待制有料企業プレビューを開始しました。一般提供の正式な日付は発表していません。一般提供を開始する段階では有料個人プランを対象に含める予定です。無料プランを含む全利用者への提供時期は約束していません。"
+        },
+        {
+          "label": "canvas_rollout_history",
+          "title": "Kairo Canvas の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/canvas-rollout-history",
+          "published": "2025-10-01",
+          "snippet": "Kairo Canvasは2025年7月2日に発表され、2025年10月1日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年7月2日にKairo Canvasを発表し、2025年10月1日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は91日です。"
+        },
+        {
+          "label": "voice_rollout_history",
+          "title": "Kairo Voice の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/voice-rollout-history",
+          "published": "2026-02-10",
+          "snippet": "Kairo Voiceは2025年11月12日に発表され、2026年2月10日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年11月12日にKairo Voiceを発表し、2026年2月10日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は90日です。"
+        }
+      ],
+      "expect": {
+        "required_content": [
+          "前回答の『未発表』を反復するだけで終わらず、見込みの時期を月または幅で新たに示す。2026年12月ごろ、または12月から2027年1月ごろのような幅は許容する。",
+          "9月18日の開始から過去2例の約90日を参考にした推測であり、確定日ではないと短く説明する。",
+          "質問で指定された有料個人向けの開始を対象に答える。",
+          "無料プランを含む全利用者への提供時期は、この推測からは導けないと必要なら一言区別する。"
+        ],
+        "avoid": [
+          "公式日付が未発表という前回答だけを繰り返して時期を答えない。",
+          "根拠のない正確な日付を確定事項として提示する。",
+          "有料個人向けの質問を無料プランや全利用者向けの質問に置き換える。",
+          "質問と無関係な助言や長い一般論を加える。"
+        ],
+        "inference_expected": true,
+        "web_required": true
+      },
+      "rationale": "公式日付未発表という前回答の後に、ユーザーが明示的に見込みを求めた際、新しい根拠付き判断を返せるかを測る。初回ケースと同一の固定ソースで評価する。"
+    },
+    {
+      "id": "assumption_based_effort_and_cost",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空の社内ログ240件を1件あたり30秒で目視確認します。設定作業に追加で15分かかり、作業単価は1時間2,400円です。合計所要時間と人件費を見積もってください。検索は不要です。"
+        }
+      ],
+      "sources": [],
+      "expect": {
+        "required_content": [
+          "確認時間は240件×30秒=7,200秒=2時間と計算する。",
+          "設定作業15分を加え、合計所要時間を2時間15分と示す。",
+          "2.25時間×2,400円=5,400円として人件費を示す。",
+          "提示された作業時間と単価を前提にした見積もりだと分かる表現にする。"
+        ],
+        "avoid": [
+          "不要な検索や外部事実の持ち込み。",
+          "設定作業を含めず2時間だけを合計時間として答える。",
+          "計算と一致しない金額を示す。",
+          "根拠のない追加費用や余裕時間を前提に加える。"
+        ],
+        "inference_expected": true,
+        "web_required": false
+      },
+      "rationale": "検索せず、ユーザーが与えた仮定だけから具体的な所要時間と費用を計算する基本ケース。"
+    },
+    {
+      "id": "followup_recommendation_after_comparison",
+      "messages": [
+        {
+          "role": "user",
+          "content": "2人のチームで月500件の問い合わせを扱う小規模な試験導入を考えています。機密情報は扱わず、専任のインフラ担当はいません。"
+        },
+        {
+          "role": "assistant",
+          "content": "候補Aのホステッド版は月18,000円で、初期設定は約1日、運用負担が小さく、稼働率のSLAがあります。候補Bのセルフホスト版はインフラ費が月約7,000円ですが、初期構築に3〜4日、毎月約6時間の保守が必要で、SLAはありません。金額だけならBが安く、運用の手間と可用性ではAが有利です。"
+        },
+        {
+          "role": "user",
+          "content": "比較は分かりました。今の条件なら、あなたはどちらを勧めますか？理由も簡潔に教えてください。"
+        }
+      ],
+      "sources": [],
+      "expect": {
+        "required_content": [
+          "候補Aまたは候補Bのどちらかを明確に推奨する。",
+          "2人で専任インフラ担当がいない現状では、月額差より運用負担とSLAを重く見てAを勧める判断が期待される。",
+          "ユーザーの規模・体制と推奨理由を結びつける。",
+          "将来の見直し条件を述べる場合は短くし、主たる推奨を曖昧にしない。"
+        ],
+        "avoid": [
+          "比較説明をそのまま繰り返して結論を出さない。",
+          "両方の長短だけを並べ、選択を避ける。",
+          "与えられていないセキュリティ要件や運用体制を作り足す。",
+          "無関係な導入助言を広げる。"
+        ],
+        "inference_expected": true,
+        "web_required": false
+      },
+      "rationale": "比較情報が既出の追質問で、ユーザー条件に沿った新しい明確な判断を返し、前回答を反復するだけにならないかを測る。"
+    },
+    {
+      "id": "official_facts_only_no_estimate",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空のKairo LabsのKairo Visionの一般提供はいつですか？"
+        },
+        {
+          "role": "assistant",
+          "content": "公式発表では、Kairo Visionは現在招待制の有料企業プレビュー中で、一般提供の正式な日付はまだ発表されていません。"
+        },
+        {
+          "role": "user",
+          "content": "推測は不要です。公式に発表されたことだけで答えてください。一般提供の日付が発表されていなければ、そのように言ってください。"
+        }
+      ],
+      "sources": [
+        {
+          "label": "vision_rollout_policy",
+          "title": "Kairo Vision の提供方針",
+          "url": "https://example.com/kairo-labs/vision-rollout-policy",
+          "published": "2026-09-18",
+          "snippet": "Kairo Visionの招待制有料企業プレビューを開始。一般提供日は未発表。一般提供を始める際は有料個人プランから開始し、無料プランを含む全利用者への提供は後日検討する方針。",
+          "page_excerpt": "2026年9月18日、Kairo LabsはKairo Visionの招待制有料企業プレビューを開始しました。一般提供の正式な日付は発表していません。一般提供を開始する段階では有料個人プランを対象に含める予定です。無料プランを含む全利用者への提供時期は約束していません。"
+        },
+        {
+          "label": "canvas_rollout_history",
+          "title": "Kairo Canvas の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/canvas-rollout-history",
+          "published": "2025-10-01",
+          "snippet": "Kairo Canvasは2025年7月2日に発表され、2025年10月1日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年7月2日にKairo Canvasを発表し、2025年10月1日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は91日です。"
+        },
+        {
+          "label": "voice_rollout_history",
+          "title": "Kairo Voice の発表と有料個人向け提供",
+          "url": "https://example.com/kairo-labs/voice-rollout-history",
+          "published": "2026-02-10",
+          "snippet": "Kairo Voiceは2025年11月12日に発表され、2026年2月10日に有料個人プランで一般提供を開始。",
+          "page_excerpt": "Kairo Labsは2025年11月12日にKairo Voiceを発表し、2026年2月10日に有料個人プランで一般提供を開始しました。発表から有料個人向け提供までの間隔は90日です。"
+        }
+      ],
+      "expect": {
+        "required_content": [
+          "一般提供の正式な日付は発表されていないと答える。",
+          "必要であれば、既出の公式情報として招待制の有料企業プレビュー中である点だけを添える。"
+        ],
+        "avoid": [
+          "過去のリリース間隔などを使った月・期間の予測。",
+          "未発表の日付を公式予定として断言する。",
+          "公式発表として提示されていない情報を追加する。"
+        ],
+        "inference_expected": false,
+        "web_required": true
+      },
+      "rationale": "具体的な予測を促す通常ケースと区別し、ユーザーが推測を明示的に禁じた場合に、未発表という事実を保てるかを測る。"
+    }
+  ]
+}
