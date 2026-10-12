@@ -1,382 +1,273 @@
-> 一番下に日本語版もあります
-
 # ChatCore-AI
 
-![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.139+-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16.2+-000000?logo=nextdotjs&logoColor=white)
-![React](https://img.shields.io/badge/React-19.2+-61DAFB?logo=react&logoColor=000000)
-![TypeScript](https://img.shields.io/badge/TypeScript-7.0+-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.3+-06B6D4?logo=tailwindcss&logoColor=white)
+**繰り返し使う指示と個人の知識を、AI との会話につなぐ。**
+
+[ライブデモ](https://chatcore-ai.com/) · [デモ動画](https://youtu.be/tdPZJdZfeQ0) · [English](#english) · [内部設計](ARCHITECTURE.md)
+
+![Python](https://img.shields.io/badge/Python-3.14.6-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.139.0-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.3.8-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
-![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
-![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
-![Anthropic Claude](https://img.shields.io/badge/Anthropic%20Claude-LLM%20API-191919?logo=anthropic&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7.4.7-DC382D?logo=redis&logoColor=white)
 
-**🚀 Live Demo: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
+## このアプリでできること
 
-## UI Preview
+毎回同じ指示を書き直す手間を減らすため、よく使う依頼を **タスク**、再利用する指示を **Skill** として保存できる AI チャットアプリを制作しました。会話だけでなく、メモ・個人のコンテキスト・公開プロンプトも扱えます。MCP を通じて外部の AI クライアントからも同じデータにアクセスできます。
 
-![UI preview](assets/images/chatcore_screenshot.png)
+| 機能 | 利用体験 |
+| --- | --- |
+| タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
+| AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
+| Web 検索・生成 UI | 出典を付けた回答や、会話内で操作できる 2D／3D の図・グラフを表示 |
+| メモ・マイコンテキスト | メモを編集・整理・共有し、好みやプロジェクト情報などの個人の事実を保存・検索 |
+| MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・コンテキストを読み書き。クライアントを変えても知識を再利用 |
 
-## 🎬 Demo Videos
+会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、画像は持ち主だけが取得できる保存先で管理します。
 
-Click a thumbnail to open the video on YouTube.
+## 画面
 
-<p align="center">
-  <a href="https://youtu.be/tdPZJdZfeQ0" target="_blank" rel="noopener noreferrer">
-    <img src="https://img.youtube.com/vi/tdPZJdZfeQ0/maxresdefault.jpg" alt="Watch the demo video" width="720">
-  </a>
-  <br>
-  <sub><b>▶ Watch Demo Video</b></sub>
-</p>
+タスクと Skill から会話を始めるホーム画面です。
 
-## Overview
-Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq, Anthropic Claude, and OpenAI APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
-
-## Background
-
-Using AI chat services daily, I kept running into the same friction: writing almost identical prompts over and over — drafting emails, asking for code fixes, requesting detailed explanations on a topic. Re-typing the same instructions every session was tedious and slowed down my workflow.
-
-Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** system: frequently used prompt patterns are defined once as templates, then launched with a single click and minimal situational input. Beyond personal efficiency, the service also emphasizes **customizability** (tasks and prompts are fully editable per user) and **community prompt sharing**, so useful patterns can be discovered, saved, and reused by others.
-
-## Key Features
-- **Email-based authentication** with 6‑digit verification codes
-- **Google OAuth** sign-in
-- **Streaming LLM responses** via Server-Sent Events (SSE) — all three providers
-- **Persistent + ephemeral chat** modes
-- **Chat room sharing** via public URLs and SNS link sharing
-- **Prompt sharing** with search and public visibility controls
-- **Groq / Claude / OpenAI** integrations for LLM responses
-- **Claude Haiku 5.5** selectable for text chat (`ANTHROPIC_API_KEY` required)
-
-## Tech Stack
-- **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
-- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 18, Redis 7 (server-side sessions and coordination; required for persistent session state)
-- **LLM Providers**: Groq, Anthropic Claude, OpenAI
-- **Local Dev**: Docker Compose
-
-## Quick Start (Docker Compose)
-> This project standardizes local execution on Docker Compose.
-
-> **Note:** This environment does not provide a `python` command. Use `python3` (and `python3 -m pip`) for every Python command in this README.
-
-```sh
-# 1) Clone the repository
-git clone https://github.com/kota-kawa/ChatCore-AI.git
-cd ChatCore-AI
-
-# 2) Create a .env file with required environment variables
-cp .env.example .env
-
-# 3) Build and run
-docker-compose up --build
-```
-
-- Frontend: `http://localhost:3000`
-- API: `http://localhost:5004`
-- When running behind a reverse proxy, make it overwrite `X-Forwarded-For` with the connecting address instead of
-  appending to the client-supplied value, set `FORWARDED_ALLOW_IPS` to the peers uvicorn may trust for that header,
-  and set `TRUSTED_PROXY_IPS` to the proxy IPs/CIDRs that may supply `X-Forwarded-For` / `X-Real-IP`.
-
-## Database Migrations (Alembic)
-Schema management is unified on Alembic. In development (`FASTAPI_ENV=development`), the app entrypoint waits for PostgreSQL and runs `alembic upgrade head` before starting the API. Production Blue/Green deployment runs migrations explicitly before starting the target color; production app containers skip automatic startup migrations. No separate `init.sql` bootstrap is required or used.
-
-For existing environments, you can also apply DB changes manually:
-
-```sh
-# Install dependencies first
-python3 -m pip install -r requirements.txt
-
-# Apply all migrations
-alembic upgrade head
-```
-
-- Current default task definitions are centralized in `frontend/data/default_tasks.json` and seeded on startup; frozen revision catalogs preserve existing users' localized tasks.
-- `alembic/versions/` contains incremental migration history.
-- Performance indexes are created by Alembic revisions as well; there is no separate SQL file to keep in sync.
-- API schema single source: backend Pydantic models (`services/request_models.py`, `services/response_models.py`) are converted into frontend Zod schemas at `frontend/types/generated/api_schemas.ts` via `python3 scripts/generate_frontend_zod_schemas.py` (or `npm --prefix frontend run generate:api-schemas`).
-- Internal structure maps: [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/architecture/`](docs/architecture/).
-
-## Challenges & Solutions
-
-**Redis session safety** — Sessions are stored server-side in Redis, while the browser cookie contains only a signed Redis session reference. If Redis is unavailable or a session write fails, the middleware clears the session cookie instead of copying sensitive session data into a signed cookie; the user can authenticate again after Redis recovers.
-
-**DB connection resilience** — In Docker Compose, the backend container sometimes starts before the database is ready. Solved by SQLAlchemy pool pre-ping, bounded pool acquisition, and the Compose/PostgreSQL healthcheck ordering.
-
-**LLM cost control** — Exposing LLM endpoints directly risked runaway API costs. Solved by implementing a centralized daily quota counter (shared across all users) that short-circuits requests at the service layer before any external API call is made.
-
-**Testing Redis-dependent code in CI** — Redis failure paths are hard to exercise because they trigger only when Redis is down or fails mid-request. Solved by driving the session middleware and Redis coordination code with a mock Redis client that simulates outages and write failures, so secure cookie-clearing and degraded-cache behavior are verified deterministically inside the standard test gate — no live Redis instance required.
-
-## CI/CD & Testing
-
-**Pipeline** (GitHub Actions — runs on every push and pull request):
-
-| Job | What it checks |
-|---|---|
-| Ruff Lint | Syntax errors and undefined names (fast gate) |
-| Unit Tests | 25+ unit tests covering services, auth, chat, rate limiting, security |
-| Integration Tests | Route-level endpoint tests against the full ASGI app |
-| Coverage Report | Combined unit + integration coverage, uploaded as XML artifact |
-| Frontend Checks | Import resolution, TypeScript type-check, and logic/component tests via `npm test` |
-| Deploy | SSH deploy to production — manual only (`Run workflow` on `main`); runs after all jobs pass in that run. Merging into `main` does not deploy |
-
-- Concurrent runs of the same event on the same branch are automatically cancelled to avoid redundant work.
-- A scheduled run fires daily at 03:00 UTC to catch dependency regressions.
-- Failed deploys trigger an automatic rollback to the previous Git commit.
-
-## Performance & Scalability
-
-- **Connection pooling**: Each FastAPI worker owns one SQLAlchemy `AsyncEngine` with an `AsyncAdaptedQueuePool`, `pool_pre_ping`, `max_overflow=0`, and a bounded acquisition timeout. Set `DB_POOL_MAX_CONN` (or `DB_POOL_MAX_CONN_PRODUCTION` in production). Keep `WEB_CONCURRENCY × DB_POOL_MAX_CONN` below PostgreSQL `max_connections` with deployment headroom; Blue/Green capacity must account for both colors.
-- **Redis-backed sessions**: Session data is stored server-side in Redis, enabling stateless horizontal scaling of the application tier when Redis is available. Redis is an operational dependency for persistent authenticated sessions; cache and coordination features have separate degraded behavior.
-- **Rate limiting**: Per-day caps on chat LLM API calls and verification email sends, plus a separate monthly support AI agent cap, are enforced at the service layer to protect external API quotas and infrastructure cost.
-- **Health endpoints**: `GET /healthz` returns process liveness; `GET /readyz` checks live DB reachability and reports Redis degradation separately. The database is required for readiness, while Redis is required to persist authenticated sessions.
-- **Structured logging**: All requests emit JSON logs with `X-Request-ID` correlation IDs, making distributed tracing and incident diagnosis tractable at scale.
-
-## Project Structure
-- `app.py`: FastAPI entry point
-- `blueprints/`: feature modules (auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth)
-- `services/`: shared integrations (DB, LLM, email, user helpers)
-- `frontend/public/`: public frontend assets and modular CSS
-- `alembic/versions/`: PostgreSQL schema migration history
-- `frontend/`: Next.js frontend (pages, components, hooks, contexts, and shared libraries)
-
-## Architecture Diagram
-```mermaid
-flowchart LR
-    U[User Browser]
-    FE[Next.js Frontend]
-    API[FastAPI Backend]
-    BP[Blueprints<br/>auth/chat/memo/prompt_share/context_vault/admin/MCP OAuth]
-    SV[Services<br/>db/llm/email/user]
-    DB[(PostgreSQL)]
-    RD[(Redis<br/>sessions and coordination)]
-    LLM[Groq / Claude / OpenAI APIs]
-    EM[Email Provider]
-
-    U --> FE --> API
-    API --> BP --> SV
-    SV --> DB
-    SV --> RD
-    SV --> LLM
-    SV --> EM
-```
-
-## Design Decisions
-- **Why FastAPI (instead of Flask)**: FastAPI gives async-first request handling, type-driven validation, and automatic OpenAPI docs. This reduces API integration friction and keeps backend contracts explicit.
-  Trade-off: stricter typing and async patterns add some implementation complexity.
-- **Why Redis for session/state**: Sessions are stored server-side and shared across instances, which supports horizontal scaling and operational controls such as centralized invalidation, quota state, and ephemeral state. Redis is required for persistent authenticated sessions, while some cache and coordination paths can degrade independently.
-  Trade-off: extra infrastructure and operational overhead, plus re-authentication when Redis cannot persist a session.
-- **Why PostgreSQL as the primary datastore**: Core entities (users, chats, prompts, admin data) are relational and consistency-sensitive. PostgreSQL provides strong integrity guarantees plus mature indexing/migration workflows.
-- **Why Next.js for frontend**: Next.js supports route-based UI composition and production-ready optimization while allowing incremental migration from legacy static/script assets.
-- **Why backend-driven API schemas**: Request/response contracts are authored once in backend Pydantic models and generated into frontend Zod schemas. This removes manual double maintenance and prevents backend/frontend contract drift.
-
-## Engineering Highlights (for reviewers)
-- **Secure Redis-backed sessions** (`services/session_middleware.py`): Built a custom ASGI middleware that stores the session body in Redis and keeps only a signed Redis reference in the browser cookie. If Redis cannot persist the session, the middleware clears the cookie rather than exposing sensitive session data in a signed cookie. It also prevents session fixation by rotating the session identifier on login.
-- **Streaming LLM responses** (`services/chat_generation.py`): LLM responses are streamed token-by-token via SSE using a background `ChatGenerationJob` thread. Jobs are cancellable, and the completed response is persisted to the database only after the full stream finishes, keeping the HTTP handler thin.
-- **Provider-agnostic LLM abstraction** (`services/llm.py`): A single `get_llm_response` / `get_llm_response_stream` interface routes to Groq, Claude, or OpenAI based on model name, with an allowlist that rejects unsupported models before any external call is made.
-- **LLM input sanitization**: Conversation messages are scanned for known secret patterns (API keys, OAuth tokens, passwords) using compiled regexes and redacted before forwarding to any LLM provider, preventing accidental secret leakage.
-- **CSRF protection** (`services/csrf.py`): Custom header-based CSRF token validation is enforced on all state-changing requests. Tokens are auto-generated per session inside the session middleware, requiring no extra setup per route.
-
-## License
-Copyright (c) 2026 Kota Kawagoe
-
-Licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
-
----
+![タスク・モデル・Skill を選べるホーム画面](assets/images/home_memo_texture_after_setup_pc_light.png)
 
 <details>
-<summary>日本語版 (クリックして展開)</summary>
+<summary>生成 UI・メモ編集・MCP 設定の画面を見る</summary>
 
-# Chat-Core-AI
+### 会話の中で動く生成 UI
 
-![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.139+-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16.2+-000000?logo=nextdotjs&logoColor=white)
-![React](https://img.shields.io/badge/React-19.2+-61DAFB?logo=react&logoColor=000000)
-![TypeScript](https://img.shields.io/badge/TypeScript-7.0+-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.3+-06B6D4?logo=tailwindcss&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
-![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
-![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
-![Anthropic Claude](https://img.shields.io/badge/Anthropic%20Claude-LLM%20API-191919?logo=anthropic&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
+![チャット内に生成した売上グラフ](assets/images/generated_ui_compact_header_pc_light.png)
 
-**🚀 ライブデモ: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
+### メモの表示を保ったまま編集
 
-## UI Preview
+![見出し・チェックリスト・コード・表を含むメモの編集画面](assets/images/memo_rich_edit_desktop.png)
 
-![UI preview](assets/images/chatcore_screenshot.png)
+### 外部 AI との接続を管理
 
-## 🎬 Demo Videos
-
-Click a thumbnail to open the video on YouTube.
-
-<p align="center">
-  <a href="https://youtu.be/tdPZJdZfeQ0" target="_blank" rel="noopener noreferrer">
-    <img src="https://img.youtube.com/vi/tdPZJdZfeQ0/maxresdefault.jpg" alt="デモ動画を見る" width="720">
-  </a>
-  <br>
-  <sub><b>▶ デモ動画を見る</b></sub>
-</p>
-
-## 概要
-Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq・Anthropic Claude・OpenAI API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
-
-## 制作背景
-
-ChatGPT などの AI チャットサービスを日常的に使うなかで、「〇〇のメールを作成して」「このコードを修正して」「〇〇について詳しく教えて」など、毎回ほぼ同じ内容を入力し直す手間を強く感じていました。反復的な作業を毎回一から書くのは非効率で、本来集中すべき作業の妨げになっていました。
-
-この課題を解消するために Chat-Core-AI を制作しました。よく使う指示パターンをあらかじめ **タスク** として登録しておくことで、最小限の状況入力とワンクリックで AI との対話を即座に開始できます。また、タスクやプロンプトを自分好みに編集・並び替えできる **高いカスタマイズ性** と、便利なプロンプトをコミュニティで発見・保存・再利用できる **プロンプト共有** 機能も重視して設計しています。
-
-## 主な機能
-- **メール認証**（6 桁コード）
-- **Google OAuth** ログイン
-- **LLM ストリーミング応答**（SSE 経由 — 全プロバイダ対応）
-- **永続／エフェメラル**のチャット
-- **チャット共有リンク**（URL/SNS 共有）
-- **プロンプト共有**（公開・検索）
-- **Groq / Claude / OpenAI 連携**
-- **Claude Haiku 5.5** をテキストチャットで選択可能（`ANTHROPIC_API_KEY` が必要）
-
-## 技術スタック
-- **Backend**: Python 3.14, FastAPI, SQLAlchemy 2.0 AsyncEngine/AsyncSession, psycopg 3, Alembic
-- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 18, Redis 7（セッション・協調処理に使用。認証セッションの永続化には必須）
-- **LLM Providers**: Groq, Anthropic Claude, OpenAI
-- **Local Dev**: Docker Compose
-
-## 実行方法（Docker Compose）
-> 実行方法は Docker Compose に統一しています。
-
-> **注意:** この環境には `python` コマンドがありません。本 README の Python コマンドはすべて `python3`（および `python3 -m pip`）を使用してください。
-
-```sh
-# 1) リポジトリを取得
-git clone https://github.com/kota-kawa/ChatCore-AI.git
-cd ChatCore-AI
-
-# 2) 環境変数を設定
-cp .env.example .env
-# メール送信は Resend を使用します。
-# RESEND_API_KEY と、Resend で検証済みドメインの RESEND_FROM_ADDRESS を設定してください。
-
-# 3) ビルド＆起動
-docker-compose up --build
-```
-
-- フロントエンド: `http://localhost:3000`
-- API: `http://localhost:5004`
-- リバースプロキシ配下で動かす場合は、`X-Forwarded-For` をクライアント送信値へ追記せず接続元アドレスで上書きするように設定し、
-  uvicorn が同ヘッダーを信頼する接続元を `FORWARDED_ALLOW_IPS` に、`X-Forwarded-For` / `X-Real-IP` を渡せるプロキシの IP/CIDR を
-  `TRUSTED_PROXY_IPS` に設定してください。
-
-## データベースマイグレーション（Alembic）
-スキーマ管理は Alembic に統一しています。開発環境（`FASTAPI_ENV=development`）では、コンテナのエントリーポイントが PostgreSQL の起動を待ってから `alembic upgrade head` を実行し、APIを起動します。本番のBlue/Greenデプロイでは、対象色の起動前にデプロイスクリプトがmigrationを明示的に実行し、本番コンテナ起動時の自動migrationはスキップします。`init.sql` のような別系統の初期化スクリプトは使いません。
-
-既存環境へ手動で適用する場合は次を実行してください。
-
-```sh
-# 先に依存関係をインストール
-python3 -m pip install -r requirements.txt
-
-# 全マイグレーションを適用
-alembic upgrade head
-```
-
-- 現行の既定タスク定義は `frontend/data/default_tasks.json` を単一ソースとして起動時に投入し、既存ユーザー向けのローカライズは凍結した旧版カタログで維持
-- `alembic/versions/`: 段階的な変更履歴
-- 性能インデックスも Alembic revision で作成するため、別管理の SQL ファイルはありません
-- APIスキーマの単一ソース: バックエンドPydantic（`services/request_models.py`, `services/response_models.py`）を `python3 scripts/generate_frontend_zod_schemas.py`（または `npm --prefix frontend run generate:api-schemas`）でフロントエンドZod（`frontend/types/generated/api_schemas.ts`）へ生成
-- 内部構成の詳細: [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`docs/architecture/`](docs/architecture/)
-
-## 課題と解決策（Challenges & Solutions）
-
-**Redisセッションの安全な失敗** — セッション本体はRedisに保存し、ブラウザCookieには署名済みのRedis参照IDだけを保持します。Redisがダウンまたはセッション保存中にエラーが発生した場合、機密情報を署名付きCookieへ退避せず、ミドルウェアがセッションCookieを消去します。Redis復旧後は再認証が必要です。
-
-**DBコネクションの耐障害性** — Docker ComposeではバックエンドコンテナがDBより先に起動してしまうことがありました。コネクションプールが `db`・`localhost`・`127.0.0.1` など複数ホストを順番に試し、接続確認が取れた最初のホストを採用する設計で解決しています。
-
-**LLMコスト制御** — LLMエンドポイントを直接公開すると外部API費用が青天井になるリスクがあります。全ユーザー合算の日次クォータカウンターをサービス層で一元管理し、外部API呼び出しの前段階でリクエストを遮断することで対処しています。
-
-**CI環境でのRedis依存テスト** — Redis障害経路はRedisダウン時やリクエスト中の書き込み失敗時にしか発動せず、そのままでは再現が困難でした。障害や書き込み失敗を模擬するモックRedisクライアントで駆動することで、安全なCookie消去とキャッシュ劣化の挙動を実Redisなしで決定論的に検証しています。
-
-## CI/CDとテスト（CI/CD & Testing）
-
-**パイプライン**（GitHub Actions — 全push・PRで実行）:
-
-| ジョブ | 確認内容 |
-|---|---|
-| Ruff Lint | 構文エラー・未定義名の即時検出（高速ゲート） |
-| Unit Tests | サービス層・認証・チャット・レート制限・セキュリティなど25件以上 |
-| Integration Tests | 実際のASGIアプリに対するルートレベルのエンドポイントテスト |
-| Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存 |
-| Frontend Checks | import解決、TypeScript型チェック、`npm test`によるロジック／コンポーネントテスト |
-| Deploy | SSHで本番デプロイ（手動実行のみ。`main` を選んで Run workflow し、その実行で全ジョブが通過した後に動く。`main` へのマージだけではデプロイされない） |
-
-- 同一ブランチ・同一イベントで並走する実行は自動キャンセルして無駄を排除。
-- 毎日03:00 UTCにスケジュール実行し、依存パッケージの非互換を継続的に検知。
-- デプロイ失敗時は直前のGitコミットへ自動ロールバック。
-
-## パフォーマンスとスケーラビリティ（Performance & Scalability）
-
-- **コネクションプール**: FastAPIワーカーごとにSQLAlchemy `AsyncEngine`を1つだけ生成し、`AsyncSession`をユースケース単位で作成します。`DB_POOL_MAX_CONN`（本番は`DB_POOL_MAX_CONN_PRODUCTION`）で上限を設定し、`WEB_CONCURRENCY × DB_POOL_MAX_CONN`がPostgreSQLの`max_connections`と予備枠を超えないようにします。Blue/Green同時稼働時は両色分を見積もります。
-- **Redisセッション**: セッション本体をRedisに保存し、アプリ層をステートレスに保つことで水平スケールに対応。認証セッションの永続化にはRedisが必要で、キャッシュや協調処理は用途ごとに劣化動作します。
-- **レート制限**: LLM API呼び出し・認証メール送信の日次上限に加え、ゲストチャット回数制限（`GUEST_CHAT_DAILY_LIMIT`）もサービス層のサーバー側カウンタで一元管理し、Cookie改ざんによる回避や外部APIコスト増大を防止。
-- **ヘルスエンドポイント**: `GET /healthz` でプロセス生存確認、`GET /readyz` でDB到達性とRedisの劣化状態を分けて返し、ロードバランサーのヘルスチェックに対応。DBはreadinessに必須で、Redisは認証セッションの永続化に必須。
-- **構造化ログ**: 全リクエストに `X-Request-ID` 相関IDを付与したJSONログを出力し、障害時のトレーサビリティを確保。
-
-## ディレクトリ構成
-- `app.py`: FastAPI エントリーポイント
-- `blueprints/`: 機能別モジュール（auth, chat, memo, prompt_share, context_vault, admin, MCP OAuth）
-- `services/`: DB/LLM/メールなど共通処理
-- `frontend/public/`: フロントエンドの公開アセットとモジュール単位のCSS
-- `alembic/versions/`: PostgreSQL スキーマ変更履歴
-- `frontend/`: Next.js フロントエンド（pages、components、hooks、contexts、共通ライブラリ）
-
-## アーキテクチャ図
-```mermaid
-flowchart LR
-    U[ユーザーブラウザ]
-    FE[Next.js フロントエンド]
-    API[FastAPI バックエンド]
-    BP[Blueprints<br/>auth/chat/memo/prompt_share/context_vault/admin/MCP OAuth]
-    SV[Services<br/>db/llm/email/user]
-    DB[(PostgreSQL)]
-    RD[(Redis<br/>セッション・協調処理)]
-    LLM[Groq / Claude / OpenAI API]
-    EM[メールプロバイダ]
-
-    U --> FE --> API
-    API --> BP --> SV
-    SV --> DB
-    SV --> RD
-    SV --> LLM
-    SV --> EM
-```
-
-## 技術的な意思決定（Design Decisions）
-- **なぜ FastAPI（Flask ではなく）を選んだか**: 非同期処理、型ヒントベースのバリデーション、自動生成される OpenAPI ドキュメントを活用し、API 連携と仕様の明確化を優先したためです。
-  トレードオフ: 型定義と async の実装負荷は増えます。
-- **なぜ Redis をセッション/状態管理に使うか**: セッションをサーバー側で一元管理でき、複数インスタンス構成でも共有しやすく、失効制御やクォータ/エフェメラル状態の運用がしやすくなります。認証セッションの永続化にはRedisが必要ですが、キャッシュや協調処理は用途ごとに劣化できます。
-  トレードオフ: 追加インフラの運用コストと、Redis障害時の再認証が発生します。
-- **なぜ PostgreSQL を主データストアにしたか**: ユーザー・チャット・プロンプト・管理データは関係性と整合性が重要なため、整合性保証・インデックス・マイグレーションが成熟した PostgreSQL を採用しています。
-- **なぜ Next.js を採用したか**: ルート単位でUIを構成しつつ本番最適化を行え、既存の静的アセット/スクリプト構成から段階的に移行しやすいためです。
-- **なぜ API スキーマをバックエンド主導にしたか**: リクエスト/レスポンス契約をバックエンドPydanticに集約し、フロントエンドZodは生成で同期します。手書き二重管理をなくし、契約ドリフトを防ぐためです。
-
-## レビュー観点の強み
-- **安全なRedisセッションミドルウェア** (`services/session_middleware.py`): セッション本体をRedisに保存し、ブラウザCookieには署名済みのRedis参照IDだけを保持するカスタムASGIミドルウェア。Redis障害時は機密情報をCookieへ退避せず、Cookieを消去して再認証へ誘導。ログイン時のセッションID再発行によるセッション固定攻撃対策も実装。
-- **LLM ストリーミング応答** (`services/chat_generation.py`): バックグラウンドスレッド上の `ChatGenerationJob` がトークン逐次生成し SSE で配信。ジョブはキャンセル可能で、レスポンス全体の受信完了後にのみ DB 保存を行うことで HTTP ハンドラを薄く保つ設計。
-- **プロバイダ非依存 LLM 抽象層** (`services/llm.py`): `get_llm_response` / `get_llm_response_stream` の単一インターフェースがモデル名でルーティング。許可リスト外のモデルは外部 API 呼び出し前に即時拒否。
-- **LLM 入力サニタイズ**: API キー・OAuth トークン・パスワードなどの秘密情報パターンをコンパイル済み正規表現でスキャンし、外部 LLM プロバイダへ送信する前に自動的に伏せ字化。意図しない秘密漏洩を防止。
-- **CSRF 対策** (`services/csrf.py`): ヘッダーベースの CSRF トークン検証をすべての状態変更リクエストに適用。トークンはセッションミドルウェア内でセッションごとに自動生成されるため、ルートごとの追加設定不要。
-
-## ライセンス
-Copyright (c) 2026 Kota Kawagoe
-
-Apache License, Version 2.0 の下でライセンスされています。詳細は [LICENSE](LICENSE) を参照してください。
+![MCP サーバー URL と OAuth 認証情報を管理する設定画面](assets/images/mcp_credentials_ui_redesign.png)
 
 </details>
+
+## アーキテクチャ
+
+Web UI と外部 AI クライアントは別の入口を使い、共通のサービス・Repository を通じてデータを扱います。永続データは PostgreSQL、セッションや生成ジョブの協調は Redis、画像は永続ボリュームへ分けています。
+
+```mermaid
+flowchart TB
+    Browser[ブラウザー]
+    Client[外部 AI クライアント]
+    Frontend[Next.js / React]
+
+    subgraph Backend[FastAPI バックエンド]
+        API[Web API / SSE<br/>MCP / OAuth]
+        Services[共通サービス]
+        Repo[Repository / SQLAlchemy]
+    end
+
+    PG[(PostgreSQL + pgvector)]
+    Redis[(Redis)]
+    Files[画像ストレージ]
+    External[LLM / Brave Search]
+
+    Browser --> Frontend --> API
+    Client -->|MCP / OAuth| API
+    API --> Services --> Repo --> PG
+    API -->|セッション| Redis
+    Services -->|ジョブ・イベント| Redis
+    Services --> Files
+    Services --> External
+```
+
+- **画面・HTTP・業務処理・DB アクセスを分離**し、Web と MCP で共通のデータ操作を再利用します。
+- **生成処理と SSE 接続を分離**し、専用スレッドプールで応答を生成します。停止時も生成済みの本文を保存し、Redis で複数ワーカー間のイベント配信・停止要求を協調します。
+- **LLM の差は Adapter に集約**し、会話モデルごとに別の検索・回答フローを作らず、共通の判断ループを使います。
+
+実装: [アプリ構成](app.py) · [チャット生成](services/chat_generation.py) · [生成の協調](services/chat_generation_coordinator.py) · [LLM Adapter](services/llm.py)
+
+## MCP によるデータの再利用
+
+例えば、ある AI クライアントで保存した「回答は日本語で簡潔に」「現在進めているプロジェクト」といった情報を、別の MCP 対応クライアントから取得して会話の参考にできます。クライアントごとに本人の ChatCore アカウントへ接続を認可し、ユーザー ID に紐づいた同じデータを参照します。
+
+| データ | MCP からできること | 公開範囲 |
+| --- | --- | --- |
+| Prompt・Skill | 公開コンテンツの検索・取得、Prompt／画像 Prompt／Skill の新規投稿 | 投稿は公開 |
+| メモ | 一覧・検索・取得・作成・更新・追記 | 認証した本人のメモ。共有中のメモの変更には追加の許可が必要 |
+| マイコンテキスト | 種類別の概要取得、キーワード／意味検索、事実の保存・更新・無効化 | 認証した本人の事実 |
+
+マイコンテキストは、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
+
+外部クライアントへは必要なデータをツールの結果として返します。クライアントの会話履歴全体を ChatCore のチャット履歴へ自動同期する方式ではありません。
+
+実装: [MCP サーバー](services/mcp_server.py) · [メモツール](services/mcp_tools/memos.py) · [コンテキストツール](services/mcp_tools/context_vault.py) · [事実の保存・検索](services/context_vault_service.py)
+
+## OAuth とアクセス制御
+
+**アプリへのログイン**はメールの6桁コード・Google OAuth・Passkey に対応します。**外部 AI へのデータアクセス許可**は、別の MCP OAuth フローで管理します。
+
+```mermaid
+sequenceDiagram
+    actor User as 利用者
+    participant Client as 外部 AI クライアント
+    participant OAuth as ChatCore OAuth
+    participant MCP as ChatCore MCP
+
+    Client->>OAuth: 認可要求 / PKCE / scope
+    OAuth->>User: ログイン・権限への同意
+    User->>OAuth: 同意
+    OAuth-->>Client: 短命・一度だけ使える認可コード
+    Client->>OAuth: コードと verifier を交換
+    OAuth-->>Client: access / refresh token
+    Client->>MCP: Bearer token 付きツール呼び出し
+    MCP->>OAuth: トークン・認可の有効性を検証
+    MCP->>MCP: ツールの scope とデータ所有者を確認
+    MCP-->>Client: 許可されたデータ・操作結果
+```
+
+- **権限を6つの scope に分割**: `prompts`・`memos`・`context` それぞれの `read`／`write`。トークンのユーザー ID とツールごとの scope を確認します。
+- **認可コードは一度だけ消費**し、PKCE・redirect URI・MCP の resource を確認します。動的クライアント登録と手動の認証情報発行に対応します。
+- **access／refresh token は digest で保存**し、クライアント secret は暗号化します。refresh token のローテーションと短い再送猶予を設け、連携は設定画面から失効できます。
+- **ブラウザーのセッション本体は Redis**へ保存し、Cookie には署名付き参照 ID だけを持たせます。Web API の状態変更は CSRF トークンで保護します。
+
+実装: [OAuth](services/mcp_oauth.py) · [認証情報の永続化](services/repositories/mcp_oauth_repository.py) · [ツールの権限確認](services/mcp_tools/common.py) · [セッション](services/session_middleware.py)
+
+## 重複・競合を防ぐ設計
+
+再送、複数タブ、複数 AI クライアントからの操作を、処理ごとの境界で扱います。
+
+| 場面 | 実装した仕組み | 結果 |
+| --- | --- | --- |
+| MCP のコンテキスト保存を再送 | 同じユーザー・クライアントの `idempotency_key` と保存内容をハッシュ化し、DB の一意制約で保護 | 同じキー・内容は既存の事実を返し、同じキーで内容が違えば競合として拒否 |
+| メモ・コンテキストを同時編集 | MCP 更新時に `expected_revision` を確認し、更新条件にも版番号を含める | 古い読み取り結果による上書きを防ぐ |
+| チャットの承認カードを二重送信 | 承認行をトランザクション内でロックし、確定状態を再確認 | 同じカードの書き込みを二重実行しない |
+| 同じ部屋のチャット生成を同時開始 | Redis の生成ロックを取得し、実行中に期限を更新 | 複数ワーカーからの生成の重なりを抑える |
+
+コンテキスト保存の再送防止は、クライアントが同じ `idempotency_key` を送る場合の仕組みです。公開投稿やメモ作成を含む、すべての MCP 書き込みを自動的に重複排除するものではありません。
+
+実装: [コンテキストの一意性](services/repositories/context_fact_repository.py) · [メモの版管理](services/repositories/memo_repository.py) · [承認の確定](services/chat_tool_approval_service.py) · [生成ロック](services/chat_generation_coordinator.py)
+
+## AI の出力をアプリで扱う工夫
+
+**生成 UI は検証してから隔離 iframe で実行**します。HTML・CSS・JavaScript の契約を検証し、検索画像もサーバーが許可した署名付き中継 URL を使います。
+
+**チャットからの書き込みは承認カードを経由**します。対応する操作に「常に承認」を設定していても、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。公開 Prompt の新規投稿は毎回の承認が必要です。
+
+**API の利用量と料金を記録**し、ユーザー／ゲスト単位の上限と全体の月予算を処理開始前に確認します。実行中のターンが料金上限を超えて終わる可能性は残るため、全体予算には余裕を設けています。
+
+実装: [生成 UI](services/generative_ui.py) · [書き込みツール](services/chat_workspace_tools/runner.py) · [利用上限](services/usage_limits.py)
+
+## 技術選定
+
+| 技術 | 選んだ理由 | トレードオフ・運用上の条件 |
+| --- | --- | --- |
+| FastAPI / Pydantic | 非同期 API と型付き入力検証をまとめ、API 契約を明示できる | 長時間の生成や blocking I/O は別の実行経路へ分離する |
+| Next.js / React / TypeScript | チャット・メモ・設定の画面をコンポーネントと hook に分け、状態と描画を整理できる | クライアント状態と API 契約の同期が必要 |
+| PostgreSQL 18 / pgvector | ユーザー・認可・版管理をトランザクションで扱い、意味検索も同じ DB に置ける | 検索用の埋め込み生成と、Alembic によるスキーマ管理が必要 |
+| SQLAlchemy 2 / psycopg 3 | AsyncSession を Repository に渡し、ユースケース単位で transaction を管理できる | ワーカー数とプール上限を DB 接続容量に合わせる |
+| Redis | セッション・生成ロック・イベント配信を複数ワーカーで共有できる | 認証セッションの保存に必須。保存障害時は Cookie を消去する |
+| MCP / OAuth | 外部 AI へツールを公開し、データごとの読み書き権限を利用者が認可できる | クライアント差、トークン更新・失効、再送・競合を扱う必要がある |
+| Pydantic → Zod | バックエンドが所有する API モデルからフロントエンドの検証スキーマを生成できる | 契約外の既存応答には正規化層を残し、モデル変更時に再生成する |
+
+LLM は Groq・Anthropic・OpenAI の3プロバイダを Adapter で統合しています。主な技術判断は [ADR 一覧](docs/decisions/README.md) に記録しています。
+
+## 品質と運用
+
+GitHub Actions で依存の固定・脆弱性監査、Ruff／mypy／Vulture、4 shard の単体テスト、PostgreSQL を使う統合テスト、フロントエンドの lint・型検査・テスト、Docker ビルドを実行します。ユニット＋統合テストの合算カバレッジには **70% のゲート**を設けています。
+
+本番は **Blue/Green デプロイ**です。`main` で CI を手動実行し、その実行の全チェック通過後にデプロイします。旧色を退役させる前はトラフィックを戻せます。退役後の cleanup 失敗では新色を稼働させたまま調査します。`/healthz` は生存確認、`/readyz` は DB と主要テーブルの確認に加え、Redis・埋め込みの劣化を報告します。
+
+実装: [CI](.github/workflows/tests.yml) · [Blue/Green デプロイ](deploy/blue_green_deploy.sh) · [ヘルスチェック](services/health.py)
+
+<details>
+<summary>開発向けの補足</summary>
+
+Docker Compose v2 で FastAPI・Next.js・PostgreSQL・Redis を起動できます。
+
+```sh
+git clone https://github.com/kota-kawa/ChatCore-AI.git
+cd ChatCore-AI
+cp .env.example .env
+# 以下の設定を済ませてから起動
+docker compose up --build app frontend db redis
+```
+
+ローカル HTTP 開発では `FASTAPI_ENV=development`、`FASTAPI_SESSION_SAMESITE=lax`、`FRONTEND_URL=http://localhost:3000` を設定し、署名鍵・Redis／DB 接続情報・使用する外部サービスのキーを自分の値へ置き換えます。テンプレートの本番設定では起動時 migration を省略するため、そのまま使わないでください。
+
+フロントエンドは `http://localhost:3000`、API は `http://localhost:5004`。開発コンテナは起動時に Alembic migration を適用します。全環境変数は [`.env.example`](.env.example)、構成と責務は [ARCHITECTURE.md](ARCHITECTURE.md)、開発コマンドは [開発規約](docs/knowledge/development_conventions.md) を参照してください。
+
+</details>
+
+<a id="english"></a>
+<details>
+<summary>English — product and engineering overview</summary>
+
+## ChatCore-AI
+
+**Reusable instructions and personal knowledge, connected to AI conversations.**
+
+[Live demo](https://chatcore-ai.com/) · [Demo video](https://youtu.be/tdPZJdZfeQ0)
+
+ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide reusable starting points, Skills supply reusable instructions, and memos and personal context preserve knowledge beyond a single conversation. An OAuth-protected remote MCP server exposes that data to compatible external AI clients.
+
+### Product experience
+
+| Area | Capabilities |
+| --- | --- |
+| Tasks and Skills | Save instructions and import useful public prompts |
+| Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
+| Search and generated UI | Source citations and interactive 2D/3D visuals inside the conversation |
+| Personal knowledge | Editable memos, collections, sharing/export, and typed personal context facts |
+| External AI integration | Read and write authorized data through MCP, and reuse it across clients |
+
+Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. The screenshots and architecture diagram above show the web experience and the shared backend.
+
+### Architecture
+
+Next.js/React serves the web UI. FastAPI exposes browser APIs, SSE, remote MCP, and OAuth. Services and repositories share PostgreSQL data access; pgvector supports semantic search. Redis holds sessions and coordinates generation locks, events, and quotas. Uploaded images live in persistent volumes with separate public/private access boundaries.
+
+Generation runs in a dedicated thread pool, while SSE delivers events and supports cancellation with partial-response preservation. Groq, Anthropic, and OpenAI differences stay in the LLM adapter; chat uses one shared decision loop across providers.
+
+### MCP data and OAuth
+
+| Data | Tools | Visibility |
+| --- | --- | --- |
+| Prompts and Skills | Search/fetch public content; publish new text/image prompts and Skills | Public posts |
+| Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
+| Personal context | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
+
+Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts begin unconfirmed and can suppress automatic chat writes when retrieved.
+
+App sign-in supports email codes, Google OAuth, and Passkeys. External client authorization uses a separate Authorization Code + PKCE flow with one-time codes, redirect/resource validation, and six scopes: read/write for prompts, memos, and context. Each tool checks its scope and derives the owner from the token. Access/refresh tokens are stored as digests; client secrets are encrypted. Refresh rotation includes a short retry grace window, and users can revoke connections.
+
+### Duplicate and conflict prevention
+
+- **Context saves:** when an MCP client reuses an `idempotency_key`, a user/client-scoped key hash, a normalized payload hash, and a database uniqueness constraint return the existing fact for identical retries and reject changed payloads.
+- **MCP updates:** `expected_revision` prevents stale memo/context edits from overwriting newer data.
+- **Chat approvals:** transaction locks and settled-state checks prevent executing the same card twice.
+- **Generation:** renewed Redis locks limit overlapping jobs for the same room.
+
+Idempotency is specific to keyed context saves; public publishing and memo creation do not have universal retry deduplication.
+
+### Technology choices and reliability
+
+| Choice | Reason and tradeoff |
+| --- | --- |
+| FastAPI / Pydantic | Async APIs and explicit typed contracts; long-running generation and blocking work need separate execution paths |
+| Next.js / React / TypeScript | Component/hook composition for chat, memos, and settings; client state must stay aligned with API contracts |
+| PostgreSQL / pgvector | Transactions, ownership, revisions, and semantic search in one datastore; embeddings and migrations need lifecycle management |
+| SQLAlchemy / psycopg | Async repository access and use-case transactions; pool capacity must account for every worker |
+| Redis | Shared sessions and generation coordination; authenticated session persistence depends on its availability |
+| MCP / OAuth | Interoperable tools and user-authorized data scopes; client differences, token lifecycle, retries, and conflicts remain explicit concerns |
+| Pydantic → Zod | Generate frontend validators from backend-owned models; regenerate on changes and normalize legacy responses separately |
+
+Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit.
+
+CI covers locked dependencies and vulnerabilities, backend static checks, four unit-test shards, PostgreSQL integration tests, a combined 70% coverage gate, frontend checks, and Docker builds. Production deployment is manual on `main`, after all checks pass, using Blue/Green traffic switching. Rollback is available before retiring the old color; later cleanup failures leave the new color serving. Health endpoints report liveness, database/schema readiness, and optional Redis/embedding degradation.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for internal boundaries, [ADRs](docs/decisions/README.md) for design decisions, and [development conventions](docs/knowledge/development_conventions.md) for commands. For local HTTP development with Compose v2, copy [`.env.example`](.env.example), set `FASTAPI_ENV=development`, `FASTAPI_SESSION_SAMESITE=lax`, and `FRONTEND_URL=http://localhost:3000`, supply your credentials/provider keys, then run `docker compose up --build app frontend db redis`. The template defaults to production and skips startup migrations.
+
+</details>
+
+## License
+
+Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
