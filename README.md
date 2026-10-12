@@ -1,8 +1,202 @@
+> 一番下に日本語版もあります
+
+# ChatCore-AI
+
+![Python](https://img.shields.io/badge/Python-3.14.6-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.139.0-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.3.8-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7.4.7-DC382D?logo=redis&logoColor=white)
+
+**Reusable instructions and personal knowledge, connected to AI conversations.**
+
+[Live demo](https://chatcore-ai.com/) · [Demo video](https://youtu.be/tdPZJdZfeQ0) · [日本語版](#japanese) · [Internal architecture](ARCHITECTURE.md)
+
+## Overview
+
+ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide reusable starting points, Skills supply reusable instructions, and memos and personal context preserve knowledge beyond a single conversation. An OAuth-protected remote MCP server exposes that data to compatible external AI clients.
+
+## Product experience
+
+| Area | Capabilities |
+| --- | --- |
+| Tasks and Skills | Save instructions and import useful public prompts |
+| Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
+| Search and generated UI | Source citations and interactive 2D/3D visuals inside the conversation |
+| Personal knowledge | Editable memos, collections, sharing/export, and typed personal context facts |
+| External AI integration | Read and write authorized data through MCP, and reuse it across clients |
+
+Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. Chat images are stored privately and can only be retrieved by their owner.
+
+## Screens
+
+Start a conversation from reusable Tasks and Skills.
+
+![Home screen with Tasks, model selection, and Skills](assets/images/home_memo_texture_after_setup_pc_light.png)
+
+<details>
+<summary>View generated UI, memo editing, and MCP settings</summary>
+
+### Interactive UI inside the conversation
+
+![Generated sales chart in a chat](assets/images/generated_ui_compact_header_pc_light.png)
+
+### Edit memos while preserving their formatted appearance
+
+![Memo editor with headings, a checklist, code, and a table](assets/images/memo_rich_edit_desktop.png)
+
+### Manage external AI connections
+
+![Settings for the MCP server URL and OAuth credentials](assets/images/mcp_credentials_ui_redesign.png)
+
+</details>
+
+## Architecture
+
+Next.js/React serves the web UI. FastAPI exposes browser APIs, SSE, remote MCP, and OAuth. Services and repositories share PostgreSQL data access; pgvector supports semantic search. Redis holds sessions and coordinates generation locks, events, and quotas. Uploaded images live in persistent volumes with separate public/private access boundaries.
+
+```mermaid
+flowchart TB
+    Browser[Browser]
+    Client[External AI client]
+    Frontend[Next.js / React]
+
+    subgraph Backend[FastAPI backend]
+        API[Web API / SSE<br/>MCP / OAuth]
+        Services[Shared services]
+        Repo[Repository / SQLAlchemy]
+    end
+
+    PG[(PostgreSQL + pgvector)]
+    Redis[(Redis)]
+    Files[Image storage]
+    External[LLM / Brave Search]
+
+    Browser --> Frontend --> API
+    Client -->|MCP / OAuth| API
+    API --> Services --> Repo --> PG
+    API -->|Sessions| Redis
+    Services -->|Jobs / events| Redis
+    Services --> Files
+    Services --> External
+```
+
+Generation runs in a dedicated thread pool, while SSE delivers events and supports cancellation with partial-response preservation. Groq, Anthropic, and OpenAI differences stay in the LLM adapter; chat uses one shared decision loop across providers.
+
+Implementation: [App composition](app.py) · [Chat generation](services/chat_generation.py) · [Generation coordination](services/chat_generation_coordinator.py) · [LLM adapter](services/llm.py)
+
+## Reusing data through MCP
+
+| Data | Tools | Visibility |
+| --- | --- | --- |
+| Prompts and Skills | Search/fetch public content; publish new text/image prompts and Skills | Public posts |
+| Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
+| Personal context | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
+
+Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts begin unconfirmed and can suppress automatic chat writes when retrieved.
+
+Implementation: [MCP server](services/mcp_server.py) · [Memo tools](services/mcp_tools/memos.py) · [Context tools](services/mcp_tools/context_vault.py) · [Fact storage/search](services/context_vault_service.py)
+
+## OAuth and access control
+
+App sign-in supports email codes, Google OAuth, and Passkeys. External client authorization uses a separate Authorization Code + PKCE flow with one-time codes, redirect/resource validation, and six scopes: read/write for prompts, memos, and context. Each tool checks its scope and derives the owner from the token. Access/refresh tokens are stored as digests; client secrets are encrypted. Refresh rotation includes a short retry grace window, and users can revoke connections.
+
+```mermaid
+sequenceDiagram
+    actor User as User
+    participant Client as External AI client
+    participant OAuth as ChatCore OAuth
+    participant MCP as ChatCore MCP
+
+    Client->>OAuth: Authorization / PKCE / scopes
+    OAuth->>User: Sign-in and permission consent
+    User->>OAuth: Approve
+    OAuth-->>Client: Short-lived, single-use code
+    Client->>OAuth: Exchange code and verifier
+    OAuth-->>Client: access / refresh token
+    Client->>MCP: Tool call with Bearer token
+    MCP->>OAuth: Validate token and grant
+    MCP->>MCP: Check tool scope and owner
+    MCP-->>Client: Authorized data / result
+```
+
+Browser sessions are stored in Redis, with only a signed reference ID in the cookie. State-changing browser APIs validate CSRF tokens.
+
+Implementation: [OAuth](services/mcp_oauth.py) · [OAuth repository](services/repositories/mcp_oauth_repository.py) · [Tool authorization](services/mcp_tools/common.py) · [Sessions](services/session_middleware.py)
+
+## Duplicate and conflict prevention
+
+- **Context saves:** when an MCP client reuses an `idempotency_key`, a user/client-scoped key hash, a normalized payload hash, and a database uniqueness constraint return the existing fact for identical retries and reject changed payloads.
+- **MCP updates:** `expected_revision` prevents stale memo/context edits from overwriting newer data.
+- **Chat approvals:** transaction locks and settled-state checks prevent executing the same card twice.
+- **Generation:** renewed Redis locks limit overlapping jobs for the same room.
+
+Idempotency is specific to keyed context saves; public publishing and memo creation do not have universal retry deduplication.
+
+Implementation: [Context uniqueness](services/repositories/context_fact_repository.py) · [Memo revisions](services/repositories/memo_repository.py) · [Approval settlement](services/chat_tool_approval_service.py) · [Generation locks](services/chat_generation_coordinator.py)
+
+## Technology choices
+
+| Choice | Reason and tradeoff |
+| --- | --- |
+| FastAPI / Pydantic | Async APIs and explicit typed contracts; long-running generation and blocking work need separate execution paths |
+| Next.js / React / TypeScript | Component/hook composition for chat, memos, and settings; client state must stay aligned with API contracts |
+| PostgreSQL / pgvector | Transactions, ownership, revisions, and semantic search in one datastore; embeddings and migrations need lifecycle management |
+| SQLAlchemy / psycopg | Async repository access and use-case transactions; pool capacity must account for every worker |
+| Redis | Shared sessions and generation coordination; authenticated session persistence depends on its availability |
+| MCP / OAuth | Interoperable tools and user-authorized data scopes; client differences, token lifecycle, retries, and conflicts remain explicit concerns |
+| Pydantic → Zod | Generate frontend validators from backend-owned models; regenerate on changes and normalize legacy responses separately |
+
+Design decisions are recorded in the [ADR index](docs/decisions/README.md).
+
+## Handling AI output
+
+Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit.
+
+Implementation: [Generated UI](services/generative_ui.py) · [Write tools](services/chat_workspace_tools/runner.py) · [Usage limits](services/usage_limits.py)
+
+## Quality and operations
+
+CI covers locked dependencies and vulnerabilities, backend static checks, four unit-test shards, PostgreSQL integration tests, a combined 70% coverage gate, frontend checks, and Docker builds. Production deployment is manual on `main`, after all checks pass, using Blue/Green traffic switching. Rollback is available before retiring the old color; later cleanup failures leave the new color serving. Health endpoints report liveness, database/schema readiness, and optional Redis/embedding degradation.
+
+Implementation: [CI](.github/workflows/tests.yml) · [Blue/Green deployment](deploy/blue_green_deploy.sh) · [Health checks](services/health.py)
+
+<details>
+<summary>Development notes</summary>
+
+Docker Compose v2 runs FastAPI, Next.js, PostgreSQL, and Redis.
+
+```sh
+git clone https://github.com/kota-kawa/ChatCore-AI.git
+cd ChatCore-AI
+cp .env.example .env
+# Configure the local settings below before starting
+docker compose up --build app frontend db redis
+```
+
+For local HTTP development, set `FASTAPI_ENV=development`, `FASTAPI_SESSION_SAMESITE=lax`, and `FRONTEND_URL=http://localhost:3000`, and supply your signing key, Redis/database credentials, and provider keys. The template defaults to production and skips startup migrations.
+
+The frontend is at `http://localhost:3000`, and the API at `http://localhost:5004`. Development containers apply Alembic migrations at startup. See [`.env.example`](.env.example) for settings, [ARCHITECTURE.md](ARCHITECTURE.md) for internal boundaries, and [development conventions](docs/knowledge/development_conventions.md) for commands.
+
+</details>
+
+## License
+
+Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
+
+---
+
+<a id="japanese"></a>
+<details>
+<summary>日本語版 (クリックして展開)</summary>
+
 # ChatCore-AI
 
 **繰り返し使う指示と個人の知識を、AI との会話につなぐ。**
 
-[ライブデモ](https://chatcore-ai.com/) · [デモ動画](https://youtu.be/tdPZJdZfeQ0) · [English](#english) · [内部設計](ARCHITECTURE.md)
+[ライブデモ](https://chatcore-ai.com/) · [デモ動画](https://youtu.be/tdPZJdZfeQ0) · [内部設計](ARCHITECTURE.md)
 
 ![Python](https://img.shields.io/badge/Python-3.14.6-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.139.0-009688?logo=fastapi&logoColor=white)
@@ -21,10 +215,10 @@
 | タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
 | AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
 | Web 検索・生成 UI | 出典を付けた回答や、会話内で操作できる 2D／3D の図・グラフを表示 |
-| メモ・マイコンテキスト | メモを編集・整理・共有し、好みやプロジェクト情報などの個人の事実を保存・検索 |
+| メモ・マイコンテキスト | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索 |
 | MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・コンテキストを読み書き。クライアントを変えても知識を再利用 |
 
-会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、画像は持ち主だけが取得できる保存先で管理します。
+会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、チャットに添付した画像は持ち主だけが取得できる保存先で管理します。
 
 ## 画面
 
@@ -51,7 +245,7 @@
 
 ## アーキテクチャ
 
-Web UI と外部 AI クライアントは別の入口を使い、共通のサービス・Repository を通じてデータを扱います。永続データは PostgreSQL、セッションや生成ジョブの協調は Redis、画像は永続ボリュームへ分けています。
+Web UI と外部 AI クライアントは別の入口を使い、共通のサービス・Repository を通じてデータを扱います。永続データは PostgreSQL、セッションや生成ジョブの協調は Redis、画像は永続ボリュームへ分け、チャット画像と公開添付でアクセス範囲を分離しています。
 
 ```mermaid
 flowchart TB
@@ -197,77 +391,8 @@ docker compose up --build app frontend db redis
 
 </details>
 
-<a id="english"></a>
-<details>
-<summary>English — product and engineering overview</summary>
+## ライセンス
 
-## ChatCore-AI
-
-**Reusable instructions and personal knowledge, connected to AI conversations.**
-
-[Live demo](https://chatcore-ai.com/) · [Demo video](https://youtu.be/tdPZJdZfeQ0)
-
-ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide reusable starting points, Skills supply reusable instructions, and memos and personal context preserve knowledge beyond a single conversation. An OAuth-protected remote MCP server exposes that data to compatible external AI clients.
-
-### Product experience
-
-| Area | Capabilities |
-| --- | --- |
-| Tasks and Skills | Save instructions and import useful public prompts |
-| Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
-| Search and generated UI | Source citations and interactive 2D/3D visuals inside the conversation |
-| Personal knowledge | Editable memos, collections, sharing/export, and typed personal context facts |
-| External AI integration | Read and write authorized data through MCP, and reuse it across clients |
-
-Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. The screenshots and architecture diagram above show the web experience and the shared backend.
-
-### Architecture
-
-Next.js/React serves the web UI. FastAPI exposes browser APIs, SSE, remote MCP, and OAuth. Services and repositories share PostgreSQL data access; pgvector supports semantic search. Redis holds sessions and coordinates generation locks, events, and quotas. Uploaded images live in persistent volumes with separate public/private access boundaries.
-
-Generation runs in a dedicated thread pool, while SSE delivers events and supports cancellation with partial-response preservation. Groq, Anthropic, and OpenAI differences stay in the LLM adapter; chat uses one shared decision loop across providers.
-
-### MCP data and OAuth
-
-| Data | Tools | Visibility |
-| --- | --- | --- |
-| Prompts and Skills | Search/fetch public content; publish new text/image prompts and Skills | Public posts |
-| Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
-| Personal context | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
-
-Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts begin unconfirmed and can suppress automatic chat writes when retrieved.
-
-App sign-in supports email codes, Google OAuth, and Passkeys. External client authorization uses a separate Authorization Code + PKCE flow with one-time codes, redirect/resource validation, and six scopes: read/write for prompts, memos, and context. Each tool checks its scope and derives the owner from the token. Access/refresh tokens are stored as digests; client secrets are encrypted. Refresh rotation includes a short retry grace window, and users can revoke connections.
-
-### Duplicate and conflict prevention
-
-- **Context saves:** when an MCP client reuses an `idempotency_key`, a user/client-scoped key hash, a normalized payload hash, and a database uniqueness constraint return the existing fact for identical retries and reject changed payloads.
-- **MCP updates:** `expected_revision` prevents stale memo/context edits from overwriting newer data.
-- **Chat approvals:** transaction locks and settled-state checks prevent executing the same card twice.
-- **Generation:** renewed Redis locks limit overlapping jobs for the same room.
-
-Idempotency is specific to keyed context saves; public publishing and memo creation do not have universal retry deduplication.
-
-### Technology choices and reliability
-
-| Choice | Reason and tradeoff |
-| --- | --- |
-| FastAPI / Pydantic | Async APIs and explicit typed contracts; long-running generation and blocking work need separate execution paths |
-| Next.js / React / TypeScript | Component/hook composition for chat, memos, and settings; client state must stay aligned with API contracts |
-| PostgreSQL / pgvector | Transactions, ownership, revisions, and semantic search in one datastore; embeddings and migrations need lifecycle management |
-| SQLAlchemy / psycopg | Async repository access and use-case transactions; pool capacity must account for every worker |
-| Redis | Shared sessions and generation coordination; authenticated session persistence depends on its availability |
-| MCP / OAuth | Interoperable tools and user-authorized data scopes; client differences, token lifecycle, retries, and conflicts remain explicit concerns |
-| Pydantic → Zod | Generate frontend validators from backend-owned models; regenerate on changes and normalize legacy responses separately |
-
-Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit.
-
-CI covers locked dependencies and vulnerabilities, backend static checks, four unit-test shards, PostgreSQL integration tests, a combined 70% coverage gate, frontend checks, and Docker builds. Production deployment is manual on `main`, after all checks pass, using Blue/Green traffic switching. Rollback is available before retiring the old color; later cleanup failures leave the new color serving. Health endpoints report liveness, database/schema readiness, and optional Redis/embedding degradation.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for internal boundaries, [ADRs](docs/decisions/README.md) for design decisions, and [development conventions](docs/knowledge/development_conventions.md) for commands. For local HTTP development with Compose v2, copy [`.env.example`](.env.example), set `FASTAPI_ENV=development`, `FASTAPI_SESSION_SAMESITE=lax`, and `FRONTEND_URL=http://localhost:3000`, supply your credentials/provider keys, then run `docker compose up --build app frontend db redis`. The template defaults to production and skips startup migrations.
+Copyright (c) 2026 Kota Kawagoe. [Apache License 2.0](LICENSE) の下で公開しています。
 
 </details>
-
-## License
-
-Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
