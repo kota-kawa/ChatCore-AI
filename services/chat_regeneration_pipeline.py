@@ -24,6 +24,8 @@ from services.chat_context import build_context_messages
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationCapacityError,
+    ChatGenerationCoordinationError,
+    ChatGenerationIdConflictError,
     ChatGenerationJob,
     ChatGenerationService,
     build_generation_key,
@@ -51,6 +53,10 @@ from services.chat_url_context import (
 )
 from services.chat_workspace_tools import build_workspace_toolbox, conversation_has_attachments
 from services.ephemeral_store import EphemeralChatStore
+from services.error_messages import (
+    ERROR_CHAT_GENERATION_ID_REUSED,
+    ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
+)
 from services.generative_ui import (
     artifact_status_part,
     inject_generative_ui_mode_instruction,
@@ -244,6 +250,7 @@ class ChatRegenerationInput:
     #          chat_regenerate saves no new user message, so there is nothing to clean up and
     #          running the cleanup would delete an existing message.
     cleanup_unanswered_user_messages_on_error: bool = False
+    generation_id: str | None = None
 
 
 # パイプラインの結果（レスポンス組み立てはブループリント側の責務）
@@ -634,6 +641,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,
+                **({"generation_id": pipeline_input.generation_id} if pipeline_input.generation_id else {}),
                 # ツールボックスがあるときだけ渡し、無いときの呼び出しは従来の形のままにする。
                 # Passed only when there is a toolbox; otherwise the call keeps its old shape.
                 **({"workspace_tools": workspace_tools} if workspace_tools else {}),
@@ -642,6 +650,16 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             return ChatRegenerationRejected(
                 payload={"error": GENERATION_ALREADY_RUNNING_MESSAGE},
                 status_code=409,
+            )
+        except ChatGenerationIdConflictError:
+            return ChatRegenerationRejected(
+                payload={"error": ERROR_CHAT_GENERATION_ID_REUSED},
+                status_code=409,
+            )
+        except ChatGenerationCoordinationError:
+            return ChatRegenerationRejected(
+                payload={"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+                status_code=503,
             )
         except ChatGenerationCapacityError:
             return ChatRegenerationRejected(

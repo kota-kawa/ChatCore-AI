@@ -35,7 +35,10 @@ from services.chat_async_bridge import _run_async_callback
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationCapacityError,
+    ChatGenerationCoordinationError,
+    ChatGenerationIdConflictError,
     ChatGenerationService,
+    is_generation_id_available,
 )
 from services.chat_image_storage import chat_image_owner_key
 from services.chat_images import (
@@ -64,7 +67,12 @@ from services.chat_url_context import (
 )
 from services.chat_workspace_tools import build_workspace_toolbox, conversation_has_attachments
 from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE, ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED
+from services.error_messages import (
+    ERROR_CHAT_EMPTY_RESPONSE,
+    ERROR_CHAT_GENERATION_ID_REUSED,
+    ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
+    ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED,
+)
 from services.generative_ui import (
     GenerativeUiMode,
     artifact_status_part,
@@ -172,6 +180,7 @@ class _ChatPostTurn:
     use_personal_knowledge: bool = False
     use_shared_prompts: bool = False
     formatted_user_message: str = ""
+    generation_id: str | None = None
     user_id: int | None = None
     sid: str | None = None
     room_mode: str = "temporary"
@@ -291,8 +300,9 @@ class ChatPostUseCase:
         for phase in (
             self._parse_request,
             self._check_usage_limit,
-            self._consume_guest_daily_limit,
             self._resolve_room_target,
+            self._reject_reused_generation_id,
+            self._consume_guest_daily_limit,
             self._store_user_message,
         ):
             early_response = await phase(turn)
@@ -348,6 +358,7 @@ class ChatPostUseCase:
         turn.theme_preference = payload.theme_preference
         turn.use_personal_knowledge = bool(payload.use_personal_knowledge)
         turn.use_shared_prompts = bool(payload.use_shared_prompts)
+        turn.generation_id = payload.generation_id
 
         # モデル名の検証
         # Validate the requested model name
@@ -360,6 +371,32 @@ class ChatPostUseCase:
         turn.user_id = turn.session.get("user_id")
         turn.formatted_user_message = html.escape(turn.user_message).replace("\n", "<br>")
         return None
+
+    async def _reject_reused_generation_id(self, turn: _ChatPostTurn) -> Response | None:
+        if turn.generation_id is None:
+            return None
+        turn.generation_key = self.deps.generation.build_generation_key(
+            chat_room_id=turn.chat_room_id,
+            user_id=turn.user_id,
+            sid=turn.sid,
+        )
+        try:
+            available = is_generation_id_available(
+                turn.generation_key,
+                turn.generation_id,
+                service=turn.chat_generation_service,
+            )
+        except ChatGenerationCoordinationError:
+            return self.deps.web.jsonify(
+                {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+                status_code=503,
+            )
+        if available:
+            return None
+        return self.deps.web.jsonify(
+            {"error": ERROR_CHAT_GENERATION_ID_REUSED},
+            status_code=409,
+        )
 
     async def _consume_guest_daily_limit(self, turn: _ChatPostTurn) -> Response | None:
         """ゲスト投稿の日次上限を消費します / Consume the guest daily post limit."""
@@ -998,6 +1035,7 @@ class ChatPostUseCase:
                 selected_reference_trace=turn.selected_reference_trace,
                 ui_mode=turn.ui_mode,
                 explicit_ui_opt_out=turn.explicit_ui_opt_out,
+                **({"generation_id": turn.generation_id} if turn.generation_id else {}),
                 **generation_kwargs,
             )
         except ChatGenerationAlreadyRunningError:
@@ -1005,13 +1043,25 @@ class ChatPostUseCase:
                 {"error": _GENERATION_ALREADY_RUNNING_MESSAGE},
                 status_code=409,
             )
+        except ChatGenerationIdConflictError:
+            return deps.web.jsonify(
+                {"error": ERROR_CHAT_GENERATION_ID_REUSED},
+                status_code=409,
+            )
+        except ChatGenerationCoordinationError:
+            return deps.web.jsonify(
+                {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+                status_code=503,
+            )
         except ChatGenerationCapacityError:
             return deps.web.jsonify(
                 {"error": _GENERATION_CAPACITY_EXCEEDED_MESSAGE},
                 status_code=503,
             )
 
-        return deps.web.build_llm_stream_response(deps.web.iter_llm_stream_events(job))
+        response = deps.web.build_llm_stream_response(deps.web.iter_llm_stream_events(job))
+        response.headers["X-Chat-Generation-ID"] = job.generation_id
+        return response
 
     def _build_workspace_toolbox(self, turn: _ChatPostTurn) -> ChatWorkspaceToolbox | None:
         """

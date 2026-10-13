@@ -16,6 +16,7 @@ import inspect
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import Future, TimeoutError
 from typing import Any
@@ -122,7 +123,9 @@ class ChatGenerationJobBase:
         renew_active_job_lock: Callable[[], bool] | None = None,
         renew_active_job_lock_interval_seconds: float = 0.0,
         workspace_tools: ChatWorkspaceToolbox | None = None,
+        generation_id: str | None = None,
     ) -> None:
+        self.generation_id = generation_id or uuid.uuid4().hex
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
         self._locale = normalize_locale(locale, default="ja") or "ja"

@@ -117,7 +117,7 @@ export type GenerationStreamMessagesPort = {
 
 export type GenerationStreamStoragePort = {
   readGenerationState: () => StoredGenerationState | null;
-  updateGenerationState: (updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText">>) => void;
+  updateGenerationState: (updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId">>) => void;
   clearGenerationState: () => void;
   persistAssistantAnswer: (entry: StoredHistoryEntry) => void;
 };
@@ -136,7 +136,9 @@ export type GenerationStreamHost = {
   reconnectRuntime?: GenerationStreamReconnectRuntime;
   // Last-Event-ID 付きでストリームを開き直す。ネットワーク失敗は例外で伝える。
   // Reopen the stream with Last-Event-ID; network failures surface as throws.
-  openStream: (lastEventId: number) => Promise<Response>;
+  openStream: (lastEventId: number, generationId?: string) => Promise<Response>;
+  generationId?: string;
+  onGenerationId?: (generationId: string) => void;
   // 1文字も返らなかったターンの後始末を呼び出し側へ委譲する。
   // Delegate cleanup of a turn that produced no answer at all to the caller.
   onUnansweredFailure?: (message: string) => void;
@@ -533,7 +535,24 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   const reconnectRuntime = host.reconnectRuntime ?? BROWSER_RECONNECT_RUNTIME;
   const { roomId } = host;
 
-  const storedGeneration = host.storage.readGenerationState();
+  const responseGenerationId = response.headers?.get("X-Chat-Generation-ID") || undefined;
+  if (host.generationId && responseGenerationId && host.generationId !== responseGenerationId) {
+    void response.body?.cancel().catch(() => {});
+    throw new Error(host.localize("別の回答のストリームを受信しました。", "Received a stream for a different answer."));
+  }
+  let storedGeneration = host.storage.readGenerationState();
+  const generationId = responseGenerationId ?? host.generationId ?? storedGeneration?.generationId;
+  // 回答が変わったとき、前回の下書きとイベント番号を新しい本文に持ち込まない。
+  // Never carry another answer's draft or event cursor into this stream.
+  if (generationId && storedGeneration && storedGeneration.generationId !== generationId) {
+    storedGeneration = { ...storedGeneration, generationId, lastEventId: 0, streamedText: "" };
+    host.lastEventIdByRoom.delete(roomId);
+    host.storage.updateGenerationState({ generationId, lastEventId: 0, streamedText: "" });
+  }
+  if (generationId) {
+    host.onGenerationId?.(generationId);
+    host.storage.updateGenerationState({ generationId });
+  }
   restoreRememberedLastEventId(host, storedGeneration);
 
   // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
@@ -707,7 +726,12 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     if (typeof lastEventId !== "number" || lastEventId <= 0) return "unavailable";
 
     try {
-      const reconnectResponse = await host.openStream(lastEventId);
+      const reconnectResponse = await host.openStream(lastEventId, generationId);
+      const reconnectGenerationId = reconnectResponse.headers?.get("X-Chat-Generation-ID");
+      if (generationId && reconnectGenerationId && reconnectGenerationId !== generationId) {
+        await reconnectResponse.body?.cancel();
+        return "unavailable";
+      }
       if (!reconnectResponse.ok) {
         // 使わない本文は破棄する。放置すると接続が解放されない。
         // Discard the unused body; leaving it open leaks the connection.

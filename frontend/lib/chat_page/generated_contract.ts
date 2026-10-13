@@ -79,6 +79,7 @@ export function readChatGenerationStatusFields(raw: unknown): GenerationStatusPa
     error: stringField(shape.error, record.error),
     is_generating: booleanField(shape.is_generating, record.is_generating),
     has_replayable_job: booleanField(shape.has_replayable_job, record.has_replayable_job),
+    generation_id: stringField(shape.generation_id, record.generation_id),
   };
 }
 

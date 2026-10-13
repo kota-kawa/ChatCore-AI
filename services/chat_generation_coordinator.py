@@ -22,7 +22,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from services.cache import get_redis_client
+from services.cache import get_redis_client, is_redis_configured
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ _CANCEL_REQUEST_KEY_PREFIX = "chat_generation:cancel"
 _CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
+_LATEST_GENERATION_KEY_PREFIX = "chat_generation:latest"
+_GENERATION_RESERVATION_KEY_PREFIX = "chat_generation:generation"
 _TERMINAL_EVENTS = {"done", "error", "aborted", "incomplete"}
 
 
@@ -115,6 +117,11 @@ class ChatGenerationCoordinator:
             return self._redis_client_getter()
         return get_redis_client()
 
+    # Redis を設定しているが現在接続できない状態かを確認する。
+    # Distinguish a local-only deployment from a configured Redis outage.
+    def redis_is_configured(self) -> bool:
+        return is_redis_configured()
+
     # Redis が有効で分散ストリーミングに対応しているかを確認する
     # Check if Redis is enabled and supports distributed streaming
     def supports_distributed_streaming(self) -> bool:
@@ -132,13 +139,130 @@ class ChatGenerationCoordinator:
 
     # Redis に保存するイベントストリームのキーを生成する
     # Generate the Redis event stream key
-    def event_stream_key(self, job_key: str) -> str:
-        return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
+    def latest_generation_key(self, job_key: str) -> str:
+        return f"{_LATEST_GENERATION_KEY_PREFIX}:{job_key}"
+
+    # 生成IDの予約キーは再生履歴と同じ期間だけ保持し、同じroomでのID再利用を防ぐ。
+    # Reserve IDs for the replay-retention window so a room cannot reuse a generation ID.
+    def generation_reservation_key(self, job_key: str, generation_id: str) -> str:
+        return f"{_GENERATION_RESERVATION_KEY_PREFIX}:{job_key}:{generation_id}"
+
+    def event_stream_key(self, job_key: str, generation_id: str) -> str:
+        return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}:{generation_id}"
 
     # Redis Pub/Sub のイベントチャネル名を生成する
     # Generate the Redis Pub/Sub event channel name
-    def event_channel_name(self, job_key: str) -> str:
-        return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
+    def event_channel_name(self, job_key: str, generation_id: str) -> str:
+        return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}:{generation_id}"
+
+    def generation_retention_ttl_seconds(self) -> int:
+        return max(self._job_retention_seconds, 1)
+
+    # Claim a generation ID before any events are written, returning None in local-only mode.
+    def reserve_generation_id(self, job_key: str, generation_id: str) -> bool | None:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return None
+        try:
+            return bool(
+                redis_client.set(
+                    self.generation_reservation_key(job_key, generation_id),
+                    "1",
+                    nx=True,
+                    ex=self.generation_retention_ttl_seconds(),
+                )
+            )
+        except Exception:
+            logger.exception("Failed to reserve a chat generation ID in Redis.")
+            raise
+
+    def release_generation_id(self, job_key: str, generation_id: str) -> None:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return
+        try:
+            redis_client.delete(self.generation_reservation_key(job_key, generation_id))
+        except Exception:
+            logger.exception("Failed to release a chat generation ID reservation in Redis.")
+
+    def set_latest_generation_id(self, job_key: str, generation_id: str) -> bool:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return True
+        try:
+            redis_client.set(
+                self.latest_generation_key(job_key),
+                generation_id,
+                ex=self.generation_retention_ttl_seconds(),
+            )
+        except Exception:
+            logger.exception("Failed to store the latest chat generation ID in Redis.")
+            return False
+        return True
+
+    def restore_latest_generation_id(
+        self,
+        job_key: str,
+        failed_generation_id: str,
+        previous_generation_id: str | None,
+    ) -> bool:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return False
+
+        lua_script = """
+local key = KEYS[1]
+if redis.call('GET', key) ~= ARGV[1] then
+  return 0
+end
+local previous_generation_id = ARGV[2]
+if previous_generation_id == '' then
+  return redis.call('DEL', key)
+end
+redis.call('SET', key, previous_generation_id, 'EX', ARGV[3])
+return 1
+"""
+        try:
+            return bool(
+                redis_client.eval(
+                    lua_script,
+                    1,
+                    self.latest_generation_key(job_key),
+                    failed_generation_id,
+                    previous_generation_id or "",
+                    self.generation_retention_ttl_seconds(),
+                )
+            )
+        except Exception:
+            logger.exception("Failed to restore the previous latest chat generation ID.")
+            return False
+
+    def refresh_latest_generation_id(self, job_key: str, generation_id: str) -> bool:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return False
+        latest_key = self.latest_generation_key(job_key)
+        try:
+            redis_client.expire(
+                self.generation_reservation_key(job_key, generation_id),
+                self.generation_retention_ttl_seconds(),
+            )
+            if decode_redis_text(redis_client.get(latest_key)) != generation_id:
+                return False
+            return bool(redis_client.expire(latest_key, self.generation_retention_ttl_seconds()))
+        except Exception:
+            logger.exception("Failed to refresh the latest chat generation ID in Redis.")
+            return False
+
+    def get_latest_generation_id(self, job_key: str) -> str | None:
+        redis_client = self.get_redis_client()
+        if redis_client is None:
+            return None
+        try:
+            return decode_redis_text(redis_client.get(self.latest_generation_key(job_key)))
+        except Exception:
+            logger.exception("Failed to read the latest chat generation ID from Redis.")
+            raise
 
     # イベントオブジェクトを JSON 文字列にシリアライズする
     # Serialize the event object to a JSON string
@@ -183,24 +307,26 @@ class ChatGenerationCoordinator:
 
     # Redis 経由で分散イベントを配信する（リストへの追記および Pub/Sub 発行）
     # Publish a distributed event via Redis (append to list and publish via Pub/Sub)
-    def publish_event(self, job_key: str, event: ChatGenerationEvent) -> None:
+    def publish_event(self, job_key: str, generation_id: str, event: ChatGenerationEvent) -> None:
         redis_client = self.get_redis_client()
         if redis_client is None:
             return
         serialized = self.serialize_event(event)
-        stream_key = self.event_stream_key(job_key)
-        channel = self.event_channel_name(job_key)
-        ttl_seconds = max(
-            self._job_retention_seconds + self._active_job_lock_ttl_seconds,
-            self._job_retention_seconds,
-            1,
-        )
+        stream_key = self.event_stream_key(job_key, generation_id)
+        channel = self.event_channel_name(job_key, generation_id)
+        ttl_seconds = self.generation_retention_ttl_seconds()
         # list は再接続時のリプレイ用、pub/sub は今つながっている SSE への即時通知用。
         # どちらか片方だけでは「取りこぼしなし」と「低遅延」を同時に満たせない。
         try:
             pipeline = redis_client.pipeline()
             pipeline.rpush(stream_key, serialized)
             pipeline.expire(stream_key, ttl_seconds)
+            pipeline.expire(self.generation_reservation_key(job_key, generation_id), ttl_seconds)
+            latest_generation_id = decode_redis_text(
+                redis_client.get(self.latest_generation_key(job_key))
+            )
+            if latest_generation_id == generation_id:
+                pipeline.expire(self.latest_generation_key(job_key), ttl_seconds)
             pipeline.publish(channel, serialized)
             pipeline.execute()
         except Exception:
@@ -211,6 +337,7 @@ class ChatGenerationCoordinator:
     def read_events(
         self,
         job_key: str,
+        generation_id: str,
         *,
         after_sequence_id: int = 0,
     ) -> list[ChatGenerationEvent]:
@@ -218,7 +345,7 @@ class ChatGenerationCoordinator:
         if redis_client is None:
             return []
         try:
-            raw_items = redis_client.lrange(self.event_stream_key(job_key), 0, -1)
+            raw_items = redis_client.lrange(self.event_stream_key(job_key, generation_id), 0, -1)
         except Exception:
             logger.exception("Failed to read Redis chat generation event stream.")
             return []
@@ -239,15 +366,15 @@ class ChatGenerationCoordinator:
 
     # 再生できるイベント履歴が Redis 上に残っているかを確認する
     # Check whether replayable event history still exists in Redis
-    def has_replay_history(self, job_key: str) -> bool:
+    def has_replay_history(self, job_key: str, generation_id: str) -> bool:
         redis_client = self.get_redis_client()
         if redis_client is None:
             return False
         try:
-            return bool(redis_client.exists(self.event_stream_key(job_key)))
+            return bool(redis_client.exists(self.event_stream_key(job_key, generation_id)))
         except Exception:
             logger.exception("Redis chat generation replay-state check failed.")
-            return False
+            raise
 
     # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
     # Redis が応答しない場合はフェイルクローズ（未取得扱い）する。
@@ -518,9 +645,10 @@ return 0
     def iter_distributed_events(
         self,
         job_key: str,
+        generation_id: str,
         *,
         after_sequence_id: int = 0,
-        has_active_generation: Callable[[str], bool],
+        has_active_generation: Callable[[str, str], bool],
     ) -> Iterator[ChatGenerationEvent | None]:
         redis_client = self.get_redis_client()
         if redis_client is None:
@@ -529,7 +657,7 @@ return 0
         cursor = max(after_sequence_id, 0)
 
         terminal_seen = False
-        for event in self.read_events(job_key, after_sequence_id=cursor):
+        for event in self.read_events(job_key, generation_id, after_sequence_id=cursor):
             cursor = max(cursor, event.sequence_id)
             if event.event in _TERMINAL_EVENTS:
                 terminal_seen = True
@@ -537,10 +665,10 @@ return 0
         if terminal_seen:
             return
 
-        if not has_active_generation(job_key):
+        if not has_active_generation(job_key, generation_id):
             return
 
-        channel = self.event_channel_name(job_key)
+        channel = self.event_channel_name(job_key, generation_id)
         pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
         idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
         next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
@@ -549,7 +677,7 @@ return 0
 
             # subscribe 直前に list へ書かれたイベントを先に読む。
             # pub/sub は購読前のメッセージを保持しないため、この二段読みで取りこぼしを埋める。
-            for event in self.read_events(job_key, after_sequence_id=cursor):
+            for event in self.read_events(job_key, generation_id, after_sequence_id=cursor):
                 cursor = max(cursor, event.sequence_id)
                 if event.event in _TERMINAL_EVENTS:
                     terminal_seen = True
@@ -582,11 +710,11 @@ return 0
                     next_heartbeat_at = time.monotonic() + self._sse_heartbeat_seconds
                     yield None
 
-                if not has_active_generation(job_key):
+                if not has_active_generation(job_key, generation_id):
                     # ロック消滅直後は pub/sub の最後の通知がまだ届かないことがあるため、
                     # 終了判定の前に list をもう一度読んで終端イベントを回収する。
                     saw_new = False
-                    for event in self.read_events(job_key, after_sequence_id=cursor):
+                    for event in self.read_events(job_key, generation_id, after_sequence_id=cursor):
                         saw_new = True
                         cursor = max(cursor, event.sequence_id)
                         idle_deadline = (

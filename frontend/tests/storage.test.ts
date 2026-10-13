@@ -182,6 +182,7 @@ test("stored generation state can be restored as the active generation", () => {
   const stored = writeStoredGenerationState({
     roomId: "room-stream",
     roomMode: "normal",
+    generationId: "answer-id",
     lastEventId: 12,
     streamedText: "途中まで",
     updatedAt: Date.now(),
@@ -191,6 +192,7 @@ test("stored generation state can be restored as the active generation", () => {
   const restored = readStoredGenerationState("room-stream");
   assert.equal(restored?.roomId, "room-stream");
   assert.equal(restored?.roomMode, "normal");
+  assert.equal(restored?.generationId, "answer-id");
   assert.equal(restored?.lastEventId, 12);
   assert.equal(restored?.streamedText, "途中まで");
   assert.equal(typeof restored?.updatedAt, "number");
@@ -211,6 +213,22 @@ test("clearing stored generation state removes active generation pointer", () =>
   clearStoredGenerationState("room-clear");
 
   assert.equal(readStoredGenerationState("room-clear"), null);
+  assert.equal(readActiveStoredGenerationState(), null);
+});
+
+test("clearing an old generation preserves a newer room draft and its active pointer", () => {
+  installFakeLocalStorage(new FakeLocalStorage());
+  writeStoredGenerationState({
+    roomId: "room-stream", roomMode: "normal", generationId: "new-generation",
+    lastEventId: 5, streamedText: "new partial answer", updatedAt: Date.now(),
+  });
+  clearStoredGenerationState("room-stream", { generationId: "old-generation" });
+  assert.equal(readStoredGenerationState("room-stream")?.generationId, "new-generation");
+  assert.equal(readActiveStoredGenerationState()?.generationId, "new-generation");
+  clearStoredGenerationState("room-stream", { generationId: undefined });
+  assert.equal(readStoredGenerationState("room-stream")?.lastEventId, 5);
+  clearStoredGenerationState("room-stream", { generationId: "new-generation" });
+  assert.equal(readStoredGenerationState("room-stream"), null);
   assert.equal(readActiveStoredGenerationState(), null);
 });
 
