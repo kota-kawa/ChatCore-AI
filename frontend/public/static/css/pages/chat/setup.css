@@ -1095,6 +1095,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     bottom: calc(100% + 0.45rem);
   }
 
+  /* 上へ開いた一覧は「最近のチャット」の行を完全に覆う。iOS Safari は横スクロールする行を
+     別レイヤーで合成し、z-index が上の一覧よりも手前に描くことがあるため、開いている間は行を描かない。
+     The upward menu fully covers the recent-chats row. iOS Safari composites that horizontally
+     scrolling row on its own layer and can paint it above the higher z-index menu, so the row is
+     not painted while the menu is open. */
+  :where(body.chat-page, .chat-page-shell) .setup-form:has(.model-select.is-open) .recent-chats {
+    visibility: hidden;
+  }
+
   :where(body.chat-page, .chat-page-shell) #setup-container {
     --setup-container-padding-y: 0;
     --setup-container-padding-x: var(--chat-mobile-gutter, 1rem);
