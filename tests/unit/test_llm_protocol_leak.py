@@ -109,6 +109,9 @@ class StripLeakedReasoningChunksTestCase(unittest.TestCase):
         asked = ["推論は </think> で終わります。"]
         self.assertEqual(strip_leaked_reasoning_chunks(asked, "</THINK> タグって何？"), asked)
 
+    def test_keeps_the_indentation_of_an_answer_that_starts_with_an_indented_block(self):
+        self.assertEqual(strip_leaked_reasoning_chunks(["下書き</think>\n \n", "    code()\n"]), ["    code()\n"])
+
     def test_an_answer_that_is_only_a_draft_becomes_empty(self):
         self.assertEqual(strip_leaked_reasoning_chunks(["下書きだけ\n</think>\n"]), [])
 

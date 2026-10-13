@@ -40,6 +40,7 @@ _REASONING_CLOSE_TAG = "</think>"
 # 利用者がタグそのものを話題にしているなら、本文中のタグは求められた回答でありうる。
 # When the user is asking about the tag itself, one in the body may be exactly what was asked for.
 _REASONING_TAG_MENTION = "think>"
+_LEADING_BLANK_LINES = re.compile(r"\A(?:[ \t]*\r?\n)+")
 # 境界をまたぐ目印を見落とさないよう、前回までの本文の末尾をこの長さだけ読み直す。
 # Re-scan this much of the earlier text so a marker split across chunks is still found.
 _RESCAN_CHARS = 64
@@ -110,11 +111,12 @@ def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: st
         if chunk_end > answer_start:
             kept.append(chunk[max(answer_start - offset, 0) :])
         offset = chunk_end
-    # 下書きと回答の間の空行は回答の一部ではない。
-    # The blank lines between the draft and the answer are not part of the answer.
+    # 下書きと回答の間の空行は回答の一部ではない。回答の先頭行の字下げは残す。
+    # The blank lines between the draft and the answer are not part of the answer; the answer's
+    # own leading indentation is kept.
     while kept:
-        kept[0] = kept[0].lstrip()
-        if kept[0]:
+        kept[0] = _LEADING_BLANK_LINES.sub("", kept[0])
+        if kept[0].strip():
             break
         kept.pop(0)
     return kept

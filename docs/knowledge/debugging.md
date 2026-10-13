@@ -72,7 +72,7 @@ Redis 障害をテストする場合は、実 Redis を前提にせず、`get_re
 
 - `services/llm.py` のプロバイダ別の呼び出し経路。GPT-6 Luna は Chat Completions ではツールと推論を併用できず（推論を付けると 400 で「function tools を使うなら /v1/responses」と返る）、推論 `none` で呼ぶと上記の崩れが起きる。Luna へツールを渡すターンは Responses API に載せ、Chat Completions 形のツール履歴を `function_call`／`function_call_output` に写す。Responses API の function tool は既定で strict なので、[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md) の緩めたスキーマを保つには `strict: false` を明示する。
 - `services/llm_protocol_leak.py` の漏れガードは、`services/chat_generation_llm_stream.py` の `_iter_llm_stream_with_retry` で本文にツール形式が出た位置で打ち切り、ストリームを閉じる。発動するとテレメトリの `protocol_leak_truncations` が増える。新しいモデルの形式（例: Qwen の XML 風タグ）が漏れたら、観測した形をテストに足してからパターンに加える。コードブロックとインラインコードの中は、利用者が形式そのものを尋ねた回答でありうるので対象外にしている。
-- Qwen は推論を非表示にしていても、開始タグの無い下書きを `</think>` で閉じて回答の前に流すことがある（実測で回答のおよそ 2 割）。同じ回答が 2 度続いて見えたらこれを疑う。`services/llm_protocol_leak.py` の `strip_leaked_reasoning_chunks` が、`services/chat_generation_agent_loop.py` の `_finish_answer_step` で配信前に最後の `</think>` までを落とし、テレメトリの `reasoning_leak_strips` が増える。判断ステップは配信前に全文を溜めるので、ここでは前側を落とせる。
+- Qwen は推論を非表示にしていても、開始タグの無い下書きを `</think>` で閉じて回答の前に流すことがある（実測で回答のおよそ 2 割）。同じ回答が 2 度続いて見えたらこれを疑う。`services/llm_protocol_leak.py` の `strip_leaked_reasoning_chunks` が、`services/chat_generation_agent_loop.py` の `_finish_answer_step` で配信前に最後の `</think>` までを落とし、テレメトリの `reasoning_leak_strips` が増える。判断ステップは配信前に全文を溜めるので、ここでは前側を落とせる。対象は通常の完了経路だけで、停止・失敗時に部分回答を保存する経路（`_take_pending_answer_text`）と、出力上限後の継続生成は通らない。
 
 ### 検証方法
 
