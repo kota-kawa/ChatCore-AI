@@ -61,6 +61,9 @@ class ChatFollowupNewInformationEvalDatasetTestCase(unittest.TestCase):
                     self.assertTrue(prior_labels)
                     searched_at = datetime.fromisoformat(prior["searched_at"])
                     self.assertLessEqual(searched_at, datetime.fromisoformat(self.dataset["current_time"]))
+                    published = {source["label"]: date.fromisoformat(source["published"]) for source in case["sources"]}
+                    for label in prior_labels:
+                        self.assertLessEqual(published[label], searched_at.date())
                 if not fresh_labels and case["id"] != STORED_EVIDENCE_CASE_ID:
                     self.assertEqual(case["sources"], [])
                     self.assertIsNone(prior)

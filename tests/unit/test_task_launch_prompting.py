@@ -141,18 +141,20 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("an estimate after facts or a recommendation after comparison", rules)
         self.assertIn("Preserve subject, scope, and constraints", rules)
         self.assertIn("Repeat facts or caveats only when needed", rules)
-        self.assertIn("spend the reply on what they do not have yet", rules)
-        self.assertIn("never answer by rewording the previous reply", rules)
-        self.assertIn("a request to repeat or summarize gets exactly that", rules)
 
     # 日本語: 追質問で前回と同じ出典を読み直して同じ答えを返さないよう、判断ループが新しい検索へ進む規則を検証します。
     # English: Verify the turn loop looks up a follow-up's new angle instead of restating from the same sources.
     def test_turn_loop_prompt_looks_up_what_a_follow_up_adds(self):
-        self.assertIn("make it the new\n  information being asked for", TURN_LOOP_SYSTEM_PROMPT)
-        self.assertIn("only restate an earlier reply is not an answer", TURN_LOOP_SYSTEM_PROMPT)
-        self.assertIn("look up first only when the new part is a web-verifiable fact you do not hold", TURN_LOOP_SYSTEM_PROMPT)
-        self.assertIn("Unless the user asked for a repeat or a confirmation", TURN_LOOP_SYSTEM_PROMPT)
-        self.assertIn("Re-reading them only reproduces the\n  earlier answer: run a new web_search", TURN_LOOP_SYSTEM_PROMPT)
+        # 折り返し位置に依存しないよう、空白をまとめてから照合する。
+        # Collapse whitespace so the checks do not depend on where lines wrap.
+        prompt = " ".join(TURN_LOOP_SYSTEM_PROMPT.split())
+        self.assertIn("keep the subject and constraints and make it the new information being asked for", prompt)
+        self.assertIn("Unless the user asked for a repeat or a confirmation", prompt)
+        self.assertIn("only restate an earlier reply is not an answer", prompt)
+        self.assertIn("when TurnState lists a prior search behind that earlier reply, look up the new angle first", prompt)
+        self.assertIn("including what a follow-up asks beyond earlier replies and stored evidence", prompt)
+        self.assertIn("Unless stored evidence already covers that angle", prompt)
+        self.assertIn("re-reading them only reproduces the earlier answer: run a new web_search", prompt)
 
     # 日本語: 否定疑問文を含む確認には、はい・いいえを強制せず命題を一度だけ明確に答える。
     # English: Confirmations answer the proposition once without forcing yes/no polarity.

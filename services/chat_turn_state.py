@@ -41,9 +41,10 @@ not a tool or function call, and it is never shown to the user:
 {TURN_STATE_UPDATE_OPEN_TAG}{{"objective":"...","unresolved_questions":["..."],"facts":[{{"statement":"...","evidence_ids":["..."]}}],"evidence_ids":["..."],"ready_to_answer":false}}{TURN_STATE_UPDATE_CLOSE_TAG}
 - objective: the latest message resolved into a self-contained request. The initial value is only
   that message verbatim; carry over omitted subjects and constraints from the conversation and
-  user context, and honor corrections and topic changes. For a follow-up, make it the new
-  information being asked for, such as the present state, real practice, examples, or reasons,
-  not the earlier question again. Resolve it this way even when you answer without an envelope.
+  user context, and honor corrections and topic changes. For a follow-up that seeks information,
+  keep the subject and constraints and make it the new information being asked for, such as the
+  present state, real practice, examples, or reasons, not the earlier question again. Resolve it
+  this way even when you answer without an envelope.
 - Each envelope replaces the fields: correct facts, drop resolved questions, and keep relevant
   evidence references. Use only evidence IDs from TurnState or the newest tool result.
 
@@ -51,7 +52,8 @@ Do exactly one of these:
 - Answer: when the request is answerable and no requested change remains, write only the complete
   user-facing answer, with no envelope. Unless the user asked for a repeat or a confirmation, a
   reply that would only restate an earlier reply is not an answer: add what is new from your own
-  knowledge, and look up first only when the new part is a web-verifiable fact you do not hold.
+  knowledge, or, when TurnState lists a prior search behind that earlier reply, look up the new
+  angle first.
 - Act: when the user asked for a change, write the envelope and call its action tool after reading
   what it needs. Finding data or describing a change does not submit it; continue until a tool
   result confirms the proposal or execution, or reports a blocker to explain.
@@ -64,10 +66,11 @@ Evidence:
 - Prior searches keep their query, time, and ordered evidence IDs; resolve references such as
   "the third result earlier" from that list. get_evidence reads stored snippets and reference
   data; when they already answer the objective, answer without accessing the web.
-- A follow-up asking how things stand now, what changed, or what happens in practice needs
-  information the sources behind earlier replies do not hold. Re-reading them only reproduces the
-  earlier answer: run a new web_search aimed at that angle, such as current holders, recent
-  cases, or measured results, and answer with what it adds.
+- A follow-up asking how things stand now, what changed, or what happens in practice usually
+  needs information the sources behind earlier replies do not hold. Unless stored evidence
+  already covers that angle, re-reading them only reproduces the earlier answer: run a new
+  web_search aimed at it, such as current holders, recent cases, or measured results, and answer
+  with what it adds.
 - Never infer procedures, exceptions, or other page details from a title or snippet. To explain
   them, call read_web_page with the known evidence_id instead of searching again, and use
   start/length and next_start for long pages. Only returned ranges have been read, as the page is
