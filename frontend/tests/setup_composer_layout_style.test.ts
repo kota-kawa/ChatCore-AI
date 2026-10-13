@@ -177,3 +177,16 @@ test("the temporary chat toggle matches the send button size at every breakpoint
   assert.deepEqual(toggleSize(baseSetupCss), sendSize(baseChatInputCss));
   assert.deepEqual(toggleSize(mobileSetupCss), sendSize(mobileChatInputCss));
 });
+
+// スマホではモデル一覧が上へ開いて「最近のチャット」の行を覆う。iOS Safari は横スクロールする行を
+// 一覧より手前に描くことがあるので、開いている間は行ごと描画しない。下へ開く PC 幅では隠さない。
+// On phones the model menu opens upward over the recent-chats row. iOS Safari can paint that
+// scrolling row above the menu, so the row is not painted while the menu is open. Wider layouts
+// open the menu downward and must keep the row visible.
+test("the recent-chats row is hidden while the upward model menu covers it on phones", () => {
+  const hideRule = /\.setup-form:has\(\.model-select\.is-open\) \.recent-chats\s*\{([^}]*)\}/;
+
+  assert.match(mobileSetupCss, /\.model-select-menu\s*\{[^}]*bottom:\s*calc\(100% \+ 0\.45rem\)\s*;/);
+  assert.match(mobileSetupCss.match(hideRule)?.[1] ?? "", /visibility:\s*hidden\s*;/);
+  assert.doesNotMatch(baseSetupCss, hideRule);
+});
