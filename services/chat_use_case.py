@@ -300,9 +300,9 @@ class ChatPostUseCase:
         for phase in (
             self._parse_request,
             self._check_usage_limit,
+            self._consume_guest_daily_limit,
             self._resolve_room_target,
             self._reject_reused_generation_id,
-            self._consume_guest_daily_limit,
             self._store_user_message,
         ):
             early_response = await phase(turn)

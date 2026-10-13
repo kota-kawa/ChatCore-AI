@@ -111,8 +111,8 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             is_streaming_model=Mock(return_value=streaming),
             search_personal_knowledge=Mock(return_value={"status": "no_results"}),
             search_shared_prompts=Mock(return_value={"status": "no_results"}),
-            start_generation_job=Mock(),
-            build_llm_stream_response=Mock(),
+            start_generation_job=Mock(return_value=SimpleNamespace(generation_id="a" * 32)),
+            build_llm_stream_response=Mock(return_value=JSONResponse({"streaming": True})),
             iter_llm_stream_events=Mock(),
             get_llm_response=Mock(return_value="assistant reply"),
             select_chat_skills=Mock(side_effect=lambda context, *_args, **_kwargs: SimpleNamespace(
