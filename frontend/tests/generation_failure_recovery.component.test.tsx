@@ -1,11 +1,11 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_generation_actions";
 import { LocaleProvider } from "../contexts/locale_context";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
-import { readStoredGenerationState, readStoredHistory, writeStoredHistory } from "../lib/chat_page/storage";
+import { readStoredGenerationState, readStoredHistory, writeStoredGenerationState, writeStoredHistory } from "../lib/chat_page/storage";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
@@ -32,13 +32,17 @@ function createJsonResponse(status: number, payload: unknown) {
   } as unknown as Response;
 }
 
-function createStreamResponse(blocks: string[]) {
+function createStreamResponse(blocks: string[], generationId?: string) {
   let index = 0;
   return {
     ok: true,
     status: 200,
     headers: {
-      get: (name: string) => (name.toLowerCase() === "content-type" ? "text/event-stream" : null),
+      get: (name: string) => {
+        if (name.toLowerCase() === "content-type") return "text/event-stream";
+        if (name.toLowerCase() === "x-chat-generation-id") return generationId ?? null;
+        return null;
+      },
     },
     body: {
       getReader: () => ({
@@ -53,6 +57,179 @@ function createStreamResponse(blocks: string[]) {
     },
   } as unknown as Response;
 }
+
+describe("generation identity", () => {
+  beforeEach(() => resilientFetchMock.mockReset());
+
+  it("pins initial request recovery to the id sent before losing the POST response", async () => {
+    let requestGenerationId = "";
+    resilientFetchMock.mockImplementation(async (url, init) => {
+      if (String(url) === "/api/chat") {
+        requestGenerationId = JSON.parse(String(init?.body)).generation_id;
+        expect(requestGenerationId).toMatch(/^[0-9a-f]{32}$/);
+        expect(readStoredGenerationState("room-1")?.generationId).toBe(requestGenerationId);
+        throw new TypeError("lost POST response");
+      }
+      if (!String(url).includes("chat_generation_stream")) return createJsonResponse(500, { error: "unrelated request" });
+      expect(new URL(String(url), "https://example.test").searchParams.get("generation_id"), String(url)).toBe(requestGenerationId);
+      return createStreamResponse([
+        'id: 1\nevent: done\ndata: {"response":"今回の回答"}\n\n',
+      ], requestGenerationId);
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      expect(await result.current.actions.generateResponse("今回の質問", "model", "room-1")).toBe(true);
+    });
+    expect(result.current.state.messages.filter((message) => message.sender === "assistant").map((message) => message.text))
+      .toEqual(["今回の回答"]);
+  });
+
+  it("creates distinct request ids for successive turns", async () => {
+    const ids: string[] = [];
+    resilientFetchMock.mockImplementation(async (url, init) => {
+      if (String(url) !== "/api/chat") return createJsonResponse(500, { error: "unrelated request" });
+      ids.push(JSON.parse(String(init?.body)).generation_id);
+      return createJsonResponse(200, { response: `回答${ids.length}` });
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => { await result.current.actions.generateResponse("質問1", "model", "room-1"); });
+    await act(async () => { await result.current.actions.generateResponse("質問2", "model", "room-1"); });
+    expect(ids).toHaveLength(2);
+    expect(ids.every((id) => /^[0-9a-f]{32}$/.test(id))).toBe(true);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  it("does not let an aborted stream flush its draft into a later turn", async () => {
+    let rejectOldRead!: (error: Error) => void;
+    const oldRead = new Promise<never>((_resolve, reject) => { rejectOldRead = reject; });
+    let resolveNewPost!: (response: Response) => void;
+    const newPost = new Promise<Response>((resolve) => { resolveNewPost = resolve; });
+    let postCount = 0;
+    let newGenerationId = "";
+    let oldStreamRead = false;
+    resilientFetchMock.mockImplementation(async (url, init) => {
+      if (String(url) === "/api/chat_stop") return createJsonResponse(200, {});
+      if (String(url) !== "/api/chat") return createJsonResponse(500, {});
+      postCount += 1;
+      const generationId = JSON.parse(String(init?.body)).generation_id;
+      if (postCount === 2) {
+        newGenerationId = generationId;
+        return newPost;
+      }
+      let reads = 0;
+      const getReader = () => ({
+        read: async () => {
+          reads += 1;
+          if (reads > 1) {
+            oldStreamRead = true;
+            return oldRead;
+          }
+          return { done: false, value: encoder.encode('id: 1\nevent: chunk\ndata: {"text":"前回の途中回答"}\n\n') };
+        },
+        cancel: async () => undefined,
+      });
+      return { ...createStreamResponse([], generationId), body: { getReader } } as unknown as Response;
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    let firstTurn!: Promise<boolean>;
+    act(() => { firstTurn = result.current.actions.generateResponse("質問1", "model", "room-1"); });
+    await waitFor(() => expect(oldStreamRead).toBe(true));
+    await act(async () => { await result.current.actions.stopGeneration(); });
+    let secondTurn!: Promise<boolean>;
+    act(() => { secondTurn = result.current.actions.generateResponse("質問2", "model", "room-1"); });
+    await act(async () => {
+      rejectOldRead(new TypeError("old stream closed"));
+      await firstTurn;
+    });
+    expect(readStoredGenerationState("room-1")).toMatchObject({
+      generationId: newGenerationId, lastEventId: 0, streamedText: "",
+    });
+    await act(async () => {
+      resolveNewPost(createJsonResponse(200, { response: "今回の回答" }));
+      await secondTurn;
+    });
+  });
+
+  it("resets a previous turn's draft before reconnecting to the current status id", async () => {
+    writeStoredGenerationState({
+      roomId: "room-1", roomMode: "normal", generationId: "old-generation",
+      lastEventId: 99, streamedText: "前回の下書き", updatedAt: Date.now(),
+    });
+    resilientFetchMock.mockImplementation(async (url, init) => {
+      if (String(url).includes("get_chat_history")) {
+        return createJsonResponse(200, { messages: [{ sender: "user", message: "今回の質問" }] });
+      }
+      if (String(url).includes("chat_generation_status")) {
+        return createJsonResponse(200, { is_generating: true, generation_id: "new-generation" });
+      }
+      if (!String(url).includes("chat_generation_stream")) return createJsonResponse(500, { error: "unrelated request" });
+      expect(new URL(String(url), "https://example.test").searchParams.get("generation_id")).toBe("new-generation");
+      expect((init?.headers as Record<string, string>)["Last-Event-ID"]).toBeUndefined();
+      return createStreamResponse(['id: 1\nevent: done\ndata: {"response":"今回の回答"}\n\n'], "new-generation");
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => { await result.current.actions.loadChatHistory("room-1"); });
+    await waitFor(() => {
+      expect(result.current.state.messages.find((message) => message.sender === "assistant")?.text).toBe("今回の回答");
+    });
+    expect(result.current.state.messages.some((message) => message.text.includes("前回の下書き"))).toBe(false);
+  });
+
+  it("does not let a delayed JSON body clear or append to a newer turn", async () => {
+    let resolveOldBody!: (payload: unknown) => void;
+    const oldBody = new Promise<unknown>((resolve) => { resolveOldBody = resolve; });
+    let resolveNewPost!: (response: Response) => void;
+    const newPost = new Promise<Response>((resolve) => { resolveNewPost = resolve; });
+    let oldBodyRead = false;
+    let posts = 0;
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url) === "/api/chat_stop") return createJsonResponse(200, {});
+      if (String(url) !== "/api/chat") return createJsonResponse(500, {});
+      posts += 1;
+      if (posts === 2) return newPost;
+      return { ...createJsonResponse(200, {}), json: async () => { oldBodyRead = true; return oldBody; } } as Response;
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    let first!: Promise<boolean>;
+    act(() => { first = result.current.actions.generateResponse("前回の質問", "model", "room-1"); });
+    await waitFor(() => expect(oldBodyRead).toBe(true));
+    await act(async () => { await result.current.actions.stopGeneration(); });
+    let second!: Promise<boolean>;
+    act(() => { second = result.current.actions.generateResponse("今回の質問", "model", "room-1"); });
+    const pending = readStoredGenerationState("room-1");
+    await act(async () => { resolveOldBody({ response: "前回の回答" }); await first; });
+    expect(readStoredGenerationState("room-1")).toEqual(pending);
+    expect(readStoredHistory("room-1").some((entry) => entry.text === "前回の回答")).toBe(false);
+    await act(async () => { resolveNewPost(createJsonResponse(200, { response: "今回の回答" })); await second; });
+  });
+
+  it("does not let delayed history status replace the messages or draft of a newer turn", async () => {
+    let resolveStatus!: (response: Response) => void;
+    const status = new Promise<Response>((resolve) => { resolveStatus = resolve; });
+    let statusRequested = false;
+    let resolvePost!: (response: Response) => void;
+    const post = new Promise<Response>((resolve) => { resolvePost = resolve; });
+    resilientFetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("get_chat_history")) return createJsonResponse(200, {
+        messages: [{ sender: "assistant", message: "前回の回答" }],
+      });
+      if (String(url).includes("chat_generation_status")) { statusRequested = true; return status; }
+      if (String(url) === "/api/chat") return post;
+      return createJsonResponse(500, {});
+    });
+    const { result } = renderHook(() => useGenerationHarness());
+    let history!: Promise<void>;
+    act(() => { history = result.current.actions.loadChatHistory("room-1"); });
+    await waitFor(() => expect(statusRequested).toBe(true));
+    let turn!: Promise<boolean>;
+    act(() => { turn = result.current.actions.generateResponse("今回の質問", "model", "room-1"); });
+    const pending = readStoredGenerationState("room-1");
+    await act(async () => { resolveStatus(createJsonResponse(200, { is_generating: false })); await history; });
+    expect(readStoredGenerationState("room-1")).toEqual(pending);
+    expect(result.current.state.messages.some((message) => message.text === "今回の質問")).toBe(true);
+    await act(async () => { resolvePost(createJsonResponse(200, { response: "今回の回答" })); await turn; });
+  });
+});
 
 function requestedUrls() {
   return resilientFetchMock.mock.calls.map((call) => String(call[0]));

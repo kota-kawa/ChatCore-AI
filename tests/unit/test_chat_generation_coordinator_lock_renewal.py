@@ -44,6 +44,29 @@ class _FakeExpiringRedis:
         with self._lock:
             return 1 if self._alive_locked(key, time.monotonic()) else 0
 
+    def get(self, key):
+        with self._lock:
+            if not self._alive_locked(key, time.monotonic()):
+                return None
+            return self._values[key][0]
+
+    def expire(self, key, ttl):
+        now = time.monotonic()
+        with self._lock:
+            if not self._alive_locked(key, now):
+                return False
+            value, _expires_at = self._values[key]
+            self._values[key] = (value, now + float(ttl))
+            return True
+
+    def remaining_ttl(self, key):
+        now = time.monotonic()
+        with self._lock:
+            if not self._alive_locked(key, now):
+                return None
+            _value, expires_at = self._values[key]
+            return None if expires_at is None else expires_at - now
+
     def delete(self, key):
         with self._lock:
             existed = key in self._values
@@ -171,6 +194,33 @@ class RefreshActiveJobLockTestCase(unittest.TestCase):
         acquired, token = coordinator.try_acquire_active_job_lock(self.job_key)
         self.assertTrue(acquired)
         self.assertFalse(coordinator.refresh_active_job_lock(self.job_key, token))
+
+    # 日本語: ロック更新の成功時は現行生成pointerとID予約も保持期間を延長する。
+    # English: A successful lock renewal also extends the current generation pointer and ID reservation.
+    def test_renews_current_generation_pointer_and_id_reservation(self):
+        from services.chat_generation import ChatGenerationService
+
+        service = ChatGenerationService(
+            redis_client_getter=lambda: self.redis,
+            active_job_lock_ttl_seconds=60,
+        )
+        generation_id = "a" * 32
+        coordinator = service._coordinator
+
+        acquired, lock_token = service._try_acquire_active_job_lock(self.job_key)
+        self.assertTrue(acquired)
+        self.assertTrue(coordinator.reserve_generation_id(self.job_key, generation_id))
+        self.assertTrue(coordinator.set_latest_generation_id(self.job_key, generation_id))
+
+        latest_key = coordinator.latest_generation_key(self.job_key)
+        reservation_key = coordinator.generation_reservation_key(self.job_key, generation_id)
+        self.assertTrue(self.redis.expire(latest_key, 0.1))
+        self.assertTrue(self.redis.expire(reservation_key, 0.1))
+
+        self.assertTrue(service._refresh_active_job_lock(self.job_key, lock_token, generation_id))
+
+        self.assertGreater(self.redis.remaining_ttl(latest_key), 250)
+        self.assertGreater(self.redis.remaining_ttl(reservation_key), 250)
 
 
 # 日本語: ジョブが実行中の間、`ChatGenerationJob` の更新スレッドが実際にロックのTTLを

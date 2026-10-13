@@ -53,6 +53,7 @@ Markdown 本文と取り消し履歴は CodeMirror の document を正本にし�
 - `lib/data/swr_fetcher.ts`: GET の JSON 取得、HTTP エラー正規化、SWR 既定値をまとめます。
 - `scripts/core/csrf.ts`: `/api/csrf-token` を使って状態変更リクエストへ CSRF ヘッダーを付けます。
 - `lib/chat_page/api_contract.ts`: チャット履歴・生成 UI パーツ・検索画像・承認カードなどの実行時正規化を担当します。承認カード（`tool_approval` パーツ）は生成スキーマ `ToolApprovalApiSchema` で検証し、描けないカードは捨てます。
+- `lib/chat_page/generation_stream_consumer.ts` と `hooks/chat_page/use_home_page_generation_actions.ts`: 生成 ID を開始リクエスト・SSE ヘッダー・再接続・保存済み下書きで共有し、同じ回答のイベントだけを復元します。契約は `../../ARCHITECTURE.md` の「チャット生成と SSE」を参照します。
 - `components/chat_page/tool_approval_card.tsx` ＋ `components/chat_page/tool_approval_previews/` ＋ `lib/chat_page/tool_approvals.ts` ＋ `hooks/chat_page/use_chat_tool_approvals.ts`: チャットの書き込みツールの承認カード。見た目と無効条件（生成中・後ろに利用者の発言がある）は選択ボタンに揃え、決定は承認 API へ送り、応答のカードでパーツを差し替えます。決定してもチャットは送信せず、結果は利用者の次の発言のときにサーバーが AI の文脈へ加えます。共有表示では伏せ字化された読み取り専用のカードとして状態だけを見せます。「常に承認」の一覧と取り消しは設定画面の `components/settings/chat_tool_permissions_section.tsx` です。
 - `types/generated/api_schemas.ts`: Backend Pydantic model から生成される契約です。直接編集しません。
 - `contexts/locale_context.tsx` と `lib/i18n/`: 日本語／英語の表示状態・翻訳カタログを管理します。

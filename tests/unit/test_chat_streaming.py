@@ -25,7 +25,9 @@ from services.chat_agent_budget import AgentStepBudget
 from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
+    ChatGenerationCoordinationError,
     ChatGenerationEvent,
+    ChatGenerationIdConflictError,
     ChatGenerationService,
     build_generation_key,
     clear_generation_job_state,
@@ -131,6 +133,19 @@ class _FakeRedis:
         self._values[key] = value
         return True
 
+    # 日本語: 保存済みの文字列値を返します。
+    # English: Return a stored string value.
+    def get(self, key):
+        return self._values.get(key)
+
+    # 日本語: 指定キーを値・リストの両方から削除します。
+    # English: Delete a key from both value and list storage.
+    def delete(self, key):
+        existed = key in self._values or key in self._lists
+        self._values.pop(key, None)
+        self._lists.pop(key, None)
+        return int(existed)
+
     # 日本語: 指定したキーが疑似Redisに存在するかどうかを確認します。
     # English: Check whether the specified key exists in fake Redis.
     def exists(self, key):
@@ -172,8 +187,20 @@ class _FakeRedis:
         return _FakeRedisPipeline(self)
 
     # 日本語: RedisのLuaスクリプト評価をシミュレートします（常に1を返します）。
-    # English: Simulate Redis Lua script evaluation (always returns 1).
-    def eval(self, *_args, **_kwargs):
+    # English: Simulate Redis Lua scripts used for releasing, renewing, and restoring state.
+    def eval(self, script, key_count, key, token, *_args):
+        del key_count
+        if self._values.get(key) != token:
+            return 0
+        if len(_args) >= 2:
+            previous_generation_id = _args[0]
+            if previous_generation_id:
+                self._values[key] = previous_generation_id
+            else:
+                self._values.pop(key, None)
+            return 1
+        if "DEL" in script:
+            self._values.pop(key, None)
         return 1
 
 
@@ -4565,6 +4592,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         payload = json.loads(status_response.body.decode("utf-8"))
         self.assertFalse(payload["is_generating"])
         self.assertTrue(payload["has_replayable_job"])
+        self.assertEqual(payload["generation_id"], job.generation_id)
 
     # 日本語: 生成完了後にストリーム接続した際、過去に完了したジョブの結果がストリーミングで再生されることを検証します。
     # English: Verify that connecting to the stream after completion replays the completed job events.
@@ -4598,6 +4626,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIsInstance(stream_response, StreamingResponse)
         self.assertEqual(stream_response.media_type, "text/event-stream")
+        self.assertEqual(stream_response.headers["X-Chat-Generation-ID"], job.generation_id)
 
         # 日本語: ストリームレスポンスを消費して結合する非同期ヘルパー
         # English: Async helper to consume and concatenate stream response chunks
@@ -4679,13 +4708,15 @@ class ChatStreamingTestCase(unittest.TestCase):
         fake_redis = _FakeRedis()
         service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
         job_key = build_generation_key(chat_room_id="room-distributed", user_id=88)
+        generation_id = "a" * 32
+        fake_redis.set(service._coordinator.latest_generation_key(job_key), generation_id)
 
         fake_redis.rpush(
-            service._coordinator.event_stream_key(job_key),
+            service._coordinator.event_stream_key(job_key, generation_id),
             json.dumps({"id": 1, "event": "chunk", "payload": {"text": "分散"}}),
         )
         fake_redis.rpush(
-            service._coordinator.event_stream_key(job_key),
+            service._coordinator.event_stream_key(job_key, generation_id),
             json.dumps({"id": 2, "event": "done", "payload": {"response": "分散完了"}}),
         )
 
@@ -4719,6 +4750,240 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"text": "分散"', body)
         self.assertIn("event: done", body)
         self.assertIn('"response": "分散完了"', body)
+        self.assertEqual(stream_response.headers["X-Chat-Generation-ID"], generation_id)
+
+    def test_chat_generation_stream_selects_latest_remote_generation_and_explicit_id(self):
+        session = {"user_id": 89}
+        fake_redis = _FakeRedis()
+        first_worker = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        second_worker = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-generation-isolation", user_id=89)
+        first_generation_id = "1" * 32
+        second_generation_id = "2" * 32
+
+        with patch(
+            "services.chat_generation_llm_stream.get_llm_response_stream",
+            side_effect=[iter(["前回回答"]), iter(["今回回答"])],
+        ):
+            first_job = first_worker.start_generation_job(
+                job_key,
+                generation_id=first_generation_id,
+                conversation_messages=[{"role": "user", "content": "first"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            list(_iter_llm_stream_events(first_job))
+
+            second_job = second_worker.start_generation_job(
+                job_key,
+                generation_id=second_generation_id,
+                conversation_messages=[{"role": "user", "content": "second"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            list(_iter_llm_stream_events(second_job))
+
+        self.assertFalse(second_worker.is_generation_id_available(job_key, first_generation_id))
+        with self.assertRaises(ChatGenerationIdConflictError):
+            second_worker.start_generation_job(
+                job_key,
+                generation_id=first_generation_id,
+                conversation_messages=[{"role": "user", "content": "duplicate"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+
+        async def _consume(response):
+            return b"".join([chunk async for chunk in response.body_iterator]).decode("utf-8")
+
+        latest_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=b"room_id=room-generation-isolation",
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                latest_response = asyncio.run(
+                    chat_generation_stream(latest_request, chat_generation_service=first_worker)
+                )
+        latest_body = asyncio.run(_consume(latest_response))
+        self.assertEqual(latest_response.headers["X-Chat-Generation-ID"], second_generation_id)
+        self.assertIn('"text": "今回回答"', latest_body)
+        self.assertNotIn("前回回答", latest_body)
+
+        explicit_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=(
+                b"room_id=room-generation-isolation&generation_id="
+                + first_generation_id.encode("ascii")
+            ),
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                explicit_response = asyncio.run(
+                    chat_generation_stream(explicit_request, chat_generation_service=first_worker)
+                )
+        explicit_body = asyncio.run(_consume(explicit_response))
+        self.assertEqual(explicit_response.headers["X-Chat-Generation-ID"], first_generation_id)
+        self.assertIn('"text": "前回回答"', explicit_body)
+        self.assertNotIn("今回回答", explicit_body)
+
+        first_worker._retained_jobs.pop((job_key, first_generation_id), None)
+        fake_redis.delete(first_worker._coordinator.event_stream_key(job_key, first_generation_id))
+        expired_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=(
+                b"room_id=room-generation-isolation&generation_id="
+                + first_generation_id.encode("ascii")
+            ),
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                expired_response = asyncio.run(
+                    chat_generation_stream(expired_request, chat_generation_service=first_worker)
+                )
+        self.assertEqual(expired_response.status_code, 404)
+
+    def test_failed_remote_generation_start_restores_previous_latest_pointer(self):
+        fake_redis = _FakeRedis()
+        service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-failed-start-restore", user_id=91)
+        previous_generation_id = "a" * 32
+        failed_generation_id = "b" * 32
+        latest_key = service._coordinator.latest_generation_key(job_key)
+        fake_redis.set(latest_key, previous_generation_id)
+        fake_redis.rpush(
+            service._coordinator.event_stream_key(job_key, previous_generation_id),
+            json.dumps(
+                {
+                    "id": 1,
+                    "event": "done",
+                    "payload": {"response": "前回の回答"},
+                }
+            ),
+        )
+
+        with patch(
+            "services.chat_generation.ChatGenerationJob.start",
+            side_effect=RuntimeError("job start failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "job start failed"):
+                service.start_generation_job(
+                    job_key,
+                    generation_id=failed_generation_id,
+                    conversation_messages=[{"role": "user", "content": "second turn"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+
+        self.assertEqual(fake_redis.get(latest_key), previous_generation_id)
+        self.assertEqual(service.resolve_latest_generation_id(job_key), previous_generation_id)
+        self.assertEqual(
+            [event.payload.get("response") for event in service.iter_generation_events(job_key)],
+            ["前回の回答"],
+        )
+        self.assertEqual(
+            fake_redis.get(
+                service._coordinator.generation_reservation_key(job_key, failed_generation_id)
+            ),
+            None,
+        )
+
+    def test_failed_generation_start_deletes_latest_pointer_when_none_existed(self):
+        fake_redis = _FakeRedis()
+        service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-failed-start-empty", user_id=92)
+        failed_generation_id = "b" * 32
+        latest_key = service._coordinator.latest_generation_key(job_key)
+
+        with patch(
+            "services.chat_generation.ChatGenerationJob.start",
+            side_effect=RuntimeError("job start failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "job start failed"):
+                service.start_generation_job(
+                    job_key,
+                    generation_id=failed_generation_id,
+                    conversation_messages=[{"role": "user", "content": "first turn"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+
+        self.assertIsNone(fake_redis.get(latest_key))
+
+    def test_failed_latest_pointer_write_restores_previous_pointer(self):
+        class _WriteThenRaiseRedis(_FakeRedis):
+            def __init__(self):
+                super().__init__()
+                self.fail_after_write_key = None
+
+            def set(self, key, value, nx=False, ex=None):
+                result = super().set(key, value, nx=nx, ex=ex)
+                if key == self.fail_after_write_key:
+                    self.fail_after_write_key = None
+                    raise ConnectionError("response lost after Redis applied SET")
+                return result
+
+        fake_redis = _WriteThenRaiseRedis()
+        service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-failed-latest-write", user_id=94)
+        previous_generation_id = "a" * 32
+        failed_generation_id = "b" * 32
+        latest_key = service._coordinator.latest_generation_key(job_key)
+        fake_redis.set(latest_key, previous_generation_id)
+        fake_redis.fail_after_write_key = latest_key
+
+        with self.assertRaises(ChatGenerationCoordinationError):
+            service.start_generation_job(
+                job_key,
+                generation_id=failed_generation_id,
+                conversation_messages=[{"role": "user", "content": "second turn"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+
+        self.assertEqual(fake_redis.get(latest_key), previous_generation_id)
+        self.assertEqual(service.resolve_latest_generation_id(job_key), previous_generation_id)
+        self.assertEqual(
+            fake_redis.get(
+                service._coordinator.generation_reservation_key(job_key, failed_generation_id)
+            ),
+            None,
+        )
+
+    def test_failed_start_does_not_restore_over_a_newer_latest_pointer(self):
+        fake_redis = _FakeRedis()
+        service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-failed-start-race", user_id=93)
+        previous_generation_id = "a" * 32
+        failed_generation_id = "b" * 32
+        newer_generation_id = "c" * 32
+        latest_key = service._coordinator.latest_generation_key(job_key)
+        fake_redis.set(latest_key, previous_generation_id)
+
+        def _advance_pointer_then_fail():
+            fake_redis.set(latest_key, newer_generation_id)
+            raise RuntimeError("job start failed")
+
+        with patch(
+            "services.chat_generation.ChatGenerationJob.start",
+            side_effect=_advance_pointer_then_fail,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "job start failed"):
+                service.start_generation_job(
+                    job_key,
+                    generation_id=failed_generation_id,
+                    conversation_messages=[{"role": "user", "content": "second turn"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+
+        self.assertEqual(fake_redis.get(latest_key), newer_generation_id)
 
     # 日本語: 分散環境下で実行中のジョブが停止(stalled)した場合、一定時間経過後にタイムアウトエラーとなることを検証します。
     # English: Verify that a stalled distributed job times out after a certain period of inactivity.
@@ -4730,6 +4995,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             distributed_stream_idle_timeout_seconds=0.0,
         )
         job_key = build_generation_key(chat_room_id="room-stalled", user_id=90)
+        generation_id = "9" * 32
+        fake_redis.set(service._coordinator.latest_generation_key(job_key), generation_id)
         fake_redis.set(service._coordinator.active_lock_key(job_key), "lock-token")
 
         stream_request = build_request(

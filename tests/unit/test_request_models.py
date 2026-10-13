@@ -399,6 +399,25 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
+    def test_chat_message_validates_optional_generation_id_as_lowercase_uuid_hex(self):
+        generation_id = "abcdef0123456789abcdef0123456789"
+        payload = _validate(
+            ChatMessageRequest,
+            {"message": "hello", "generation_id": generation_id},
+        )
+        self.assertEqual(payload.generation_id, generation_id)
+
+        for invalid_generation_id in (
+            "ABCDEF0123456789ABCDEF0123456789",
+            "abcdef0123456789abcdef012345678",
+            "g" * 32,
+        ):
+            with self.subTest(generation_id=invalid_generation_id), self.assertRaises(ValidationError):
+                _validate(
+                    ChatMessageRequest,
+                    {"message": "hello", "generation_id": invalid_generation_id},
+                )
+
     # チャットメッセージ送信リクエストで、Base64形式のバイナリ添付ファイルを受け入れ可能であることを検証します。
     # Verify that chat message accepts binary file attachments encoded in Base64.
     def test_chat_message_accepts_binary_attachment_metadata(self):

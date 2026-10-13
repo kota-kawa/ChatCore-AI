@@ -247,6 +247,7 @@ class StartGenerationJob(Protocol):
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
         workspace_tools: ChatWorkspaceToolbox | None = None,
+        generation_id: str | None = None,
     ) -> ChatGenerationJob: ...
 
 

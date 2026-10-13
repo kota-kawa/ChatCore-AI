@@ -219,6 +219,7 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
   const record = raw as {
     roomId?: unknown;
     roomMode?: unknown;
+    generationId?: unknown;
     lastEventId?: unknown;
     streamedText?: unknown;
     updatedAt?: unknown;
@@ -239,6 +240,9 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
   return {
     roomId: record.roomId,
     roomMode,
+    ...(typeof record.generationId === "string" && record.generationId.trim()
+      ? { generationId: record.generationId }
+      : {}),
     lastEventId,
     streamedText,
     updatedAt,
@@ -288,7 +292,7 @@ export function writeStoredGenerationState(state: StoredGenerationState): boolea
 
 export function updateStoredGenerationState(
   roomId: string,
-  updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText">>,
+  updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId">>,
 ): boolean {
   const existing = readStoredGenerationState(roomId);
   if (!existing) return false;
@@ -299,7 +303,8 @@ export function updateStoredGenerationState(
   });
 }
 
-export function clearStoredGenerationState(roomId: string) {
+export function clearStoredGenerationState(roomId: string, expected?: { generationId?: string }) {
+  if (expected && readStoredGenerationState(roomId)?.generationId !== expected.generationId) return;
   try {
     localStorage.removeItem(getStoredGenerationKey(roomId));
     const active = normalizeStoredGenerationState(

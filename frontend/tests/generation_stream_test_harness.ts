@@ -133,7 +133,7 @@ export type StreamHostOptions = {
   storedGeneration?: StoredGenerationState | null;
   // 再接続要求ごとに返すレスポンス。足りなければ最後の値を使い続ける。
   // Responses returned per reconnect request; the last one repeats.
-  openStream?: (lastEventId: number) => Promise<Response>;
+  openStream?: (lastEventId: number, generationId?: string) => Promise<Response>;
   withUnansweredFailureHandler?: boolean;
 };
 
@@ -237,7 +237,7 @@ type ScriptedStep = string | { error: unknown };
 
 // SSE ブロック列（または途中で投げるエラー）を1本のレスポンスとして再現する。
 // Replays a list of SSE blocks (or a mid-stream throw) as one response.
-export function createScriptedStream(steps: ScriptedStep[], options?: { bodyless?: boolean }): ScriptedStream {
+export function createScriptedStream(steps: ScriptedStep[], options?: { bodyless?: boolean; generationId?: string }): ScriptedStream {
   let index = 0;
 
   const reader = {
@@ -254,8 +254,12 @@ export function createScriptedStream(steps: ScriptedStep[], options?: { bodyless
   const response = {
     ok: true,
     status: 200,
-    headers: { get: () => "text/event-stream" },
-    body: options?.bodyless ? null : { getReader: () => reader },
+    headers: { get: (name: string) => {
+      if (name.toLowerCase() === "content-type") return "text/event-stream";
+      if (name.toLowerCase() === "x-chat-generation-id") return options?.generationId ?? null;
+      return null;
+    } },
+    body: options?.bodyless ? null : { getReader: () => reader, cancel: reader.cancel },
   } as unknown as Response;
 
   return { response, readCount: () => index };

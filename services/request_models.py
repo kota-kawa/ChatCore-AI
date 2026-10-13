@@ -109,6 +109,7 @@ ContextFactCandidateStatus = Literal["pending", "approved", "rejected"]
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
 ModelNameStr = Annotated[str, Field(min_length=1, max_length=MAX_MODEL_NAME_LENGTH)]
+GenerationIdStr = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
 
 
 # 日本語: すべてのAPIリクエストペイロードモデルの共通基底クラス。余分なフィールドを無視し、文字列の空白をトリムします。
@@ -311,6 +312,7 @@ class ChatMessageRequest(RequestPayloadModel):
     # 日本語: 回答の途中で公開された共有プロンプトを検索してよいか。公開データなので誰でも利用可。
     # English: Whether the answer may search public shared prompts (public data, available to anyone).
     use_shared_prompts: bool = False
+    generation_id: GenerationIdStr | None = None
 
 
 # 日本語: 定型タスクの並び順（IDリスト）を更新するリクエストペイロード。

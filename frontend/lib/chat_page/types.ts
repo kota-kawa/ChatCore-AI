@@ -218,6 +218,7 @@ export type GenerationStatusPayload = {
   error?: string;
   is_generating?: boolean;
   has_replayable_job?: boolean;
+  generation_id?: string;
 };
 
 export type ChatResponsePayload = {
@@ -268,6 +269,7 @@ export type StoredHistoryEntry = {
 export type StoredGenerationState = {
   roomId: string;
   roomMode: ChatRoomMode;
+  generationId?: string;
   lastEventId: number;
   streamedText: string;
   updatedAt: number;

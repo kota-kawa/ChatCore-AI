@@ -19,7 +19,9 @@ function assistantMessages(messages: UiChatMessage[]) {
 }
 
 function jsonResponse(status: number) {
-  return { ok: status >= 200 && status < 300, status, headers: { get: () => "application/json" } } as unknown as Response;
+  return { ok: status >= 200 && status < 300, status, headers: {
+    get: (name: string) => name.toLowerCase() === "content-type" ? "application/json" : null,
+  } } as unknown as Response;
 }
 
 // 「思考中」だけが並んでいる初期状態を作る。
@@ -29,6 +31,100 @@ function seedThinkingMessage(recorder: ReturnType<typeof createStreamHostRecorde
     { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
   ]);
 }
+
+test("a second answer reconnects with its own generation id and a fresh event cursor", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: async (lastEventId, generationId) => {
+      assert.equal(lastEventId, 1);
+      assert.equal(generationId, "second-generation");
+      return createScriptedStream([
+        sseBlock(2, "done", { response: "2回目の回答" }),
+      ], { generationId }).response;
+    },
+  });
+  const first = createScriptedStream([
+    sseBlock(1, "chunk", { text: "1回目の回答" }),
+    sseBlock(2, "done", { response: "1回目の回答" }),
+  ], { generationId: "first-generation" });
+  await settleStream(consumeGenerationStream(first.response, recorder.host), clock);
+
+  const second = createScriptedStream([
+    sseBlock(1, "chunk", { text: "2回目の" }),
+  ], { generationId: "second-generation" });
+  assert.equal(await settleStream(consumeGenerationStream(second.response, recorder.host), clock), true);
+  assert.deepEqual(assistantMessages(recorder.messages()).map((message) => message.text), ["1回目の回答", "2回目の回答"]);
+});
+
+test("a new generation discards the previous answer's stored draft and event ids", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    storedGeneration: {
+      roomId: "room-1", roomMode: "normal", generationId: "old-generation",
+      lastEventId: 99, streamedText: "前回の下書き", updatedAt: Date.now(),
+    },
+  });
+  recorder.lastEventIds.set("room-1", 99);
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: "今回の回答" }),
+    sseBlock(2, "done", { response: "今回の回答" }),
+  ], { generationId: "new-generation" });
+  assert.equal(await settleStream(consumeGenerationStream(stream.response, recorder.host), clock), true);
+  assert.deepEqual(assistantMessages(recorder.messages()).map((message) => message.text), ["今回の回答"]);
+});
+
+test("a reconnect for another generation never replaces the partial answer", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: async () => createScriptedStream([
+      sseBlock(2, "done", { response: "前回の回答" }),
+    ], { generationId: "wrong-generation" }).response,
+  });
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: "今回の途中回答" }),
+  ], { generationId: "current-generation" });
+  assert.equal(await settleStream(consumeGenerationStream(stream.response, recorder.host), clock), false);
+  assert.equal(assistantMessages(recorder.messages())[0].text, "今回の途中回答");
+  assert.equal(recorder.messages().some((message) => message.text.includes("前回の回答")), false);
+});
+
+test("an initial recovery response for another generation is rejected before rendering", () => {
+  const recorder = createStreamHostRecorder({ clock: createFakeClock() });
+  recorder.host.generationId = "requested-generation";
+  const stream = createScriptedStream([
+    sseBlock(1, "done", { response: "前回の回答" }),
+  ], { generationId: "previous-generation" });
+  assert.throws(() => consumeGenerationStream(stream.response, recorder.host), /別の回答/);
+  assert.deepEqual(recorder.messages(), []);
+  assert.deepEqual(recorder.persistedAnswers(), []);
+});
+
+test("a matching generation restores its draft and pins the reconnect", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    storedGeneration: {
+      roomId: "room-1", roomMode: "normal", generationId: "current-generation",
+      lastEventId: 7, streamedText: "復元された本文", updatedAt: Date.now(),
+    },
+    openStream: async (lastEventId, generationId) => {
+      assert.equal(lastEventId, 8);
+      assert.equal(generationId, "current-generation");
+      return createScriptedStream([
+        sseBlock(9, "done", { response: "復元された本文の続き" }),
+      ], { generationId }).response;
+    },
+  });
+  const stream = createScriptedStream([
+    sseBlock(7, "chunk", { text: "再送は無視" }),
+    sseBlock(8, "chunk", { text: "の続き" }),
+  ], { generationId: "current-generation" });
+  assert.equal(await settleStream(consumeGenerationStream(stream.response, recorder.host), clock), true);
+  assert.deepEqual(assistantMessages(recorder.messages()).map((message) => message.text), ["復元された本文の続き"]);
+});
 
 // ---------------------------------------------------------------------------
 // 通常のストリーミング / a normal streaming sequence
@@ -182,7 +278,7 @@ function createGatedStream(leading: string[]) {
   const response = {
     ok: true,
     status: 200,
-    headers: { get: () => "text/event-stream" },
+    headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "text/event-stream" : null },
     body: { getReader: () => reader },
   } as unknown as Response;
   return { response, release };

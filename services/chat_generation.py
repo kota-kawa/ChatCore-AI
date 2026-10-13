@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
 from fastapi import Request
 
+from services.error_messages import ERROR_CHAT_GENERATION_ID_INVALID
 from services.generative_ui import GenerativeUiMode
 
 from .chat_generation_agent_loop import ChatGenerationAgentLoopMixin
@@ -50,12 +53,25 @@ DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 # 停止要求が別ワーカーへ届いた場合に、所有ワーカーの応答を待つ上限。
 # Upper bound for waiting on the owning worker after a stop request lands on another worker.
 DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS = 5.0
+_GENERATION_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
 
 # 同一の部屋・ユーザーで既に生成ジョブが実行中である場合に投げられる例外クラス
 # Exception class raised when a generation job is already running for the same room/user
 class ChatGenerationAlreadyRunningError(RuntimeError):
     pass
+
+
+class ChatGenerationIdConflictError(RuntimeError):
+    """Raised when a room tries to reuse a generation ID still in its retention window."""
+
+
+class ChatGenerationCoordinationError(RuntimeError):
+    """Raised when Redis cannot safely publish or resolve the current generation."""
+
+
+def is_valid_generation_id(value: Any) -> bool:
+    return isinstance(value, str) and _GENERATION_ID_PATTERN.fullmatch(value) is not None
 
 
 # 個別のチャット応答生成のバックグラウンドタスクおよびイベントを管理するクラス
@@ -160,14 +176,15 @@ def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: 
 # Class defining the Chat Generation Service
 class ChatGenerationService:
     # チャット応答生成ジョブを管理し、SSE の再接続・分散配信を吸収する。
-    # ローカルプロセス内では `_jobs` にジョブを保持し、Redis が使える環境では
-    # イベント履歴とアクティブロックを Redis にも書く。これにより、ロードバランサ配下で
+    # ローカルプロセス内では `_retained_jobs` に世代ごとのジョブを保持し、`_jobs` には
+    # 部屋ごとの現行ジョブを置く。Redis が使える環境ではイベント履歴とアクティブロックも
+    # 書く。これにより、ロードバランサ配下で
     # 再接続先プロセスが変わっても、完了済み/実行中イベントを再生できる。
     #
     # Manages chat response generation jobs, smoothing over SSE reconnections and distributed delivery.
-    # Keeps jobs in `_jobs` in the local process, and also writes event history and active locks to Redis
-    # when available. This allows replaying completed/in-progress events even if the reconnected process
-    # changes behind a load balancer.
+    # Keeps per-generation jobs in `_retained_jobs` and the current room job in `_jobs`, and also
+    # writes event history and active locks to Redis when available. This allows replaying
+    # completed/in-progress events even if the reconnected process changes behind a load balancer.
 
     # サービスを初期化する
     # Initialize the service
@@ -201,6 +218,7 @@ class ChatGenerationService:
         self._remote_cancel_timeout_seconds = max(float(remote_cancel_timeout_seconds), 0.0)
         self._redis_client_getter = redis_client_getter
         self._jobs: dict[str, ChatGenerationJob] = {}
+        self._retained_jobs: dict[tuple[str, str], ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
         # プロセス間協調（Redis Pub/Sub・分散ロック・停止要求）は専用のコラボレータへ委譲する。
         # ローカルジョブの操作だけをコールバックとして渡し、ライフサイクルはこのクラスが持つ。
@@ -225,8 +243,13 @@ class ChatGenerationService:
 
     # Redis 経由で分散イベントを配信する（リストへの追記および Pub/Sub 発行）
     # Publish a distributed event via Redis (append to list and publish via Pub/Sub)
-    def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
-        self._coordinator.publish_event(job_key, event)
+    def _publish_distributed_event(
+        self,
+        job_key: str,
+        generation_id: str,
+        event: ChatGenerationEvent,
+    ) -> None:
+        self._coordinator.publish_event(job_key, generation_id, event)
 
     # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
     # Attempt to acquire the Redis active job lock for the specified job key
@@ -240,8 +263,16 @@ class ChatGenerationService:
 
     # 自分が取得した Redis アクティブジョブロックのTTLを、所有トークンを確認しながら延長する
     # Extend the TTL of the Redis active job lock this instance owns, verifying the owner token
-    def _refresh_active_job_lock(self, job_key: str, lock_token: str | None) -> bool:
-        return self._coordinator.refresh_active_job_lock(job_key, lock_token)
+    def _refresh_active_job_lock(
+        self,
+        job_key: str,
+        lock_token: str | None,
+        generation_id: str | None = None,
+    ) -> bool:
+        renewed = self._coordinator.refresh_active_job_lock(job_key, lock_token)
+        if renewed and generation_id is not None:
+            self._coordinator.refresh_latest_generation_id(job_key, generation_id)
+        return renewed
 
     # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
     # Check if a Redis active job lock exists for the specified job key
@@ -262,7 +293,7 @@ class ChatGenerationService:
     # Check whether this process still holds a running job
     def _has_running_local_jobs(self) -> bool:
         with self._jobs_lock:
-            return any(not job.is_done for job in self._jobs.values())
+            return any(not job.is_done for job in self._retained_jobs.values())
 
     # ローカルに保持しているジョブだけをキャンセルする
     # Cancel only the job held in this process
@@ -289,6 +320,9 @@ class ChatGenerationService:
     def supports_distributed_streaming(self) -> bool:
         return self._coordinator.supports_distributed_streaming()
 
+    def generation_store_unavailable(self) -> bool:
+        return self._coordinator.redis_is_configured() and not self.supports_distributed_streaming()
+
     # メモリ上のジョブ状態をリセットし、必要に応じて実行中ジョブをキャンセルする
     # Reset the in-memory job state and optionally cancel running jobs
     def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
@@ -297,10 +331,11 @@ class ChatGenerationService:
             if cancel_running:
                 running_jobs = [
                     job
-                    for job in self._jobs.values()
+                    for job in self._retained_jobs.values()
                     if not job.is_done
                 ]
             self._jobs.clear()
+            self._retained_jobs.clear()
 
         for job in running_jobs:
             job.cancel()
@@ -309,7 +344,7 @@ class ChatGenerationService:
     # Wait for all running jobs to complete
     def wait_for_running_jobs(self, *, timeout: float | None = None) -> bool:
         with self._jobs_lock:
-            running_jobs = [job for job in self._jobs.values() if not job.is_done]
+            running_jobs = [job for job in self._retained_jobs.values() if not job.is_done]
 
         if not running_jobs:
             return True
@@ -331,16 +366,27 @@ class ChatGenerationService:
     def _cleanup_expired_jobs(self, now: float | None = None) -> None:
         current_time = time.monotonic() if now is None else now
         expired_keys: list[str] = []
+        expired_generations: list[tuple[str, str]] = []
 
         with self._jobs_lock:
             for key, job in self._jobs.items():
                 if not job.is_done or job.finished_at is None:
                     continue
-                if current_time - job.finished_at >= self._job_retention_seconds:
+                if current_time - job.finished_at >= self._coordinator.generation_retention_ttl_seconds():
                     expired_keys.append(key)
+
+            for generation_key, job in self._retained_jobs.items():
+                if not job.is_done or job.finished_at is None:
+                    continue
+                if current_time - job.finished_at >= self._coordinator.generation_retention_ttl_seconds():
+                    expired_generations.append(generation_key)
 
             for key in expired_keys:
                 self._jobs.pop(key, None)
+
+            for generation_key in expired_generations:
+                self._retained_jobs.pop(generation_key, None)
+
 
     # 指定ジョブをキャンセルし、キャンセルできたか否かを返す
     # Cancel the specified job and return whether the cancellation succeeded
@@ -359,27 +405,102 @@ class ChatGenerationService:
         self._cleanup_expired_jobs()
         with self._jobs_lock:
             job = self._jobs.get(job_key)
-            if job is not None:
-                return not job.is_done
+            if job is not None and not job.is_done:
+                return True
         return self._has_distributed_active_lock(job_key)
+
+    def is_generation_id_available(self, job_key: str, generation_id: str) -> bool:
+        if not is_valid_generation_id(generation_id):
+            return False
+        self._cleanup_expired_jobs()
+        with self._jobs_lock:
+            local_job = self._retained_jobs.get((job_key, generation_id))
+            if local_job is not None:
+                return False
+
+        if self.generation_store_unavailable():
+            raise ChatGenerationCoordinationError("Redis is configured but unavailable.")
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return True
+        try:
+            return not bool(
+                redis_client.exists(
+                    self._coordinator.generation_reservation_key(job_key, generation_id)
+                )
+            )
+        except Exception as exc:
+            logger.exception("Failed to check whether a chat generation ID was already used.")
+            raise ChatGenerationCoordinationError(
+                "The chat generation ID could not be checked."
+            ) from exc
 
     # 再生可能な生成処理（メモリ上または Redis 上にイベントがある）が存在するか確認する
     # Check if a replayable generation process (with events in-memory or Redis) exists
     def has_replayable_generation(self, job_key: str) -> bool:
+        generation_id = self.resolve_latest_generation_id(job_key)
+        return self.has_generation_history(job_key, generation_id)
+
+    def has_generation_history(self, job_key: str, generation_id: str | None) -> bool:
+        if not generation_id:
+            return False
         self._cleanup_expired_jobs()
         with self._jobs_lock:
-            local_job = self._jobs.get(job_key)
+            local_job = self._retained_jobs.get((job_key, generation_id))
             if local_job is not None:
                 return True
+        try:
+            return self._coordinator.has_replay_history(job_key, generation_id)
+        except Exception as exc:
+            raise ChatGenerationCoordinationError(
+                "Chat generation history could not be checked."
+            ) from exc
 
-        return self._coordinator.has_replay_history(job_key)
+    def resolve_latest_generation_id(self, job_key: str) -> str | None:
+        self._cleanup_expired_jobs()
+        redis_client = self._get_redis_client()
+        if redis_client is not None:
+            try:
+                generation_id = self._coordinator.get_latest_generation_id(job_key)
+            except Exception as exc:
+                raise ChatGenerationCoordinationError(
+                    "The latest chat generation could not be resolved."
+                ) from exc
+            return generation_id if is_valid_generation_id(generation_id) else None
+
+        if self._coordinator.redis_is_configured():
+            return None
+
+        with self._jobs_lock:
+            local_job = self._jobs.get(job_key)
+            return local_job.generation_id if local_job is not None else None
+
+    def has_generation_active(self, job_key: str, generation_id: str) -> bool:
+        with self._jobs_lock:
+            local_job = self._jobs.get(job_key)
+            if local_job is not None and local_job.generation_id == generation_id:
+                return not local_job.is_done
+        return (
+            self.resolve_latest_generation_id(job_key) == generation_id
+            and self._has_distributed_active_lock(job_key)
+        )
 
     # 指定したジョブキーに対応するローカルジョブオブジェクトを取得する
     # Retrieve the local job object corresponding to the specified job key
-    def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
+    def get_generation_job(
+        self,
+        job_key: str,
+        generation_id: str | None = None,
+    ) -> ChatGenerationJob | None:
         self._cleanup_expired_jobs()
+        try:
+            selected_generation_id = generation_id or self.resolve_latest_generation_id(job_key)
+        except ChatGenerationCoordinationError:
+            return None
+        if selected_generation_id is None:
+            return None
         with self._jobs_lock:
-            return self._jobs.get(job_key)
+            return self._retained_jobs.get((job_key, selected_generation_id))
 
     # メモリまたは Redis Pub/Sub から生成イベントをイテレートして呼び出し元にストリームする
     # Iterate and stream generation events to the caller from memory or Redis Pub/Sub
@@ -387,9 +508,13 @@ class ChatGenerationService:
         self,
         job_key: str,
         *,
+        generation_id: str | None = None,
         after_sequence_id: int = 0,
     ) -> Iterator[ChatGenerationEvent | None]:
-        job = self.get_generation_job(job_key)
+        selected_generation_id = generation_id or self.resolve_latest_generation_id(job_key)
+        if selected_generation_id is None:
+            return
+        job = self.get_generation_job(job_key, selected_generation_id)
         if job is not None:
             yield from job.iter_events(
                 after_sequence_id=after_sequence_id,
@@ -403,8 +528,9 @@ class ChatGenerationService:
         # history, which happens whenever the SSE connection lands on another worker.
         yield from self._coordinator.iter_distributed_events(
             job_key,
+            selected_generation_id,
             after_sequence_id=after_sequence_id,
-            has_active_generation=self.has_active_generation,
+            has_active_generation=self.has_generation_active,
         )
 
     # 新しいチャット応答生成ジョブを開始する
@@ -428,7 +554,14 @@ class ChatGenerationService:
         ui_mode: GenerativeUiMode | str | None = None,
         explicit_ui_opt_out: bool = False,
         workspace_tools: ChatWorkspaceToolbox | None = None,
+        generation_id: str | None = None,
     ) -> ChatGenerationJob:
+        if self.generation_store_unavailable():
+            raise ChatGenerationCoordinationError("Redis is configured but unavailable.")
+        selected_generation_id = generation_id or uuid.uuid4().hex
+        if not is_valid_generation_id(selected_generation_id):
+            raise ValueError(f"{ERROR_CHAT_GENERATION_ID_INVALID}.")
+
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
         if not acquired_lock:
@@ -445,8 +578,46 @@ class ChatGenerationService:
             if existing_job is not None and not existing_job.is_done:
                 self._release_active_job_lock(job_key, lock_token)
                 raise ChatGenerationAlreadyRunningError(job_key)
+            if existing_job is not None and existing_job.generation_id == selected_generation_id:
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationIdConflictError(job_key)
+
+            if (job_key, selected_generation_id) in self._retained_jobs:
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationIdConflictError(job_key)
+            previous_job = existing_job
+            try:
+                reserved = self._coordinator.reserve_generation_id(job_key, selected_generation_id)
+            except Exception as exc:
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationCoordinationError(
+                    "The chat generation ID could not be reserved."
+                ) from exc
+            if reserved is False:
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationIdConflictError(job_key)
+            try:
+                previous_latest_generation_id = self._coordinator.get_latest_generation_id(job_key)
+            except Exception as exc:
+                self._coordinator.release_generation_id(job_key, selected_generation_id)
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationCoordinationError(
+                    "The latest chat generation could not be resolved."
+                ) from exc
+            if not self._coordinator.set_latest_generation_id(job_key, selected_generation_id):
+                self._coordinator.restore_latest_generation_id(
+                    job_key,
+                    selected_generation_id,
+                    previous_latest_generation_id,
+                )
+                self._coordinator.release_generation_id(job_key, selected_generation_id)
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationCoordinationError(
+                    "The latest chat generation ID could not be stored."
+                )
 
             job = ChatGenerationJob(
+                generation_id=selected_generation_id,
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
@@ -456,7 +627,11 @@ class ChatGenerationService:
                     lock_token,
                     on_finished=on_finished,
                 ),
-                on_event=lambda event: self._publish_distributed_event(job_key, event),
+                on_event=lambda event: self._publish_distributed_event(
+                    job_key,
+                    selected_generation_id,
+                    event,
+                ),
                 on_error=on_error,
                 prior_web_search_results=prior_web_search_results,
                 pasted_url_pages=pasted_url_pages,
@@ -468,7 +643,7 @@ class ChatGenerationService:
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,
                 renew_active_job_lock=(
-                    (lambda: self._refresh_active_job_lock(job_key, lock_token))
+                    (lambda: self._refresh_active_job_lock(job_key, lock_token, selected_generation_id))
                     if lock_token is not None
                     else None
                 ),
@@ -476,6 +651,7 @@ class ChatGenerationService:
                 workspace_tools=workspace_tools,
             )
             self._jobs[job_key] = job
+            self._retained_jobs[(job_key, selected_generation_id)] = job
 
         # 購読スレッドは `_jobs_lock` の外で起動する（ロック順序を固定して待ち合わせを避ける）。
         # Start the listener outside `_jobs_lock` to keep the lock ordering consistent.
@@ -486,7 +662,16 @@ class ChatGenerationService:
         except Exception:
             # start に失敗したジョブはリプレイ対象に残さず、分散ロックも即時解放する。
             with self._jobs_lock:
+                self._retained_jobs.pop((job_key, selected_generation_id), None)
                 self._jobs.pop(job_key, None)
+                if previous_job is not None:
+                    self._jobs[job_key] = previous_job
+            self._coordinator.restore_latest_generation_id(
+                job_key,
+                selected_generation_id,
+                previous_latest_generation_id,
+            )
+            self._coordinator.release_generation_id(job_key, selected_generation_id)
             self._release_active_job_lock(job_key, lock_token)
             raise
         return job
@@ -565,6 +750,7 @@ def has_active_generation(
 def get_generation_job(
     job_key: str,
     *,
+    generation_id: str | None = None,
     service: ChatGenerationService | None = None,
 ) -> ChatGenerationJob | None:
     target = (
@@ -572,13 +758,25 @@ def get_generation_job(
         if isinstance(service, ChatGenerationService)
         else get_chat_generation_service()
     )
-    return target.get_generation_job(job_key)
+    return target.get_generation_job(job_key, generation_id)
 
 
-# 指定したジョブがリプレイ可能であるかを判定する
-# Determine if the specified job is replayable
-def has_replayable_generation(
+def resolve_latest_generation_id(
     job_key: str,
+    *,
+    service: ChatGenerationService | None = None,
+) -> str | None:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.resolve_latest_generation_id(job_key)
+
+
+def is_generation_id_available(
+    job_key: str,
+    generation_id: str,
     *,
     service: ChatGenerationService | None = None,
 ) -> bool:
@@ -587,7 +785,27 @@ def has_replayable_generation(
         if isinstance(service, ChatGenerationService)
         else get_chat_generation_service()
     )
-    return target.has_replayable_generation(job_key)
+    return target.is_generation_id_available(job_key, generation_id)
+
+
+# 指定したジョブがリプレイ可能であるかを判定する
+# Determine if the specified job is replayable
+def has_replayable_generation(
+    job_key: str,
+    *,
+    generation_id: str | None = None,
+    service: ChatGenerationService | None = None,
+) -> bool:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return (
+        target.has_replayable_generation(job_key)
+        if generation_id is None
+        else target.has_generation_history(job_key, generation_id)
+    )
 
 
 # 指定したジョブのイベントストリームをイテレートする
@@ -595,6 +813,7 @@ def has_replayable_generation(
 def iter_generation_events(
     job_key: str,
     *,
+    generation_id: str | None = None,
     after_sequence_id: int = 0,
     service: ChatGenerationService | None = None,
 ) -> Iterator[ChatGenerationEvent | None]:
@@ -605,6 +824,7 @@ def iter_generation_events(
     )
     return target.iter_generation_events(
         job_key,
+        generation_id=generation_id,
         after_sequence_id=after_sequence_id,
     )
 
@@ -630,6 +850,7 @@ def start_generation_job(
     ui_mode: GenerativeUiMode | str | None = None,
     explicit_ui_opt_out: bool = False,
     workspace_tools: ChatWorkspaceToolbox | None = None,
+    generation_id: str | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -653,4 +874,5 @@ def start_generation_job(
         ui_mode=ui_mode,
         explicit_ui_opt_out=explicit_ui_opt_out,
         workspace_tools=workspace_tools,
+        generation_id=generation_id,
     )

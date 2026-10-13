@@ -443,9 +443,9 @@ export function useHomePageGenerationActions({
   // The single entry point for opening a generation stream; Last-Event-ID is
   // attached only when resuming an interrupted one.
   const openGenerationStreamRequest = useCallback(
-    (roomId: string, signal: AbortSignal, headers?: Record<string, string>) =>
+    (roomId: string, signal: AbortSignal, headers?: Record<string, string>, generationId?: string) =>
       resilientFetch(
-        `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+        `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}${generationId ? `&generation_id=${encodeURIComponent(generationId)}` : ""}`,
         {
           credentials: "same-origin",
           signal,
@@ -484,6 +484,10 @@ export function useHomePageGenerationActions({
         isActive: () => isGenerationActive(generation),
         lastEventIdByRoom: streamLastEventIdByRoomRef.current,
         localize,
+        generationId: generation.serverGenerationId,
+        onGenerationId: (generationId) => {
+          generation.serverGenerationId = generationId;
+        },
         messages: {
           updateActiveMessages: (updater) => {
             setMessages((previous) => {
@@ -498,17 +502,22 @@ export function useHomePageGenerationActions({
         storage: {
           readGenerationState: () => readStoredGenerationState(roomId),
           updateGenerationState: (updates) => {
+            if (!isGenerationActive(generation)) return;
             updateStoredGenerationState(roomId, updates);
           },
-          clearGenerationState: () => clearStoredGenerationState(roomId),
+          clearGenerationState: () => {
+            if (isGenerationActive(generation)) {
+              clearStoredGenerationState(roomId, { generationId: generation.serverGenerationId });
+            }
+          },
           persistAssistantAnswer: (entry) => {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, entry, roomMode));
           },
         },
-        openStream: (lastEventId) =>
+        openStream: (lastEventId, generationId) =>
           openGenerationStreamRequest(roomId, generation.abortController.signal, {
             "Last-Event-ID": String(lastEventId),
-          }),
+          }, generationId),
         onUnansweredFailure,
       };
     },
@@ -549,7 +558,9 @@ export function useHomePageGenerationActions({
         reconnectAttempt += 1;
 
         try {
-          const response = await openGenerationStreamRequest(roomId, generation.abortController.signal);
+          const response = await openGenerationStreamRequest(
+            roomId, generation.abortController.signal, undefined, generation.serverGenerationId,
+          );
           if (response.ok) return response;
 
           // A 4xx response means the original request was not accepted (or the
@@ -566,9 +577,23 @@ export function useHomePageGenerationActions({
   );
 
   const connectToGenerationStream = useCallback(
-    async (roomId: string, roomMode: ChatRoomMode) => {
+    async (roomId: string, roomMode: ChatRoomMode, serverGenerationId?: string) => {
       const generation = acquireGeneration(roomId);
       if (!generation) return false;
+
+      const storedGeneration = readStoredGenerationState(roomId);
+      generation.serverGenerationId = serverGenerationId ?? storedGeneration?.generationId;
+      if (!storedGeneration?.generationId || storedGeneration.generationId !== generation.serverGenerationId) {
+        streamLastEventIdByRoomRef.current.delete(roomId);
+        writeStoredGenerationState({
+          roomId,
+          roomMode,
+          generationId: generation.serverGenerationId,
+          lastEventId: 0,
+          streamedText: "",
+          updatedAt: Date.now(),
+        });
+      }
 
       const thinkingId = nextMessageId("thinking", messageSeqRef);
       setMessages((previous) => {
@@ -592,7 +617,9 @@ export function useHomePageGenerationActions({
       }
 
       try {
-        const response = await openGenerationStreamRequest(roomId, generation.abortController.signal, headers);
+        const response = await openGenerationStreamRequest(
+          roomId, generation.abortController.signal, headers, generation.serverGenerationId,
+        );
 
         if (!response.ok) {
           const rawPayload = await readJsonBodySafe(response);
@@ -631,9 +658,12 @@ export function useHomePageGenerationActions({
 
   const loadChatHistory = useCallback(
     async (roomId: string, shouldCheckGeneration = true) => {
+      const revision = generationGuardRef.current?.revision();
+      const expectedGenerationId = readStoredGenerationState(roomId)?.generationId;
+      const isCurrentLoad = () => currentRoomIdRef.current === roomId && generationGuardRef.current?.revision() === revision;
       try {
         let loadedHistory = await fetchChatHistoryPage(roomId);
-        if (currentRoomIdRef.current !== roomId) return;
+        if (!isCurrentLoad()) return;
 
         const toUiMessages = (historyMessages: typeof loadedHistory.messages): UiChatMessage[] =>
           historyMessages.map((entry) => ({
@@ -678,12 +708,12 @@ export function useHomePageGenerationActions({
           generationStatus = normalizeGenerationStatusPayload({});
         }
 
-        if (currentRoomIdRef.current !== roomId) return;
+        if (!isCurrentLoad()) return;
 
         if (generationStatus.is_generating && isLatestChatTurnAnswered(uiMessages)) {
           try {
             loadedHistory = await fetchChatHistoryPage(roomId);
-            if (currentRoomIdRef.current !== roomId) return;
+            if (!isCurrentLoad()) return;
             uiMessages = toUiMessages(loadedHistory.messages);
             syncLoadedHistoryState();
           } catch {
@@ -693,30 +723,30 @@ export function useHomePageGenerationActions({
 
         if (isLatestChatTurnAnswered(uiMessages)) {
           streamLastEventIdByRoomRef.current.delete(roomId);
-          clearStoredGenerationState(roomId);
+          clearStoredGenerationState(roomId, { generationId: expectedGenerationId });
           commitHistoryMessages(uiMessages);
           return;
         }
 
         if (generationStatus.is_generating) {
           commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId, loadedHistory.roomMode);
+          void connectToGenerationStream(roomId, loadedHistory.roomMode, generationStatus.generation_id);
           return;
         }
 
         if (generationStatus.has_replayable_job) {
           commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId, loadedHistory.roomMode);
+          void connectToGenerationStream(roomId, loadedHistory.roomMode, generationStatus.generation_id);
           return;
         }
 
-        clearStoredGenerationState(roomId);
+        clearStoredGenerationState(roomId, { generationId: expectedGenerationId });
         commitHistoryMessages(uiMessages);
       } catch (error) {
         console.error("履歴取得失敗:", error);
       }
     },
-    [connectToGenerationStream, fetchChatHistoryPage, saveUiMessagesToLocalStorage, requestScrollToBottom],
+    [connectToGenerationStream, currentRoomIdRef, fetchChatHistoryPage, generationGuardRef, saveUiMessagesToLocalStorage, requestScrollToBottom],
   );
 
   const loadOlderChatHistory = useCallback(async () => {
@@ -791,9 +821,10 @@ export function useHomePageGenerationActions({
   // reflect freshly-created branches after an edit or regeneration.
   const refreshActivePath = useCallback(
     async (roomId: string) => {
+      const revision = generationGuardRef.current?.revision();
       try {
         const loaded = await fetchChatHistoryPage(roomId);
-        if (currentRoomIdRef.current !== roomId) return;
+        if (currentRoomIdRef.current !== roomId || generationGuardRef.current?.revision() !== revision) return;
         const uiMessages = mapHistoryEntriesToUi(loaded.messages, "history");
         prependScrollRestoreRef.current = null;
         setHistoryHasMore(loaded.pagination.hasMore);
@@ -809,7 +840,7 @@ export function useHomePageGenerationActions({
         // Keep the optimistic messages if the refresh fails.
       }
     },
-    [fetchChatHistoryPage, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
+    [currentRoomIdRef, fetchChatHistoryPage, generationGuardRef, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
   );
 
   // Switch the active branch to the requested sibling version and render the
@@ -904,11 +935,12 @@ export function useHomePageGenerationActions({
 
   // 復元用の進行状態を、このターンの開始位置へ初期化する。
   // Reset the persisted progress state to the start of this turn.
-  const resetStoredGenerationProgress = useCallback((roomId: string, roomMode: ChatRoomMode) => {
+  const resetStoredGenerationProgress = useCallback((roomId: string, roomMode: ChatRoomMode, generationId?: string) => {
     streamLastEventIdByRoomRef.current.set(roomId, 0);
     writeStoredGenerationState({
       roomId,
       roomMode,
+      generationId,
       lastEventId: 0,
       streamedText: "",
       updatedAt: Date.now(),
@@ -921,6 +953,7 @@ export function useHomePageGenerationActions({
   const beginOutgoingTurn = useCallback(
     (generation: ActiveGeneration, userMessage: UiChatMessage, roomMode: ChatRoomMode) => {
       const { roomId } = generation;
+      generation.serverGenerationId = crypto.randomUUID().replaceAll("-", "");
       const initialThinkingState = getInitialThinkingState(
         personalKnowledgeEnabled,
         sharedPromptsEnabled,
@@ -937,7 +970,7 @@ export function useHomePageGenerationActions({
         return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
       });
       notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: userMessage.text, sender: "user" }, roomMode));
-      resetStoredGenerationProgress(roomId, roomMode);
+      resetStoredGenerationProgress(roomId, roomMode, generation.serverGenerationId);
       requestScrollToBottom();
     },
     [
@@ -959,7 +992,7 @@ export function useHomePageGenerationActions({
     (generation: ActiveGeneration, userMessageId: string, message: string, unsentInputText?: string) =>
       (errorMessage: string) => {
         if (!isGenerationActive(generation)) return;
-        clearStoredGenerationState(generation.roomId);
+        clearStoredGenerationState(generation.roomId, { generationId: generation.serverGenerationId });
         rollbackUnansweredUserMessage(generation.roomId, userMessageId, message, unsentInputText);
         appendAssistantErrorMessage(generation.roomId, errorMessage);
       },
@@ -1014,6 +1047,7 @@ export function useHomePageGenerationActions({
           body: JSON.stringify({
             message: payload.message,
             chat_room_id: generation.roomId,
+            generation_id: generation.serverGenerationId,
             model: payload.model,
             ...(shouldSendThemePreference(payload.message)
               ? { theme_preference: getStoredThemePreference() }
@@ -1077,6 +1111,7 @@ export function useHomePageGenerationActions({
       handleUnansweredFailure: (message: string) => void,
     ): Promise<boolean> => {
       const rawPayload = await readJsonBodySafe(response);
+      if (!isGenerationActive(generation)) return false;
       const data = normalizeChatResponsePayload(rawPayload);
       const answered = response.ok && Boolean(data.response || data.parts?.length);
 
@@ -1101,7 +1136,7 @@ export function useHomePageGenerationActions({
         }, roomMode));
         applyRoomTitleUpdate(generation.roomId, data.roomTitle);
       }
-      clearStoredGenerationState(generation.roomId);
+      clearStoredGenerationState(generation.roomId, { generationId: generation.serverGenerationId });
       // 回答が届いても画面は動かさない。見落とすと困るエラーだけ下端へ送る。
       // An arriving answer never moves the view; only an error, which must not
       // be missed, still pulls the view to the bottom.
@@ -1311,6 +1346,7 @@ export function useHomePageGenerationActions({
             body: JSON.stringify({
               chat_room_id: roomId,
               new_message: newMessage,
+              generation_id: generation.serverGenerationId,
               trailing_user_count: trailingUserCount,
               model,
               ...(shouldSendThemePreference(newMessage)
@@ -1329,11 +1365,12 @@ export function useHomePageGenerationActions({
           await consumeStreamingChatResponse(response, generation, currentRoomMode, {
             onUnansweredFailure: handleUnansweredFailure,
           });
-          void refreshActivePath(roomId);
+          if (isGenerationActive(generation)) void refreshActivePath(roomId);
           return;
         }
 
         const rawPayload = await readJsonBodySafe(response);
+        if (!isGenerationActive(generation)) return;
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
@@ -1344,7 +1381,7 @@ export function useHomePageGenerationActions({
               ...(data.parts?.length ? { parts: data.parts } : {}),
             }, currentRoomMode));
           }
-          clearStoredGenerationState(roomId);
+          clearStoredGenerationState(roomId, { generationId: generation.serverGenerationId });
           void refreshActivePath(roomId);
           return;
         }
@@ -1437,7 +1474,8 @@ export function useHomePageGenerationActions({
           },
         ];
       });
-      resetStoredGenerationProgress(roomId, currentRoomMode);
+      generation.serverGenerationId = crypto.randomUUID().replaceAll("-", "");
+      resetStoredGenerationProgress(roomId, currentRoomMode, generation.serverGenerationId);
       requestScrollToBottom();
     },
     [
@@ -1475,6 +1513,7 @@ export function useHomePageGenerationActions({
             body: JSON.stringify({
               chat_room_id: roomId,
               model,
+              generation_id: generation.serverGenerationId,
               ...(shouldSendThemePreference(latestUserMessage)
                 ? { theme_preference: getStoredThemePreference() }
                 : {}),
@@ -1489,11 +1528,12 @@ export function useHomePageGenerationActions({
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
           await consumeStreamingChatResponse(response, generation, currentRoomMode);
-          void refreshActivePath(roomId);
+          if (isGenerationActive(generation)) void refreshActivePath(roomId);
           return;
         }
 
         const rawPayload = await readJsonBodySafe(response);
+        if (!isGenerationActive(generation)) return;
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
@@ -1504,7 +1544,7 @@ export function useHomePageGenerationActions({
               ...(data.parts?.length ? { parts: data.parts } : {}),
             }, currentRoomMode));
           }
-          clearStoredGenerationState(roomId);
+          clearStoredGenerationState(roomId, { generationId: generation.serverGenerationId });
           void refreshActivePath(roomId);
           return;
         }
@@ -1521,7 +1561,7 @@ export function useHomePageGenerationActions({
             },
           ];
         });
-        clearStoredGenerationState(roomId);
+        clearStoredGenerationState(roomId, { generationId: generation.serverGenerationId });
         requestScrollToBottom();
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -1530,7 +1570,7 @@ export function useHomePageGenerationActions({
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (isGenerationActive(generation)) {
-          clearStoredGenerationState(roomId);
+          clearStoredGenerationState(roomId, { generationId: generation.serverGenerationId });
           appendAssistantErrorMessage(roomId, errorMessage);
         }
       } finally {

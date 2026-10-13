@@ -62,6 +62,7 @@ class ChatJsonResponse(ApiErrorPayload):
 class ChatGenerationStatusResponse(ApiErrorPayload):
     is_generating: bool | None = None
     has_replayable_job: bool | None = None
+    generation_id: str | None = None
 
 
 # 日本語: チャット履歴における個々のメッセージデータを表現するモデル。

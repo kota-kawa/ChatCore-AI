@@ -34,6 +34,12 @@ class _SharedFakeRedis:
             self._values[key] = value
             return True
 
+    # 日本語: 保存済みの文字列値を返します。
+    # English: Return a stored string value.
+    def get(self, key):
+        with self._lock:
+            return self._values.get(key)
+
     # 日本語: 指定キーが存在するかどうかを返します。
     # English: Return whether the specified key exists.
     def exists(self, key):
@@ -46,8 +52,9 @@ class _SharedFakeRedis:
     # English: Delete the specified key.
     def delete(self, key):
         with self._lock:
-            existed = key in self._values
+            existed = key in self._values or key in self._lists
             self._values.pop(key, None)
+            self._lists.pop(key, None)
             return 1 if existed else 0
 
     # 日本語: リストキーの指定範囲の要素を取得します。
@@ -110,10 +117,12 @@ class _SharedFakeRedis:
 
     # 日本語: ロック解放用Luaスクリプトを模擬し、トークン一致時のみ削除します。
     # English: Emulate the lock-release Lua script, deleting only on a token match.
-    def eval(self, script, key_count, key, token):
-        del script, key_count
+    def eval(self, script, key_count, key, token, *_args):
+        del key_count
         with self._lock:
             if self._values.get(key) == token:
+                if "EXPIRE" in script:
+                    return 1
                 del self._values[key]
                 return 1
             return 0

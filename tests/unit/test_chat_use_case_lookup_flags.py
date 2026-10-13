@@ -86,7 +86,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             is_streaming_model=Mock(return_value=True),
             search_personal_knowledge=search_personal_knowledge,
             search_shared_prompts=search_shared_prompts or Mock(return_value={"status": "no_results"}),
-            start_generation_job=Mock(return_value=SimpleNamespace()),
+            start_generation_job=Mock(return_value=SimpleNamespace(generation_id="a" * 32)),
             build_llm_stream_response=Mock(return_value=JSONResponse({"streaming": True})),
             iter_llm_stream_events=Mock(return_value=iter(())),
             get_llm_response=Mock(return_value="assistant reply"),

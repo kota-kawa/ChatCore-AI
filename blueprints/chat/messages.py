@@ -6,7 +6,7 @@ from functools import partial
 from typing import Any
 
 from fastapi import Depends, Request
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from services.api_errors import ApiServiceError
 from services.async_utils import iterate_blocking, run_blocking
@@ -25,6 +25,7 @@ from services.chat_contract import (
 )
 from services.chat_generation import (
     DEFAULT_SSE_HEARTBEAT_SECONDS,
+    ChatGenerationCoordinationError,
     ChatGenerationEvent,
     ChatGenerationJob,
     ChatGenerationService,
@@ -35,7 +36,10 @@ from services.chat_generation import (
     get_generation_job,
     has_active_generation,
     has_replayable_generation,
+    is_generation_id_available,
+    is_valid_generation_id,
     iter_generation_events,
+    resolve_latest_generation_id,
     start_generation_job,
 )
 from services.chat_images import decode_chat_images_from_storage, encode_chat_images_for_storage
@@ -107,6 +111,9 @@ from services.chat_use_case import ChatPostUseCase
 from services.context_vault_candidate_service import should_extract_context
 from services.context_vault_extraction import schedule_context_extraction
 from services.error_messages import (
+    ERROR_CHAT_GENERATION_ID_INVALID,
+    ERROR_CHAT_GENERATION_ID_REUSED,
+    ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
     ERROR_CHAT_ROOM_NOT_FOUND,
 )
 from services.i18n import get_request_locale
@@ -311,6 +318,8 @@ def _iter_serialized_stream_events(
 # Construct a StreamingResponse object from a sequence of SSE stream events.
 def _build_llm_stream_response(
     events: Iterator[bytes],
+    *,
+    generation_id: str | None = None,
 ) -> StreamingResponse:
     """
     ストリーミングイベントシーケンスから text/event-stream 形式の StreamingResponse を生成します。
@@ -329,14 +338,17 @@ def _build_llm_stream_response(
     # capacity tokens for a whole heartbeat interval. Past 40 concurrent streams every
     # `run_in_threadpool` call in the worker stalls, so the iteration is offloaded to the
     # dedicated SSE pool instead.
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    if generation_id is not None:
+        headers["X-Chat-Generation-ID"] = generation_id
     return StreamingResponse(
         iterate_blocking(events),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=headers,
     )
 
 
@@ -411,6 +423,45 @@ def _parse_last_event_id(request: Request) -> int:
     except (TypeError, ValueError):
         return 0
     return parsed if parsed > 0 else 0
+
+
+def _parse_requested_generation_id(data: dict[str, Any]) -> tuple[str | None, Response | None]:
+    generation_id = data.get("generation_id")
+    if generation_id is None:
+        return None, None
+    if not is_valid_generation_id(generation_id):
+        return None, jsonify(
+            {"error": ERROR_CHAT_GENERATION_ID_INVALID},
+            status_code=400,
+        )
+    return generation_id, None
+
+
+def _reject_reused_generation_id(
+    generation_id: str | None,
+    *,
+    chat_room_id: str,
+    user_id: int | None,
+    sid: str | None,
+    service: ChatGenerationService,
+) -> Response | None:
+    if generation_id is None:
+        return None
+    generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
+    try:
+        available = is_generation_id_available(
+            generation_key,
+            generation_id,
+            service=service,
+        )
+    except ChatGenerationCoordinationError:
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
+    if available:
+        return None
+    return jsonify({"error": ERROR_CHAT_GENERATION_ID_REUSED}, status_code=409)
 
 
 # 特定タスクのプロンプトデータをDBから非同期に読み込む関数
@@ -806,7 +857,10 @@ def _render_regeneration_outcome(outcome: ChatRegenerationOutcome):
     Renders a shared-pipeline outcome; response construction stays a blueprint concern.
     """
     if isinstance(outcome, ChatRegenerationStreamStarted):
-        return _build_llm_stream_response(_iter_llm_stream_events(outcome.job))
+        return _build_llm_stream_response(
+            _iter_llm_stream_events(outcome.job),
+            generation_id=outcome.job.generation_id,
+        )
     if isinstance(outcome, ChatRegenerationRateLimited):
         return jsonify_rate_limited(outcome.message, retry_after=outcome.retry_after)
     if isinstance(outcome, ChatRegenerationRejected):
@@ -833,6 +887,9 @@ async def chat_regenerate(
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
+    generation_id, generation_id_error = _parse_requested_generation_id(data)
+    if generation_id_error is not None:
+        return generation_id_error
 
     chat_room_id_raw = data.get("chat_room_id")
     model_raw = data.get("model") or OPENAI_DEFAULT_MODEL
@@ -878,6 +935,17 @@ async def chat_regenerate(
 
         if room_mode == "temporary":
             sid = get_temporary_user_store_key(user_id)
+        generation_id_error = _reject_reused_generation_id(
+            generation_id,
+            chat_room_id=chat_room_id,
+            user_id=user_id,
+            sid=sid,
+            service=resolved_chat_generation_service,
+        )
+        if generation_id_error is not None:
+            return generation_id_error
+
+        if room_mode == "temporary":
             await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
@@ -907,6 +975,15 @@ async def chat_regenerate(
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
             return guest_error
+        generation_id_error = _reject_reused_generation_id(
+            generation_id,
+            chat_room_id=chat_room_id,
+            user_id=None,
+            sid=sid,
+            service=resolved_chat_generation_service,
+        )
+        if generation_id_error is not None:
+            return generation_id_error
         await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
         all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
 
@@ -940,6 +1017,7 @@ async def chat_regenerate(
                 # Regeneration saves no new user message, so there is nothing to
                 # clean up; running the cleanup would delete an existing message.
                 cleanup_unanswered_user_messages_on_error=False,
+                generation_id=generation_id,
             )
         )
     )
@@ -964,6 +1042,9 @@ async def chat_edit_and_regenerate(
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
+    generation_id, generation_id_error = _parse_requested_generation_id(data)
+    if generation_id_error is not None:
+        return generation_id_error
 
     chat_room_id_raw = data.get("chat_room_id")
     new_message_raw = data.get("new_message")
@@ -1022,6 +1103,17 @@ async def chat_edit_and_regenerate(
 
         if room_mode == "temporary":
             sid = get_temporary_user_store_key(user_id)
+        generation_id_error = _reject_reused_generation_id(
+            generation_id,
+            chat_room_id=chat_room_id,
+            user_id=user_id,
+            sid=sid,
+            service=resolved_chat_generation_service,
+        )
+        if generation_id_error is not None:
+            return generation_id_error
+
+        if room_mode == "temporary":
             existing_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
             user_positions = [
                 i for i, message in enumerate(existing_messages)
@@ -1103,6 +1195,15 @@ async def chat_edit_and_regenerate(
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
             return guest_error
+        generation_id_error = _reject_reused_generation_id(
+            generation_id,
+            chat_room_id=chat_room_id,
+            user_id=None,
+            sid=sid,
+            service=resolved_chat_generation_service,
+        )
+        if generation_id_error is not None:
+            return generation_id_error
         existing_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         user_positions = [
             i for i, message in enumerate(existing_messages)
@@ -1157,6 +1258,7 @@ async def chat_edit_and_regenerate(
                 # Edit-and-regenerate saved the edited user message in this request, so a
                 # failed generation must discard that unanswered message.
                 cleanup_unanswered_user_messages_on_error=True,
+                generation_id=generation_id,
             )
         )
     )
@@ -1377,6 +1479,11 @@ async def chat_generation_stream(
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
+    generation_id, generation_id_error = _parse_requested_generation_id(
+        {"generation_id": request.query_params.get("generation_id")}
+    )
+    if generation_id_error is not None:
+        return generation_id_error
 
     session = request.session
     resolved_chat_generation_service = _resolve_chat_generation_service(
@@ -1409,17 +1516,56 @@ async def chat_generation_stream(
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     last_event_id = _parse_last_event_id(request)
-    job = get_generation_job(generation_key, service=resolved_chat_generation_service)
-    if job is not None:
-        return _build_llm_stream_response(
-            _iter_llm_stream_events(job, after_sequence_id=last_event_id)
+    if generation_id is None and resolved_chat_generation_service.generation_store_unavailable():
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
         )
+    try:
+        selected_generation_id = generation_id or resolve_latest_generation_id(
+            generation_key,
+            service=resolved_chat_generation_service,
+        )
+    except ChatGenerationCoordinationError:
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
+    if selected_generation_id is None:
+        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
 
-    replayable = has_replayable_generation(
+    job = get_generation_job(
         generation_key,
+        generation_id=selected_generation_id,
         service=resolved_chat_generation_service,
     )
-    active = has_active_generation(generation_key, service=resolved_chat_generation_service)
+    if job is not None:
+        return _build_llm_stream_response(
+            _iter_llm_stream_events(job, after_sequence_id=last_event_id),
+            generation_id=selected_generation_id,
+        )
+
+    if resolved_chat_generation_service.generation_store_unavailable():
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
+
+    try:
+        replayable = has_replayable_generation(
+            generation_key,
+            generation_id=selected_generation_id,
+            service=resolved_chat_generation_service,
+        )
+        active = resolved_chat_generation_service.has_generation_active(
+            generation_key,
+            selected_generation_id,
+        )
+    except ChatGenerationCoordinationError:
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
     if not replayable and not active:
         return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
 
@@ -1433,10 +1579,14 @@ async def chat_generation_stream(
 
     distributed_events = iter_generation_events(
         generation_key,
+        generation_id=selected_generation_id,
         after_sequence_id=last_event_id,
         service=resolved_chat_generation_service,
     )
-    return _build_llm_stream_response(_iter_serialized_stream_events(distributed_events))
+    return _build_llm_stream_response(
+        _iter_serialized_stream_events(distributed_events),
+        generation_id=selected_generation_id,
+    )
 
 
 # 現在進行中のAI生成処理ステータスを取得するAPIエンドポイント
@@ -1485,12 +1635,34 @@ async def chat_generation_status(
             return guest_error
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
+    if resolved_chat_generation_service.generation_store_unavailable():
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
+    try:
+        generation_id = resolve_latest_generation_id(
+            generation_key,
+            service=resolved_chat_generation_service,
+        )
+    except ChatGenerationCoordinationError:
+        return jsonify(
+            {"error": ERROR_CHAT_GENERATION_STATE_UNAVAILABLE},
+            status_code=503,
+        )
     is_generating = has_active_generation(
         generation_key,
         service=resolved_chat_generation_service,
     )
     has_replayable_job = has_replayable_generation(
         generation_key,
+        generation_id=generation_id,
         service=resolved_chat_generation_service,
     )
-    return jsonify({"is_generating": is_generating, "has_replayable_job": has_replayable_job})
+    return jsonify(
+        {
+            "is_generating": is_generating,
+            "has_replayable_job": has_replayable_job,
+            "generation_id": generation_id,
+        }
+    )

@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 762eec161042f7d9d355cc433d1c45df11f57e60fad782a80117f22172212a22
+// Schema fingerprint: 85b78bcfb237aac9fdfc9efbd31cab4af3c1890f43b61ad8e1446dbb2cfa6e94
 
 import { z } from "zod";
 
@@ -35,7 +35,7 @@ export type ShareChatRoomRequest = z.infer<typeof ShareChatRoomRequestSchema>;
 export const ForkSharedChatRoomRequestSchema = z.object({ "token": z.string().min(1).max(128), "id": z.string().min(1).max(128) });
 export type ForkSharedChatRoomRequest = z.infer<typeof ForkSharedChatRoomRequestSchema>;
 
-export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null), "attached_files": z.array(z.object({ "name": z.string().min(1).max(256), "content": z.string().max(100000).default(""), "media_type": z.string().max(128).default(""), "data_base64": z.string().max(4194304).default("") })).max(5).optional(), "theme_preference": z.union([z.enum(["light","dark","auto"]), z.null()]).default(null), "use_personal_knowledge": z.boolean().default(false), "use_shared_prompts": z.boolean().default(false) });
+export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null), "attached_files": z.array(z.object({ "name": z.string().min(1).max(256), "content": z.string().max(100000).default(""), "media_type": z.string().max(128).default(""), "data_base64": z.string().max(4194304).default("") })).max(5).optional(), "theme_preference": z.union([z.enum(["light","dark","auto"]), z.null()]).default(null), "use_personal_knowledge": z.boolean().default(false), "use_shared_prompts": z.boolean().default(false), "generation_id": z.union([z.string().regex(new RegExp("^[0-9a-f]{32}$")), z.null()]).default(null) });
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;
 
 export const ToolApprovalDecisionRequestSchema = z.object({ "decision": z.enum(["approve_once","approve_always","deny"]), "acknowledge_warnings": z.boolean().default(false) }).strict();
@@ -143,7 +143,7 @@ export type UsageLimitsResponse = z.infer<typeof UsageLimitsResponseSchema>;
 export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;
 
-export const ChatGenerationStatusResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "is_generating": z.union([z.boolean(), z.null()]).default(null), "has_replayable_job": z.union([z.boolean(), z.null()]).default(null) }).catchall(z.any());
+export const ChatGenerationStatusResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "is_generating": z.union([z.boolean(), z.null()]).default(null), "has_replayable_job": z.union([z.boolean(), z.null()]).default(null), "generation_id": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatGenerationStatusResponse = z.infer<typeof ChatGenerationStatusResponseSchema>;
 
 export const ChatHistoryMessageSchema = z.object({ "id": z.union([z.number().int(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null), "timestamp": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());

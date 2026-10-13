@@ -515,17 +515,19 @@ test("normalizeChatHistoryPayload ignores malformed contract siblings", () => {
 test("normalizeGenerationStatusPayload falls back on malformed payloads", () => {
   assert.deepEqual(normalizeGenerationStatusPayload(undefined), {
     error: undefined,
+    generation_id: undefined,
     is_generating: false,
     has_replayable_job: false,
   });
   assert.deepEqual(normalizeGenerationStatusPayload([1, 2, 3]), {
     error: undefined,
+    generation_id: undefined,
     is_generating: false,
     has_replayable_job: false,
   });
   assert.deepEqual(
     normalizeGenerationStatusPayload({ error: 500, is_generating: "true", has_replayable_job: 1 }),
-    { error: undefined, is_generating: false, has_replayable_job: false },
+    { error: undefined, generation_id: undefined, is_generating: false, has_replayable_job: false },
   );
   assert.deepEqual(
     normalizeGenerationStatusPayload({
@@ -535,8 +537,13 @@ test("normalizeGenerationStatusPayload falls back on malformed payloads", () => 
       is_generating: true,
       has_replayable_job: false,
     }),
-    { error: "generation failed", is_generating: true, has_replayable_job: false },
+    { error: "generation failed", generation_id: undefined, is_generating: true, has_replayable_job: false },
   );
+});
+
+test("generation status keeps the server generation id for a scoped reconnect", () => {
+  assert.equal(normalizeGenerationStatusPayload({ generation_id: "answer-id" }).generation_id, "answer-id");
+  assert.equal(normalizeGenerationStatusPayload({ generation_id: 123 }).generation_id, undefined);
 });
 
 test("normalizeChatResponsePayload falls back on malformed payloads", () => {

@@ -2,6 +2,7 @@ export type ActiveGeneration = {
   id: number;
   roomId: string;
   abortController: AbortController;
+  serverGenerationId?: string;
 };
 
 export type GenerationGuard = {
@@ -10,6 +11,7 @@ export type GenerationGuard = {
   release: (generation: ActiveGeneration) => boolean;
   abortActive: () => ActiveGeneration | null;
   current: () => ActiveGeneration | null;
+  revision: () => number;
 };
 
 export function createGenerationGuard(): GenerationGuard {
@@ -49,6 +51,10 @@ export function createGenerationGuard(): GenerationGuard {
 
     current() {
       return currentGeneration;
+    },
+
+    revision() {
+      return nextGenerationId;
     },
   };
 }

@@ -33,8 +33,8 @@
 `blueprints/chat/messages.py` のチャット系ルートは、次の役割に分かれています。
 
 1. `POST /api/chat`: 入力・部屋所有者・クォータ・参照コンテキストを検証して生成ジョブを開始。
-2. `GET /api/chat_generation_stream`: 生成ジョブのイベントを SSE で配信し、再接続を処理。
-3. `GET /api/chat_generation_status`: 再接続前の状態確認。
+2. `GET /api/chat_generation_stream`: `generation_id` と `Last-Event-ID` で回答と再開位置を指定し、イベントを SSE で配信。
+3. `GET /api/chat_generation_status`: 生成状況と最新の `generation_id` を確認。
 4. `POST /api/chat_stop`: 生成の停止要求。
 5. `POST /api/chat_regenerate`、`/api/chat_edit_and_regenerate`: 既存履歴から分岐生成。
 6. `POST /api/chat_switch_branch`: 現在表示する履歴ブランチを切り替え。
