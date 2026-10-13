@@ -7016,13 +7016,38 @@ body.memo-page {
   display: none;
 }
 
-/* 作成欄が画面外にある間の入口。展開したナビゲーションより上に置く。
-   New-memo entry while the composer is off-screen, above the expanded navigation. */
+/* 作成欄が画面外にある間の入口。下端の左にある AI のボタンと右にある操作メニューのボタンの
+   あいだ、画面の左右中央に置き、縦の中心をその 2 つに揃える。--memo-new-fab-bottom は
+   それらの bottom に、高さの差（60px または 56px と 52px）の半分を足した値。
+   360px 未満の幅では展開した操作メニューの項目がこのボタンにかかるので、項目を押せるよう
+   重なり順は操作メニューの 1 つ下にする。
+   New-memo entry while the composer is off-screen. It sits horizontally centred between the AI
+   button (bottom left) and the actions-menu button (bottom right), sharing their vertical centre.
+   --memo-new-fab-bottom is their bottom plus half the height difference (60px or 56px vs 52px).
+   Below 360px an expanded actions-menu entry reaches this button, so it stacks one step under the
+   menu to keep that entry tappable. */
+:where(body.memo-page, .memo-page-shell) {
+  --memo-new-fab-bottom: calc(max(40px, env(safe-area-inset-bottom)) + 4px);
+}
+
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) {
+    --memo-new-fab-bottom: calc(max(20px, env(safe-area-inset-bottom)) + 4px);
+  }
+}
+
+@media (max-width: 480px) {
+  :where(body.memo-page, .memo-page-shell) {
+    --memo-new-fab-bottom: calc(max(15px, env(safe-area-inset-bottom)) + 2px);
+  }
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-new-fab {
   position: fixed;
-  right: 40px;
-  bottom: calc(14rem + env(safe-area-inset-bottom, 0px));
-  z-index: var(--z-floating-action-menu, 60);
+  left: 50%;
+  bottom: var(--memo-new-fab-bottom);
+  transform: translateX(-50%);
+  z-index: calc(var(--z-floating-action-menu, 60) - 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7150,10 +7175,6 @@ body.memo-page {
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-new-fab {
-    right: 1.25rem;
-    /* 下のナビゲーションを展開しても新規作成に重ならない位置。
-       Keep the new-memo button above the expanded navigation. */
-    bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
     width: 52px;
     padding: 0;
   }
@@ -7166,14 +7187,16 @@ body.memo-page {
 /* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ──────────────────
    スクロール位置に関係なく見え、一覧を押し下げない。面は色の反転（ライトでは濃色面に明色の文字、
    ダークでは明色面に濃色の文字）で作り、失敗だけ --danger-color の面にする。下端には左に AI の
-   固定ボタン、右に操作メニューとその上に新規作成ボタンがあるので、
+   固定ボタン、右に操作メニューがあるので、
    PC では中央に置き、スマホ幅では左右のボタンの間に収める（収まらなければボタンを次の行へ回す）。
+   同じ中央に新規作成ボタンが出ている間は、その上へ逃がす。
    Visible wherever the page is scrolled, and it never pushes the list down. The surface is an
    inversion (light text on a dark surface in light theme, dark on light in dark theme); only a
    failure uses the --danger-color surface. The bottom edge holds the AI button on the left and the
-   actions-menu button on the right with the new-memo button above it, so the
+   actions-menu button on the right, so the
    notice is centred on wide screens and sits between those buttons on phone widths, wrapping its
-   button onto a second line when the message does not leave room. */
+   button onto a second line when the message does not leave room. While the new-memo button
+   occupies that same centre, the notice moves above it. */
 :where(body.memo-page, .memo-page-shell) .memo-toast {
   position: fixed;
   left: 50%;
@@ -7254,6 +7277,10 @@ body.memo-page {
     max-width: none;
     transform: none;
   }
+}
+
+.memo-page-shell:has(.memo-new-fab) .memo-toast {
+  bottom: calc(var(--memo-new-fab-bottom) + 52px + 0.75rem);
 }
 
 /* ── ゴミ箱 / Trash ─────────────────────────────────────────────────────────
