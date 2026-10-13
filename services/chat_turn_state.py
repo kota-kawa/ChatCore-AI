@@ -50,10 +50,9 @@ not a tool or function call, and it is never shown to the user:
 
 Do exactly one of these:
 - Answer: when the request is answerable and no requested change remains, write only the complete
-  user-facing answer, with no envelope. Unless the user asked for a repeat or a confirmation, a
-  reply that would only restate an earlier reply is not an answer: add what is new from your own
-  knowledge, or, when TurnState lists a prior search behind that earlier reply, look up the new
-  angle first.
+  user-facing answer, with no envelope. When TurnState lists a prior search behind an earlier
+  reply, a reply that would only restate it is not an answer unless the user asked for a repeat
+  or a confirmation: look up the new angle first.
 - Act: when the user asked for a change, write the envelope and call its action tool after reading
   what it needs. Finding data or describing a change does not submit it; continue until a tool
   result confirms the proposal or execution, or reports a blocker to explain.
