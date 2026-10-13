@@ -6,11 +6,20 @@ GPT-6 Luna と GPT-OSS はツール呼び出しを内部の Harmony 形式で、
 GPT-6 Luna and GPT-OSS express tool calls in the internal Harmony format, Qwen in XML-like tags. When sampling derails,
 strings such as `assistant to=functions.web_search` or `<|im_end|>` stream as body text and can
 repeat up to the output cap (issue #771). Nothing after that point is an answer, so cut there.
+
+Qwen は推論を非表示に設定していても、開始タグの無い下書きを `</think>` で閉じて本文の前に流すことが
+ある（実測でおよそ2割の回答）。下書きは回答とほぼ同じ内容なので、同じ回答が2度続いて見える。こちらは
+目印より前が回答ではないため、`strip_leaked_reasoning_chunks` で前側を落とす。
+Qwen sometimes streams a draft without its opening tag, closed by `</think>`, ahead of the answer
+even with reasoning hidden (about a fifth of replies when measured). The draft mostly matches the
+answer, so the reply appears twice. Here the text before the marker is the part that is not an
+answer, so `strip_leaked_reasoning_chunks` drops that side.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 # 先頭の任意の1語は `liassistant to=functions...` のように区切りが崩れた役割名を同じ位置から落とすため。
 # The optional leading word drops a garbled role prefix such as `liassistant to=functions...` with the marker.
@@ -27,6 +36,10 @@ _PROTOCOL_LEAK_PATTERN = re.compile(
 # Code fences and inline code spans; one still open mid-stream counts as code up to the end of its
 # line (a fence, to the end of the text).
 _CODE_SPAN_PATTERN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*(?:`|(?=\n)|\Z)", re.DOTALL)
+_REASONING_CLOSE_TAG = "</think>"
+# 利用者がタグそのものを話題にしているなら、本文中のタグは求められた回答でありうる。
+# When the user is asking about the tag itself, one in the body may be exactly what was asked for.
+_REASONING_TAG_MENTION = "think>"
 # 境界をまたぐ目印を見落とさないよう、前回までの本文の末尾をこの長さだけ読み直す。
 # Re-scan this much of the earlier text so a marker split across chunks is still found.
 _RESCAN_CHARS = 64
@@ -71,6 +84,40 @@ def find_protocol_leak(text: str, start: int = 0) -> int | None:
         if not any(span_start <= match.start() < span_end for span_start, span_end in code_spans):
             return match.start()
     return None
+
+
+def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: str = "") -> list[str]:
+    """Drop a leaked reasoning draft, keeping the chunk boundaries of the answer after it.
+
+    コードの外にある最後の `</think>` までを下書きとして落とす。タグが無ければそのまま返す。
+    Everything up to the last `</think>` outside code is the draft. Without one the chunks are
+    returned unchanged.
+    """
+    text = "".join(chunks)
+    if _REASONING_CLOSE_TAG not in text or _REASONING_TAG_MENTION in latest_user_message.lower():
+        return list(chunks)
+    code_spans = [span.span() for span in _CODE_SPAN_PATTERN.finditer(text)]
+    answer_start = 0
+    for match in re.finditer(re.escape(_REASONING_CLOSE_TAG), text):
+        if not any(span_start <= match.start() < span_end for span_start, span_end in code_spans):
+            answer_start = match.end()
+    if not answer_start:
+        return list(chunks)
+    kept: list[str] = []
+    offset = 0
+    for chunk in chunks:
+        chunk_end = offset + len(chunk)
+        if chunk_end > answer_start:
+            kept.append(chunk[max(answer_start - offset, 0) :])
+        offset = chunk_end
+    # 下書きと回答の間の空行は回答の一部ではない。
+    # The blank lines between the draft and the answer are not part of the answer.
+    while kept:
+        kept[0] = kept[0].lstrip()
+        if kept[0]:
+            break
+        kept.pop(0)
+    return kept
 
 
 class ProtocolLeakGuard:

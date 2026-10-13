@@ -52,6 +52,9 @@ class ChatGenerationTelemetry:
     # 本文に内部のツール呼び出し形式が漏れ始めたため、そこで出力を打ち切った回数。
     # How often a stream was cut where internal tool-call protocol began leaking into the text.
     protocol_leak_truncations: int = 0
+    # 推論の下書きが `</think>` ごと本文へ漏れたため、回答の前から取り除いた回数。
+    # How often a reasoning draft that leaked ahead of the answer with `</think>` was removed.
+    reasoning_leak_strips: int = 0
     # Context preparation counters. They contain sizes and counts only, never prompt bodies.
     context_projection_count: int = 0
     context_compaction_count: int = 0
@@ -202,6 +205,7 @@ class ChatGenerationTelemetry:
             "input_limit_recoveries": self.input_limit_recoveries,
             "research_output_limit_recoveries": self.research_output_limit_recoveries,
             "protocol_leak_truncations": self.protocol_leak_truncations,
+            "reasoning_leak_strips": self.reasoning_leak_strips,
             "context_projection_count": self.context_projection_count,
             "context_compaction_count": self.context_compaction_count,
             "context_recovery_count": self.context_recovery_count,

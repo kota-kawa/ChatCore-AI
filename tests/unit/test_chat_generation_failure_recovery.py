@@ -1306,6 +1306,24 @@ class ChatGenerationFailureRecoveryTestCase(unittest.TestCase):
         self.assertEqual(len(pulled), 2)
         self.assertEqual(job._telemetry.protocol_leak_truncations, 1)
 
+    # 日本語: 推論の下書きが `</think>` ごと回答の前に漏れても、回答だけを配信・保存することを検証します。
+    # English: Verify only the answer is sent and saved when a reasoning draft leaks ahead of it with `</think>`.
+    def test_leaked_reasoning_draft_is_removed_before_the_answer_is_published(self):
+        def stream(_messages, _model, **_kwargs):
+            yield "はい、クラウドで大丈夫です。補足の下書き。\n\n\n</thi"
+            yield "nk>\n\nはい、クラウドで"
+            yield "大丈夫です。"
+
+        job, saved, _on_error = self.make_job()
+        self.run_job(job, stream)
+
+        self.assertEqual(terminal_event(job).event, "done")
+        self.assertEqual(terminal_event(job).payload["response"].strip(), "はい、クラウドで大丈夫です。")
+        streamed = "".join(event.payload["text"] for event in job._events if event.event == "chunk")
+        self.assertNotIn("下書き", streamed)
+        self.assertNotIn("think", saved.call_args.args[0])
+        self.assertEqual(job._telemetry.reasoning_leak_strips, 1)
+
     # 日本語: 逐次配信される継続生成で、チャンク境界をまたいだ目印の頭が配信・保存されないことを検証します。
     # English: Verify a streamed continuation never sends or saves the head of a marker split across chunks.
     def test_streamed_continuation_never_sends_the_head_of_a_split_marker(self):

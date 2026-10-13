@@ -1,11 +1,11 @@
-"""本文に漏れた内部のツール呼び出し形式を検出する処理を検証する（issue #771）。
+"""本文に漏れた内部のツール呼び出し形式と推論の下書きを取り除く処理を検証する（issue #771）。
 
-Verifies detection of internal tool-call protocol leaking into body text (issue #771).
+Verifies removal of internal tool-call protocol and reasoning drafts leaking into body text (issue #771).
 """
 
 import unittest
 
-from services.llm_protocol_leak import ProtocolLeakGuard, find_protocol_leak
+from services.llm_protocol_leak import ProtocolLeakGuard, find_protocol_leak, strip_leaked_reasoning_chunks
 
 
 class FindProtocolLeakTestCase(unittest.TestCase):
@@ -87,6 +87,30 @@ class ProtocolLeakGuardTestCase(unittest.TestCase):
         self.assertEqual(guard.feed(" to=functions.web_search"), "")
         self.assertTrue(guard.tripped)
         self.assertEqual(guard.overflow_chars, len("xyz"))
+
+
+class StripLeakedReasoningChunksTestCase(unittest.TestCase):
+    def test_drops_the_draft_before_the_closing_tag_and_keeps_answer_boundaries(self):
+        # 実 API で観測した形: 開始タグの無い下書き、空行、閉じタグ、回答の順。
+        # The shape observed against the real API: an unopened draft, blank lines, the closing tag, the answer.
+        chunks = ["はい、クラウドで", "大丈夫です。\n\n\n</thi", "nk>\n\nはい、", "クラウドで大丈夫です。"]
+        self.assertEqual(strip_leaked_reasoning_chunks(chunks), ["はい、", "クラウドで大丈夫です。"])
+
+    def test_uses_the_last_closing_tag_and_drops_a_tagged_block_too(self):
+        self.assertEqual(strip_leaked_reasoning_chunks(["<think>案A</think>案B</think>", "\n回答"]), ["回答"])
+
+    def test_returns_text_without_a_closing_tag_unchanged(self):
+        chunks = ["下書きではない", "ふつうの回答です。"]
+        self.assertEqual(strip_leaked_reasoning_chunks(chunks), chunks)
+
+    def test_keeps_a_tag_the_answer_shows_as_code_or_the_user_asked_about(self):
+        in_code = ["閉じタグは `</think>` です。", "\n```\n<think>…</think>\n```"]
+        self.assertEqual(strip_leaked_reasoning_chunks(in_code), in_code)
+        asked = ["推論は </think> で終わります。"]
+        self.assertEqual(strip_leaked_reasoning_chunks(asked, "</THINK> タグって何？"), asked)
+
+    def test_an_answer_that_is_only_a_draft_becomes_empty(self):
+        self.assertEqual(strip_leaked_reasoning_chunks(["下書きだけ\n</think>\n"]), [])
 
 
 if __name__ == "__main__":
