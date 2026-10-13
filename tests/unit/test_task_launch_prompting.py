@@ -19,6 +19,7 @@ from services.chat_prompt import (
 from services.chat_prompt import (
     build_user_profile_prompt as _build_user_profile_prompt,
 )
+from services.chat_turn_state import TURN_LOOP_SYSTEM_PROMPT
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     GENERATIVE_UI_SKILL_INSTRUCTIONS,
@@ -140,6 +141,22 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("an estimate after facts or a recommendation after comparison", rules)
         self.assertIn("Preserve subject, scope, and constraints", rules)
         self.assertIn("Repeat facts or caveats only when needed", rules)
+        self.assertIn("only checks their understanding of the previous reply", rules)
+        self.assertIn("confirm or correct it in one or two sentences and stop", rules)
+
+    # 日本語: 追質問で前回と同じ出典を読み直して同じ答えを返さないよう、判断ループが新しい検索へ進む規則を検証します。
+    # English: Verify the turn loop looks up a follow-up's new angle instead of restating from the same sources.
+    def test_turn_loop_prompt_looks_up_what_a_follow_up_adds(self):
+        # 折り返し位置に依存しないよう、空白をまとめてから照合する。
+        # Collapse whitespace so the checks do not depend on where lines wrap.
+        prompt = " ".join(TURN_LOOP_SYSTEM_PROMPT.split())
+        self.assertIn("keep the subject and constraints and make it the new information being asked for", prompt)
+        self.assertIn("When TurnState lists a prior search behind an earlier reply", prompt)
+        self.assertIn("a reply that would only restate it is not an answer", prompt)
+        self.assertIn("unless the user asked for a repeat or a confirmation: look up the new angle first", prompt)
+        self.assertIn("including what a follow-up asks beyond earlier replies and stored evidence", prompt)
+        self.assertIn("Unless stored evidence already covers that angle", prompt)
+        self.assertIn("re-reading them only reproduces the earlier answer: run a new web_search", prompt)
 
     # 日本語: 否定疑問文を含む確認には、はい・いいえを強制せず命題を一度だけ明確に答える。
     # English: Confirmations answer the proposition once without forcing yes/no polarity.

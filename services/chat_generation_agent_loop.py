@@ -55,6 +55,7 @@ from .llm_context_budget import (
     get_context_budget,
     request_fits_context,
 )
+from .llm_protocol_leak import strip_leaked_reasoning_chunks
 from .research_state import (
     TurnState,
     TurnStateProjectionError,
@@ -552,6 +553,12 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
         # モデルの区切りをそのまま保ち、内部状態の封筒だけを取り除く。
         # Keep the model's own boundaries and drop only the internal envelope.
         visible_chunks = strip_turn_state_update_chunks(step_chunks)
+        # 推論の下書きが漏れていれば、回答より前の分を落とす。残すと同じ回答が2度続いて見える。
+        # Drop a reasoning draft that leaked ahead of the answer; kept, the reply appears twice.
+        answer_chunks = strip_leaked_reasoning_chunks(visible_chunks, state.latest_user_message)
+        if answer_chunks != visible_chunks:
+            telemetry.reasoning_leak_strips += 1
+            visible_chunks = answer_chunks
         untagged_update = (
             None if cancelled else self._untagged_turn_state_update(step_chunks, "".join(visible_chunks))
         )

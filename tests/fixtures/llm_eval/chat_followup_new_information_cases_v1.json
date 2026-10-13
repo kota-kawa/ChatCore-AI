@@ -1,0 +1,389 @@
+{
+  "dataset_id": "chat_followup_new_information_v1",
+  "current_time": "2026-10-13T12:00:00+09:00",
+  "criteria": [
+    "追質問に対して、前の回答にない新しい情報（実態、別の策、深さ、別の角度の根拠、保存済み出典の事実）を渡している。",
+    "前の回答の内容を言い換えただけの再掲で終わらず、既出の内容は一言で済ませている。ただし、ユーザーが再掲を明示的に求めた場合は、既出の内容を省かず再掲する。",
+    "新しい情報は提供された出典または検証できる推論に基づき、根拠のない断定や出典にない数値を加えていない。",
+    "前の回答が正しい場合は結論を維持し、根拠なく翻さない。",
+    "短い確認の質問には短く答え、新しい論点で水増ししない。",
+    "保存済みの出典に答えがある追質問に対して、情報がないと答えたり前回の回答を繰り返したりせず、出典から答える。"
+  ],
+  "cases": [
+    {
+      "id": "same_answer_time_axis_web",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空の国アルディナ連邦では、広域水利調整会議の議長は必ず水利管理士の資格を持つ人がなるのですか？"
+        },
+        {
+          "role": "assistant",
+          "content": "アルディナ連邦の水利調整法第12条では、広域水利調整会議の議長は水利管理士か認定河川技師のどちらかの資格を持つ人から選ぶと定められています。そのため、議長が必ず水利管理士とは限らず、認定河川技師の資格だけで就任することも法令上は可能です。どちらの資格も持たない人は議長になれません。"
+        },
+        {
+          "role": "user",
+          "content": "今はどうなの？"
+        }
+      ],
+      "sources": [
+        {
+          "label": "water_law_article12",
+          "title": "水利調整法（現行）第12条 議長の資格",
+          "url": "https://example.com/ardina/water-coordination-act/article-12",
+          "published": "2025-04-01",
+          "snippet": "水利調整法第12条は、広域水利調整会議の議長を水利管理士または認定河川技師の資格を有する者から選ぶと定める。",
+          "page_excerpt": "2025年4月1日に施行された水利調整法第12条は、広域水利調整会議の議長について、水利管理士または認定河川技師の資格を有する者の中から選任すると定めています。いずれの資格も有しない者は議長に選任できません。"
+        },
+        {
+          "label": "chair_qualification_breakdown",
+          "title": "広域水利調整会議 議長の資格別内訳",
+          "url": "https://example.com/ardina/water-council/chair-qualification-breakdown",
+          "published": "2026-09-30",
+          "snippet": "全国11の広域水利調整会議の議長のうち、水利管理士は7人、認定河川技師は4人。",
+          "page_excerpt": "アルディナ連邦水利庁の集計によると、2026年9月30日時点で全国11の広域水利調整会議の議長のうち、水利管理士の資格を持つ人は7人、認定河川技師の資格を持つ人は4人です。両方の資格を持つ人はいません。"
+        },
+        {
+          "label": "third_council_new_chair",
+          "title": "第3広域水利調整会議の新議長に認定河川技師のセルマ・オルヴァン氏",
+          "url": "https://example.com/ardina/water-council/third-council-new-chair",
+          "published": "2026-10-02",
+          "snippet": "第3広域水利調整会議の議長に、認定河川技師のセルマ・オルヴァン氏が10月1日付で就任した。",
+          "page_excerpt": "2026年10月1日付で、第3広域水利調整会議の議長に認定河川技師のセルマ・オルヴァン氏が就任しました。前任の議長は水利管理士の資格を持つ人でした。オルヴァン氏は水利管理士の資格を持っていません。"
+        },
+        {
+          "label": "act_amendment_postponed",
+          "title": "水利調整法の改正案、今国会では見送りへ",
+          "url": "https://example.com/ardina/news/water-act-amendment-postponed",
+          "published": "2026-09-25",
+          "snippet": "議長の資格要件を含む水利調整法の改正案は、今国会では提出されない見通し。",
+          "page_excerpt": "2026年9月25日、アルディナ連邦政府は、議長の資格要件を含む水利調整法の改正案を今国会には提出しない方針を示しました。第12条の資格要件は現行のまま維持されます。"
+        }
+      ],
+      "prior_search": {
+        "query": "アルディナ連邦 広域水利調整会議 議長 資格 水利調整法",
+        "searched_at": "2026-10-13T11:50:00+09:00",
+        "source_labels": [
+          "water_law_article12"
+        ]
+      },
+      "fresh_search_source_labels": [
+        "chair_qualification_breakdown",
+        "third_council_new_chair",
+        "act_amendment_postponed"
+      ],
+      "expect": {
+        "required_content": [
+          "資格要件（水利管理士または認定河川技師）は変わっておらず、改正も当面見送られていることを一言で述べる。",
+          "議長11人の内訳を、2026年9月30日時点の数字（水利管理士7人、認定河川技師4人）として新しい情報として伝える。10月1日の交代を反映して6人・5人と推定するのは、推定と明示していれば許容する。",
+          "直近の就任例として、認定河川技師のセルマ・オルヴァン氏が2026年10月1日付で第3会議の議長に就任したことを伝える。"
+        ],
+        "avoid": [
+          "水利調整法第12条の内容を前回と同じように説明し直すだけで終わる。",
+          "「制度上は認定河川技師でも可能」とだけ述べ、現職の内訳や就任例といった実態に触れない。",
+          "出典にない人数や就任例を作る。"
+        ],
+        "repetition_expected": false,
+        "web_required": true
+      },
+      "rationale": "「今はどうなの？」は法令の再説明ではなく、現在の実態を尋ねる追質問である。法令上の答えは変わらないため、規則は一言で済ませ、現職の内訳と直近の就任例を新しく渡せるかを測る。"
+    },
+    {
+      "id": "whats_else_after_list",
+      "messages": [
+        {
+          "role": "user",
+          "content": "在宅勤務だと集中力が続きません。何か方法はありますか？"
+        },
+        {
+          "role": "assistant",
+          "content": "次の3つを試してみてください。1つ目は、25分作業して5分休むポモドーロ・テクニックです。時間に区切りがあると、集中を保ちやすくなります。2つ目は、仕事をする場所を決めて、寝室やソファと分けることです。3つ目は、作業中にチャットやメールの通知を切ることです。"
+        },
+        {
+          "role": "user",
+          "content": "他には？"
+        }
+      ],
+      "sources": [],
+      "prior_search": null,
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "前回挙げたポモドーロ、作業場所の分離、通知オフとは別の策を少なくとも2つ挙げる。",
+          "挙げる策は、始業前に最優先タスクを決める、昼に外へ出る、オンラインで他の人と同時に作業するなど、具体的な行動として書く。"
+        ],
+        "avoid": [
+          "ポモドーロを「時間を区切る」などと言い換えて、既出の策を再掲する。",
+          "作業場所の分離や通知オフを別の表現にしただけで、新しい策のように並べる。",
+          "「前回挙げた3つで十分です」と答えて新しい策を出さない。"
+        ],
+        "repetition_expected": false,
+        "web_required": false
+      },
+      "rationale": "「他には？」は既出の列挙に足りない項目を求める追質問である。既出3つの言い換えではなく、重複しない別の策を出せるかを測る。"
+    },
+    {
+      "id": "elaborate_after_summary",
+      "messages": [
+        {
+          "role": "user",
+          "content": "データベースのインデックスって何ですか？"
+        },
+        {
+          "role": "assistant",
+          "content": "インデックスは、テーブルのデータを素早く探すために別に作っておく索引のような仕組みです。本の巻末にある索引と同じで、ある列の値から該当する行の場所をすぐに見つけられます。インデックスがないと全行を順に調べることになり、データが増えるほど検索が遅くなります。"
+        },
+        {
+          "role": "user",
+          "content": "もう少し詳しく"
+        }
+      ],
+      "sources": [],
+      "prior_search": null,
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "B木のような木構造で値を並べておくことで、全行を調べずに少ない手順で目的の行へたどり着ける、という仕組みを説明する。",
+          "ユーザー表のメールアドレス列で検索する場合など、具体例で効果を示す。",
+          "代償として、書き込み（挿入・更新・削除）が遅くなることと、保存領域が増えることに触れる。"
+        ],
+        "avoid": [
+          "前回の概説（索引のような仕組み、全行を調べると遅い）を言い換えて長くするだけで終わる。",
+          "仕組み、例、代償のいずれにも触れず、一般的な説明を繰り返す。"
+        ],
+        "repetition_expected": false,
+        "web_required": false
+      },
+      "rationale": "「もう少し詳しく」は同じ内容を長くする依頼ではなく、前回になかった深さを求める追質問である。仕組み、具体例、代償という新しい層を足せるかを測る。"
+    },
+    {
+      "id": "challenge_same_conclusion",
+      "messages": [
+        {
+          "role": "user",
+          "content": "23人のクラスで、同じ誕生日の人がいる確率は半分を超えるって本当ですか？"
+        },
+        {
+          "role": "assistant",
+          "content": "本当です。うるう年を除き、誕生日がどの日にも同じ確率で分布すると仮定すると、23人いれば同じ誕生日の組が少なくとも1組ある確率は約50.7%になります。直感より少ない人数で半分を超えるのは、比べる相手が自分だけではなく、全員の組み合わせが対象になるからです。"
+        },
+        {
+          "role": "user",
+          "content": "本当に？なんか違う気がする"
+        }
+      ],
+      "sources": [],
+      "prior_search": null,
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "結論（23人で約50.7%）を維持する。",
+          "前回と違う角度の根拠を示す。例として、23人の組み合わせは253組あることを数える、または全員の誕生日が異なる確率を (364/365)×(363/365)×… と1人ずつ掛けて約49.3%を求め、1から引く計算を示す。",
+          "人数を変えた具体的な数値（例: 10人なら約12%）を挙げて、確率が人数とともにどう増えるかを示す。"
+        ],
+        "avoid": [
+          "「全員の組み合わせが対象になるから」という前回と同じ説明を、同じ言葉で繰り返すだけで終わる。",
+          "根拠を示さずに「確かに間違いでした」と結論を翻し、半分未満だと述べる。",
+          "「自分と同じ誕生日の人がいる確率」など別の確率とすり替えて説明する。"
+        ],
+        "repetition_expected": false,
+        "web_required": false
+      },
+      "rationale": "疑いを示す追質問に対し、正しい結論を維持したまま、別の確かめ方や具体的な数値で納得できる根拠を新しく渡せるかを測る。同じ説明の繰り返しと、根拠のない撤回の両方を避ける必要がある。"
+    },
+    {
+      "id": "explicit_repeat_requested",
+      "messages": [
+        {
+          "role": "user",
+          "content": "観葉植物の植え替えのやり方を教えてください。"
+        },
+        {
+          "role": "assistant",
+          "content": "まず、今の鉢より一回り大きい鉢と、新しい観葉植物用の土を用意します。次に、根を傷つけないように株を鉢から抜きます。続いて、古い土を軽く落とし、黒く傷んだ根があれば切り取ります。そのあと、新しい鉢に鉢底石と土を少し入れて株を据え、まわりに土を足します。最後に、鉢底から水が出るまでたっぷり水をやり、数日は明るい日陰で休ませます。"
+        },
+        {
+          "role": "user",
+          "content": "さっきの手順をもう一度、番号付きで短くまとめて"
+        }
+      ],
+      "sources": [],
+      "prior_search": null,
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "前回の5つの手順（鉢と土の準備、株を抜く、古い土を落として傷んだ根を切る、新しい鉢に据えて土を足す、水やりと日陰で休ませる）をすべて、同じ順序で番号付きで挙げる。",
+          "各手順を一行程度に短くまとめる。"
+        ],
+        "avoid": [
+          "手順のどれかを省く、または順序を入れ替える。",
+          "頼まれていない新しい手順や助言（植え替えの時期、肥料など）を足す。",
+          "番号を付けず、前回と同じ文章をそのまま繰り返す。"
+        ],
+        "repetition_expected": true,
+        "web_required": false
+      },
+      "rationale": "ユーザーが既出の手順の再掲を明示的に求めている。新しい情報を足すことが正しくないケースであり、既出内容を欠落や追加なしに指定の形式で再掲できるかを測る。"
+    },
+    {
+      "id": "short_confirmation",
+      "messages": [
+        {
+          "role": "user",
+          "content": "家族の写真のバックアップ先を、クラウドストレージと外付けHDDのどちらにするか迷っています。"
+        },
+        {
+          "role": "assistant",
+          "content": "どちらにも長所があります。外付けHDDは、購入すれば追加の費用がほとんどかからず、容量あたりの価格も安い一方で、火事や盗難にあうと本体と一緒に写真を失う恐れがあります。クラウドストレージは月額料金がかかりますが、自宅とは別の場所に保管され、スマホからの自動アップロードも設定できます。月額料金を負担できるなら、クラウドストレージをおすすめします。"
+        },
+        {
+          "role": "user",
+          "content": "つまりクラウドでいいってこと？"
+        }
+      ],
+      "sources": [],
+      "prior_search": null,
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "「はい、クラウドストレージでよいです」と、1〜2文で肯定する。",
+          "前回の条件である「月額料金を負担できるなら」を添える。"
+        ],
+        "avoid": [
+          "クラウドと外付けHDDの比較を、あらためて並べ直す。",
+          "暗号化、複数の保存先を持つ方針、容量プランなど、前回なかった新しい論点を足して水増しする。"
+        ],
+        "repetition_expected": false,
+        "web_required": false
+      },
+      "rationale": "短い確認の質問に対しては、新しい情報を足すことが逆効果になる。確認に1〜2文で答え、前回の条件だけを添える、簡潔さと一貫性を測る。"
+    },
+    {
+      "id": "practice_vs_rule_english_web",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Quick question about the fictional Brightwell Systems' Halcyon Queue: what is the official maximum throughput per queue?"
+        },
+        {
+          "role": "assistant",
+          "content": "According to the official Halcyon Queue documentation, the maximum supported throughput is 10,000 messages per second per queue. That limit applies to messages of up to 4 KB each. It is the ceiling the service is specified to support, and the documentation does not describe it as a recommended operating level."
+        },
+        {
+          "role": "user",
+          "content": "And in practice?"
+        }
+      ],
+      "sources": [
+        {
+          "label": "halcyon_official_limits",
+          "title": "Halcyon Queue documentation: Quotas and limits",
+          "url": "https://example.com/brightwell/halcyon-queue/docs/quotas-and-limits",
+          "published": "2026-05-12",
+          "snippet": "Maximum throughput per queue: 10,000 messages per second for messages up to 4 KB.",
+          "page_excerpt": "Halcyon Queue supports a maximum throughput of 10,000 messages per second per queue for messages up to 4 KB. Quotas were last updated on May 12, 2026."
+        },
+        {
+          "label": "halcyon_load_test",
+          "title": "Halcyon Queue load test results from a community benchmark",
+          "url": "https://example.com/brightwell/halcyon-queue/community-load-test",
+          "published": "2026-08-20",
+          "snippet": "Sustained 6,200 messages per second per queue with p99 latency under 50 ms; above 7,000 messages per second, p99 latency exceeded 400 ms.",
+          "page_excerpt": "In a test run on August 20, 2026, a single Halcyon Queue sustained 6,200 messages per second with p99 latency under 50 ms. Above roughly 7,000 messages per second, p99 latency exceeded 400 ms and producers began receiving throttling errors. The test never reached the documented 10,000 messages per second."
+        },
+        {
+          "label": "halcyon_ops_notes",
+          "title": "Halcyon Queue operations notes: capacity planning",
+          "url": "https://example.com/brightwell/halcyon-queue/ops-capacity-planning",
+          "published": "2026-09-15",
+          "snippet": "Brightwell recommends staying under 70 percent of the documented limit; autoscaling takes 3 to 5 minutes, so sudden bursts can be throttled.",
+          "page_excerpt": "For capacity planning, Brightwell Systems recommends keeping steady-state load under 70 percent of the documented limit, which is 7,000 messages per second per queue. Autoscaling takes 3 to 5 minutes to take effect, so sudden bursts can be throttled before extra capacity arrives. Notes updated September 15, 2026."
+        }
+      ],
+      "prior_search": {
+        "query": "Brightwell Systems Halcyon Queue maximum throughput per queue",
+        "searched_at": "2026-10-13T11:50:00+09:00",
+        "source_labels": [
+          "halcyon_official_limits"
+        ]
+      },
+      "fresh_search_source_labels": [
+        "halcyon_load_test",
+        "halcyon_ops_notes"
+      ],
+      "expect": {
+        "required_content": [
+          "The documented 10,000 messages per second is mentioned only briefly as the official ceiling, not re-explained.",
+          "States the measured behavior: about 6,200 messages per second sustained with p99 latency under 50 ms, and above roughly 7,000 messages per second latency rises past 400 ms with throttling errors.",
+          "States the operational constraints: Brightwell recommends staying under 70 percent of the limit (about 7,000 messages per second), and autoscaling takes 3 to 5 minutes, so sudden bursts can be throttled."
+        ],
+        "avoid": [
+          "Repeating the official 10,000 messages per second limit and the 4 KB size condition as the main content of the answer.",
+          "Presenting the official limit as what users should expect to reach in practice.",
+          "Citing throughput or latency numbers that do not appear in the sources."
+        ],
+        "repetition_expected": false,
+        "web_required": true
+      },
+      "rationale": "The question asks for real-world behavior after the official value was already given. The answer should keep the official figure to a short mention and bring in the measured results and operating constraints from the newly searched sources."
+    },
+    {
+      "id": "followup_evidence_already_sufficient_web",
+      "messages": [
+        {
+          "role": "user",
+          "content": "架空のノートアプリ Tessera Notes では、オフラインモードは使えますか？"
+        },
+        {
+          "role": "assistant",
+          "content": "Tessera Notes のオフラインモードは、Plus プランと Team プランで使えます。Free プランでは使えません。オフラインで編集した内容は、オンラインに戻ったときに自動で同期されます。"
+        },
+        {
+          "role": "user",
+          "content": "じゃあ料金は？"
+        }
+      ],
+      "sources": [
+        {
+          "label": "tessera_features",
+          "title": "Tessera Notes の機能一覧とプラン別の対応",
+          "url": "https://example.com/mirova/tessera-notes/features",
+          "published": "2026-07-10",
+          "snippet": "オフラインモードは Plus と Team で利用可能。オフライン中の編集はオンライン復帰時に自動同期される。",
+          "page_excerpt": "2026年7月10日更新。オフラインモードは Plus プランと Team プランで利用できます。Free プランでは利用できません。オフライン中に行った編集は、オンラインに戻ったときに自動で同期されます。"
+        },
+        {
+          "label": "tessera_pricing",
+          "title": "Tessera Notes の料金プラン",
+          "url": "https://example.com/mirova/tessera-notes/pricing",
+          "published": "2026-09-01",
+          "snippet": "Tessera Notes の料金プランと請求方法の案内。",
+          "page_excerpt": "2026年9月1日改定の料金です。Free プランは無料です。Plus プランは月額680円（年払いの場合は月額換算560円）です。Team プランは1ユーザーあたり月額1,200円で、5ユーザーから契約できます。料金はすべて税込です。"
+        }
+      ],
+      "prior_search": {
+        "query": "Tessera Notes オフラインモード 対応プラン",
+        "searched_at": "2026-10-13T11:50:00+09:00",
+        "source_labels": [
+          "tessera_features",
+          "tessera_pricing"
+        ]
+      },
+      "fresh_search_source_labels": [],
+      "expect": {
+        "required_content": [
+          "保存済みの料金ページの情報から、Plus プランは月額680円（年払いなら月額換算560円）、Team プランは1ユーザーあたり月額1,200円（5ユーザーから）と答える。",
+          "オフラインモードを使えるプランに絞って答えるか、Free プランが無料であることも添える。"
+        ],
+        "avoid": [
+          "オフラインモードが Plus と Team で使えるという前回の回答を繰り返すだけで終わる。",
+          "料金の情報が見つからない、または追加で調べる必要があると答える。",
+          "出典にない料金や割引を加える。"
+        ],
+        "repetition_expected": false,
+        "web_required": false
+      },
+      "rationale": "前の検索で取得した2件の出典のうち、前回の回答は機能一覧だけを使った。料金は保存済みの料金ページにすでに書かれており、新たに検索しなくても、保存済みの出典から新しい事実を答えられるかを測る。"
+    }
+  ]
+}
