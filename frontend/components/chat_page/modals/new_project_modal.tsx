@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 
 import { useHomePageProjectContext } from "../../../contexts/chat_page/home_page_context";
 import { ModalCloseButton } from "../../ui/modal_close_button";
@@ -13,7 +13,7 @@ const MAX_PROJECT_INSTRUCTIONS_LENGTH = 20000;
 // 共通モーダル面（cc-modal）の小サイズで描く。
 // New-project modal: enter a name and optional custom instructions,
 // drawn on the small shared modal surface (cc-modal).
-export function NewProjectModal() {
+function NewProjectModalComponent() {
   const { locale, t } = useTranslation();
   const {
     isProjectModalOpen,
@@ -125,3 +125,5 @@ export function NewProjectModal() {
     </ModalShell>
   );
 }
+
+export const NewProjectModal = memo(NewProjectModalComponent);

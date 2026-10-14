@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { ShareStatus } from "../../../lib/chat_page/types";
 import { ShareDialogContent } from "../../ui/share_dialog_content";
 import { ModalCloseButton } from "../../ui/modal_close_button";
@@ -24,7 +26,7 @@ type ChatShareModalProps = {
 // 共通モーダル面（cc-modal）の小サイズで描き、中身はプロンプト共有の共有モーダルと同じ cc-share-modal。
 // Modal component for sharing chat history by generating, copying, and sharing on SNS.
 // Drawn on the small shared modal surface (cc-modal); the body is the same cc-share-modal as Prompt Share.
-export function ChatShareModal({
+function ChatShareModalComponent({
   shareModalOpen,
   shareStatus,
   shareUrl,
@@ -83,3 +85,5 @@ export function ChatShareModal({
     </ModalShell>
   );
 }
+
+export const ChatShareModal = memo(ChatShareModalComponent);

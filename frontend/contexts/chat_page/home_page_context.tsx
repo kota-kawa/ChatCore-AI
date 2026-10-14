@@ -1,4 +1,6 @@
-import { createContext, useContext, useMemo, type Context, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type Context, type ReactNode } from "react";
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type HomePageControllerState =
   ReturnType<typeof import("../../hooks/chat_page/use_home_page_controller").useHomePageController>;
@@ -60,10 +62,28 @@ type HomePageTaskContextValue = Pick<
   | "toggleAiAgentModal"
 >;
 
+type HomePageChatUiContextValue = Pick<
+  HomePageUiContextValue,
+  | "pageViewState"
+  | "isChatVisible"
+  | "isChatLaunching"
+  | "loggedIn"
+  | "personalKnowledgeEnabled"
+  | "sharedPromptsEnabled"
+  | "chatHeaderModelMenuOpen"
+  | "selectedModel"
+  | "selectedModelShortLabel"
+  | "chatHeaderModelSelectRef"
+  | "setPersonalKnowledgeEnabled"
+  | "setSharedPromptsEnabled"
+  | "showSetupForm"
+  | "setChatHeaderModelMenuOpen"
+  | "setSelectedModel"
+>;
+
 type HomePageChatContextValue = Pick<
   HomePageControllerState,
   | "handleAccessChat"
-  | "handleSetupSendMessage"
   | "hasCurrentRoom"
   | "sidebarOpen"
   | "chatRooms"
@@ -143,6 +163,8 @@ type HomePageProjectContextValue = Pick<
 >;
 
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
+const HomePageChatUiContext = createContext<HomePageChatUiContextValue | null>(null);
+const HomePageLaunchPreviewContext = createContext<string | null>(null);
 const HomePageTaskContext = createContext<HomePageTaskContextValue | null>(null);
 const HomePageChatContext = createContext<HomePageChatContextValue | null>(null);
 const HomePageSetupChatContext = createContext<HomePageSetupChatContextValue | null>(null);
@@ -154,6 +176,27 @@ type HomePageContextProviderProps = {
 };
 
 export function HomePageContextProvider({ controller, children }: HomePageContextProviderProps) {
+  // setupInfo に依存する操作の参照を安定させ、確定した描画の controller へ渡す。
+  // 中断された描画の操作を既存 UI へ混ぜないよう、参照の更新は commit 後に行う。
+  // Keep setup-dependent actions stable and update their refs after commit so
+  // an interrupted render cannot replace the callbacks used by the current UI.
+  const handleTaskCardLaunchRef = useRef(controller.handleTaskCardLaunch);
+  const handleTaskCardLaunch = useCallback(
+    (...args: Parameters<HomePageControllerState["handleTaskCardLaunch"]>) => handleTaskCardLaunchRef.current(...args),
+    [],
+  );
+
+  const handleSetupSendMessageRef = useRef(controller.handleSetupSendMessage);
+  useIsomorphicLayoutEffect(() => {
+    handleTaskCardLaunchRef.current = controller.handleTaskCardLaunch;
+    handleSetupSendMessageRef.current = controller.handleSetupSendMessage;
+  }, [controller.handleTaskCardLaunch, controller.handleSetupSendMessage]);
+
+  const handleSetupSendMessage = useCallback(
+    (...args: Parameters<HomePageControllerState["handleSetupSendMessage"]>) => handleSetupSendMessageRef.current(...args),
+    [],
+  );
+
   const uiValue = useMemo<HomePageUiContextValue>(
     () => ({
       loggedIn: controller.loggedIn,
@@ -211,6 +254,45 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     ],
   );
 
+  const chatUiValue = useMemo<HomePageChatUiContextValue>(
+    () => ({
+      pageViewState: controller.pageViewState,
+      isChatVisible: controller.isChatVisible,
+      isChatLaunching: controller.isChatLaunching,
+      loggedIn: controller.loggedIn,
+      personalKnowledgeEnabled: controller.personalKnowledgeEnabled,
+      sharedPromptsEnabled: controller.sharedPromptsEnabled,
+      chatHeaderModelMenuOpen: controller.chatHeaderModelMenuOpen,
+      selectedModel: controller.selectedModel,
+      selectedModelShortLabel: controller.selectedModelShortLabel,
+      chatHeaderModelSelectRef: controller.chatHeaderModelSelectRef,
+      setPersonalKnowledgeEnabled: controller.setPersonalKnowledgeEnabled,
+      setSharedPromptsEnabled: controller.setSharedPromptsEnabled,
+      showSetupForm: controller.showSetupForm,
+      setChatHeaderModelMenuOpen: controller.setChatHeaderModelMenuOpen,
+      setSelectedModel: controller.setSelectedModel,
+    }),
+    [
+      controller.pageViewState,
+      controller.isChatVisible,
+      controller.isChatLaunching,
+      controller.loggedIn,
+      controller.personalKnowledgeEnabled,
+      controller.sharedPromptsEnabled,
+      controller.chatHeaderModelMenuOpen,
+      controller.selectedModel,
+      controller.selectedModelShortLabel,
+      controller.chatHeaderModelSelectRef,
+      controller.setPersonalKnowledgeEnabled,
+      controller.setSharedPromptsEnabled,
+      controller.showSetupForm,
+      controller.setChatHeaderModelMenuOpen,
+      controller.setSelectedModel,
+    ],
+  );
+
+  const launchPreviewSetupInfo = controller.isChatLaunching ? controller.setupInfo : null;
+
   const taskValue = useMemo<HomePageTaskContextValue>(
     () => ({
       tasks: controller.tasks,
@@ -228,7 +310,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       openNewPromptModal: controller.openNewPromptModal,
       handleTaskDragStart: controller.handleTaskDragStart,
       handleTaskDragEnd: controller.handleTaskDragEnd,
-      handleTaskCardLaunch: controller.handleTaskCardLaunch,
+      handleTaskCardLaunch,
       handleTaskDelete: controller.handleTaskDelete,
       openTaskEditModal: controller.openTaskEditModal,
       setTaskDetail: controller.setTaskDetail,
@@ -254,7 +336,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.openNewPromptModal,
       controller.handleTaskDragStart,
       controller.handleTaskDragEnd,
-      controller.handleTaskCardLaunch,
+      handleTaskCardLaunch,
       controller.handleTaskDelete,
       controller.openTaskEditModal,
       controller.setTaskDetail,
@@ -269,7 +351,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
   const chatValue = useMemo<HomePageChatContextValue>(
     () => ({
       handleAccessChat: controller.handleAccessChat,
-      handleSetupSendMessage: controller.handleSetupSendMessage,
       hasCurrentRoom: controller.hasCurrentRoom,
       sidebarOpen: controller.sidebarOpen,
       chatRooms: controller.chatRooms,
@@ -316,7 +397,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     }),
     [
       controller.handleAccessChat,
-      controller.handleSetupSendMessage,
       controller.hasCurrentRoom,
       controller.sidebarOpen,
       controller.chatRooms,
@@ -368,7 +448,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       chatRooms: controller.chatRooms,
       switchChatRoom: controller.switchChatRoom,
       handleAccessChat: controller.handleAccessChat,
-      handleSetupSendMessage: controller.handleSetupSendMessage,
+      handleSetupSendMessage,
       attachedFiles: controller.attachedFiles,
       setAttachedFiles: controller.setAttachedFiles,
     }),
@@ -376,7 +456,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.chatRooms,
       controller.switchChatRoom,
       controller.handleAccessChat,
-      controller.handleSetupSendMessage,
+      handleSetupSendMessage,
       controller.attachedFiles,
       controller.setAttachedFiles,
     ],
@@ -429,13 +509,17 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
 
   return (
     <HomePageUiContext.Provider value={uiValue}>
-      <HomePageTaskContext.Provider value={taskValue}>
-        <HomePageSetupChatContext.Provider value={setupChatValue}>
-          <HomePageProjectContext.Provider value={projectValue}>
-            <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
-          </HomePageProjectContext.Provider>
-        </HomePageSetupChatContext.Provider>
-      </HomePageTaskContext.Provider>
+      <HomePageChatUiContext.Provider value={chatUiValue}>
+        <HomePageLaunchPreviewContext.Provider value={launchPreviewSetupInfo}>
+          <HomePageTaskContext.Provider value={taskValue}>
+            <HomePageSetupChatContext.Provider value={setupChatValue}>
+              <HomePageProjectContext.Provider value={projectValue}>
+                <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+              </HomePageProjectContext.Provider>
+            </HomePageSetupChatContext.Provider>
+          </HomePageTaskContext.Provider>
+        </HomePageLaunchPreviewContext.Provider>
+      </HomePageChatUiContext.Provider>
     </HomePageUiContext.Provider>
   );
 }
@@ -450,6 +534,14 @@ function useRequiredContext<T>(context: Context<T | null>, contextName: string):
 
 export function useHomePageUiContext() {
   return useRequiredContext(HomePageUiContext, "HomePageUiContext");
+}
+
+export function useHomePageChatUiContext() {
+  return useRequiredContext(HomePageChatUiContext, "HomePageChatUiContext");
+}
+
+export function useHomePageLaunchPreviewContext() {
+  return useContext(HomePageLaunchPreviewContext);
 }
 
 export function useHomePageTaskContext() {

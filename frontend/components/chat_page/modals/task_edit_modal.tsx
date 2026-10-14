@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction } from "react";
+import { memo, type Dispatch, type SetStateAction } from "react";
 
 import type { TaskEditFormState } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
@@ -19,7 +19,7 @@ type TaskEditModalProps = {
 // 共通モーダル面（cc-modal）の中サイズで描き、フォーム部品は custom-form-* を使う。
 // Modal component for editing task fields (name, prompt, rules, examples, etc.), drawn on the
 // medium shared modal surface (cc-modal) with the custom-form-* controls.
-export function TaskEditModal({
+function TaskEditModalComponent({
   taskEditModalOpen,
   taskEditForm,
   closeTaskEditModal,
@@ -210,3 +210,5 @@ export function TaskEditModal({
     </ModalShell>
   );
 }
+
+export const TaskEditModal = memo(TaskEditModalComponent);
