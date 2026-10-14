@@ -1168,3 +1168,91 @@ test("an incomplete event replaces the draft with the text the server saved", as
   assert.equal(answers[0].text, "保存された部分");
   assert.equal(answers[0].partial, true);
 });
+
+test("a second connection sharing the room's resume position rebuilds the draft from its start", async () => {
+  const clock = createFakeClock();
+  const first = createStreamHostRecorder({ clock });
+  seedThinkingMessage(first);
+  const firstStream = createControlledStream();
+
+  const firstConsuming = consumeGenerationStream(firstStream.response, first.host);
+  firstStream.push(
+    sseBlock(1, "response_generation_started", {}),
+    sseBlock(2, "answer_draft", { text: "下書きの前半、" }),
+    sseBlock(3, "answer_draft", { text: "下書きの後半です。" }),
+  );
+  await showFrames(clock);
+  // 下書きのイベントは、ルームをまたぐ再開位置を進めない。
+  // Draft events do not advance the per-room resume position.
+  assert.equal(first.lastEventIds.get("room-1"), 1);
+
+  // ルームを切り替えて戻った相当: 同じ再開位置の表を持つ新しい接続が、再生されたイベントを受ける。
+  // Switching rooms and back: a new connection with the same resume table receives the replay.
+  first.setActive(false);
+  firstStream.close();
+  await settleStream(firstConsuming, clock);
+
+  const second = createStreamHostRecorder({ clock });
+  const secondHost = { ...second.host, lastEventIdByRoom: first.lastEventIds };
+  seedThinkingMessage(second);
+  const secondStream = createControlledStream();
+  const secondConsuming = consumeGenerationStream(secondStream.response, secondHost);
+  secondStream.push(
+    sseBlock(2, "answer_draft", { text: "下書きの前半、" }),
+    sseBlock(3, "answer_draft", { text: "下書きの後半です。" }),
+  );
+  await showFrames(clock);
+
+  assert.equal(assistantMessages(second.messages())[0].text, "下書きの前半、下書きの後半です。");
+
+  secondStream.push(
+    sseBlock(4, "answer_draft_reset", {}),
+    sseBlock(5, "chunk", { text: "確定した本文です。" }),
+    sseBlock(6, "done", { response: "確定した本文です。" }),
+  );
+  secondStream.close();
+  await settleStream(secondConsuming, clock);
+  assert.deepEqual(second.persistedAnswers(), [{ text: "確定した本文です。", sender: "bot" }]);
+});
+
+test("a reconnect replays the draft from the last non-draft event without duplicating it", async () => {
+  const clock = createFakeClock();
+  const replay = createControlledStream();
+  const requestedFrom: number[] = [];
+  const recorder = createStreamHostRecorder({
+    clock,
+    openStream: async (lastEventId) => {
+      requestedFrom.push(lastEventId);
+      return replay.response;
+    },
+  });
+  seedThinkingMessage(recorder);
+  const firstStream = createControlledStream();
+
+  const consuming = consumeGenerationStream(firstStream.response, recorder.host);
+  firstStream.push(
+    sseBlock(1, "response_generation_started", {}),
+    sseBlock(2, "answer_draft", { text: "下書きの前半、" }),
+    sseBlock(3, "answer_draft", { text: "下書きの後半です。" }),
+  );
+  await showFrames(clock);
+  firstStream.close();
+  replay.push(
+    sseBlock(2, "answer_draft", { text: "下書きの前半、" }),
+    sseBlock(3, "answer_draft", { text: "下書きの後半です。" }),
+  );
+  await showFrames(clock, 120);
+
+  assert.deepEqual(requestedFrom, [1]);
+  assert.equal(assistantMessages(recorder.messages())[0].text, "下書きの前半、下書きの後半です。");
+
+  replay.push(
+    sseBlock(4, "answer_draft_reset", {}),
+    sseBlock(5, "chunk", { text: "確定した本文です。" }),
+    sseBlock(6, "done", { response: "確定した本文です。" }),
+  );
+  replay.close();
+  const completed = await settleStream(consuming, clock);
+  assert.equal(completed, true);
+  assert.deepEqual(recorder.persistedAnswers(), [{ text: "確定した本文です。", sender: "bot" }]);
+});

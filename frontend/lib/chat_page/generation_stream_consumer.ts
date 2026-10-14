@@ -754,23 +754,39 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   // Count of new events applied so far, used to judge whether a reconnect made
   // progress. Replayed events and events that change nothing are not counted.
   let appliedEventCount = 0;
+  let highestDraftEventId = 0;
 
   const processBlock = (block: string, progress: StreamProgressState) => {
     const parsed = parseStreamEventBlock(block);
     if (!parsed) return;
     if (!host.isActive()) return;
 
-    if (!rememberStreamEventId(host.lastEventIdByRoom, roomId, parsed.id)) return;
-
     const action = interpretGenerationStreamEvent(parsed, { streamedText: state.streamedText, localize: host.localize });
-    // 下書きは復元データに残らないため、下書きのイベントでは保存側の再開位置を進めない。進めると、
-    // 再読み込み後の再開が下書きの途中から始まり、先頭の欠けた下書きが見える。
-    // A draft is not part of the stored recovery data, so a draft event does not advance the stored
-    // resume point; otherwise a reload would resume mid-draft and show a draft missing its start.
-    if (typeof parsed.id === "number" && parsed.id > 0 && action.kind !== "answer_draft") {
-      storedStateSync.noteLastEventId(parsed.id);
+    // 下書きは復元データにも、ルームをまたぐ再開位置にも残さない。どちらも下書きのイベントでは進めず、
+    // 再接続は最後の非下書きイベントの次から再生して、下書きを先頭から組み立て直す。進めると、
+    // 再読み込みやルーム切り替えの後に下書きの途中から再開し、先頭の欠けた下書きが見える。
+    // 受信済みのイベントの再送は、記録しなくても捨てる。
+    // A draft is kept out of both the stored recovery data and the per-room resume position. Neither
+    // advances on a draft event, so a reconnect replays from just after the last non-draft event and
+    // rebuilds the draft from its start; advancing them would resume mid-draft after a reload or a
+    // room switch and show a draft missing its head. A resent event is still dropped, unrecorded.
+    let countsAsProgress = action.kind !== "ignored";
+    if (action.kind === "answer_draft") {
+      const lastEventId = host.lastEventIdByRoom.get(roomId) ?? 0;
+      if (typeof parsed.id === "number" && parsed.id > 0) {
+        if (parsed.id <= lastEventId) return;
+        // 再接続で再生し直した下書きは、再接続の成否を測る進捗に数えない。
+        // A draft replayed after a reconnect does not count as progress for judging the reconnect.
+        countsAsProgress = parsed.id > highestDraftEventId;
+        highestDraftEventId = Math.max(highestDraftEventId, parsed.id);
+      }
+    } else {
+      if (!rememberStreamEventId(host.lastEventIdByRoom, roomId, parsed.id)) return;
+      if (typeof parsed.id === "number" && parsed.id > 0) {
+        storedStateSync.noteLastEventId(parsed.id);
+      }
     }
-    if (action.kind !== "ignored") appliedEventCount += 1;
+    if (countsAsProgress) appliedEventCount += 1;
     applyStreamAction(action, progress);
   };
 
@@ -919,6 +935,10 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         continue;
       }
       activeResponse = reconnectResponse;
+      // 再接続は最後の非下書きイベントの次から再生するので、下書きは再生分から組み立て直す。
+      // The reconnect replays from after the last non-draft event, so the draft is rebuilt from the replay.
+      state.draftText = "";
+      renderer.scheduleRender();
     }
 
     return false;
