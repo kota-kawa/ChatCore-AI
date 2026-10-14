@@ -787,6 +787,10 @@ export default function PromptSharePage({
     return loadMoreFeedResults();
   }, [activeSearchQuery, loadMoreFeedResults, loadMoreSearchResults]);
 
+  const handleLoadMoreResults = useCallback(() => {
+    void loadMoreResults();
+  }, [loadMoreResults]);
+
   // 共有モーダルを開き、対象プロンプトの共有URLを非同期で生成する
   // Opens the share modal and asynchronously generates the share URL for the target prompt
   const openPromptShareDialog = useCallback(
@@ -1263,9 +1267,7 @@ export default function PromptSharePage({
         promptCountMeta={promptCountMeta}
         hasMoreResults={hasMoreResults}
         isLoadingMoreResults={isLoadingMoreResults}
-        onLoadMoreResults={() => {
-          void loadMoreResults();
-        }}
+        onLoadMoreResults={handleLoadMoreResults}
         isPromptsLoading={isPromptsLoading}
         hasPromptFeedback={Boolean(promptFeedback)}
         visiblePrompts={visiblePrompts}
