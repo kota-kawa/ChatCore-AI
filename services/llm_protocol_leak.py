@@ -36,7 +36,7 @@ _PROTOCOL_LEAK_PATTERN = re.compile(
 # Code fences and inline code spans; one still open mid-stream counts as code up to the end of its
 # line (a fence, to the end of the text).
 _CODE_SPAN_PATTERN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*(?:`|(?=\n)|\Z)", re.DOTALL)
-_REASONING_CLOSE_TAG = "</think>"
+REASONING_CLOSE_TAG = "</think>"
 # 利用者がタグそのものを話題にしているなら、本文中のタグは求められた回答でありうる。
 # When the user is asking about the tag itself, one in the body may be exactly what was asked for.
 _REASONING_TAG_MENTION = "think>"
@@ -87,6 +87,23 @@ def find_protocol_leak(text: str, start: int = 0) -> int | None:
     return None
 
 
+def reasoning_answer_start(text: str, latest_user_message: str = "") -> int:
+    """Return where the answer begins after a leaked reasoning draft, or 0 when there is none.
+
+    コードの外にある最後の `</think>` の直後が回答の先頭。利用者がタグ自体を話題にしているときは 0。
+    The answer begins right after the last `</think>` outside code; 0 when the user is asking about
+    the tag itself.
+    """
+    if REASONING_CLOSE_TAG not in text or _REASONING_TAG_MENTION in latest_user_message.lower():
+        return 0
+    code_spans = [span.span() for span in _CODE_SPAN_PATTERN.finditer(text)]
+    answer_start = 0
+    for match in re.finditer(re.escape(REASONING_CLOSE_TAG), text):
+        if not any(span_start <= match.start() < span_end for span_start, span_end in code_spans):
+            answer_start = match.end()
+    return answer_start
+
+
 def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: str = "") -> list[str]:
     """Drop a leaked reasoning draft, keeping the chunk boundaries of the answer after it.
 
@@ -94,14 +111,7 @@ def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: st
     Everything up to the last `</think>` outside code is the draft. Without one the chunks are
     returned unchanged.
     """
-    text = "".join(chunks)
-    if _REASONING_CLOSE_TAG not in text or _REASONING_TAG_MENTION in latest_user_message.lower():
-        return list(chunks)
-    code_spans = [span.span() for span in _CODE_SPAN_PATTERN.finditer(text)]
-    answer_start = 0
-    for match in re.finditer(re.escape(_REASONING_CLOSE_TAG), text):
-        if not any(span_start <= match.start() < span_end for span_start, span_end in code_spans):
-            answer_start = match.end()
+    answer_start = reasoning_answer_start("".join(chunks), latest_user_message)
     if not answer_start:
         return list(chunks)
     kept: list[str] = []

@@ -313,6 +313,35 @@ class ChatGenerationStopTestCase(unittest.TestCase):
         self.assertTrue(persisted)
         self.assertNotIn("turn_state_update", persisted[0])
 
+    # 日本語: 下書きを見せた後に停止すると、下書きの取り消し、救済した本文の chunk、aborted の順に並ぶことを検証します。
+    # English: A stop after a draft was shown publishes the draft discard, then the salvaged body's chunk, then aborted.
+    def test_stop_after_a_draft_resets_it_before_the_salvaged_chunk(self):
+        persisted = []
+        with patch(
+            "services.chat_generation_llm_stream.get_llm_response_stream",
+            side_effect=_endless_answer_stream,
+        ):
+            job = self.owner.start_generation_job(
+                self.job_key,
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **kwargs: persisted.append(response),
+            )
+            self.assertTrue(_wait_until(lambda: any(event.event == "answer_draft" for event in list(job._events))))
+
+            self.assertTrue(self.other_worker.cancel_generation_job(self.job_key))
+
+        self.assertTrue(job.is_done)
+        names = [event.event for event in job._events]
+        self.assertEqual(names[-3:], ["answer_draft_reset", "chunk", "aborted"])
+        self.assertEqual(names.count("answer_draft_reset"), 1)
+        # 取り消し以降は下書きが出ない。救済した本文は保存された回答と一致する。
+        # No draft follows the discard, and the salvaged body matches what was saved.
+        salvaged = job._events[-2].payload["text"]
+        self.assertTrue(salvaged.startswith("chunk-0 "))
+        self.assertEqual(persisted, [job._events[-1].payload["response"]])
+        self.assertIn(salvaged, persisted[0])
+
     # 日本語: モデルがTurnStateを更新している途中に停止した場合、内部状態を回答として保存しないことを検証します。
     # English: Verify stopping while the model updates TurnState never persists internal state as an answer.
     def test_stop_during_model_decision_does_not_persist_turn_state(self):

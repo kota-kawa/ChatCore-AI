@@ -408,6 +408,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
                 with self._chunks_lock:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
+                self._reset_answer_draft()
                 state.suppress_next_generation_started = True
                 continue
             if decision.outcome == "stopped":
@@ -428,6 +429,9 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             with self._chunks_lock:
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
+            # ツール呼び出しで終わった判断の本文は回答ではないので、見せた下書きも取り消す。
+            # The body of a decision that ended in a tool call is not the answer; discard the draft shown.
+            self._reset_answer_draft()
             telemetry.research_phase_used = True
             self._dispatch_tool_calls(state, decision.tool_calls, llm_step)
 
@@ -446,6 +450,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
         with self._chunks_lock:
             self._pending_stream_chunks = step_chunks
             self._pending_stream_is_rewrite = False
+        self._begin_answer_draft(state.latest_user_message)
         try:
             for chunk in self._iter_llm_stream_with_retry(
                 turn_messages,
@@ -481,6 +486,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             with self._chunks_lock:
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
+            self._reset_answer_draft()
             state.suppress_next_generation_started = True
             return ModelDecision(outcome="replay")
         except LlmToolSchemaError:
@@ -500,6 +506,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
                 with self._chunks_lock:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
+                self._reset_answer_draft()
                 state.suppress_next_generation_started = True
                 return ModelDecision(outcome="replay")
             raise
@@ -538,6 +545,10 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
     ) -> bool:
         telemetry = state.telemetry
         output_limited = self._last_stream_output_limited
+        # 下書きは表示専用で、確定した本文が配信される前に必ず取り消す。回復で配信せず抜ける経路も同じ。
+        # The draft is display-only and is always discarded before the confirmed body is published,
+        # including the paths that leave for recovery without publishing.
+        self._reset_answer_draft()
         with self._chunks_lock:
             self._pending_stream_chunks = []
             self._pending_stream_is_rewrite = False

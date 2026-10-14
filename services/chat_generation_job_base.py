@@ -35,6 +35,7 @@ from .chat_answer_continuation import (
     splice_restarted_answer,
     strip_continuation_overlap,
 )
+from .chat_answer_draft import AnswerDraftFilter
 from .chat_generation_coordinator import (
     REMOTE_CANCEL_CHECK_INTERVAL_SECONDS,
     ChatGenerationEvent,
@@ -61,6 +62,10 @@ logger = logging.getLogger(__name__)
 # 本文イベントが無い間に SSE へ keepalive を送る間隔の既定値。
 # Default interval for SSE keepalives while no body event is flowing.
 DEFAULT_SSE_HEARTBEAT_SECONDS = 15.0
+
+# 利用者の画面に本文の文字を最初に出すイベント。初回表示までの時間をテレメトリへ記録する。
+# Events that put body text on the user's screen; the first one stamps the time-to-first-text metric.
+VISIBLE_TEXT_EVENTS = frozenset({"chunk", "answer_draft"})
 
 
 def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
@@ -206,6 +211,18 @@ class ChatGenerationJobBase:
         # 継続中に全文を書き直しているかどうか。停止時は全文をそのまま足さず接合する。
         # Whether a continuation is rewriting the full answer; cancellation must splice it.
         self._pending_stream_is_rewrite = False
+        # 判断ステップの本文を確定前に表示専用で先に流す下書き（ADR 0020）。保存・`_chunks` には入れない。
+        # ロックは `_chunks_lock` とは別にし、停止経路と生成スレッドの間で「下書きの取り消し」が
+        # 確定の `chunk` より前に並ぶことだけを保証する。
+        # The display-only draft of a decision step streamed ahead of confirmation (ADR 0020). It never
+        # enters `_chunks` or storage. Its lock is separate from `_chunks_lock` and only guarantees that
+        # the stop path's draft discard is published before the confirming `chunk`.
+        self._answer_draft: AnswerDraftFilter | None = None
+        # 下書きを有効にしたステップの直近の利用者発話。None は下書きを出さないターン。
+        # The latest user message of a step with drafting on; None for a turn that never drafts.
+        self._answer_draft_request: str | None = None
+        self._answer_draft_visible = False
+        self._answer_draft_lock = threading.RLock()
         # 直前のモデルストリームが出力上限で打ち切られたか。回答なら継続生成へ回す。
         # Whether the last model stream was cut off by the output cap; an answer then
         # continues instead of being persisted as if the model had finished.
@@ -295,6 +312,60 @@ class ChatGenerationJobBase:
             tool_approval_ids=[str(card["id"]) for card in approval_cards],
         )
 
+    def _new_answer_draft(self) -> AnswerDraftFilter | None:
+        if self._answer_draft_request is None:
+            return None
+        return AnswerDraftFilter(self._answer_draft_request)
+
+    # 表示済みの下書きがあれば取り消しを配信する。下書きを出していなければ何もしないので、
+    # 保留バッファを空にする・差し替える箇所から重ねて呼んでよい。
+    # Publish a discard when a draft is on screen; a no-op otherwise, so every place that empties or
+    # replaces the pending buffer may call it again.
+    def _reset_answer_draft(self) -> None:
+        with self._answer_draft_lock:
+            if not self._answer_draft_visible:
+                return
+            self._answer_draft_visible = False
+            self._telemetry.answer_draft_resets += 1
+            self._publish("answer_draft_reset", {})
+
+    # 新しい判断ステップの下書きを始める。書き込みツールのあるターンは下書きを出さない。誤った
+    # 「追記しました」などが一瞬でも見える事故を避けるため（ADR 0020）。
+    # Start the draft of a new decision step. A turn with workspace write tools never drafts, so a
+    # wrong "memo updated" is not visible even briefly (ADR 0020).
+    def _begin_answer_draft(self, latest_user_message: str) -> None:
+        with self._answer_draft_lock:
+            self._answer_draft_request = None if self._workspace_tools is not None else latest_user_message
+            self._restart_answer_draft()
+
+    # 同じステップをストリームの先頭からやり直すとき、表示済みの下書きを取り消して判定も最初に戻す。
+    # When the same step restarts from the head of the stream, discard the draft shown and judge afresh.
+    def _restart_answer_draft(self) -> None:
+        with self._answer_draft_lock:
+            self._reset_answer_draft()
+            self._answer_draft = self._new_answer_draft()
+
+    # このステップの下書きを打ち切る（プロトコル漏れで確定が全文を置き換えるとき）。
+    # Give up drafting this step, as when a protocol leak makes confirmation replace the whole text.
+    def _abandon_answer_draft(self) -> None:
+        with self._answer_draft_lock:
+            self._reset_answer_draft()
+            self._answer_draft = None
+
+    # ガード通過後の本文1片を下書きへ渡す。停止後は何も流さない。
+    # Feed one guard-checked body piece to the draft. After a stop nothing is published.
+    def _feed_answer_draft(self, piece: str) -> None:
+        with self._answer_draft_lock:
+            draft = self._answer_draft
+            if draft is None or self._cancelled:
+                return
+            update = draft.feed(piece)
+            if update.reset:
+                self._reset_answer_draft()
+            if update.text:
+                self._answer_draft_visible = True
+                self._publish("answer_draft", {"text": update.text})
+
     # ジョブの非同期処理をスレッドプール上で開始する
     # Start the job's asynchronous processing in the thread pool
     def start(self) -> None:
@@ -353,6 +424,9 @@ class ChatGenerationJobBase:
         if self.is_done:
             return
         self._cancelled = True
+        # 救済する本文の `chunk` より前に下書きを取り消す。`_cancelled` を立てた後は下書きが出ない。
+        # Discard the draft before the salvaged body's `chunk`; no draft is published once `_cancelled` is set.
+        self._reset_answer_draft()
 
         # 取り出し・追記・読み取りをひとつの排他区間にまとめる。生成スレッド側の
         # `_publish_completed_answer_step` も同じロックの下で `_cancelled` を見てから
@@ -599,6 +673,8 @@ class ChatGenerationJobBase:
                 payload=payload,
             )
             self._events.append(published_event)
+            if event in VISIBLE_TEXT_EVENTS:
+                self._telemetry.record_first_visible_text(self.started_at)
             if done:
                 callback = self._mark_done()
             self._condition.notify_all()

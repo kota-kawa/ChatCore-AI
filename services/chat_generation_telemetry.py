@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -85,6 +86,14 @@ class ChatGenerationTelemetry:
     # 失敗したターンから、配信前のバッファに残っていた本文を救出した回数。
     # How often a failed turn salvaged body text still sitting in the pre-publish buffer.
     salvaged_partial_answers: int = 0
+    # 確定前に流した下書きを取り消した回数（ADR 0020）。多いほど、見せた文字が消えた回数が多い。
+    # How often a draft streamed ahead of confirmation was discarded (ADR 0020); each is text the
+    # user saw and then lost.
+    answer_draft_resets: int = 0
+    # ジョブ開始から、最初の本文（下書きか確定の `chunk`）を送り出すまでのミリ秒。出ていなければ None。
+    # Milliseconds from job start to the first body text sent (a draft or a confirmed `chunk`); None
+    # while none has been sent.
+    first_visible_text_ms: int | None = None
     # モデル判断の上限に達してループを打ち切ったか。
     # Whether the loop stopped because the model-decision budget ran out.
     llm_turn_budget_exhausted: bool = False
@@ -128,6 +137,10 @@ class ChatGenerationTelemetry:
     def agent_steps(self) -> int:
         """Total displayed steps: model turns plus executed tool calls."""
         return self.llm_turns + self.tool_calls
+
+    def record_first_visible_text(self, started_at: float) -> None:
+        if self.first_visible_text_ms is None:
+            self.first_visible_text_ms = max(round((time.monotonic() - started_at) * 1000), 0)
 
     def record_continuation_reason(self, reason: str) -> None:
         normalized = str(reason or "").strip()[:64]
@@ -217,6 +230,8 @@ class ChatGenerationTelemetry:
             "untagged_turn_state_recoveries": self.untagged_turn_state_recoveries,
             "research_failure_recoveries": self.research_failure_recoveries,
             "salvaged_partial_answers": self.salvaged_partial_answers,
+            "answer_draft_resets": self.answer_draft_resets,
+            "first_visible_text_ms": self.first_visible_text_ms,
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
             "workspace_read_calls": self.workspace_read_calls,
             "workspace_write_proposals": self.workspace_write_proposals,

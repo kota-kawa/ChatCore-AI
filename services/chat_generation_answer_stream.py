@@ -461,6 +461,7 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
         `_publish_completed_answer_step` keeps the trace prefix and citation resolution identical
         to the success path.
         """
+        self._reset_answer_draft()
         pending_text = self._take_pending_answer_text()
         if not pending_text:
             return False

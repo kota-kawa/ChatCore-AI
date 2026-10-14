@@ -28,6 +28,11 @@ _TURN_STATE_FIELDS = frozenset(
 # Models were observed returning the envelope JSON as the body without its tags. Only a body
 # that is entirely this shape counts as an envelope; JSON mixed with prose is left alone.
 _FENCED_JSON_PATTERN = re.compile(r"^```(?:json)?[ \t]*\n(.*)\n[ \t]*```$", re.DOTALL | re.IGNORECASE)
+# 本文の先頭が、上の形（タグ無しの封筒 JSON、コードフェンス付きを含む）の書き出しか。終わりを待たずに
+# 判定するため、閉じフェンスは見ない。
+# Whether a body opens like the shape above (an untagged envelope JSON, fenced or not). It does not
+# wait for the closing fence, so a stream can be judged before it ends.
+_FENCED_JSON_OPENING = re.compile(r"^```(?:json)?[ \t]*\n\s*\{", re.IGNORECASE)
 
 # 利用者がこれらの内部キー名を挙げているなら、その JSON は求められた回答でありうる。
 # When the user names these internal keys, a JSON body may be exactly what was asked for.
@@ -201,6 +206,12 @@ def parse_bare_turn_state_update(text: str, *, latest_user_message: str) -> dict
     if not isinstance(parsed.get("ready_to_answer"), bool):
         return None
     return parsed
+
+
+def starts_like_bare_turn_state_update(text: str) -> bool:
+    """Return whether ``text`` opens like an untagged envelope, so it may not be an answer."""
+    stripped = text.lstrip()
+    return stripped.startswith("{") or _FENCED_JSON_OPENING.match(stripped) is not None
 
 
 def _held_back_tail_length(text: str) -> int:
