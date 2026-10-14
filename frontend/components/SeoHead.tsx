@@ -99,8 +99,8 @@ export function SeoHead({
       <meta name="twitter:description" content={resolvedDescription} />
       {resolvedImageUrl ? <meta name="twitter:image" content={resolvedImageUrl} /> : null}
       {/* ファビコン・アイコン設定 / Favicon and icon settings */}
-      <link rel="icon" type="image/webp" href="/static/favicon.webp" />
       <link rel="icon" type="image/png" href="/static/favicon.png" />
+      <link rel="icon" type="image/webp" href="/static/favicon-lossless.webp" />
       <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
       <meta name="theme-color" content="#f7f2e8" media="(prefers-color-scheme: light)" />
       <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />

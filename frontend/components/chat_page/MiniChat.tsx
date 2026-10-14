@@ -44,7 +44,7 @@ import MarkdownContent from "../MarkdownContent";
 import { useTranslation } from "../../contexts/locale_context";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
-const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.png";
+const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.webp";
 
 // MiniChat — AI エージェントとの会話 UI コンポーネント
 // MiniChat — embeddable chat panel that lets users interact with the AI agent
