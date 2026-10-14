@@ -317,17 +317,21 @@ class ChatGenerationJobBase:
             return None
         return AnswerDraftFilter(self._answer_draft_request)
 
-    # 表示済みの下書きがあれば取り消しを配信する。下書きを出していなければ何もしないので、
-    # 保留バッファを空にする・差し替える箇所から重ねて呼んでよい。
-    # Publish a discard when a draft is on screen; a no-op otherwise, so every place that empties or
-    # replaces the pending buffer may call it again.
-    def _reset_answer_draft(self) -> None:
+    # 表示済みの下書きがあれば取り消しを配信し、取り消したかを返す。下書きを出していなければ何もしない
+    # ので、保留バッファを空にする・差し替える箇所から重ねて呼んでよい。`counted=False` は確定の直前の
+    # 通常の置き換えで、「捨てた」回数には数えない。
+    # Publish a discard when a draft is on screen and report whether one was. A no-op otherwise, so
+    # every place that empties or replaces the pending buffer may call it again. `counted=False` is
+    # the ordinary replacement right before confirmation and is not counted as a thrown-away draft.
+    def _reset_answer_draft(self, *, counted: bool = True) -> bool:
         with self._answer_draft_lock:
             if not self._answer_draft_visible:
-                return
+                return False
             self._answer_draft_visible = False
-            self._telemetry.answer_draft_resets += 1
+            if counted:
+                self._telemetry.answer_draft_discards += 1
             self._publish("answer_draft_reset", {})
+            return True
 
     # 新しい判断ステップの下書きを始める。書き込みツールのあるターンは下書きを出さない。誤った
     # 「追記しました」などが一瞬でも見える事故を避けるため（ADR 0020）。

@@ -3146,7 +3146,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     yield "discarded research draft"
                     raise LlmTimeoutError("provider timed out mid-stream")
                 return interrupted()
-            return iter([_turn_state_update(), "final answer"])
+            return iter([_turn_state_update(), "final answer that is long enough to draft"])
 
         with (
             patch("services.chat_generation_llm_stream._llm_stream_retry_delay", return_value=0.0),
@@ -3169,6 +3169,15 @@ class ChatStreamingTestCase(unittest.TestCase):
         confirmed = [event.payload for event in job._events if event.event in ("chunk", "done")]
         self.assertNotIn("discarded research draft", json.dumps(confirmed, ensure_ascii=False))
         self.assertIn("final answer", body)
+        # 再試行で破棄した下書きの取り消しが、2回目の試行の下書きより前に出る。
+        # The discard of the retried attempt's draft precedes the second attempt's draft.
+        names = [event.event for event in job._events]
+        drafts = [event.payload["text"] for event in job._events if event.event == "answer_draft"]
+        self.assertEqual(drafts, ["discarded research draft", "final answer that is long enough to draft"])
+        first_draft = names.index("answer_draft")
+        second_draft = names.index("answer_draft", first_draft + 1)
+        self.assertLess(first_draft, names.index("answer_draft_reset"))
+        self.assertLess(names.index("answer_draft_reset"), second_draft)
         self.assertIn("event: done", body)
 
     def test_background_generation_job_continues_token_limited_final_answer(self):
@@ -5092,7 +5101,9 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertEqual(job.response, DRAFT_OPENING + "続きの説明です。最後の一文です。")
         self.assertEqual(job._events[-1].event, "done")
         self.assertIsNotNone(job._telemetry.first_visible_text_ms)
-        self.assertEqual(job._telemetry.as_log_extra()["answer_draft_resets"], 1)
+        # 確定直前の通常の置き換えは、捨てた下書きに数えない。
+        # The ordinary replacement right before confirmation is not a thrown-away draft.
+        self.assertEqual(job._telemetry.as_log_extra()["answer_draft_discards"], 0)
 
     # 日本語: 確定時は answer_draft_reset が最初の chunk より前に出て、確定した本文が従来どおり配信されることを検証します。
     # English: At confirmation answer_draft_reset precedes the first chunk, and the confirmed body is delivered as before.
@@ -5135,6 +5146,7 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertEqual(calls, 2)
         self.assertEqual(self.texts(job, "answer_draft"), DRAFT_OPENING)
         self.assertEqual(names.count("answer_draft_reset"), 1)
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
         # 取り消しは、ツール実行の進捗より前に出る。
         # The discard is published before the tool's progress events.
         self.assertLess(names.index("answer_draft_reset"), names.index("web_search_started"))
@@ -5169,6 +5181,24 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertEqual(names[first_reset + 1], "answer_draft")
         self.assertEqual(self.texts(job, "chunk"), "やり直したあとの回答は、先頭から改めて十分に長く書かれます。")
         self.assertNotIn(DRAFT_OPENING, job._events[-1].payload["response"])
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
+
+    # 日本語: `</think>` までの下書きが取り消されて数えられ、その後ろの回答は確定の置き換えとして数えないことを検証します。
+    # English: A draft up to `</think>` is discarded and counted, while the replacement at confirmation is not.
+    def test_reasoning_draft_discard_is_counted_once(self):
+        job = self.make_job()
+        answer = "推論のあとに続く、利用者へ見せる本来の回答の本文です。"
+
+        def stream(_messages, _model, **_kwargs):
+            yield "利用者の質問に答えるための下書きとして考えをまとめます。"
+            yield "\n</think>\n\n"
+            yield answer
+
+        self.run_job(job, stream)
+
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        self.assertEqual(self.names(job).count("answer_draft_reset"), 2)
+        self.assertEqual(self.texts(job, "chunk"), answer)
 
     # 日本語: 書き込みツールのあるターンでは下書きを一切流さず、従来どおり確定時にだけ配信することを検証します。
     # English: A turn with workspace write tools streams no draft at all and delivers only at confirmation, as before.
@@ -5191,7 +5221,7 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertNotIn("answer_draft", names)
         self.assertNotIn("answer_draft_reset", names)
         self.assertEqual(self.texts(job, "chunk"), DRAFT_OPENING + "続きの説明です。")
-        self.assertEqual(job._telemetry.answer_draft_resets, 0)
+        self.assertEqual(job._telemetry.answer_draft_discards, 0)
 
     # 日本語: プロトコル漏れで確定が全文を置き換えるステップは、下書きを取り消し、その後は下書きしないことを検証します。
     # English: A step whose confirmation replaces everything after a protocol leak discards its draft and drafts no more.

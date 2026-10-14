@@ -548,7 +548,9 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
         # 下書きは表示専用で、確定した本文が配信される前に必ず取り消す。回復で配信せず抜ける経路も同じ。
         # The draft is display-only and is always discarded before the confirmed body is published,
         # including the paths that leave for recovery without publishing.
-        self._reset_answer_draft()
+        # 回復で配信せず抜ける、または配信する本文が残らない場合だけ、捨てた下書きとして数える。
+        # It counts as a thrown-away draft only when the step leaves for recovery or has no body to publish.
+        draft_shown = self._reset_answer_draft(counted=False)
         with self._chunks_lock:
             self._pending_stream_chunks = []
             self._pending_stream_is_rewrite = False
@@ -596,6 +598,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             # Use the normal decision budget; let the model submit through the existing tools.
             state.workspace_action_recovery_attempted = True
             telemetry.workspace_action_recoveries += 1
+            telemetry.answer_draft_discards += draft_shown
             state.suppress_next_generation_started = True
             return True
         if (
@@ -612,6 +615,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             # trace-only reply, so retry once, retaining tools for unsubmitted workspace actions.
             state.empty_answer_recovery_attempted = True
             telemetry.empty_answer_recoveries += 1
+            telemetry.answer_draft_discards += draft_shown
             logger.warning(
                 "Final decision produced no user-facing answer; retrying once "
                 "with the applicable recovery contract.",
@@ -623,6 +627,8 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             )
             state.suppress_next_generation_started = True
             return True
+        if not visible_chunks:
+            telemetry.answer_draft_discards += draft_shown
         state.answer_context_messages = turn_messages
         telemetry.final_answer_input_tokens = estimate_request_tokens(
             turn_messages,

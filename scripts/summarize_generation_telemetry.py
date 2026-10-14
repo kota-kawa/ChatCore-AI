@@ -64,6 +64,7 @@ OCCURRENCE_FIELDS = (
     "tool_schema_retries",
     "research_failure_recoveries",
     "salvaged_partial_answers",
+    "answer_draft_discards",
     "input_limit_recoveries",
     "research_output_limit_recoveries",
     "truncated_evidence_payloads",
@@ -92,6 +93,7 @@ MEDIAN_FIELDS = (
     "continuation_count",
     "final_answer_input_tokens",
     "final_answer_output_chars",
+    "first_visible_text_ms",
     "duration_seconds",
 )
 

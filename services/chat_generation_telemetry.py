@@ -86,10 +86,14 @@ class ChatGenerationTelemetry:
     # 失敗したターンから、配信前のバッファに残っていた本文を救出した回数。
     # How often a failed turn salvaged body text still sitting in the pre-publish buffer.
     salvaged_partial_answers: int = 0
-    # 確定前に流した下書きを取り消した回数（ADR 0020）。多いほど、見せた文字が消えた回数が多い。
-    # How often a draft streamed ahead of confirmation was discarded (ADR 0020); each is text the
-    # user saw and then lost.
-    answer_draft_resets: int = 0
+    # 画面に出した下書きが、確定した本文に置き換わらずに捨てられた回数（ADR 0020）。確定の直前の
+    # 通常の置き換えは数えない。ツール呼び出しで終わった判断・再試行・回復・停止・救済・プロトコル漏れ・
+    # `</think>` による取り消しが対象で、各回は利用者が見て消えた文字を表す。
+    # How often a draft shown on screen was thrown away instead of being replaced by the confirmed
+    # body (ADR 0020). The ordinary replacement right before confirmation is not counted; a decision
+    # ending in a tool call, a retry, a recovery, a stop, a salvage, a protocol leak and a `</think>`
+    # discard are, each being text the user saw and then lost.
+    answer_draft_discards: int = 0
     # ジョブ開始から、最初の本文（下書きか確定の `chunk`）を送り出すまでのミリ秒。出ていなければ None。
     # Milliseconds from job start to the first body text sent (a draft or a confirmed `chunk`); None
     # while none has been sent.
@@ -230,7 +234,7 @@ class ChatGenerationTelemetry:
             "untagged_turn_state_recoveries": self.untagged_turn_state_recoveries,
             "research_failure_recoveries": self.research_failure_recoveries,
             "salvaged_partial_answers": self.salvaged_partial_answers,
-            "answer_draft_resets": self.answer_draft_resets,
+            "answer_draft_discards": self.answer_draft_discards,
             "first_visible_text_ms": self.first_visible_text_ms,
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
             "workspace_read_calls": self.workspace_read_calls,
