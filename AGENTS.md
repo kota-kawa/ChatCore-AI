@@ -6,6 +6,7 @@
 - `docs/architecture/README.md` はサブシステム固有の設計（構造マップ）の索引です。全体像は持たないので、`ARCHITECTURE.md` で境界を確認した後に必要なファイルだけ辿ってください。
 - `docs/knowledge/development_conventions.md` はプロジェクト構成、ビルド・テストコマンド、スキーマ同期、実装規約、命名規則、責務分割、テスト方針、サブエージェントの指定をまとめた開発規約です。コードを変更する作業では着手前に必ず読んでください。
 - `docs/knowledge/README.md` は再利用可能な知見の索引です。デバッグ手順は `docs/knowledge/debugging.md`、API契約とマイグレーションの注意点は `docs/knowledge/contracts-and-migrations.md`、worktree を分けた後の運用手順は `docs/knowledge/parallel_work.md` を参照してください。作業ログや一時的な状態は追加しません。
+- `docs/knowledge/frontend_performance.md` はフロントエンド性能の設計・検証に関する再利用可能な知見です。更新範囲や初期読み込みの設計、性能調査・改善時に参照してください。
 - `docs/knowledge/system_design_interview_notes.md` はシステムデザイン面接向けの準備メモです。容量見積もりや将来の発展案は現在の実装ではないため、実装判断の根拠として引用しないでください。
 - `docs/decisions/0015-preselect-enabled-skills.md` は設計判断の記録です。関連する実装の境界や採用条件を確認するときに参照してください。
 - `docs/decisions/0019-generation-scoped-chat-replay.md` は設計判断の記録です。関連する契約の境界や互換条件を確認するときに参照してください。

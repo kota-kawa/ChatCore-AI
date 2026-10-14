@@ -34,7 +34,7 @@
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
 - JavaScript / TypeScript: `frontend/components/`・`frontend/hooks/`・`frontend/lib/` にある既存のモジュールパターン（機能別ディレクトリ、用途別 hook と Context への分割、`lib/` の再利用ロジック）に従い、ファイルを単一責任に保ちます。`frontend/scripts/` はブラウザ側の共通ランタイム（CSRF、テーマ、再試行付き fetch）とテストランナーの置き場で、画面ロジックは置きません。
-- CSS: フロントエンド（Next.js）のスタイルは `frontend/public/static/css/` 配下にあり、`frontend/pages/_app.tsx` から import します。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。1 ファイルに無関係なスタイルを混在させないでください。BEM スタイルの `kebab-case` クラス名を推奨します。
+- CSS: フロントエンド（Next.js）の共通スタイルは `frontend/pages/_app.tsx` から import し、境界を確認できるページ専用スタイルは所有ページのlinkで読み込みます。配置・カスケード・読み込みの基準は `../../frontend/STYLING_STRATEGY.md` に従ってください。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。1 ファイルに無関係なスタイルを混在させないでください。BEM スタイルの `kebab-case` クラス名を推奨します。
 - フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
 - 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
 
@@ -60,6 +60,7 @@
 - ケースを足したら、そのケースが守っている規則を実装側で一時的に壊し、テストが落ちることを確認してから固定します。落ちないケースは回帰を検出できていないため、期待値の粒度（どの指摘が出るか、本文がどう残るか）を上げます。
 
 ## UI 実装規約
+- 入力、一覧、非表示ビュー、DOM計測、初期読み込みを設計・変更する前に `frontend_performance.md` を読み、更新が必要な範囲と処理・取得の所有者を決めてください。性能改善の比較条件と回帰確認も同文書に従います。
 - トークンの正本は `frontend/public/static/css/base/variables.css`、役割別の一覧と選び方は `frontend/DESIGN_TOKENS.md`、CSS の配置方針は `frontend/STYLING_STRATEGY.md` です。ここには配色や操作の原則だけを置き、色の数値は書きません。新しい UI は既存トークンから選び、既存画面と浮かないことを優先してください。
 - ホバー（`:hover`）だけで現れる操作はタッチ端末では触れません。タップで開く導線を必ず用意し、ポインタを持たない端末で同じ操作ができるかを実装前に確認してください。
 - アイコンだけのボタンは、タップ領域を 44×44px 以上にしてください。
