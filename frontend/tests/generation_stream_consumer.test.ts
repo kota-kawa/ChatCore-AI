@@ -1047,18 +1047,21 @@ test("draft deltas accumulate, and a reset followed by confirmed text keeps one 
   const draftBubbleId = assistantMessages(recorder.messages())[0].id;
   assert.equal(assistantMessages(recorder.messages())[0].text, "下書きの前半、下書きの後半です。");
 
-  stream.push(sseBlock(3, "answer_draft_reset", {}), sseBlock(4, "chunk", { text: "確定した本文です。" }));
+  stream.push(
+    sseBlock(3, "answer_draft_reset", {}),
+    sseBlock(4, "chunk", { text: "下書きの前半、下書きの後半です。" }),
+  );
   await showFrames(clock);
 
   const answers = assistantMessages(recorder.messages());
   assert.equal(answers.length, 1);
   assert.equal(answers[0].id, draftBubbleId);
-  assert.equal(answers[0].text, "確定した本文です。");
+  assert.equal(answers[0].text, "下書きの前半、下書きの後半です。");
 
-  stream.push(sseBlock(5, "done", { response: "確定した本文です。" }));
+  stream.push(sseBlock(5, "done", { response: "下書きの前半、下書きの後半です。" }));
   stream.close();
   await settleStream(consuming, clock);
-  assert.deepEqual(recorder.persistedAnswers(), [{ text: "確定した本文です。", sender: "bot" }]);
+  assert.deepEqual(recorder.persistedAnswers(), [{ text: "下書きの前半、下書きの後半です。", sender: "bot" }]);
 });
 
 test("a discarded draft that is followed by a tool call returns to the thinking indicator", async () => {
@@ -1087,7 +1090,7 @@ test("a discarded draft that is followed by a tool call returns to the thinking 
   assert.equal(assistantMessages(recorder.messages()).length, 1);
 });
 
-test("a discard with no follow-up still returns to the thinking indicator on the next frame", async () => {
+test("a discarded draft stays on screen until progress arrives, then returns to the thinking indicator", async () => {
   const clock = createFakeClock();
   const recorder = createStreamHostRecorder({ clock });
   seedThinkingMessage(recorder);
@@ -1095,6 +1098,13 @@ test("a discard with no follow-up still returns to the thinking indicator on the
 
   const consuming = consumeGenerationStream(stream.response, recorder.host);
   stream.push(sseBlock(1, "answer_draft", { text: DRAFT_TEXT }), sseBlock(2, "answer_draft_reset", {}));
+  await showFrames(clock);
+
+  // 確定した本文が追いつくまで、取り消された下書きは表示から縮まない。
+  // A discarded draft does not shrink from the screen until the confirmed text catches up.
+  assert.equal(assistantMessages(recorder.messages())[0].text, DRAFT_TEXT);
+
+  stream.push(sseBlock(3, "web_search_started", {}));
   await showFrames(clock);
 
   assert.equal(assistantMessages(recorder.messages()).length, 0);
@@ -1255,4 +1265,105 @@ test("a reconnect replays the draft from the last non-draft event without duplic
   const completed = await settleStream(consuming, clock);
   assert.equal(completed, true);
   assert.deepEqual(recorder.persistedAnswers(), [{ text: "確定した本文です。", sender: "bot" }]);
+});
+
+// フレームごとに、表示中の回答の長さを記録する。
+// Record the length of the shown answer after every frame.
+async function sampleLengths(recorder: ReturnType<typeof createStreamHostRecorder>, clock: FakeClock, frames: number) {
+  const lengths: number[] = [];
+  for (let frame = 0; frame < frames; frame += 1) {
+    await flushMicrotasks();
+    clock.runFrames();
+    clock.advance(16);
+    lengths.push(assistantMessages(recorder.messages())[0]?.text.length ?? 0);
+  }
+  return lengths;
+}
+
+const LONG_DRAFT = "検索せずにお答えできる内容なので、このまま続けて順を追って説明します。".repeat(4);
+
+test("the first draft is revealed from zero length instead of painting all at once", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+  const stream = createControlledStream();
+
+  const consuming = consumeGenerationStream(stream.response, recorder.host);
+  stream.push(sseBlock(1, "answer_draft", { text: LONG_DRAFT }));
+  await flushMicrotasks();
+
+  // 吹き出しは作られるが、最初の描画は空から始まる。
+  // The bubble exists, but the first paint starts empty.
+  assert.equal(assistantMessages(recorder.messages())[0].text, "");
+
+  const lengths = await sampleLengths(recorder, clock, 30);
+  assert.ok(lengths.some((length) => length > 0 && length < LONG_DRAFT.length), "a partial reveal should appear");
+  lengths.forEach((length, index) => {
+    if (index > 0) assert.ok(length >= lengths[index - 1], `length shrank at frame ${index}: ${lengths}`);
+  });
+
+  recorder.setActive(false);
+  stream.close();
+  await settleStream(consuming, clock);
+});
+
+test("a shown draft does not shrink while the confirmed text arrives in pieces after the discard", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+  const stream = createControlledStream();
+
+  const consuming = consumeGenerationStream(stream.response, recorder.host);
+  stream.push(sseBlock(1, "answer_draft", { text: LONG_DRAFT }));
+  await showFrames(clock, 200);
+  const shownBeforeDiscard = assistantMessages(recorder.messages())[0].text;
+  assert.equal(shownBeforeDiscard, LONG_DRAFT);
+
+  stream.push(sseBlock(2, "answer_draft_reset", {}));
+  const lengths: number[] = [];
+  const pieceSize = 20;
+  for (let offset = 0, id = 3; offset < LONG_DRAFT.length; offset += pieceSize, id += 1) {
+    stream.push(sseBlock(id, "chunk", { text: LONG_DRAFT.slice(offset, offset + pieceSize) }));
+    lengths.push(...(await sampleLengths(recorder, clock, 2)));
+  }
+  lengths.push(...(await sampleLengths(recorder, clock, 20)));
+
+  lengths.forEach((length, index) => {
+    assert.ok(length >= shownBeforeDiscard.length, `shrank to ${length} at sample ${index}`);
+  });
+  const finalId = 3 + Math.ceil(LONG_DRAFT.length / pieceSize);
+  stream.push(sseBlock(finalId, "done", { response: LONG_DRAFT }));
+  stream.close();
+  const completed = await settleStream(consuming, clock);
+
+  assert.equal(completed, true);
+  const answers = assistantMessages(recorder.messages());
+  assert.equal(answers.length, 1);
+  assert.equal(answers[0].text, LONG_DRAFT);
+  assert.deepEqual(recorder.persistedAnswers(), [{ text: LONG_DRAFT, sender: "bot" }]);
+});
+
+test("a confirmed body that differs from the draft does not leave a duplicated draft behind", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+  const stream = createControlledStream();
+
+  const consuming = consumeGenerationStream(stream.response, recorder.host);
+  stream.push(sseBlock(1, "answer_draft", { text: LONG_DRAFT }));
+  await showFrames(clock, 200);
+
+  const confirmed = `検索結果を踏まえた確定本文です。${LONG_DRAFT}`;
+  stream.push(sseBlock(2, "answer_draft_reset", {}), sseBlock(3, "chunk", { text: confirmed }));
+  await showFrames(clock, 200);
+
+  // 確定した本文が下書きより長ければ、下書きの残りは出ない。
+  // Once the confirmed text is longer than the draft, none of the draft's remainder shows.
+  assert.equal(assistantMessages(recorder.messages())[0].text, confirmed);
+
+  stream.push(sseBlock(4, "done", { response: confirmed }));
+  stream.close();
+  await settleStream(consuming, clock);
+  assert.equal(assistantMessages(recorder.messages()).length, 1);
+  assert.equal(assistantMessages(recorder.messages())[0].text, confirmed);
 });

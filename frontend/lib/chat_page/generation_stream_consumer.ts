@@ -158,6 +158,11 @@ type StreamSessionState = {
   // The display-only draft shown ahead of confirmation. Only streamedText is stored and restored;
   // the draft is never part of it.
   draftText: string;
+  // 下書きが取り消された時点の確定済み本文の長さ。取り消されたあとも、確定した本文が下書きの長さに
+  // 追いつくまでは下書きの残りを表示に残し、表示が縮んで再表示されるちらつきを防ぐ。null は取り消し前。
+  // The confirmed length when the draft was discarded. The rest of the draft stays on screen until
+  // the confirmed text catches up with it, so the display never shrinks and replays. null before a discard.
+  draftDiscardedAt: number | null;
   // 吹き出しが下書きだけで作られ、確定した本文がまだ無いか。下書きが捨てられたときに吹き出しごと取り除く。
   // Whether the bubble was created by a draft alone and holds no confirmed text yet, so a discarded
   // draft takes the bubble with it.
@@ -178,6 +183,21 @@ type StreamReadResult =
   | "aborted"
   | "inactive"
   | { status: "error"; message: string };
+
+// 画面に出す本文。取り消された下書きは、確定した本文が追いついた分だけ短くなる。
+// The text to show; a discarded draft shortens by as much as the confirmed text has caught up.
+function readStreamShownText(state: Pick<StreamSessionState, "streamedText" | "draftText" | "draftDiscardedAt">) {
+  if (state.draftDiscardedAt === null) return `${state.streamedText}${state.draftText}`;
+  const confirmedSinceDiscard = state.streamedText.length - state.draftDiscardedAt;
+  return `${state.streamedText}${state.draftText.slice(Math.max(confirmedSinceDiscard, 0))}`;
+}
+
+// 下書きを捨てる。
+// Drop the draft entirely.
+function clearStreamDraft(state: Pick<StreamSessionState, "draftText" | "draftDiscardedAt">) {
+  state.draftText = "";
+  state.draftDiscardedAt = null;
+}
 
 // localStorage への進行状態書き込みをスロットルする。
 // Throttles progress writes to localStorage.
@@ -267,7 +287,7 @@ function createStreamRenderer(
 
   // 画面に出す本文は、確定した本文の後ろに下書きを続けたもの。
   // What the screen shows is the confirmed text followed by the draft.
-  const readShownText = () => `${state.streamedText}${state.draftText}`;
+  const readShownText = () => readStreamShownText(state);
 
   const ensureStreamingMessage = () => {
     if (state.streamingMessageId) return state.streamingMessageId;
@@ -510,7 +530,7 @@ function createStreamRenderer(
     // 終端イベントで下書きを捨てる。確定した本文が無く下書きだけの吹き出しなら、吹き出しごと取り除く。
     // Drop the draft on a terminal event; a bubble holding only the draft goes with it.
     discardDraft() {
-      state.draftText = "";
+      clearStreamDraft(state);
       if (state.messageHeldByDraft && !state.streamedText) {
         cancelRender();
         dropDraftMessage(false);
@@ -628,6 +648,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     streamingMessageId: null,
     streamedText: restoredText,
     draftText: "",
+    draftDiscardedAt: null,
     messageHeldByDraft: false,
     streamingParts: undefined,
     pendingFinalization: null,
@@ -670,30 +691,40 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "chunk":
         renderer.ensureStreamingMessage();
-        // 確定した本文は下書きに取って代わる。サーバーは取り消しを先に送るが、順序に頼らず重複させない。
-        // Confirmed text supersedes the draft. The server sends the discard first, but a duplicate
-        // must not depend on that order.
-        state.draftText = "";
+        // 確定した本文は下書きに取って代わる。取り消し済みの下書きは確定分が追いつくまで残し、
+        // 取り消しが先に届かなかった下書きは重複させないよう捨てる。
+        // Confirmed text supersedes the draft. A discarded draft stays until the confirmed text catches
+        // up; a draft whose discard did not arrive first is dropped so it is never duplicated.
         state.messageHeldByDraft = false;
         state.streamedText += action.text;
+        if (
+          state.draftDiscardedAt === null ||
+          state.streamedText.length - state.draftDiscardedAt >= state.draftText.length
+        ) {
+          clearStreamDraft(state);
+        }
         storedStateSync.noteStreamedText();
         renderer.scheduleRender();
         return;
       case "answer_draft": {
         const createdByDraft = state.streamingMessageId === null;
-        state.draftText += action.text;
+        // 初回の描画が下書き全体をペース制御なしで描かないよう、吹き出しを先に作ってから追記する。
+        // Create the bubble before appending so its first render does not paint the whole draft unpaced.
         renderer.ensureStreamingMessage();
+        if (state.draftDiscardedAt !== null) clearStreamDraft(state);
+        state.draftText += action.text;
         if (createdByDraft) state.messageHeldByDraft = true;
         renderer.scheduleRender();
         return;
       }
       case "answer_draft_reset":
-        // 直後に確定した本文が続くことが多いので、描画は次のフレームにまとめる。
-        // A confirmed body usually follows at once, so the render waits for the next frame.
-        state.draftText = "";
+        // 確定した本文が少しずつ続くので、追いつくまで下書きの残りを表示に残す。
+        // The confirmed body follows in pieces, so the rest of the draft stays until it catches up.
+        if (state.draftText && state.draftDiscardedAt === null) state.draftDiscardedAt = state.streamedText.length;
         renderer.scheduleRender();
         return;
       case "parts_updated":
+        clearStreamDraft(state);
         // 直後に最新テキストで即時描画するため、保留中のチャンク描画は破棄する。
         // Drop the pending chunk render; the immediate update below already
         // carries the latest text.
@@ -703,12 +734,13 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       case "thinking_status":
         // 捨てられた下書きの吹き出しが残っていると、進捗の更新先になる思考中の表示が無い。
         // A leftover bubble of a discarded draft would leave no thinking indicator for the update.
+        clearStreamDraft(state);
         renderer.settleEmptiedDraft();
         renderer.updateThinkingStatus(action.text, action.phase);
         return;
       case "done":
         progress.completed = true;
-        state.draftText = "";
+        clearStreamDraft(state);
         state.messageHeldByDraft = false;
         host.messages.applyRoomTitle(action.roomTitle);
         renderer.ensureStreamingMessage();
@@ -937,7 +969,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       activeResponse = reconnectResponse;
       // 再接続は最後の非下書きイベントの次から再生するので、下書きは再生分から組み立て直す。
       // The reconnect replays from after the last non-draft event, so the draft is rebuilt from the replay.
-      state.draftText = "";
+      clearStreamDraft(state);
       renderer.scheduleRender();
     }
 
