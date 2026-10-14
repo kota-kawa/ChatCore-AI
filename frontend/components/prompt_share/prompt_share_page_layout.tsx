@@ -16,6 +16,8 @@ import type { ImportActionState } from "../../hooks/use_import_action";
 import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 
+const EMPTY_IMPORT_ACTION_STATES: ReadonlyMap<string, ImportActionState> = new Map();
+
 // ページ全体のレイアウトが受け取るすべての状態・フィルター・ハンドラを定義する
 // Defines all state, filters, and event handlers passed into the page layout component
 type PromptSharePageLayoutProps = {
@@ -67,6 +69,38 @@ type PromptSharePageLayoutProps = {
   children?: ReactNode;
 };
 
+type PromptFeedProps = Pick<PromptSharePageLayoutProps,
+  | "categories"
+  | "selectedCategory"
+  | "selectedCategoryTitle"
+  | "promptCountMeta"
+  | "hasMoreResults"
+  | "isLoadingMoreResults"
+  | "onLoadMoreResults"
+  | "isPromptsLoading"
+  | "hasPromptFeedback"
+  | "visiblePrompts"
+  | "feedbackToShow"
+  | "currentUserId"
+  | "openDropdownPromptId"
+  | "likePendingIds"
+  | "actionEffectIds"
+  | "addAsTaskPendingIds"
+  | "addAsTaskStates"
+  | "memoSavePendingIds"
+  | "onOpenDetail"
+  | "onOpenComments"
+  | "onOpenShare"
+  | "onToggleDropdown"
+  | "onCloseDropdown"
+  | "onAddAsTask"
+  | "onSaveAsMemo"
+  | "onToggleLike"
+  | "onOpenAuthorProfile"
+  | "onEditPrompt"
+  | "onImpression"
+>;
+
 // カテゴリ別ガイドページのパス。一覧見出しの横と末尾のガイドナビで同じ形を使う
 // Path of a category guide page, shared by the feed heading link and the guide nav at the end
 function getCategoryGuideHref(categoryValue: string) {
@@ -106,6 +140,182 @@ function PromptCardSkeletonGrid() {
   );
 }
 
+function PromptShareFeed({
+  categories,
+  selectedCategory,
+  selectedCategoryTitle,
+  promptCountMeta,
+  hasMoreResults,
+  isLoadingMoreResults,
+  onLoadMoreResults,
+  isPromptsLoading,
+  hasPromptFeedback,
+  visiblePrompts,
+  feedbackToShow,
+  currentUserId,
+  openDropdownPromptId,
+  likePendingIds,
+  actionEffectIds,
+  addAsTaskPendingIds,
+  addAsTaskStates = EMPTY_IMPORT_ACTION_STATES,
+  memoSavePendingIds,
+  onOpenDetail,
+  onOpenComments,
+  onOpenShare,
+  onToggleDropdown,
+  onCloseDropdown,
+  onAddAsTask,
+  onSaveAsMemo,
+  onToggleLike,
+  onOpenAuthorProfile,
+  onEditPrompt,
+  onImpression
+}: PromptFeedProps) {
+  const { locale, t } = useTranslation();
+  const getFeedCategoryLabel = (category: PromptCategory) => category.value === "all"
+    ? t("promptShare.all")
+    : getCategoryLabelOrFallback(category.value, category.label, locale);
+  const firstImageIndex = visiblePrompts.findIndex(
+    (candidate) => Boolean(candidate.reference_image_url)
+  );
+  // ガイドを持つカテゴリ（「すべて」以外）だけを、末尾のガイドナビと見出し横リンクで使う
+  // Only categories with a guide page (everything but "all") feed both guide link placements
+  const guideCategories = categories.filter((category) => category.value !== "all");
+  const selectedGuideCategory = guideCategories.find(
+    (category) => category.value === selectedCategory
+  );
+
+  return (
+    <>
+      {/* プロンプトカード一覧セクション */}
+      {/* Prompt card feed section */}
+      <section id="prompt-feed-section" data-agent-id="prompt.results" className="prompts-list" aria-labelledby="selected-category-title">
+        <div className="section-header prompts-list-header section-header--compact">
+          <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
+          {/* カテゴリで絞り込んだときだけ、そのカテゴリのガイドへの導線を1本だけ出す */}
+          {/* Surface a single link to the matching guide only while a category filter is active */}
+          {selectedGuideCategory ? (
+            <Link
+              href={getCategoryGuideHref(selectedGuideCategory.value)}
+              locale={locale}
+              className="prompts-list-guide-link"
+            >
+              {t("promptShare.browseCategoryGuide", { category: getFeedCategoryLabel(selectedGuideCategory) })}
+              <i className="bi bi-arrow-right" aria-hidden="true"></i>
+            </Link>
+          ) : null}
+        </div>
+
+        <div className="prompt-toolbar">
+          <p id="promptCountMeta" className="prompt-count-meta">
+            {promptCountMeta}
+          </p>
+        </div>
+
+        {/* 非React（レガシー）スクリプトのマウントポイント */}
+        {/* Mount point for legacy non-React rendering scripts */}
+        <div id="promptResults"></div>
+
+        <div className="prompt-cards">
+          {/* 初回ロード中のみローディングメッセージを表示し、フィードバックと重複させない */}
+          {/* Show loading message only on initial empty load, not when feedback is displayed */}
+          {isPromptsLoading && visiblePrompts.length === 0 && !hasPromptFeedback ? (
+            <PromptCardSkeletonGrid />
+          ) : null}
+
+          {/* エラーや空状態のフィードバックをvariantに応じたスタイルで表示する */}
+          {/* Show feedback message with variant-specific styling for error or empty states */}
+          {feedbackToShow ? (
+            <p className={`prompt-feedback prompt-feedback--${feedbackToShow.variant}`}>
+              {feedbackToShow.message}
+            </p>
+          ) : null}
+
+          {visiblePrompts.map((prompt, index) => {
+            const promptId = prompt.clientId;
+            return (
+              // 各カードに必要な状態とハンドラをSetから引いて渡す
+              // Look up per-card state from Sets and forward the right handlers
+              <PromptCard
+                key={promptId}
+                prompt={prompt}
+                isPriorityImage={index === firstImageIndex}
+                isDropdownOpen={openDropdownPromptId === promptId}
+                isLikePending={likePendingIds.has(promptId)}
+                isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
+                isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
+                addAsTaskState={addAsTaskStates.get(promptId)}
+                isMemoSavePending={memoSavePendingIds.has(promptId)}
+                isUseInChatEffectActive={
+                  actionEffectIds.has(`${promptId}:use-in-chat`) ||
+                  actionEffectIds.has(`${promptId}:add-skill`)
+                }
+                isOwnPrompt={
+                  currentUserId !== null && Number(prompt.author_user_id || 0) === currentUserId
+                }
+                onOpenDetail={onOpenDetail}
+                onOpenComments={onOpenComments}
+                onOpenShare={onOpenShare}
+                onToggleDropdown={onToggleDropdown}
+                onCloseDropdown={onCloseDropdown}
+                onAddAsTask={onAddAsTask}
+                onSaveAsMemo={onSaveAsMemo}
+                onToggleLike={onToggleLike}
+                onOpenAuthorProfile={onOpenAuthorProfile}
+                onEdit={onEditPrompt}
+                onImpression={onImpression}
+              />
+            );
+          })}
+        </div>
+
+        {/* 読了後の次の操作として、追加読み込みはカード一覧の末尾に表示する */}
+        {/* Put the next action after the last card, where readers naturally reach it */}
+        {hasMoreResults ? (
+          <div className="prompt-load-more-container">
+            <button
+              type="button"
+              className="prompt-load-more cc-press"
+              onClick={onLoadMoreResults}
+              disabled={isLoadingMoreResults}
+            >
+              {isLoadingMoreResults ? (
+                t("common.loading")
+              ) : (
+                <>
+                  <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginRight: "4px" }}></i>
+                  {t("promptShare.loadMore")}
+                </>
+              )}
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      {/* カテゴリ別ガイドへの網羅リンク。検索エンジンが各ページを辿れるようにしつつ、
+          上のカテゴリフィルターと見た目で競合しないよう本文の下にテキストリンクだけを置く */}
+      {/* Complete set of crawlable links to the category guides; kept below the feed as plain
+          text links so they never compete visually with the category filters above */}
+      <nav className="category-guides" aria-labelledby="category-guides-title">
+        <h2 id="category-guides-title" className="category-guides__title">
+          {t("promptShare.categoryGuides")}
+        </h2>
+        <ul className="category-guide-list">
+          {guideCategories.map((category) => (
+            <li key={category.value}>
+              <Link href={getCategoryGuideHref(category.value)} locale={locale} className="category-guide-link">
+                {getFeedCategoryLabel(category)}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </>
+  );
+}
+
+const MemoizedPromptShareFeed = React.memo(PromptShareFeed);
+
 // プロンプト共有ページのヘッダー・フィルター・カード一覧を担う純粋なレイアウトコンポーネント
 // Pure layout component for the prompt share page: header, filters, and card grid
 export function PromptSharePageLayout({
@@ -139,7 +349,7 @@ export function PromptSharePageLayout({
   likePendingIds,
   actionEffectIds,
   addAsTaskPendingIds,
-  addAsTaskStates = new Map(),
+  addAsTaskStates = EMPTY_IMPORT_ACTION_STATES,
   memoSavePendingIds,
   onOpenDetail,
   onOpenComments,
@@ -174,15 +384,6 @@ export function PromptSharePageLayout({
   const getMediaTypeLabel = (value: MediaTypeFilter) => value === "all"
     ? t("promptShare.all")
     : getPromptMediaLabel(value, locale);
-  const firstImageIndex = visiblePrompts.findIndex(
-    (candidate) => Boolean(candidate.reference_image_url)
-  );
-  // ガイドを持つカテゴリ（「すべて」以外）だけを、末尾のガイドナビと見出し横リンクの対象にする
-  // Only categories with a guide page (everything but "all") feed the guide nav and heading link
-  const guideCategories = categories.filter((category) => category.value !== "all");
-  const selectedGuideCategory = guideCategories.find(
-    (category) => category.value === selectedCategory
-  );
   return (
     <div className="prompt-share-page cc-page-rise">
       {/* カスタム要素：グローバルなアクションメニューWebComponent */}
@@ -374,133 +575,37 @@ export function PromptSharePageLayout({
           </div>
         </section>
 
-        {/* プロンプトカード一覧セクション */}
-        {/* Prompt card feed section */}
-        <section id="prompt-feed-section" data-agent-id="prompt.results" className="prompts-list" aria-labelledby="selected-category-title">
-          <div className="section-header prompts-list-header section-header--compact">
-            <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
-            {/* カテゴリで絞り込んだときだけ、そのカテゴリのガイドへの導線を1本だけ出す */}
-            {/* Surface a single link to the matching guide only while a category filter is active */}
-            {selectedGuideCategory ? (
-              <Link
-                href={getCategoryGuideHref(selectedGuideCategory.value)}
-                locale={locale}
-                className="prompts-list-guide-link"
-              >
-                {t("promptShare.browseCategoryGuide", { category: getCategoryLabel(selectedGuideCategory) })}
-                <i className="bi bi-arrow-right" aria-hidden="true"></i>
-              </Link>
-            ) : null}
-          </div>
-
-          <div className="prompt-toolbar">
-            <p id="promptCountMeta" className="prompt-count-meta">
-              {promptCountMeta}
-            </p>
-          </div>
-
-          {/* 非React（レガシー）スクリプトのマウントポイント */}
-          {/* Mount point for legacy non-React rendering scripts */}
-          <div id="promptResults"></div>
-
-          <div className="prompt-cards">
-            {/* 初回ロード中のみローディングメッセージを表示し、フィードバックと重複させない */}
-            {/* Show loading message only on initial empty load, not when feedback is displayed */}
-            {isPromptsLoading && visiblePrompts.length === 0 && !hasPromptFeedback ? (
-              <PromptCardSkeletonGrid />
-            ) : null}
-
-            {/* エラーや空状態のフィードバックをvariantに応じたスタイルで表示する */}
-            {/* Show feedback message with variant-specific styling for error or empty states */}
-            {feedbackToShow ? (
-              <p className={`prompt-feedback prompt-feedback--${feedbackToShow.variant}`}>
-                {feedbackToShow.message}
-              </p>
-            ) : null}
-
-            {visiblePrompts.map((prompt, index) => {
-              const promptId = prompt.clientId;
-              return (
-                // 各カードに必要な状態とハンドラをSetから引いて渡す
-                // Look up per-card state from Sets and forward the right handlers
-                <PromptCard
-                  key={promptId}
-                  prompt={prompt}
-                  isPriorityImage={index === firstImageIndex}
-                  isDropdownOpen={openDropdownPromptId === promptId}
-                  isLikePending={likePendingIds.has(promptId)}
-                  isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
-                  isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
-                  addAsTaskState={addAsTaskStates.get(promptId)}
-                  isMemoSavePending={memoSavePendingIds.has(promptId)}
-                  isUseInChatEffectActive={
-                    actionEffectIds.has(`${promptId}:use-in-chat`) ||
-                    actionEffectIds.has(`${promptId}:add-skill`)
-                  }
-                  isOwnPrompt={
-                    currentUserId !== null && Number(prompt.author_user_id || 0) === currentUserId
-                  }
-                  onOpenDetail={onOpenDetail}
-                  onOpenComments={onOpenComments}
-                  onOpenShare={onOpenShare}
-                  onToggleDropdown={onToggleDropdown}
-                  onCloseDropdown={onCloseDropdown}
-                  onAddAsTask={onAddAsTask}
-                  onSaveAsMemo={onSaveAsMemo}
-                  onToggleLike={onToggleLike}
-                  onOpenAuthorProfile={onOpenAuthorProfile}
-                  onEdit={onEditPrompt}
-                  onImpression={onImpression}
-                />
-              );
-            })}
-          </div>
-
-          {/* 読了後の次の操作として、追加読み込みはカード一覧の末尾に表示する */}
-          {/* Put the next action after the last card, where readers naturally reach it */}
-          {hasMoreResults ? (
-            <div className="prompt-load-more-container">
-              <button
-                type="button"
-                className="prompt-load-more cc-press"
-                onClick={onLoadMoreResults}
-                disabled={isLoadingMoreResults}
-              >
-                {isLoadingMoreResults ? (
-                  t("common.loading")
-                ) : (
-                  <>
-                    <i className="bi bi-chevron-down" aria-hidden="true" style={{ marginRight: "4px" }}></i>
-                    {t("promptShare.loadMore")}
-                  </>
-                )}
-              </button>
-            </div>
-          ) : null}
-        </section>
-
-        {/* カテゴリ別ガイドへの網羅リンク。検索エンジンが各ページを辿れるようにしつつ、
-            上のカテゴリフィルターと見た目で競合しないよう本文の下にテキストリンクだけを置く */}
-        {/* Complete set of crawlable links to the category guides; kept below the feed as plain
-            text links so they never compete visually with the category filters above */}
-        <nav className="category-guides" aria-labelledby="category-guides-title">
-          <h2 id="category-guides-title" className="category-guides__title">
-            {t("promptShare.categoryGuides")}
-          </h2>
-          <ul className="category-guide-list">
-            {guideCategories.map((category) => (
-              <li key={category.value}>
-                <Link
-                  href={getCategoryGuideHref(category.value)}
-                  locale={locale}
-                  className="category-guide-link"
-                >
-                  {getCategoryLabel(category)}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <MemoizedPromptShareFeed
+          categories={categories}
+          selectedCategory={selectedCategory}
+          selectedCategoryTitle={selectedCategoryTitle}
+          promptCountMeta={promptCountMeta}
+          hasMoreResults={hasMoreResults}
+          isLoadingMoreResults={isLoadingMoreResults}
+          onLoadMoreResults={onLoadMoreResults}
+          isPromptsLoading={isPromptsLoading}
+          hasPromptFeedback={hasPromptFeedback}
+          visiblePrompts={visiblePrompts}
+          feedbackToShow={feedbackToShow}
+          currentUserId={currentUserId}
+          openDropdownPromptId={openDropdownPromptId}
+          likePendingIds={likePendingIds}
+          actionEffectIds={actionEffectIds}
+          addAsTaskPendingIds={addAsTaskPendingIds}
+          addAsTaskStates={addAsTaskStates}
+          memoSavePendingIds={memoSavePendingIds}
+          onOpenDetail={onOpenDetail}
+          onOpenComments={onOpenComments}
+          onOpenShare={onOpenShare}
+          onToggleDropdown={onToggleDropdown}
+          onCloseDropdown={onCloseDropdown}
+          onAddAsTask={onAddAsTask}
+          onSaveAsMemo={onSaveAsMemo}
+          onToggleLike={onToggleLike}
+          onOpenAuthorProfile={onOpenAuthorProfile}
+          onEditPrompt={onEditPrompt}
+          onImpression={onImpression}
+        />
       </main>
 
       {/* モーダルなど子コンポーネントをページ末尾に差し込む */}

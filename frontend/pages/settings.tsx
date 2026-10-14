@@ -149,6 +149,7 @@ export default function UserSettingsPage() {
 
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
   const [localeSaving, setLocaleSaving] = useState(false);
+  const [initialLocalePreferenceLoaded, setInitialLocalePreferenceLoaded] = useState(false);
 
   // Passkey 関連の状態 — 対応有無・一覧・ローディング・操作中フラグを管理する
   // Passkey-related state — tracks support, list, loading, and in-progress operation flags
@@ -182,6 +183,8 @@ export default function UserSettingsPage() {
   const [emailChangeStatus, setEmailChangeStatus] = useState<ProfileSaveStatus | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const passkeySectionActiveRef = useRef(false);
+  const passkeyLocaleRef = useRef<Locale | null>(null);
   // 保存成功アニメーション用タイマーを保持し、再保存時にリセットできるようにする
   // Holds the save-effect timer so it can be cleared and reset on rapid saves
   const profileSaveEffectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,6 +251,8 @@ export default function UserSettingsPage() {
       setLocale(await loadLocalePreference());
     } catch (error) {
       console.error("loadLanguagePreference:", error instanceof Error ? error.message : String(error));
+    } finally {
+      setInitialLocalePreferenceLoaded(true);
     }
   }, [setLocale]);
 
@@ -343,6 +348,7 @@ export default function UserSettingsPage() {
       setPasskeySupported(false);
       setPasskeySupportStatus(t("settings.passkeyUnsupported"));
       setPasskeys([]);
+      setPasskeysLoading(false);
       return;
     }
 
@@ -406,20 +412,21 @@ export default function UserSettingsPage() {
     }
   }, [locale]);
 
-  // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする。
-  // 依存配列は空に保つ。loadProfile / loadPasskeys は locale に依存するため、依存に
+  // マウント時にページクラスを追加し、テーマ・プロフィール・表示言語を初期ロードする。
+  // Passkey はセキュリティセクションを開いたときに取得する。
+  // 依存配列は空に保つ。loadProfile は locale に依存するため、依存に
   // 含めると言語を変えるたびにこのエフェクトが破棄・再実行され、(1) settings-page
   // クラスが一瞬外れて画面がちらつき、(2) 保存中の言語が loadLanguagePreference の
   // 取得結果（変更前の値）で上書きされて切り替わらなくなる。初回描画時の
-  // コールバックを ref で保持し、初期ロードは一度だけ実行する。
-  // On mount, add the page class and perform initial loads for theme, profile, and
-  // passkeys. The dependency array stays empty on purpose: loadProfile/loadPasskeys
-  // depend on locale, so listing them would tear down and re-run this effect on every
-  // language change, which (1) drops the settings-page class for a frame and flickers
-  // the screen and (2) lets loadLanguagePreference overwrite the language being saved
-  // with the pre-change value, making the switch appear to do nothing. Hold the
-  // first-render callbacks in a ref so the initial loads happen exactly once.
-  const initialLoadersRef = useRef({ loadProfile, loadLanguagePreference, loadPasskeys });
+  // プロフィール・言語ローダーを ref で保持し、初期ロードは一度だけ実行する。
+  // On mount, add the page class and load the theme, profile, and language preference.
+  // Passkeys load when the security section opens. The dependency array stays empty on
+  // purpose: the profile loader depends on locale, so listing it would tear down and
+  // re-run this effect on every language change, which (1) drops the settings-page
+  // class for a frame and flickers the screen and (2) lets loadLanguagePreference
+  // overwrite the language being saved with the pre-change value. Hold the first-render
+  // profile and language callbacks in a ref so the initial loads happen exactly once.
+  const initialLoadersRef = useRef({ loadProfile, loadLanguagePreference });
 
   useEffect(() => {
     document.body.classList.add("settings-page");
@@ -434,7 +441,6 @@ export default function UserSettingsPage() {
     const initialLoaders = initialLoadersRef.current;
     void initialLoaders.loadProfile();
     void initialLoaders.loadLanguagePreference();
-    void initialLoaders.loadPasskeys();
 
     return () => {
       if (profileSaveEffectTimeoutRef.current) {
@@ -445,19 +451,41 @@ export default function UserSettingsPage() {
     };
   }, []);
 
-  // 言語を切り替えたら、サーバー由来のラベル（Passkey の日時表記など）を新しい言語で
-  // 取り直す。スケルトンを出すと切り替えのたびに画面がちらつくため、裏側で差し替える。
-  // After a language switch, refetch server-derived labels (passkey timestamps and the
-  // like) in the new language. Refresh them in the background — showing skeletons would
-  // flicker the screen on every switch.
+  // 初回の言語設定が確定してからSecurityのPasskeyを読み込む。URL localeと保存値が
+  // 異なる場合も一度だけ現localeで取得し、取得に失敗した場合はURL localeを使う。
+  // Load Security passkeys after the initial language preference is resolved. This
+  // fetches once in the active locale when the URL locale differs from the saved value,
+  // and falls back to the URL locale if loading the preference fails.
+  useEffect(() => {
+    if (!initialLocalePreferenceLoaded || activeSection !== "security") {
+      if (activeSection !== "security") {
+        passkeySectionActiveRef.current = false;
+      }
+      return;
+    }
+
+    if (!passkeySectionActiveRef.current) {
+      passkeySectionActiveRef.current = true;
+      passkeyLocaleRef.current = locale;
+      void loadPasskeys();
+      return;
+    }
+
+    if (passkeyLocaleRef.current !== locale) {
+      passkeyLocaleRef.current = locale;
+      void loadPasskeys({ background: true });
+    }
+  }, [activeSection, initialLocalePreferenceLoaded, loadPasskeys, locale]);
+
+  // 言語を切り替えたら、プロフィールの自動生成文を新しい言語で取り直す。
+  // Refresh the generated profile copy after a language switch.
   const relocalizedForRef = useRef(locale);
 
   useEffect(() => {
     if (relocalizedForRef.current === locale) return;
     relocalizedForRef.current = locale;
     void loadProfile({ background: true });
-    void loadPasskeys({ background: true });
-  }, [locale, loadPasskeys, loadProfile]);
+  }, [locale, loadProfile]);
 
   // 保存成功トークンが変わるたびにアニメーションを一定時間表示して自動消灯する
   // Show the save-success animation for a fixed duration each time the token increments
@@ -498,6 +526,10 @@ export default function UserSettingsPage() {
   const applySection = useCallback((section: SettingsSection) => {
     setActiveSection(section);
 
+    if (section !== "security") {
+      passkeySectionActiveRef.current = false;
+    }
+
     if (section === "prompts") {
       void loadMyPrompts();
       return;
@@ -507,11 +539,21 @@ export default function UserSettingsPage() {
       return;
     }
     if (section === "security") {
-      void loadPasskeys();
+      // Let the active-section effect perform the first fetch after a transition to
+      // Security. Fetch here only when Security is selected again while already open,
+      // because setting the same active section does not rerun that effect.
+      if (activeSection === "security" && initialLocalePreferenceLoaded) {
+        passkeySectionActiveRef.current = true;
+        passkeyLocaleRef.current = locale;
+        void loadPasskeys();
+      } else if (!initialLocalePreferenceLoaded) {
+        // Keep the section's loading state visible while the locale preference resolves.
+        setPasskeysLoading(true);
+      }
       void loadMcpOAuthConnectionList();
       void loadMcpOAuthClientList();
     }
-  }, [loadMcpOAuthClientList, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
+  }, [activeSection, initialLocalePreferenceLoaded, loadMcpOAuthClientList, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys, locale]);
 
   // 選択したセクションを URL のクエリにも書き戻す。再読み込みしても同じセクションが開くようにするため、
   // 履歴を増やさない replace + shallow でページ全体の再取得は避ける。

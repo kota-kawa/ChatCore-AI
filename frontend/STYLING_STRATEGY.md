@@ -12,7 +12,7 @@
 There are exactly two places CSS enters the app:
 
 1. **The global bundle** — `import "...css"` statements at the top of `pages/_app.tsx`. Webpack concatenates them in import order and Next emits them as one `<link>` set on every route.
-2. **A page `<link>`** — `<link rel="stylesheet" href="/static/css/..." />` inside the owning page's `next/head` (in this repo, as a child of `<SeoHead>`). Files under `frontend/public/` are served at the matching URL path, so `public/static/css/pages/docs/docs.css` is `/static/css/pages/docs/docs.css`.
+2. **A page `<link>`** — the owning page renders its stylesheet link. Existing pages use `next/head` (as a child of `<SeoHead>`). A page entered through client navigation can render `<link rel="stylesheet" href="..." precedence="..." />` directly so React manages the stylesheet and waits for it before displaying the page. Files under `frontend/public/` are served at the matching URL path, so `public/static/css/pages/docs/docs.css` is `/static/css/pages/docs/docs.css`.
 
 New page-only CSS should use form 2. Nothing new should be added to `_app.tsx` unless it is genuinely shared.
 
@@ -23,14 +23,15 @@ New page-only CSS should use form 2. Nothing new should be added to `_app.tsx` u
 A file may therefore be moved out of `_app.tsx` only if **both** hold:
 
 - **(a) single owner** — every class/id it defines is reachable only from one page's component tree (or one small, explicitly enumerated set of pages). A file used by a shared component is not page-scoped, because many pages pull that component in.
-- **(b) no tie in the cascade** — its selectors do not collide with selectors that stay in the global bundle at the same specificity on the same element. In practice this means: its key (rightmost) class/id names appear in no other stylesheet, and no element that carries one of its classes also carries a class styled for the same property by the remaining bundle.
+- **(b) no tie in the cascade** — its selectors do not depend on import order against selectors that stay in the global bundle on the same element. Check the complete selector, coexisting classes, specificity, importance, and property values. A shared class name alone is not a collision: disjoint page/modal scopes cannot match the same element, a stronger selector or `!important` wins regardless of order, and equal declarations give the same result. Keep order-dependent rules global.
 
 Order matters for the files that stay, too: **do not reshuffle the remaining `_app.tsx` imports**. Several of them deliberately override each other by import order (see below).
 
 ## Currently linked per page
 
-| Page / component | Stylesheets linked from `next/head` |
+| Page / component | Page-owned stylesheets |
 | --- | --- |
+| `components/memo/page/MemoPage.tsx` | `memo/static/css/memo_form.css` (React-managed, `precedence="memo"`) |
 | `pages/lp.tsx` | `pages/lp/lp.css` |
 | `pages/help.tsx`, `pages/privacy.tsx`, `pages/terms.tsx` | `pages/lp/lp.css`, `pages/docs/docs.css` |
 | `pages/chat/lp.tsx` | `pages/lp/lp.css`, `pages/chat_lp/chat_lp.css` |
@@ -45,7 +46,7 @@ Order matters for the files that stay, too: **do not reshuffle the remaining `_a
 
 ## What stays in `_app.tsx`, and why
 
-The global bundle is still large (~37k lines). Each group below fails test (a), test (b), or both — the reason is recorded so nobody has to re-derive it:
+The global bundle still contains shared components and page override chains. Each group below fails test (a), test (b), or both — the reason is recorded so nobody has to re-derive it:
 
 - `base/form_zoom_guard.css` — genuinely shared, and the one file in the bundle allowed to mark `font-size` `!important`. It raises `input` / `textarea` / `select` to at least 16px under `@media (pointer: coarse)` so iOS Safari stops zooming the page on focus; the design tokens stay below 16px and existing controls are styled through class selectors as specific as `(0,2,0)`, so the guard cannot win on specificity. It wins through `!important`, not through import order, and being last in `_app.tsx` is insurance rather than a precondition. Controls deliberately larger than 16px are written back from their page stylesheet, and `tests/form_zoom_guard_style.test.ts` asserts the two stay equal. The sandbox iframe carries its own copy in `components/chat_page/sandbox_artifact_frame.tsx` because global CSS never reaches a `srcDoc` document.
 - `styles/globals.css`, `base/*`, `components/*` — genuinely shared. `globals.css` also styles the `_app`-level shell (`GlobalAiAgent`, `NetworkStatusBanner`, the error boundary), which renders on every route.
@@ -53,9 +54,16 @@ The global bundle is still large (~37k lines). Each group below fails test (a), 
   - `components/modal_surface.css` is the one modal shell: every centered modal renders through `components/ui/modal_shell.tsx` (`ModalShell`, portaled to `<body>`) with the `cc-modal` overlay class and the `cc-modal__panel / __header / __body / __footer / __btn` parts. It paints only with the `--modal-*` tokens from `base/variables.css`; a page changes the accent by overriding `--modal-accent`, `--modal-accent-hover`, `--modal-accent-text`, `--modal-accent-soft` and `--modal-focus-ring` on a scope class it puts on the overlay (e.g. `.prompt-share-modal`). Page CSS styles only the modal's contents, never a second shell. `globals.css` keeps the shared share-modal contents (`.cc-share-modal__*`) on the same tokens.
 - **`pages/chat/*` family** (`setup`, `skills`, `chat_layout`, `chat_messages`, `chat_markdown`, `chat_input`, `tasks_order/*`, `project`, `index`) — fails (b). These files override each other by import order and share the `:where(body.chat-page, .chat-page-shell)` scope, and `chat_messages`/`chat_markdown`/`chat_layout`/`index` are also needed by `/shared/[token]`. (The two modal ties that used to be decided by import order — `.skill-detail-modal__instructions` vs `.task-detail-section-body`, `.project-overlay__close` vs `.icon-button` — are gone now that those modals render through the shared `cc-modal` surface.)
 - **`pages/chat/shared_chat.css`** — passes (a) (only `/shared/[token]`) but fails (b). `.shared-chat-page` and `pages/chat/index.css` `.chat-page-shell` are both `(0,1,0)` and both set `align-items` and `padding` on the same element; `shared_chat.css` wins only because it is imported later.
-- **`memo/static/css/memo_form.css`** (8,544 lines) — fails both. It defines the whole `mini-chat-*` family, which the `GlobalAiAgent` shell and `/prompt_share` also use, plus `memo-code-block-*` used on `/` and `/shared/[token]`, plus `primary-button`, `secondary-button`, `sr-only` and the `is-*` state classes; 64 of its names are also defined by other files in the bundle.
 - **`pages/user_settings/user_settings.css`** (~3,300 lines) — fails both. It defines the `edit-prompt-modal__*` and `prompt-card__*` families, which `/prompt_share` renders too, and 55 of its names overlap the rest of the bundle.
 - **`prompt_share/*` family** (`base`, `foundation`, `cards-actions`, `modals-composer`, `ai-agent`, `responsive`, `button-system`, `dark-mode`) — fails both. The seven `prompt_share.*` files are an intentional override chain (foundation → cards-actions → modals-composer → ai-agent → responsive → button-system → dark-mode); `dark-mode` and `responsive` overlap the rest of the bundle on nearly every name they define, and `prompt-card*` / `edit-prompt-modal__*` / `search-box` are shared with `/settings` and `/`.
+
+### Memo stylesheet boundary
+
+`memo/static/css/memo_form.css` is owned by `/memo`, including its portaled modals. Its `mini-chat-*` rules are scoped to `.memo-modal .memo-modal__agent-panel`, and its `memo-code-block-*` rules to the memo page; they do not style the global support agent or chat pages. The memo modal's selectors outrank the shared modal surface. The mobile overlay rules use `.modal-base.memo-modal-scope` / `.modal-base.memo-compose-mobile-modal` so the full-screen sheet wins against the shared overlay padding on both direct loads and client navigation. The global button shadow/filter reset and touch input font-size guard use `!important`, so they still win when the memo link comes before the bundled styles. The memo-scoped `sr-only` declarations agree with the global utility. Memo animation definitions and `--memo-spring` / `--memo-press` variables are consumed only by the memo stylesheet; `miniChatTyping` remains globally defined for the shared support agent.
+
+Keep these scope and cascade boundaries when adding rules. A route change can place the link after the global bundle, while a direct load places it before; both must render identically.
+
+The memo link is rendered directly with React's `precedence` prop, rather than through `next/head`, so client navigation cannot display the memo shell before its stylesheet is ready. Background route preparation only preloads the asset; menu intent uses React's `preinit` to prepare the stylesheet before navigation. React can retain this link after leaving the page; its rules must remain memo-scoped. See the [React stylesheet reference](https://react.dev/reference/react-dom/components/link#special-behavior-for-stylesheets).
 
 ## Checking a candidate
 

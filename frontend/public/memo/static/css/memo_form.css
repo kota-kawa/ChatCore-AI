@@ -565,9 +565,9 @@ html[data-cc-auth="in"] .memo-guest-intro {
   }
 }
 
-/* The memo page does not load the global buttons.css (base.css import chain),
-   so replicate the shared #auth-buttons styling here to match the home and
-   prompt-share screens: a green floating pill in the top-right corner. */
+/* The shared buttons stylesheet scopes its auth-button rules to chat/settings.
+   Keep the memo-scoped counterpart here so the floating login button has the
+   same appearance as on the home and prompt-share screens. */
 :where(body.memo-page, .memo-page-shell) #auth-buttons .auth-btn {
   display: inline-flex;
   align-items: center;
@@ -7541,7 +7541,7 @@ body.memo-page {
 
 /* ── 表示領域に収まる入力面 / Editing surfaces within the visual viewport ── */
 .memo-modal-scope[style],
-.memo-compose-mobile-modal {
+.modal-base.memo-compose-mobile-modal {
   top: var(--memo-viewport-top, 0px);
   bottom: auto;
   height: var(--memo-surface-height, var(--memo-viewport-height, 100dvh));
@@ -7705,8 +7705,8 @@ body.memo-page {
     padding-right: 3.5rem;
   }
 
-  .memo-modal-scope,
-  .memo-compose-mobile-modal {
+  .modal-base.memo-modal-scope,
+  .modal-base.memo-compose-mobile-modal {
     padding: 0;
     align-items: flex-end;
   }
