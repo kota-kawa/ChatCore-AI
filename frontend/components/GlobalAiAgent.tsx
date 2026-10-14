@@ -49,7 +49,7 @@ export function GlobalAiAgent() {
         data-tooltip-placement="right"
         onClick={() => setIsOpen((current) => !current)}
       >
-        <img className="global-ai-agent-icon" src="/static/Chaco.png" alt="" aria-hidden="true" />
+        <img className="global-ai-agent-icon" src="/static/Chaco.webp" alt="" aria-hidden="true" />
       </button>
 
       {/* ドラッグ可能なAIエージェントモーダル / Draggable AI agent modal */}

@@ -1,4 +1,4 @@
-import { useCallback, type FormEvent, type MutableRefObject } from "react";
+import { memo, useCallback, type FormEvent, type MutableRefObject } from "react";
 
 import type { PromptStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
@@ -34,7 +34,7 @@ type NewPromptModalProps = {
 // 共通モーダル面（cc-modal）の大サイズで描き、フォームが本文とフッターを包む。
 // Modal component for creating and submitting a new prompt, drawn on the large shared
 // modal surface (cc-modal); the form wraps both the body and the footer.
-export function NewPromptModal({
+function NewPromptModalComponent({
   isOpen,
   isPromptSubmitting,
   guardrailEnabled,
@@ -243,3 +243,5 @@ export function NewPromptModal({
     </ModalShell>
   );
 }
+
+export const NewPromptModal = memo(NewPromptModalComponent);

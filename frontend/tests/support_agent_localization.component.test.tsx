@@ -57,7 +57,7 @@ describe("support agent localization", () => {
   it("shows its placeholder copy and quick prompts in English", () => {
     const { container } = renderSupportAgent("en");
 
-    expect(container.querySelector('img[src="/static/Chaco.png"]')).toBeInTheDocument();
+    expect(container.querySelector('img[src="/static/Chaco.webp"]')).toBeInTheDocument();
     expect(screen.getByText("Chaco")).toBeInTheDocument();
     expect(screen.getByText("Ask for help using this page, choosing your next action, or organizing what to enter.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Ask for help with this page").tagName).toBe("TEXTAREA");

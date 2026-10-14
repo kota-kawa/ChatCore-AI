@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   useHomePageChatContext,
@@ -14,7 +14,7 @@ import { useTranslation } from "../../contexts/locale_context";
 // 共通モーダル面（cc-modal）の大サイズで描き、ModalShell 経由で body へポータルする。
 // Project detail modal: manage instructions and member chats. Drawn on the large shared
 // modal surface (cc-modal) and portalled to the body through ModalShell.
-export function ProjectSection() {
+function ProjectSectionComponent() {
   const { locale, t } = useTranslation();
   const {
     activeProjectId,
@@ -179,3 +179,5 @@ export function ProjectSection() {
     </ModalShell>
   );
 }
+
+export const ProjectSection = memo(ProjectSectionComponent);

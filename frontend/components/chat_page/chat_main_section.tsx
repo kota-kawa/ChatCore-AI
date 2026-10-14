@@ -1,10 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
 import { ChatRoomCard } from "./chat_room_card";
 import { ChatRoomSearch } from "./chat_room_search";
 import { InlineLoading } from "../ui/inline_loading";
 import { Skeleton } from "../ui/skeleton";
-import { useHomePageChatContext, useHomePageProjectContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
+import {
+  useHomePageChatContext,
+  useHomePageChatUiContext,
+  useHomePageLaunchPreviewContext,
+  useHomePageProjectContext,
+  useHomePageTaskContext,
+} from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { splitPinnedChatRooms } from "../../lib/chat_page/home_page_controller_utils";
 import {
@@ -22,6 +28,15 @@ import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils
 import { useTranslation } from "../../contexts/locale_context";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 
+type ChatMessageListWithoutPreviewProps = Omit<ComponentProps<typeof ChatMessageList>, "setupInfo">;
+
+function ChatMessageListWithSetupPreview(props: ChatMessageListWithoutPreviewProps) {
+  // 起動プレビューだけが setupInfo を購読し、セットアップ中の非表示チャットへ更新を広げない。
+  // Only the launch preview subscribes to setupInfo, keeping setup edits away from the hidden chat.
+  const setupInfo = useHomePageLaunchPreviewContext();
+  return <ChatMessageList {...props} setupInfo={setupInfo ?? undefined} />;
+}
+
 // チャット画面の中央ペイン全体（サイドバー・メッセージリスト・入力欄）を管理するコンポーネント。
 // Component managing the entire chat center pane: sidebar, message list, and input area.
 function ChatMainSectionComponent() {
@@ -34,7 +49,6 @@ function ChatMainSectionComponent() {
     isChatVisible,
     isChatLaunching,
     loggedIn,
-    setupInfo,
     personalKnowledgeEnabled,
     setPersonalKnowledgeEnabled,
     sharedPromptsEnabled,
@@ -46,7 +60,7 @@ function ChatMainSectionComponent() {
     showSetupForm,
     setChatHeaderModelMenuOpen,
     setSelectedModel,
-  } = useHomePageUiContext();
+  } = useHomePageChatUiContext();
 
   const { launchingTaskId, launchingTaskName, tasks } = useHomePageTaskContext();
 
@@ -187,7 +201,7 @@ function ChatMainSectionComponent() {
 
   // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
-  const chatFooterRef = useChatFooterHeight<HTMLDivElement>();
+  const chatFooterRef = useChatFooterHeight<HTMLDivElement>(isChatVisible);
 
   // Mac の IME は変換確定の Enter を送信キーとして通してしまうため、composition の状態で弾く。
   // macOS IMEs let the Enter that confirms a conversion through as a plain send key, so the
@@ -279,8 +293,9 @@ function ChatMainSectionComponent() {
     const maxHeight = lineHeight * 6 + verticalPadding + verticalBorder;
 
     element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, maxHeight)}px`;
-    element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
+    const contentHeight = element.scrollHeight;
+    element.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+    element.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
   };
 
   // chatInput が変わるたびに入力欄の高さを再計算する。
@@ -576,11 +591,10 @@ function ChatMainSectionComponent() {
 
           {/* chatMessageListResetKey が変わるとリストをアンマウント/再マウントして初期スクロール位置をリセットする。 */}
           {/* Changing chatMessageListResetKey unmounts and remounts the list to reset scroll position. */}
-          <ChatMessageList
+          <ChatMessageListWithSetupPreview
             key={`chat-message-list:${chatMessageListResetKey}`}
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
-            setupInfo={setupInfo}
             historyHasMore={historyHasMore}
             historyNextBeforeId={historyNextBeforeId}
             isChatLaunching={isChatLaunching}
@@ -722,7 +736,6 @@ function ChatMainSectionComponent() {
                 autoCapitalize="sentences"
                 onChange={(event) => {
                   setChatInput(event.target.value);
-                  adjustChatInputHeight(event.currentTarget);
                 }}
                 onFocus={handleChatInputFocus}
                 {...chatInputCompositionHandlers}

@@ -513,7 +513,7 @@ function SetupSectionComponent() {
     >
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
         <h2 className="setup-form-title">
-          <img className="setup-form-title__icon" src="/static/favicon.png" alt="" aria-hidden="true" />
+          <img className="setup-form-title__icon" src="/static/favicon-lossless.webp" alt="" aria-hidden="true" />
           <span>Chat Core</span>
         </h2>
 

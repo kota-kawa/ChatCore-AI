@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from "react";
+
 import { SeoHead } from "../components/SeoHead";
 import { ChatMainSection } from "../components/chat_page/chat_main_section";
 import { ChatShareModal } from "../components/chat_page/modals/chat_share_modal";
@@ -92,6 +94,16 @@ export default function HomePage() {
     shareWithNativeSheet,
   } = controller;
 
+  const closeTaskDetail = useCallback(() => setTaskDetail(null), [setTaskDetail]);
+  const seoHead = useMemo(() => (
+    <SeoHead
+      title={t("home.seoTitle")}
+      description={t("home.seoDescription")}
+      canonicalPath="/"
+      structuredData={buildHomeStructuredData(locale, t("home.seoDescription"))}
+    />
+  ), [locale, t]);
+
 // チャットビュー内かどうかを判定
   // Check if we are in the chat view
   const isInChatView = pageViewState === "chat" || pageViewState === "launching";
@@ -115,12 +127,7 @@ export default function HomePage() {
 
   return (
     <>
-      <SeoHead
-        title={t("home.seoTitle")}
-        description={t("home.seoDescription")}
-        canonicalPath="/"
-        structuredData={buildHomeStructuredData(locale, t("home.seoDescription"))}
-      />
+      {seoHead}
 
       <HomePageContextProvider controller={controller}>
         <div className="chat-page-shell cc-page-rise" data-authenticated={loggedIn}>
@@ -173,9 +180,7 @@ export default function HomePage() {
 
           <TaskDetailModal
             taskDetail={taskDetail}
-            onClose={() => {
-              setTaskDetail(null);
-            }}
+            onClose={closeTaskDetail}
           />
 
           <NewPromptModal
@@ -193,9 +198,7 @@ export default function HomePage() {
             outputExampleRef={outputExampleRef}
             newPromptAssistRootRef={newPromptAssistRootRef}
             onClose={closeNewPromptModal}
-            onSubmit={(event) => {
-              void handlePromptSubmit(event);
-            }}
+            onSubmit={handlePromptSubmit}
             setGuardrailEnabled={setGuardrailEnabled}
             setNewPromptTitle={setNewPromptTitle}
             setNewPromptContent={setNewPromptContent}
@@ -208,9 +211,7 @@ export default function HomePage() {
             taskEditForm={taskEditForm}
             closeTaskEditModal={closeTaskEditModal}
             setTaskEditForm={setTaskEditForm}
-            onSave={() => {
-              void handleTaskEditSave();
-            }}
+            onSave={handleTaskEditSave}
           />
 
           <ChatShareModal
@@ -224,9 +225,7 @@ export default function HomePage() {
             shareFacebookUrl={shareFacebookUrl}
             closeShareModal={closeShareModal}
             copyShareLink={copyShareLink}
-            shareWithNativeSheet={() => {
-              void shareWithNativeSheet();
-            }}
+            shareWithNativeSheet={shareWithNativeSheet}
           />
         </div>
       </HomePageContextProvider>

@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { NormalizedTask } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
@@ -14,7 +16,7 @@ type TaskDetailModalProps = {
 // 共通モーダル面（cc-modal）の大サイズで描き、各フィールドを cc-modal__section で並べる。
 // Modal component that displays task details (prompt template, response rules, examples, etc.),
 // drawn on the large shared modal surface (cc-modal) with one cc-modal__section per field.
-export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
+function TaskDetailModalComponent({ taskDetail, onClose }: TaskDetailModalProps) {
   const { locale, t } = useTranslation();
 
   // 1 フィールド分のセクション。複数行テキストは改行を保持して表示する
@@ -84,3 +86,5 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
     </ModalShell>
   );
 }
+
+export const TaskDetailModal = memo(TaskDetailModalComponent);

@@ -10,7 +10,7 @@ export function LpHeader() {
       <div className="lp-container lp-header__inner">
         <Link href="/lp" className="lp-header__brand" aria-label={locale === "en" ? "ChatCore-AI landing page" : "ChatCore-AI ランディングページ"}>
           <span className="lp-header__brand-mark" aria-hidden="true">
-            <img src="/static/favicon.png" alt="" />
+            <img src="/static/favicon-lossless.webp" alt="" />
           </span>
           <span className="lp-header__brand-name">ChatCore-AI</span>
         </Link>

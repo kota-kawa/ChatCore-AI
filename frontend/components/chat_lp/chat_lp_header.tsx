@@ -14,7 +14,7 @@ export function ChatLpHeader() {
           aria-label={locale === "en" ? "ChatCore-AI chat" : "ChatCore-AI AIチャット"}
         >
           <span className="lp-header__brand-mark" aria-hidden="true">
-            <img src="/static/favicon.png" alt="" />
+            <img src="/static/favicon-lossless.webp" alt="" />
           </span>
           <span className="lp-header__brand-name">{locale === "en" ? "AI Chat" : "AIチャット"}</span>
         </Link>

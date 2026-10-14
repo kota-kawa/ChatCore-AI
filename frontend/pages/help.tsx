@@ -148,7 +148,7 @@ export default function HelpPage() {
               {quickstartCards.map((card) => (
                 <Link key={card.href} href={card.href} className="lp-feature-card">
                   <span className="lp-feature-card__icon" aria-hidden="true">
-                    {card.useFavicon ? <img src="/static/favicon.png" alt="" /> : <i className={`bi ${card.icon}`}></i>}
+                    {card.useFavicon ? <img src="/static/favicon-lossless.webp" alt="" /> : <i className={`bi ${card.icon}`}></i>}
                   </span>
                   <span className="lp-feature-card__name">{card.name}</span>
                   <span className="lp-feature-card__title">{card.title}</span>
