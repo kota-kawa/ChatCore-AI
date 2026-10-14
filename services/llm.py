@@ -104,6 +104,9 @@ LLM_ANSWER_MAX_TOKENS = env_int("LLM_MAX_TOKENS_ANSWER", 32768)
 ANSWER_GENERATION_PHASES = frozenset(
     {"agent", "final_answer", "continuation", "final_answer_deep", "continuation_deep"}
 )
+# 回答前の Skill 選択は候補から JSON で選ぶだけの分類なので、推論を軽くして待ち時間を縮める。
+# Skill selection is a short JSON classification, so it runs with light reasoning to cut latency.
+SKILL_SELECTION_GENERATION_PHASE = "skill_selection"
 
 
 # 生成フェーズに応じた出力トークン上限を返す
@@ -699,8 +702,13 @@ def _openai_responses_reasoning_kwargs(
     *,
     generation_phase: str = "default",
 ) -> dict[str, Any]:
-    """Keep medium reasoning for Luna answers as well as auxiliary tasks."""
+    """Keep medium reasoning for Luna answers as well as auxiliary tasks, except light Skill selection.
+
+    Luna's `none` leaks its internal format into the body (#771), so selection uses `low`.
+    """
     if model_name == GPT_6_LUNA_MODEL:
+        if generation_phase == SKILL_SELECTION_GENERATION_PHASE:
+            return {"reasoning": {"effort": "low"}}
         return {"reasoning": {"effort": "medium"}}
     return {}
 
@@ -718,11 +726,18 @@ def _groq_reasoning_kwargs(
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
     if model_name == QWEN_3_8_27B_MODEL:
-        reasoning_options = {
-            "reasoning_effort": "default",
-            "reasoning_format": "hidden",
-        }
+        if generation_phase == SKILL_SELECTION_GENERATION_PHASE:
+            # Thinking is off, so there is no reasoning output to hide and no format is sent.
+            # 思考を止めるため隠す対象の推論が出力されず、reasoning_format は送らない。
+            reasoning_options = {"reasoning_effort": "none"}
+        else:
+            reasoning_options = {
+                "reasoning_effort": "default",
+                "reasoning_format": "hidden",
+            }
     elif model_name in GPT_OSS_MODELS:
+        if reasoning_effort is None and generation_phase == SKILL_SELECTION_GENERATION_PHASE:
+            reasoning_effort = "low"
         if reasoning_effort is not None:
             # JSON mode validates message content; keep explicit reasoning in its parsed field.
             # JSON modeはmessage.contentを検証するため、明示した推論をparsed fieldへ分けます。
@@ -1966,6 +1981,7 @@ def _get_chat_completions_json_response(
     fallback_message: str,
     reasoning_effort: Literal["low", "medium", "high"] | None = None,
     reasoning_format: Literal["hidden", "parsed"] | None = None,
+    generation_phase: str = "default",
 ) -> str | None:
     if client is None:
         _raise_configuration_error(
@@ -1983,6 +1999,7 @@ def _get_chat_completions_json_response(
             **(
                 _groq_reasoning_kwargs(
                     model_name,
+                    generation_phase=generation_phase,
                     reasoning_effort=reasoning_effort,
                     reasoning_format=reasoning_format,
                 )
@@ -2016,6 +2033,7 @@ def _get_chat_completions_json_response(
 def _get_openai_responses_json_response(
     conversation_messages: ConversationMessages,
     model_name: str,
+    generation_phase: str = "default",
 ) -> str | None:
     if openai_client is None:
         _raise_configuration_error(
@@ -2032,7 +2050,7 @@ def _get_openai_responses_json_response(
             model=model_name,
             input=_openai_request_messages(model_name, sanitized_messages, responses_api=True),
             max_output_tokens=LLM_MAX_TOKENS,
-            **_openai_responses_reasoning_kwargs(model_name),
+            **_openai_responses_reasoning_kwargs(model_name, generation_phase=generation_phase),
             text={"format": {"type": "json_object"}},
         )
         if not record_responses_usage(model_name, getattr(response, "usage", None)):
@@ -2058,6 +2076,7 @@ def get_llm_json_response(
     *,
     reasoning_effort: Literal["low", "medium", "high"] | None = None,
     reasoning_format: Literal["hidden", "parsed"] | None = None,
+    generation_phase: str = "default",
 ) -> str | None:
     # JSONオブジェクト形式の出力を強制してLLMから応答を取得します。失敗時は LlmServiceError を送出します。
     # Request and retrieve a chat completion response formatted strictly as a JSON object, raising LlmServiceError on failure.
@@ -2083,9 +2102,10 @@ def get_llm_json_response(
             fallback_message="Groq JSON API call failed.",
             reasoning_effort=reasoning_effort,
             reasoning_format=reasoning_format,
+            generation_phase=generation_phase,
         )
     if is_openai_model(model_name):
-        return _get_openai_responses_json_response(conversation_messages, model_name)
+        return _get_openai_responses_json_response(conversation_messages, model_name, generation_phase)
     raise RuntimeError("Unreachable model dispatch branch in get_llm_json_response.")
 
 
