@@ -4925,14 +4925,15 @@ body.memo-page {
 
 /* ── 詳細モーダル: ヘッダー / Detail modal: header ─────────────────── */
 .memo-modal .memo-modal__header {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.6rem 0.9rem;
   padding-right: 4rem;
 }
 
 .memo-modal .memo-modal__heading {
-  flex: 0 1 clamp(220px, 30%, 360px);
+  flex: 1 1 0;
+  min-width: 0;
   gap: 0.2rem;
 }
 
@@ -5016,8 +5017,9 @@ body.memo-page {
 
 .memo-modal .memo-modal__header-actions {
   display: flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  order: 2;
+  justify-content: flex-end;
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
@@ -5368,9 +5370,10 @@ body.memo-page {
 /* ── 詳細モーダル: 保存状態 / Detail modal: save state ─────────────── */
 .memo-modal .memo-modal__autosave-status {
   display: inline-flex;
+  order: 1;
   align-items: center;
   gap: 0.4rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-height: 32px;
   min-width: 0;
   max-width: 15rem;
@@ -7385,27 +7388,6 @@ body.memo-page {
   color: inherit;
 }
 
-/* タイトルと操作列が 1 行に収まらない幅では、1 行目をタイトルと保存状態、2 行目を操作列にする。
-   保存状態を操作列の後ろに並べたままだと、それだけが 3 行目に折り返してヘッダーが伸びる。
-   Where the title and the action row no longer fit on one line, row one holds the title and the
-   save state and row two the actions. Left after the action row, the save state alone would wrap
-   onto a third row and stretch the header. */
-@media (max-width: 1023px) {
-  .memo-modal .memo-modal__heading {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .memo-modal .memo-modal__autosave-status {
-    order: 1;
-  }
-
-  .memo-modal .memo-modal__header-actions {
-    flex-basis: 100%;
-    order: 4;
-  }
-}
-
 @media (max-width: 640px) {
   .memo-modal .memo-modal__header {
     padding-right: 1rem;
@@ -7415,24 +7397,6 @@ body.memo-page {
   .memo-modal .memo-modal__header > .cc-modal__close {
     top: 0.85rem;
     right: 1rem;
-  }
-
-  .memo-modal .memo-modal__header-actions {
-    flex-basis: 100%;
-    order: 4;
-    overflow: visible;
-    padding-bottom: 0.1rem;
-  }
-
-  .memo-modal .memo-modal__header-actions::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* この幅ではヘッダーの右余白が無いので、保存状態の右を閉じるボタンの分だけ空ける
-     The header has no right padding at this width, so keep the save state clear of the close button */
-  .memo-modal .memo-modal__autosave-status {
-    max-width: 11rem;
-    margin-right: 3rem;
   }
 
   .memo-modal .memo-modal__body {
@@ -7722,10 +7686,10 @@ body.memo-page {
   }
 
   /* スマホではキーボード表示中も本文を広く使えるよう、ヘッダーを 1 段に収める。
-     並びは タイトル → 保存状態 → 原文の切り替え → 書式 → その他の操作 → 閉じる。
+     並びは タイトル → 保存状態 → チャコ → 書式 → その他の操作 → 閉じる。
      右の余白は絶対配置の閉じるボタンの分
      Phones keep the header on one row so the body stays roomy with the keyboard up.
-     Order: title, save state, source toggle, formatting, more actions, close.
+     Order: title, save state, Chaco, formatting, more actions, close.
      The right padding leaves room for the absolutely placed close button */
   .memo-modal .memo-modal__header {
     flex-wrap: nowrap;
@@ -7736,6 +7700,13 @@ body.memo-page {
   .memo-modal .memo-modal__heading {
     flex: 1 1 0;
     min-width: 2.5rem;
+  }
+
+  /* 狭い操作間隔では入力の当たり判定を見出しの内側に収める。
+     Keep the title's hit area inside its heading when control gaps are narrow. */
+  .memo-modal .memo-modal__title-input {
+    width: 100%;
+    margin: 0;
   }
 
   /* 保存状態はアイコンだけにする。失敗の理由だけは文字で残し、幅が足りなければ縮める
