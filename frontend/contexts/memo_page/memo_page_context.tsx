@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type Context, type ReactNode } from "react";
+import { useMemoPageController } from "../../hooks/memo_page/use_memo_page_controller";
 
 // メモ画面の状態を子コンポーネントへ配る Context 群。
 // 値の型は controller hook の戻り値から Pick で切り出すので、hook 側のキー変更が
@@ -198,12 +199,18 @@ type MemoPageModalsContextValue = Pick<
   | "handleExport"
 >;
 
+type MemoPageFlashContextValue = Pick<
+  MemoPageControllerState,
+  "flashState" | "runFlashAction" | "holdFlash" | "releaseFlash"
+>;
+
 const MemoPageUiContext = createContext<MemoPageUiContextValue | null>(null);
 const MemoPageListContext = createContext<MemoPageListContextValue | null>(null);
 const MemoPageComposerContext = createContext<MemoPageComposerContextValue | null>(null);
 const MemoPageBoardContext = createContext<MemoPageBoardContextValue | null>(null);
 const MemoPageDetailContext = createContext<MemoPageDetailContextValue | null>(null);
 const MemoPageModalsContext = createContext<MemoPageModalsContextValue | null>(null);
+const MemoPageFlashContext = createContext<MemoPageFlashContextValue | null>(null);
 
 type MemoPageContextProviderProps = {
   controller: MemoPageControllerState;
@@ -559,19 +566,36 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
     ],
   );
 
+  const flashValue = useMemo<MemoPageFlashContextValue>(
+    () => ({
+      flashState: controller.flashState,
+      runFlashAction: controller.runFlashAction,
+      holdFlash: controller.holdFlash,
+      releaseFlash: controller.releaseFlash,
+    }),
+    [controller.flashState, controller.runFlashAction, controller.holdFlash, controller.releaseFlash],
+  );
+
   return (
     <MemoPageUiContext.Provider value={uiValue}>
       <MemoPageListContext.Provider value={listValue}>
         <MemoPageComposerContext.Provider value={composerValue}>
           <MemoPageDetailContext.Provider value={detailValue}>
             <MemoPageModalsContext.Provider value={modalsValue}>
-              <MemoPageBoardContext.Provider value={boardValue}>{children}</MemoPageBoardContext.Provider>
+              <MemoPageBoardContext.Provider value={boardValue}>
+                <MemoPageFlashContext.Provider value={flashValue}>{children}</MemoPageFlashContext.Provider>
+              </MemoPageBoardContext.Provider>
             </MemoPageModalsContext.Provider>
           </MemoPageDetailContext.Provider>
         </MemoPageComposerContext.Provider>
       </MemoPageListContext.Provider>
     </MemoPageUiContext.Provider>
   );
+}
+
+export function MemoPageControllerProvider({ children }: { children: ReactNode }) {
+  const controller = useMemoPageController();
+  return <MemoPageContextProvider controller={controller}>{children}</MemoPageContextProvider>;
 }
 
 function useRequiredContext<T>(context: Context<T | null>, contextName: string): T {
@@ -604,4 +628,8 @@ export function useMemoPageDetailContext() {
 
 export function useMemoPageModalsContext() {
   return useRequiredContext(MemoPageModalsContext, "MemoPageModalsContext");
+}
+
+export function useMemoPageFlashContext() {
+  return useRequiredContext(MemoPageFlashContext, "MemoPageFlashContext");
 }
