@@ -27,7 +27,6 @@ import "../public/static/css/pages/chat/tasks_order/tasks_order.css";
 import "../public/static/css/pages/chat/tasks_order/task-edit-modal.css";
 import "../public/static/css/pages/chat/project.css";
 import "../public/static/css/pages/chat/index.css";
-import "../public/memo/static/css/memo_form.css";
 import "../public/prompt_share/static/css/base/base.css";
 import "../public/prompt_share/static/css/pages/prompt_share.foundation.css";
 import "../public/prompt_share/static/css/pages/prompt_share.cards-actions.css";
@@ -41,12 +40,12 @@ import "../public/static/css/pages/chat/shared_chat.css";
 // タッチ端末の入力欄フォーカス時ズームを防ぐガード。上書きのため必ず CSS import の最後に置く。
 // Touch-device focus-zoom guard; it must stay last so it wins the cascade.
 import "../public/static/css/base/form_zoom_guard.css";
-// 単一ページからのみ到達し、残りのグローバル束とセレクタが重ならないページCSSは
+// 単一ページからのみ到達し、残りのグローバル束とのカスケードが順序に依存しないページCSSは
 // _app に載せず、所有ページの next/head から <link> で読み込む（STYLING_STRATEGY.md 参照）。
-// oauth_authorize.css / shared_memo.css / shared_prompt.css がこれに該当する。
-// Page CSS that is reachable from exactly one page and shares no selector with the remaining
+// memo_form.css / oauth_authorize.css / shared_memo.css / shared_prompt.css がこれに該当する。
+// Page CSS that is reachable from exactly one page and has no order-dependent cascade with the remaining
 // global bundle is linked from the owning page's next/head instead of _app (see STYLING_STRATEGY.md):
-// oauth_authorize.css, shared_memo.css and shared_prompt.css.
+// memo_form.css, oauth_authorize.css, shared_memo.css and shared_prompt.css.
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
 import "../scripts/core/csrf";
@@ -63,6 +62,7 @@ import { swrFetcher } from "../lib/data/swr_fetcher";
 import { createPersistentCacheProvider, loadPersistentCacheEntries } from "../lib/data/persistent_cache";
 import { LocaleProvider, useTranslation } from "../contexts/locale_context";
 import { DEFAULT_LOCALE, normalizeLocale, resolvePageLocale, type Locale } from "../lib/i18n/config";
+import { useMenuNavigationPrefetch } from "../hooks/use_menu_navigation_prefetch";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -260,15 +260,7 @@ export default function App({ Component, pageProps }: AppProps<LocalizedPageProp
     };
   }, []);
 
-  // メニューナビゲーション対象のルートを事前準備する
-  // Pre-fetch menu navigation target routes
-  useEffect(() => {
-    MENU_NAVIGATION_PATHS.forEach((path) => {
-      void router.prefetch(path).catch(() => {
-        // Prefetch is an optimization only; navigation still works without it.
-      });
-    });
-  }, [router]);
+  useMenuNavigationPrefetch(router, MENU_NAVIGATION_PATHS);
 
   // カスタムイベント「chatcore:navigate」をNext.jsルーターへ橋渡しする
   // Bridge the custom "chatcore:navigate" event to the Next.js router
