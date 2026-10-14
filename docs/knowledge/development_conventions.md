@@ -120,6 +120,7 @@ effort: high
   - 予算の使い切り: `llm_turn_budget_exhausted`、`tools_withdrawn_by_budget`、`truncated_evidence_payloads`
   - 生成 UI: `artifact_status`、`artifact_reason_codes`、`artifact_repair_attempted`、`artifact_repair_succeeded`
   - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`
+  - 下書き: `answer_draft_discards`（画面に出した下書きが確定した本文に置き換わらず捨てられた回数）、`first_visible_text_ms`（ジョブ開始から最初の本文を送るまでのミリ秒）
 - これらの指標が変更前より悪化した場合は、回答文が良く見えても PR にしません。悪化していないことと、狙った改善が観点の比較で確認できたことの両方が揃ってから PR を作ります。
 - LLM に採点させる判定は実行ごとに揺れるため、CI の合否条件にはしません。CI で守るのは決定的に判定できるもの（形式、契約、引用先の存在、禁止パターンの不在、構造のしきい値）に限り、意味の判定は PR 本文に残す比較で扱います。
 - 検索 API への接続、結果の解析、エラー処理を変える場合は、固定した API 応答を使う関連テストで確認します。検索結果の画面表示や操作を変える場合は `../../AGENTS.md` の Playwright による実描画・実操作確認も行います。
