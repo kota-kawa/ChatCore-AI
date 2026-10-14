@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { preinit } from "react-dom";
 import type { NextRouter } from "next/router";
 
 const BACKGROUND_QUIET_PERIOD_MS = 800;
@@ -62,6 +63,9 @@ export function useMenuNavigationPrefetch(
       );
       if (!fromMenu) return;
       cancelBackground();
+      if (router.pathname !== "/memo" && paths.includes("/memo")) {
+        preinit("/memo/static/css/memo_form.css", { as: "style", precedence: "memo" });
+      }
       for (const path of paths) {
         void prepare(path);
       }

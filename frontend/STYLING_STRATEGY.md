@@ -63,7 +63,7 @@ The global bundle still contains shared components and page override chains. Eac
 
 Keep these scope and cascade boundaries when adding rules. A route change can place the link after the global bundle, while a direct load places it before; both must render identically.
 
-The memo link is rendered directly with React's `precedence` prop, rather than through `next/head`, so client navigation cannot display the memo shell before its stylesheet is ready. React can retain this link after leaving the page; its rules must remain memo-scoped. See the [React stylesheet reference](https://react.dev/reference/react-dom/components/link#special-behavior-for-stylesheets).
+The memo link is rendered directly with React's `precedence` prop, rather than through `next/head`, so client navigation cannot display the memo shell before its stylesheet is ready. Background route preparation only preloads the asset; menu intent uses React's `preinit` to prepare the stylesheet before navigation. React can retain this link after leaving the page; its rules must remain memo-scoped. See the [React stylesheet reference](https://react.dev/reference/react-dom/components/link#special-behavior-for-stylesheets).
 
 ## Checking a candidate
 
