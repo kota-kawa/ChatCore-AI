@@ -12,7 +12,7 @@
 There are exactly two places CSS enters the app:
 
 1. **The global bundle** — `import "...css"` statements at the top of `pages/_app.tsx`. Webpack concatenates them in import order and Next emits them as one `<link>` set on every route.
-2. **A page `<link>`** — `<link rel="stylesheet" href="/static/css/..." />` inside the owning page's `next/head` (in this repo, as a child of `<SeoHead>`). Files under `frontend/public/` are served at the matching URL path, so `public/static/css/pages/docs/docs.css` is `/static/css/pages/docs/docs.css`.
+2. **A page `<link>`** — the owning page renders its stylesheet link. Existing pages use `next/head` (as a child of `<SeoHead>`). A page entered through client navigation can render `<link rel="stylesheet" href="..." precedence="..." />` directly so React manages the stylesheet and waits for it before displaying the page. Files under `frontend/public/` are served at the matching URL path, so `public/static/css/pages/docs/docs.css` is `/static/css/pages/docs/docs.css`.
 
 New page-only CSS should use form 2. Nothing new should be added to `_app.tsx` unless it is genuinely shared.
 
@@ -29,9 +29,9 @@ Order matters for the files that stay, too: **do not reshuffle the remaining `_a
 
 ## Currently linked per page
 
-| Page / component | Stylesheets linked from `next/head` |
+| Page / component | Page-owned stylesheets |
 | --- | --- |
-| `components/memo/page/MemoPage.tsx` | `memo/static/css/memo_form.css` |
+| `components/memo/page/MemoPage.tsx` | `memo/static/css/memo_form.css` (React-managed, `precedence="memo"`) |
 | `pages/lp.tsx` | `pages/lp/lp.css` |
 | `pages/help.tsx`, `pages/privacy.tsx`, `pages/terms.tsx` | `pages/lp/lp.css`, `pages/docs/docs.css` |
 | `pages/chat/lp.tsx` | `pages/lp/lp.css`, `pages/chat_lp/chat_lp.css` |
@@ -62,6 +62,8 @@ The global bundle still contains shared components and page override chains. Eac
 `memo/static/css/memo_form.css` is owned by `/memo`, including its portaled modals. Its `mini-chat-*` rules are scoped to `.memo-modal .memo-modal__agent-panel`, and its `memo-code-block-*` rules to the memo page; they do not style the global support agent or chat pages. The memo modal's selectors outrank the shared modal surface. The mobile overlay rules use `.modal-base.memo-modal-scope` / `.modal-base.memo-compose-mobile-modal` so the full-screen sheet wins against the shared overlay padding on both direct loads and client navigation. The global button shadow/filter reset and touch input font-size guard use `!important`, so they still win when the memo link comes before the bundled styles. The memo-scoped `sr-only` declarations agree with the global utility. Memo animation definitions and `--memo-spring` / `--memo-press` variables are consumed only by the memo stylesheet; `miniChatTyping` remains globally defined for the shared support agent.
 
 Keep these scope and cascade boundaries when adding rules. A route change can place the link after the global bundle, while a direct load places it before; both must render identically.
+
+The memo link is rendered directly with React's `precedence` prop, rather than through `next/head`, so client navigation cannot display the memo shell before its stylesheet is ready. React can retain this link after leaving the page; its rules must remain memo-scoped. See the [React stylesheet reference](https://react.dev/reference/react-dom/components/link#special-behavior-for-stylesheets).
 
 ## Checking a candidate
 

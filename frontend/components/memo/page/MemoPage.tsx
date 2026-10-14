@@ -44,9 +44,8 @@ export default function MemoPage() {
         description={locale === "en" ? "Save, organize, search, and share your notes and useful AI responses." : memoPageDescription}
         canonicalPath="/memo"
         structuredData={memoStructuredData}
-      >
-        <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
-      </SeoHead>
+      />
+      <link rel="stylesheet" href="/memo/static/css/memo_form.css" precedence="memo" />
 
       <MemoPageControllerProvider>
         <MemoPageContent locale={locale} t={t} />

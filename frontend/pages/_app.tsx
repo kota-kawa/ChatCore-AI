@@ -41,10 +41,10 @@ import "../public/static/css/pages/chat/shared_chat.css";
 // Touch-device focus-zoom guard; it must stay last so it wins the cascade.
 import "../public/static/css/base/form_zoom_guard.css";
 // 単一ページからのみ到達し、残りのグローバル束とのカスケードが順序に依存しないページCSSは
-// _app に載せず、所有ページの next/head から <link> で読み込む（STYLING_STRATEGY.md 参照）。
+// _app に載せず、所有ページの <link> で読み込む（STYLING_STRATEGY.md 参照）。
 // memo_form.css / oauth_authorize.css / shared_memo.css / shared_prompt.css がこれに該当する。
 // Page CSS that is reachable from exactly one page and has no order-dependent cascade with the remaining
-// global bundle is linked from the owning page's next/head instead of _app (see STYLING_STRATEGY.md):
+// global bundle is linked from the owning page instead of _app (see STYLING_STRATEGY.md):
 // memo_form.css, oauth_authorize.css, shared_memo.css and shared_prompt.css.
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
