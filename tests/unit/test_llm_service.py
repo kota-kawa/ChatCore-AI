@@ -578,9 +578,9 @@ class LlmServiceTestCase(unittest.TestCase):
                     request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
                     self.assertEqual(request_kwargs["extra_body"], expected_reasoning)
 
-    # 日本語: Skill 選択フェーズだけが3モデルの推論を軽くし、既存フェーズは変わらないことを検証します。
-    # English: Only the Skill selection phase lightens reasoning for the three models; other phases are unchanged.
-    def test_skill_selection_phase_lightens_json_reasoning_for_each_model(self):
+    # 日本語: Skill 選択フェーズは GPT-OSS と Luna の推論だけを軽くし、Qwen は従来のままであることを検証します。
+    # English: The Skill selection phase lightens reasoning for GPT-OSS and Luna only and leaves Qwen unchanged.
+    def test_skill_selection_phase_lightens_json_reasoning_for_gpt_oss_and_luna(self):
         phase = llm.SKILL_SELECTION_GENERATION_PHASE
         messages = [{"role": "user", "content": "Return JSON."}]
         mock_groq = MagicMock()
@@ -589,7 +589,7 @@ class LlmServiceTestCase(unittest.TestCase):
             for model_name, expected in (
                 (llm.GPT_OSS_120B_MODEL, {"reasoning_effort": "low", "reasoning_format": "parsed"}),
                 (llm.GPT_OSS_20B_MODEL, {"reasoning_effort": "low", "reasoning_format": "parsed"}),
-                (llm.QWEN_3_8_27B_MODEL, {"reasoning_effort": "none"}),
+                (llm.QWEN_3_8_27B_MODEL, {"reasoning_effort": "default", "reasoning_format": "hidden"}),
             ):
                 with self.subTest(model_name=model_name):
                     llm.get_llm_json_response(messages, model_name, generation_phase=phase)

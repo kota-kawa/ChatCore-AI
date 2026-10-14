@@ -726,15 +726,10 @@ def _groq_reasoning_kwargs(
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
     if model_name == QWEN_3_8_27B_MODEL:
-        if generation_phase == SKILL_SELECTION_GENERATION_PHASE:
-            # Thinking is off, so there is no reasoning output to hide and no format is sent.
-            # 思考を止めるため隠す対象の推論が出力されず、reasoning_format は送らない。
-            reasoning_options = {"reasoning_effort": "none"}
-        else:
-            reasoning_options = {
-                "reasoning_effort": "default",
-                "reasoning_format": "hidden",
-            }
+        reasoning_options = {
+            "reasoning_effort": "default",
+            "reasoning_format": "hidden",
+        }
     elif model_name in GPT_OSS_MODELS:
         if reasoning_effort is None and generation_phase == SKILL_SELECTION_GENERATION_PHASE:
             reasoning_effort = "low"
