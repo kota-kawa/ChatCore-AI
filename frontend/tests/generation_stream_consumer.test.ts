@@ -1020,7 +1020,7 @@ test("a draft is shown ahead of confirmation but never stored or counted as conf
   assert.equal(recorder.storedGeneration()?.lastEventId, 1);
 
   stream.push(
-    sseBlock(3, "answer_draft_reset", {}),
+    sseBlock(3, "answer_draft_reset", { confirming: true }),
     sseBlock(4, "chunk", { text: DRAFT_TEXT }),
     sseBlock(5, "done", { response: DRAFT_TEXT }),
   );
@@ -1048,7 +1048,7 @@ test("draft deltas accumulate, and a reset followed by confirmed text keeps one 
   assert.equal(assistantMessages(recorder.messages())[0].text, "下書きの前半、下書きの後半です。");
 
   stream.push(
-    sseBlock(3, "answer_draft_reset", {}),
+    sseBlock(3, "answer_draft_reset", { confirming: true }),
     sseBlock(4, "chunk", { text: "下書きの前半、下書きの後半です。" }),
   );
   await showFrames(clock);
@@ -1090,14 +1090,14 @@ test("a discarded draft that is followed by a tool call returns to the thinking 
   assert.equal(assistantMessages(recorder.messages()).length, 1);
 });
 
-test("a discarded draft stays on screen until progress arrives, then returns to the thinking indicator", async () => {
+test("a confirming discard keeps the draft on screen until progress arrives, then returns to the thinking indicator", async () => {
   const clock = createFakeClock();
   const recorder = createStreamHostRecorder({ clock });
   seedThinkingMessage(recorder);
   const stream = createControlledStream();
 
   const consuming = consumeGenerationStream(stream.response, recorder.host);
-  stream.push(sseBlock(1, "answer_draft", { text: DRAFT_TEXT }), sseBlock(2, "answer_draft_reset", {}));
+  stream.push(sseBlock(1, "answer_draft", { text: DRAFT_TEXT }), sseBlock(2, "answer_draft_reset", { confirming: true }));
   await showFrames(clock);
 
   // 確定した本文が追いつくまで、取り消された下書きは表示から縮まない。
@@ -1105,6 +1105,30 @@ test("a discarded draft stays on screen until progress arrives, then returns to 
   assert.equal(assistantMessages(recorder.messages())[0].text, DRAFT_TEXT);
 
   stream.push(sseBlock(3, "web_search_started", {}));
+  await showFrames(clock);
+
+  assert.equal(assistantMessages(recorder.messages()).length, 0);
+  assert.equal(recorder.messages().filter((message) => message.sender === "thinking").length, 1);
+
+  recorder.setActive(false);
+  stream.close();
+  await settleStream(consuming, clock);
+});
+
+test("a discard without confirmation drops the draft on the next frame and returns to the thinking indicator", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+  const stream = createControlledStream();
+
+  const consuming = consumeGenerationStream(stream.response, recorder.host);
+  stream.push(sseBlock(1, "answer_draft", { text: DRAFT_TEXT }));
+  await showFrames(clock);
+  assert.equal(assistantMessages(recorder.messages())[0].text, DRAFT_TEXT);
+
+  // 再試行のバックオフ中のように、取り消しの後にイベントが続かなくても残らない。
+  // Even with no event after the discard, as during a retry backoff, nothing stays on screen.
+  stream.push(sseBlock(2, "answer_draft_reset", {}));
   await showFrames(clock);
 
   assert.equal(assistantMessages(recorder.messages()).length, 0);
@@ -1166,7 +1190,7 @@ test("an incomplete event replaces the draft with the text the server saved", as
   await showFrames(clock);
 
   stream.push(
-    sseBlock(2, "answer_draft_reset", {}),
+    sseBlock(2, "answer_draft_reset", { confirming: true }),
     sseBlock(3, "chunk", { text: "保存された部分" }),
     sseBlock(4, "incomplete", { response: "保存された部分", message: "途中で終了しました。" }),
   );
@@ -1216,7 +1240,7 @@ test("a second connection sharing the room's resume position rebuilds the draft 
   assert.equal(assistantMessages(second.messages())[0].text, "下書きの前半、下書きの後半です。");
 
   secondStream.push(
-    sseBlock(4, "answer_draft_reset", {}),
+    sseBlock(4, "answer_draft_reset", { confirming: true }),
     sseBlock(5, "chunk", { text: "確定した本文です。" }),
     sseBlock(6, "done", { response: "確定した本文です。" }),
   );
@@ -1257,7 +1281,7 @@ test("a reconnect replays the draft from the last non-draft event without duplic
   assert.equal(assistantMessages(recorder.messages())[0].text, "下書きの前半、下書きの後半です。");
 
   replay.push(
-    sseBlock(4, "answer_draft_reset", {}),
+    sseBlock(4, "answer_draft_reset", { confirming: true }),
     sseBlock(5, "chunk", { text: "確定した本文です。" }),
     sseBlock(6, "done", { response: "確定した本文です。" }),
   );
@@ -1319,7 +1343,7 @@ test("a shown draft does not shrink while the confirmed text arrives in pieces a
   const shownBeforeDiscard = assistantMessages(recorder.messages())[0].text;
   assert.equal(shownBeforeDiscard, LONG_DRAFT);
 
-  stream.push(sseBlock(2, "answer_draft_reset", {}));
+  stream.push(sseBlock(2, "answer_draft_reset", { confirming: true }));
   const lengths: number[] = [];
   const pieceSize = 20;
   for (let offset = 0, id = 3; offset < LONG_DRAFT.length; offset += pieceSize, id += 1) {
@@ -1354,7 +1378,7 @@ test("a confirmed body that differs from the draft does not leave a duplicated d
   await showFrames(clock, 200);
 
   const confirmed = `検索結果を踏まえた確定本文です。${LONG_DRAFT}`;
-  stream.push(sseBlock(2, "answer_draft_reset", {}), sseBlock(3, "chunk", { text: confirmed }));
+  stream.push(sseBlock(2, "answer_draft_reset", { confirming: true }), sseBlock(3, "chunk", { text: confirmed }));
   await showFrames(clock, 200);
 
   // 確定した本文が下書きより長ければ、下書きの残りは出ない。

@@ -28,7 +28,9 @@ export type GenerationStreamAction =
   // 確定前に先行して見せる表示専用の下書き。確定した本文（chunk）には数えない。
   // A display-only draft shown ahead of confirmation; it never counts as confirmed text (chunk).
   | { kind: "answer_draft"; text: string }
-  | { kind: "answer_draft_reset" }
+  // confirming: 確定した本文が直後に続く取り消し。それ以外は、下書きをそのまま捨てる。
+  // confirming: a discard that the confirmed body follows at once; any other discard just drops the draft.
+  | { kind: "answer_draft_reset"; confirming: boolean }
   | { kind: "parts_updated"; displayText: string; parts: ChatMessagePart[] | null }
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
   | { kind: "done"; roomTitle: unknown; responseText: string; parts?: ChatMessagePart[] }
@@ -296,7 +298,7 @@ export function interpretGenerationStreamEvent(
     return text ? { kind: "answer_draft", text } : IGNORED;
   }
 
-  if (parsed.event === "answer_draft_reset") return { kind: "answer_draft_reset" };
+  if (parsed.event === "answer_draft_reset") return { kind: "answer_draft_reset", confirming: data.confirming === true };
 
   if (parsed.event === "response_parts_updated") {
     const updatePayload = normalizeChatResponsePayload(data);

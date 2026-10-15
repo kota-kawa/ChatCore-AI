@@ -46,9 +46,10 @@ test("an answer_draft event with no usable text changes nothing", () => {
   assert.deepEqual(interpret("answer_draft", {}), { kind: "ignored" });
 });
 
-test("an answer_draft_reset event is a discard with or without a payload", () => {
-  assert.deepEqual(interpret("answer_draft_reset", {}), { kind: "answer_draft_reset" });
-  assert.deepEqual(interpret("answer_draft_reset", { text: "ignored" }), { kind: "answer_draft_reset" });
+test("an answer_draft_reset event says whether the confirmed body follows", () => {
+  assert.deepEqual(interpret("answer_draft_reset", {}), { kind: "answer_draft_reset", confirming: false });
+  assert.deepEqual(interpret("answer_draft_reset", { confirming: true }), { kind: "answer_draft_reset", confirming: true });
+  assert.deepEqual(interpret("answer_draft_reset", { confirming: "yes" }), { kind: "answer_draft_reset", confirming: false });
 });
 
 test("an unknown event name changes nothing", () => {

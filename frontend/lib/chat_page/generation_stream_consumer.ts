@@ -718,9 +718,16 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       }
       case "answer_draft_reset":
-        // 確定した本文が少しずつ続くので、追いつくまで下書きの残りを表示に残す。
-        // The confirmed body follows in pieces, so the rest of the draft stays until it catches up.
-        if (state.draftText && state.draftDiscardedAt === null) state.draftDiscardedAt = state.streamedText.length;
+        if (action.confirming) {
+          // 確定した本文が少しずつ続くので、追いつくまで下書きの残りを表示に残す。
+          // The confirmed body follows in pieces, so the rest of the draft stays until it catches up.
+          if (state.draftText && state.draftDiscardedAt === null) state.draftDiscardedAt = state.streamedText.length;
+        } else {
+          // 確定が続かない取り消し（再試行・ツール呼び出し・回復）は、次のイベントを待たずに捨てる。
+          // A discard no confirmation follows (retry, tool call, recovery) drops the draft without
+          // waiting for the next event.
+          clearStreamDraft(state);
+        }
         renderer.scheduleRender();
         return;
       case "parts_updated":
