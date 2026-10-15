@@ -158,10 +158,10 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
                         # Tool-call JSON is not body text; pass it through so its arguments cannot trip
                         # the guard, after the held-back text so the order is kept.
                         if _parse_tool_calls_chunk(chunk) is None:
-                            pieces: tuple[str, ...] = (leak_guard.feed(chunk),)
+                            pieces: tuple[tuple[str, bool], ...] = ((leak_guard.feed(chunk), True),)
                         else:
-                            pieces = (leak_guard.flush(), chunk)
-                        for piece in pieces:
+                            pieces = ((leak_guard.flush(), True), (chunk, False))
+                        for piece, is_body in pieces:
                             if discard_partial_on_retry:
                                 if leak_guard.tripped:
                                     _trim_chunks_tail(attempt_chunks, leak_guard.overflow_chars)
@@ -169,6 +169,14 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
                                     attempt_chunks.append(piece)
                                 with self._chunks_lock:
                                     self._pending_stream_chunks[:] = attempt_chunks
+                                # 保留バッファの全文確定とは別に、ガードを通った本文だけを下書きへ流す。
+                                # 漏れで確定が全文を置き換えるステップは、見せた下書きも取り消す。
+                                # Beside the buffered full text, feed only guard-checked body to the draft.
+                                # A step whose confirmation replaces everything after a leak loses its draft too.
+                                if leak_guard.tripped:
+                                    self._abandon_answer_draft()
+                                elif is_body and piece:
+                                    self._feed_answer_draft(piece)
                             elif piece:
                                 yield piece
                         if leak_guard.tripped:
@@ -265,6 +273,7 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
                     if discard_partial_on_retry:
                         with self._chunks_lock:
                             self._pending_stream_chunks.clear()
+                        self._restart_answer_draft()
                     continue
                 # 2度目の拒否では、ツールを外して1度だけやり直し、ターン全体を落とさずに
                 # 手持ちの情報で回答へ進む。
@@ -283,6 +292,7 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
                 if discard_partial_on_retry:
                     with self._chunks_lock:
                         self._pending_stream_chunks.clear()
+                    self._restart_answer_draft()
                 continue
             except LlmRetryableProviderError as exc:
                 # レート制限もここで再試行する。1ターンに複数回のモデル判断を回す以上、
@@ -301,6 +311,7 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
                 if discard_partial_on_retry:
                     with self._chunks_lock:
                         self._pending_stream_chunks.clear()
+                    self._restart_answer_draft()
                 delay = _llm_stream_retry_delay(exc, attempt)
                 attempt += 1
                 logger.warning(

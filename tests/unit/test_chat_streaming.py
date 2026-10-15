@@ -28,6 +28,7 @@ from services.chat_generation import (
     ChatGenerationCoordinationError,
     ChatGenerationEvent,
     ChatGenerationIdConflictError,
+    ChatGenerationJob,
     ChatGenerationService,
     build_generation_key,
     clear_generation_job_state,
@@ -49,6 +50,7 @@ from services.chat_turn_state import (
     strip_turn_state_update,
     strip_turn_state_update_chunks,
 )
+from services.chat_workspace_tools import build_workspace_toolbox
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.llm import (
     LlmAuthenticationError,
@@ -3144,7 +3146,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     yield "discarded research draft"
                     raise LlmTimeoutError("provider timed out mid-stream")
                 return interrupted()
-            return iter([_turn_state_update(), "final answer"])
+            return iter([_turn_state_update(), "final answer that is long enough to draft"])
 
         with (
             patch("services.chat_generation_llm_stream._llm_stream_retry_delay", return_value=0.0),
@@ -3162,8 +3164,20 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertEqual(attempts["count"], 2)
-        self.assertNotIn("discarded research draft", body)
+        # 破棄した本文は表示専用の下書きとして一度は流れうるが、確定した本文には入らない。
+        # The discarded text may have streamed once as a display-only draft, but never as confirmed text.
+        confirmed = [event.payload for event in job._events if event.event in ("chunk", "done")]
+        self.assertNotIn("discarded research draft", json.dumps(confirmed, ensure_ascii=False))
         self.assertIn("final answer", body)
+        # 再試行で破棄した下書きの取り消しが、2回目の試行の下書きより前に出る。
+        # The discard of the retried attempt's draft precedes the second attempt's draft.
+        names = [event.event for event in job._events]
+        drafts = [event.payload["text"] for event in job._events if event.event == "answer_draft"]
+        self.assertEqual(drafts, ["discarded research draft", "final answer that is long enough to draft"])
+        first_draft = names.index("answer_draft")
+        second_draft = names.index("answer_draft", first_draft + 1)
+        self.assertLess(first_draft, names.index("answer_draft_reset"))
+        self.assertLess(names.index("answer_draft_reset"), second_draft)
         self.assertIn("event: done", body)
 
     def test_background_generation_job_continues_token_limited_final_answer(self):
@@ -5029,6 +5043,230 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"retryable": true', body)
         self.assertIn("応答ストリームが一定時間更新されなかったため接続を終了しました。", body)
         self.assertTrue(fake_redis.pubsub_instance.closed)
+
+
+# 下書きとして先に見せてよい長さの書き出し（保留の閾値を超える）。
+# An opening long enough to be drafted ahead of confirmation (past the hold-back threshold).
+DRAFT_OPENING = "検索せずにお答えできる内容なので、このまま続けて説明します。"
+
+
+# 日本語: 判断ステップの本文を、確定前に表示専用の下書きとして先に流す挙動（ADR 0020）を検証します。
+# English: Verify that a decision step's body streams ahead of confirmation as a display-only draft (ADR 0020).
+class AnswerDraftStreamingTestCase(unittest.TestCase):
+    def make_job(self, **kwargs):
+        return ChatGenerationJob(
+            conversation_messages=[{"role": "user", "content": "説明して"}],
+            model="openai/gpt-oss-120b",
+            persist_response=lambda *_args, **_kwargs: None,
+            **kwargs,
+        )
+
+    def run_job(self, job, stream, *, max_retries="0"):
+        with (
+            patch.dict("os.environ", {"LLM_STREAM_MAX_RETRIES": max_retries}, clear=False),
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=True),
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=None),
+            patch("services.chat_generation_llm_stream._llm_stream_retry_delay", return_value=0.0),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_generation_answer_stream.choose_web_search_images", return_value=[]),
+        ):
+            job._run()
+
+    @staticmethod
+    def names(job):
+        return [event.event for event in job._events]
+
+    @staticmethod
+    def reset_payloads(job):
+        return [event.payload for event in job._events if event.event == "answer_draft_reset"]
+
+    @staticmethod
+    def texts(job, event_name):
+        return "".join(event.payload["text"] for event in job._events if event.event == event_name)
+
+    # 日本語: 下書きがストリームの終了より前に流れ、保存される本文には入らないことを検証します。
+    # English: The draft is published before the stream ends and never enters the saved body.
+    def test_draft_is_published_before_the_stream_ends(self):
+        job = self.make_job()
+        names_before_end = []
+
+        def stream(_messages, _model, **_kwargs):
+            yield _turn_state_update()
+            yield DRAFT_OPENING
+            yield "続きの説明です。"
+            names_before_end.extend(self.names(job))
+            yield "最後の一文です。"
+
+        self.run_job(job, stream)
+
+        self.assertIn("answer_draft", names_before_end)
+        self.assertNotIn("chunk", names_before_end)
+        self.assertEqual(self.texts(job, "answer_draft"), DRAFT_OPENING + "続きの説明です。" + "最後の一文です。")
+        self.assertEqual(job.response, DRAFT_OPENING + "続きの説明です。最後の一文です。")
+        self.assertEqual(job._events[-1].event, "done")
+        self.assertIsNotNone(job._telemetry.first_visible_text_ms)
+        # 確定直前の通常の置き換えは、捨てた下書きに数えない。
+        # The ordinary replacement right before confirmation is not a thrown-away draft.
+        self.assertEqual(job._telemetry.as_log_extra()["answer_draft_discards"], 0)
+
+    # 日本語: 確定時は answer_draft_reset が最初の chunk より前に出て、確定した本文が従来どおり配信されることを検証します。
+    # English: At confirmation answer_draft_reset precedes the first chunk, and the confirmed body is delivered as before.
+    def test_confirmation_resets_the_draft_before_the_first_chunk(self):
+        job = self.make_job()
+
+        def stream(_messages, _model, **_kwargs):
+            yield DRAFT_OPENING
+            yield "続きの説明です。"
+
+        self.run_job(job, stream)
+
+        names = self.names(job)
+        self.assertLess(names.index("answer_draft_reset"), names.index("chunk"))
+        self.assertEqual(names.count("answer_draft_reset"), 1)
+        # 確定の直前の取り消しだけが、確定した本文が続くことを伝える。
+        # Only the discard right before confirmation says that the confirmed body follows.
+        self.assertEqual(self.reset_payloads(job), [{"confirming": True}])
+        self.assertEqual(self.texts(job, "chunk"), DRAFT_OPENING + "続きの説明です。")
+        self.assertLess(max(i for i, name in enumerate(names) if name == "answer_draft"), names.index("answer_draft_reset"))
+
+    # 日本語: 前置きの後にツール呼び出しで終わった判断は下書きを取り消し、最終本文に前置きが混ざらないことを検証します。
+    # English: A decision that ends in a tool call after a preamble discards its draft, and the preamble never reaches the final body.
+    def test_tool_call_after_a_preamble_discards_the_draft(self):
+        job = self.make_job()
+        calls = 0
+
+        def stream(_messages, _model, *, tools=None, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                yield _turn_state_update(ready_to_answer=False)
+                yield DRAFT_OPENING
+                yield json.dumps(
+                    [{"id": "call-1", "type": "function", "function": {"name": "web_search", "arguments": json.dumps({"query": "x"})}}]
+                )
+                return
+            yield "検索を踏まえた最終回答です。"
+
+        self.run_job(job, stream)
+
+        names = self.names(job)
+        self.assertEqual(calls, 2)
+        self.assertEqual(self.texts(job, "answer_draft"), DRAFT_OPENING)
+        self.assertEqual(names.count("answer_draft_reset"), 1)
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        self.assertEqual(self.reset_payloads(job), [{}])
+        # 取り消しは、ツール実行の進捗より前に出る。
+        # The discard is published before the tool's progress events.
+        self.assertLess(names.index("answer_draft_reset"), names.index("web_search_started"))
+        # 確定した本文には検索トレースが前置きされるので、末尾で比較する。
+        # The confirmed body carries the search trace as a prefix, so compare its tail.
+        self.assertTrue(self.texts(job, "chunk").endswith("検索を踏まえた最終回答です。"))
+        self.assertNotIn(DRAFT_OPENING, self.texts(job, "chunk"))
+        self.assertNotIn(DRAFT_OPENING, job._events[-1].payload["response"])
+
+    # 日本語: 一時障害の再試行では、見せた下書きを取り消してから先頭の本文をやり直すことを検証します。
+    # English: A transient-failure retry discards the draft shown and then redoes the body from its start.
+    def test_transient_retry_resets_the_draft(self):
+        job = self.make_job()
+        attempts = 0
+
+        def stream(_messages, _model, *, tools=None, generation_phase="default"):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                def interrupted():
+                    yield DRAFT_OPENING
+                    raise LlmTimeoutError("provider timed out mid-stream")
+                return interrupted()
+            return iter(["やり直したあとの回答は、先頭から改めて十分に長く書かれます。"])
+
+        self.run_job(job, stream, max_retries="2")
+
+        names = self.names(job)
+        self.assertEqual(attempts, 2)
+        first_reset = names.index("answer_draft_reset")
+        self.assertLess(names.index("answer_draft"), first_reset)
+        self.assertEqual(names[first_reset + 1], "answer_draft")
+        self.assertEqual(self.texts(job, "chunk"), "やり直したあとの回答は、先頭から改めて十分に長く書かれます。")
+        self.assertNotIn(DRAFT_OPENING, job._events[-1].payload["response"])
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        # 再試行の取り消しは確定を伴わず、最後の確定直前の取り消しだけが印を持つ。
+        # The retry's discard carries no confirmation mark; only the final one before confirmation does.
+        self.assertEqual(self.reset_payloads(job), [{}, {"confirming": True}])
+
+    # 日本語: `</think>` までの下書きが取り消されて数えられ、その後ろの回答は確定の置き換えとして数えないことを検証します。
+    # English: A draft up to `</think>` is discarded and counted, while the replacement at confirmation is not.
+    def test_reasoning_draft_discard_is_counted_once(self):
+        job = self.make_job()
+        answer = "推論のあとに続く、利用者へ見せる本来の回答の本文です。"
+
+        def stream(_messages, _model, **_kwargs):
+            yield "利用者の質問に答えるための下書きとして考えをまとめます。"
+            yield "\n</think>\n\n"
+            yield answer
+
+        self.run_job(job, stream)
+
+        self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        self.assertEqual(self.reset_payloads(job), [{}, {"confirming": True}])
+        self.assertEqual(self.texts(job, "chunk"), answer)
+
+    # 日本語: 書き込みツールのあるターンでは下書きを一切流さず、従来どおり確定時にだけ配信することを検証します。
+    # English: A turn with workspace write tools streams no draft at all and delivers only at confirmation, as before.
+    def test_workspace_tool_turn_never_drafts(self):
+        toolbox = build_workspace_toolbox(
+            user_id=1,
+            chat_room_id="room-1",
+            memo_tools_enabled=True,
+            external_input_in_turn=False,
+        )
+        job = self.make_job(workspace_tools=toolbox)
+
+        def stream(_messages, _model, **_kwargs):
+            yield DRAFT_OPENING
+            yield "続きの説明です。"
+
+        self.run_job(job, stream)
+
+        names = self.names(job)
+        self.assertNotIn("answer_draft", names)
+        self.assertNotIn("answer_draft_reset", names)
+        self.assertEqual(self.texts(job, "chunk"), DRAFT_OPENING + "続きの説明です。")
+        self.assertEqual(job._telemetry.answer_draft_discards, 0)
+
+    # 日本語: プロトコル漏れで確定が全文を置き換えるステップは、下書きを取り消し、その後は下書きしないことを検証します。
+    # English: A step whose confirmation replaces everything after a protocol leak discards its draft and drafts no more.
+    def test_protocol_leak_discards_the_draft(self):
+        job = self.make_job()
+
+        def stream(_messages, _model, **_kwargs):
+            yield DRAFT_OPENING
+            yield "続き assistant to=functions.web_search {\"query\":\"x\"}"
+            yield "漏れの後ろの本文は下書きにも確定にも入りません。"
+
+        self.run_job(job, stream)
+
+        names = self.names(job)
+        self.assertEqual(names.count("answer_draft_reset"), 1)
+        self.assertLess(names.index("answer_draft_reset"), names.index("chunk"))
+        self.assertNotIn("漏れの後ろ", self.texts(job, "answer_draft"))
+        self.assertNotIn("to=functions", self.texts(job, "chunk"))
+
+    # 日本語: 下書きが引用マーカーを表示せず、確定時にチップへ置換されることを検証します。
+    # English: The draft never shows citation markers; confirmation replaces them with chips.
+    def test_draft_hides_citation_markers(self):
+        job = self.make_job()
+
+        def stream(_messages, _model, **_kwargs):
+            yield DRAFT_OPENING + "根拠は[[source:src_0123"
+            yield "456789abcdef0123]]です。"
+
+        self.run_job(job, stream)
+
+        draft_text = self.texts(job, "answer_draft")
+        self.assertNotIn("[[source", draft_text)
+        self.assertNotIn("src_", draft_text)
+        self.assertTrue(draft_text.startswith(DRAFT_OPENING))
 
 
 if __name__ == "__main__":

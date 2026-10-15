@@ -408,6 +408,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
                 with self._chunks_lock:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
+                self._reset_answer_draft()
                 state.suppress_next_generation_started = True
                 continue
             if decision.outcome == "stopped":
@@ -428,6 +429,9 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             with self._chunks_lock:
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
+            # ツール呼び出しで終わった判断の本文は回答ではないので、見せた下書きも取り消す。
+            # The body of a decision that ended in a tool call is not the answer; discard the draft shown.
+            self._reset_answer_draft()
             telemetry.research_phase_used = True
             self._dispatch_tool_calls(state, decision.tool_calls, llm_step)
 
@@ -446,6 +450,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
         with self._chunks_lock:
             self._pending_stream_chunks = step_chunks
             self._pending_stream_is_rewrite = False
+        self._begin_answer_draft(state.latest_user_message)
         try:
             for chunk in self._iter_llm_stream_with_retry(
                 turn_messages,
@@ -481,6 +486,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             with self._chunks_lock:
                 self._pending_stream_chunks = []
                 self._pending_stream_is_rewrite = False
+            self._reset_answer_draft()
             state.suppress_next_generation_started = True
             return ModelDecision(outcome="replay")
         except LlmToolSchemaError:
@@ -500,6 +506,7 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
                 with self._chunks_lock:
                     self._pending_stream_chunks = []
                     self._pending_stream_is_rewrite = False
+                self._reset_answer_draft()
                 state.suppress_next_generation_started = True
                 return ModelDecision(outcome="replay")
             raise
@@ -601,6 +608,9 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             # trace-only reply, so retry once, retaining tools for unsubmitted workspace actions.
             state.empty_answer_recovery_attempted = True
             telemetry.empty_answer_recoveries += 1
+            # 回復で配信せず抜けるので、見せた下書きは確定に置き換わらず捨てられる。
+            # The step leaves for recovery without publishing, so the draft shown is thrown away.
+            self._reset_answer_draft()
             logger.warning(
                 "Final decision produced no user-facing answer; retrying once "
                 "with the applicable recovery contract.",
@@ -612,6 +622,9 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             )
             state.suppress_next_generation_started = True
             return True
+        # 配信する本文が残らないなら下書きは捨てられ、残るなら確定の配信に置き換わる。
+        # With no body left to publish the draft is thrown away; otherwise confirmation replaces it.
+        self._reset_answer_draft(confirming=bool(visible_chunks))
         state.answer_context_messages = turn_messages
         telemetry.final_answer_input_tokens = estimate_request_tokens(
             turn_messages,

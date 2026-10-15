@@ -33,6 +33,25 @@ test("a chunk event with no usable text changes nothing", () => {
   assert.deepEqual(interpret("chunk", {}), { kind: "ignored" });
 });
 
+test("an answer_draft event carries its text as a draft, not as a chunk", () => {
+  assert.deepEqual(interpret("answer_draft", { text: "先に見せる下書き" }), {
+    kind: "answer_draft",
+    text: "先に見せる下書き",
+  });
+});
+
+test("an answer_draft event with no usable text changes nothing", () => {
+  assert.deepEqual(interpret("answer_draft", { text: "" }), { kind: "ignored" });
+  assert.deepEqual(interpret("answer_draft", { text: 42 }), { kind: "ignored" });
+  assert.deepEqual(interpret("answer_draft", {}), { kind: "ignored" });
+});
+
+test("an answer_draft_reset event says whether the confirmed body follows", () => {
+  assert.deepEqual(interpret("answer_draft_reset", {}), { kind: "answer_draft_reset", confirming: false });
+  assert.deepEqual(interpret("answer_draft_reset", { confirming: true }), { kind: "answer_draft_reset", confirming: true });
+  assert.deepEqual(interpret("answer_draft_reset", { confirming: "yes" }), { kind: "answer_draft_reset", confirming: false });
+});
+
 test("an unknown event name changes nothing", () => {
   assert.deepEqual(interpret("something_new", { text: "x" }), { kind: "ignored" });
   assert.deepEqual(interpret("message", { text: "x" }), { kind: "ignored" });

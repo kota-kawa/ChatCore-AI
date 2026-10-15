@@ -153,6 +153,20 @@ type PendingFinalization = {
 type StreamSessionState = {
   streamingMessageId: string | null;
   streamedText: string;
+  // 確定前に先行して見せている表示専用の下書き。保存・復元の対象は streamedText だけで、
+  // 下書きは含めない。
+  // The display-only draft shown ahead of confirmation. Only streamedText is stored and restored;
+  // the draft is never part of it.
+  draftText: string;
+  // 下書きが取り消された時点の確定済み本文の長さ。取り消されたあとも、確定した本文が下書きの長さに
+  // 追いつくまでは下書きの残りを表示に残し、表示が縮んで再表示されるちらつきを防ぐ。null は取り消し前。
+  // The confirmed length when the draft was discarded. The rest of the draft stays on screen until
+  // the confirmed text catches up with it, so the display never shrinks and replays. null before a discard.
+  draftDiscardedAt: number | null;
+  // 吹き出しが下書きだけで作られ、確定した本文がまだ無いか。下書きが捨てられたときに吹き出しごと取り除く。
+  // Whether the bubble was created by a draft alone and holds no confirmed text yet, so a discarded
+  // draft takes the bubble with it.
+  messageHeldByDraft: boolean;
   streamingParts: ChatMessagePart[] | undefined;
   pendingFinalization: PendingFinalization | null;
   hasSeparatedInstantPrefix: boolean;
@@ -169,6 +183,21 @@ type StreamReadResult =
   | "aborted"
   | "inactive"
   | { status: "error"; message: string };
+
+// 画面に出す本文。取り消された下書きは、確定した本文が追いついた分だけ短くなる。
+// The text to show; a discarded draft shortens by as much as the confirmed text has caught up.
+function readStreamShownText(state: Pick<StreamSessionState, "streamedText" | "draftText" | "draftDiscardedAt">) {
+  if (state.draftDiscardedAt === null) return `${state.streamedText}${state.draftText}`;
+  const confirmedSinceDiscard = state.streamedText.length - state.draftDiscardedAt;
+  return `${state.streamedText}${state.draftText.slice(Math.max(confirmedSinceDiscard, 0))}`;
+}
+
+// 下書きを捨てる。
+// Drop the draft entirely.
+function clearStreamDraft(state: Pick<StreamSessionState, "draftText" | "draftDiscardedAt">) {
+  state.draftText = "";
+  state.draftDiscardedAt = null;
+}
 
 // localStorage への進行状態書き込みをスロットルする。
 // Throttles progress writes to localStorage.
@@ -256,14 +285,19 @@ function createStreamRenderer(
     chunkRenderRafId = timers.requestAnimationFrame(() => flushChunkRender());
   };
 
+  // 画面に出す本文は、確定した本文の後ろに下書きを続けたもの。
+  // What the screen shows is the confirmed text followed by the draft.
+  const readShownText = () => readStreamShownText(state);
+
   const ensureStreamingMessage = () => {
     if (state.streamingMessageId) return state.streamingMessageId;
     state.streamingMessageId = messages.createMessageId("assistant-stream");
     const newId = state.streamingMessageId;
-    const displayText = getStreamingGenerativeUiDisplayText(state.streamedText);
+    const shownText = readShownText();
+    const displayText = getStreamingGenerativeUiDisplayText(shownText);
     const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
-    const generativeUiPending = isGenerativeUiPending(state.streamedText, state.streamingParts);
-    const fenceKind = generativeUiFenceKind(state.streamedText);
+    const generativeUiPending = isGenerativeUiPending(shownText, state.streamingParts);
+    const fenceKind = generativeUiFenceKind(shownText);
 
     messages.updateActiveMessages((previous) => [
       ...removeThinkingMessages(previous),
@@ -359,6 +393,40 @@ function createStreamRenderer(
     resolveRevealCompletion = null;
   };
 
+  // 下書きだけで作った吹き出しを取り除き、表示ペースを最初に戻す。
+  // Remove the bubble a draft alone created and return the display pace to its start.
+  const dropDraftMessage = (restoreThinking: boolean) => {
+    const streamId = state.streamingMessageId;
+    state.streamingMessageId = null;
+    state.messageHeldByDraft = false;
+    streamPace.length = 0;
+    streamPace.rate = 0;
+    streamPace.lastTime = timers.now();
+    if (!streamId) return;
+    const thinkingMessage: UiChatMessage = {
+      id: messages.createMessageId("thinking"),
+      sender: "thinking",
+      text: host.localize("思考中", "Preparing an answer"),
+      generationPhase: "generating",
+    };
+    messages.updateActiveMessages((previous) => {
+      const rest = removeThinkingMessages(previous).filter((message) => message.id !== streamId);
+      return restoreThinking ? [...rest, thinkingMessage] : rest;
+    });
+  };
+
+  // 下書きが捨てられ、確定した本文も続かなかった吹き出しを片付ける。ツール呼び出しに進んだ判断なので、
+  // 思考中の表示へ戻す。取り消しの直後に確定した本文が続く場合は、その本文が来るまで吹き出しを残す。
+  // Clear a bubble whose draft was discarded with no confirmed text after it. The decision went on to
+  // a tool call, so the thinking indicator returns. Right after a discard the bubble stays until the
+  // confirmed text that usually follows has arrived.
+  const settleEmptiedDraft = () => {
+    if (!state.messageHeldByDraft || readShownText()) return false;
+    cancelRender();
+    dropDraftMessage(true);
+    return true;
+  };
+
   // 表示位置を1フレーム分進め、チャンク境界→語境界→引用チップ境界へ丸める。
   // Advance one frame, then round to a chunk, word and citation-chip boundary.
   const resolveDisplayLength = (pacedText: string, frameNow: number) => {
@@ -394,7 +462,9 @@ function createStreamRenderer(
     chunkRenderRafId = null;
     const streamId = state.streamingMessageId;
     if (!streamId) return;
-    const separatedDisplayText = splitStreamDisplayText(getStreamingGenerativeUiDisplayText(state.streamedText));
+    if (settleEmptiedDraft()) return;
+    const shownText = readShownText();
+    const separatedDisplayText = splitStreamDisplayText(getStreamingGenerativeUiDisplayText(shownText));
     const frameNow = timers.now();
     if (!state.hasSeparatedInstantPrefix && separatedDisplayText.instantPrefix) {
       // 不完全だった検索トレースが閉じた瞬間、そこまでHTMLへ費やしていた進捗を
@@ -428,9 +498,10 @@ function createStreamRenderer(
   };
 
   const renderStreamingText = (streamId: string, displayText: string) => {
+    const shownText = readShownText();
     const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
-    const generativeUiPending = isGenerativeUiPending(state.streamedText, state.streamingParts);
-    const fenceKind = generativeUiFenceKind(state.streamedText);
+    const generativeUiPending = isGenerativeUiPending(shownText, state.streamingParts);
+    const fenceKind = generativeUiFenceKind(shownText);
 
     messages.updateActiveMessages((previous) =>
       previous.map((message) =>
@@ -453,6 +524,20 @@ function createStreamRenderer(
     cancelRender,
     ensureStreamingMessage,
     finalizeStreamingMessage,
+
+    settleEmptiedDraft,
+
+    // 終端イベントで下書きを捨てる。確定した本文が無く下書きだけの吹き出しなら、吹き出しごと取り除く。
+    // Drop the draft on a terminal event; a bubble holding only the draft goes with it.
+    discardDraft() {
+      clearStreamDraft(state);
+      if (state.messageHeldByDraft && !state.streamedText) {
+        cancelRender();
+        dropDraftMessage(false);
+        return;
+      }
+      state.messageHeldByDraft = false;
+    },
 
     updateThinkingStatus(statusText: string, generationPhase: ChatGenerationPhase = "preparing") {
       messages.updateActiveMessages((previous) =>
@@ -562,6 +647,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   const state: StreamSessionState = {
     streamingMessageId: null,
     streamedText: restoredText,
+    draftText: "",
+    draftDiscardedAt: null,
+    messageHeldByDraft: false,
     streamingParts: undefined,
     pendingFinalization: null,
     hasSeparatedInstantPrefix: Boolean(initialDisplayText.instantPrefix),
@@ -575,6 +663,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   const textDecoder = new TextDecoder();
 
   const persistInterruptedStream = (message: string) => {
+    renderer.discardDraft();
     if (state.streamedText.trim()) {
       renderer.finalizeStreamingMessage(
         getStreamingGenerativeUiDisplayText(state.streamedText),
@@ -602,11 +691,47 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "chunk":
         renderer.ensureStreamingMessage();
+        // 確定した本文は下書きに取って代わる。取り消し済みの下書きは確定分が追いつくまで残し、
+        // 取り消しが先に届かなかった下書きは重複させないよう捨てる。
+        // Confirmed text supersedes the draft. A discarded draft stays until the confirmed text catches
+        // up; a draft whose discard did not arrive first is dropped so it is never duplicated.
+        state.messageHeldByDraft = false;
         state.streamedText += action.text;
+        if (
+          state.draftDiscardedAt === null ||
+          state.streamedText.length - state.draftDiscardedAt >= state.draftText.length
+        ) {
+          clearStreamDraft(state);
+        }
         storedStateSync.noteStreamedText();
         renderer.scheduleRender();
         return;
+      case "answer_draft": {
+        const createdByDraft = state.streamingMessageId === null;
+        // 初回の描画が下書き全体をペース制御なしで描かないよう、吹き出しを先に作ってから追記する。
+        // Create the bubble before appending so its first render does not paint the whole draft unpaced.
+        renderer.ensureStreamingMessage();
+        if (state.draftDiscardedAt !== null) clearStreamDraft(state);
+        state.draftText += action.text;
+        if (createdByDraft) state.messageHeldByDraft = true;
+        renderer.scheduleRender();
+        return;
+      }
+      case "answer_draft_reset":
+        if (action.confirming) {
+          // 確定した本文が少しずつ続くので、追いつくまで下書きの残りを表示に残す。
+          // The confirmed body follows in pieces, so the rest of the draft stays until it catches up.
+          if (state.draftText && state.draftDiscardedAt === null) state.draftDiscardedAt = state.streamedText.length;
+        } else {
+          // 確定が続かない取り消し（再試行・ツール呼び出し・回復）は、次のイベントを待たずに捨てる。
+          // A discard no confirmation follows (retry, tool call, recovery) drops the draft without
+          // waiting for the next event.
+          clearStreamDraft(state);
+        }
+        renderer.scheduleRender();
+        return;
       case "parts_updated":
+        clearStreamDraft(state);
         // 直後に最新テキストで即時描画するため、保留中のチャンク描画は破棄する。
         // Drop the pending chunk render; the immediate update below already
         // carries the latest text.
@@ -614,10 +739,16 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         renderer.applyPartsUpdate(action.displayText, action.parts);
         return;
       case "thinking_status":
+        // 捨てられた下書きの吹き出しが残っていると、進捗の更新先になる思考中の表示が無い。
+        // A leftover bubble of a discarded draft would leave no thinking indicator for the update.
+        clearStreamDraft(state);
+        renderer.settleEmptiedDraft();
         renderer.updateThinkingStatus(action.text, action.phase);
         return;
       case "done":
         progress.completed = true;
+        clearStreamDraft(state);
+        state.messageHeldByDraft = false;
         host.messages.applyRoomTitle(action.roomTitle);
         renderer.ensureStreamingMessage();
         state.streamedText = action.responseText;
@@ -629,6 +760,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         // An empty completion means no answer: treat it as an error instead
         // of leaving a blank bubble behind.
         progress.completed = false;
+        renderer.discardDraft();
         host.messages.applyRoomTitle(action.roomTitle);
         progress.streamError = action.message;
         host.lastEventIdByRoom.delete(roomId);
@@ -636,6 +768,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "incomplete":
         progress.completed = true;
+        renderer.discardDraft();
         host.messages.applyRoomTitle(action.roomTitle);
         renderer.finalizeStreamingMessage(action.finalText, false, action.parts, true);
         host.messages.appendErrorMessage(action.message);
@@ -644,10 +777,12 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "aborted":
         progress.completed = true;
+        renderer.discardDraft();
         renderer.finalizeStreamingMessage(action.finalText, false, action.parts);
         host.storage.clearGenerationState();
         return;
       case "error":
+        renderer.discardDraft();
         progress.streamError = action.message;
         return;
     }
@@ -658,19 +793,39 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   // Count of new events applied so far, used to judge whether a reconnect made
   // progress. Replayed events and events that change nothing are not counted.
   let appliedEventCount = 0;
+  let highestDraftEventId = 0;
 
   const processBlock = (block: string, progress: StreamProgressState) => {
     const parsed = parseStreamEventBlock(block);
     if (!parsed) return;
     if (!host.isActive()) return;
 
-    if (!rememberStreamEventId(host.lastEventIdByRoom, roomId, parsed.id)) return;
-    if (typeof parsed.id === "number" && parsed.id > 0) {
-      storedStateSync.noteLastEventId(parsed.id);
-    }
-
     const action = interpretGenerationStreamEvent(parsed, { streamedText: state.streamedText, localize: host.localize });
-    if (action.kind !== "ignored") appliedEventCount += 1;
+    // 下書きは復元データにも、ルームをまたぐ再開位置にも残さない。どちらも下書きのイベントでは進めず、
+    // 再接続は最後の非下書きイベントの次から再生して、下書きを先頭から組み立て直す。進めると、
+    // 再読み込みやルーム切り替えの後に下書きの途中から再開し、先頭の欠けた下書きが見える。
+    // 受信済みのイベントの再送は、記録しなくても捨てる。
+    // A draft is kept out of both the stored recovery data and the per-room resume position. Neither
+    // advances on a draft event, so a reconnect replays from just after the last non-draft event and
+    // rebuilds the draft from its start; advancing them would resume mid-draft after a reload or a
+    // room switch and show a draft missing its head. A resent event is still dropped, unrecorded.
+    let countsAsProgress = action.kind !== "ignored";
+    if (action.kind === "answer_draft") {
+      const lastEventId = host.lastEventIdByRoom.get(roomId) ?? 0;
+      if (typeof parsed.id === "number" && parsed.id > 0) {
+        if (parsed.id <= lastEventId) return;
+        // 再接続で再生し直した下書きは、再接続の成否を測る進捗に数えない。
+        // A draft replayed after a reconnect does not count as progress for judging the reconnect.
+        countsAsProgress = parsed.id > highestDraftEventId;
+        highestDraftEventId = Math.max(highestDraftEventId, parsed.id);
+      }
+    } else {
+      if (!rememberStreamEventId(host.lastEventIdByRoom, roomId, parsed.id)) return;
+      if (typeof parsed.id === "number" && parsed.id > 0) {
+        storedStateSync.noteLastEventId(parsed.id);
+      }
+    }
+    if (countsAsProgress) appliedEventCount += 1;
     applyStreamAction(action, progress);
   };
 
@@ -819,6 +974,10 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         continue;
       }
       activeResponse = reconnectResponse;
+      // 再接続は最後の非下書きイベントの次から再生するので、下書きは再生分から組み立て直す。
+      // The reconnect replays from after the last non-draft event, so the draft is rebuilt from the replay.
+      clearStreamDraft(state);
+      renderer.scheduleRender();
     }
 
     return false;
