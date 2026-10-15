@@ -317,21 +317,25 @@ class ChatGenerationJobBase:
             return None
         return AnswerDraftFilter(self._answer_draft_request)
 
-    # 表示済みの下書きがあれば取り消しを配信し、取り消したかを返す。下書きを出していなければ何もしない
-    # ので、保留バッファを空にする・差し替える箇所から重ねて呼んでよい。`counted=False` は確定の直前の
-    # 通常の置き換えで、「捨てた」回数には数えない。
-    # Publish a discard when a draft is on screen and report whether one was. A no-op otherwise, so
-    # every place that empties or replaces the pending buffer may call it again. `counted=False` is
-    # the ordinary replacement right before confirmation and is not counted as a thrown-away draft.
-    def _reset_answer_draft(self, *, counted: bool = True) -> bool:
+    # 表示済みの下書きがあれば取り消しを配信する。下書きを出していなければ何もしないので、保留バッファを
+    # 空にする・差し替える箇所から重ねて呼んでよい。`confirming=True` は確定した本文を直後に配信する
+    # 経路で、取り消しに `{"confirming": true}` を載せ、「捨てた」回数には数えない。クライアントは
+    # この印があるときだけ、確定した本文が追いつくまで下書きを表示に残す。
+    # Publish a discard when a draft is on screen; a no-op otherwise, so every place that empties or
+    # replaces the pending buffer may call it again. `confirming=True` is the path that publishes the
+    # confirmed body right after: the discard carries `{"confirming": true}` and is not counted as a
+    # thrown-away draft. Only with that mark does the client keep the draft on screen until the
+    # confirmed text catches up.
+    def _reset_answer_draft(self, *, confirming: bool = False) -> None:
         with self._answer_draft_lock:
             if not self._answer_draft_visible:
-                return False
+                return
             self._answer_draft_visible = False
-            if counted:
-                self._telemetry.answer_draft_discards += 1
+            if confirming:
+                self._publish("answer_draft_reset", {"confirming": True})
+                return
+            self._telemetry.answer_draft_discards += 1
             self._publish("answer_draft_reset", {})
-            return True
 
     # 新しい判断ステップの下書きを始める。書き込みツールのあるターンは下書きを出さない。誤った
     # 「追記しました」などが一瞬でも見える事故を避けるため（ADR 0020）。

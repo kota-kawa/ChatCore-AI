@@ -5077,6 +5077,10 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         return [event.event for event in job._events]
 
     @staticmethod
+    def reset_payloads(job):
+        return [event.payload for event in job._events if event.event == "answer_draft_reset"]
+
+    @staticmethod
     def texts(job, event_name):
         return "".join(event.payload["text"] for event in job._events if event.event == event_name)
 
@@ -5119,6 +5123,9 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         names = self.names(job)
         self.assertLess(names.index("answer_draft_reset"), names.index("chunk"))
         self.assertEqual(names.count("answer_draft_reset"), 1)
+        # 確定の直前の取り消しだけが、確定した本文が続くことを伝える。
+        # Only the discard right before confirmation says that the confirmed body follows.
+        self.assertEqual(self.reset_payloads(job), [{"confirming": True}])
         self.assertEqual(self.texts(job, "chunk"), DRAFT_OPENING + "続きの説明です。")
         self.assertLess(max(i for i, name in enumerate(names) if name == "answer_draft"), names.index("answer_draft_reset"))
 
@@ -5147,6 +5154,7 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertEqual(self.texts(job, "answer_draft"), DRAFT_OPENING)
         self.assertEqual(names.count("answer_draft_reset"), 1)
         self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        self.assertEqual(self.reset_payloads(job), [{}])
         # 取り消しは、ツール実行の進捗より前に出る。
         # The discard is published before the tool's progress events.
         self.assertLess(names.index("answer_draft_reset"), names.index("web_search_started"))
@@ -5182,6 +5190,9 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.assertEqual(self.texts(job, "chunk"), "やり直したあとの回答は、先頭から改めて十分に長く書かれます。")
         self.assertNotIn(DRAFT_OPENING, job._events[-1].payload["response"])
         self.assertEqual(job._telemetry.answer_draft_discards, 1)
+        # 再試行の取り消しは確定を伴わず、最後の確定直前の取り消しだけが印を持つ。
+        # The retry's discard carries no confirmation mark; only the final one before confirmation does.
+        self.assertEqual(self.reset_payloads(job), [{}, {"confirming": True}])
 
     # 日本語: `</think>` までの下書きが取り消されて数えられ、その後ろの回答は確定の置き換えとして数えないことを検証します。
     # English: A draft up to `</think>` is discarded and counted, while the replacement at confirmation is not.
@@ -5197,7 +5208,7 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
         self.run_job(job, stream)
 
         self.assertEqual(job._telemetry.answer_draft_discards, 1)
-        self.assertEqual(self.names(job).count("answer_draft_reset"), 2)
+        self.assertEqual(self.reset_payloads(job), [{}, {"confirming": True}])
         self.assertEqual(self.texts(job, "chunk"), answer)
 
     # 日本語: 書き込みツールのあるターンでは下書きを一切流さず、従来どおり確定時にだけ配信することを検証します。
