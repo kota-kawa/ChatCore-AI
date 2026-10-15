@@ -45,8 +45,8 @@ export function useChatAttachmentDropzone({
   }, []);
 
   const attachSelectedFiles = useCallback(
-    (files: File[]) => {
-      if (files.length === 0) return;
+    async (files: File[], isCurrent: () => boolean = () => true) => {
+      if (files.length === 0 || !isCurrent()) return;
 
       if (isAttachmentDisabled) {
         notifyAttachmentError(t("chat.attachmentUnavailable"));
@@ -58,11 +58,12 @@ export function useChatAttachmentDropzone({
         return;
       }
 
-      void readSelectedChatAttachments(files, attachedFiles, notifyAttachmentError, { allowImages }).then((selectedFiles) => {
-        if (selectedFiles.length === 0) return;
-        setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
-        focusTargetRef.current?.focus();
-      });
+      const selectedFiles = await readSelectedChatAttachments(files, attachedFiles, (message) => {
+        if (isCurrent()) notifyAttachmentError(message);
+      }, { allowImages });
+      if (selectedFiles.length === 0 || !isCurrent()) return;
+      setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
+      focusTargetRef.current?.focus();
     },
     [allowImages, attachedFiles, focusTargetRef, isAttachmentDisabled, locale, notifyAttachmentError, setAttachedFiles, t],
   );

@@ -18,6 +18,8 @@ type SetupAttachMenuProps = {
   onToggleMemoLookup: () => void;
   onToggleSharedPromptLookup: () => void;
   onSelectFile: () => void;
+  onPaste: () => void;
+  isPasting: boolean;
 };
 
 type KnowledgeLookupChipsProps = {
@@ -27,8 +29,8 @@ type KnowledgeLookupChipsProps = {
   onToggleSharedPromptLookup: () => void;
 };
 
-// 入力欄のクリップボタンから開く添付メニュー。メモ・共有プロンプト・ファイル添付を並べる。
-// Attachment menu opened from the composer's paperclip button, listing memo, shared prompt, and file entries.
+// 入力欄の追加メニュー。スマホではクリップボードの貼り付けも提供する。
+// Composer add menu, including clipboard paste on phones.
 export function SetupAttachMenu({
   disabled,
   fileItemDisabled,
@@ -39,6 +41,8 @@ export function SetupAttachMenu({
   onToggleMemoLookup,
   onToggleSharedPromptLookup,
   onSelectFile,
+  onPaste,
+  isPasting,
 }: SetupAttachMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -161,6 +165,20 @@ export function SetupAttachMenu({
         >
           <i className="bi bi-paperclip setup-attach-menu__icon" aria-hidden="true"></i>
           <span>{t("home.attachMenu.file")}</span>
+        </button>
+        <button
+          type="button"
+          className="setup-attach-menu__item setup-attach-menu__item--paste"
+          role="menuitem"
+          tabIndex={isOpen ? 0 : -1}
+          disabled={disabled || isPasting}
+          onClick={() => {
+            onPaste();
+            closeMenu();
+          }}
+        >
+          <i className="bi bi-clipboard setup-attach-menu__icon" aria-hidden="true"></i>
+          <span>{t("home.attachMenu.paste")}</span>
         </button>
       </div>
     </div>

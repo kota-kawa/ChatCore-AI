@@ -59,6 +59,16 @@
   flex-shrink: 0;
 }
 
+/* スマホの添付ボタンは左端にあるため、メニューも左端を揃えて画面内へ開く。 */
+/* The phone's attachment trigger is on the left; open its menu toward the screen. */
+@media (max-width: 768px) and (pointer: coarse) {
+  :where(body.chat-page, .chat-page-shell) .chat-input-wrapper--with-attach-menu .setup-attach-menu__list {
+    left: 0;
+    right: auto;
+    transform-origin: bottom left;
+  }
+}
+
 :where(body.chat-page, .chat-page-shell) .input-wrapper:focus-within {
   border-color: var(--primary-color);
 }

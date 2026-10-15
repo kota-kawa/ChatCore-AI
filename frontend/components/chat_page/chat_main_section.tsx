@@ -21,6 +21,7 @@ import {
 import { modelAcceptsImageInput } from "../../lib/chat_page/chat_images";
 import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
+import { useChatClipboardPaste } from "../../hooks/chat_page/use_chat_clipboard_paste";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
 import { useChatToolApprovals } from "../../hooks/chat_page/use_chat_tool_approvals";
 import { isNearBottom } from "../../lib/chat_page/dom";
@@ -185,6 +186,15 @@ function ChatMainSectionComponent() {
     allowImages: imageInputAllowed,
     focusTargetRef: chatInputRef,
     notifyAttachmentError,
+  });
+
+  const { handlePaste, isPasting } = useChatClipboardPaste({
+    inputRef: chatInputRef,
+    setInputValue: setChatInput,
+    attachSelectedFiles,
+    notifyError: notifyAttachmentError,
+    isDisabled: isChatLaunching || !isChatVisible,
+    scopeKey: `${currentRoomId}:${selectedModel}`,
   });
 
   // 途中保存された回答の続きを、通常の送信経路でそのまま依頼する。保存済み本文は
@@ -718,6 +728,8 @@ function ChatMainSectionComponent() {
                 onToggleMemoLookup={() => setPersonalKnowledgeEnabled((previous) => !previous)}
                 onToggleSharedPromptLookup={() => setSharedPromptsEnabled((previous) => !previous)}
                 onSelectFile={() => fileInputRef.current?.click()}
+                onPaste={() => { void handlePaste(); }}
+                isPasting={isPasting}
               />
               <textarea
                 ref={chatInputRef}

@@ -21,6 +21,7 @@ import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { RecentChatsStrip } from "./recent_chats_strip";
 import { SkillSection } from "./skill_section";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
+import { useChatClipboardPaste } from "../../hooks/chat_page/use_chat_clipboard_paste";
 import { useTaskReorderDrag } from "../../hooks/chat_page/use_task_reorder_drag";
 import type { NormalizedTask } from "../../lib/chat_page/types";
 import {
@@ -294,6 +295,15 @@ function SetupSectionComponent() {
     allowImages: imageInputAllowed,
     focusTargetRef: setupInfoInputRef,
     notifyAttachmentError,
+  });
+
+  const { handlePaste, isPasting } = useChatClipboardPaste({
+    inputRef: setupInfoInputRef,
+    setInputValue: setSetupInfo,
+    attachSelectedFiles,
+    notifyError: notifyAttachmentError,
+    isDisabled: isChatLaunching || !isSetupVisible,
+    scopeKey: selectedModel,
   });
 
   // ファイル選択後にリストへ追加し、inputの値をリセットして同じファイルの再選択を可能にする
@@ -663,6 +673,8 @@ function SetupSectionComponent() {
                 onToggleMemoLookup={() => setPersonalKnowledgeEnabled((previous) => !previous)}
                 onToggleSharedPromptLookup={() => setSharedPromptsEnabled((previous) => !previous)}
                 onSelectFile={() => fileInputRef.current?.click()}
+                onPaste={() => { void handlePaste(); }}
+                isPasting={isPasting}
               />
 
               <button
