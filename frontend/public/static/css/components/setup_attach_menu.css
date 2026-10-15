@@ -1,5 +1,5 @@
-/* 入力欄のクリップボタンから開く追加メニュー（メモ／共有プロンプト／ファイル添付） */
-/* Add menu opened from the composer's paperclip button (memo / shared prompt / file attach) */
+/* 入力欄の追加メニュー。ペーストはスマホだけに表示する。 */
+/* Composer add menu. Paste is shown only on phones. */
 
 :where(body.chat-page, .chat-page-shell) .setup-attach-menu__list {
   position: absolute;
@@ -65,6 +65,17 @@
 
 :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:not(:first-child) {
   border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-attach-menu__item--paste {
+  display: none;
+}
+
+@media (max-width: 768px) and (pointer: coarse) {
+  :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item--paste {
+    display: flex;
+    min-height: var(--tap-target-min);
+  }
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-attach-menu__item:hover:not(:disabled),

@@ -5,6 +5,7 @@ import { KnowledgeLookupChips, SetupAttachMenu } from "../components/chat_page/s
 
 function renderMenu(overrides: Partial<Parameters<typeof SetupAttachMenu>[0]> = {}) {
   const onSelectFile = vi.fn();
+  const onPaste = vi.fn();
   const onToggleMemoLookup = vi.fn();
   const onToggleSharedPromptLookup = vi.fn();
   render(
@@ -17,11 +18,14 @@ function renderMenu(overrides: Partial<Parameters<typeof SetupAttachMenu>[0]> = 
       onToggleMemoLookup={onToggleMemoLookup}
       onToggleSharedPromptLookup={onToggleSharedPromptLookup}
       onSelectFile={onSelectFile}
+      onPaste={onPaste}
+      isPasting={false}
       {...overrides}
     />,
   );
   return {
     onSelectFile,
+    onPaste,
     onToggleMemoLookup,
     onToggleSharedPromptLookup,
     trigger: screen.getByRole("button", { name: "追加メニューを開く" }),
@@ -31,7 +35,7 @@ function renderMenu(overrides: Partial<Parameters<typeof SetupAttachMenu>[0]> = 
 describe("SetupAttachMenu", () => {
   // クリップを押した時点でファイル選択が開いてしまうと、メモや共有プロンプトを選べない。
   // Opening the file picker on the paperclip click would leave no room for the other entries.
-  it("shows the three entries instead of opening the file picker", () => {
+  it("shows the add entries instead of opening the file picker", () => {
     const { onSelectFile, trigger } = renderMenu();
 
     expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -47,8 +51,28 @@ describe("SetupAttachMenu", () => {
       [...screen.getAllByRole("menuitemcheckbox"), ...screen.getAllByRole("menuitem")].map(
         (item) => item.textContent,
       ),
-    ).toEqual(["メモ", "共有プロンプト", "ファイル添付"]);
+    ).toEqual(["メモ", "共有プロンプト", "ファイル添付", "ペースト"]);
     expect(onSelectFile).not.toHaveBeenCalled();
+  });
+
+  it("pastes from the mobile entry and closes the menu without opening the picker", () => {
+    const { onPaste, onSelectFile, trigger } = renderMenu({ fileItemDisabled: true });
+    fireEvent.click(trigger);
+    const paste = screen.getByRole("menuitem", { name: "ペースト" });
+    expect(paste).toHaveClass("setup-attach-menu__item--paste");
+    expect(paste).toBeEnabled();
+    fireEvent.click(paste);
+    expect(onPaste).toHaveBeenCalledTimes(1);
+    expect(onSelectFile).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("disables paste while a clipboard read is pending", () => {
+    const { onPaste, trigger } = renderMenu({ isPasting: true });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "ペースト" }));
+    expect(onPaste).not.toHaveBeenCalled();
+    expect(screen.getByRole("menuitem", { name: "ファイル添付" })).toBeEnabled();
   });
 
   it("opens the file picker only from the file entry, then closes the menu", () => {
