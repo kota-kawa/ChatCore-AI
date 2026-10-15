@@ -135,7 +135,7 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
     def test_regeneration_reselects_and_filters_external_reference_text(self):
         pipeline_input = self._regeneration_input()
         captured = []
-        def decide(messages, _model):
+        def decide(messages, _model, **_kwargs):
             captured.append(messages)
             return self._decision([-1])
         with (

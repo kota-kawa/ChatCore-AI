@@ -17,7 +17,7 @@ from services.chat_context import (
     select_recent_messages,
     trim_text_to_token_budget,
 )
-from services.llm import get_llm_json_response
+from services.llm import SKILL_SELECTION_GENERATION_PHASE, get_llm_json_response
 from services.llm_context_budget import estimate_messages_tokens, get_available_input_tokens
 from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
@@ -292,9 +292,13 @@ def _select_chat_skills(
             input_budget_tokens=input_budget_tokens,
         )
 
-    invoke = llm_json_response or get_llm_json_response
     try:
-        raw_response = invoke(messages, model_name)
+        if llm_json_response is not None:
+            raw_response = llm_json_response(messages, model_name)
+        else:
+            raw_response = get_llm_json_response(
+                messages, model_name, generation_phase=SKILL_SELECTION_GENERATION_PHASE
+            )
     except Exception:
         return _fallback(
             context,

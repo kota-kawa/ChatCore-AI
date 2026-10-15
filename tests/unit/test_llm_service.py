@@ -578,6 +578,55 @@ class LlmServiceTestCase(unittest.TestCase):
                     request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
                     self.assertEqual(request_kwargs["extra_body"], expected_reasoning)
 
+    # 日本語: Skill 選択フェーズは GPT-OSS と Luna の推論だけを軽くし、Qwen は従来のままであることを検証します。
+    # English: The Skill selection phase lightens reasoning for GPT-OSS and Luna only and leaves Qwen unchanged.
+    def test_skill_selection_phase_lightens_json_reasoning_for_gpt_oss_and_luna(self):
+        phase = llm.SKILL_SELECTION_GENERATION_PHASE
+        messages = [{"role": "user", "content": "Return JSON."}]
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _mock_openai_response('{"ok": true}')
+        with patch.object(llm, "groq_client", mock_groq):
+            for model_name, expected in (
+                (llm.GPT_OSS_120B_MODEL, {"reasoning_effort": "low", "reasoning_format": "parsed"}),
+                (llm.GPT_OSS_20B_MODEL, {"reasoning_effort": "low", "reasoning_format": "parsed"}),
+                (llm.QWEN_3_8_27B_MODEL, {"reasoning_effort": "default", "reasoning_format": "hidden"}),
+            ):
+                with self.subTest(model_name=model_name):
+                    llm.get_llm_json_response(messages, model_name, generation_phase=phase)
+                    request_kwargs = mock_groq.chat.completions.create.call_args.kwargs
+                    self.assertEqual(request_kwargs["extra_body"], expected)
+                    self.assertEqual(request_kwargs["response_format"], {"type": "json_object"})
+
+        mock_openai = MagicMock()
+        mock_openai.responses.create.return_value = SimpleNamespace(output_text='{"ok": true}', usage=None)
+        with patch.object(llm, "openai_client", mock_openai):
+            llm.get_llm_json_response(messages, llm.GPT_6_LUNA_MODEL, generation_phase=phase)
+            self.assertEqual(mock_openai.responses.create.call_args.kwargs["reasoning"], {"effort": "low"})
+            llm.get_llm_json_response(messages, llm.GPT_6_LUNA_MODEL)
+            self.assertEqual(mock_openai.responses.create.call_args.kwargs["reasoning"], {"effort": "medium"})
+
+    def test_skill_selection_phase_keeps_other_phases_and_explicit_effort(self):
+        phase = llm.SKILL_SELECTION_GENERATION_PHASE
+        self.assertNotIn(phase, llm.ANSWER_GENERATION_PHASES)
+        for other_phase in ("default", "research"):
+            with self.subTest(phase=other_phase):
+                self.assertEqual(
+                    llm._groq_reasoning_kwargs(llm.QWEN_3_8_27B_MODEL, generation_phase=other_phase),
+                    {"extra_body": {"reasoning_effort": "default", "reasoning_format": "hidden"}},
+                )
+                self.assertEqual(
+                    llm._groq_reasoning_kwargs(llm.GPT_OSS_120B_MODEL, generation_phase=other_phase),
+                    {"extra_body": {"include_reasoning": False}},
+                )
+                self.assertEqual(
+                    llm._openai_responses_reasoning_kwargs(llm.GPT_6_LUNA_MODEL, generation_phase=other_phase),
+                    {"reasoning": {"effort": "medium"}},
+                )
+        self.assertEqual(
+            llm._groq_reasoning_kwargs(llm.GPT_OSS_120B_MODEL, generation_phase=phase, reasoning_effort="high"),
+            {"extra_body": {"reasoning_effort": "high", "reasoning_format": "parsed"}},
+        )
+
     def test_model_constants_ignore_model_environment_variables(self):
         with patch.dict(
             llm.os.environ,

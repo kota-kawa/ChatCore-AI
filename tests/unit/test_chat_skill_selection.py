@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from services.chat_skill_selection import select_chat_skills
+from services.llm import SKILL_SELECTION_GENERATION_PHASE
 from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
     MEMO_TOOLS_SYSTEM_SKILL_ID,
@@ -92,6 +93,18 @@ class ChatSkillSelectionTests(unittest.TestCase):
         self.assertIn("## 回答方針", result.context.prompt or "")
         self.assertNotIn(instructions, json.dumps(result.telemetry, ensure_ascii=False))
         self.assertGreaterEqual(result.telemetry["duration_ms"], 0)
+
+    def test_default_call_uses_the_light_reasoning_skill_selection_phase(self):
+        with patch("services.chat_skill_selection.get_llm_json_response", return_value=_decision([12])) as invoke:
+            select_chat_skills(
+                _context(user_skills=[{"id": 12, "name": "回答方針", "instructions": "常に結論を先に書く"}]),
+                [{"role": "user", "content": "今回の質問"}],
+                "chosen-conversation-model",
+            )
+
+        invoke.assert_called_once()
+        self.assertEqual(invoke.call_args.args[1], "chosen-conversation-model")
+        self.assertEqual(invoke.call_args.kwargs, {"generation_phase": SKILL_SELECTION_GENERATION_PHASE})
 
     def test_uses_custom_prompt_builder_for_the_selected_subset(self):
         builder_calls = []
