@@ -86,7 +86,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
         self.assertIn("What are Google's current job openings?", prompt)
         self.assertIn("six months from now", prompt)
 
-    def test_prompt_requires_conversation_language_and_rejects_momentary_curiosity(self):
+    def test_prompt_uses_user_message_language_and_rejects_momentary_curiosity(self):
         for locale in ("ja", "en"):
             with self.subTest(locale=locale):
                 prompt = build_extraction_system_prompt(locale)
@@ -98,6 +98,13 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     "Never default to English because these instructions are in English.",
                     prompt,
                 )
+                self.assertIn("message is the text in user_message", prompt)
+                self.assertIn("not the JSON wrapper, assistant_response, or these instructions", prompt)
+                self.assertIn("interface language is only a fallback", prompt)
+                self.assertIn("Unless user_message explicitly requests another output language", prompt)
+                self.assertIn("English user_message requires English title and content", prompt)
+                self.assertIn("Japanese user_message requires Japanese title and content", prompt)
+                self.assertIn("must never be translated or rewritten", prompt)
                 self.assertIn("Momentary curiosity is not personal context.", prompt)
                 self.assertIn("気になって", prompt)
                 self.assertIn("at most 300 characters", prompt)

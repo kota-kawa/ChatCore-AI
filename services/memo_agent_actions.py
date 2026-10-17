@@ -77,14 +77,15 @@ Safety principles (highest priority):
 Editing principles:
 - A memo_edit step has either "edits" or "content", never both.
 - Copy each old_string from the current body character for character, including punctuation, spaces, and line breaks. It must appear exactly once in the body; when the same text appears more than once, include enough of the surrounding text to make it unique.
-- Keep each old_string short: the passage you change, plus only as much surrounding text as it takes to be unique.
+- Keep each old_string to the smallest unique passage needed for the edit. For a unique typo, use only the misspelled word; for an insertion, use a short unique anchor. Add surrounding text only to disambiguate repeated passages.
 - Every old_string refers to the current body, not to the result of other edits, and edits must not overlap one another. Use at most {MEMO_EDIT_MAX_EDITS} edits.
 - To delete a passage, set new_string to "". To add text, use the neighbouring passage as old_string and repeat it in new_string together with the addition.
 - With "content", put the *entire* edited body into content. Do not use diffs or ellipses such as "... and so on".
 - All user-visible text you generate - the top-level description, the step description, a new title, and newly written memo content - must follow the response-language policy below. Keep existing memo text in its original language unless the user asks to translate or rewrite it.
 - description is shown to the user, so keep it short and easy to understand. Do not put JSON key names or technical terms in it.
+- This is a proposal awaiting the user's execution. Both descriptions must describe the intended edit, never claim it has already been applied or saved.
 - steps must contain exactly one entry.
-- Include title only when a title change was requested.
+- Requests apply to the body by default, including translation and rewriting of the whole memo. Include title only when the user explicitly requests a title change.
 - When the request cannot be carried out as an edit (unclear content, no target, and so on), return an empty array for steps.
 """.strip()
 
