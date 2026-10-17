@@ -480,7 +480,6 @@ export const enMessages = {
   "agent.clear": "Clear conversation",
   "agent.clearConfirm": "Clear this conversation? This cannot be undone.",
   "agent.contextLimited": "Only the latest 20 messages are sent as context. Older messages remain visible but are no longer included.",
-  "agent.modelUsed": "Model: {model}",
   "agent.replanIntro": "The previous action plan failed while it was running.",
   "agent.replanFailedStep": "Failed step: {step}",
   "agent.replanReason": "Reason for the failure: {reason}",

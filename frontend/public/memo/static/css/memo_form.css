@@ -5667,17 +5667,6 @@ body.memo-page {
   overflow-wrap: anywhere;
 }
 
-/* 応答に使ったモデル名。MiniChat に showModelLabel を渡しているのはこのパネルだけなので、
-   ここで持たないと本文と同じ大きさで出てしまう。
-   The model that answered. This panel is the only caller passing showModelLabel, so without a
-   rule here the label renders at body size. */
-.memo-modal .memo-modal__agent-panel .mini-chat-model-label {
-  margin-top: 0.45rem;
-  color: var(--modal-text-muted);
-  font-size: 0.7rem;
-  line-height: 1.35;
-}
-
 /* 会話が上限に達したときの注意書き / Notice shown once the conversation hits its limit */
 .memo-modal .memo-modal__agent-panel .mini-chat-context-notice {
   align-self: center;

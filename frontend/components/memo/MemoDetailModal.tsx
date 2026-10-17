@@ -259,7 +259,6 @@ export function MemoDetailModal() {
                     inputPlaceholder={t("memo.agentPlaceholder")}
                     enableActions={false}
                     persistConversation={false}
-                    showModelLabel
                     iconOnlyClearButton={true}
                     agentIconPath="/static/ChacoMemo.png"
                     onMemoEdit={applyAgentMemoEdit}

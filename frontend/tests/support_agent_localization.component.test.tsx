@@ -100,14 +100,17 @@ describe("support agent localization", () => {
     expect(leaked).toEqual([]);
   });
 
-  it("sends a suggested message immediately without showing the response model", async () => {
+  it.each([undefined, 1])("sends a suggested message without model labels (memoId: %s)", async (memoId) => {
     const user = userEvent.setup();
-    renderSupportAgent("en");
+    const { container } = render(
+      <LocaleProvider initialLocale="en"><MiniChat memoId={memoId} /></LocaleProvider>,
+    );
 
     await user.click(screen.getByRole("button", { name: "What can this service do?" }));
 
     await screen.findByText("Concise answer");
-    expect(screen.queryByText("Model: gpt-oss-120b · Groq")).not.toBeInTheDocument();
+    expect(screen.queryByText(/gpt-oss-120b|Groq|Model:/)).not.toBeInTheDocument();
+    expect(container.querySelector(".mini-chat-model-label")).toBeNull();
     expect(resilientFetchMock).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(resilientFetchMock.mock.calls[0][1].body));
     expect(requestBody.messages.at(-1)).toEqual({ role: "user", content: "What can this service do?" });

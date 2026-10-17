@@ -78,13 +78,6 @@ test("the memo agent panel styles every MiniChat option it turns on", () => {
     "the memo panel must not add styles for a labelled clear control",
   );
 
-  // 使用モデルの表示 / The model label
-  assert.match(agentPanel, /showModelLabel/);
-  const modelRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-model-label\\s*\\{([\\s\\S]*?)\\}`));
-  assert.ok(modelRule, "the model label must be styled as a caption, not as body text");
-  assert.match(modelRule[1], /font-size:\s*0\.7rem/);
-  assert.match(modelRule[1], /color:\s*var\(--modal-text-muted\)/);
-
   // 会話上限の注意書きは MiniChat が常に出しうる / MiniChat can always show the context notice
   const noticeRule = memoCss.match(new RegExp(`${scope}\\.mini-chat-context-notice\\s*\\{([\\s\\S]*?)\\}`));
   assert.ok(noticeRule, "the context notice must be styled");

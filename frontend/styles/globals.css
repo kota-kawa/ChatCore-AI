@@ -969,13 +969,6 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   line-height: 1.65;
 }
 
-.global-ai-agent-modal .mini-chat-model-label {
-  margin-top: 0.52rem;
-  color: #7dd3fc;
-  font-size: 0.7rem;
-  line-height: 1.35;
-}
-
 .global-ai-agent-modal .mini-chat-context-notice {
   align-self: center;
   display: flex;

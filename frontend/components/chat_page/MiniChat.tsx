@@ -5,7 +5,6 @@ import {
   buildAiAgentHttpError,
   collectVisiblePageDom,
   createAiAgentMessageId,
-  formatAiAgentModelLabel,
   isAllowedNavigationPath,
   isSafeInternalPath,
   readSseStream,
@@ -57,7 +56,6 @@ export function MiniChat({
   inputPlaceholder,
   enableActions = true,
   persistConversation = true,
-  showModelLabel = false,
   iconOnlyClearButton = true,
   agentIconPath = SUPPORT_AGENT_ICON_PATH,
   onMemoEdit,
@@ -625,14 +623,7 @@ export function MiniChat({
             </span>
             <div className={`mini-chat-text-wrapper${msg.isError ? " mini-chat-text-wrapper--error" : ""}`}>
               {msg.sender === "assistant" ? (
-                <>
-                  <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
-                  {showModelLabel && msg.model ? (
-                    <div className="mini-chat-model-label">
-                      {t("agent.modelUsed", { model: formatAiAgentModelLabel(msg.model) })}
-                    </div>
-                  ) : null}
-                </>
+                <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
               ) : (
                 <div className="mini-chat-text">{msg.text}</div>
               )}

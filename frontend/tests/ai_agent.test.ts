@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   buildAiAgentHttpError,
-  formatAiAgentModelLabel,
   isActionStep,
   isAllowedNavigationPath,
   isSafeInternalPath,
@@ -99,11 +98,6 @@ test("buildAiAgentHttpError localizes fallback retry guidance", async () => {
   const error = await buildAiAgentHttpError(response, "en");
 
   assert.equal(error.message, "Too many requests. Try again in about 30 seconds.");
-});
-
-test("formatAiAgentModelLabel identifies gpt-oss models served by Groq", () => {
-  assert.equal(formatAiAgentModelLabel("openai/gpt-oss-120b"), "gpt-oss-120b · Groq");
-  assert.equal(formatAiAgentModelLabel("custom-model"), "custom-model");
 });
 
 // バグ2: MiniChat は done / action_plan / error を受け取った時点で break する。
