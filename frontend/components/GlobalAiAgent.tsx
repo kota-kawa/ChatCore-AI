@@ -19,6 +19,7 @@ export function GlobalAiAgent() {
   // モーダルの開閉状態
   // Open/close state of the modal
   const [isOpen, setIsOpen] = useState(false);
+  const [clearButtonContainer, setClearButtonContainer] = useState<HTMLElement | null>(null);
   // SSRとのハイドレーション完了フラグ
   // Flag indicating hydration from SSR is complete
   const [hydrated, setHydrated] = useState(false);
@@ -57,6 +58,7 @@ export function GlobalAiAgent() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         title={agentLabel}
+        headerActions={<span ref={setClearButtonContainer} />}
         initialX={20}
         initialY={100}
         positionStorageKey={POSITION_STORAGE_KEY}
@@ -65,7 +67,7 @@ export function GlobalAiAgent() {
         avoidElementSelector=".global-ai-agent-button"
         avoidElementMinViewportWidth={641}
       >
-        <MiniChat />
+        <MiniChat clearButtonContainer={clearButtonContainer} />
       </DraggableModal>
     </>
   );

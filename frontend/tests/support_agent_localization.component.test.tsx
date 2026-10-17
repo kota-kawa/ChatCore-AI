@@ -1,3 +1,5 @@
+import { useState } from "react";
+import type { MiniChatProps } from "../lib/chat_page/mini_chat_runtime";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,12 +20,18 @@ import { LOCALE_CHANGE_EVENT, type Locale } from "../lib/i18n/config";
 
 const JAPANESE = /[぀-ヿ一-龯]/;
 
+function AgentHarness(props: Omit<MiniChatProps, "clearButtonContainer">) {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  return <>
+    <header><span ref={setContainer} /><button type="button" aria-label="Close agent">×</button></header>
+    <MiniChat {...props} clearButtonContainer={container} />
+  </>;
+}
+
 function renderSupportAgent(locale: Locale) {
-  // 左下のサポートエージェントは props を渡さずに MiniChat を描画するため、
-  // 既定の文言がそのまま英語UIに出る。
-  // The support agent in the bottom-left corner renders MiniChat without any props, so its
-  // default copy is exactly what the English UI shows.
-  return render(<LocaleProvider initialLocale={locale}><MiniChat /></LocaleProvider>);
+  // サポートエージェントと同じ既定文言で描画する。
+  // Render the same default copy as the support agent.
+  return render(<LocaleProvider initialLocale={locale}><AgentHarness /></LocaleProvider>);
 }
 
 describe("support agent localization", () => {
@@ -69,7 +77,7 @@ describe("support agent localization", () => {
     const user = userEvent.setup();
     const { container } = render(
       <LocaleProvider initialLocale="en">
-        <MiniChat agentIconPath="/static/ChacoMemo.png" quickPrompts={["Summarize"]} persistConversation={false} />
+        <AgentHarness agentIconPath="/static/ChacoMemo.png" quickPrompts={["Summarize"]} persistConversation={false} />
       </LocaleProvider>,
     );
 
@@ -103,7 +111,7 @@ describe("support agent localization", () => {
   it.each([undefined, 1])("sends a suggested message without model labels (memoId: %s)", async (memoId) => {
     const user = userEvent.setup();
     const { container } = render(
-      <LocaleProvider initialLocale="en"><MiniChat memoId={memoId} /></LocaleProvider>,
+      <LocaleProvider initialLocale="en"><AgentHarness memoId={memoId} /></LocaleProvider>,
     );
 
     await user.click(screen.getByRole("button", { name: "What can this service do?" }));
@@ -145,6 +153,8 @@ describe("support agent localization", () => {
     await screen.findByText("Concise answer");
 
     const clearButton = screen.getByRole("button", { name: "Clear conversation" });
+    expect(clearButton.closest("header")).not.toBeNull();
+    expect(clearButton.closest("form")).toBeNull();
     expect(clearButton).toHaveClass("mini-chat-clear-btn--icon-only");
     expect(clearButton.querySelector("span")).toBeNull();
 

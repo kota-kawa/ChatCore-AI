@@ -49,6 +49,7 @@ export function MemoDetailModal() {
   } = useMemoPageDetailContext();
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [clearButtonContainer, setClearButtonContainer] = useState<HTMLElement | null>(null);
   const isOpen = Boolean(selectedMemo) && !isMemoDetailClosing;
   const editorRef = useRef<MemoEditorHandle | null>(null);
 
@@ -240,13 +241,17 @@ export function MemoDetailModal() {
                       <strong>{t("memo.agentTitle")}</strong>
                       <span className="memo-modal__agent-label">{t("memo.agentHeaderSubtitle")}</span>
                     </div>
-                    <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label={t("memo.closeAgent")}>
-                      <i className="bi bi-x-lg" aria-hidden="true"></i>
-                    </button>
+                    <div className="memo-modal__agent-header-actions">
+                      <span ref={setClearButtonContainer} />
+                      <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label={t("memo.closeAgent")}>
+                        <i className="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    </div>
                   </div>
                   <MiniChat
                     key={`memo-agent-${selectedMemo.id}`}
                     memoId={selectedMemo.id}
+                    clearButtonContainer={clearButtonContainer}
                     storageScope={`memoAgent.${selectedMemo.id}`}
                     quickPrompts={[
                       t("memo.agentPromptSummarize"),

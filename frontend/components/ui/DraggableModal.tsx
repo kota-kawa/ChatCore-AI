@@ -18,6 +18,7 @@ type DraggableModalProps = {
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  headerActions?: ReactNode;
   initialX?: number;
   initialY?: number;
   positionStorageKey?: string;
@@ -58,6 +59,7 @@ export function DraggableModal({
   onClose,
   title,
   children,
+  headerActions,
   initialX = 100,
   initialY = 100,
   positionStorageKey,
@@ -159,10 +161,10 @@ export function DraggableModal({
     );
   }, [avoidElementMinViewportWidth, avoidElementSelector]);
 
-  // マウスドラッグ開始ハンドラー（閉じるボタンクリックは除外）
-  // Mouse drag start handler (excluding close button clicks)
+  // ヘッダー内の操作ボタンからはドラッグを始めない。
+  // Header action buttons must not start a drag.
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest(".modal-close-btn")) return;
+    if ((e.target as HTMLElement).closest("button")) return;
 
     setIsDragging(true);
     setDragOffset({
@@ -174,7 +176,7 @@ export function DraggableModal({
   // タッチ/ペンデバイスのドラッグ開始ハンドラー
   // Drag start handler for touch/pen devices
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest(".modal-close-btn")) return;
+    if ((event.target as HTMLElement).closest("button")) return;
     if (event.pointerType === "mouse") return;
 
     // ポインターをキャプチャしてドラッグ中に外れないようにする
@@ -359,7 +361,7 @@ export function DraggableModal({
         position: "fixed",
         left: `${position.x}px`,
         top: `${position.y}px`,
-        zIndex: 1000,
+        zIndex: "var(--z-modal)",
         cursor: isDragging ? "grabbing" : "auto",
         // 高さの上限はCSS側が決める。ここは実測した表示領域の高さを渡すだけ
         // CSS owns the height rules; this only hands it the measured viewport height
@@ -379,14 +381,17 @@ export function DraggableModal({
         style={{ cursor: "grab", touchAction: "none" }}
       >
         <span className="ai-agent-modal-title">{title}</span>
-        <button
-          type="button"
-          className="modal-close-btn"
-          onClick={onClose}
-          aria-label={t("agent.close")}
-        >
-          <i className="bi bi-x-lg"></i>
-        </button>
+        <div className="ai-agent-modal-header-actions">
+          {headerActions}
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            aria-label={t("agent.close")}
+          >
+            <i className="bi bi-x-lg"></i>
+          </button>
+        </div>
       </div>
       <div className="ai-agent-modal-content">
         {children}
