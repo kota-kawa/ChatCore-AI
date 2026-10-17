@@ -40,7 +40,7 @@ from services.default_tasks import default_task_payloads
 from services.i18n import build_response_language_policy, get_request_locale, translate
 from services.intent_classifier import classify_intent
 from services.llm import (
-    GPT_OSS_120B_MODEL,
+    GPT_6_LUNA_MODEL,
     LlmAuthenticationError,
     LlmConfigurationError,
     LlmRateLimitError,
@@ -977,10 +977,10 @@ async def ai_agent(
                             for m in payload.messages[-AI_AGENT_HISTORY_MAX_MESSAGES:]
                         ],
                         locale=locale,
-                        model=GPT_OSS_120B_MODEL,
+                        model=GPT_6_LUNA_MODEL,
                     )
                     if edit_plan:
-                        yield _ai_agent_sse("action_plan", {**edit_plan, "model": GPT_OSS_120B_MODEL})
+                        yield _ai_agent_sse("action_plan", {**edit_plan, "model": GPT_6_LUNA_MODEL})
                         return
                     # 編集計画を生成できない場合は通常のQA回答にフォールバックする
                     # Fall back to the standard QA answer when no valid edit plan was produced
@@ -989,9 +989,9 @@ async def ai_agent(
                 response_text = await run_blocking(
                     get_llm_response,
                     _build_ai_agent_messages(payload, rag_context, locale),
-                    GPT_OSS_120B_MODEL,
+                    GPT_6_LUNA_MODEL,
                 )
-                yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})
+                yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_6_LUNA_MODEL})
                 return
 
             yield _ai_agent_sse("progress", {"message": translate("ai_agent.progress.request", locale)})
@@ -1019,13 +1019,13 @@ async def ai_agent(
                         locale=locale,
                     )
                     response_text = await run_blocking(
-                        get_llm_response, action_messages, GPT_OSS_120B_MODEL
+                        get_llm_response, action_messages, GPT_6_LUNA_MODEL
                     )
                     # UI上の操作指示プランをパース
                     # Parse proposed UI action selectors
                     action_plan = parse_action_response(response_text or "")
                     if action_plan:
-                        yield _ai_agent_sse("action_plan", {**action_plan, "model": GPT_OSS_120B_MODEL})
+                        yield _ai_agent_sse("action_plan", {**action_plan, "model": GPT_6_LUNA_MODEL})
                         return
                     # セレクタ特定できず → ページコードをRAGとして通常応答にフォールスルー
                     # Fallback to standard chat response if selectors cannot be resolved
@@ -1068,9 +1068,9 @@ async def ai_agent(
             response_text = await run_blocking(
                 get_llm_response,
                 _build_ai_agent_messages(payload, rag_context, locale),
-                GPT_OSS_120B_MODEL,
+                GPT_6_LUNA_MODEL,
             )
-            yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})
+            yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_6_LUNA_MODEL})
 
         except LlmRateLimitError as exc:
             retry = exc.retry_after_seconds if exc.retry_after_seconds is not None else DEFAULT_RETRY_AFTER_SECONDS

@@ -10,7 +10,7 @@ from services.context_vault_extraction import (
     extract_context_candidates,
     schedule_context_extraction,
 )
-from services.llm import GPT_OSS_120B_MODEL
+from services.llm import GPT_6_LUNA_MODEL
 
 
 class ContextVaultExtractionTestCase(unittest.TestCase):
@@ -67,7 +67,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             ],
         )
         messages, model = llm.call_args.args
-        self.assertEqual(model, GPT_OSS_120B_MODEL)
+        self.assertEqual(model, GPT_6_LUNA_MODEL)
         self.assertEqual(len(messages), 2)
         self.assertEqual(
             json.loads(messages[1]["content"])["user_message"],

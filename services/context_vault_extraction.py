@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 
 from services.background_executor import submit_background_task
 from services.i18n import build_response_language_policy
-from services.llm import GPT_OSS_120B_MODEL, get_llm_json_response
+from services.llm import GPT_6_LUNA_MODEL, get_llm_json_response
 from services.request_models import (
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
     MAX_CONTEXT_FACT_TITLE_LENGTH,
@@ -31,7 +31,7 @@ MAX_EXTRACTION_ASSISTANT_RESPONSE_CHARS = 4_000
 EVIDENCE_QUOTE_GUIDANCE_CHARS = 300
 # 証拠は user_message の一節そのものなので、少し長くても候補全体を落とさないよう緩めに検証する。
 MAX_CANDIDATE_EVIDENCE_LENGTH = MAX_EXTRACTION_USER_MESSAGE_CHARS
-CONTEXT_EXTRACTION_MODEL = GPT_OSS_120B_MODEL
+CONTEXT_EXTRACTION_MODEL = GPT_6_LUNA_MODEL
 
 _CandidateTitle = Annotated[
     str,

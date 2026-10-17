@@ -158,7 +158,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                             "title": "丁寧なメール返信テンプレート",
                             "prompt_content": "顧客への丁寧な返信文を作成してください。",
                         },
-                        "model": "openai/gpt-oss-120b",
+                        "model": "gpt-6-luna",
                     },
                 ):
                     response = asyncio.run(prompt_assist(request))
@@ -166,11 +166,9 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["suggested_fields"]["title"], "丁寧なメール返信テンプレート")
-        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
+        self.assertEqual(payload["model"], "gpt-6-luna")
 
-    # 日本語: ゲストに対して、aiagent返却するgptoss120bレスポンスことを検証します。
-    # English: Verify that ai agent returns gpt oss 120b response for guest.
-    def test_ai_agent_returns_gpt_oss_120b_response_for_guest(self):
+    def test_ai_agent_returns_gpt_6_luna_response_for_guest(self):
         request = make_ai_agent_request(
             {
                 "messages": [
@@ -198,8 +196,8 @@ class PromptAssistApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["response"], "改善案です。")
-        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
-        self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
+        self.assertEqual(payload["model"], "gpt-6-luna")
+        self.assertEqual(mock_llm.call_args.args[1], "gpt-6-luna")
         self.assertTrue(mock_limits.call_args.args[1].startswith("guest:"))
 
     def test_ai_agent_uses_the_same_20_message_history_window(self):
@@ -310,7 +308,8 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["description"], "プロンプト検索を実行します")
         self.assertEqual(payload["steps"][0]["selector"], "#searchButton")
-        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
+        self.assertEqual(payload["model"], "gpt-6-luna")
+        self.assertEqual(mock_llm.call_args.args[1], "gpt-6-luna")
         self.assertIn("#searchInput", mock_llm.call_args.args[0][0]["content"])
         self.assertIn("ChatCore 機能カタログ", mock_llm.call_args.args[0][0]["content"])
 
@@ -375,9 +374,10 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(plan["description"], "誤字を修正します")
         self.assertEqual(plan["steps"][0]["action"], "memo_edit")
         self.assertEqual(plan["steps"][0]["content"], "修正済みの本文")
-        self.assertEqual(plan["model"], "openai/gpt-oss-120b")
+        self.assertEqual(plan["model"], "gpt-6-luna")
         # 編集計画の生成にメモ本文が参照情報として渡されていることを確認する
         # Confirm the memo body was passed as reference context for plan generation
+        self.assertEqual(mock_edit.call_args.args[1], "gpt-6-luna")
         self.assertIn("誤字のある本文", mock_edit.call_args.args[0][0]["content"])
         mock_answer.assert_not_called()
 
@@ -468,7 +468,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(events[-1], ("done", {"response": "代わりの回答です。", "model": "openai/gpt-oss-120b"}))
+        self.assertEqual(events[-1], ("done", {"response": "代わりの回答です。", "model": "gpt-6-luna"}))
         self.assertEqual(mock_edit.call_count, 2)
         mock_answer.assert_called_once()
 

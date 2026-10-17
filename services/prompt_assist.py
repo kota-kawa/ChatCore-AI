@@ -5,10 +5,10 @@ import re
 from typing import Any
 
 from services.i18n import build_response_language_policy, infer_response_language
-from services.llm import LlmProviderError, get_llm_response
+from services.llm import GPT_6_LUNA_MODEL, LlmProviderError, get_llm_response
 from services.prompt_categories import category_label
 
-PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
+PROMPT_ASSIST_MODEL = GPT_6_LUNA_MODEL
 SHARED_PROMPT_SKILL_ALLOWED_FIELDS = ("title", "skill_markdown")
 SHARED_PROMPT_IMAGE_ALLOWED_FIELDS = ("title", "content")
 SHARED_PROMPT_CONTEXT_FIELDS = (
