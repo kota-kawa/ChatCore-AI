@@ -1,7 +1,7 @@
 /* chat_input.css
    メッセージ入力フォーム、送信ボタン、タイピングインジケータのスタイル
 */
-/* 入力コンテナは .chat-area 下端に重ねる透明オーバーレイ。帯の背景を持たず、
+/* PC の入力コンテナは .chat-area 下端に重ねる透明オーバーレイ。帯の背景を持たず、
    メッセージが下を通り抜けて見える「浮いた入力欄」にする。透明部分は
    pointer-events を無効化し、背後のテキスト選択やクリックを妨げない。
    メッセージ側の下端余白は --chat-footer-height（use_chat_footer_height が
@@ -292,6 +292,13 @@
 
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
+  /* 入力欄が伸びても会話の操作や待機表示と重ならないよう、一覧の外で高さを取る。 */
+  /* Reserve space outside the list so a growing composer cannot cover actions or status. */
+  :where(body.chat-page, .chat-page-shell) .chat-area > .input-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
   :where(body.chat-page, .chat-page-shell) .input-container {
     /* safe-area対応（iPhoneのホームインジケータ）
        キーボード表示中は safe-area-inset-bottom が 0 になるため、
@@ -301,7 +308,7 @@
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
       calc(0.62rem + env(safe-area-inset-bottom, 0px))
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
-    /* モバイルもデスクトップ同様に帯を持たない透明オーバーレイ */
+    /* 入力欄の周囲は親のサーフェスをそのまま見せる。 */
     background: transparent;
   }
 
