@@ -492,8 +492,24 @@ class BuildMemoEditMessagesTestCase(unittest.TestCase):
         self.assertIn('"old_string"', system_content)
         self.assertIn("either \"edits\" or \"content\", never both", system_content)
         self.assertIn("appear exactly once in the body", system_content)
+        self.assertIn("For a unique typo, use only the misspelled word", system_content)
+        self.assertIn("for an insertion, use a short unique anchor", system_content)
         self.assertIn("Use at most 20 edits", system_content)
         self.assertNotIn("<long_memo>", system_content)
+
+    def test_edit_proposals_do_not_claim_execution_or_change_title_by_default(self):
+        system = build_memo_edit_messages(
+            "Title: 評価メモ\nBody: 次回の会議は火曜日です。",
+            [{"role": "user", "content": "Translate the whole memo into English."}],
+            locale="ja",
+        )[0]["content"]
+
+        self.assertIn("proposal awaiting the user's execution", system)
+        self.assertIn("Both descriptions must describe the intended edit", system)
+        self.assertIn("never claim it has already been applied or saved", system)
+        self.assertIn("Requests apply to the body by default", system)
+        self.assertIn("including translation and rewriting of the whole memo", system)
+        self.assertIn("only when the user explicitly requests a title change", system)
 
 
 if __name__ == "__main__":

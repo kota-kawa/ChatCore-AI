@@ -1,0 +1,201 @@
+{
+  "dataset_id": "auxiliary-luna-followup-v1",
+  "source_notice": "Additional synthetic validation inputs fixed before any live calls on these inputs; includes explicit-language overrides and explicit title changes.",
+  "before_commit": "92641f51",
+  "cases": [
+    {
+      "id": "followup_context_en_ja_ui",
+      "kind": "context",
+      "raw": {
+        "user_message": "I have used Emacs every day at work for five years.",
+        "assistant_response": "今後もEmacsを使うのですね。",
+        "locale": "ja"
+      },
+      "expect": {
+        "candidate_presence": true,
+        "language": "en"
+      },
+      "criteria": [
+        "利用者の継続的事実だけ",
+        "原文の根拠",
+        "明示の出力言語を優先し、無指定なら発話の言語",
+        "画面言語やassistantの言語に引きずられない"
+      ],
+      "initial_messages_sha256": "9a4738d2995c9d98508f690d10a34bb5bc18da800378da20e69ae8c6e594387d"
+    },
+    {
+      "id": "followup_context_ja_en_ui",
+      "kind": "context",
+      "raw": {
+        "user_message": "私は仕事で5年間、毎日Emacsを使っています。",
+        "assistant_response": "You use Emacs at work.",
+        "locale": "en"
+      },
+      "expect": {
+        "candidate_presence": true,
+        "language": "ja"
+      },
+      "criteria": [
+        "利用者の継続的事実だけ",
+        "原文の根拠",
+        "明示の出力言語を優先し、無指定なら発話の言語",
+        "画面言語やassistantの言語に引きずられない"
+      ],
+      "initial_messages_sha256": "dacd0c1646ad9dcdcb59c285abf3512514dc376e809a648c291ba9a5311d497a"
+    },
+    {
+      "id": "followup_context_explicit_ja",
+      "kind": "context",
+      "raw": {
+        "user_message": "Please write the candidate in Japanese. I have used Emacs every day at work for five years.",
+        "assistant_response": "You use Emacs at work.",
+        "locale": "en"
+      },
+      "expect": {
+        "candidate_presence": true,
+        "language": "ja"
+      },
+      "criteria": [
+        "利用者の継続的事実だけ",
+        "原文の根拠",
+        "明示の出力言語を優先し、無指定なら発話の言語",
+        "画面言語やassistantの言語に引きずられない"
+      ],
+      "initial_messages_sha256": "a24c86946f4a022c6efeb4bcec7a580012dae8b8711b7f5a51d216e2d5a58886"
+    },
+    {
+      "id": "followup_context_explicit_en",
+      "kind": "context",
+      "raw": {
+        "user_message": "候補は英語で書いてください。私は仕事で5年間、毎日Emacsを使っています。",
+        "assistant_response": "Emacsを毎日お使いですね。",
+        "locale": "ja"
+      },
+      "expect": {
+        "candidate_presence": true,
+        "language": "en"
+      },
+      "criteria": [
+        "利用者の継続的事実だけ",
+        "原文の根拠",
+        "明示の出力言語を優先し、無指定なら発話の言語",
+        "画面言語やassistantの言語に引きずられない"
+      ],
+      "initial_messages_sha256": "3c1cc53ed7ebd5f590e7b96a356173b1c18e2adced2b24405026b0c2606f5f72"
+    },
+    {
+      "id": "followup_memo_explicit_title",
+      "kind": "memo",
+      "raw": {
+        "body": "会議は火曜日です。予算は未定です。",
+        "question": "Translate both the title and the entire memo body into English. Preserve both facts.",
+        "locale": "ja",
+        "truncated": false
+      },
+      "expect": {
+        "body_required": [
+          "Tuesday",
+          "budget"
+        ],
+        "language": "en",
+        "title_required": true
+      },
+      "criteria": [
+        "明示されたタイトル翻訳を含める",
+        "本文の2事実と未確定を保持",
+        "説明は未実行の提案"
+      ],
+      "initial_messages_sha256": "1a9c14ac6429abbf1da6f5e982b8346b9f9bdb8e83e908018be6b4fc115cc2fc"
+    },
+    {
+      "id": "followup_memo_append_en",
+      "kind": "memo",
+      "raw": {
+        "body": "Meeting: Tuesday\nBudget: TBD",
+        "question": "Append the line \"Bring the draft.\" Keep every existing character unchanged.",
+        "locale": "ja",
+        "truncated": false
+      },
+      "expect": {
+        "expected_body": "Meeting: Tuesday\nBudget: TBD\nBring the draft.",
+        "language": "en"
+      },
+      "criteria": [
+        "末尾への追記だけ",
+        "元の全文字を維持",
+        "英語で未実行の説明",
+        "titleを勝手に変更しない"
+      ],
+      "initial_messages_sha256": "afd21c6bb6f2e4d6bfb9f64a981ea0b1cee56c01489827fda76000fe08cd4748"
+    },
+    {
+      "id": "followup_prompt_shorten_json",
+      "kind": "prompt",
+      "raw": {
+        "target": "task_modal",
+        "action": "shorten",
+        "fields": {
+          "title": "Decision",
+          "prompt_content": "Read the supplied text carefully. Return only valid JSON with exactly the keys \"decision\" and \"reasons\". The reasons array must contain exactly 2 strings. Do not infer missing information. Be concise and easy to understand."
+        },
+        "instruction": "Shorten this prompt while preserving every output requirement and the rule against guessing.",
+        "locale": "ja"
+      },
+      "expect": {
+        "allowed": [
+          "title",
+          "prompt_content",
+          "input_examples",
+          "output_examples"
+        ],
+        "required": [
+          "JSON",
+          "decision",
+          "reasons",
+          "2"
+        ],
+        "language": "en"
+      },
+      "criteria": [
+        "JSONのみの出力要件を保持",
+        "キー2個と配列の要素2個を区別して保持",
+        "推測禁止を保持",
+        "元より短い"
+      ],
+      "initial_messages_sha256": "89fd5483ebabff2649cce34e7efb072ba28be1cb6ac085e7ad507a9db14c0dcf"
+    },
+    {
+      "id": "followup_prompt_changed_count",
+      "kind": "prompt",
+      "raw": {
+        "target": "task_modal",
+        "action": "shorten",
+        "fields": {
+          "title": "要約",
+          "prompt_content": "文章を読み、必ず3つの箇条書きで要約してください。根拠のない推測は禁止です。丁寧で読みやすい文章にしてください。"
+        },
+        "instruction": "箇条書きの数だけ2つに変更し、ほかの条件を保って短くしてください。",
+        "locale": "ja"
+      },
+      "expect": {
+        "allowed": [
+          "title",
+          "prompt_content",
+          "input_examples",
+          "output_examples"
+        ],
+        "required": [
+          "2",
+          "箇条書き"
+        ]
+      },
+      "criteria": [
+        "新しい明示指定を優先して2項目へ変更",
+        "箇条書き形式を保持",
+        "推測禁止を保持"
+      ],
+      "initial_messages_sha256": "280cd02b615d157da2447bc2500b051c2d02748fd18767a0fb87089e3efd73ed"
+    }
+  ],
+  "source_sha256": "0a90d5080d1fa0af971855e07385e5d5c6d2f1c20ba7b16e36cc1753f696419c"
+}

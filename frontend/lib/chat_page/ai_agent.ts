@@ -415,11 +415,3 @@ export async function buildAiAgentHttpError(response: Response, locale: "ja" | "
     : "";
   return new Error(`${baseMessage}${suffix}`);
 }
-
-export function formatAiAgentModelLabel(model: string | undefined): string {
-  if (!model) return "";
-  if (model.startsWith("openai/gpt-oss-")) {
-    return `${model.slice("openai/".length)} · Groq`;
-  }
-  return model;
-}

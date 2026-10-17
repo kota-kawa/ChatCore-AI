@@ -1,11 +1,11 @@
 import { useRouter } from "next/router";
+import { createPortal } from "react-dom";
 import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent, type KeyboardEvent } from "react";
 
 import {
   buildAiAgentHttpError,
   collectVisiblePageDom,
   createAiAgentMessageId,
-  formatAiAgentModelLabel,
   isAllowedNavigationPath,
   isSafeInternalPath,
   readSseStream,
@@ -49,6 +49,7 @@ const SUPPORT_AGENT_ICON_PATH = "/static/Chaco.webp";
 // MiniChat — AI エージェントとの会話 UI コンポーネント
 // MiniChat — embeddable chat panel that lets users interact with the AI agent
 export function MiniChat({
+  clearButtonContainer,
   memoId = null,
   storageScope,
   quickPrompts,
@@ -57,11 +58,10 @@ export function MiniChat({
   inputPlaceholder,
   enableActions = true,
   persistConversation = true,
-  showModelLabel = false,
   iconOnlyClearButton = true,
   agentIconPath = SUPPORT_AGENT_ICON_PATH,
   onMemoEdit,
-}: MiniChatProps = {}) {
+}: MiniChatProps) {
   const { locale, t } = useTranslation();
   const { compositionHandlers: inputCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLTextAreaElement>();
   // 呼び出し側が文言を渡さないとき（左下のサポートエージェント）は、日本語を既定値に
@@ -588,6 +588,20 @@ export function MiniChat({
 
   return (
     <div className="mini-chat-container">
+      {clearButtonContainer && createPortal(
+        <button
+          type="button"
+          className={`mini-chat-action-btn mini-chat-clear-btn${iconOnlyClearButton ? " mini-chat-clear-btn--icon-only" : ""}`}
+          onClick={() => void handleClearConversation()}
+          disabled={!messages.length || isGenerating}
+          aria-label={t("agent.clear")}
+          title={t("agent.clear")}
+        >
+          <i className="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+          {!iconOnlyClearButton && <span>{t("agent.clear")}</span>}
+        </button>,
+        clearButtonContainer,
+      )}
       <div className="mini-chat-messages" ref={scrollRef}>
         {/* メッセージがない場合はプレースホルダーと候補プロンプトを表示する */}
         {/* Show placeholder content and quick prompt suggestions when the conversation is empty */}
@@ -625,14 +639,7 @@ export function MiniChat({
             </span>
             <div className={`mini-chat-text-wrapper${msg.isError ? " mini-chat-text-wrapper--error" : ""}`}>
               {msg.sender === "assistant" ? (
-                <>
-                  <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
-                  {showModelLabel && msg.model ? (
-                    <div className="mini-chat-model-label">
-                      {t("agent.modelUsed", { model: formatAiAgentModelLabel(msg.model) })}
-                    </div>
-                  ) : null}
-                </>
+                <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
               ) : (
                 <div className="mini-chat-text">{msg.text}</div>
               )}
@@ -820,19 +827,6 @@ export function MiniChat({
             </button>
           )}
         </div>
-        {/* 会話履歴をクリアするボタン — メッセージがないか生成中は無効化 */}
-        {/* Clears the conversation history; disabled while generating or when there's nothing to clear */}
-        <button
-          type="button"
-          className={`mini-chat-action-btn mini-chat-clear-btn${iconOnlyClearButton ? " mini-chat-clear-btn--icon-only" : ""}`}
-          onClick={() => void handleClearConversation()}
-          disabled={!messages.length || isGenerating}
-          aria-label={t("agent.clear")}
-          title={t("agent.clear")}
-        >
-          <i className="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-          {!iconOnlyClearButton && <span>{t("agent.clear")}</span>}
-        </button>
       </form>
     </div>
   );

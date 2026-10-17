@@ -58,6 +58,9 @@ export type MemoEditApplyHandler = (edit: MemoEditPayload) => StepExecutionResul
 // MiniChat コンポーネントの外部 API (props の型定義)
 // Public API surface for the MiniChat component
 export type MiniChatProps = {
+  // 会話状態は MiniChat が持ち、クリア操作だけをホストのヘッダーへ表示する。
+  // MiniChat owns conversation state and portals its clear control into the host header.
+  clearButtonContainer: HTMLElement | null;
   memoId?: number | string | null;
   storageScope?: string;
   quickPrompts?: string[];
@@ -66,9 +69,6 @@ export type MiniChatProps = {
   inputPlaceholder?: string;
   enableActions?: boolean;
   persistConversation?: boolean;
-  // サポートエージェントではモデル名を表示せず、メモエージェントでは必要に応じて表示する
-  // Controls whether assistant responses include the model label
-  showModelLabel?: boolean;
   // サポートエージェントのクリア操作をアイコンだけで表示する
   // Renders the clear-conversation control as an icon-only button
   iconOnlyClearButton?: boolean;

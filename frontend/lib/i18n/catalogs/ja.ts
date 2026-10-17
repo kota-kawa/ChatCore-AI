@@ -1075,7 +1075,6 @@ export const jaMessages = {
   "agent.clear": "会話をクリア",
   "agent.clearConfirm": "この会話をクリアしますか？この操作は元に戻せません。",
   "agent.contextLimited": "AIへ文脈として送信するのは直近20件です。それより前のメッセージは表示に残りますが、送信対象外になります。",
-  "agent.modelUsed": "使用モデル: {model}",
   "agent.replanIntro": "前回の操作計画は実行中に失敗しました。",
   "agent.replanFailedStep": "失敗ステップ: {step}",
   "agent.replanReason": "失敗理由: {reason}",

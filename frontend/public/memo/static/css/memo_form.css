@@ -5097,6 +5097,13 @@ body.memo-page {
 }
 
 .memo-modal .memo-modal__icon-btn,
+.memo-modal .memo-modal__agent-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
 .memo-modal .memo-modal__agent-close {
   display: inline-flex;
   align-items: center;
@@ -5456,6 +5463,7 @@ body.memo-page {
 
 .memo-modal .memo-modal__agent-header-info {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.1rem;
   min-width: 0;
@@ -5665,17 +5673,6 @@ body.memo-page {
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-/* 応答に使ったモデル名。MiniChat に showModelLabel を渡しているのはこのパネルだけなので、
-   ここで持たないと本文と同じ大きさで出てしまう。
-   The model that answered. This panel is the only caller passing showModelLabel, so without a
-   rule here the label renders at body size. */
-.memo-modal .memo-modal__agent-panel .mini-chat-model-label {
-  margin-top: 0.45rem;
-  color: var(--modal-text-muted);
-  font-size: 0.7rem;
-  line-height: 1.35;
 }
 
 /* 会話が上限に達したときの注意書き / Notice shown once the conversation hits its limit */
@@ -5962,14 +5959,16 @@ body.memo-page {
 }
 
 .memo-modal .memo-modal__agent-panel .mini-chat-action-btn:hover:not(:disabled) {
-  border-color: var(--modal-danger);
-  color: var(--modal-danger);
+  border-color: var(--modal-accent);
+  background: var(--modal-surface-muted);
+  color: var(--modal-text);
 }
 
 /* 会話クリアはトップページのチャコと同じくアイコンだけで表示する。
    The memo companion keeps the same icon-only clear control as Chaco on the home page. */
 .memo-modal .memo-modal__agent-panel .mini-chat-clear-btn--icon-only {
   width: var(--tap-target-min);
+  border-radius: 11px;
   gap: 0;
   padding: 0;
   font-size: 1rem;

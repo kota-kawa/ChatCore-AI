@@ -71,14 +71,22 @@ describe("DraggableModal", () => {
     });
   });
 
-  it("uses the close button without starting a drag", () => {
+  it("uses header action buttons without starting a drag", () => {
     const onClose = vi.fn();
+    const onClear = vi.fn();
     render(
-      <DraggableModal isOpen onClose={onClose} title="閉じる操作">
+      <DraggableModal isOpen onClose={onClose} title="閉じる操作" headerActions={<button onClick={onClear}>会話をクリア</button>}>
         content
       </DraggableModal>
     );
     act(() => vi.advanceTimersByTime(32));
+
+    const clearButton = screen.getByRole("button", { name: "会話をクリア" });
+    fireEvent.mouseDown(clearButton, { clientX: 250, clientY: 200 });
+    fireEvent.click(clearButton);
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveStyle({ cursor: "auto" });
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "チャコを閉じる" }), {
       clientX: 300,

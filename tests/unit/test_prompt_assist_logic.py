@@ -15,6 +15,21 @@ from services.prompt_assist import (
 # 日本語: Prompt Assist Logicの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Prompt Assist Logic.
 class PromptAssistLogicTestCase(unittest.TestCase):
+    def test_revision_preserves_requirements_and_consistent_output(self):
+        messages = _build_prompt_assist_messages(
+            "task_modal",
+            "shorten",
+            {"title": "要約", "prompt_content": "必ず3つの箇条書き。根拠のない推測は禁止。"},
+            "条件を保って短くして。",
+        )
+
+        system = messages[0]["content"]
+        self.assertIn("preserve its explicit output format, item counts", system)
+        self.assertIn("unless user_brief explicitly changes them", system)
+        self.assertIn("Shortening removes redundant wording, never requirements", system)
+        self.assertIn("output requirements internally consistent", system)
+        self.assertIn("必ず3つの箇条書き", messages[1]["content"])
+
     def test_prompt_assist_uses_input_language_then_saved_locale(self):
         messages = _build_prompt_assist_messages(
             "task_modal",
