@@ -108,7 +108,7 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
-  /* 浮いている入力コンテナの高さぶん下端を空ける（safe-area は実測高さに含まれる） */
+  /* PC は浮いている入力コンテナの高さぶん下端を空ける（safe-area は実測高さに含まれる） */
   padding-bottom: calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
 }
 
@@ -1212,35 +1212,30 @@
     padding:
       calc(var(--chat-fade-top) + var(--space-2, 0.5rem))
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
-      calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem))
+      var(--space-2, 0.5rem)
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
     gap: 0.15rem;
     /* iOS の慣性スクロールを安定させ、入力フォーカス時にズレないようにする */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    scroll-padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
+    scroll-padding-bottom: var(--space-2, 0.5rem);
     /* 透明なモバイルヘッダーの裏を通るメッセージを、スクロール位置に応じて自然に
        薄くする。モバイルはヘッダーの中でボタンが占める割合が大きいので、完全に
        透過させる区間をデスクトップより少しだけ長く取る。
-       下端も同様に、浮いている入力欄へ潜り込むテキストを減衰させる。
-       mask-image は単一プロパティなので、上下のフェードを1つの gradient で指定する。 */
+       入力欄は一覧の外で高さを取るため、下端のフェードは不要。 */
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--chat-fade-top) * 0.66),
       rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.84),
-      #000 var(--chat-fade-top),
-      #000 calc(100% - var(--chat-footer-height, 4.9rem)),
-      transparent 100%
+      #000 var(--chat-fade-top)
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(var(--chat-fade-top) * 0.66),
       rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.84),
-      #000 var(--chat-fade-top),
-      #000 calc(100% - var(--chat-footer-height, 4.9rem)),
-      transparent 100%
+      #000 var(--chat-fade-top)
     );
   }
 
@@ -1266,7 +1261,11 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
-    padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
+    padding-bottom: var(--space-2, 0.5rem);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .chat-messages.scroll-pb-24 {
+    scroll-padding-bottom: var(--space-12, 3rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .message-wrapper {
