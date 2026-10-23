@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14.6-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.139.0-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16.3.8-000000?logo=nextdotjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.4.2-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=000000)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
@@ -86,6 +86,82 @@ flowchart TB
 Generation runs in a dedicated thread pool, while SSE delivers events and supports cancellation with partial-response preservation. Groq, Anthropic, and OpenAI differences stay in the LLM adapter; chat uses one shared decision loop across providers.
 
 Implementation: [App composition](app.py) · [Chat generation](services/chat_generation.py) · [Generation coordination](services/chat_generation_coordinator.py) · [LLM adapter](services/llm.py)
+
+## AI workflow: from input to output
+
+For a streaming chat turn, the selected model decides whether to answer or use the available tools. Skill selection happens once before this loop; tool availability also depends on user settings and permissions.
+
+```mermaid
+flowchart TD
+    Input["Question, attachments, URLs"] --> Validate["Validate input, room access, and usage limits"]
+    Validate --> Context["Prepare Task, history, references, and selected Skills"]
+    Context --> Decide{"AI chooses the next action"}
+    Decide -->|Search or read| Lookup["Search the Web or personal knowledge, read evidence or workspace data"]
+    Lookup --> State["Update TurnState with facts, sources, and unresolved questions"]
+    State --> Decide
+    Decide -->|Write requiring user approval| Approval["Validate the proposal and create an approval card"]
+    Approval --> Answer["Generate the answer"]
+    Decide -->|Answer| Answer
+    Answer --> Output["Stream text and finalize citations, validated UI, and cards"]
+    Output --> Save["Save the reply and send the terminal event"]
+    Approval -.-> Gate["After user approval, recheck access and revision"]
+    Gate --> Write["Execute the authorized write"]
+```
+
+Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed personal context suppresses it. Generated UI runs only after validation, inside an isolated iframe.
+
+Implementation: [Input and context preparation](services/chat_use_case.py) · [Skill selection](services/chat_skill_selection.py) · [AI decision loop](services/chat_generation_agent_loop.py) · [Tool execution](services/chat_generation_tools.py)
+
+## Chat generation and SSE delivery
+
+The initial `POST /api/chat` response is an SSE stream with an `X-Chat-Generation-ID` header. After disconnection, the browser reconnects through `GET /api/chat_generation_stream` with `generation_id` and `Last-Event-ID`. Generation runs in the backend's dedicated thread pool, independently of that connection. This example follows an authenticated, normal room whose history is stored in PostgreSQL.
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API as FastAPI / SSE
+    participant Job as Generation job
+    participant Redis
+    participant DB as PostgreSQL
+
+    Browser->>API: POST /api/chat, generation_id
+    API->>API: Validate access, limits, context
+    API->>Redis: Acquire room generation lock
+    API->>Job: Start background generation
+    API-->>Browser: SSE + generation ID header
+    loop AI decisions and answer delivery
+        Job->>Job: LLM adapter and tools
+        Job->>Redis: Retain events and notify
+        Job-->>API: Events locally or via Redis
+        API-->>Browser: Progress and answer events
+    end
+    opt Reconnect after a connection loss
+        Browser->>API: Reconnect with generation ID + cursor
+        API->>API: Revalidate room access
+        alt Job is local
+            API->>Job: Replay and follow events
+        else Job belongs to another worker
+            API->>Redis: Replay and follow events
+        end
+        API-->>Browser: Events after the cursor
+    end
+    alt Normal completion
+        Job->>DB: Save the finalized reply once
+        Job-->>API: done
+        API-->>Browser: done
+    else User stops generation
+        Browser->>API: POST /api/chat_stop
+        API->>API: Revalidate room access
+        API->>Job: Stop locally or via Redis
+        Job->>DB: Save partial reply once if present
+        Job-->>API: aborted
+        API-->>Browser: aborted
+    end
+```
+
+Redis coordinates locks, replay history, cross-worker delivery, and stop requests; it is not a distributed execution queue. Reconnection is limited to retained events for the same owner, room, and generation. Other terminal events are `incomplete` for a partial answer and `error` when no answer text can be produced.
+
+Implementation: [Chat endpoints](blueprints/chat/messages.py) · [Generation lifecycle](services/chat_generation.py) · [Events and cancellation](services/chat_generation_job_base.py) · [Redis coordination](services/chat_generation_coordinator.py)
 
 ## Reusing data through MCP
 
@@ -200,7 +276,7 @@ Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
 
 ![Python](https://img.shields.io/badge/Python-3.14.6-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.139.0-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16.3.8-000000?logo=nextdotjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.4.2-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=000000)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.0.2-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
@@ -278,6 +354,82 @@ flowchart TB
 - **LLM の差は Adapter に集約**し、会話モデルごとに別の検索・回答フローを作らず、共通の判断ループを使います。
 
 実装: [アプリ構成](app.py) · [チャット生成](services/chat_generation.py) · [生成の協調](services/chat_generation_coordinator.py) · [LLM Adapter](services/llm.py)
+
+## 入力から出力までの AI ワークフロー
+
+ストリーミングのチャットでは、選択したモデルが、回答するか利用可能なツールを使うかを判断します。Skill は判断ループの前に一度だけ選び、ツールの利用可否にはユーザーの設定と権限も反映します。
+
+```mermaid
+flowchart TD
+    Input["質問・添付ファイル・URL"] --> Validate["入力・部屋へのアクセス権・利用上限を検証"]
+    Validate --> Context["タスク・履歴・参照情報・選択した Skill を準備"]
+    Context --> Decide{"AI が次の行動を判断"}
+    Decide -->|検索・読み取り| Lookup["Web・個人の知識を検索し、根拠や作業対象のデータを読む"]
+    Lookup --> State["事実・出典・未解決事項を TurnState に反映"]
+    State --> Decide
+    Decide -->|都度承認が必要な書き込み| Approval["提案を検証して承認カードを作成"]
+    Approval --> Answer["回答を生成"]
+    Decide -->|回答| Answer
+    Answer --> Output["本文を逐次配信し、引用・検証済み UI・カードを仕上げる"]
+    Output --> Save["回答を保存し、終端イベントを通知"]
+    Approval -.-> Gate["利用者の承認後、権限・版番号を再確認"]
+    Gate --> Write["許可された書き込みを実行"]
+```
+
+検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。生成 UI は検証を通過したものだけを隔離 iframe で実行します。
+
+実装: [入力と文脈の準備](services/chat_use_case.py) · [Skill 選択](services/chat_skill_selection.py) · [AI の判断ループ](services/chat_generation_agent_loop.py) · [ツール実行](services/chat_generation_tools.py)
+
+## チャット生成と SSE 配信
+
+初回の `POST /api/chat` は、`X-Chat-Generation-ID` ヘッダー付きの SSE ストリームを返します。切断時は `GET /api/chat_generation_stream` に `generation_id` と `Last-Event-ID` を指定して再接続します。生成処理は、その接続から独立したバックエンド内の専用スレッドプールで動きます。下図は、履歴を PostgreSQL に保存するログイン済み利用者の通常ルームを例にしています。
+
+```mermaid
+sequenceDiagram
+    participant Browser as ブラウザー
+    participant API as FastAPI / SSE
+    participant Job as 生成ジョブ
+    participant Redis
+    participant DB as PostgreSQL
+
+    Browser->>API: POST /api/chat と generation_id
+    API->>API: 権限・上限・文脈を確認
+    API->>Redis: 部屋の生成ロックを取得
+    API->>Job: 専用スレッドプールで開始
+    API-->>Browser: SSE 応答と生成 ID ヘッダー
+    loop AI の判断と回答の配信
+        Job->>Job: LLM Adapter・ツールを利用
+        Job->>Redis: 連番付きイベントを保持して通知
+        Job-->>API: ローカル、または Redis 経由のイベント
+        API-->>Browser: SSE で進捗・回答を配信
+    end
+    opt 切断後の再接続
+        Browser->>API: 生成 ID とイベント番号で再接続
+        API->>API: 部屋へのアクセス権を再確認
+        alt 同じワーカーのジョブ
+            API->>Job: イベントを再生して購読
+        else 別ワーカーのジョブ
+            API->>Redis: イベントを再生して購読
+        end
+        API-->>Browser: 指定した番号より後のイベントを配信
+    end
+    alt 正常完了
+        Job->>DB: 確定した回答を一度だけ保存
+        Job-->>API: done
+        API-->>Browser: done
+    else 利用者が途中停止
+        Browser->>API: POST /api/chat_stop
+        API->>API: 部屋へのアクセス権を再確認
+        API->>Job: ローカルで停止、または Redis 経由で要求
+        Job->>DB: 部分回答があれば一度だけ保存
+        Job-->>API: aborted
+        API-->>Browser: aborted
+    end
+```
+
+Redis はロック・再接続用の履歴・ワーカー間の配信と停止要求を協調します。生成を実行する分散キューではありません。再接続は履歴の保持期間内で、同じ所有者・部屋・生成に限定します。このほか、部分回答で終わる `incomplete` と、回答本文を生成できなかった場合の `error` が終端イベントです。
+
+実装: [チャットの API](blueprints/chat/messages.py) · [生成のライフサイクル](services/chat_generation.py) · [イベントと停止処理](services/chat_generation_job_base.py) · [Redis の協調](services/chat_generation_coordinator.py)
 
 ## MCP によるデータの再利用
 
