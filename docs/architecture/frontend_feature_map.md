@@ -29,7 +29,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | `/shared/[token]` | `pages/shared/[token].tsx` | `components/shared_chat/` | 共有チャット取得・fork API |
 | `/shared/memo/[token]` | `pages/shared/memo/[token].tsx` | 共有メモ表示 | `/memo/api/shared` |
 | `/shared/prompt/[id]/[[...slug]]` | `pages/shared/prompt/[id]/[[...slug]].tsx` | 共有プロンプト詳細 | `/prompt_share/api/prompts/{id}` |
-| `/admin`, `/admin/login` | `pages/admin/index.tsx`, `pages/admin/login.tsx` | 管理画面固有の UI と Tailwind 互換スタイル | `/admin/api/*` |
+| `/admin`, `/admin/login` | `pages/admin/index.tsx`, `pages/admin/login.tsx` | 管理画面固有の UI（`components/admin/`）とページ専用 CSS `frontend/public/static/css/pages/admin/admin.css` | `/admin/api/*` |
 | `/lp`, `/chat/lp`, `/memo/lp`, `/prompt_share/lp` | 各 `pages/*/lp.tsx` | LP 専用 components と page CSS | 原則公開ページ。必要なデータ取得のみ API を利用 |
 | `/help`, `/terms`, `/privacy` | 各ページ入口 | `components/docs/`、help コンテンツ | 静的／翻訳データ中心 |
 

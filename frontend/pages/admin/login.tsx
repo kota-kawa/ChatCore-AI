@@ -18,13 +18,6 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<StatusMessage | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // メッセージの種類に応じてTailwindのカラークラスを切り替える
-  // Switch Tailwind color classes based on message type
-  const messageTone =
-    message?.type === "success"
-      ? "border-emerald-400/70 bg-emerald-50 text-emerald-700"
-      : "border-rose-400/70 bg-rose-50 text-rose-700";
-
   // ログインフォームの送信処理（管理者ログインAPIを呼び出してリダイレクトする）
   // Handle login form submission (call admin login API and redirect on success)
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -68,65 +61,42 @@ export default function AdminLogin() {
         canonicalPath="/admin/login"
         noindex
       />
-      <div className="relative min-h-screen overflow-hidden bg-slate-50">
-        {/* 背景の装飾的なブラーエフェクト / Decorative blur effect in the background */}
-        <div className="pointer-events-none absolute -top-24 right-[-10rem] h-72 w-72 rounded-full bg-indigo-200/50 blur-3xl"></div>
-        <div className="pointer-events-none absolute bottom-0 left-[-6rem] h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl"></div>
-
-        <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-12">
-          <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/90 p-8 shadow-2xl shadow-indigo-100/50 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-2xl text-white shadow-lg shadow-indigo-200">
-                🔐
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">
-                  Admin Access
-                </p>
-                <h1 className="mt-2 text-2xl font-semibold text-slate-900">管理者ログイン</h1>
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm text-slate-500">
-              セキュアな管理コンソールへアクセスするための認証です。
-            </p>
-
-            {/* 送信後のエラーまたは成功メッセージ / Error or success message after submission */}
-            {message ? (
-              <div
-                className={`mt-6 rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${messageTone}`}
-              >
-                {message.text}
-              </div>
-            ) : null}
-
-            <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700" htmlFor="password">
-                  パスワード
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  required
-                  className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </div>
-              {/* 送信中はボタンを無効化する / Disable button while submitting */}
-              <button
-                type="submit"
-                className="cc-texture-btn cc-texture-btn--indigo cc-press w-full rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={submitting}
-              >
-                ログイン
-              </button>
-            </form>
+      <link rel="stylesheet" href="/static/css/pages/admin/admin.css" precedence="admin" />
+      <main className="admin-login">
+        <div className="admin-login__card">
+          <div>
+            <h1 className="admin-login__title">管理者ログイン</h1>
+            <p className="admin-login__lead">Chat Core の管理コンソールに入るためのパスワードを入力してください。</p>
           </div>
+
+          {/* 送信後のエラーまたは成功メッセージ / Error or success message after submission */}
+          {message ? (
+            <p className={`admin-notice admin-notice--${message.type}`} role="alert">
+              {message.text}
+            </p>
+          ) : null}
+
+          <form className="admin-form" onSubmit={handleSubmit}>
+            <div className="admin-field">
+              <label className="admin-label" htmlFor="password">パスワード</label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                required
+                autoComplete="current-password"
+                className="admin-input"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            {/* 送信中はボタンを無効化する / Disable button while submitting */}
+            <button type="submit" className="admin-btn admin-btn--primary admin-btn--block" disabled={submitting}>
+              ログイン
+            </button>
+          </form>
         </div>
-      </div>
+      </main>
     </>
   );
 }

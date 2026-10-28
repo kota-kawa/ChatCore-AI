@@ -5,7 +5,7 @@
 - The colour, radius and shadow tokens, and the rules for choosing them, are documented in `DESIGN_TOKENS.md` (Japanese). Change a value in `variables.css` and that document in the same commit.
 - Page-level visual differences (for example scrollbars) use page-scoped variables such as `--page-scrollbar-*`, not duplicated `:root` tokens.
 - Bootstrap's CSS is not loaded. Only `bootstrap-icons` remains, via npm.
-- Tailwind utility usage remains in admin pages as a legacy exception; new shared tokens must still be defined via `variables.css`.
+- The admin pages no longer use Tailwind utility classes; the last user is `components/settings/prompt_category_select.tsx` (`min-w-0`, `flex-1`, `truncate`). `styles/globals.css` still imports Tailwind, which also brings its base reset (preflight) to every page, so removing the dependency changes base styles app-wide and needs its own change. Do not add new Tailwind utilities.
 
 ## Where a stylesheet is loaded
 
@@ -41,6 +41,7 @@ Order matters for the files that stay, too: **do not reshuffle the remaining `_a
 | `pages/oauth/authorize.tsx` | `pages/oauth_authorize/oauth_authorize.css` |
 | `pages/shared/memo/[token].tsx` | `pages/shared_memo.css` |
 | `pages/shared/prompt/[id]/[[...slug]].tsx` | `pages/shared_prompt.css` |
+| `pages/admin/index.tsx`, `pages/admin/login.tsx` | `pages/admin/admin.css` (React-managed, `precedence="admin"`); the dashboard's demo code card adds `pages/admin/demo_codes.css` (`precedence="demo-codes"`) |
 
 `prompt_category_page.tsx` shows the shape to use when the styles belong to a shared component rather than a page shell: the component renders its own `next/head` link.
 

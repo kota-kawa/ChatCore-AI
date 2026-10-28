@@ -13,7 +13,8 @@ const globalCss = readFileSync(
   "utf8",
 );
 const appTsx = readFileSync(new URL("../pages/_app.tsx", import.meta.url), "utf8");
-const adminIndexTsx = readFileSync(new URL("../pages/admin/index.tsx", import.meta.url), "utf8");
+const adminCss = readFileSync(new URL("../public/static/css/pages/admin/admin.css", import.meta.url), "utf8");
+const variablesCss = readFileSync(new URL("../public/static/css/base/variables.css", import.meta.url), "utf8");
 
 function removeCssComments(css: string) {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -155,10 +156,12 @@ test("global.css disables automatic text size adjustment", () => {
   assert.match(joined, /(?<!-)\btext-size-adjust:\s*100%/, "the standard property must be set too");
 });
 
-// admin ページは Tailwind の text-sm(14px) を使うが、要素セレクタのガードで救われる。
-// The admin pages keep Tailwind's text-sm (14px); the element-level guard rescues them.
-test("admin Tailwind inputs are covered by the global guard instead of local overrides", () => {
-  assert.match(adminIndexTsx, /const inputClass =[\s\S]*?text-sm/, "admin inputs still use text-sm");
+// admin ページの入力欄は自前で 16px を指定し、要素セレクタのガードにも引き続き含まれる。
+// The admin inputs set 16px themselves and are still covered by the element-level guard.
+test("admin inputs are 16px on their own and stay covered by the global guard", () => {
+  const adminInputRule = removeCssComments(adminCss).match(/\.admin-input \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(adminInputRule, /font-size: var\(--text-md\);/, "admin inputs use the 16px text token");
+  assert.match(variablesCss, /--text-md: 1rem;/, "--text-md stays at 16px");
 
   const firstRuleSelector = guardRules.slice(guardRules.indexOf("@media")).split("{")[1] ?? "";
 
