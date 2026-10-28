@@ -8,6 +8,7 @@ PostgreSQL の構造は `alembic/versions/` の適用後状態が正本です。
 erDiagram
     users ||--o{ user_passkeys : owns
     users ||--o{ user_auth_providers : uses
+    users ||--o| demo_access_codes : "demo account of"
     users ||--o{ chat_rooms : owns
     chat_rooms ||--o{ chat_history : contains
     chat_rooms ||--o| shared_chat_rooms : shares
@@ -44,6 +45,7 @@ erDiagram
 | 領域 | 主要テーブル | 関係・注意点 |
 | --- | --- | --- |
 | Identity | `users`, `user_passkeys`, `user_auth_providers` | ほとんどのユーザー所有データは `users.id` に紐づく。認証プロバイダー情報の正本は`user_auth_providers`のみで、`services/repositories/auth_identity_repository.py`がメール・Google・Passkey向けの永続化契約を所有する。`users` 行そのもの（プロフィール、サインイン用メール、`preferred_locale`）とアカウント削除は `services/repositories/user_repository.py` が所有する。 |
+| Demo access | `demo_access_codes` | 応募先ごとに配るデモ用アクセスコード。コード本体は保存せず SHA-256 の digest（一意）だけを持つ。初回利用で作ったデモ用ユーザーを `user_id`（一意、ON DELETE SET NULL）で結び、`first_used_at` から 30 日後を `expires_at` に入れる。`revoked_at` は管理者による停止。期限切れと停止ではユーザーを削除して行は残すため、`user_id` が NULL の行は終了済み（未使用は `first_used_at` も NULL）。所有は `services/repositories/demo_access_repository.py`、判断は `services/demo_access.py`（[ADR 0021](../decisions/0021-demo-access-codes.md)）。 |
 | Chat | `chat_rooms`, `chat_history`, `shared_chat_rooms`, `chat_room_summaries`, `memory_facts`, `user_skills`, `chat_tool_approvals`, `chat_tool_auto_approvals` | 永続化境界は機能別に分かれ、ルーム・履歴・分岐・共有・ルーム内メモリを `services/repositories/chat_repository.py` が、`user_skills` と既定スキルの ON/OFF（`users.generative_ui_skill_enabled`、`users.memo_tools_skill_enabled`、`users.prompt_tools_skill_enabled`）を `services/repositories/user_skill_repository.py` が、承認カードと「常に承認」の付与を `services/repositories/chat_tool_approval_repository.py` が所有する。部屋削除は履歴・要約・ルーム内メモリ・承認カードへ cascade する。`chat_rooms.mode` は `normal`／`temporary`。`chat_rooms.last_activity_at` はメッセージ保存時に更新され、履歴一覧の新着順とカーソル境界の正本になる。`chat_rooms.pinned_at` はサイドバーのピン留めで、NULL がピン留めなしを表す。ピン留めした部屋はページング対象の履歴一覧から外れ、最初のページに `pinned_rooms` として全件（件数上限なし）をピン留めした新しい順で返す。付け外しでは `last_activity_at` を更新しない。`shared_chat_rooms.revoked_at`／`expires_at` は共有リンクのライフサイクルで、どちらも NULL の行だけが公開読み取りの対象になる。`user_skills` はユーザーがトップページで登録する再利用指示で、有効行だけがチャット生成時の追加システム文脈になる。生成UIとメモは、コード定義の削除・編集不可なデフォルトSkillであり、ユーザーごとのON/OFFだけを `users` の列に保存するため、`user_skills` の件数上限には含めない。共有 Skill から追加した行は `source_prompt_id` で出典と追加済み状態を追跡し、共有元が削除された場合も Skill 本体は残して参照だけを NULL にする。`chat_tool_approvals` は書き込みツール（メモの作成・追記・書き換え、公開 Prompt の新規投稿、自分用 Prompt・個人 Skill の作成・編集）の承認カード1件を1行に持ち、`assistant_message_id` は回答の保存まで NULL、`status` は `pending`／`succeeded`／`failed`／`denied`／`expired`／`superseded`／`cancelled`。`chat_tool_auto_approvals` は利用者とツール名の組で一意な「常に承認」の付与で、取り消しは行の削除。両テーブルの値の集合は `services/response_models.py` の Literal を正本にし、DB の CHECK 制約はそこから組み立てる（[ADR 0013](../decisions/0013-chat-writes-through-stored-approvals.md)）。 |
 | Projects | `projects`, `project_files` | プロジェクトはユーザー所有。チャット部屋から project を参照する。`services/repositories/project_repository.py` が `projects` と `chat_rooms.project_id` の所属を所有し、部屋の所有者確認は `services/repositories/chat_room_access.py` を共有する。 |
 | Tasks | `task_with_examples`, `task_versions` | `services/repositories/task_repository.py` が所有する。system task とユーザー task を同じ主テーブルで扱い、論理削除・revision・source prompt を追加情報として持つ。version 行は旧列に加えて、現在の task 全体を `snapshot` JSONB に保存する。 |
@@ -64,7 +66,7 @@ erDiagram
 - キャッシュ、日次・月次クォータ、single-flight lock、チャット生成のイベント協調は Redis を使います。
 - プロンプト共有画像の表示用・カード用 WebP は `PROMPT_SHARE_UPLOAD_DIR` の永続 Docker volume に保存されます。DB は添付 descriptor と参照関係の source of truth です。
 - アバター画像は `AVATAR_UPLOAD_DIR` の永続 Docker volume に保存し、`/api/user/avatars/<filename>` としてアプリが配信します。`users.avatar_url` が source of truth で、旧 `/static/uploads/<filename>` は読み出し時に `services/avatar_storage.py` の `normalize_avatar_url` が現行URLへ読み替えます。既定アイコン `/static/user-icon.png` は frontend の静的アセットです。
-- エフェメラルチャットの削除、保持期間を過ぎたゴミ箱のメモの完全削除、添付ファイルとアバターの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
+- エフェメラルチャットの削除、保持期間を過ぎたゴミ箱のメモの完全削除、期限を過ぎたデモ用アカウントの削除、添付ファイルとアバターの orphan cleanup、起動時 seed は `app.py` の lifespan／バックグラウンド処理から実行されます。
 
 ## スキーマ変更を追う場所
 
