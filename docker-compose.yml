@@ -46,7 +46,7 @@ services:
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-}
       - GOOGLE_JS_ORIGIN=${GOOGLE_JS_ORIGIN:-https://chatcore-ai.com}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
-      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       # Remote MCP server and OAuth configuration.
       - MCP_ENABLED=${MCP_ENABLED:-false}
       - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}
