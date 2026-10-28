@@ -27,7 +27,8 @@ describe("UsageSettingsSection", () => {
       daily: { used_ratio: 0.42, resets_at: "2026-09-24T00:00:00+09:00" },
       weekly: { used_ratio: 1, resets_at: "2026-09-28T00:00:00+09:00" },
       monthly_budget_exhausted: false,
-      monthly_resets_at: "2026-10-01T00:00:00+09:00"
+      monthly_resets_at: "2026-10-01T00:00:00+09:00",
+      demo: null
     });
     renderSection();
 
@@ -44,7 +45,8 @@ describe("UsageSettingsSection", () => {
       daily: null,
       weekly: { used_ratio: 0.1, resets_at: "2026-09-28T00:00:00+09:00" },
       monthly_budget_exhausted: true,
-      monthly_resets_at: "2026-10-01T00:00:00+09:00"
+      monthly_resets_at: "2026-10-01T00:00:00+09:00",
+      demo: null
     });
     renderSection();
 
@@ -53,12 +55,29 @@ describe("UsageSettingsSection", () => {
     expect(screen.getAllByRole("progressbar")).toHaveLength(1);
   });
 
+  it("shows the demo allowance first with its expiry date", async () => {
+    mockedLoad.mockResolvedValue({
+      daily: { used_ratio: 0.1, resets_at: "2026-09-24T00:00:00+09:00" },
+      weekly: { used_ratio: 0.2, resets_at: "2026-09-28T00:00:00+09:00" },
+      monthly_budget_exhausted: false,
+      monthly_resets_at: "2026-10-01T00:00:00+09:00",
+      demo: { used_ratio: 0.08, expires_at: "2026-11-24T10:00:00+09:00" }
+    });
+    renderSection();
+
+    const bars = await screen.findAllByRole("progressbar");
+    expect(bars.map((bar) => bar.getAttribute("aria-valuenow"))).toEqual(["8", "10", "20"]);
+    expect(screen.getByRole("progressbar", { name: "デモの利用枠" })).toBe(bars[0]);
+    expect(screen.getByText("11月24日まで利用できます")).toBeInTheDocument();
+  });
+
   it("offers a retry after a failed load", async () => {
     mockedLoad.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({
       daily: { used_ratio: 0, resets_at: "2026-09-24T00:00:00+09:00" },
       weekly: { used_ratio: 0, resets_at: "2026-09-28T00:00:00+09:00" },
       monthly_budget_exhausted: false,
-      monthly_resets_at: "2026-10-01T00:00:00+09:00"
+      monthly_resets_at: "2026-10-01T00:00:00+09:00",
+      demo: null
     });
     renderSection();
 

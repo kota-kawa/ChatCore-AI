@@ -1,7 +1,8 @@
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import useSWR from "swr";
 
+import { DemoCodesPanel } from "../../components/admin/demo_codes_panel";
 import { SeoHead } from "../../components/SeoHead";
 import { Skeleton, SkeletonText } from "../../components/ui/skeleton";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
@@ -226,6 +227,13 @@ export default function AdminDashboard() {
     void router.replace(`/admin/login?next=${encodeURIComponent(nextPath)}`);
   }, [dashboardFetchError, router]);
 
+  // 管理者セッションが切れたときにログインページへ戻す（デモコード欄などの子コンポーネント用）
+  // Send the admin back to the login page when the session is gone (for child panels such as demo codes)
+  const redirectToAdminLogin = useCallback(() => {
+    const nextPath = router.asPath || "/admin";
+    void router.replace(`/admin/login?next=${encodeURIComponent(nextPath)}`);
+  }, [router]);
+
   // フォームをAPIエンドポイントにPOSTして結果に応じてページを更新する
   // POST form data to an API endpoint and refresh the page based on the result
   const submitForm = async (event: FormEvent<HTMLFormElement>, endpoint: string) => {
@@ -358,6 +366,8 @@ export default function AdminDashboard() {
               </div>
             ) : null}
           </div>
+
+          <DemoCodesPanel onUnauthorized={redirectToAdminLogin} />
 
           {/* テーブル一覧パネルと操作パネルを2カラムレイアウトで並べる / Two-column layout: table list panel on left, operations panel on right */}
           <div className="grid gap-8 xl:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">

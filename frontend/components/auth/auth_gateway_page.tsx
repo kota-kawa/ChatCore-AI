@@ -17,11 +17,13 @@ import {
 } from "../../lib/auth/account_switcher";
 import { REDIRECT_DELAY_MS } from "./auth_gateway_modules/constants";
 import { AuthCodeStep } from "./auth_gateway_modules/components/auth_code_step";
+import { AuthDemoCodeForm } from "./auth_gateway_modules/components/auth_demo_code_form";
 import { AuthEntryStep } from "./auth_gateway_modules/components/auth_entry_step";
 import { AuthGatewayHead } from "./auth_gateway_modules/components/auth_gateway_head";
 import { AuthMessageModal } from "./auth_gateway_modules/components/auth_message_modal";
 import { AuthPasskeyStep } from "./auth_gateway_modules/components/auth_passkey_step";
 import { LoadingSpinnerOverlay } from "./auth_gateway_modules/components/loading_spinner_overlay";
+import { useDemoLogin } from "./auth_gateway_modules/hooks/use_demo_login";
 import { useModalMessage } from "./auth_gateway_modules/hooks/use_modal_message";
 import { AuthGatewayGlobalStyles } from "./auth_gateway_modules/styles/auth_gateway_global_styles";
 import type { AuthStep, EmailAuthFlow, PasskeySetupProvider } from "./auth_gateway_modules/types";
@@ -99,6 +101,10 @@ export default function AuthGatewayPage() {
       window.location.href = targetPath;
     }, REDIRECT_DELAY_MS);
   };
+
+  // デモコードでのログイン成功後も、他の認証方式と同じ経路でホームへ移動する
+  // After a demo-code sign-in, go home through the same path as the other methods
+  const demoLogin = useDemoLogin(() => scheduleRedirect());
 
   // 現在の処理状態に応じてローディングオーバーレイのメッセージを決定する
   // Determine the loading overlay message based on the current processing state
@@ -377,6 +383,19 @@ export default function AuthGatewayPage() {
               }}
               onSendCode={() => {
                 void handleSendCode();
+              }}
+            />
+          ) : null}
+
+          {/* デモコードをお持ちの方向けの入口（最初のステップだけ） / Entry for demo-code holders (first step only) */}
+          {step === "entry" ? (
+            <AuthDemoCodeForm
+              code={demoLogin.code}
+              error={demoLogin.error}
+              pending={demoLogin.pending}
+              onCodeChange={demoLogin.setCode}
+              onSubmit={() => {
+                void demoLogin.submit();
               }}
             />
           ) : null}

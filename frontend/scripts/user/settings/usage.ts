@@ -28,3 +28,15 @@ export function formatUsageResetTime(isoTime: string, locale: Locale): string {
     minute: "2-digit"
   }).format(date);
 }
+
+// デモの期限を「11月24日」／「Nov 24」の形で返す（日付の区切りは日本時間）。
+// Format the demo expiry as "11月24日" or "Nov 24" (the date boundary is Japan time).
+export function formatUsageExpiryDate(isoTime: string, locale: Locale): string {
+  const date = new Date(isoTime);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(locale === "ja" ? "ja-JP" : "en-US", {
+    timeZone: USAGE_TIME_ZONE,
+    month: locale === "ja" ? "long" : "short",
+    day: "numeric"
+  }).format(date);
+}
