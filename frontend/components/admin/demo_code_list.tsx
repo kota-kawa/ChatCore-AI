@@ -56,7 +56,7 @@ export function DemoCodeList({ codes, revokingId, onRevoke }: DemoCodeListProps)
                 {canRevoke ? (
                   <button
                     type="button"
-                    className="demo-codes__btn"
+                    className="admin-btn"
                     aria-label={t("admin.demoRevokeAria", { label: code.label })}
                     disabled={revokingId !== null}
                     onClick={() => onRevoke(code)}

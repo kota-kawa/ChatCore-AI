@@ -1,124 +1,17 @@
-/* 管理画面「デモ用アクセスコード」。色は variables.css のトークンだけを使い、
-   ページ全体がライト固定でもテーマに追随する独立したカードとして組む。
-   Admin "Demo access codes" card. Colours come only from variables.css tokens;
-   it is a self-contained card that follows the theme even though the rest of the page is light-only. */
+/* 管理画面「デモ用アクセスコード」に固有の部品。パネル・入力欄・ボタンなどの共通部品は admin.css にある。
+   Parts specific to the admin "Demo access codes" card; shared panels, inputs and buttons live in admin.css. */
 
-.demo-codes {
-  margin: 0 0 2rem;
-  padding: 1.5rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-primary);
-  color: var(--text-dark);
-  overflow-wrap: anywhere;
-}
-
-.demo-codes__title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 700;
-}
-
-.demo-codes__subtitle {
-  margin: 1.5rem 0 0.75rem;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.demo-codes__lead {
-  margin: 0.5rem 0 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.65;
-}
-
-.demo-codes__error {
-  margin: 0.75rem 0 0;
-  color: var(--settings-danger);
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-/* ── 発行フォーム / Issue form ───────────────────────────────────── */
 .demo-codes__form {
-  margin-top: 1.25rem;
-}
-
-.demo-codes__label {
-  display: block;
-  margin-bottom: 0.4rem;
-  font-size: 0.875rem;
-  font-weight: 600;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
 }
 
 .demo-codes__form-row {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
-.demo-codes__input {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: var(--tap-target-min);
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-primary);
-  color: var(--text-dark);
-  font: inherit;
-  font-size: 1rem;
-}
-
-.demo-codes__input::placeholder {
-  color: var(--text-secondary);
-}
-
-.demo-codes__input:focus {
-  outline: none;
-  border-color: var(--settings-accent);
-}
-
-/* ── ボタン / Buttons ────────────────────────────────────────────── */
-.demo-codes__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--tap-target-min);
-  padding: 0.5rem 1.25rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  background: var(--surface-primary);
-  color: var(--text-dark);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.demo-codes__btn:hover:not(:disabled) {
-  background: var(--surface-secondary);
-}
-
-.demo-codes__btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.demo-codes__btn--primary {
-  border-color: var(--settings-accent);
-  background: var(--settings-accent);
-  color: var(--settings-accent-text);
-}
-
-.demo-codes__btn--primary:hover:not(:disabled) {
-  border-color: var(--settings-accent-hover);
-  background: var(--settings-accent-hover);
-}
-
-.demo-codes__btn:focus-visible,
 .demo-codes__copy:focus-visible {
   outline: 2px solid var(--settings-accent);
   outline-offset: 2px;
@@ -126,10 +19,10 @@
 
 /* ── 発行直後のコード / The code right after issuing ─────────────── */
 .demo-codes__issued {
-  margin-top: 1.25rem;
-  padding: 1rem 1.25rem;
+  margin-top: var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--settings-accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--settings-radius-control);
   background: var(--primary-alpha-12);
 }
 
@@ -142,8 +35,8 @@
 .demo-codes__code-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .demo-codes__code {
@@ -151,8 +44,8 @@
   min-width: 0;
   padding: 0.6rem 0.9rem;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-primary);
+  border-radius: var(--settings-radius-control);
+  background: var(--settings-card-bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 1.25rem;
   font-weight: 700;
@@ -170,18 +63,18 @@
   height: var(--tap-target-min);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-full);
-  background: var(--surface-primary);
-  color: var(--text-dark);
+  background: var(--settings-card-bg);
+  color: var(--settings-text-primary);
   font-size: 1.1rem;
   cursor: pointer;
 }
 
 .demo-codes__copy:hover:not(:disabled) {
-  background: var(--surface-secondary);
+  background: var(--settings-surface-muted);
 }
 
 .demo-codes__issued-note {
-  margin: 0.75rem 0 0;
+  margin: var(--space-3) 0 0;
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.6;
@@ -190,16 +83,10 @@
 .demo-codes__issued-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 /* ── 一覧 / List ─────────────────────────────────────────────────── */
-.demo-codes__empty {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
 .demo-codes__table {
   width: 100%;
   border-collapse: collapse;
@@ -208,7 +95,7 @@
 
 .demo-codes__table th,
 .demo-codes__table td {
-  padding: 0.75rem 0.75rem;
+  padding: var(--space-3);
   border-bottom: 1px solid var(--border-default);
   text-align: left;
   vertical-align: middle;
@@ -258,10 +145,6 @@
 
 /* ── スマホ幅: 1行を1枚のカードに積む / Phone width: each row becomes a stacked card ── */
 @media (max-width: 720px) {
-  .demo-codes {
-    padding: 1.25rem 1rem;
-  }
-
   .demo-codes__form-row {
     flex-direction: column;
   }
@@ -286,18 +169,18 @@
   }
 
   .demo-codes__table tr {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
     padding: 0.5rem 0.9rem;
     border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
+    border-radius: var(--settings-radius-control);
   }
 
   .demo-codes__table td {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 0.5rem 0;
+    gap: var(--space-4);
+    padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border-default);
     text-align: right;
   }

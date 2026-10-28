@@ -75,27 +75,27 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
 
   let list;
   if (loadError && !(loadError instanceof DemoCodesUnauthorizedError)) {
-    list = <p className="demo-codes__error" role="alert">{loadError.message}</p>;
+    list = <p className="admin-notice admin-notice--error" role="alert">{loadError.message}</p>;
   } else if (isLoading) {
-    list = <p className="demo-codes__empty">{t("common.loading")}</p>;
+    list = <p className="admin-empty">{t("common.loading")}</p>;
   } else if (codes.length === 0) {
-    list = <p className="demo-codes__empty">{t("admin.demoEmpty")}</p>;
+    list = <p className="admin-empty">{t("admin.demoEmpty")}</p>;
   } else {
     list = <DemoCodeList codes={codes} revokingId={revokingId} onRevoke={setRevokeTarget} />;
   }
 
   return (
-    <section className="demo-codes" aria-labelledby="demoCodesTitle">
+    <section className="admin-panel" aria-labelledby="demoCodesTitle">
       <link rel="stylesheet" href="/static/css/pages/admin/demo_codes.css" precedence="demo-codes" />
-      <h2 className="demo-codes__title" id="demoCodesTitle">{t("admin.demoTitle")}</h2>
-      <p className="demo-codes__lead">{t("admin.demoLead")}</p>
+      <h2 className="admin-panel__title" id="demoCodesTitle">{t("admin.demoTitle")}</h2>
+      <p className="admin-panel__lead">{t("admin.demoLead")}</p>
 
       <form className="demo-codes__form" onSubmit={(event) => void handleIssue(event)}>
-        <label className="demo-codes__label" htmlFor="demoCodeLabel">{t("admin.demoLabelField")}</label>
+        <label className="admin-label" htmlFor="demoCodeLabel">{t("admin.demoLabelField")}</label>
         <div className="demo-codes__form-row">
           <input
             id="demoCodeLabel"
-            className="demo-codes__input"
+            className="admin-input"
             type="text"
             maxLength={120}
             placeholder={t("admin.demoLabelPlaceholder")}
@@ -103,11 +103,11 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
             onChange={(event) => setLabel(event.target.value)}
             disabled={issuing}
           />
-          <button type="submit" className="demo-codes__btn demo-codes__btn--primary" disabled={issuing || !label.trim()}>
+          <button type="submit" className="admin-btn admin-btn--primary" disabled={issuing || !label.trim()}>
             {issuing ? t("admin.demoIssuing") : t("admin.demoIssue")}
           </button>
         </div>
-        {formError ? <p className="demo-codes__error" role="alert">{formError}</p> : null}
+        {formError ? <p className="admin-field-error" role="alert">{formError}</p> : null}
       </form>
 
       {issued ? (
@@ -124,13 +124,15 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
           </div>
           <p className="demo-codes__issued-note">{t("admin.demoIssuedWarning")}</p>
           <div className="demo-codes__issued-actions">
-            <button type="button" className="demo-codes__btn" onClick={() => setIssued(null)}>{t("common.close")}</button>
+            <button type="button" className="admin-btn" onClick={() => setIssued(null)}>{t("common.close")}</button>
           </div>
         </div>
       ) : null}
 
-      <h3 className="demo-codes__subtitle">{t("admin.demoListTitle")}</h3>
-      {list}
+      <div className="admin-panel__block">
+        <h3 className="admin-panel__subtitle">{t("admin.demoListTitle")}</h3>
+        {list}
+      </div>
 
       {revokeTarget ? (
         <ModalShell
@@ -148,7 +150,7 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
             </header>
             <div className="cc-modal__body">
               <p>{t("admin.demoRevokeBody", { label: revokeTarget.label })}</p>
-              {revokeError ? <p className="demo-codes__error" role="alert">{revokeError}</p> : null}
+              {revokeError ? <p className="admin-field-error" role="alert">{revokeError}</p> : null}
             </div>
             <footer className="cc-modal__footer">
               <button type="button" className="cc-modal__btn" onClick={closeRevokeDialog} disabled={revokingId !== null}>
