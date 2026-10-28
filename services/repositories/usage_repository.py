@@ -103,3 +103,18 @@ class UsageRepository:
             ApiUsageDaily.usage_date <= end,
         )
         return int((await session.execute(statement)).scalar_one())
+
+    async def lifetime_costs(self, session: AsyncSession, subject_keys: list[str]) -> dict[str, int]:
+        """Return each subject's cost over every recorded day; subjects with no usage map to 0."""
+
+        if not subject_keys:
+            return {}
+        statement = (
+            select(ApiUsageDaily.subject_key, func.coalesce(func.sum(ApiUsageDaily.cost_nano_usd), 0))
+            .where(ApiUsageDaily.subject_key.in_(subject_keys))
+            .group_by(ApiUsageDaily.subject_key)
+        )
+        totals = dict.fromkeys(subject_keys, 0)
+        for subject_key, cost in (await session.execute(statement)).all():
+            totals[str(subject_key)] = int(cost)
+        return totals

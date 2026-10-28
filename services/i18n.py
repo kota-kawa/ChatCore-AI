@@ -59,6 +59,9 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "usage_limit.load_failed": "利用状況の取得に失敗しました。",
         "usage_limit.daily": "本日の利用上限に達しました。明日の0時（日本時間）にリセットされます。",
         "usage_limit.weekly": "今週の利用上限に達しました。月曜日の0時（日本時間）にリセットされます。",
+        "usage_limit.demo": "デモの利用期間が終わったか、利用枠を使い切りました。",
+        "demo_access.invalid_code": "コードが正しくないか、利用期間が終わっています。",
+        "demo_access.sign_in_failed": "デモへのログインに失敗しました。時間をおいて再試行してください。",
         "usage_limit.monthly_budget": (
             "今月のサービス全体の利用枠に達したため、AI機能を一時停止しています。"
             "翌月1日の0時（日本時間）に再開します。"
@@ -92,6 +95,9 @@ _MESSAGES: dict[Locale, dict[str, str]] = {
         "usage_limit.load_failed": "Could not load your usage.",
         "usage_limit.daily": "You have reached today's usage limit. It resets at midnight Japan time.",
         "usage_limit.weekly": "You have reached this week's usage limit. It resets at midnight on Monday, Japan time.",
+        "usage_limit.demo": "This demo has ended or used up its allowance.",
+        "demo_access.invalid_code": "This code is incorrect or its demo period has ended.",
+        "demo_access.sign_in_failed": "Could not sign in to the demo. Please try again later.",
         "usage_limit.monthly_budget": (
             "AI features are paused because the service has used its budget for this month. "
             "They resume at midnight on the 1st, Japan time."

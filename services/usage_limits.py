@@ -1,4 +1,4 @@
-"""Per-user daily/weekly cost limits and the system-wide monthly budget.
+"""Per-user daily/weekly cost limits, the demo account allowance and the system-wide monthly budget.
 
 `services.usage_metering` が記録した料金を読み、AI 機能を始める前に判定します。
 判定は処理の開始時だけ行うため、実行中のターンは上限を少し超えて終わることがあります。
@@ -22,13 +22,13 @@ from services.env_settings import env_float
 from services.i18n import translate
 from services.repositories.usage_repository import SubjectUsageTotals
 from services.usage_metering import USAGE_TIMEZONE
-from services.usage_subject import SYSTEM_USAGE_SUBJECT, current_usage_subject
+from services.usage_subject import SYSTEM_USAGE_SUBJECT, current_usage_subject, user_id_from_usage_subject
 
 logger = logging.getLogger(__name__)
 
 _NANO_USD_PER_USD = 1_000_000_000
 
-LimitReason = Literal["daily", "weekly", "monthly_budget"]
+LimitReason = Literal["daily", "weekly", "monthly_budget", "demo"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +39,12 @@ class UsageLimitSettings:
     user_weekly: int
     guest_daily: int
     guest_weekly: int
+    demo_total: int
     monthly_stop: int
+
+
+def nano_usd_to_usd(amount: int) -> float:
+    return amount / _NANO_USD_PER_USD
 
 
 def _usd_env(name: str, default: float) -> int:
@@ -56,8 +61,17 @@ def load_usage_limit_settings() -> UsageLimitSettings:
         user_weekly=_usd_env("USAGE_USER_WEEKLY_LIMIT_USD", 6.00),
         guest_daily=_usd_env("USAGE_GUEST_DAILY_LIMIT_USD", 0.03),
         guest_weekly=_usd_env("USAGE_GUEST_WEEKLY_LIMIT_USD", 0.10),
+        demo_total=_usd_env("DEMO_ACCESS_USAGE_LIMIT_USD", 1.50),
         monthly_stop=int(_usd_env("USAGE_MONTHLY_BUDGET_USD", 30.0) * ratio),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class DemoUsageTotals:
+    """A demo account's end and its cost since it was created, in nano-dollars."""
+
+    expires_at: datetime
+    lifetime_nano_usd: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +80,8 @@ class UsageTotals:
 
     subject: SubjectUsageTotals
     monthly_total_nano_usd: int
+    # デモ用アカウントのときだけ値が入る。 / Set only for a demo account.
+    demo: DemoUsageTotals | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +125,7 @@ UsageTotalsReader = Callable[[str, UsagePeriods], Awaitable[UsageTotals]]
 
 async def _read_usage_totals(subject_key: str, periods: UsagePeriods) -> UsageTotals:
     from services.db import session_scope
+    from services.repositories.demo_access_repository import DemoAccessRepository
     from services.repositories.usage_repository import UsageRepository
 
     repository = UsageRepository()
@@ -117,7 +134,16 @@ async def _read_usage_totals(subject_key: str, periods: UsagePeriods) -> UsageTo
             session, subject_key, day=periods.day, week_start=periods.week_start
         )
         monthly = await repository.total_cost(session, start=periods.month_start, end=periods.day)
-    return UsageTotals(subject=subject, monthly_total_nano_usd=monthly)
+        demo = None
+        user_id = user_id_from_usage_subject(subject_key)
+        if user_id is not None:
+            expires_at = await DemoAccessRepository(session).expiry_for_user(user_id)
+            if expires_at is not None:
+                # デモ用ユーザーは初回利用時に作るので、全期間の合計がデモ期間の利用額になる。
+                # The demo user is created on first use, so its all-time total is the demo period's spend.
+                lifetime = await repository.lifetime_costs(session, [subject_key])
+                demo = DemoUsageTotals(expires_at=expires_at, lifetime_nano_usd=lifetime[subject_key])
+    return UsageTotals(subject=subject, monthly_total_nano_usd=monthly, demo=demo)
 
 
 _usage_totals_reader: UsageTotalsReader = _read_usage_totals
@@ -144,6 +170,20 @@ class UsageWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class DemoAllowance:
+    """A demo account's allowance for its whole period; it never resets, the account just ends."""
+
+    used_nano_usd: int
+    limit_nano_usd: int
+    expires_at: datetime
+
+    def ended(self, now: datetime) -> bool:
+        if now >= self.expires_at:
+            return True
+        return self.limit_nano_usd > 0 and self.used_nano_usd >= self.limit_nano_usd
+
+
+@dataclass(frozen=True, slots=True)
 class UsageStatus:
     """Where one subject stands against its limits and the monthly budget."""
 
@@ -151,6 +191,7 @@ class UsageStatus:
     weekly: UsageWindow | None
     monthly_budget_exhausted: bool
     monthly_resets_at: datetime
+    demo: DemoAllowance | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +228,9 @@ async def get_usage_status(
     if limits is not None:
         daily = UsageWindow(totals.subject.daily_nano_usd, limits[0], periods.next_day)
         weekly = UsageWindow(totals.subject.weekly_nano_usd, limits[1], periods.next_week)
+    demo = None
+    if totals.demo is not None:
+        demo = DemoAllowance(totals.demo.lifetime_nano_usd, settings.demo_total, totals.demo.expires_at)
     return UsageStatus(
         daily=daily,
         weekly=weekly,
@@ -194,6 +238,7 @@ async def get_usage_status(
             settings.monthly_stop > 0 and totals.monthly_total_nano_usd >= settings.monthly_stop
         ),
         monthly_resets_at=periods.next_month,
+        demo=demo,
     )
 
 
@@ -216,6 +261,11 @@ async def check_usage_limit(
     if status.monthly_budget_exhausted:
         logger.warning("Monthly API budget reached; refusing new AI requests until next month.")
         return _block("monthly_budget", status.monthly_resets_at, moment)
+    # デモ用アカウントの枠は期間中に戻らない。期限を過ぎて削除を待つ間もここで止める。
+    # A demo allowance never comes back within its period; this also stops an expired account
+    # that the periodic purge has not deleted yet.
+    if status.demo is not None and status.demo.ended(moment):
+        return _block("demo", status.demo.expires_at, moment)
     # 週の枠が尽きていれば、日が変わっても使えないので週の方を案内する。
     # When the weekly allowance is gone a new day does not help, so report the week.
     if status.weekly is not None and status.weekly.exhausted:

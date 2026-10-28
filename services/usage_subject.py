@@ -31,6 +31,15 @@ def user_usage_subject(user_id: int | str) -> str:
     return f"user:{int(user_id)}"
 
 
+def user_id_from_usage_subject(subject_key: str) -> int | None:
+    """Return the user id inside a ``user:<id>`` subject, or ``None`` for any other subject."""
+
+    prefix, _, raw_id = subject_key.partition(":")
+    if prefix != "user" or not raw_id.isdigit():
+        return None
+    return int(raw_id)
+
+
 def guest_usage_subject(client_ip: str) -> str:
     # 接続元IPをそのまま保存しないようハッシュにする。
     # Hash the client IP so the address itself is never stored.

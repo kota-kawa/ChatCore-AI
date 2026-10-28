@@ -37,6 +37,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "chat_history",
             "chat_tool_approvals",
             "chat_tool_auto_approvals",
+            "demo_access_codes",
             "shared_chat_rooms",
             "chat_room_summaries",
             "memory_facts",
@@ -134,6 +135,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "idx_mcp_oauth_tokens_client_id",
             "idx_chat_tool_approvals_message",
             "idx_chat_tool_auto_approvals_source",
+            "idx_demo_access_codes_expires_at",
         ):
             with self.subTest(index=index_name):
                 self.assertTrue(any(index_name in statement for statement in index_sql))

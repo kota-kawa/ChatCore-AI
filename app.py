@@ -33,6 +33,7 @@ from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.db import dispose_engine  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
 from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
+from services.demo_access import purge_expired_demo_accounts  # noqa: E402
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
 from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
 from services.locale_middleware import LocaleMiddleware  # noqa: E402
@@ -119,6 +120,18 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
                     await cleanup_expired_memo_trash()
             except Exception:
                 logger.exception("Failed to purge expired trashed memos.")
+            # 利用期間を過ぎたデモ用アカウントの削除。上と同じく独立した try で包む。
+            # Deletion of demo accounts past their period, in its own try for the same reason.
+            try:
+                demo_lock = await asyncio.to_thread(
+                    try_acquire_single_flight,
+                    "demo_account_cleanup",
+                    CLEANUP_LOCK_TTL_SECONDS,
+                )
+                if demo_lock:
+                    await purge_expired_demo_accounts()
+            except Exception:
+                logger.exception("Failed to delete expired demo accounts.")
             ephemeral_lock = await asyncio.to_thread(
                 try_acquire_single_flight,
                 "ephemeral_cleanup",
@@ -334,6 +347,7 @@ async def readyz():
 # Import routers so endpoint definitions are attached.
 from blueprints.admin import admin_bp  # noqa: E402
 from blueprints.auth import auth_bp  # noqa: E402
+from blueprints.auth_demo import auth_demo_bp  # noqa: E402
 from blueprints.chat import chat_bp  # noqa: E402
 from blueprints.context_vault import context_vault_bp  # noqa: E402
 from blueprints.mcp_oauth import mcp_oauth_bp  # noqa: E402
@@ -347,6 +361,7 @@ from blueprints.verification import verification_bp  # noqa: E402
 # ルーティングテーブルに各 Router を登録する
 # Register all routers into the app routing table.
 app.include_router(auth_bp)
+app.include_router(auth_demo_bp)
 app.include_router(verification_bp)
 app.include_router(chat_bp)
 app.include_router(prompt_share_bp)
