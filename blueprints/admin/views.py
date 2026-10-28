@@ -1,6 +1,5 @@
 import inspect
 import logging
-import os
 import re
 from functools import wraps
 from urllib.parse import urlencode
@@ -16,6 +15,7 @@ from services.auth_limits import (
     consume_admin_login_limit,
     get_auth_limit_service,
 )
+from services.env_settings import env_text
 from services.repositories.admin_repository import (
     add_column_if_valid as repository_add_column_if_valid,
 )
@@ -34,7 +34,7 @@ from services.repositories.admin_repository import (
 from services.repositories.admin_repository import (
     quote_identifier,
 )
-from services.security import verify_password
+from services.security import constant_time_compare
 from services.session_middleware import rotate_session_identifier
 from services.web import (
     flash,
@@ -51,9 +51,9 @@ from services.web import (
 
 from . import admin_bp
 
-# 環境変数から管理者パスワードハッシュを読み込む
-# Load the administrator password hash from environment variables.
-ADMIN_PASSWORD_HASH = (os.getenv("ADMIN_PASSWORD_HASH") or "").strip()
+# 環境変数から管理者パスワードを読み込む。ハッシュではなく平文で設定する。
+# Load the administrator password from the environment; it is set as plain text, not a hash.
+ADMIN_PASSWORD = (env_text("ADMIN_PASSWORD") or "").strip()
 logger = logging.getLogger(__name__)
 
 # SQL識別子（テーブル名・カラム名）のバリデーション用正規表現パターン
@@ -107,19 +107,18 @@ def _resolve_auth_limit_service(
 
 
 # 入力された管理者パスワードを検証する関数
-# Verify the provided password against the administrator password hash.
+# Verify the provided password against the administrator password.
 def _verify_admin_password(password: str) -> bool:
     """
-    提供された平文のパスワードを、環境変数の管理者パスワードハッシュ値と比較検証する。
-    Check if the plaintext password matches the hashed administrator password.
+    入力されたパスワードを、環境変数の管理者パスワードと定数時間で比較する。
+    Compare the given password with the administrator password in constant time.
     """
-    # パスワードハッシュが未設定の場合は無条件でFalseを返す
-    # Return False immediately if hash is not set in environment.
-    if not ADMIN_PASSWORD_HASH:
+    # パスワードが未設定なら空の入力も含めて常に拒否する。文字列以外（JSON の数値など）も拒否する。
+    # Reject everything, an empty input included, when no password is configured; reject non-strings
+    # (a JSON number, say) too.
+    if not ADMIN_PASSWORD or not isinstance(password, str):
         return False
-    # ハッシュとの照合結果を返却
-    # Return the password hash verification result.
-    return verify_password(password, ADMIN_PASSWORD_HASH)
+    return constant_time_compare(password, ADMIN_PASSWORD)
 
 
 # SQLAlchemyのPostgreSQL識別子quoteを使って安全なSQL識別子を構築する。
@@ -514,7 +513,7 @@ async def api_login(
 
     # パスワード検証を実行
     # Check password correctness.
-    if await run_blocking(_verify_admin_password, password):
+    if _verify_admin_password(password):
         # セッションハイジャック対策としてセッションIDをローテーション
         # Rotate session identifiers to prevent fixation.
         rotate_session_identifier(request)

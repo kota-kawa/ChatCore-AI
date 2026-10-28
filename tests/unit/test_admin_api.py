@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from blueprints.admin import views as admin_views
-from services.security import hash_password
 from tests.helpers.request_helpers import build_request
 
 
@@ -43,9 +42,9 @@ class AdminApiTestCase(unittest.TestCase):
             session={},
         )
         request.scope["session_id"] = "existing-admin-session"
-        # 日本語: 正しいパスワードハッシュとレート制限が消費可能な状態をモック
-        # English: Mock correct password hash and rate limit allowing the login
-        with patch.object(admin_views, "ADMIN_PASSWORD_HASH", hash_password(password)):
+        # 日本語: 正しいパスワードとレート制限が消費可能な状態をモック
+        # English: Mock the correct password and rate limit allowing the login
+        with patch.object(admin_views, "ADMIN_PASSWORD", password):
             with patch("blueprints.admin.views.consume_admin_login_limit", return_value=(True, None)):
                 response = asyncio.run(admin_views.api_login(request))
         self.assertEqual(response.status_code, 200)
@@ -62,9 +61,9 @@ class AdminApiTestCase(unittest.TestCase):
         password = "admin-test-password"
         external_next_values = ["https://evil.com", "http://evil.com", "//evil.com"]
 
-        # 日本語: パスワードハッシュをモックして複数の外部URLリダイレクト先をサブテストで試行
-        # English: Mock password hash and run subtests for each external URL redirect target
-        with patch.object(admin_views, "ADMIN_PASSWORD_HASH", hash_password(password)):
+        # 日本語: パスワードをモックして複数の外部URLリダイレクト先をサブテストで試行
+        # English: Mock the password and run subtests for each external URL redirect target
+        with patch.object(admin_views, "ADMIN_PASSWORD", password):
             for external_next in external_next_values:
                 with self.subTest(next=external_next):
                     request = make_request(
@@ -87,15 +86,44 @@ class AdminApiTestCase(unittest.TestCase):
             path="/admin/api/login",
             json_body={"password": "wrong-password", "next": "/admin"},
         )
-        # 日本語: 管理者の正しいパスワードハッシュをモック
-        # English: Mock the correct admin password hash
-        with patch.object(admin_views, "ADMIN_PASSWORD_HASH", hash_password("correct-password")):
+        # 日本語: 管理者の正しいパスワードをモック
+        # English: Mock the correct admin password
+        with patch.object(admin_views, "ADMIN_PASSWORD", "correct-password"):
             with patch("blueprints.admin.views.consume_admin_login_limit", return_value=(True, None)):
                 response = asyncio.run(admin_views.api_login(request))
 
         self.assertEqual(response.status_code, 401)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "fail")
+
+    # 日本語: パスワードが未設定のときは、空の入力でもログインできないことを検証します。
+    # English: Verify that no input, an empty one included, signs in while no password is configured.
+    def test_login_fails_when_no_password_is_configured(self):
+        for attempt in ("", "anything"):
+            with self.subTest(attempt=attempt):
+                request = make_request(
+                    method="POST",
+                    path="/admin/api/login",
+                    json_body={"password": attempt, "next": "/admin"},
+                )
+                with patch.object(admin_views, "ADMIN_PASSWORD", ""):
+                    with patch("blueprints.admin.views.consume_admin_login_limit", return_value=(True, None)):
+                        response = asyncio.run(admin_views.api_login(request))
+                self.assertEqual(response.status_code, 401)
+                self.assertNotIn("is_admin", request.session)
+
+    # 日本語: 文字列以外のパスワード（JSON の数値）は、文字にすると一致しても拒否することを検証します。
+    # English: Verify that a non-string password (a JSON number) is rejected even when its text would match.
+    def test_login_rejects_a_non_string_password(self):
+        request = make_request(
+            method="POST",
+            path="/admin/api/login",
+            json_body={"password": 123456, "next": "/admin"},
+        )
+        with patch.object(admin_views, "ADMIN_PASSWORD", "123456"):
+            with patch("blueprints.admin.views.consume_admin_login_limit", return_value=(True, None)):
+                response = asyncio.run(admin_views.api_login(request))
+        self.assertEqual(response.status_code, 401)
 
     # 日本語: ログイン試行回数制限（レートリミット）超過時に429ステータスを返すことを検証します。
     # English: Verify that 429 status is returned when the login rate limit is exceeded.
