@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 85b78bcfb237aac9fdfc9efbd31cab4af3c1890f43b61ad8e1446dbb2cfa6e94
+// Schema fingerprint: 5874c6598767b12b22bccd857f7a2feb2f27e789925f56e4c1c0f0777a0ef5cb
 
 import { z } from "zod";
 
@@ -10,6 +10,12 @@ export type EmailRequest = z.infer<typeof EmailRequestSchema>;
 
 export const AuthCodeRequestSchema = z.object({ "authCode": z.union([z.string(), z.null()]).default(null) });
 export type AuthCodeRequest = z.infer<typeof AuthCodeRequestSchema>;
+
+export const DemoLoginRequestSchema = z.object({ "code": z.string().min(1).max(64) });
+export type DemoLoginRequest = z.infer<typeof DemoLoginRequestSchema>;
+
+export const DemoAccessCodeCreateRequestSchema = z.object({ "label": z.string().min(1).max(120) });
+export type DemoAccessCodeCreateRequest = z.infer<typeof DemoAccessCodeCreateRequestSchema>;
 
 export const LocalePreferenceUpdateRequestSchema = z.object({ "locale": z.enum(["ja","en"]) }).strict();
 export type LocalePreferenceUpdateRequest = z.infer<typeof LocalePreferenceUpdateRequestSchema>;
@@ -137,8 +143,26 @@ export type LocalePreferenceResponse = z.infer<typeof LocalePreferenceResponseSc
 export const UsageLimitWindowResponseSchema = z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any());
 export type UsageLimitWindowResponse = z.infer<typeof UsageLimitWindowResponseSchema>;
 
-export const UsageLimitsResponseSchema = z.object({ "daily": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "weekly": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "monthly_budget_exhausted": z.boolean(), "monthly_resets_at": z.string() }).catchall(z.any());
+export const DemoUsageResponseSchema = z.object({ "used_ratio": z.number().gte(0).lte(1), "expires_at": z.string() }).catchall(z.any());
+export type DemoUsageResponse = z.infer<typeof DemoUsageResponseSchema>;
+
+export const UsageLimitsResponseSchema = z.object({ "daily": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "weekly": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "resets_at": z.string() }).catchall(z.any()), z.null()]), "monthly_budget_exhausted": z.boolean(), "monthly_resets_at": z.string(), "demo": z.union([z.object({ "used_ratio": z.number().gte(0).lte(1), "expires_at": z.string() }).catchall(z.any()), z.null()]).default(null) }).catchall(z.any());
 export type UsageLimitsResponse = z.infer<typeof UsageLimitsResponseSchema>;
+
+export const DemoLoginResponseSchema = z.object({ "status": z.literal("success"), "expires_at": z.string() }).catchall(z.any());
+export type DemoLoginResponse = z.infer<typeof DemoLoginResponseSchema>;
+
+export const DemoAccessCodeApiSchema = z.object({ "id": z.number().int(), "label": z.string(), "status": z.enum(["unused","active","ended","revoked"]), "created_at": z.string(), "first_used_at": z.union([z.string(), z.null()]), "expires_at": z.union([z.string(), z.null()]), "used_usd": z.union([z.number(), z.null()]), "limit_usd": z.number() }).catchall(z.any());
+export type DemoAccessCodeApi = z.infer<typeof DemoAccessCodeApiSchema>;
+
+export const DemoAccessCodeListResponseSchema = z.object({ "codes": z.array(z.object({ "id": z.number().int(), "label": z.string(), "status": z.enum(["unused","active","ended","revoked"]), "created_at": z.string(), "first_used_at": z.union([z.string(), z.null()]), "expires_at": z.union([z.string(), z.null()]), "used_usd": z.union([z.number(), z.null()]), "limit_usd": z.number() }).catchall(z.any())) }).catchall(z.any());
+export type DemoAccessCodeListResponse = z.infer<typeof DemoAccessCodeListResponseSchema>;
+
+export const DemoAccessCodeIssueResponseSchema = z.object({ "code": z.string(), "item": z.object({ "id": z.number().int(), "label": z.string(), "status": z.enum(["unused","active","ended","revoked"]), "created_at": z.string(), "first_used_at": z.union([z.string(), z.null()]), "expires_at": z.union([z.string(), z.null()]), "used_usd": z.union([z.number(), z.null()]), "limit_usd": z.number() }).catchall(z.any()) }).catchall(z.any());
+export type DemoAccessCodeIssueResponse = z.infer<typeof DemoAccessCodeIssueResponseSchema>;
+
+export const DemoAccessCodeRevokeResponseSchema = z.object({ "item": z.object({ "id": z.number().int(), "label": z.string(), "status": z.enum(["unused","active","ended","revoked"]), "created_at": z.string(), "first_used_at": z.union([z.string(), z.null()]), "expires_at": z.union([z.string(), z.null()]), "used_usd": z.union([z.number(), z.null()]), "limit_usd": z.number() }).catchall(z.any()) }).catchall(z.any());
+export type DemoAccessCodeRevokeResponse = z.infer<typeof DemoAccessCodeRevokeResponseSchema>;
 
 export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;

@@ -194,6 +194,18 @@ class AuthCodeRequest(RequestPayloadModel):
     authCode: str | None = None  # noqa: N815
 
 
+# 日本語: デモ用アクセスコードでログインするリクエスト。コードの長さは表記ゆれ（空白・ハイフン）を許す幅を取る。
+# English: Sign-in with a demo access code; the length leaves room for spaces and hyphens a person may type.
+class DemoLoginRequest(RequestPayloadModel):
+    code: Annotated[str, Field(min_length=1, max_length=64)]
+
+
+# 日本語: 管理画面でデモ用アクセスコードを発行するリクエスト。label は配布先（応募先）の名前。
+# English: Admin request issuing a demo access code; label names the recipient it is handed to.
+class DemoAccessCodeCreateRequest(RequestPayloadModel):
+    label: Annotated[str, Field(min_length=1, max_length=120)]
+
+
 # 日本語: 新しいチャットルームを作成する際のリクエストペイロード。
 # English: Request payload for creating a new chat room.
 class NewChatRoomRequest(RequestPayloadModel):

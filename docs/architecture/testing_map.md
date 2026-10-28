@@ -6,7 +6,7 @@
 
 | 変更対象 | 主なテスト群 | 確認内容 |
 | --- | --- | --- |
-| 認証・セッション・CSRF | `tests/unit/test_auth_*.py`, `test_account_sessions.py`, `test_session_middleware.py`, `test_csrf_protection.py`, `tests/integration/test_session_resilience.py` | 認証状態、ID rotation、Redis 障害、安全な Cookie 処理、CSRF |
+| 認証・セッション・CSRF | `tests/unit/test_auth_*.py`, `test_account_sessions.py`, `test_session_middleware.py`, `test_csrf_protection.py`, `tests/unit/test_demo_access.py`, `tests/integration/test_session_resilience.py`, `tests/integration/test_demo_access.py` | 認証状態、ID rotation、Redis 障害、安全な Cookie 処理、CSRF、デモ用アクセスコード（初回作成・再入室・停止・期限切れ・利用枠） |
 | チャット・SSE・部屋 | `tests/unit/test_chat_*.py`, `test_chat_streaming.py`, `test_chat_generation_stop.py`, `tests/integration/test_endpoint_routes.py` | 入力、所有者、branch、quota、生成イベント、停止・再接続 |
 | タスク・prompt assist | `test_default_tasks.py`, `test_edit_default_task.py`, `test_task_*.py`, `test_prompt_assist*.py` | seed、localized task、並び順、重複制約、assist quota |
 | Prompt sharing | `test_prompt_share*.py`, `test_prompt_*_api.py`, `test_prompt_attachment_*.py`, `test_prompt_resource_repository.py` | 公開範囲、検索、like/comment、添付処理、resource |

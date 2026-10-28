@@ -27,6 +27,8 @@ DEFAULT_AUTH_EMAIL_WINDOW_SECONDS = 600
 DEFAULT_AUTH_EMAIL_COOLDOWN_SECONDS = 60
 DEFAULT_ADMIN_LOGIN_PER_IP_LIMIT = 10
 DEFAULT_ADMIN_LOGIN_WINDOW_SECONDS = 900
+DEFAULT_DEMO_LOGIN_PER_IP_LIMIT = 10
+DEFAULT_DEMO_LOGIN_WINDOW_SECONDS = 900
 DEFAULT_PASSKEY_AUTH_OPTIONS_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_VERIFY_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS = 300
@@ -475,6 +477,36 @@ return {1, current, key_ttl}
             ),
         )
 
+    # デモ用アクセスコードの入力回数を制限する。成功も数えて、コードの総当たりを遅らせる。
+    # Limit demo access code entries; successes count too, so guessing codes stays slow.
+    def consume_demo_login_limit(self, request: Request) -> tuple[bool, str | None]:
+        client_ip = get_request_client_ip(request)
+        per_ip_limit = _limit_from_env(
+            "DEMO_LOGIN_PER_IP_LIMIT",
+            DEFAULT_DEMO_LOGIN_PER_IP_LIMIT,
+        )
+        window_seconds = _limit_from_env(
+            "DEMO_LOGIN_WINDOW_SECONDS",
+            DEFAULT_DEMO_LOGIN_WINDOW_SECONDS,
+        )
+
+        allowed, _, retry_after = self.consume_rate_limit(
+            "demo_login:ip",
+            client_ip,
+            limit=per_ip_limit,
+            window_seconds=window_seconds,
+        )
+        if allowed:
+            return True, None
+
+        return (
+            False,
+            (
+                "デモコードの入力回数が多すぎます。"
+                f"{retry_after}秒ほど待ってから再試行してください。"
+            ),
+        )
+
     # Passkeyオプション生成の試行制限を処理する
     # Consume the rate limit for passkey authentication options generation
     def consume_passkey_auth_options_limit(self, request: Request) -> tuple[bool, str | None]:
@@ -679,6 +711,21 @@ def consume_admin_login_limit(
         else get_auth_limit_service(request)
     )
     return target.consume_admin_login_limit(request)
+
+
+# デモ用アクセスコードの入力制限判定・消費を行う外部用関数
+# Function to consume demo access code entry limits (external entry point)
+def consume_demo_login_limit(
+    request: Request,
+    *,
+    service: AuthLimitService | None = None,
+) -> tuple[bool, str | None]:
+    target = (
+        service
+        if isinstance(service, AuthLimitService)
+        else get_auth_limit_service(request)
+    )
+    return target.consume_demo_login_limit(request)
 
 
 # Passkeyオプション生成の試行制限判定・消費を行う外部用関数

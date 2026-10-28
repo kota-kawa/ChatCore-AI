@@ -6,7 +6,7 @@ from fastapi import Request
 
 from services.datetime_serialization import serialize_datetime_iso
 from services.i18n import get_request_locale, translate
-from services.usage_limits import UsageWindow, get_usage_status
+from services.usage_limits import DemoAllowance, UsageWindow, get_usage_status
 from services.usage_subject import user_usage_subject
 from services.web import jsonify
 
@@ -25,6 +25,15 @@ def _serialize_window(window: UsageWindow | None) -> dict[str, object] | None:
         "used_ratio": min(window.used_nano_usd / window.limit_nano_usd, 1.0),
         "resets_at": serialize_datetime_iso(window.resets_at),
     }
+
+
+def _serialize_demo(demo: DemoAllowance | None) -> dict[str, object] | None:
+    if demo is None:
+        return None
+    used_ratio = 0.0
+    if demo.limit_nano_usd > 0:
+        used_ratio = min(demo.used_nano_usd / demo.limit_nano_usd, 1.0)
+    return {"used_ratio": used_ratio, "expires_at": serialize_datetime_iso(demo.expires_at)}
 
 
 @chat_bp.get("/api/user/usage-limits", name="chat.get_usage_limits")
@@ -49,5 +58,6 @@ async def get_usage_limits(request: Request):
             "weekly": _serialize_window(status.weekly),
             "monthly_budget_exhausted": status.monthly_budget_exhausted,
             "monthly_resets_at": serialize_datetime_iso(status.monthly_resets_at),
+            "demo": _serialize_demo(status.demo),
         }
     )

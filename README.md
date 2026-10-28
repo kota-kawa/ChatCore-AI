@@ -229,7 +229,7 @@ Design decisions are recorded in the [ADR index](docs/decisions/README.md).
 
 ## Handling AI output
 
-Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit.
+Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit. The admin console issues one demo code per recipient; entering it opens a dedicated, sample-filled account with every feature, deleted 30 days after first use and capped in spend for its whole period.
 
 Implementation: [Generated UI](services/generative_ui.py) · [Write tools](services/chat_workspace_tools/runner.py) · [Usage limits](services/usage_limits.py)
 
@@ -499,6 +499,8 @@ sequenceDiagram
 **チャットからの書き込みは承認カードを経由**します。対応する操作に「常に承認」を設定していても、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。公開 Prompt の新規投稿は毎回の承認が必要です。
 
 **API の利用量と料金を記録**し、ユーザー／ゲスト単位の上限と全体の月予算を処理開始前に確認します。実行中のターンが料金上限を超えて終わる可能性は残るため、全体予算には余裕を設けています。
+
+**応募先ごとのデモコード**を管理画面から発行できます。コードを入力した人は、サンプルデータ入りの専用アカウントで全機能を試せます。アカウントは初回の入力から 30 日で削除し、期間全体の利用額にも上限を設けています。
 
 実装: [生成 UI](services/generative_ui.py) · [書き込みツール](services/chat_workspace_tools/runner.py) · [利用上限](services/usage_limits.py)
 

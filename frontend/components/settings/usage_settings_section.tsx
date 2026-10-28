@@ -5,14 +5,16 @@ import { SettingsSectionHeader } from "./settings_sections";
 import { useTranslation } from "../../contexts/locale_context";
 import { loadUsageLimits } from "../../scripts/user/settings/api";
 import type { UsageLimits } from "../../scripts/user/settings/types";
-import { formatUsageResetTime, usagePercent } from "../../scripts/user/settings/usage";
+import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../../scripts/user/settings/usage";
 
-type UsageWindow = NonNullable<UsageLimits["daily"]>;
+type UsageWindow = { used_ratio: number };
 
-// 1つの期間（今日・今週）の使用率をバーで示す。金額は出さず割合だけを見せる。
-// One window (today / this week) shown as a bar: only the share of the limit, never amounts.
-function UsageMeter({ id, label, window }: { id: string; label: string; window: UsageWindow | null }) {
-  const { t, locale } = useTranslation();
+// 1つの枠（今日・今週・デモ）の使用率をバーで示す。金額は出さず割合だけを見せる。
+// footnote は枠ごとの補足（リセット時刻、デモの期限）。
+// One allowance (today / this week / demo) shown as a bar: only the share of the limit, never amounts.
+// The footnote is the per-allowance note (reset time, demo expiry).
+function UsageMeter({ id, label, window, footnote }: { id: string; label: string; window: UsageWindow | null; footnote: string }) {
+  const { t } = useTranslation();
   const labelId = `${id}-label`;
 
   if (!window) {
@@ -45,9 +47,7 @@ function UsageMeter({ id, label, window }: { id: string; label: string; window: 
       >
         <div className="usage-meter__fill" style={{ width: `${percent}%` }} />
       </div>
-      <p className="usage-meter__reset">
-        {t("settings.usageResetsAt", { time: formatUsageResetTime(window.resets_at, locale) })}
-      </p>
+      <p className="usage-meter__reset">{footnote}</p>
     </div>
   );
 }
@@ -72,6 +72,9 @@ export function UsageSettingsSection({ isActive }: { isActive: boolean }) {
     if (isActive) void reload();
   }, [isActive, reload]);
 
+  const resetNote = (window: { resets_at: string } | null) =>
+    window ? t("settings.usageResetsAt", { time: formatUsageResetTime(window.resets_at, locale) }) : "";
+
   let body;
   if (failed) {
     body = (
@@ -92,8 +95,26 @@ export function UsageSettingsSection({ isActive }: { isActive: boolean }) {
             {t("settings.usageMonthlyPaused", { time: formatUsageResetTime(usage.monthly_resets_at, locale) })}
           </p>
         ) : null}
-        <UsageMeter id="usage-daily" label={t("settings.usageDaily")} window={usage.daily} />
-        <UsageMeter id="usage-weekly" label={t("settings.usageWeekly")} window={usage.weekly} />
+        {usage.demo ? (
+          <UsageMeter
+            id="usage-demo"
+            label={t("settings.usageDemo")}
+            window={usage.demo}
+            footnote={t("settings.usageDemoUntil", { date: formatUsageExpiryDate(usage.demo.expires_at, locale) })}
+          />
+        ) : null}
+        <UsageMeter
+          id="usage-daily"
+          label={t("settings.usageDaily")}
+          window={usage.daily}
+          footnote={resetNote(usage.daily)}
+        />
+        <UsageMeter
+          id="usage-weekly"
+          label={t("settings.usageWeekly")}
+          window={usage.weekly}
+          footnote={resetNote(usage.weekly)}
+        />
       </>
     );
   }

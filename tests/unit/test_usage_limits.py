@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -13,6 +13,7 @@ from blueprints.chat.usage import get_usage_limits
 from services.chat_use_case import ChatPostUseCase
 from services.repositories.usage_repository import SubjectUsageTotals, UsageRepository
 from services.usage_limits import (
+    DemoUsageTotals,
     UsageLimitBlock,
     UsageTotals,
     check_usage_limit,
@@ -37,8 +38,14 @@ def _jst(year, month, day):
 
 
 class _TotalsMixin:
-    def use_totals(self, *, daily=0.0, weekly=0.0, monthly=0.0):
+    def use_totals(self, *, daily=0.0, weekly=0.0, monthly=0.0, demo_used=None, demo_expires_at=None):
         seen = []
+        demo = None
+        if demo_used is not None:
+            demo = DemoUsageTotals(
+                expires_at=demo_expires_at or _NOW + timedelta(days=10),
+                lifetime_nano_usd=round(demo_used * _USD),
+            )
 
         async def reader(subject_key, periods):
             seen.append((subject_key, periods))
@@ -47,6 +54,7 @@ class _TotalsMixin:
                     daily_nano_usd=round(daily * _USD), weekly_nano_usd=round(weekly * _USD)
                 ),
                 monthly_total_nano_usd=round(monthly * _USD),
+                demo=demo,
             )
 
         set_usage_totals_reader(reader)
@@ -85,6 +93,7 @@ class UsageLimitSettingsTests(unittest.TestCase):
                 "USAGE_GUEST_WEEKLY_LIMIT_USD",
                 "USAGE_MONTHLY_BUDGET_USD",
                 "USAGE_MONTHLY_STOP_RATIO",
+                "DEMO_ACCESS_USAGE_LIMIT_USD",
             ):
                 os.environ.pop(name, None)
             settings = load_usage_limit_settings()
@@ -93,6 +102,7 @@ class UsageLimitSettingsTests(unittest.TestCase):
         self.assertEqual(settings.user_weekly, round(6.00 * _USD))
         self.assertEqual(settings.guest_daily, round(0.03 * _USD))
         self.assertEqual(settings.guest_weekly, round(0.10 * _USD))
+        self.assertEqual(settings.demo_total, round(1.50 * _USD))
         # $30 の 90% = $27 で止める。 / Stop at 90% of $30 = $27.
         self.assertEqual(settings.monthly_stop, 27 * _USD)
 
@@ -155,10 +165,34 @@ class UsageLimitCheckTests(_TotalsMixin, unittest.TestCase):
         self.assertEqual(subject_key, "user:3")
         self.assertEqual((periods.day, periods.week_start), (date(2026, 9, 23), date(2026, 9, 21)))
 
+    def test_demo_account_stops_once_its_whole_period_allowance_is_spent(self):
+        expires_at = _NOW + timedelta(days=10)
+        self.use_totals(daily=0.10, weekly=0.10, demo_used=1.50, demo_expires_at=expires_at)
+        block = asyncio.run(check_usage_limit("user:5", now=_NOW))
+        self.assertEqual(block.reason, "demo")
+        # 期間中に枠は戻らないので、案内するのはデモの終了日時。
+        # The allowance never returns within the period, so the demo's end is reported.
+        self.assertEqual(block.resets_at, expires_at)
+
+        self.use_totals(daily=0.10, weekly=0.10, demo_used=1.49, demo_expires_at=expires_at)
+        self.assertIsNone(asyncio.run(check_usage_limit("user:5", now=_NOW)))
+
+    def test_expired_demo_account_is_stopped_before_the_purge_deletes_it(self):
+        self.use_totals(demo_used=0, demo_expires_at=_NOW)
+        self.assertEqual(asyncio.run(check_usage_limit("user:5", now=_NOW)).reason, "demo")
+
+    def test_disabled_demo_allowance_still_ends_with_the_period(self):
+        self.use_totals(demo_used=100, demo_expires_at=_NOW + timedelta(days=1))
+        with patch.dict(os.environ, {"DEMO_ACCESS_USAGE_LIMIT_USD": "0"}):
+            self.assertIsNone(asyncio.run(check_usage_limit("user:5", now=_NOW)))
+
     def test_messages_are_localized(self):
         block = UsageLimitBlock(reason="weekly", resets_at=_NOW, retry_after_seconds=1)
         self.assertIn("今週", usage_limit_message(block, "ja"))
         self.assertIn("this week", usage_limit_message(block, "en"))
+        demo_block = UsageLimitBlock(reason="demo", resets_at=_NOW, retry_after_seconds=1)
+        self.assertIn("デモ", usage_limit_message(demo_block, "ja"))
+        self.assertIn("demo", usage_limit_message(demo_block, "en"))
 
 
 class UsageRepositoryTotalsTests(unittest.TestCase):
@@ -275,6 +309,16 @@ class UsageLimitsEndpointTests(_TotalsMixin, unittest.TestCase):
         self.assertTrue(payload["daily"]["resets_at"].endswith("+09:00"))
         self.assertFalse(payload["monthly_budget_exhausted"])
         self.assertNotIn("limit", json.dumps(payload))
+
+    def test_demo_allowance_is_shown_with_its_end_only_for_demo_accounts(self):
+        self.use_totals(demo_used=0.75, demo_expires_at=_NOW + timedelta(days=10))
+        payload = json.loads(self._get({"user_id": 8}).body)
+        self.assertAlmostEqual(payload["demo"]["used_ratio"], 0.5)
+        self.assertEqual(payload["demo"]["expires_at"], "2026-10-03T03:00:00+00:00")
+        self.assertNotIn("limit", json.dumps(payload))
+
+        self.use_totals()
+        self.assertIsNone(json.loads(self._get({"user_id": 8}).body)["demo"])
 
     def test_disabled_limit_is_null(self):
         self.use_totals()

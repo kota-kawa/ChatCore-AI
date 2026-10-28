@@ -34,7 +34,8 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         justify-content: center;
         align-items: center;
         color: var(--text);
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         position: relative;
       }
 
@@ -42,6 +43,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         width: 100vw;
         min-height: 100vh;
         min-height: 100svh;
+        padding: 20px 0;
         isolation: isolate;
       }
 
@@ -235,6 +237,48 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
 
       .google-icon {
         flex: 0 0 auto;
+      }
+
+      /* デモコードの入口。ログイン方法とは罫線と余白で分け、ボタンも控えめな ghost にする
+         Entry for demo-code holders: separated from the sign-in methods by a rule and spacing, with a quiet ghost button */
+      .demo-code {
+        margin-top: 28px;
+        padding-top: 22px;
+        border-top: 1px solid var(--glass-border);
+        text-align: left;
+      }
+
+      .demo-code-heading {
+        margin: 0 0 6px;
+        color: var(--text);
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .demo-code-lead {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.6;
+      }
+
+      .demo-code .email-input {
+        margin-bottom: 12px;
+      }
+
+      .demo-code .error-message {
+        min-height: 0;
+        margin: -4px 0 12px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .demo-code-submit {
+        margin-top: 0;
+      }
+
+      .demo-code-submit:disabled:not([aria-busy="true"]) {
+        cursor: not-allowed;
       }
 
       .step-caption {

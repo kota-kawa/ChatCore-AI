@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseSettingsSection } from "../scripts/user/settings/section_url";
-import { formatUsageResetTime, usagePercent } from "../scripts/user/settings/usage";
+import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../scripts/user/settings/usage";
 
 test("usage percent never reads 100% before the limit is reached", () => {
   assert.equal(usagePercent(0), 0);
@@ -18,6 +18,13 @@ test("reset times are shown in Japan time regardless of the viewer's zone", () =
   assert.equal(formatUsageResetTime("2026-09-23T15:00:00+00:00", "ja"), "9月24日(木) 0:00");
   assert.equal(formatUsageResetTime("2026-09-24T00:00:00+09:00", "en"), "Thu, Sep 24, 12:00 AM");
   assert.equal(formatUsageResetTime("not a date", "ja"), "");
+});
+
+test("the demo expiry shows only the date, on the Japan-time boundary", () => {
+  // 2026-11-24T20:00Z is already 11/25 in Japan.
+  assert.equal(formatUsageExpiryDate("2026-11-24T20:00:00+00:00", "ja"), "11月25日");
+  assert.equal(formatUsageExpiryDate("2026-11-24T20:00:00+00:00", "en"), "Nov 25");
+  assert.equal(formatUsageExpiryDate("not a date", "ja"), "");
 });
 
 test("the usage section can be opened from the URL", () => {

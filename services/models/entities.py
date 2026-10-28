@@ -77,6 +77,35 @@ class User(Base):
     )
 
 
+class DemoAccessCode(Base):
+    """One demo access code handed to one recipient; only the code's SHA-256 digest is stored.
+
+    初回利用でデモ用ユーザーを作って user_id に結び、expires_at までが利用期間。期限切れや停止で
+    ユーザーを削除しても行は残る（user_id は NULL）。
+    The first use creates the demo user linked through user_id, and the period ends at expires_at.
+    Deleting the user on expiry or revocation keeps the row with user_id NULL.
+    """
+
+    __tablename__ = "demo_access_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    code_digest: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    first_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("code_digest", name="uq_demo_access_codes_code_digest"),
+        UniqueConstraint("user_id", name="uq_demo_access_codes_user_id"),
+        Index("idx_demo_access_codes_expires_at", "expires_at", postgresql_where=text("user_id IS NOT NULL")),
+    )
+
+
 class UserPasskey(Base):
     __tablename__ = "user_passkeys"
 

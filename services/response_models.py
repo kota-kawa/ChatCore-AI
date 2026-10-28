@@ -42,13 +42,59 @@ class UsageLimitWindowResponse(ResponsePayloadModel):
     resets_at: str
 
 
-# 日本語: 設定画面に表示する利用状況。上限が無効な期間は null。
-# English: Usage shown on the settings page; a window is null when its limit is disabled.
+# 日本語: デモ用アカウントの利用枠。期間中は戻らないので、リセット時刻ではなく終了日時を持つ。
+# English: A demo account's allowance; it never resets within the period, so it carries the end instead.
+class DemoUsageResponse(ResponsePayloadModel):
+    used_ratio: float = Field(ge=0, le=1)
+    expires_at: str
+
+
+# 日本語: 設定画面に表示する利用状況。上限が無効な期間は null。demo はデモ用アカウントのときだけ入る。
+# English: Usage shown on the settings page; a window is null when its limit is disabled, and demo is
+# set only for a demo account.
 class UsageLimitsResponse(ResponsePayloadModel):
     daily: UsageLimitWindowResponse | None
     weekly: UsageLimitWindowResponse | None
     monthly_budget_exhausted: bool
     monthly_resets_at: str
+    demo: DemoUsageResponse | None = None
+
+
+# 日本語: デモ用アクセスコードでのログイン結果。expires_at はデモ期間の終了日時。
+# English: Result of signing in with a demo access code; expires_at is when the demo period ends.
+class DemoLoginResponse(ResponsePayloadModel):
+    status: Literal["success"]
+    expires_at: str
+
+
+# 日本語: 管理画面の1件のデモ用アクセスコード。コード本体は保存しないので含まない。
+# 利用額（ドル）は利用中のコードだけ入る。
+# English: One demo access code on the admin screen. The code itself is never stored, so it is absent;
+# the spend in dollars is set only for an active code.
+class DemoAccessCodeApi(ResponsePayloadModel):
+    id: int
+    label: str
+    status: Literal["unused", "active", "ended", "revoked"]
+    created_at: str
+    first_used_at: str | None
+    expires_at: str | None
+    used_usd: float | None
+    limit_usd: float
+
+
+class DemoAccessCodeListResponse(ResponsePayloadModel):
+    codes: list[DemoAccessCodeApi]
+
+
+# 日本語: 発行直後の応答。code が見えるのはこの1回だけ。
+# English: Response right after issuing; this is the only time code is ever returned.
+class DemoAccessCodeIssueResponse(ResponsePayloadModel):
+    code: str
+    item: DemoAccessCodeApi
+
+
+class DemoAccessCodeRevokeResponse(ResponsePayloadModel):
+    item: DemoAccessCodeApi
 
 
 # 日本語: チャットボットの応答テキストを含むJSONレスポンスモデル。

@@ -17,6 +17,7 @@
 | Router | URL の範囲 | 主な実装ファイル | 主な責務 |
 | --- | --- | --- | --- |
 | `auth_bp` | `/login`, `/register`, `/logout`, `/api/current_user`, `/api/auth/*`, `/api/passkeys/*`, `/google-*` | `blueprints/auth.py`, `auth_account.py`, `auth_email.py`, `auth_google.py`, `auth_passkeys.py` | メール、Google、Passkey 認証とアカウント操作 |
+| `auth_demo_bp` | `/api/auth/demo-login` | `blueprints/auth_demo.py`, `services/demo_access.py` | デモ用アクセスコードでのログイン（初回はデモ用アカウントとサンプルデータを作成） |
 | `verification_bp` | `/api/send_verification_email`, `/api/verify_registration_code` | `blueprints/verification.py` | 登録メール確認コード |
 | `chat_bp` | `/`, `/settings`, `/api/*` | `blueprints/chat/{views,rooms,messages,tasks,skills,projects,profile,preferences,usage,avatar_media,chat_image_media,web_search_image_media,tool_approvals}.py` | チャット、部屋、SSE、タスク、個人Skill、プロジェクト、プロフィール、設定、利用状況、アバター画像配信、チャット添付画像の配信、生成UI向け検索画像の中継、チャットの書き込みツール承認カード |
 | `prompt_share_bp` | `/prompt_share/*` | `blueprints/prompt_share/__init__.py` | Next.js のプロンプト共有画面へのリダイレクト |
@@ -25,7 +26,7 @@
 | `prompt_manage_api_bp` | `/prompt_manage/api/*` | `blueprints/prompt_share/prompt_manage_api.py` | 自分の投稿、保存・いいね一覧、編集・削除 |
 | `memo_bp` | `/memo/api/*`、`/memo` | `blueprints/memo/{memos,suggest,bulk,reorder,export,collections,share,pages}.py`, `export_formats.py` | メモ、コレクション、共有、並び替え、エクスポート |
 | `context_vault_bp` | `/api/context-facts/*` | `blueprints/context_vault/routes.py`, `services/context_vault_*` | コンテキスト事実、候補、import/export、抽出設定 |
-| `admin_bp` | `/admin/*` | `blueprints/admin/views.py` | 管理ログイン、ダッシュボード、管理用 DB 操作 |
+| `admin_bp` | `/admin/*` | `blueprints/admin/views.py`, `demo_codes.py` | 管理ログイン、ダッシュボード、管理用 DB 操作、デモ用アクセスコードの発行・一覧・停止 |
 | `mcp_oauth_bp` | `/api/mcp/oauth/*` | `blueprints/mcp_oauth.py`, `services/mcp_oauth.py` | MCP 同意、クライアント、接続の管理 |
 
 ## チャット API の流れ

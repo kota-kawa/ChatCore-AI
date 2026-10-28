@@ -24,6 +24,7 @@
 - [0018: 生成UIの中の検索画像は、署名付きの自オリジン中継だけで読み込ませる](0018-signed-relay-for-generated-ui-images.md)
 - [0019: チャットの再接続を回答ごとの生成IDに固定する](0019-generation-scoped-chat-replay.md)
 - [0020: 判断ステップの本文は、確定前に表示専用の下書きとして先に流す](0020-provisional-answer-draft-streaming.md)
+- [0021: デモは配布先ごとのアクセスコードで、期限付きの専用アカウントに入れる](0021-demo-access-codes.md)
 
 ## 追加・更新の基準
 
