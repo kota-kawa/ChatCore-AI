@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -49,7 +49,13 @@ export function useChatClipboardPaste(options: ChatClipboardPasteOptions) {
   const caretRef = useRef<{ value: string; position: number } | null>(null);
   const [isPasting, setIsPasting] = useState(false);
 
-  useEffect(() => {
+  // 貼り付けた値が画面に出るのと同じコミットでフォーカスとキャレットを戻す。useEffect だと描画後に
+  // 遅れて動き、キャレットが一瞬末尾に出るうえ、値の変化を監視する側（テストの waitFor など）が
+  // フォーカス前の状態を読む。React 19 はサーバー描画で useLayoutEffect を警告しない。
+  // Restore focus and the caret in the same commit that shows the pasted value. A useEffect runs later,
+  // after paint, so the caret briefly sits at the end and an observer of the value (a test's waitFor,
+  // say) reads the input before focus returns. React 19 does not warn about useLayoutEffect on the server.
+  useLayoutEffect(() => {
     latestOptions.current = options;
     const caret = caretRef.current;
     const input = inputRef.current;
