@@ -36,7 +36,7 @@ packaging==26.2
 pillow==13.0.0
 psycopg-binary==3.3.4
 psycopg==3.3.4
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1_modules==0.4.2
 pycparser==3.0
 pydantic-settings==2.14.2
@@ -44,7 +44,7 @@ pydantic==2.13.4
 pydantic_core==2.46.4
 PyJWT==2.15.1
 pyOpenSSL==26.4.0
-pypdf==6.21.2
+pypdf==6.21.4
 python-dotenv==1.2.2
 python-multipart==0.0.32
 rank-bm25==0.2.2
