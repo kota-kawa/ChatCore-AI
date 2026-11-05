@@ -1,3 +1,8 @@
+# [JP] 単一構成（blue/green ではない）の Docker Compose 定義。app（FastAPI）・frontend（Next.js）・db・redis と、nginx 用 upstream の初期化ジョブを持つ。
+#      本番では deploy/blue_green_deploy.sh が、従来構成の検出と停止にこのファイルを使う。
+# [EN] Docker Compose definition for the single-stack setup (not blue/green): app (FastAPI), frontend (Next.js), db, redis, and the nginx upstream bootstrap job.
+#      In production, deploy/blue_green_deploy.sh uses it to detect and stop the old stack.
+
 name: chatcore-ai
 
 # [JP] 既定の json-file ドライバは無制限に肥大化する。Blue/Green は常時2色分の
@@ -10,10 +15,6 @@ x-default-logging: &default_logging
     max-size: "10m"
     max-file: "3"
 
-# [JP] 単一構成（blue/green ではない）の Docker Compose 定義。app（FastAPI）・frontend（Next.js）・db・redis と、nginx 用 upstream の初期化ジョブを持つ。
-#      本番では deploy/blue_green_deploy.sh が、従来構成の検出と停止にこのファイルを使う。
-# [EN] Docker Compose definition for the single-stack setup (not blue/green): app (FastAPI), frontend (Next.js), db, redis, and the nginx upstream bootstrap job.
-#      In production, deploy/blue_green_deploy.sh uses it to detect and stop the old stack.
 services:
   app:
     build:

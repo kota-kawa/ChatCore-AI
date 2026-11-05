@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-
 # [JP] 一度きり・オフラインで行う PostgreSQL 15 から 18 への論理移行（ダンプとリストア）。
 #      deploy/blue_green_deploy.sh から呼ばれる。旧ボリュームは変更も削除もしない。リストアに失敗したら不完全な pg18 ボリュームだけを削除するので、再実行しても安全。
 # [EN] One-time, offline PostgreSQL 15 -> 18 logical migration.
 #      Called from deploy/blue_green_deploy.sh. The legacy volume is never modified or removed. A failed restore removes only
 #      the incomplete pg18 volume so rerunning this script is safe.
+
+set -Eeuo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-deploy/docker-compose.bluegreen.yml}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-docker-compose.yml}"

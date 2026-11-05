@@ -134,7 +134,7 @@ async def api_list_context_facts(
     limit: int = DEFAULT_CONTEXT_LIST_LIMIT,
     cursor: str | None = None,
 ):
-    #
+    # コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。
     # List context facts, filtered by type and status, with keyset paging.
     """コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。"""
     user_id = user_id_from_session(request.session)
@@ -270,7 +270,7 @@ async def api_list_context_fact_candidates(
     limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     cursor: str | None = None,
 ):
-    #
+    # ユーザー確認待ちの抽出候補をkeysetページングで取得する。
     # List extraction candidates awaiting user review, using keyset paging.
     """ユーザー確認待ちの抽出候補をkeysetページングで取得する。"""
     user_id = user_id_from_session(request.session)
@@ -300,7 +300,7 @@ async def api_list_context_fact_candidates(
     name="context_vault.api_approve_candidate",
 )
 async def api_approve_context_fact_candidate(request: Request, candidate_id: int):
-    #
+    # 候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。
     # Promote a candidate to an active context fact, optionally with edits.
     """候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。"""
     user_id = user_id_from_session(request.session)
@@ -340,7 +340,7 @@ async def api_approve_context_fact_candidate(request: Request, candidate_id: int
     name="context_vault.api_reject_candidate",
 )
 async def api_reject_context_fact_candidate(request: Request, candidate_id: int):
-    #
+    # 候補をrevision競合安全に却下する。
     # Reject a candidate, guarded against revision conflicts.
     """候補をrevision競合安全に却下する。"""
     user_id = user_id_from_session(request.session)
@@ -376,7 +376,7 @@ async def api_reject_context_fact_candidate(request: Request, candidate_id: int)
     name="context_vault.api_get_extraction_settings",
 )
 async def api_get_context_extraction_settings(request: Request):
-    #
+    # 現在の会話コンテキスト自動抽出opt-in設定を取得する。
     # Get the current opt-in setting for automatic context extraction from conversations.
     """現在の会話コンテキスト自動抽出opt-in設定を取得する。"""
     user_id = user_id_from_session(request.session)
@@ -396,7 +396,7 @@ async def api_get_context_extraction_settings(request: Request):
     name="context_vault.api_update_extraction_settings",
 )
 async def api_update_context_extraction_settings(request: Request):
-    #
+    # 会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。
     # Enable or disable automatic context extraction through an explicit user action.
     """会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。"""
     user_id = user_id_from_session(request.session)
@@ -422,7 +422,7 @@ async def api_update_context_extraction_settings(request: Request):
 
 @context_vault_bp.post("", name="context_vault.api_create")
 async def api_create_context_fact(request: Request):
-    #
+    # コンテキスト事実を新規作成する。
     # Create a new context fact.
     """コンテキスト事実を新規作成する。"""
     user_id = user_id_from_session(request.session)
@@ -459,7 +459,7 @@ async def api_create_context_fact(request: Request):
 
 @context_vault_bp.put("/{fact_id:int}", name="context_vault.api_update")
 async def api_update_context_fact(request: Request, fact_id: int):
-    #
+    # コンテキスト事実を更新する（無効化・復元も status で行う、revision で競合検出）。
     # Update a context fact; deprecating or restoring is done via status, and revision detects conflicts.
     """コンテキスト事実を更新する（無効化・復元も status で行う、revision で競合検出）。"""
     user_id = user_id_from_session(request.session)
