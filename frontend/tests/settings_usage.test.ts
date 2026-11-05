@@ -17,6 +17,7 @@ test("usage percent never reads 100% before the limit is reached", () => {
 });
 
 test("reset times are shown in Japan time regardless of the viewer's zone", () => {
+  // 日本時間の9月24日0時とUTCの9月23日15時は、同じ瞬間を表す。
   // 2026-09-24T00:00+09:00 is 2026-09-23T15:00Z.
   assert.equal(formatUsageResetTime("2026-09-23T15:00:00+00:00", "ja"), "9月24日(木) 0:00");
   assert.equal(formatUsageResetTime("2026-09-24T00:00:00+09:00", "en"), "Thu, Sep 24, 12:00 AM");
