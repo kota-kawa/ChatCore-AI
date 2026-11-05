@@ -1,3 +1,5 @@
+// 認証ゲートウェイページの <head>（タイトル・説明・canonical）を出力する。検索エンジンの索引対象にはしない。
+// Renders the <head> metadata (title, description, canonical) for the auth gateway page; the page is kept out of search indexes.
 import { useRouter } from "next/router";
 import { SeoHead } from "../../../SeoHead";
 import { useTranslation } from "../../../../contexts/locale_context";

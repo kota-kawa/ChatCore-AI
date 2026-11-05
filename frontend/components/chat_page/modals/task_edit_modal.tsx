@@ -1,3 +1,5 @@
+// タスクの各項目を編集するモーダル。入力値と保存処理は親が持ち、ここは表示と入力の受け渡しだけを行う。pages/index.tsx から描画される。
+// Modal for editing a task's fields; the form state and saving live in the parent, so this only renders and forwards input; rendered by pages/index.tsx.
 import { memo, type Dispatch, type SetStateAction } from "react";
 
 import type { TaskEditFormState } from "../../../lib/chat_page/types";

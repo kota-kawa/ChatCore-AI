@@ -1,3 +1,5 @@
+// ホーム画面全体の UI 状態（認証状態、表示ビュー、セットアップ入力、モデル選択、各種モード）を保持し、一部を localStorage と同期するフック。
+// Hook holding the home page UI state (auth flags, view state, setup input, model selection, mode toggles), syncing part of it with localStorage.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { DEFAULT_MODEL, MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
@@ -13,6 +15,8 @@ import { useTranslation } from "../../contexts/locale_context";
 // useLayoutEffect warns during SSR, so fall back to useEffect on the server
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+// ホームの表示ビュー。setup=タスク選択/入力画面、launching=チャット起動の遷移中、chat=チャット画面。
+// Home page view: setup = task/input screen, launching = transition into a chat, chat = the chat screen.
 export type HomePageViewState = "setup" | "launching" | "chat";
 
 type ChatCoreHydrationWindow = Window & {
@@ -68,9 +72,14 @@ function readStoredSelectedModel() {
   }
 }
 
+// useState の初期値用。最初のハイドレーション中はサーバー描画と同じ "setup" を返し、ハイドレーション後のクライアント遷移でだけ保存済みのビューから始める。
+// Initial value for useState. Returns "setup" during the first hydration to match the server markup, and starts from the stored view only for client-side returns after hydration.
 function readInitialPageViewState(): HomePageViewState {
   if (typeof window === "undefined") return "setup";
 
+  // 初回のドキュメントのハイドレーション中は、サーバーが描画するマークアップがセットアップ画面になる。
+  // 不一致を避けるためその初期状態を保つ。チャット復元待ちのときはヘッドの先行 CSS がセットアップ画面を隠す。
+  // アプリがハイドレーション済みになった後のクライアント側の画面遷移では、保存済みのビューから直接始めてよい。
   // During the first document hydration the server markup is the setup view.
   // Keep that initial state to avoid hydration mismatches; the head bootstrap
   // CSS hides setup when a chat restore is pending. After the app has hydrated,
@@ -113,6 +122,8 @@ export function useHomePageUiState() {
   const modelSelectRef = useRef<HTMLDivElement | null>(null);
   const chatHeaderModelSelectRef = useRef<HTMLDivElement | null>(null);
 
+  // ビューを変更するたびに保存先（localStorage）へも書き込むラッパー。関数形式の更新にも対応する。
+  // Wrapper that also writes every view change to storage; supports functional updates too.
   const setPageViewState = useCallback<Dispatch<SetStateAction<HomePageViewState>>>((nextState) => {
     if (typeof nextState !== "function") {
       writeStoredHomePageViewState(nextState);

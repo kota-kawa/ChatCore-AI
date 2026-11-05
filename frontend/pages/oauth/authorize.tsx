@@ -1,3 +1,6 @@
+// MCPクライアントが要求する権限を表示し、OAuth認可の承認を受け付ける。
+// Displays requested MCP client permissions and handles OAuth consent.
+
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 

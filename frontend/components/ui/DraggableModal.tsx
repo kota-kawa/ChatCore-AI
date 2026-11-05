@@ -1,3 +1,5 @@
+// ヘッダーをドラッグして動かせる、非モーダル型のダイアログ。位置の保存、画面外へのはみ出し防止、開閉アニメーション、フォーカス管理を担う。呼び出し元は components/GlobalAiAgent.tsx。
+// Non-modal dialog that can be moved by dragging its header. Handles position persistence, keeping it inside the viewport, open/close animation and focus management. Used by components/GlobalAiAgent.tsx.
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, type CSSProperties, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -38,6 +40,8 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+// 現在見えている領域（Visual Viewport。非対応ならウィンドウ）の位置と大きさを返す
+// Return the position and size of the visible area (the Visual Viewport, or the window if unsupported)
 function getViewportBounds(): ViewportBounds {
   const visualViewport = window.visualViewport;
   return {
@@ -48,6 +52,8 @@ function getViewportBounds(): ViewportBounds {
   };
 }
 
+// 幅が狭い、またはタッチ主体の端末かどうかを判定する
+// Detect a narrow viewport or a touch-first device
 function isTouchViewport() {
   return window.innerWidth <= 640 || window.matchMedia?.("(pointer: coarse)").matches === true;
 }
@@ -260,6 +266,8 @@ export function DraggableModal({
   // 表示領域の高さが変わるとモーダルの高さも変わるため、新しい寸法で位置を取り直す
   // A change in viewport height resizes the modal, so re-resolve the position with the new size
   useLayoutEffect(() => {
+    // 表示領域の高さがまだ測れていないときは何もしない
+    // Do nothing until the viewport height has been measured
     if (!shouldRender || !isOpen || viewportHeight === null) return;
     setPosition((current) => keepPositionIfUnchanged(current, resolveOpenPosition(current)));
   }, [isOpen, resolveOpenPosition, shouldRender, viewportHeight]);

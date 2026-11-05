@@ -1,3 +1,5 @@
+// チャットルームの共有リンク作成・コピー・OS 共有シート呼び出しを行うフック（共有モーダルの操作側）。
+// Hook for the chat room share actions: creating the link, copying it, and opening the native share sheet (the action side of the share modal).
 import { useCallback, type MutableRefObject } from "react";
 
 import { normalizeShareChatRoomPayload } from "../../lib/chat_page/api_contract";
@@ -11,6 +13,8 @@ import {
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { useTranslation } from "../../contexts/locale_context";
 
+// 共有モーダルに表示するステータス文言とエラー有無。
+// Status message and error flag shown in the share modal.
 type ShareStatus = {
   message: string;
   error: boolean;
@@ -27,6 +31,8 @@ type UseHomePageShareActionsParams = {
   shareCacheRef: MutableRefObject<Map<string, string>>;
 };
 
+// 状態は use_home_page_share_state が保持し、このフックは API 呼び出しと状態更新だけを担当する。
+// State lives in use_home_page_share_state; this hook only performs API calls and state updates.
 export function useHomePageShareActions({
   currentRoomIdRef,
   currentRoomMode,
@@ -46,6 +52,8 @@ export function useHomePageShareActions({
     setShareLoading(loading);
   }, []);
 
+  // ルーム未選択・一時チャットは共有できないためエラー表示で終える。生成済みリンクは shareCacheRef に保存し、forceRefresh でない限り再利用して API を呼ばない。
+  // No room or a temporary chat cannot be shared, so those end with an error status. Created links are cached in shareCacheRef and reused unless forceRefresh is set, avoiding repeat API calls.
   const createShareLink = useCallback(
     async (forceRefresh = false) => {
       const roomId = currentRoomIdRef.current;

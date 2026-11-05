@@ -23,6 +23,8 @@ const IME_KEY_NAME = "Process";
 // Used to tell whether a commit contains anything outside the ASCII range.
 const NON_ASCII_PATTERN = /[^\x20-\x7E]/;
 
+// 判定に必要な項目だけを取り出したキーイベントの型。
+// Minimal key event shape needed for the checks.
 type CompositionKeyEvent = {
   key: string;
   keyCode?: number;

@@ -1,3 +1,5 @@
+// 認証ゲートウェイの最初のステップ。パスキー・Google・メールのいずれでログインするかを選ばせる表示部品。
+// First step of the auth gateway: lets the user pick passkey, Google or email sign-in (presentational; state lives in auth_gateway_page.tsx).
 // 認証エントリーステップのprops型定義
 // Props type definition for the authentication entry step
 type AuthEntryStepProps = {

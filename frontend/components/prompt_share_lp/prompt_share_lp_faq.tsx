@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）のよくある質問セクションと、その質問データ（日英）。データは pages/prompt_share/lp.tsx の構造化データ（FAQPage）にも使われる。
+// FAQ section of the prompt-share introduction page (/prompt_share/lp) and its Japanese / English question data. The data also feeds the FAQPage structured data in pages/prompt_share/lp.tsx.
 import { useTranslation } from "../../contexts/locale_context";
 
 // プロンプト共有ページのFAQ。JSON-LDと表示の両方でこのデータを使う
@@ -30,6 +32,8 @@ export const PROMPT_SHARE_LP_FAQ_ITEMS = [
   }
 ] as const;
 
+// 英語版のFAQ。日本語版と同じ順序・同じ件数で並べる
+// English FAQ, kept in the same order and count as the Japanese list
 export const PROMPT_SHARE_LP_FAQ_ITEMS_EN = [
   {
     question: "Can I use it without an account?",
@@ -58,6 +62,8 @@ export const PROMPT_SHARE_LP_FAQ_ITEMS_EN = [
   }
 ] as const;
 
+// 現在のロケールに合わせたFAQを一覧表示する
+// Render the FAQ list for the current locale
 export function PromptShareLpFaq() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

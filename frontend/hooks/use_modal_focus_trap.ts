@@ -1,3 +1,5 @@
+// モーダルを開いている間、フォーカスをモーダル内に閉じ込め（Tab の循環）、Escape で閉じ、閉じたら元の要素へフォーカスを戻すフック。
+// Hook that traps focus inside an open modal (Tab cycling), handles Escape to close, and restores focus to the previous element on close.
 import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE_SELECTOR = [

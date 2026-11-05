@@ -1,3 +1,6 @@
+// 公開投稿の本文プレビュー・作者・反応と詳細を開く操作を描画する。
+// Renders public post previews, authors, reactions and detail actions.
+
 import { memo, useEffect, useRef, useState, type MouseEvent } from "react";
 import Image from "next/image";
 

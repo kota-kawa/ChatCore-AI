@@ -1,7 +1,13 @@
+// メモ画面で共有する型定義。メモとコレクション、API のペイロード、通知やドラッグ＆ドロップなど画面の状態、変更系リクエストの入力を含む。
+// Shared type definitions for the memo page: memos and collections, API payloads, UI state such as notices and drag-and-drop, and mutation request inputs.
+
 // ---------------------------------------------------------------------------
+// メモ画面で共有する型
 // Memo page shared types
 // ---------------------------------------------------------------------------
 
+// メモをまとめるコレクション（フォルダ）。memo_count はそこに入っているメモの数。
+// A collection (folder) that groups memos; memo_count is how many memos it holds.
 export type Collection = {
   id: number;
   name: string;
@@ -9,6 +15,8 @@ export type Collection = {
   memo_count: number;
 };
 
+// 一覧に表示するメモ 1 件。共有リンク・ゴミ箱の情報も含み、API が返さない項目は省略される。
+// One memo as shown in the list, including share-link and trash information; fields the API does not return are omitted.
 export type MemoSummary = {
   id: number | string;
   title?: string;
@@ -34,6 +42,8 @@ export type MemoSummary = {
   trash_expires_at?: string | null;
 };
 
+// 詳細表示用のメモ。一覧の項目に加えて本文（ai_response）を持つ。
+// A memo for the detail view: the list fields plus the body (ai_response).
 export type MemoDetail = MemoSummary & {
   ai_response?: string;
 };
@@ -41,6 +51,8 @@ export type MemoDetail = MemoSummary & {
 export type MemoListPayload = { memos?: MemoSummary[]; total?: number; error?: string };
 export type MemoListState = { memos: MemoSummary[]; total: number };
 export type MemoDetailPayload = { memo?: MemoDetail; error?: string };
+// 共有リンクの状態を返す API のレスポンス。
+// Response of the API that returns the state of a share link.
 export type SharePayload = {
   share_token?: string;
   share_url?: string;
@@ -58,17 +70,27 @@ export type CollectionListPayload = { collections?: Collection[]; error?: string
 export type FlashAction = { label: string; onAction: () => void | Promise<void> };
 export type FlashState = { type: "success" | "error"; text: string; action?: FlashAction };
 export type HttpError = Error & { status?: number };
+// 詳細モーダルの自動保存の状態。
+// State of the detail modal's autosave.
 export type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 // delete はゴミ箱への移動。restore と purge はゴミ箱の中のメモにだけ使う
 // delete moves memos to the trash; restore and purge apply to memos already in the trash
 export type BulkAction = "delete" | "restore" | "purge" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
+// メモの操作メニューを表示する位置と、メニューが取れる最大の高さ。
+// Where the memo action menu is placed and the maximum height it may take.
 export type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
+// ドラッグしたメモを、対象のメモの手前と後ろのどちらに置くか。
+// Whether a dragged memo is dropped before or after the target memo.
 export type MemoDropPosition = "before" | "after";
 
+// ドラッグ開始時に固定して記録したカードの矩形。
+// A card's rectangle frozen when the drag started.
 export type FrozenRect = { left: number; top: number; right: number; bottom: number };
 
 export type SelectOption = { value: string; label: string };
 
+// 新規メモの作成フォームの入力内容。
+// Inputs of the new-memo composer form.
 export type MemoComposeFormState = {
   ai_response: string;
   title: string;
@@ -84,9 +106,12 @@ export type MemoExportFormat = "markdown" | "json" | "csv";
 export type MemoExportScope = "all" | "selected";
 
 // ---------------------------------------------------------------------------
+// /memo/api/* の変更系リクエストのペイロード（lib/memo/api.ts を参照）
 // Request payloads for /memo/api/* mutations (see lib/memo/api.ts)
 // ---------------------------------------------------------------------------
 
+// メモ更新の入力。clear_background_color と clear_collection に true を渡すと、背景色とコレクションをそれぞれ外す。
+// Input for updating a memo; passing true for clear_background_color or clear_collection removes the background color or the collection respectively.
 export type MemoUpdateInput = {
   title?: string;
   ai_response: string;

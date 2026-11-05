@@ -1,3 +1,5 @@
+// 認証処理（コード送信・パスキー操作など）の待機中に画面全体へ重ねて出すスピナー。auth_gateway_page.tsx が使う。
+// Full-screen spinner overlay shown while an authentication request is in flight; used by auth_gateway_page.tsx.
 // ローディングスピナーオーバーレイのprops型定義
 // Props type definition for the loading spinner overlay
 type LoadingSpinnerOverlayProps = {

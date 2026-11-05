@@ -1,3 +1,5 @@
+// 管理画面の「デモ用アクセスコード」の一覧取得・発行・停止を行うフック（/admin/api/demo-codes を呼ぶ）。
+// Hook for listing, issuing, and revoking demo access codes on the admin page (calls /admin/api/demo-codes).
 import { useCallback, useState } from "react";
 import useSWR from "swr";
 import type { z } from "zod";

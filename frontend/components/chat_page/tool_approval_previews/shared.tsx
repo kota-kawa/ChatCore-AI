@@ -1,3 +1,5 @@
+// ツール承認カードのプレビュー（memo / prompts / profile_settings）が共有する、本文・項目の表示部品。
+// Shared display parts for the tool approval card previews (memo / prompts / profile_settings): bodies and labelled fields.
 import { type ReactNode } from "react";
 
 import { useTranslation } from "../../../contexts/locale_context";
@@ -8,10 +10,14 @@ import { useTranslation } from "../../../contexts/locale_context";
 const LONG_TEXT_CHARS = 280;
 const LONG_TEXT_LINES = 6;
 
+// 本文が長文として抜粋表示にすべきか判定する（文字数または行数が上限超過）。
+// Decides whether a body should be shown as an excerpt (over the character or line limit).
 function isLongText(text: string) {
   return text.length > LONG_TEXT_CHARS || text.split("\n").length > LONG_TEXT_LINES;
 }
 
+// 長文の先頭から行数・文字数の上限までを切り出し、省略記号を付けた抜粋を作る。
+// Builds an excerpt from the start of a long text, capped by lines and characters, with an ellipsis.
 function excerptOf(text: string) {
   const lines = text.split("\n").slice(0, LONG_TEXT_LINES).join("\n");
   const clipped = lines.length > LONG_TEXT_CHARS ? lines.slice(0, LONG_TEXT_CHARS) : lines;
@@ -56,6 +62,8 @@ export function ExpandableText({ text }: { text: string }) {
   );
 }
 
+// ラベルと値を dt/dd の組で表示する、プレビュー内の1項目。
+// One labelled field in a preview, rendered as a dt/dd pair.
 export function PreviewField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
     <div className={className ? `tool-approval-preview__field ${className}` : "tool-approval-preview__field"}>

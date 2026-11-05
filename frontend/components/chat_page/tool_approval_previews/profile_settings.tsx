@@ -1,3 +1,5 @@
+// 承認カード内の、プロフィール設定（表示名・自己紹介・LLM用コンテキスト・言語・テーマ）変更の実行前プレビュー。tool_approval_card.tsx から使われる。
+// Pre-execution preview of a profile settings change (display name, bio, LLM context, language, theme) inside the approval card; used by tool_approval_card.tsx.
 import { memo } from "react";
 
 import { useTranslation } from "../../../contexts/locale_context";
@@ -31,6 +33,8 @@ function ProfileSettingsApprovalPreviewComponent({ preview }: { preview: Profile
 
   if (!hasChanges) return null;
 
+  // 空文字は「内容を消す」変更なので、空欄のまま見せず専用の文言にする
+  // An empty string means clearing the field, so show dedicated wording instead of a blank
   const showText = (value: string) => (
     value.length === 0
       ? t("chat.toolApproval.preview.emptyWillClear")

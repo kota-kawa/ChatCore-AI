@@ -1,3 +1,5 @@
+// 管理画面で選んだテーブルの定義と先頭の行データを表示するパネル。pages/admin/index.tsx が取得したデータを受け取って描画する。
+// Admin panel that shows the selected table's definition and first rows; renders the data fetched by pages/admin/index.tsx.
 import { Skeleton, SkeletonText } from "../ui/skeleton";
 
 // テーブルの各カラムのメタ情報を表す型
@@ -29,6 +31,8 @@ function PreviewSkeleton() {
   );
 }
 
+// 長い値は先頭だけを要約にして <details> で折りたたみ、表の幅が崩れないようにする
+// Collapse long values behind a <details> showing only the head, so the table width does not blow up
 function CellValue({ value }: { value: unknown }) {
   const text = value === null || value === undefined ? "" : String(value);
   if (text.length <= COLLAPSE_AFTER_CHARS) return <>{text}</>;

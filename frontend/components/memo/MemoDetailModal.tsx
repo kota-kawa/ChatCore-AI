@@ -1,3 +1,5 @@
+// メモを開いて読む・編集する詳細モーダル。タイトル入力、本文エディタ、自動保存の状態表示、メモエージェント（MiniChat）のパネルを持つ。MemoPage から使われる。
+// Detail modal for reading and editing a memo: title input, body editor, autosave status, and the memo agent (MiniChat) panel; used by MemoPage.
 import type { MemoEditorHandle } from "../../lib/memo/editor";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -20,6 +22,7 @@ import {
   useMemoPageDetailContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// ── メモ詳細モーダル ──
 // ── Memo detail modal ──
 // 本文を読む／編集する面。共通モーダル面（cc-modal）の読む面サイズ（xl / reader）に、
 // ヘッダー＝タイトル入力と操作・保存状態、本文＝閲覧／明示的な編集（＋エージェント）を置く。

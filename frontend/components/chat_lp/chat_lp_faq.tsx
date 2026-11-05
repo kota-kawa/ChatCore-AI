@@ -1,3 +1,5 @@
+// AIチャット紹介ページのよくある質問。日本語・英語の質問データと、それを表示するセクションを持つ。構造化データ（FAQPage）にも使われる。
+// FAQ of the AI chat landing page: Japanese and English question data plus the section that renders them; also feeds the FAQPage structured data.
 import { useTranslation } from "../../contexts/locale_context";
 
 // AIチャットページのFAQ。JSON-LDと表示の両方でこのデータを使う
@@ -30,6 +32,8 @@ export const CHAT_LP_FAQ_ITEMS = [
   }
 ] as const;
 
+// 英語版。日本語版 CHAT_LP_FAQ_ITEMS と同じ順序・同じ5項目で対応している
+// English version; the same five items in the same order as the Japanese CHAT_LP_FAQ_ITEMS
 export const CHAT_LP_FAQ_ITEMS_EN = [
   {
     question: "Can I use it without an account?",
@@ -58,6 +62,8 @@ export const CHAT_LP_FAQ_ITEMS_EN = [
   }
 ] as const;
 
+// locale に合う FAQ を <dl> で一覧表示するセクション
+// Section that lists the FAQ for the current locale as a <dl>
 export function ChatLpFaq() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

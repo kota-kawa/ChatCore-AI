@@ -1,3 +1,5 @@
+// メモ一覧のパネル。ピン留め／その他の区分、カード操作（ピン・コピー・アーカイブ・共有・削除・ドラッグ並べ替え）、ゴミ箱表示、「さらに読み込む」を扱う。MemoPage から使われる。
+// Memo list panel: pinned/other sections, per-card actions (pin, copy, archive, share, delete, drag reorder), the trash view, and "load more"; used by MemoPage.
 import React from "react";
 import { createPortal } from "react-dom";
 
@@ -16,6 +18,7 @@ import {
   useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// ── メモ一覧 ──
 // ── Memo list ──
 export function MemoHistoryPanel() {
   const {
@@ -121,6 +124,8 @@ export function MemoHistoryPanel() {
               )}
 
               {memos.length > 0 && (() => {
+                // メモ1件分のカード。選択・ドラッグ・メニューの状態はすべて Board コンテキストから受け取る。
+                // Renders one memo card; selection, drag, and menu state all come from the Board context.
                 const renderMemoCard = (memo: MemoSummary) => {
                   const memoId = String(memo.id);
                   const isMenuOpen = openMenuMemoId === memoId;

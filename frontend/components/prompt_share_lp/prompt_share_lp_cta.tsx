@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の末尾にある、最後の行動喚起セクション。
+// Final call-to-action section at the bottom of the prompt-share introduction page (/prompt_share/lp).
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

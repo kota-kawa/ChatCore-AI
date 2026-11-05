@@ -1,3 +1,7 @@
+// チャットのモデル選択肢に表示するラベル（モデル名と用途の補足）を、ロケールに合わせて組み立てる。
+// Builds the label shown for a chat model option (model name plus a usage hint) for the current locale.
+// Used by the setup section and the home page UI state.
+
 import type { MessageKey } from "../i18n/catalogs/ja";
 import type { Locale } from "../i18n/config";
 import type { ModelOption } from "./types";

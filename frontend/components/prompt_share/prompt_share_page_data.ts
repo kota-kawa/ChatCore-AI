@@ -1,3 +1,5 @@
+// プロンプト共有ページのSSR用データ取得。公開フィードの先頭ページをバックエンドから取得し、構造化データ（JSON-LD）と getServerSideProps を提供する。pages/prompt_share/index.tsx とカテゴリページから使われる。
+// SSR data loading for the prompt sharing pages: fetches the first public-feed page from the backend and provides structured data (JSON-LD) and getServerSideProps; used by pages/prompt_share/index.tsx and the category page.
 import type { GetServerSideProps } from "next";
 
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
@@ -15,12 +17,16 @@ import {
   PROMPT_CATEGORY_KEYS
 } from "../../scripts/prompt_share/prompt_category_registry";
 
+// 共有トップページが SSR で受け取る props。
+// Props the prompt sharing main page receives from SSR.
 export type PromptSharePageProps = {
   initialPrompts?: PromptData[];
   initialPagination?: PromptPagination | null;
   initialCategory?: string;
 };
 
+// カテゴリページが SSR で受け取る props。initialLoadFailed で取得失敗を画面側に伝える。
+// Props the category page receives from SSR; initialLoadFailed tells the UI that the fetch failed.
 export type PromptCategoryPageProps = {
   category: string;
   initialPrompts: PromptData[];
@@ -56,6 +62,8 @@ function getBackendOrigin() {
   return (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
 }
 
+// SSR 取得の結果。失敗時は空の一覧と initialLoadFailed: true を返し、ページ自体は表示できるようにする。
+// Result of the SSR fetch; on failure it is an empty list with initialLoadFailed: true so the page itself still renders.
 type InitialPromptData = {
   initialPrompts: PromptData[];
   initialPagination: PromptPagination | null;

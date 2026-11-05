@@ -1,6 +1,10 @@
+// メモ一覧の読み込み中に出す、カード形のスケルトン表示。MemoHistoryPanel と MyContextPanel から使われる。
+// Card-shaped skeleton shown while the memo list loads; used by MemoHistoryPanel and MyContextPanel.
 import { Skeleton, SkeletonText } from "../ui/skeleton";
 import { useTranslation } from "../../contexts/locale_context";
 
+// 8 枚分のカード枠を出す。幅と行数は index で少し変え、機械的に見えないようにしている。
+// Renders eight card placeholders; widths and line counts vary a little by index so they do not look uniform.
 export function MemoListSkeleton() {
   const { t } = useTranslation();
   return (

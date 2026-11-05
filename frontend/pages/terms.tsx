@@ -1,9 +1,13 @@
+// 利用規約ページ（/terms）。条文・要点サマリー・構造化データを日英で持ち、共通のLegalDocumentコンポーネントで描画する。
+// Terms of service page (/terms); holds the articles, summary and structured data in Japanese and English and renders them with the shared LegalDocument component.
 import { SeoHead } from "../components/SeoHead";
 import Link from "next/link";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
 import { absoluteUrl, localizedAbsoluteUrl } from "../lib/seo";
 import { useTranslation } from "../contexts/locale_context";
 
+// 日本語版のtitleとmeta description。英語版はコンポーネント内で別に指定する
+// Japanese title and meta description; the English versions are specified inside the component
 const TERMS_TITLE = "利用規約 | ChatCore-AI";
 
 const TERMS_DESCRIPTION =
@@ -186,6 +190,8 @@ const TERMS_SECTIONS: LegalSection[] = [
   }
 ];
 
+// 英語版の要点と条文。日本語版（TERMS_SUMMARY / TERMS_SECTIONS）と同じ構成で、locale が en のときに使われる
+// English summary and articles, mirroring the Japanese TERMS_SUMMARY / TERMS_SECTIONS; used when the locale is en
 const TERMS_SUMMARY_EN: LegalSummaryItem[] = [
   { icon: "bi-wallet2", title: "Free core features", text: "Account creation and core features are free. No credit card is required." },
   { icon: "bi-person-check", title: "Your content remains yours", text: "You retain rights to the chats, memos, and prompts you create." },
@@ -239,6 +245,8 @@ export default function TermsPage() {
   const description = english ? "Terms governing accounts, acceptable use, content rights, AI-generated content, and availability of ChatCore-AI." : TERMS_DESCRIPTION;
   const homeUrl = localizedAbsoluteUrl("/", locale);
   const pageUrl = localizedAbsoluteUrl("/terms", locale);
+  // 日本語固定の構造化データをロケールに合わせて差し替える（タイトル・URL・言語・パンくずの名称とURL）
+  // Swap the Japanese-only structured data for the current locale (title, URL, language, breadcrumb names and URLs)
   const structuredData = termsStructuredData.map((entry) => {
     if (entry["@type"] === "WebPage") return {
       ...entry,

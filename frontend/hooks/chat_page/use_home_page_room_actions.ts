@@ -1,3 +1,5 @@
+// ホーム画面のチャットルーム操作（切り替え、新規作成と起動、メッセージ送信、削除・名称変更・ピン留め、複数選択）をまとめたフック。
+// Hook bundling the home page chat room actions: switching, creating and launching, sending messages, deleting, renaming, pinning, and multi-select.
 import {
   useCallback,
   useRef,
@@ -29,6 +31,8 @@ import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 import { useTranslation } from "../../contexts/locale_context";
 import type { PinChatRoomRequest } from "../../types/generated/api_schemas";
 
+// チャット起動時の遷移アニメーションを最低限見せるための待ち時間（ミリ秒）。ルーム作成が速くても画面が一瞬で切り替わらないようにする。
+// Minimum time (ms) the launch transition stays visible, so the screen does not flip instantly even when room creation is fast.
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
@@ -122,6 +126,8 @@ type UseHomePageRoomActionsParams = {
   clearPendingProject: () => void;
 };
 
+// 状態は呼び出し元（use_home_page_controller）が持ち、このフックは API 呼び出しと、その結果を反映する状態更新だけを担当する。
+// State is owned by the caller (use_home_page_controller); this hook only performs API calls and applies their results to that state.
 export function useHomePageRoomActions({
   attachedFiles,
   setAttachedFiles,
@@ -185,6 +191,8 @@ export function useHomePageRoomActions({
   clearPendingProject,
 }: UseHomePageRoomActionsParams) {
   const { locale } = useTranslation();
+  // コールバックの依存配列を増やさずに最新のロケールを参照するための ref。localize がこれを読む。
+  // Ref so callbacks can read the latest locale without growing their dependency arrays; localize reads it.
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
@@ -201,6 +209,8 @@ export function useHomePageRoomActions({
     );
     return true;
   }, [attachedFiles, localize, selectedModel]);
+  // handleAccessChat の多重実行を防ぐフラグ。
+  // Guard flag that prevents handleAccessChat from running concurrently.
   const accessChatInProgressRef = useRef(false);
   // 削除処理は確認モーダルと通信を挟むため、コールバック生成時ではなく実行時の
   // 表示状態を見る必要がある。
@@ -345,6 +355,8 @@ export function useHomePageRoomActions({
     [setSelectedRoomIds],
   );
 
+  // ログイン中は SWR の再検証結果、未ログインは直接取得した最初のページでルーム一覧を更新する。失敗時はキャッシュ済みの一覧を返す。
+  // Refreshes the room list from the SWR revalidation when logged in, or from a direct fetch of the first page otherwise. On failure it returns the cached list.
   const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
       resetChatRoomsPaginationWindow();
@@ -385,6 +397,8 @@ export function useHomePageRoomActions({
     setCurrentRoomMode,
   ]);
 
+  // 作成直後のルームをサーバー応答を待たずに先頭へ追加する（楽観的更新）。一時チャットは一覧に出さないので対象外。
+  // Adds the just-created room to the top of the list without waiting for the server (optimistic update). Temporary chats are not listed, so they are skipped.
   const upsertCreatedChatRoom = useCallback(
     (roomId: string, title: string, mode: ChatRoomMode) => {
       if (!loggedIn || mode !== "normal") return;
@@ -426,6 +440,8 @@ export function useHomePageRoomActions({
     ],
   );
 
+  // 別のルームを開く。ローカルに保存済みの履歴を先に表示し、続けてサーバーの履歴を読み込む。
+  // Opens another room: shows the locally stored history first, then loads the server history.
   const switchChatRoom = useCallback(
     (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
       const forceReload = options?.forceReload === true;
@@ -574,6 +590,8 @@ export function useHomePageRoomActions({
     switchChatRoom,
   ]);
 
+  // 通常の「新規チャット」。選択モードを解除し、現在のルームを外してセットアップ画面へ戻る。
+  // Plain "new chat": leaves selection mode, detaches the current room, and returns to the setup screen.
   const handleNewChat = useCallback(() => {
     cancelRoomSelection();
     // 通常の「新規チャット」ではプロジェクト紐づけを解除する。プロジェクト内からの
@@ -589,12 +607,18 @@ export function useHomePageRoomActions({
     showSetupForm();
   }, [cancelRoomSelection, persistCurrentRoomId, showSetupForm]);
 
+  // 新規ルームの起動直前に、画面とルーム状態を「起動中」へそろえる。
+  // Aligns screen and room state to "launching" right before a new room is created.
   const resetLaunchingRoomState = useCallback((roomId: string, roomMode: ChatRoomMode) => {
     // 新規チャット起動では履歴アンカリングが不要なので、ChatMessageList を
     // remount させない（resetChatMessageList を呼ばない）。remount すると
     // 初回アンカリングの opacity:0 ベールが再点灯し、起動時に一覧領域が一瞬
     // 消えて見える原因になる。既存ルームへの切替時のみ switchChatRoom 側で
     // remount する。
+    // When launching a new chat there is no history to anchor, so ChatMessageList is not
+    // remounted (resetChatMessageList is not called). A remount would re-arm the opacity:0
+    // veil of the initial anchoring and make the list area briefly disappear on launch.
+    // The remount happens only in switchChatRoom when switching to an existing room.
     persistCurrentRoomId(roomId, roomMode);
     // 今の（セットアップ画面で選んだ）参照設定を、この新しいルームの値として記録する。
     // Record the reference toggles as currently set on the setup screen as this new room's value.
@@ -619,6 +643,8 @@ export function useHomePageRoomActions({
     setPageViewState,
   ]);
 
+  // タスクカードから新規チャットを始める。状況入力か添付が無ければ送らず案内する。ルーム作成と最低遷移時間を並行して待ち、作成中にユーザーが別のルームへ移っていたら送信をやめる。
+  // Starts a new chat from a task card. Without setup text or attachments it shows a hint instead. Room creation and the minimum transition time are awaited together; if the user moved to another room meanwhile, the send is dropped.
   const handleTaskCardLaunch = useCallback(
     async (task: NormalizedTask) => {
       if (isTaskOrderEditing) return;
@@ -731,6 +757,8 @@ export function useHomePageRoomActions({
     ],
   );
 
+  // セットアップ画面の入力から新規チャットを始める（タスクカードを使わない版）。起動の流れは handleTaskCardLaunch と同じ。
+  // Starts a new chat from the setup screen input (the variant without a task card). The launch flow matches handleTaskCardLaunch.
   const handleSetupSendMessage = useCallback(async () => {
     if (taskLaunchInProgressRef.current) return;
 
@@ -809,6 +837,8 @@ export function useHomePageRoomActions({
     upsertCreatedChatRoom,
   ]);
 
+  // 生成中に呼ばれた場合は送信ではなく停止として動く。
+  // When called during generation it acts as "stop" rather than "send".
   const handleSendMessage = useCallback((overrideMessage?: string) => {
     if (isGenerating) {
       void stopGeneration();
@@ -889,6 +919,8 @@ export function useHomePageRoomActions({
     [handleSendMessage, isGenerating],
   );
 
+  // 削除は楽観的更新で、先に一覧から消して API を呼び、失敗したら元の一覧へ戻す。
+  // Deletion is optimistic: remove from the list first, call the API, and restore the previous list on failure.
   const handleDeleteRoom = useCallback(
     async (roomId: string, roomTitle: string) => {
       const confirmed = await showConfirmModal(`「${roomTitle}」を削除しますか？`);
@@ -955,6 +987,8 @@ export function useHomePageRoomActions({
     ],
   );
 
+  // 選択した複数ルームの一括削除。方式は handleDeleteRoom と同じ（楽観的更新、失敗時に復元）。
+  // Bulk delete of the selected rooms, using the same optimistic update and rollback as handleDeleteRoom.
   const handleBulkDeleteRooms = useCallback(async () => {
     const roomIds = Array.from(selectedRoomIds);
     if (roomIds.length === 0) return;
@@ -1085,6 +1119,8 @@ export function useHomePageRoomActions({
     [chatRooms, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
+  // ピン留めの付け外し。他の操作と違い楽観的更新はしない（並び順がサーバー側のピン留め日時で決まるため）。
+  // Pin/unpin. Unlike the other actions it is not optimistic, because ordering depends on the pin time recorded by the server.
   const handleToggleRoomPin = useCallback(
     async (roomId: string, pinned: boolean) => {
       setOpenRoomActionsFor(null);

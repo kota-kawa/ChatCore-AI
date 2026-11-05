@@ -1,3 +1,6 @@
+// 長い会話を表示するため、メッセージの描画範囲を計算する。
+// Computes the rendered message window for long conversations.
+
 import { MAX_RENDERED_CHAT_MESSAGES } from "./constants";
 import type { UiChatMessage } from "./types";
 

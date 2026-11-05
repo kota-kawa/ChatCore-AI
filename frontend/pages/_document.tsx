@@ -1,3 +1,8 @@
+// Next.js のカスタム Document。全ページ共通の HTML の枠（lang・メタタグ・PWA 設定）と、描画前にテーマ・画面状態・認証状態・言語切り替えの
+// 演出を <html> へ反映するインラインスクリプトを出力する。これらはハイドレーション前のちらつきを防ぐためのもの。
+// The custom Next.js Document: the HTML shell shared by every page (lang, meta tags, PWA settings) and the inline scripts that,
+// before paint, reflect the theme, home view state, auth state and language-switch transition on <html> to avoid flashes before hydration.
+
 import NextDocument, { Html, Head, Main, NextScript, type DocumentContext, type DocumentInitialProps } from "next/document";
 import { resolvePageLocale, type Locale } from "../lib/i18n/config";
 
@@ -37,10 +42,12 @@ export const authBootstrapScript = `(function(){try{var v=localStorage.getItem('
 // frontend/lib/i18n/locale_transition.ts.
 const localeTransitionBootstrapScript = `(function(){try{var k='chatcore.locale.transition';if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);document.documentElement.setAttribute('data-cc-locale-transition','settle');}}catch(e){}})();`;
 
-// Next.jsカスタムDocumentコンポーネント（共通のHTMLシェルとPWA対応のmeta/linkタグを設定する）
-// Next.js custom Document component (sets up the common HTML shell and PWA-related meta/link tags)
+// サーバーで決めた表示言語を Document の props に加えた型。
+// Document props extended with the display locale decided on the server.
 type LocalizedDocumentProps = DocumentInitialProps & { locale: Locale };
 
+// Next.jsカスタムDocumentコンポーネント（共通のHTMLシェルとPWA対応のmeta/linkタグを設定する）
+// Next.js custom Document component (sets up the common HTML shell and PWA-related meta/link tags)
 export default function Document({ locale }: LocalizedDocumentProps) {
   return (
     // ブラウザの自動翻訳は React がハイドレートする前のテキストノードを書き換え、
@@ -80,6 +87,8 @@ export default function Document({ locale }: LocalizedDocumentProps) {
   );
 }
 
+// リクエストの URL・Cookie・Accept-Language から表示言語を決め、<html lang> に使えるよう props に加える。
+// Decides the display locale from the request's URL, cookie and Accept-Language and adds it to props for <html lang>.
 Document.getInitialProps = async (ctx: DocumentContext): Promise<LocalizedDocumentProps> => {
   const initialProps = await NextDocument.getInitialProps(ctx);
   return {

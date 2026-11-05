@@ -615,6 +615,8 @@ function restoreRememberedLastEventId(host: GenerationStreamHost, stored: Stored
   }
 }
 
+// 1 本の生成ストリームを最後まで読み切る入口。切断されたら最後に受け取ったイベント ID から再接続して続きを受け取り、完了したら true、中断・失敗・別の生成への置き換えなら false を返す。画面更新と保存はすべて host（注入されたポート）越しに行う。
+// Entry point that reads one generation stream to the end. On a drop it reconnects from the last received event id and continues; it resolves true on completion and false on abort, failure, or being superseded. Screen updates and persistence all go through host (the injected ports).
 export function consumeGenerationStream(response: Response, host: GenerationStreamHost): Promise<boolean> {
   const timers = host.timers ?? BROWSER_STREAM_TIMERS;
   const reconnectRuntime = host.reconnectRuntime ?? BROWSER_RECONNECT_RUNTIME;
@@ -685,6 +687,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     host.messages.appendErrorMessage(message);
   };
 
+  // 解釈済みのイベント（action）を、画面更新・保存・完了や失敗の状態（progress）へ反映する。
+  // Applies an interpreted event (action) to the screen, to storage, and to the completion/failure state (progress).
   const applyStreamAction = (action: GenerationStreamAction, progress: StreamProgressState) => {
     switch (action.kind) {
       case "ignored":
@@ -795,6 +799,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   let appliedEventCount = 0;
   let highestDraftEventId = 0;
 
+  // SSE の 1 ブロックを解釈して反映する。受信済みの ID の再送は捨てる。下書きは再開位置や保存に含めず、再接続で先頭から組み立て直す。
+  // Interprets and applies one SSE block. A resent event with an already-seen id is dropped. Drafts are excluded from the resume position and storage and are rebuilt from the start on reconnect.
   const processBlock = (block: string, progress: StreamProgressState) => {
     const parsed = parseStreamEventBlock(block);
     if (!parsed) return;
@@ -829,6 +835,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     applyStreamAction(action, progress);
   };
 
+  // 1 回の接続分の本文を読み切り、完了・切断・中止・別生成への置き換え・エラーのどれで終わったかを返す。
+  // Reads one connection's body to the end and reports how it ended: completed, interrupted, aborted, superseded, or error.
   const readStreamResponse = async (streamResponse: Response): Promise<StreamReadResult> => {
     if (!streamResponse.body) {
       throw new Error(host.localize("ストリーム応答を受信できませんでした。", "No streaming response was received."));
@@ -851,6 +859,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       if (host.abortSignal.aborted || !host.isActive()) {
         return "aborted";
       }
+      // 回線の切り替えは通常 TypeError として現れるが、ブラウザによっては既存の SSE 応答を破棄するときに AbortError を使う。
+      // どちらもユーザーが取り消したのではなく接続が切れただけなので、失敗扱いにせず最後のイベント ID から再開する。
       // Network handoffs usually surface as TypeError, but some browsers
       // use AbortError when they tear down an existing SSE response.  Both
       // mean the request itself was not cancelled by the user, so resume
@@ -861,6 +871,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       throw error;
     } finally {
       reader.cancel().catch(() => {
+        // 読み取りの後始末の失敗は無視する。
         // no-op
       });
     }
@@ -872,6 +883,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     return progress.completed ? "completed" : "interrupted";
   };
 
+  // 最後のイベント ID を付けてストリームを開き直す。再開位置が無い・別の生成だった・復旧不能なステータスなら "unavailable"、一時的な失敗なら null を返す。
+  // Reopens the stream with the last event id. Returns "unavailable" when there is no resume point, the stream belongs to another generation, or the status is unrecoverable, and null for a transient failure.
   const openReconnectStream = async (): Promise<Response | "unavailable" | null> => {
     const lastEventId = host.lastEventIdByRoom.get(roomId);
     // 再開位置が無いまま切れた（1イベントも届かなかった）場合は、何度試しても
@@ -893,6 +906,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         try {
           await reconnectResponse.body?.cancel();
         } catch {
+          // 本文の破棄に失敗しても何もしない。
           // no-op
         }
         return isUnrecoverableStreamStatus(reconnectResponse.status) ? "unavailable" : null;
@@ -903,6 +917,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     }
   };
 
+  // 再開できないと確定したとき、ここまでに届いた回答を保存してエラーとして終える。
+  // When resuming is ruled out, saves what has arrived so far and ends with an error.
   const persistUnresumableStream = () => {
     persistInterruptedStream(
       state.streamedText
@@ -914,6 +930,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     );
   };
 
+  // 読み取り → 再接続待ち（バックオフ）→ 再接続を繰り返すループ。進捗の無い再接続が上限（MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS）に達したら諦める。
+  // The loop of read, backoff wait, and reconnect. It gives up once reconnects without progress reach the cap (MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS).
   const runStreamWithReconnects = async (initialResponse: Response): Promise<boolean> => {
     let activeResponse = initialResponse;
     let reconnectAttempt = 0;
@@ -963,6 +981,8 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return false;
       }
       if (!reconnectResponse) {
+        // Wi-Fi が切れると、ブラウザがオンラインと報告したあとも最初の数回の再接続が失敗することがある。
+        // ローカルの進捗は保ったまま再試行を続けるが、試行が尽きたら必ず止めて、空回りさせずに見える結果で終える。
         // A lost Wi-Fi connection can make the first few reconnects fail
         // even after the browser reports online. Keep the local progress
         // and continue retrying, but stop once the attempts run out so the

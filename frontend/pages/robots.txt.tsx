@@ -1,3 +1,5 @@
+// /robots.txt をSSRで動的に生成するページ。サイトのオリジンを環境変数かリクエストヘッダーから解決し、sitemap.xml の場所を含めて返す。
+// Page that generates /robots.txt dynamically at SSR; resolves the site origin from env vars or request headers and points to sitemap.xml.
 import type { GetServerSideProps } from "next";
 
 // Hostヘッダーの値を正規化する（配列の場合は先頭を取得）

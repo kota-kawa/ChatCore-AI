@@ -22,6 +22,8 @@ export const LP_FAQ_ITEMS = [
       "いいえ。自分で共有リンクを発行しない限り、会話やメモは非公開のままです。共有はワンクリックで発行・停止できます。"
   }
 ] as const;
+// 英語版のFAQ。日本語版 LP_FAQ_ITEMS と同じ順序・同じ質問構成で保つ。
+// English FAQ items; keep the same order and set of questions as the Japanese LP_FAQ_ITEMS.
 export const LP_FAQ_ITEMS_EN = [
   { question: "Is ChatCore-AI free?", answer: "Yes. Creating an account and using the service are free, and no credit card is required." },
   { question: "What can I use it for?", answer: "Use it for research, summaries, writing, and organizing ideas. Save useful answers as memos and reuse effective prompts." },

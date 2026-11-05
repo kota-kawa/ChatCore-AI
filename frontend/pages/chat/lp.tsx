@@ -1,3 +1,6 @@
+// チャット機能・モデル・利用条件を紹介する公開ページ。
+// Public page introducing chat features, models and usage conditions.
+
 import { SeoHead } from "../../components/SeoHead";
 import { ChatLpFinalCta } from "../../components/chat_lp/chat_lp_cta";
 import {

@@ -1,3 +1,5 @@
+// プロンプトの編集フォームで使う、キーボード操作に対応したカテゴリ選択。呼び出し元は edit_prompt_modal.tsx。
+// Keyboard-accessible category picker used in the prompt edit form. Used by edit_prompt_modal.tsx.
 import {
   useEffect,
   useRef,

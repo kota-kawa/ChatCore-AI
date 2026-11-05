@@ -1,3 +1,6 @@
+// メモ紹介ページのFAQ表示と構造化データを定義する。
+// Defines memo landing FAQ content and structured data.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // メモ紹介ページのFAQ。JSON-LDと表示の両方でこのデータを使う
@@ -30,6 +33,8 @@ export const MEMO_LP_FAQ_ITEMS = [
   }
 ] as const;
 
+// 英語版のFAQ。日本語版 MEMO_LP_FAQ_ITEMS と同じ順序・同じ質問構成で保つ。
+// English FAQ items; keep the same order and set of questions as the Japanese MEMO_LP_FAQ_ITEMS.
 export const MEMO_LP_FAQ_ITEMS_EN = [
   {
     question: "Can other people see my memos?",
@@ -58,6 +63,8 @@ export const MEMO_LP_FAQ_ITEMS_EN = [
   }
 ] as const;
 
+// FAQ セクションの表示。ロケールに応じて日本語版／英語版の配列を切り替える。
+// Renders the FAQ section, switching between the Japanese and English arrays by locale.
 export function MemoLpFaq() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

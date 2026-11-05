@@ -1,3 +1,5 @@
+// メモ紹介ページ（/memo/lp）の最終CTAセクション。メモ画面へ進む導線を出す。
+// Final CTA section of the memo landing page (/memo/lp), leading to the memo screen.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

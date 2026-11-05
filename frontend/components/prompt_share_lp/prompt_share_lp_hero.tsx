@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の先頭セクション。見出し・導線ボタンと、実際のカードを模した見本を表示する。
+// Opening section of the prompt-share introduction page (/prompt_share/lp): headline, entry buttons and a sample that mimics the real prompt card.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

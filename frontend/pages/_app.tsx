@@ -1,3 +1,8 @@
+// Next.js のカスタム App。全ページ共通のグローバル CSS、フォント、SWR の設定、表示言語のプロバイダー、エラーバウンダリー、
+// テーマの適用、グローバル AI エージェントの表示をまとめて担う。
+// The custom Next.js App shared by every page: global CSS, fonts, SWR settings, the locale provider, the error boundary,
+// theme application, and the global AI agent.
+
 import "../styles/globals.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "../public/static/css/base/variables.css";
@@ -136,6 +141,8 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
   }
 }
 
+// 表示言語の文言を取り出してエラーバウンダリーに渡し、その内側にページ本体とアナリティクス、ネットワーク状態の表示、AI エージェントを置く。
+// Reads the localized messages for the error boundary and places the page, analytics, network status banner and AI agent inside it.
 function LocalizedAppShell({ Component, pageProps, showAiAgent }: Pick<AppProps, "Component" | "pageProps"> & { showAiAgent: boolean }) {
   const { t } = useTranslation();
   return (
@@ -200,6 +207,9 @@ const swrGlobalConfig = {
 // 永続SWRキャッシュは初回クライアント描画では読まず、ReactがSSR HTMLを
 // ハイドレートした後に反映する。これによりサーバーとクライアントの初期HTMLが
 // 常に一致し、localStorage由来のハイドレーション不整合を防ぐ。
+// Persisted SWR cache entries are not read during the first client render; they are applied
+// after React has hydrated the SSR HTML. This keeps the server and client initial HTML identical
+// and prevents hydration mismatches caused by localStorage.
 function PersistentCacheHydrator() {
   const { mutate } = useSWRConfig();
 
@@ -212,10 +222,12 @@ function PersistentCacheHydrator() {
   return null;
 }
 
-// Next.jsのカスタムAppコンポーネント（テーマ管理と共通プロバイダーを統括する）
-// Next.js custom App component (manages theme and shared providers)
+// ページの props に載せる、サーバーで決めた表示言語。
+// Page props carrying the display locale decided on the server.
 type LocalizedPageProps = Record<string, unknown> & { __locale?: Locale };
 
+// Next.jsのカスタムAppコンポーネント（テーマ管理と共通プロバイダーを統括する）
+// Next.js custom App component (manages theme and shared providers)
 export default function App({ Component, pageProps }: AppProps<LocalizedPageProps>) {
   const router = useRouter();
   // 認証ページではグローバルAIエージェントを非表示にする
@@ -297,6 +309,8 @@ export default function App({ Component, pageProps }: AppProps<LocalizedPageProp
   );
 }
 
+// 各ページの props に、URL・Cookie・Accept-Language から決めた表示言語（__locale）を加える。
+// Adds the display locale (__locale), decided from the URL, cookie and Accept-Language, to every page's props.
 App.getInitialProps = async (appContext: AppContext) => {
   const appProps = await NextApp.getInitialProps(appContext);
   const request = appContext.ctx.req;

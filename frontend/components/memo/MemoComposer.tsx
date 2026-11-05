@@ -1,3 +1,5 @@
+// メモ一覧の上部にある新規メモの入力欄（クイック作成）。折りたたみ表示と展開表示があり、スマホ幅では展開時にモーダルへ切り替える。MemoPage から使われる。
+// Quick-capture composer above the memo list, with collapsed and expanded states; on mobile widths the expanded form moves into a modal. Used by MemoPage.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
@@ -13,6 +15,8 @@ import {
   useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// このセレクタに一致する要素の中でのクリックは「入力欄の外を押した」とみなさない（ポップアップ・モーダル・作成ボタンなど）。
+// Clicks inside elements matching this selector do not count as clicking outside the composer (popups, modals, trigger buttons).
 const OUTSIDE_CLICK_EXEMPT_SELECTOR = [
   "[role='listbox']",
   "[role='menu']",
@@ -22,6 +26,8 @@ const OUTSIDE_CLICK_EXEMPT_SELECTOR = [
   "[data-memo-composing]",
 ].join(", ");
 
+// 本文に保存すべき内容があるか判定する。空行、引用記号だけの行、中身の無いチェックリスト記号だけの行は内容と見なさない。
+// Tells whether the body has anything worth saving; blank lines, quote markers alone, and empty checklist markers do not count.
 function hasMemoBodyContent(value: string): boolean {
   return value.split(/\r?\n/u).some((line) => {
     const content = line.replace(/^\s*(?:>\s*)*/u, "").trim();
@@ -30,10 +36,13 @@ function hasMemoBodyContent(value: string): boolean {
   });
 }
 
+// クリックの伝播経路のどれかがセレクタに一致するか調べる。
+// Checks whether any element on the click's propagation path matches the selector.
 function pathHasSelector(path: EventTarget[], selector: string): boolean {
   return path.some((item) => item instanceof Element && item.matches(selector));
 }
 
+// ── クイック作成 ──
 // ── Quick capture ──
 export function MemoComposer() {
   const { collections } = useMemoPageListContext();
@@ -79,6 +88,8 @@ export function MemoComposer() {
   const mobileDialogOpen = isMobileLayout && showExpandedComposer;
   const viewportStyle = useMemoViewport(mobileDialogOpen, true);
 
+  // フローティングの「新規」ボタンはコントローラーを直接呼ぶので、インライン側のトリガー処理では
+  // スマホ用のローカルな「閉じた」状態を解除できない。そこでネイティブの click を先に捕捉して解除する。
   // The floating New button calls the controller directly, so it cannot clear the local
   // mobile dismissal state through the inline trigger handlers. Capture its native click first.
   useEffect(() => {
@@ -95,6 +106,8 @@ export function MemoComposer() {
     return () => document.removeEventListener("click", handleComposerTriggerClick, true);
   }, []);
 
+  // ネイティブの click は、React がクリックされたノードを差し替えた後でも、元の祖先要素の経路を保持している。
+  // このため、常設のインライントリガーや、スマホ用ダイアログへポータルされた展開フォームも外側クリックの判定に使える。
   // Native click paths retain the original ancestors even if React replaces the clicked node
   // before the document listener runs. This also covers the persistent inline trigger and the
   // expanded composer portaled into the mobile dialog.
@@ -219,6 +232,8 @@ export function MemoComposer() {
     return composeEditorRef.current?.contentDOM ?? titleRef.current ?? paletteTriggerRef.current;
   }, [composeEditorRef]);
 
+  // 入力内容をすべて破棄して折りたたむ。
+  // Discards the whole draft and collapses the composer.
   const handleCloseComposer = () => {
     setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
     setSourceMode(false);
@@ -437,6 +452,8 @@ export function MemoComposer() {
     </form>
   );
 
+  // インライン表示とスマホ用ダイアログで共通の外殻。ダイアログ表示中はインライン側を隠し、操作も無効（inert）にする。
+  // Shell shared by the inline view and the mobile dialog; while the dialog is open, the inline one is hidden and made inert.
   const renderSection = (options: { id: string; expanded: boolean; className?: string; hidden?: boolean }) => (
     <section
       id={options.id}

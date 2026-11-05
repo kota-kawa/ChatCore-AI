@@ -1,3 +1,5 @@
+// 回答の「再生成」ボタン。chat_message_list.tsx のメッセージ操作列で使われる。
+// "Regenerate" button for an answer; used in the message action row of chat_message_list.tsx.
 // 回答再生成ボタンのprops型定義
 // Props type definition for the response regenerate button
 type RegenerateActionButtonProps = {

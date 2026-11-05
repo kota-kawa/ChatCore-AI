@@ -1,3 +1,5 @@
+// AI 回答の下に出す「メモに保存」ボタン。/memo/api へ回答本文を送り、結果をアイコンの変化で知らせる。chat_message_list.tsx から使われる。
+// "Save as memo" button under an AI answer: posts the answer to /memo/api and reports the result via icon changes; used by chat_message_list.tsx.
 import { useCallback, useState } from "react";
 
 import { isRecord } from "../../lib/utils";
@@ -65,6 +67,8 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
 
       setIconClass("bi-check-lg");
       setVariantClass("memo-save-btn--success");
+    // エラーの詳細は出さず、アイコンをエラー表示にするだけにする（finally で 2 秒後に元へ戻る）
+    // Show no error detail, only the error icon (the finally block restores the icon after 2 seconds)
     } catch {
       setIconClass("bi-x-lg");
       setVariantClass("memo-save-btn--error");

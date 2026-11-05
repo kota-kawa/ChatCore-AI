@@ -1,3 +1,5 @@
+// 共有ダイアログの中身（共有 URL 欄、コピー、X・LINE・Facebook、ネイティブ共有）。チャット・メモ・プロンプトの各共有モーダルで共通に使う。
+// Body of the share dialog (URL field, copy, X / LINE / Facebook, native share), shared by the chat, memo and prompt share modals.
 import type { ReactNode, RefObject } from "react";
 
 import type { SocialShareLinks } from "../../lib/share";
@@ -38,6 +40,8 @@ export type ShareDialogContentProps = {
   onNativeShare: () => Promise<void> | void;
 };
 
+// X のロゴの SVG パス
+// SVG path of the X logo
 const X_LOGO_PATH =
   "M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z";
 
@@ -53,6 +57,8 @@ type ShareChannelLinkProps = {
   children: ReactNode;
 };
 
+// 共有先 1 つ分のリンク。共有 URL が未準備のときは href を外し、クリックと Tab 移動を無効にする
+// Link for one share target; when the URL is not ready it drops href and blocks clicks and tab focus
 function ShareChannelLink({ id, href, title, disabled, children }: ShareChannelLinkProps) {
   return (
     <a
@@ -73,7 +79,10 @@ function ShareChannelLink({ id, href, title, disabled, children }: ShareChannelL
   );
 }
 
-/** Shared URL/copy/social/native-share body used by chat, memo, and prompt modals. */
+/**
+ * チャット・メモ・プロンプトの各モーダルで共通に使う、共有 URL・コピー・SNS・ネイティブ共有の本体。
+ * Shared URL/copy/social/native-share body used by chat, memo, and prompt modals.
+ */
 export function ShareDialogContent({
   shareUrl,
   shareLoading,
@@ -97,6 +106,8 @@ export function ShareDialogContent({
   nativeShareLabel,
   onNativeShare,
 }: ShareDialogContentProps) {
+  // URL が空でなく、生成中でもないときだけ、コピー・共有操作を有効にする
+  // Enable copy / share actions only when the URL is non-empty and not being generated
   const shareReady = Boolean(shareUrl.trim()) && !shareLoading;
 
   return (

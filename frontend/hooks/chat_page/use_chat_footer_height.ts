@@ -1,3 +1,5 @@
+// チャット入力欄（フッター）の実際の高さを、親要素の CSS 変数 --chat-footer-height に反映する hook。呼び出し元は components/chat_page/chat_main_section.tsx。
+// Hook that mirrors the chat composer (footer) height into the parent's --chat-footer-height CSS variable. Used by components/chat_page/chat_main_section.tsx.
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;

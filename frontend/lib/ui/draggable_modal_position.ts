@@ -1,3 +1,7 @@
+// ドラッグできるモーダルの位置の計算。画面の内側に収め、避けたい領域（ほかの要素の矩形）と重ならない位置を選ぶ。
+// Position calculations for the draggable modal: keep it inside the viewport and pick a spot that does not overlap an area to avoid.
+// Used by components/ui/DraggableModal.tsx.
+
 export type Position = { x: number; y: number };
 
 export type Size = { width: number; height: number };
@@ -16,7 +20,11 @@ export type Rect = {
   bottom: number;
 };
 
+// 画面の端からモーダルまで空ける余白（px）。
+// Margin (px) kept between the viewport edge and the modal.
 const POSITION_MARGIN = 12;
+// 避ける対象の領域とモーダルのあいだに空ける間隔（px）。
+// Gap (px) kept between the modal and the area it avoids.
 const AVOIDANCE_GAP = 12;
 
 function positionsEqual(first: Position, second: Position) {
@@ -32,12 +40,16 @@ function positionToRect(position: Position, size: Size): Rect {
   };
 }
 
+// 2 つの矩形が重なる面積。重ならなければ 0。
+// Area where two rectangles overlap; 0 when they do not.
 function overlapArea(first: Rect, second: Rect) {
   const overlapWidth = Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left));
   const overlapHeight = Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
   return overlapWidth * overlapHeight;
 }
 
+// モーダルが余白を残して画面内に収まるよう、位置を補正する。画面より大きい場合は左上の余白位置に寄せる。
+// Adjusts the position so the modal stays inside the viewport with a margin; if it is larger than the viewport, it is pinned to the top-left margin.
 export function clampModalPosition(position: Position, modalSize: Size, viewport: ViewportBounds): Position {
   const minX = viewport.left + POSITION_MARGIN;
   const minY = viewport.top + POSITION_MARGIN;
@@ -50,6 +62,8 @@ export function clampModalPosition(position: Position, modalSize: Size, viewport
   };
 }
 
+// 避けたい矩形と重ならない位置を返す。重なるときは、その矩形の右・左・上・下に置いた 4 つの候補から、重なりが最も小さいものを選ぶ（同じなら元の位置に近いほう）。
+// Returns a position that does not overlap the rectangle to avoid. When it would overlap, it tries four candidates (right, left, above, below) and picks the one with the least overlap, then the one closest to the original position.
 export function positionModalAwayFromRect(
   position: Position,
   modalSize: Size,
@@ -89,6 +103,8 @@ export function positionModalAwayFromRect(
   }, clampedPosition);
 }
 
+// 位置が同じなら以前のオブジェクトをそのまま返し、React が無駄な再描画をしないようにする。
+// Returns the existing object when the position is unchanged so React does not re-render needlessly.
 export function keepPositionIfUnchanged(current: Position, next: Position) {
   return positionsEqual(current, next) ? current : next;
 }

@@ -1,4 +1,5 @@
 // ---------------------------------------------------------------------------
+// メモエディタ: Markdown のリスト編集
 // Memo editor: Markdown list edits
 // ---------------------------------------------------------------------------
 
@@ -9,6 +10,8 @@
 // "replace this range with this text and put the caret here". This module only handles strings;
 // lib/memo/editor.ts applies the result to the editor.
 
+// 編集 1 回分の結果。start〜end の範囲を text に置き換え、カーソル（選択範囲）を selectionStart〜selectionEnd にする。
+// One edit: replace the range start..end with text and set the selection to selectionStart..selectionEnd.
 export interface TextEdit {
   start: number;
   end: number;
@@ -17,6 +20,8 @@ export interface TextEdit {
   selectionEnd: number;
 }
 
+// ツールバーで行に付けられる書式。チェックリスト・箇条書き・番号付きリスト・見出し。
+// Line formats the toolbar can apply: checklist, bullet list, numbered list, heading.
 export type MemoLineFormat = "task" | "bullet" | "number" | "heading";
 
 // 行頭の字下げ・引用記号と、その後ろのリスト記号（チェック欄を含む）
@@ -54,6 +59,8 @@ function indentUnit(value: string, lineStart: number): string {
   return " ".repeat(markerWidth);
 }
 
+// position を含む行の開始位置と終了位置（改行の手前）を返す。
+// Returns the start and end (before the line break) of the line containing position.
 function lineBounds(value: string, position: number) {
   const start = value.lastIndexOf("\n", position - 1) + 1;
   const nextBreak = value.indexOf("\n", position);
@@ -93,6 +100,8 @@ export function continueListOnEnter(value: string, selectionStart: number, selec
   return { start: selectionStart, end: selectionStart, text: next, selectionStart: caret, selectionEnd: caret };
 }
 
+// 選択範囲にかかる行をまとめた範囲（先頭行の頭から最終行の終わりまで）を返す。
+// Returns the range covering every line touched by the selection, from the first line's start to the last line's end.
 function selectedLineRange(value: string, selectionStart: number, selectionEnd: number) {
   const start = lineBounds(value, selectionStart).start;
   // 選択が行頭で終わっているときは、その行を含めない
@@ -101,6 +110,8 @@ function selectedLineRange(value: string, selectionStart: number, selectionEnd: 
   return { start, end: lineBounds(value, lastPosition).end };
 }
 
+// 行から見出し・リストの記号を取り除き、字下げと本文に分ける。
+// Strips the heading or list marker from a line and splits it into indent and body.
 function stripLineFormat(line: string) {
   const heading = line.match(HEADING_LINE);
   if (heading) return { indent: heading[1], body: line.slice(heading[0].length) };
@@ -110,6 +121,8 @@ function stripLineFormat(line: string) {
   return { indent, body: line.slice(indent.length) };
 }
 
+// 行がすでに指定の書式（見出し・チェック・箇条書き・番号）になっているか。
+// Whether the line already has the given format (heading, checklist, bullet, number).
 function lineHasFormat(line: string, format: MemoLineFormat) {
   if (format === "heading") return HEADING_LINE.test(line);
   const match = line.match(LIST_LINE);
@@ -185,6 +198,8 @@ export function indentLines(value: string, selectionStart: number, selectionEnd:
   return { ...range, text, selectionStart: range.start, selectionEnd: range.start + text.length };
 }
 
+// 本文中のチェック欄 1 つ。offset は `[` の位置、text は欄の後ろの文字。
+// One checkbox in the body: offset is the position of `[`, text is what follows the box.
 export interface TaskMarker {
   offset: number;
   checked: boolean;
@@ -230,12 +245,21 @@ function comparableCharacters(text: string): string[] {
   return Array.from(text.normalize("NFKC").toLowerCase()).filter((character) => /[\p{L}\p{N}]/u.test(character));
 }
 
+// needle の文字が haystack の中に、順番を保ったまま（間に他の文字があってもよい）含まれるか。
+// Whether the characters of needle appear in haystack in order, possibly with other characters in between.
 function isSubsequence(needle: string[], haystack: string[]): boolean {
   let position = 0;
   for (const character of haystack) {
     if (position < needle.length && character === needle[position]) position += 1;
   }
   return position === needle.length;
+}
+
+// 描画されたチェック欄 1 件（表示文字とチェック状態）。
+// One rendered checkbox: its visible label and checked state.
+export interface RenderedTask {
+  label: string;
+  checked: boolean;
 }
 
 // 描画されたチェック欄（先頭から順の、各行の表示文字とチェック状態）が、本文の欄の先頭と
@@ -245,11 +269,6 @@ function isSubsequence(needle: string[], haystack: string[]): boolean {
 // one by one with the head of the source's. Any difference in count, state or text gives null.
 // A list card renders only the head of the body, so fewer rendered boxes are allowed there
 // (allowPrefix).
-export interface RenderedTask {
-  label: string;
-  checked: boolean;
-}
-
 export function matchRenderedTasks(source: string, rendered: RenderedTask[], allowPrefix = false): TaskMarker[] | null {
   const markers = findTaskMarkers(source);
   if (allowPrefix ? markers.length < rendered.length : markers.length !== rendered.length) return null;

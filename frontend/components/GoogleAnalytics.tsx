@@ -1,3 +1,5 @@
+// Google Analytics（gtag.js）の読み込みと、クライアント遷移ごとのページビュー送信を担当する。pages/_app.tsx から描画される。
+// Loads Google Analytics (gtag.js) and reports a page view on each client-side route change; rendered from pages/_app.tsx.
 import Script from "next/script";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
@@ -20,6 +22,8 @@ function trackPageView(url: string) {
     return;
   }
 
+  // 初回の page_view は下のインラインスクリプトの config が送るため、ここは遷移後の URL を通知する分だけ
+  // The first page view is sent by the config call in the inline script below; this call only reports URLs after route changes
   window.gtag("config", GA_MEASUREMENT_ID, {
     page_path: url
   });

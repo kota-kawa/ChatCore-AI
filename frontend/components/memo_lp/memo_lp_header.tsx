@@ -1,3 +1,5 @@
+// メモ紹介ページ（/memo/lp）のヘッダー。ロゴ、ページ内リンク、メモ画面・新規登録への導線を持つ。
+// Header of the memo landing page (/memo/lp): logo, in-page links, and entry points to the memo screen and sign-up.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

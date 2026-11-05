@@ -1,3 +1,5 @@
+// 設定画面のナビゲーション（サイドバー）。セクション一覧と戻るボタンを持つ。呼び出し元は pages/settings.tsx。
+// Navigation (sidebar) of the settings page, with the section list and a back button. Used by pages/settings.tsx.
 import { SETTINGS_NAV_ITEMS } from "../../scripts/user/settings/constants";
 import type { SettingsSection } from "../../scripts/user/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
@@ -16,6 +18,8 @@ export function SettingsSidebar({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
+  // セクションのキーから、現在の言語での表示名を引く
+  // Look up each section's label in the current language
   const labels: Record<SettingsSection, string> = {
     profile: t("settings.profile"), usage: t("settings.usage"), "chat-permissions": t("settings.chatPermissions"),
     appearance: t("settings.appearance"), language: t("settings.language"),

@@ -1,3 +1,6 @@
+// 公開投稿一覧のヘッダー・絞り込み・カードと関連モーダルを配置する。
+// Lays out the public feed header, filters, cards and related modals.
+
 import React, { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { Skeleton, SkeletonText } from "../ui/skeleton";

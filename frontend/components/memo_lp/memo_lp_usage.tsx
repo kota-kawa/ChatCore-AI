@@ -1,3 +1,6 @@
+// メモの利用手順とAI支援・料金の前提を紹介する。
+// Presents memo usage steps, AI assistance and pricing prerequisites.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // 3ステップの利用フローと、その下に「AIに任せられること」「料金と前提」の2カラムを置く
@@ -22,6 +25,8 @@ const STEPS_JA: Step[] = [
   }
 ];
 
+// 英語版。日本語版と同じ順序・同じ項目で保つ（以下の *_EN も同様）。
+// English version; keep the same order and items as the Japanese arrays (the other *_EN arrays below follow the same rule).
 const STEPS_EN: Step[] = [
   {
     title: "Save an answer from a chat",
@@ -108,6 +113,8 @@ const PRICING_EN: Step[] = [
   }
 ];
 
+// 使い方セクション。3ステップの流れと、その下の「AIに任せられること」「料金と前提」の2カラムを、ロケールに応じて切り替える。
+// Usage section: the three-step flow with the "what the AI handles" and "price and prerequisites" columns below it, switched by locale.
 export function MemoLpUsage() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

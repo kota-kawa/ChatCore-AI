@@ -1,3 +1,5 @@
+// ホーム画面（チャット開始前）のセットアップ領域。タスクカード一覧と並び替え、状況の入力欄、モデル選択、添付、未保存チャット切り替え、スキル一覧を持つ。pages/index.tsx から描画される。
+// The home screen's setup area before a chat starts: task cards with reordering, the situation input, model picker, attachments, temporary-chat toggle and skills; rendered by pages/index.tsx.
 import {
   memo,
   useCallback,
@@ -329,6 +331,7 @@ function SetupSectionComponent() {
     [setAttachedFiles],
   );
 
+  // DOM 要素への参照
   // DOM refs
   const modelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modelOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);

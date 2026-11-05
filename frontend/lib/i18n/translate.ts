@@ -1,3 +1,6 @@
+// Reactに依存せず、言語選択と変数補間を含む翻訳処理を提供する。
+// Provides locale selection and interpolated translations independently of React.
+
 import { enMessages } from "./catalogs/en";
 import { jaMessages, type MessageKey } from "./catalogs/ja";
 import type { Locale } from "./config";

@@ -1,3 +1,5 @@
+// 設定画面の「投稿したプロンプト」と「いいねしたプロンプト」に並べる、プロンプトカードの表示コンポーネント。呼び出し元は settings_sections.tsx。
+// Prompt card components for the settings page's authored and liked prompt lists. Used by settings_sections.tsx.
 import type { ReactNode } from "react";
 
 import { asId } from "../../lib/utils";

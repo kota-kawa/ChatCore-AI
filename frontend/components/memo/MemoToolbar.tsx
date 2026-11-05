@@ -1,3 +1,5 @@
+// メモ一覧の上部ツールバー。見出しと件数、表示切替・一括操作・書き出し、検索欄、スマホ向けの絞り込み・並び替えを置く。MemoPage から使われる。
+// Toolbar above the memo list: heading and count, view toggle, bulk mode, export, the search box, and the filter/sort controls used on phones; used by MemoPage.
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
 import {
@@ -7,6 +9,7 @@ import {
   useMemoPageUiContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// ── ツールバー ──
 // ── Toolbar ──
 export function MemoToolbar() {
   const { viewMode, setViewMode, isFiltersOpen, setIsFiltersOpen } = useMemoPageUiContext();
@@ -28,6 +31,8 @@ export function MemoToolbar() {
   const { setIsExportModalOpen, setIsCollectionPanelOpen } = useMemoPageModalsContext();
   const { locale, t } = useTranslation();
   const english = locale === "en";
+  // 並び順の選択肢（表示名はロケールに応じて英語・日本語を切り替える）。
+  // Sort choices; the labels switch between English and Japanese by locale.
   const sortOptions = english
     ? [{ value: "manual", label: "Manual" }, { value: "recent", label: "Newest" }, { value: "updated", label: "Recently updated" }, { value: "oldest", label: "Oldest" }, { value: "title", label: "Title" }, { value: "semantic", label: "AI similarity" }]
     : [{ value: "manual", label: "手動順" }, { value: "recent", label: "新しい順" }, { value: "updated", label: "更新順" }, { value: "oldest", label: "古い順" }, { value: "title", label: "タイトル順" }, { value: "semantic", label: "AI類似検索" }];

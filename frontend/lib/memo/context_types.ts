@@ -18,10 +18,14 @@ import type {
   ContextVaultImportResponse,
 } from "../../types/generated/api_schemas";
 
+// 型の多くは生成スキーマ（types/generated/api_schemas）から派生させ、サーバーとの契約を一か所に保つ。
+// Most types derive from the generated schema (types/generated/api_schemas) to keep the server contract in one place.
 export type ContextFact = ContextFactResponse;
 export type ContextFactType = ContextFact["fact_type"];
 export type ContextFactStatus = ContextFact["status"];
 
+// 重要度の選択肢が書き込む値（低・標準・高）。
+// The values the importance options write (low, standard, high).
 export type ContextFactImportancePreset = 25 | 50 | 75;
 
 export type ContextFactListPayload = ContextFactListResponse & {
@@ -88,6 +92,8 @@ export type ContextVaultImportPreview = Omit<
   warnings: NonNullable<ContextVaultImportPreviewResponse["warnings"]>;
 };
 export type ContextVaultImportResult = ContextVaultImportResponse;
+// 事実の種類ごとの表示名。
+// Display names for each fact type.
 export const CONTEXT_FACT_TYPE_LABELS: Record<ContextFactType, string> = {
   profile: "経歴・プロフィール",
   preference: "好み・方針",
@@ -113,6 +119,8 @@ export const CONTEXT_FACT_IMPORTANCE_OPTIONS: {
   { value: "75", label: "高" },
 ];
 
+// 0〜100 の重要度を、最も近い 3 段階（低・標準・高）の選択肢に丸める。
+// Rounds a 0-100 importance to the nearest of the three presets (low, standard, high).
 export function toContextFactImportancePreset(importance: number): ContextFactImportancePreset {
   if (importance <= 33) return 25;
   if (importance >= 67) return 75;

@@ -1,3 +1,5 @@
+// ユーザーが送信したメッセージ（本文・添付画像・添付ファイル名）をチャット画面に表示するコンポーネント。chat_message_list.tsx などから使われる。
+// Component that renders a sent user message (text, attached images, attached file names) in the chat view.
 import { memo, useMemo } from "react";
 
 import type { ChatAttachedImage } from "../../lib/chat_page/types";
@@ -14,6 +16,8 @@ type UserMessageHtmlProps = {
 // ユーザーのメッセージとファイル添付を表示するコンポーネント
 // Component that displays the user's message and attached files
 function UserMessageHtmlComponent({ text, attachedFileNames, attachedImages }: UserMessageHtmlProps) {
+  // formatUserInputForDisplay は代替経路ではパスをエスケープし、マーク付き HTML はサニタイズして返すため、
+  // dangerouslySetInnerHTML には安全なマークアップだけが渡る。
   // formatUserInputForDisplay escapes the fallback path and sanitizes marked HTML
   // before returning it, so dangerouslySetInnerHTML is limited to safe markup.
   const formatted = useMemo(() => formatUserInputForDisplay(text), [text]);

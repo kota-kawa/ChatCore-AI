@@ -1,3 +1,5 @@
+// AIチャット紹介ページ（/chat/lp）のヘッダー。ページ内リンクとチャット・登録への導線を持つ。pages/chat/lp.tsx から使われる。
+// Header of the AI chat landing page (/chat/lp) with in-page links and entry points to the chat and sign-up; used by pages/chat/lp.tsx.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

@@ -1,3 +1,5 @@
+// 認証ゲートウェイの最後のステップ。ログイン後にこの端末へパスキーを登録するか、後回しにするかを選ばせる表示部品。
+// Final step of the auth gateway: asks whether to register a passkey on this device now or skip it (presentational).
 import type { EmailAuthFlow, PasskeySetupProvider } from "../types";
 import { useTranslation } from "../../../../contexts/locale_context";
 
@@ -20,6 +22,8 @@ export function AuthPasskeyStep({
   onLater,
   onRegisterPasskey
 }: AuthPasskeyStepProps) {
+  // キャプションだけは分岐が多いため、カタログではなく locale で直接出し分けている
+  // The caption has many branches, so it switches on locale directly instead of using catalog keys
   const { locale, t } = useTranslation();
   return (
     <div className="passkey-panel">

@@ -1,3 +1,5 @@
+// AI エージェント（Chaco）とのチャットパネル。回答のストリーミング表示に加え、画面操作の計画（action plan）の実行・再計画・ページ遷移をまたぐ再開も担う。
+// Chat panel for the AI agent (Chaco): streams answers, and also runs action plans, replans after failures and resumes across page navigations.
 import { useRouter } from "next/router";
 import { createPortal } from "react-dom";
 import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent, type KeyboardEvent } from "react";
@@ -120,12 +122,15 @@ export function MiniChat({
   const routerRef = useRef(router);
   const trimmedInput = input.trim();
 
+  // navigateInternal を参照の変わらない関数に保つため、router は ref 経由で常に最新のものを使う。
   // Keep router ref current so the stable navigateInternal callback always pushes via the
   // latest router instance.
   useEffect(() => {
     routerRef.current = router;
   }, [router]);
 
+  // 保険。実行中に検知できなかった操作（通常のリンクやフォーム送信など）でページが破棄されても、
+  // 残りのステップを保存し、再読み込み後に続きから実行できるようにする。
   // Safety net: if an undetected click (e.g. a plain link or form submit) tears the page
   // down mid-execution, persist the remaining steps so they resume after the reload.
   useEffect(() => {
@@ -152,6 +157,7 @@ export function MiniChat({
         const settled = await waitForRouteSettled(path, locale);
         return { ok: settled.ok, message: settled.message, clientSide: true, needsReplan: settled.needsReplan };
       } catch {
+        // クライアント遷移に失敗したら、下のフルページ読み込みにフォールバックする。
         // Client navigation failed; fall back to a full document load below.
       }
     }
@@ -164,6 +170,7 @@ export function MiniChat({
   }, []);
   const currentProgressText = statusText ?? progressSteps[progressSteps.length - 1] ?? null;
 
+  // 非同期ハンドラが古いクロージャを掴まないよう、ref を最新の messages に同期しておく。
   // Keep ref in sync for stale-closure-safe access in async handlers
   useEffect(() => {
     messagesRef.current = messages;
@@ -332,6 +339,8 @@ export function MiniChat({
     });
   }, []);
 
+  // 現在のページを観察し直し、モデルに実行可能な新しい計画を作らせる。ステップの途中失敗と、
+  // 遷移後に対象要素が見つからない場合の両方で使う。
   // Re-observe the current page and ask the model for a fresh, executable plan. Used both
   // when a step fails mid-flight and when post-navigation targets can't be found.
   const replanAfterFailure = async (failureText: string, failedStepIndex?: number) => {
@@ -441,6 +450,7 @@ export function MiniChat({
           writeSessionJson(storageKeys.executed, merged);
         }
       } else if (result.needsReplan === false) {
+        // 再計画しても解決しない、理由が明らかな停止（ログインが必要など）。利用者に知らせるだけにする。
         // A terminal, self-explanatory stop (e.g. login required): just inform the user.
         setMessages((prev) => [
           ...prev,
@@ -504,6 +514,7 @@ export function MiniChat({
         if (!ready.ok) {
           clearPendingActionSteps();
           if (ready.needsReplan) {
+            // 遷移先は読み込めたが、遷移前に立てた計画の対象要素が存在しない。ページを観察し直して再計画する。
             // The destination loaded but the blind-planned targets aren't there: re-observe.
             void replanAfterFailure(ready.message || t("agent.destinationNotReady"));
           } else {
@@ -538,6 +549,8 @@ export function MiniChat({
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
+  // この effect は保存済みの実行状態を 1 回だけ復元する。コールバックの参照が変わるたびに再実行すると
+  // 同じアクションを二重に実行しかねない。ルートや言語が変わるときはグローバルシェルごと再マウントされる。
   // This effect restores one persisted execution snapshot. Re-running it for callback identity
   // changes could execute the same action twice; route/language changes remount the global shell.
   // eslint-disable-next-line react-hooks/exhaustive-deps

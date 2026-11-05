@@ -1,3 +1,6 @@
+// トップページのタスク選択とチャット画面をホーム画面のcontrollerへ接続する。
+// Connects home task selection and chat rendering to the home controller.
+
 import { useCallback, useMemo } from "react";
 
 import { SeoHead } from "../components/SeoHead";

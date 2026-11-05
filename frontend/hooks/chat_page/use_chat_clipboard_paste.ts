@@ -1,3 +1,5 @@
+// チャット入力欄の添付メニューにある「貼り付け」操作用の hook。クリップボードから画像（添付）か文字（カーソル位置へ挿入）を読み取る。呼び出し元は components/chat_page/chat_main_section.tsx と setup_section.tsx。
+// Hook behind the paste action in the chat composer's attach menu: reads images (as attachments) or text (inserted at the caret) from the clipboard. Used by components/chat_page/chat_main_section.tsx and setup_section.tsx.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -6,6 +8,8 @@ type ClipboardContent = { files: File[]; text: string; unsupported?: boolean };
 
 // 同じ項目の画像と文章を両方貼ると、画像の代替テキストやURLも重複して入ってしまう。
 // Prefer images over their alternate text/URL representations.
+// クリップボードの中身を読む。画像があれば画像だけを返し、無ければ text/plain を結合して返す。対応する形式が無いときは unsupported を立てる
+// Read the clipboard: return images only when present, otherwise the joined text/plain; flag unsupported when nothing usable is found
 async function readClipboardContent(): Promise<ClipboardContent> {
   const clipboard = navigator.clipboard;
   if (!clipboard?.read) {
@@ -40,10 +44,16 @@ type ChatClipboardPasteOptions = {
   scopeKey?: string | null;
 };
 
+// 貼り付け操作の処理を返す。読み取り中の二重実行を防ぎ、許可待ちの間に画面が変わった場合は結果を適用しない
+// Return the paste handler; it blocks re-entry while reading and drops the result if the screen changed during the permission prompt
 export function useChatClipboardPaste(options: ChatClipboardPasteOptions) {
   const { t } = useTranslation();
   const { inputRef, isDisabled, scopeKey } = options;
+  // 非同期の途中でも最新の props を参照するため、毎回 ref に保存しておく
+  // Keep the latest options in a ref so async work always sees current values
   const latestOptions = useRef(options);
+  // 入力欄やルームが切り替わるたびに増やす番号。読み取り開始時の値と比べて、古い結果を判別する
+  // Counter bumped whenever the composer or room changes; compared with the value at read start to spot stale results
   const scopeRef = useRef(0);
   const pendingRef = useRef(false);
   const caretRef = useRef<{ value: string; position: number } | null>(null);

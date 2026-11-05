@@ -1,3 +1,5 @@
+// 共有プロンプトの共有ダイアログで使う、共有 URL の生成・SNS リンク・コピー・ネイティブ共有を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook for the share dialog on shared prompts: share URL creation, SNS links, copy and native share. Used by pages/prompt_share/index.tsx.
 import { useCallback, useRef, useState } from "react";
 
 import { copyTextToClipboard } from "../../scripts/core/clipboard";

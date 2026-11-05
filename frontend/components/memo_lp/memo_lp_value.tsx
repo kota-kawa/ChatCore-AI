@@ -1,3 +1,6 @@
+// メモの保存・整理・再確認の機能を紹介する。
+// Presents memo capture, organization and review features.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // 「残す・整える・見返す」の3つに絞り、メモ画面に実在する操作だけを並べる。
@@ -48,6 +51,8 @@ const VALUE_ITEMS_JA: ValueItem[] = [
   }
 ];
 
+// 英語版。日本語版 VALUE_ITEMS_JA と同じ順序・同じ項目で保つ。
+// English version; keep the same order and items as VALUE_ITEMS_JA.
 const VALUE_ITEMS_EN: ValueItem[] = [
   {
     title: "Capture",
@@ -86,6 +91,8 @@ const VALUE_ITEMS_EN: ValueItem[] = [
   }
 ];
 
+// 「できること」セクション。残す・整える・見返すの3項目をロケールに応じた文言で並べる。
+// "What you can do" section: the capture / organize / revisit items in the locale's wording.
 export function MemoLpValue() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

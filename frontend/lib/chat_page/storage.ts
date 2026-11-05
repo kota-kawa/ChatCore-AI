@@ -1,3 +1,9 @@
+// チャット画面がブラウザの localStorage に持つ状態（会話の表示キャッシュ、生成の途中経過、直前に開いていたルーム、ビュー状態）の読み書き。
+// 一時チャットの本文は端末に残さず、ユーザー切り替え時は前の利用者の状態を破棄する。
+// Reads and writes the chat state kept in localStorage: the display cache of conversations, in-flight generation state,
+// the last active room, and the home view state. Temporary chats never persist their text, and a user switch wipes the previous user's state.
+// Used by hooks/chat_page/use_home_page_controller.ts, use_home_page_generation_actions.ts and lib/auth/account_switcher.ts.
+
 import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { normalizeChatMessageParts } from "./api_contract";
 import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
@@ -13,6 +19,8 @@ import {
 } from "./history_cache";
 import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
 
+// 生成の途中経過の保存期限。これより古いものは復元せず捨てる。
+// Retention limit for saved in-flight generation state; older entries are discarded instead of restored.
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
 const GENERATION_STATE_KEY_PREFIX = "chatGeneration_";
 
@@ -23,7 +31,11 @@ const GENERATION_STATE_KEY_PREFIX = "chatGeneration_";
 const USER_SCOPE_KEY = "chatcore.chat.userScope";
 const ANONYMOUS_USER_SCOPE = "anonymous";
 
+// ホーム画面の復元先。setup は新規チャットの設定画面、chat は会話画面。
+// Which home view to restore: setup is the new-chat setup screen, chat is the conversation screen.
 export type StoredHomePageViewState = "setup" | "chat";
+// 書き込み時だけ "launching"（タスク起動中）も受け付け、保存では chat として扱う。
+// Writes also accept "launching" (a task is being launched), which is stored as chat.
 type WritableHomePageViewState = StoredHomePageViewState | "launching";
 
 export type StoredActiveChatRoom = {
@@ -31,6 +43,8 @@ export type StoredActiveChatRoom = {
   roomMode: ChatRoomMode;
 };
 
+// 生成の途中経過を保存する、ルームごとの localStorage キー。
+// Per-room localStorage key under which in-flight generation state is saved.
 function getStoredGenerationKey(roomId: string) {
   return `${GENERATION_STATE_KEY_PREFIX}${roomId}`;
 }
@@ -43,6 +57,8 @@ function normalizeStoredHomePageViewState(rawState: unknown): StoredHomePageView
   return rawState === "chat" ? "chat" : "setup";
 }
 
+// リロード時に会話画面へ戻すか。保存済みのビューが chat か、生成が進行中のときに true。
+// Whether to return to the conversation view on reload: true when the saved view is chat or a generation is in progress.
 export function shouldRestoreHomeChatView(): boolean {
   try {
     if (normalizeStoredHomePageViewState(localStorage.getItem(STORAGE_KEYS.homePageViewState)) === "chat") {
@@ -71,6 +87,8 @@ export function writeStoredHomePageViewState(viewState: WritableHomePageViewStat
   }
 }
 
+// 前回開いていたルームを読む。新しいキーが無いときだけ、旧キー（currentChatRoomId）にフォールバックする。
+// Reads the room that was open last time; falls back to the legacy key (currentChatRoomId) only when the new key is absent.
 export function readStoredActiveChatRoom(): StoredActiveChatRoom | null {
   try {
     const activeRoomId = localStorage.getItem(STORAGE_KEYS.activeChatRoomId)?.trim();
@@ -92,6 +110,8 @@ export function readStoredActiveChatRoom(): StoredActiveChatRoom | null {
   }
 }
 
+// 開いているルームを保存する。null なら関連キーをすべて消す。一時チャットは旧キーへ書かず、通常チャットだけが旧キーにも残る。
+// Saves the open room; null removes all related keys. Temporary chats are not written to the legacy key, only normal chats are.
 export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomMode = "normal"): boolean {
   try {
     if (!roomId) {
@@ -117,6 +137,8 @@ export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomM
   }
 }
 
+// 履歴キャッシュへ書き込んだ結果（保存できたか、容量の都合で切り詰めたか、残した件数など）。
+// Result of writing to the history cache (whether it was stored, truncated for capacity, how many entries were kept).
 export type StoredHistoryWriteResult = HistoryCacheWriteResult;
 
 // 「一時チャット」は本文を端末に残さないという約束の機能なので、書き込みは
@@ -136,6 +158,8 @@ function skippedTemporaryWrite(roomId: string, droppedEntries: number): StoredHi
   };
 }
 
+// ルームの表示キャッシュを読み、壊れた項目を除いて正規化する。失敗したら空配列を返す。
+// Reads a room's display cache and normalizes it, dropping malformed entries; returns an empty array on failure.
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
     const raw = readCachedHistory(roomId);
@@ -166,6 +190,8 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   }
 }
 
+// ルームの表示キャッシュを丸ごと書き換える。一時チャットでは何も保存しない。
+// Overwrites a room's display cache; temporary chats store nothing.
 export function writeStoredHistory(
   roomId: string,
   entries: StoredHistoryEntry[],
@@ -175,6 +201,8 @@ export function writeStoredHistory(
   return writeCachedHistory(roomId, entries);
 }
 
+// 既存のキャッシュの末尾へ 1 件足して保存する。一時チャットでは何も保存しない。
+// Appends one entry to the existing cache; temporary chats store nothing.
 export function appendStoredHistory(
   roomId: string,
   entry: StoredHistoryEntry,
@@ -199,6 +227,8 @@ export function removeLastStoredHistoryEntry(
   return writeStoredHistory(roomId, existing.slice(0, -1));
 }
 
+// 古い履歴を読み足したとき、既存のキャッシュの先頭へ追加して保存する。一時チャットでは何も保存しない。
+// Prepends entries (older history loaded later) to the existing cache; temporary chats store nothing.
 export function prependStoredHistory(
   roomId: string,
   entries: StoredHistoryEntry[],
@@ -209,11 +239,15 @@ export function prependStoredHistory(
   return writeStoredHistory(roomId, [...entries, ...existing]);
 }
 
+// ルームの表示キャッシュと生成の途中経過をまとめて消す。
+// Removes both a room's display cache and its in-flight generation state.
 export function removeStoredHistory(roomId: string) {
   removeCachedHistory(roomId);
   clearStoredGenerationState(roomId);
 }
 
+// localStorage から読んだ値を検証して StoredGenerationState にする。roomId が無い、または保存期限を過ぎていれば null。
+// Validates a value read from localStorage into a StoredGenerationState; null if roomId is missing or the retention limit has passed.
 function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as {
@@ -249,6 +283,8 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
   };
 }
 
+// ルームの生成の途中経過を読む。壊れている、期限切れ、別ルームのものなら、キーを削除して null を返す。
+// Reads a room's in-flight generation state; removes the key and returns null if it is broken, expired, or belongs to another room.
 export function readStoredGenerationState(roomId: string): StoredGenerationState | null {
   try {
     const raw = localStorage.getItem(getStoredGenerationKey(roomId));
@@ -264,6 +300,8 @@ export function readStoredGenerationState(roomId: string): StoredGenerationState
   }
 }
 
+// 生成の途中経過をルームごとのキーと「進行中の生成」キーの両方へ保存する。保存のたびに updatedAt を現在時刻に更新する。
+// Saves in-flight generation state under both the per-room key and the active-generation key, refreshing updatedAt on every write.
 export function writeStoredGenerationState(state: StoredGenerationState): boolean {
   const normalized = normalizeStoredGenerationState({
     ...state,
@@ -290,6 +328,8 @@ export function writeStoredGenerationState(state: StoredGenerationState): boolea
   }
 }
 
+// 保存済みの生成状態の一部（受信済みイベント ID・本文・生成 ID）だけを更新する。保存済みが無ければ何もしない。
+// Updates only part of the saved generation state (last event id, text, generation id); does nothing if none is saved.
 export function updateStoredGenerationState(
   roomId: string,
   updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId">>,
@@ -303,6 +343,8 @@ export function updateStoredGenerationState(
   });
 }
 
+// 生成状態を消す。expected を渡すと、保存されている generationId が一致するときだけ消し、後から始まった別の生成の状態を巻き込まない。
+// Clears generation state; with expected, only when the saved generationId matches, so a later generation's state is not wiped.
 export function clearStoredGenerationState(roomId: string, expected?: { generationId?: string }) {
   if (expected && readStoredGenerationState(roomId)?.generationId !== expected.generationId) return;
   try {
@@ -314,10 +356,13 @@ export function clearStoredGenerationState(roomId: string, expected?: { generati
       localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
     }
   } catch {
+    // localStorage の失敗は無視する
     // ignore localStorage failures
   }
 }
 
+// 「進行中の生成」キーが指すルームの生成状態を読む。キーが壊れていれば削除して null を返す。
+// Reads the generation state of the room the active-generation key points to; removes the key and returns null if it is broken.
 export function readActiveStoredGenerationState(): StoredGenerationState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.activeChatGeneration);
@@ -345,6 +390,7 @@ export function clearAllHomePagePersistedState() {
   try {
     clearAllCachedHistory();
   } catch {
+    // localStorage の失敗は無視する
     // ignore localStorage failures
   }
 
@@ -357,6 +403,7 @@ export function clearAllHomePagePersistedState() {
       }
     }
   } catch {
+    // localStorage の失敗は無視する
     // ignore localStorage failures
   }
 
@@ -369,10 +416,13 @@ export function clearAllHomePagePersistedState() {
     localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
     localStorage.removeItem(STORAGE_KEYS.memoComposeDraft);
   } catch {
+    // localStorage の失敗は無視する
     // ignore localStorage failures
   }
 }
 
+// ユーザー ID を持ち主マーカーの値にする。ID が空なら未ログイン用の "anonymous"。
+// Turns a user id into the owner-marker value; an empty id becomes "anonymous" for signed-out users.
 function normalizeUserScopeValue(userId: string | null): string {
   const trimmed = typeof userId === "string" ? userId.trim() : "";
   return trimmed ? `user:${trimmed}` : ANONYMOUS_USER_SCOPE;
@@ -390,6 +440,7 @@ export function clearStoredUserScope() {
   try {
     localStorage.removeItem(USER_SCOPE_KEY);
   } catch {
+    // localStorage の失敗は無視する
     // ignore localStorage failures
   }
 }
@@ -412,6 +463,7 @@ export function reconcileStoredUserScope(userId: string | null): { changed: bool
     try {
       localStorage.setItem(USER_SCOPE_KEY, nextScope);
     } catch {
+      // localStorage の失敗は無視する
       // ignore localStorage failures
     }
     return { changed: true };
@@ -421,6 +473,7 @@ export function reconcileStoredUserScope(userId: string | null): { changed: bool
     try {
       localStorage.setItem(USER_SCOPE_KEY, nextScope);
     } catch {
+      // localStorage の失敗は無視する
       // ignore localStorage failures
     }
   }
@@ -428,12 +481,16 @@ export function reconcileStoredUserScope(userId: string | null): { changed: bool
   return { changed: false };
 }
 
+// 履歴 API の sender を ChatSender に直す。user と thinking 以外はすべて assistant として扱う。
+// Maps a history API sender to ChatSender; anything other than user and thinking is treated as assistant.
 export function normalizeHistorySender(sender: string | undefined): ChatSender {
   if (sender === "user") return "user";
   if (sender === "thinking") return "thinking";
   return "assistant";
 }
 
+// 保存用の sender 名に変換する。アシスタント側は "bot" として書く（読み戻しは normalizeStoredSender）。
+// Converts to the sender name used for storage; the assistant side is written as "bot" (read back by normalizeStoredSender).
 export function toStoredSender(sender: ChatSender): string {
   if (sender === "user") return "user";
   return "bot";
@@ -457,6 +514,8 @@ export {
 // Imported separately from the re-export above because consumeAuthSuccessHint uses it locally.
 import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
 
+// Google OAuth のコールバックが付けた認証成功のヒントを URL から取り除き、前の利用者の永続状態を破棄する。ヒントがなければ false。
+// Strips the auth-success hint added by the Google OAuth callback from the URL and wipes the previous user's persisted state; returns false when the hint is absent.
 export function consumeAuthSuccessHint() {
   if (typeof window === "undefined") return false;
 

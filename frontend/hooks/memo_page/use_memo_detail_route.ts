@@ -1,3 +1,5 @@
+// メモ画面で開いているメモを URL の ?memo=<id> と同期するフック（ブラウザの戻る操作で詳細を閉じられるようにする）。
+// Hook that syncs the open memo with the ?memo=<id> URL query on the memo page, so the browser back action closes the detail.
 import { useRouter } from "next/router";
 import { useEffect, useRef } from "react";
 

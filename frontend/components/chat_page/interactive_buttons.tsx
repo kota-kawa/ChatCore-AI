@@ -1,3 +1,5 @@
+// AI が出す選択ボタン（はい/いいえ・単一選択・複数選択）。選んだ内容を次の発話として送る。通常チャットと共有チャットで使われる。
+// Choice buttons the AI can present (yes/no, single, multiple select) that send the pick as the next message; used by the chat and the shared chat.
 import { memo, useCallback, useId, useMemo, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";

@@ -1,7 +1,16 @@
+// チャット画面（ホーム）で共有する型定義。ルーム・プロジェクト・メッセージとそのパーツ（生成 UI、選択ボタン、承認カードなど）、
+// 履歴 API の応答、localStorage へ保存する生成状態、モデル選択肢を含む。
+// Shared type definitions for the chat (home) screen: rooms, projects, messages and their parts (generated UI, choice buttons, approval cards),
+// history API payloads, the generation state saved to localStorage, and model options.
+
 import type { ToolApprovalApi } from "../../types/generated/api_schemas";
 
+// ルームの種類。temporary（一時チャット）は本文を端末に保存しない。
+// Kind of room; a temporary chat never stores its text on the device.
 export type ChatRoomMode = "normal" | "temporary";
 
+// 画面で扱うタスク（定型プロンプト）。欠けた値は task_utils の normalizeTask が補う。
+// A task (reusable prompt) as the UI handles it; missing values are filled by normalizeTask in task_utils.
 export type NormalizedTask = {
   task_id: number | null;
   system_task_key?: string | null;
@@ -53,7 +62,11 @@ export type ChatRoomsPage = {
   error?: string;
 };
 
+// メッセージの送り手。thinking は生成の開始直後に出す「思考中」の仮メッセージ。
+// Who sent a message; thinking is the placeholder message shown right after generation starts.
 export type ChatSender = "user" | "assistant" | "thinking";
+// 生成の段階。準備中、検索中（Web・メモ・共有プロンプト）、回答の生成中。
+// Generation phase: preparing, searching (web, memos, shared prompts), or generating the answer.
 export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 
 // サンドボックス内でローカル配信されるライブラリの識別子。
@@ -70,6 +83,8 @@ export type GenerativeUiArtifactImage = {
   sourceTitle?: string;
 };
 
+// 生成 UI（サンドボックス内の iframe で動かす HTML・CSS・JS の組）。
+// A generated UI: the HTML, CSS and JS bundle that runs inside the sandboxed iframe.
 export type GenerativeUiArtifactV1 = {
   version: 1;
   title: string;
@@ -121,6 +136,8 @@ export type InteractiveButtonsV1 = {
   options?: string[];
 };
 
+// 回答に添える Web 検索の画像。出典のページ URL とタイトルを持つ。
+// An image from web search attached to an answer, with its source page URL and title.
 export type WebSearchImageV1 = {
   url: string;
   alt: string;
@@ -128,6 +145,8 @@ export type WebSearchImageV1 = {
   sourceTitle?: string;
 };
 
+// メッセージを構成するパーツ。text 以外は画面側で専用の部品として描画する。
+// A part that makes up a message; everything other than text is rendered by a dedicated UI component.
 export type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
@@ -165,6 +184,8 @@ export type ChatHistoryAttachedImage = {
   height: number;
 };
 
+// 画面に表示するメッセージ 1 件。ストリーミング中や保存済みなど、状態に応じて任意の項目が付く。
+// One message displayed in the UI; optional fields are attached depending on its state (streaming, persisted, etc.).
 export type UiChatMessage = {
   id: string;
   sender: ChatSender;
@@ -172,25 +193,34 @@ export type UiChatMessage = {
   parts?: ChatMessagePart[];
   generationPhase?: ChatGenerationPhase;
   streaming?: boolean;
+  /** 生成 UI のフェンスをストリーミング中で、描画できるパーツがまだ届いていない間は true。 */
   /** True while a generative UI fence is streaming and no renderable part has arrived yet. */
   generativeUiPending?: boolean;
+  /** exact のフェンスは検証後に実行できる。probable のフェンスは状態表示のみ。 */
   /** Exact fences can execute after validation; probable fences are status-only. */
   generativeUiFenceKind?: "exact" | "probable";
   error?: boolean;
+  /** サーバーがこの回答を途中までのものとして保存した（SSE の `incomplete`）ときは true。 */
   /** True when the server saved this answer as a partial one (SSE `incomplete`). */
   partial?: boolean;
   attachedFileNames?: string[];
   attachedImages?: ChatAttachedImage[];
+  /** サーバー側の chat_history の ID。DB に保存済みのメッセージにだけ付く。 */
   /** Server-side chat_history id; present for persisted (DB-backed) messages. */
   serverId?: number;
+  /** 同じ位置の分岐（別バージョン）のうち、このメッセージが何番目か（1 始まり）。 */
   /** 1-based position of this version among its sibling branches. */
   versionIndex?: number;
+  /** この位置にある分岐の総数。1 より大きければバージョンを切り替えられる。 */
   /** Total number of sibling branches at this point (>1 means it is switchable). */
   versionCount?: number;
+  /** 分岐すべてのサーバー側 ID を並べたもの。バージョン切り替えに使う。 */
   /** Ordered server ids of all sibling branches, used to switch versions. */
   siblingIds?: number[];
 };
 
+// 履歴 API が返すメッセージ 1 件（サーバーの snake_case のまま）。
+// One message as returned by the history API (still in the server's snake_case).
 export type ChatHistoryMessagePayload = {
   id?: number;
   message?: string;
@@ -228,6 +258,8 @@ export type ChatResponsePayload = {
   roomTitle?: string;
 };
 
+// SSE の 1 ブロックを解析したイベント。event 名・連番の id・JSON の data を持つ。
+// A parsed SSE block: event name, sequence id, and JSON data.
 export type StreamParsedEvent = {
   event: string;
   id?: number;
@@ -266,6 +298,8 @@ export type StoredHistoryEntry = {
   parts?: ChatMessagePart[];
 };
 
+// localStorage に保存する生成の途中経過。リロードや再接続の後、どのイベントまで受信し、どこまで本文が届いたかを復元するために使う。
+// Generation progress saved to localStorage, used after a reload or reconnect to restore which event was received last and how much text has arrived.
 export type StoredGenerationState = {
   roomId: string;
   roomMode: ChatRoomMode;
@@ -275,6 +309,8 @@ export type StoredGenerationState = {
   updatedAt: number;
 };
 
+// モデル選択肢 1 件。value は送信するモデル識別子、label は固有名詞の表示名。
+// One model option: value is the model identifier sent to the server, label is its proper-noun display name.
 export type ModelOption = {
   value: string;
   /** プロバイダーとモデル名（翻訳しない固有名詞） / Provider and model name (a proper noun, never translated) */

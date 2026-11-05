@@ -1,3 +1,6 @@
+// カテゴリ別の公開投稿と案内を組み立てる。
+// Composes public posts and guidance for a category page.
+
 import type { ReactNode } from "react";
 
 import { LpFooter } from "../lp/lp_footer";

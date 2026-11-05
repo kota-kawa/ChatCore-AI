@@ -1,3 +1,6 @@
+// 管理画面の入口を提供し、管理者向けのパネルを配置する。
+// Provides the administration page and its management panels.
+
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import useSWR from "swr";

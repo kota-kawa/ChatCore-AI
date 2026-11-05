@@ -1,3 +1,5 @@
+// メモ画面の操作結果（保存・削除・エラーなど）を画面下に出す通知トースト。MemoPage から使われる。
+// Toast shown at the bottom of the memo screen for operation results (saved, deleted, errors, and so on); used by MemoPage.
 import type { FlashState } from "../../lib/memo/types";
 
 // 画面下に固定で出す通知。スクロール位置に関係なく見え、一覧を押し下げない。

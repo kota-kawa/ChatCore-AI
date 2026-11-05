@@ -1,3 +1,6 @@
+// 公開投稿の作者プロフィールをモーダルで表示する。
+// Shows a public post author's profile in a modal.
+
 import { useState, type RefObject } from "react";
 
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";

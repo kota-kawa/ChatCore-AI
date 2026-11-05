@@ -1,3 +1,5 @@
+// メモ本文の Markdown をサニタイズした HTML として描画するコンポーネント。チェックリストのその場での切り替えと、検索語の強調に対応する。メモ一覧・マイコンテキスト・提案パネルから使われる。
+// Component that renders memo Markdown as sanitized HTML, with in-place checklist toggling and search-term highlighting; used by the memo list, my context, and the suggestion panel.
 import { useEffect, useMemo, useRef, type MouseEvent } from "react";
 
 import type { RenderedTask } from "../../lib/memo/list_editing";
@@ -6,6 +8,7 @@ import { formatMemoOutput } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
 // ---------------------------------------------------------------------------
+// MemoMarkdown コンポーネント（LLM が整えた Markdown を描画する）
 // MemoMarkdown component (renders LLM-formatted markdown)
 // ---------------------------------------------------------------------------
 
@@ -29,6 +32,8 @@ function taskLabel(box: HTMLInputElement): string {
   return (row.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+// クリック位置から対象のチェック欄を探す。欄そのもの、または同じ行で欄の周囲 TASK_HIT_SLOP_PX 以内のクリックを拾い、リンクとボタンは除く。
+// Finds the checkbox for a click: the box itself, or a click on its row within TASK_HIT_SLOP_PX of it; links and buttons are excluded.
 function findTappedTask(container: HTMLElement, event: MouseEvent): HTMLInputElement | null {
   const target = event.target as HTMLElement;
   if (target instanceof HTMLInputElement && target.type === "checkbox") return target;

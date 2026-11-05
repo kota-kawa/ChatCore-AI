@@ -1,3 +1,5 @@
+// 編集したユーザー発言や再生成した回答の「‹ n/m ›」バージョン切り替え。chat_message_list.tsx がメッセージごとに描画する。
+// The "‹ n/m ›" version switcher for edited user prompts and regenerated answers; chat_message_list.tsx renders it per message.
 import type { UiChatMessage } from "../../lib/chat_page/types";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -9,6 +11,7 @@ type BranchNavigatorProps = {
   onSwitchBranch: (messageId: number) => void;
 };
 
+// ChatGPT 風の ‹ n/m › 操作。メッセージのブランチ（バージョン）を切り替える。
 // ChatGPT-style ‹ n/m › control for switching between branch versions of a
 // message (edited user prompts, or regenerated assistant answers).
 // メッセージのバージョン（編集済みプロンプトや再生成された回答）を切り替えるコンポーネント

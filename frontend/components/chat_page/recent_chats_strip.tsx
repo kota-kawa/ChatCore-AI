@@ -1,3 +1,5 @@
+// ホーム画面の入力欄の下に出す「最近のチャット」の1行。setup_section.tsx から使われる。
+// The "recent chats" row below the home screen composer; used by setup_section.tsx.
 import { useHomePageSetupChatContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
 import { splitPinnedChatRooms } from "../../lib/chat_page/home_page_controller_utils";

@@ -1,3 +1,5 @@
+// 認証後の遷移先（next パラメータ）の検証と、Google ログイン URL の組み立てを行うユーティリティ。
+// Utilities that validate the post-auth redirect (next parameter) and build the Google login URL.
 // nextパラメータのパスをサニタイズし、オープンリダイレクト攻撃を防ぐ
 // Sanitize the next parameter path to prevent open redirect attacks
 export function sanitizeNextPath(rawNextPath: string | null): string {

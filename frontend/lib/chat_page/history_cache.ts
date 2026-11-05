@@ -1,3 +1,6 @@
+// ルーム履歴をブラウザーへ保存し、容量制限とキャッシュの読み戻しを扱う。
+// Persists room history in the browser and handles quota limits and cache restoration.
+
 import type { StoredHistoryEntry } from "./types";
 
 const HISTORY_KEY_PREFIX = "chatHistory_";
@@ -29,6 +32,7 @@ function getHistoryKey(roomId: string) {
 }
 
 function approximateStorageBytes(value: string) {
+  // 保存文字列はUTF-16なので、ブラウザーごとの容量判定に対して安全側の2バイトで数える。
   // localStorage stores DOMStrings. Counting two bytes per UTF-16 code unit is
   // intentionally conservative across browser quota implementations.
   return value.length * 2;
@@ -68,6 +72,7 @@ function writeHistoryIndex(index: HistoryIndex) {
     }
     localStorage.setItem(HISTORY_INDEX_KEY, JSON.stringify(index));
   } catch {
+    // LRU情報を保存できなくても、キャッシュ済みメッセージは利用できる。
     // The cached messages remain usable without the best-effort LRU metadata.
   }
 }
@@ -98,6 +103,7 @@ function removeCachedRoom(room: Pick<CachedRoom, "roomId" | "key">, index: Histo
   try {
     localStorage.removeItem(room.key);
   } catch {
+    // キャッシュ掃除の失敗でチャット操作を中断しない。
     // Best-effort cache cleanup must not interrupt the chat UI.
   }
   delete index[room.roomId];
@@ -284,6 +290,7 @@ export function clearAllCachedHistory() {
     }
     localStorage.removeItem(HISTORY_INDEX_KEY);
   } catch {
+    // 利用不能なlocalStorageには消去できるデータもないため、失敗を許容する。
     // Best-effort: an inaccessible localStorage has nothing to clear anyway.
   }
 }

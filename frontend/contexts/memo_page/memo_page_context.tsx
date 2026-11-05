@@ -1,3 +1,5 @@
+// メモ画面のコントローラー（useMemoPageController）の戻り値を、用途別の Context に分けて配る。
+// Distributes the memo page controller (useMemoPageController) state through purpose-specific contexts.
 import { createContext, useContext, useMemo, type Context, type ReactNode } from "react";
 import { useMemoPageController } from "../../hooks/memo_page/use_memo_page_controller";
 
@@ -212,6 +214,8 @@ const MemoPageDetailContext = createContext<MemoPageDetailContextValue | null>(n
 const MemoPageModalsContext = createContext<MemoPageModalsContextValue | null>(null);
 const MemoPageFlashContext = createContext<MemoPageFlashContextValue | null>(null);
 
+// Provider に渡す props。controller は呼び出し側で作った戻り値をそのまま受け取る
+// Provider props; controller is the controller hook's return value created by the caller
 type MemoPageContextProviderProps = {
   controller: MemoPageControllerState;
   children: ReactNode;
@@ -593,11 +597,15 @@ export function MemoPageContextProvider({ controller, children }: MemoPageContex
   );
 }
 
+// controller hook を呼び出して Context に配る、画面用の入口
+// Page-level entry point that calls the controller hook and feeds the contexts
 export function MemoPageControllerProvider({ children }: { children: ReactNode }) {
   const controller = useMemoPageController();
   return <MemoPageContextProvider controller={controller}>{children}</MemoPageContextProvider>;
 }
 
+// Provider の外で使われたら、原因が分かるエラーを投げる
+// Throw a descriptive error when used outside the provider
 function useRequiredContext<T>(context: Context<T | null>, contextName: string): T {
   const value = useContext(context);
   if (!value) {

@@ -1,3 +1,5 @@
+// 共有チャットのユーザー発言の本文を描画する。呼び出し元は shared_chat_message_list.tsx。
+// Renders the body of a user message in a shared chat. Used by shared_chat_message_list.tsx.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatUserInputForDisplay } from "../../scripts/chat/chat_ui";

@@ -1,3 +1,5 @@
+// スピナーとラベルを横に並べて表示する、インライン用のローディング表示。
+// Inline loading indicator showing a spinner next to a label.
 // インラインローディングコンポーネントのprops型定義
 // Props type definition for the inline loading component
 type InlineLoadingProps = {

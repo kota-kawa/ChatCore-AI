@@ -1,3 +1,5 @@
+// 認証ゲートウェイでデモコードを入力してログインするためのフォーム部品。送信処理は use_demo_login フックが担当する。
+// Form on the auth gateway for signing in with a demo code; the submit logic is handled by the use_demo_login hook.
 import type { FormEvent } from "react";
 
 import { useTranslation } from "../../../../contexts/locale_context";
@@ -16,6 +18,8 @@ type AuthDemoCodeFormProps = {
 // A quiet, separate entry for people who hold a demo code
 export function AuthDemoCodeForm({ code, error, pending, onCodeChange, onSubmit }: AuthDemoCodeFormProps) {
   const { t } = useTranslation();
+  // Enter キーでの送信をページ遷移させず、処理中・空入力のときは二重送信しない
+  // Handle Enter-key submit without a page navigation, and skip it while pending or when the input is empty
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!pending && code.trim()) onSubmit();

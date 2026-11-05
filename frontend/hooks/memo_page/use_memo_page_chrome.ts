@@ -1,3 +1,5 @@
+// メモ画面全体の副作用（body クラスの付け外し、カスタム要素の読み込み、モーダル表示中のスクロール抑止）を扱うフック。
+// Hook for memo page level side effects: body classes, loading custom elements, and scroll locking while modals are open.
 import { useEffect } from "react";
 
 import type { MemoDetail } from "../../lib/memo/types";

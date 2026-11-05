@@ -1,3 +1,5 @@
+// 新規登録ページ（/register）。認証ゲートウェイ画面をそのまま表示する。
+// Sign-up page (/register); simply renders the authentication gateway screen.
 import AuthGatewayPage from "../components/auth/auth_gateway_page";
 
 // 登録ページのメインコンポーネント

@@ -1,3 +1,7 @@
+// ユーザーの入力文から URL を検出し、表示用のドメイン名を取り出す小さなヘルパー。
+// Small helpers that detect URLs in the user's input text and derive a domain name for display.
+// Used by components/chat_page/chat_main_section.tsx.
+
 const URL_RE = /https?:\/\/[^\s<>"'`()[\]{}|\\^]+/gi;
 const MAX_DETECTED_URLS = 3;
 

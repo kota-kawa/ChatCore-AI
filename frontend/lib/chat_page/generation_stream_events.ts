@@ -59,6 +59,8 @@ function isAlreadySearched(data: Record<string, unknown>): boolean {
   return data.status === "already_searched";
 }
 
+// 共有プロンプト検索のイベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
+// Converts shared-prompt search events into thinking-status text; null for other events.
 function interpretSharedPromptSearchEvent(
   event: string,
   data: Record<string, unknown>,
@@ -94,6 +96,8 @@ function interpretSharedPromptSearchEvent(
   return null;
 }
 
+// メモ・マイコンテキスト検索のイベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
+// Converts memo / My Context search events into thinking-status text; null for other events.
 function interpretPersonalKnowledgeSearchEvent(
   event: string,
   data: Record<string, unknown>,
@@ -132,6 +136,8 @@ function interpretPersonalKnowledgeSearchEvent(
   return null;
 }
 
+// Web 検索のイベントを、思考中ステータスの文言へ変換する。失敗は理由（設定・上限・その他）ごとに文言を分ける。対象外のイベントなら null。
+// Converts web search events into thinking-status text, with separate wording per failure reason (configuration, quota, other). Null for other events.
 function interpretWebSearchEvent(
   event: string,
   data: Record<string, unknown>,
@@ -229,6 +235,8 @@ function interpretWorkspaceToolEvent(
   return null;
 }
 
+// done イベントを最終応答へ変換する。本文もパーツ（検索画像だけのものは除く）も空なら、空の吹き出しではなく empty_answer にする。
+// Converts the done event into the final answer. If both the body and the answer parts (excluding web-search-image-only parts) are empty, it becomes empty_answer instead of a blank bubble.
 function interpretDoneEvent(
   data: Record<string, unknown>,
   context: GenerationStreamEventContext,
@@ -261,6 +269,8 @@ function interpretDoneEvent(
   };
 }
 
+// 途中で終了した回答のイベントを変換する。ここまでの本文を残し、サーバーのメッセージ（無ければ既定文言）を添える。
+// Converts the event for an answer that ended early: keeps the text so far and attaches the server message (or a default).
 function interpretIncompleteEvent(
   data: Record<string, unknown>,
   context: GenerationStreamEventContext,
@@ -281,6 +291,8 @@ function interpretIncompleteEvent(
   };
 }
 
+// SSE の 1 イベントを、画面に加える変化（GenerationStreamAction）へ変換する入口。未知のイベントは ignored にする。
+// Entry point converting one SSE event into the change to apply to the screen (GenerationStreamAction); unknown events become ignored.
 export function interpretGenerationStreamEvent(
   parsed: StreamParsedEvent,
   context: GenerationStreamEventContext,

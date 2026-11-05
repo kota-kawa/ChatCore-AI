@@ -1,3 +1,5 @@
+// アプリ全体で共通のコピーボタン。コピー処理と状態管理は useCopyFeedback が担い、ここは描画だけを行う。
+// The copy button shared across the app. useCopyFeedback owns the copy logic and state; this component only renders.
 import type { Ref } from "react";
 
 import { COPY_ERROR_ICON, COPY_IDLE_ICON, COPY_SUCCESS_ICON } from "../../lib/copy_feedback";
@@ -72,6 +74,8 @@ export function CopyButton({
 }: CopyButtonProps) {
   const { state, copied, failed, copy, run } = useCopyFeedback();
 
+  // onCopy があれば副作用を含むコピーとして実行し、無ければ getText の文字列をコピーする
+  // Run onCopy when provided (copy with side effects); otherwise copy the string from getText
   const handleClick = () => {
     if (onCopy) {
       void run(onCopy);
@@ -82,6 +86,8 @@ export function CopyButton({
     }
   };
 
+  // 準備中・コピー成功・失敗・待機の順にアイコンを決める
+  // Pick the icon in this order: busy, copied, failed, idle
   const iconClass = busy
     ? busyIconClass || idleIcon
     : copied
@@ -90,6 +96,8 @@ export function CopyButton({
         ? COPY_ERROR_ICON
         : idleIcon;
 
+  // コピー直後は copiedLabel（無ければ label）をアクセシブル名にする
+  // Right after copying, use copiedLabel (or label) as the accessible name
   const activeLabel = copied ? copiedLabel ?? label : label;
 
   const classes = [

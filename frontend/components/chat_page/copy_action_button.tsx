@@ -1,3 +1,5 @@
+// チャットメッセージ下のコピーボタン。共通の CopyButton をチャット用の見た目で包む。chat_message_list.tsx で使われる。
+// Copy button under a chat message, wrapping the shared CopyButton with the chat styling; used by chat_message_list.tsx.
 import { CopyButton } from "../ui/copy_button";
 import { useTranslation } from "../../contexts/locale_context";
 

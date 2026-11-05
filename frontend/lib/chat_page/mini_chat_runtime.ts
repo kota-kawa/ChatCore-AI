@@ -1,3 +1,9 @@
+// サポートエージェント（MiniChat）が返した操作計画のステップを、ブラウザ上で実行する処理とその周辺。
+// 待機・DOM 入力・クリック・画面遷移、遷移をまたぐ再開用の sessionStorage 保存、実行前の確認要否の判定を持つ。
+// Runtime for executing the action-plan steps returned by the support agent (MiniChat) in the browser:
+// waiting, DOM input/click, navigation, resume state saved in sessionStorage across page loads, and the confirmation check.
+// Used by components/chat_page/MiniChat.tsx.
+
 import {
   createAiAgentMessageId,
   cssEscape,
@@ -38,6 +44,7 @@ export type PendingActionState = {
 export type NavigationOutcome = {
   ok: boolean;
   message?: string;
+  /** 移動が同じページ内（Next ルーター）で完了し、エージェントがマウントされたままなら true。 */
   /** true when the move stayed in-place (Next router) and the agent is still mounted. */
   clientSide: boolean;
   needsReplan?: boolean;
@@ -122,6 +129,8 @@ export const MAX_DOM_LENGTH = 12_000;
 export const MAX_INPUT_LENGTH = 4_000;
 export const RESUME_READY_TIMEOUT_MS = 12_000;
 
+// Next.js が配信する内部ページのうち、ルーターの push でその場で遷移できるもの
+// （認証ページは意図的に除外している。計画の途中でエージェントが黙ってアンマウントされないようにするため）。
 // Internal pages served by Next.js that can be reached with an in-place router push
 // (auth pages are intentionally excluded so the agent never silently unmounts mid-plan).
 export const CLIENT_NAVIGABLE_ROUTES = new Set([
@@ -213,6 +222,7 @@ export function clearStoredConversation(storageKeys: MessageStorageKeys) {
     window.sessionStorage.removeItem(storageKeys.executed);
     window.sessionStorage.removeItem(storageKeys.legacyExecuted);
   } catch {
+    // ストレージの失敗は無視する
     // ignore storage failures
   }
 }
@@ -295,6 +305,7 @@ export function writePendingActionSteps(steps: ActionStep[], expectedPath?: stri
     }));
     window.sessionStorage.setItem(AI_AGENT_OPEN_STATE_KEY, JSON.stringify(true));
   } catch {
+    // ストレージの失敗は無視する
     // ignore storage failures
   }
 }
@@ -306,6 +317,7 @@ export function clearPendingActionSteps() {
   try {
     window.sessionStorage.removeItem(PENDING_ACTION_STEPS_KEY);
   } catch {
+    // ストレージの失敗は無視する
     // ignore storage failures
   }
 }
@@ -411,6 +423,8 @@ async function waitForPagePath(
     : { ok: false, message: miniChatCopy(locale, "navigationNotReady"), needsReplan: false };
 }
 
+// クライアント側のルーター遷移の後、URL が遷移先（または認証画面）に落ち着いたことを確かめてから、
+// 後続のステップを新しいページに対して実行させる。
 // After a client-side router push, confirm the URL settled on the destination (or an
 // auth gate) before letting follow-up steps run against the new page.
 export async function waitForRouteSettled(expectedPath: string, locale: Locale = "ja"): Promise<StepExecutionResult> {
@@ -433,9 +447,12 @@ export async function waitForPendingResumeReady(state: PendingActionState, local
       document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
     });
   }
+  // DOM を調べる前に、読み込み直したページで React のコミットと effect が走り終わるのを待つ。
   // Let React commit and run effects on the freshly loaded page before probing the DOM.
   await nextFrame();
   const ready = await waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS, locale);
+  // ページは読み込めたが計画の対象が無い場合。計画は遷移先の中身を見ずに作られているため、
+  // すぐ失敗にせず、改めて画面を観測して計画を作り直す。
   // The page loaded but the planned target is absent: the plan was built blind against
   // this destination, so re-observe and re-plan rather than failing outright.
   return ready.ok ? ready : { ...ready, needsReplan: true };
@@ -475,6 +492,7 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+// input・textarea、または登録済みのメモエディタに値を設定する。
 // Sets a value on an input, textarea, or registered memo editor.
 function setInputValue(selector: string, value: string, locale: Locale): StepExecutionResult {
   const el = getElement<HTMLElement>(selector);
@@ -553,6 +571,7 @@ function executeAppAction(step: ActionStep, locale: Locale): StepExecutionResult
   const command = step.command || "";
   const args = step.args || {};
 
+  // navigation.openPage は executeActionStep の共通のナビゲーション分岐で処理する。
   // navigation.openPage is handled by the unified navigation branch in executeActionStep.
 
   if (command === "chat.fillSetupMessage") {
@@ -666,6 +685,8 @@ async function verifyStep(step: ActionStep, locale: Locale): Promise<StepExecuti
   if (step.action === "focus" && step.selector) {
     return { ok: document.activeElement === getElement(step.selector), message: miniChatCopy(locale, "focusNotVerified", { target: step.selector }) };
   }
+  // クリックの効果（遷移・要素の削除・非同期の UI 更新）は汎用的には観測できず、遷移を起こすと
+  // 対象要素が消えるのも正常な挙動。クリックの前に要素の存在と有効状態は確認済みなので、ここでは完了とみなす。
   // A click's effect (navigation, removal, async UI) isn't generically observable, and the
   // target legitimately disappears when it triggers a navigation. The element's presence and
   // enabled state were already confirmed before clicking, so treat the click as done.
@@ -686,6 +707,7 @@ async function executeNavigation(
   if (!isAllowedNavigationPath(path)) {
     return { ok: false, message: miniChatCopy(locale, "navigationNotAllowed"), needsReplan: false };
   }
+  // すでに遷移先にいる場合は移動する必要がないので、後続のステップをそのまま実行させる。
   // Already on the destination: nothing to navigate, let following steps run in place.
   if (pathnamesMatch(getInternalPathname(path), window.location.pathname)) return { ok: true };
   const outcome = await navigateInternal(path);
@@ -738,6 +760,7 @@ function performActionStep(step: ActionStep, locale: Locale): StepExecutionResul
   return scrollElement(step.selector, locale);
 }
 
+// 操作の前に、ステップの対象要素が現れるのを待つ。navigate と wait は自分で待ち時間を管理する。
 // Wait for the step's target to be present before acting. Navigation/wait manage their own timing.
 async function waitForStepTarget(step: ActionStep, locale: Locale): Promise<StepExecutionResult> {
   if (step.action === "app_action") {
@@ -749,6 +772,10 @@ async function waitForStepTarget(step: ActionStep, locale: Locale): Promise<Step
   return { ok: true };
 }
 
+// 画面上のラベルや属性は、操作の意図の分類には使わない。
+// ここに挙げたコマンドは UI だけを動かす操作として明示的に登録したもの。コマンド名は
+// 画面に出す文言ではなくプロトコル上のメタデータなので、構造的な判定に使っても安全。
+// この一覧に無いコマンドは、実行前に確認を取る。
 // Visible labels and attributes are never used for intent classification.
 // These commands are explicitly registered as UI-only operations. The command name is
 // protocol metadata, not user-facing text, so it is safe to use for the structural guard.
@@ -768,6 +795,12 @@ const NON_MUTATING_APP_ACTION_COMMANDS = new Set([
 ]);
 
 /**
+ * 型付きの操作メタデータだけを使い、確認が必要な操作かを判定する。
+ *
+ * DOM への直接クリックは意図が分からないものとして扱い、必ず確認する（画面上のラベルを
+ * 意図の分類に使ってはならない）。型付きの app_action コマンドは、更新を伴わないものとして
+ * 登録済みの場合に限って確認を省略できる。メモ編集と未登録のコマンドは確認が必要なまま。
+ *
  * Decide whether an action needs a confirmation using typed action metadata only.
  *
  * Direct DOM clicks are intentionally treated as unknown and therefore confirmed;
@@ -820,10 +853,13 @@ async function executeActionStep(
     return executeNavigation(step, navigateInternal, locale);
   }
 
+  // 対象が現れるのを一度だけ待つ。最後まで現れないなら、リトライしても結果は変わらない。
   // Wait once for the target to exist; if it never appears, retrying won't help.
   const ready = await waitForStepTarget(step, locale);
   if (!ready.ok) return ready;
 
+  // 状態を変える操作の前には必ず確認する。意図が不明な DOM クリックと未登録の app_action コマンドは、
+  // ラベルを調べずに、すべて確認の対象にする。
   // Confirm before any state-changing action. Unknown DOM clicks and unregistered
   // app_action commands are confirmation-gated without inspecting their labels.
   const needsConfirmation = requiresActionConfirmation(step);
@@ -831,6 +867,8 @@ async function executeActionStep(
     return { ok: false, message: miniChatCopy(locale, "cancelled"), needsReplan: false };
   }
 
+  // クリックや型付き操作は、対象の React ハンドラが結び付く前（特に画面遷移の直後）に届くことがあるため、
+  // 実行と検証のサイクルを 1 回だけやり直す。
   // Clicks and typed actions can briefly land before the target's React handlers are
   // bound (notably right after a navigation), so retry the perform+verify cycle once.
   const maxAttempts = step.action === "wait" ? 1 : 2;
@@ -862,6 +900,8 @@ export async function executeActionSteps(
     const navigationPathname = getInternalPathname(navigationPath);
     const willNavigate = Boolean(navigationPathname) && !pathnamesMatch(navigationPathname, window.location.pathname);
 
+    // どのステップを実行するよりも先に、後続の分を保存しておく。明示的な遷移はページを再読み込みし、
+    // 検出できないクリックもページを離脱させうる。beforeunload の保険がこの保存内容を読む。
     // Persist the continuation before any step runs: an explicit navigation reloads the
     // page, and an undetected click may unload it. The beforeunload net reads this context.
     setUnloadContext(remaining.length ? { remaining, expectedPath: navigationPathname || undefined } : null);
@@ -879,10 +919,12 @@ export async function executeActionSteps(
       return { ...result, failedStepIndex: stepIndex };
     }
 
+    // ページ全体の再読み込みが目前。残りのステップは再開用にすでに保存してある。
     // A full document reload is imminent; remaining steps are already persisted for resume.
     if (result.navigation === "hard" && remaining.length) {
       return { ok: true, pendingNavigation: true };
     }
+    // その場での遷移でマウントが保たれたので、再開用の保存を捨て、ここで実行を続ける。
     // In-place navigation kept us mounted: drop the resume snapshot and keep executing here.
     if (result.navigation === "client") {
       clearPendingActionSteps();

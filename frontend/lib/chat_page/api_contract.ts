@@ -1,3 +1,5 @@
+// チャット API の応答（履歴・ルーム一覧・生成状態・共有・生成 UI・承認カードなど）を、画面が扱う型へ正規化する関数群。生成スキーマで検証できる部分は generated_contract.ts に任せ、ここは追加キーの手書き正規化を担う。
+// Functions that normalize chat API responses (history, room list, generation status, sharing, generated UI, approval cards) into the types the UI uses. Parts the generated schemas can validate are delegated to generated_contract.ts; this file hand-normalizes the extra keys.
 import type {
   ChatHistoryMessagePayload,
   ChatHistoryAttachedImage,
@@ -112,6 +114,11 @@ const ARTIFACT_IMAGE_PATH_PATTERN = /^\/api\/chat\/web-images\/[0-9a-f]{32}\/[A-
 // Same value as MAX_WEB_SEARCH_IMAGES_PER_REPLY in services/message_parts_display.py
 const MAX_ARTIFACT_IMAGES = 5;
 
+// 日本語: 生成 UI に添える画像の参照を検証して残す。ref は 1〜5 の整数で重複不可、
+//         url は署名済みの中継パスだけ、出典 URL は http/https のみ許可する。
+// English: Validates and keeps the image references attached to a generated UI: ref is an integer
+//          from 1 to 5 without duplicates, url must be a server-signed relay path, and the source
+//          URL must be http/https.
 function normalizeArtifactImages(rawImages: unknown): GenerativeUiArtifactImage[] {
   if (!Array.isArray(rawImages)) return [];
   const images: GenerativeUiArtifactImage[] = [];
@@ -141,6 +148,12 @@ type NormalizedArtifact = {
   status?: GenerativeUiArtifactStatusV1;
 };
 
+// 日本語: 生成 UI アーティファクトを検証して正規化する。バージョン・タイトル・html/css/js の
+//         どれかが不正なら artifact は null にして、表示用のステータス（失敗理由）を返す。
+//         高さは 160〜900 に丸め、ライブラリは許可リスト（three）だけ残す。
+// English: Validates and normalizes a generated-UI artifact. If the version, title, or html/css/js
+//          is invalid, artifact is null and a display status (failure reason) is returned. Height
+//          is clamped to 160-900 and libraries are limited to the allow-list (three).
 function normalizeArtifact(raw: unknown): NormalizedArtifact {
   const record = asRecord(raw);
   if (record.version !== 1) {

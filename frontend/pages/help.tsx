@@ -1,3 +1,6 @@
+// 使い方の案内とヘルプへの入口を提供する。
+// Provides usage guidance and entry points to help.
+
 import { SeoHead } from "../components/SeoHead";
 import Link from "next/link";
 import { HELP_CATEGORIES } from "../components/help/help_content";

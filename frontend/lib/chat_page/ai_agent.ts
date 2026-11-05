@@ -1,3 +1,5 @@
+// AI エージェント（画面操作を計画・実行する機能）のフロント側の型定義と、DOM 収集・パス検証・SSE 読み取りの補助関数。
+// Frontend types and helpers for the AI agent (the feature that plans and runs UI actions): DOM collection, path validation, and SSE reading.
 import type { MemoTextEdit } from "../memo/agent_edits";
 
 export type ActionStep = {
@@ -58,16 +60,31 @@ export type StepExecutionResult = {
   ok: boolean;
   message?: string;
   failedStepIndex?: number;
-  /** A full page reload was triggered; remaining steps were persisted for resume. */
+  /**
+   * ページ全体の再読み込みが始まった。残りのステップは再開用に保存済み。
+   *
+   * A full page reload was triggered; remaining steps were persisted for resume.
+   */
   pendingNavigation?: boolean;
   /**
+   * ステップが画面遷移したときに設定される。"client" はエージェントを残したままの
+   * アプリ内遷移（Next ルーター）、"hard" は文書全体の再読み込みが差し迫っていることを表す。
+   *
    * Set when a step navigated. "client" means an in-place (Next router) navigation
    * that kept the agent mounted; "hard" means a full document reload is imminent.
    */
   navigation?: "client" | "hard";
-  /** The destination pathname is now ready for the next step to act on. */
+  /**
+   * 遷移先のパスが、次のステップが操作できる状態になった。
+   *
+   * The destination pathname is now ready for the next step to act on.
+   */
   navigatedTo?: string;
-  /** The destination DOM no longer matches the plan; a fresh re-plan is needed. */
+  /**
+   * 遷移先の DOM が計画と合わなくなったので、計画を作り直す必要がある。
+   *
+   * The destination DOM no longer matches the plan; a fresh re-plan is needed.
+   */
   needsReplan?: boolean;
 };
 
@@ -134,7 +151,11 @@ export function isSafeInternalPath(path: string | undefined): path is string {
   return !/^\/[a-z][a-z0-9+.-]*:/i.test(path);
 }
 
-/** Collapse a pathname to a comparable form: lower-cased, query/hash stripped, no trailing slash. */
+/**
+ * パスを比較しやすい形（小文字、クエリとハッシュを除去、末尾スラッシュなし）にそろえる。
+ *
+ * Collapse a pathname to a comparable form: lower-cased, query/hash stripped, no trailing slash.
+ */
 export function normalizePathname(pathname: string | undefined): string {
   if (!pathname) return "";
   const withoutQuery = pathname.split(/[?#]/, 1)[0];
@@ -146,6 +167,9 @@ export function normalizePathname(pathname: string | undefined): string {
 }
 
 /**
+ * 2 つの内部パスが同じ行き先かを判定する。正規化して等しいか、一方がもう一方のパス区切り単位の
+ * 前方一致（/settings -> /settings/profile のようにサブルートへリダイレクトされる場合）なら同じとみなす。
+ *
  * Two internal pathnames refer to the same destination if they normalize equal,
  * or one is a path-segment prefix of the other (handles redirects that append a
  * sub-route, e.g. /settings -> /settings/profile).
@@ -160,6 +184,8 @@ export function pathnamesMatch(expected: string | undefined, actual: string | un
   return longer.startsWith(`${shorter}/`);
 }
 
+// エージェントが遷移してよい行き先は、機能一覧にある副作用のない実際のアプリ画面だけ。
+// 状態を変える GET エンドポイント（/logout、/google-login など）やアプリ外への遷移を防ぐ。
 // The only destinations the agent is allowed to navigate to: real, side-effect-free app
 // pages from the capability catalog. This blocks navigation to mutating GET endpoints
 // (e.g. /logout, /google-login) and anything outside the app.
@@ -171,6 +197,8 @@ export const NAVIGABLE_APP_ROUTES = [
   "/login",
 ];
 
+// エージェントの navigate が許可リストのパスだけを指すことを確認する（安全な内部パスで、かつ NAVIGABLE_APP_ROUTES のいずれかに一致）。
+// Checks that an agent navigate step only targets an allowlisted path: a safe internal path that matches one of NAVIGABLE_APP_ROUTES.
 export function isAllowedNavigationPath(path: string | undefined): boolean {
   if (!isSafeInternalPath(path)) return false;
   const target = normalizePathname(path);
@@ -182,7 +210,11 @@ const SENSITIVE_AUTOCOMPLETE_PATTERN =
   /(password|current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp|cc-name)/i;
 const SENSITIVE_NAME_PATTERN = /(pass(word)?|secret|token|otp|cvv|card[\s_-]?number)/i;
 
-/** Inputs whose value must never be sent to the LLM (passwords, hidden fields, payment data). */
+/**
+ * 値を LLM に送ってはいけない入力（パスワード、hidden、決済情報など）かどうか。
+ *
+ * Inputs whose value must never be sent to the LLM (passwords, hidden fields, payment data).
+ */
 export function isSensitiveValueElement(element: Element): boolean {
   if (!(element instanceof HTMLInputElement)) return false;
   if (element.type === "password" || element.type === "hidden") return true;
@@ -192,7 +224,11 @@ export function isSensitiveValueElement(element: Element): boolean {
 
 const AUTH_PATHNAMES = new Set(["/login", "/register"]);
 
-/** True when navigation landed on an auth gate it was not asked to open. */
+/**
+ * 開くよう指示していないログイン/登録画面へ遷移してしまった場合に true（セッション切れなどの検知用）。
+ *
+ * True when navigation landed on an auth gate it was not asked to open.
+ */
 export function isUnexpectedAuthRedirect(
   expectedPath: string | undefined,
   actualPathname: string | undefined,
@@ -240,6 +276,8 @@ function isVisibleActionableElement(element: Element) {
   return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
 }
 
+// 画面上で操作できる要素（ボタン・入力・リンクなど、最大 100 件）を要約して、LLM に渡すテキストにする。パスワード等の機密入力の値は含めない。
+// Summarizes up to 100 actionable on-screen elements (buttons, inputs, links, ...) into text for the LLM; values of sensitive inputs such as passwords are excluded.
 export function collectVisiblePageDom() {
   if (typeof document === "undefined") return "";
   const elements = Array.from(
@@ -268,6 +306,7 @@ export function collectVisiblePageDom() {
       text: truncateForContext(element.textContent),
       ariaLabel: truncateForContext(element.getAttribute("aria-label")),
       placeholder: truncateForContext(input?.placeholder),
+      // パスワード、hidden、決済欄にある秘密情報や個人情報は送らない。
       // Never transmit secrets/PII held in password, hidden, or payment fields.
       value: sensitive ? undefined : truncateForContext(input?.value ?? select?.value, 60),
       inputType: element instanceof HTMLInputElement ? element.type : undefined,
@@ -303,6 +342,8 @@ export function collectVisiblePageDom() {
     .join("\n");
 }
 
+// サーバーから届いた値が ActionStep として扱える形か（action が既知の種別で、description が文字列）を判定する型ガード。
+// Type guard checking that a received value has the shape of an ActionStep (a known action kind and a string description).
 export function isActionStep(value: unknown): value is ActionStep {
   if (!value || typeof value !== "object") return false;
   const step = value as Partial<ActionStep>;

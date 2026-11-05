@@ -1,3 +1,7 @@
+// メモのリッチエディタ（TipTap）の拡張の組み合わせと、ツールバーの書式指定をエディタの操作へ対応づける処理。
+// Assembles the TipTap extensions for the memo's rich editor and maps toolbar format requests to editor commands.
+// Used by components/memo/MemoEditor.tsx.
+
 import { Editor, Extension, renderNestedMarkdownContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
@@ -11,6 +15,8 @@ import { MemoCodeBlock, MemoCodeHighlight } from "./rich_code";
 
 // 既存の番号付きチェックリストも、番号とチェック欄を保って編集できるようにする。
 // Preserve numbered checklists supported by existing memos.
+// 番号付きリストの項目に taskItem も入れられるようにし、Markdown の「1. [ ] 項目」を読み込むとチェック欄つきの項目として扱う。
+// Lets ordered lists hold taskItem too, and reads Markdown like "1. [ ] item" as a checklist item.
 const MemoOrderedList = OrderedList.extend({
   content: "(listItem | taskItem)+",
   parseMarkdown(token, helpers) {
@@ -30,6 +36,8 @@ const MemoOrderedList = OrderedList.extend({
   },
 });
 
+// チェック項目を Markdown に書き出すときの接頭辞を決める。番号付きリストの中なら「1. [x] 」、それ以外は「- [x] 」。
+// Chooses the prefix when writing a checklist item back to Markdown: "1. [x] " inside an ordered list, otherwise "- [x] ".
 const MemoTaskItem = TaskItem.extend({
   renderMarkdown(node, helpers, context) {
     const checked = node.attrs?.checked ? "x" : " ";
@@ -39,6 +47,8 @@ const MemoTaskItem = TaskItem.extend({
   },
 });
 
+// リッチエディタに使う拡張の一覧を返す。取り消し／やり直しは TipTap 標準の履歴ではなく、受け取った undo/redo のコールバックに任せる。
+// Returns the extension list for the rich editor; undo/redo are delegated to the supplied callbacks instead of TipTap's built-in history.
 export function memoRichExtensions(placeholder: () => string, undo: () => boolean, redo: () => boolean) {
   return [
     StarterKit.configure({ codeBlock: false, orderedList: false, undoRedo: false, underline: false, trailingNode: false, link: { openOnClick: true, autolink: false, HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" } } }),
@@ -57,6 +67,8 @@ export function memoRichExtensions(placeholder: () => string, undo: () => boolea
   ];
 }
 
+// ツールバーの書式指定（チェック・箇条書き・番号・見出し・字下げ・字上げ）を、TipTap のコマンドとして実行する。
+// Runs a toolbar format request (checklist, bullet, number, heading, indent, outdent) as the corresponding TipTap command.
 export function formatRichMemo(editor: Editor, format: MemoFormat) {
   const chain = editor.chain().focus();
   switch (format) {

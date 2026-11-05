@@ -41,6 +41,10 @@ function findLeadingTraceEnd(text: string, rootStart: number) {
   return null;
 }
 
+// 本文を「即時に表示する先頭の Web 検索トレース」と「ペーシングする残り」に分ける。
+// 先頭トレースが閉じていない間は全体をペーシング対象のままにする。
+// Splits text into the leading web-search trace (shown at once) and the rest (paced).
+// While the leading trace is still unclosed, everything stays paced.
 export function splitStreamDisplayText(text: string): StreamDisplayText {
   const leadingTrace = LEADING_WEB_SEARCH_TRACE.exec(text);
   if (!leadingTrace) return { instantPrefix: "", pacedText: text };

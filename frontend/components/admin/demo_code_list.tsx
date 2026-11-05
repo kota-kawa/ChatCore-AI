@@ -1,3 +1,5 @@
+// 管理画面のデモ用アクセスコード一覧（状態・初回利用日・期限・利用額・停止ボタン）。demo_codes_panel.tsx から使われる。
+// List of demo access codes in the admin console (status, first use, expiry, spend, revoke button); used by demo_codes_panel.tsx.
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 import type { DemoAccessCodeApi } from "../../types/generated/api_schemas";
@@ -40,6 +42,8 @@ export function DemoCodeList({ codes, revokingId, onRevoke }: DemoCodeListProps)
       </thead>
       <tbody>
         {codes.map((code) => {
+          // 終了済み・停止済みのコードにはもう停止操作を出さない
+          // Codes that already ended or were revoked no longer offer the revoke action
           const canRevoke = code.status === "unused" || code.status === "active";
           return (
             <tr key={code.id}>

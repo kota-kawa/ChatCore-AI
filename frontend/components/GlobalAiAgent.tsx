@@ -1,3 +1,5 @@
+// 全ページに常駐する AI エージェント（Chaco）の起動ボタンと、ドラッグできるチャットモーダル。pages/_app.tsx から描画される。
+// Floating launch button and draggable chat modal for the AI agent (Chaco) available on every page; rendered from pages/_app.tsx.
 import { useEffect, useState } from "react";
 
 import { useTranslation } from "../contexts/locale_context";
@@ -27,6 +29,8 @@ export function GlobalAiAgent() {
   // マウント時にセッションストレージから開閉状態を復元する
   // On mount, restore the open/close state from session storage
   useEffect(() => {
+    // 保存値の復元はマウント後に行う。初回描画で読むとサーバー出力と食い違いハイドレーション不一致になるため
+    // Restore after mount: reading storage during the first render would differ from the server output and break hydration
     setIsOpen(readSessionJson<boolean>(OPEN_STATE_KEY, false));
     setHydrated(true);
   }, []);

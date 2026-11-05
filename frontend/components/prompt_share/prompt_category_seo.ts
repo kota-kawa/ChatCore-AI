@@ -1,3 +1,6 @@
+// 公開カテゴリページの検索向け説明とメタデータを定義する。
+// Defines search-oriented descriptions and metadata for public category pages.
+
 import type { Locale } from "../../lib/i18n/config";
 import { localizePublicPath } from "../../lib/seo";
 import { PROMPT_CATEGORY_KEYS } from "../../scripts/prompt_share/prompt_category_registry";

@@ -1,3 +1,5 @@
+// プロンプト共有サービスの紹介ページ（/prompt_share/lp）。ヒーロー・価値・対象範囲・使い方・FAQ・CTAを並べ、構造化データ（WebPage・FAQ・パンくず）を出力する。
+// Introduction landing page for the prompt sharing service (/prompt_share/lp); stacks hero, value, scope, usage, FAQ and CTA sections and emits structured data (WebPage, FAQ, breadcrumbs).
 import { SeoHead } from "../../components/SeoHead";
 import { LpFooter } from "../../components/lp/lp_footer";
 import { PromptShareLpFinalCta } from "../../components/prompt_share_lp/prompt_share_lp_cta";
@@ -15,6 +17,8 @@ import { useTranslation } from "../../contexts/locale_context";
 import { localizedAbsoluteUrl } from "../../lib/seo";
 import type { Locale } from "../../lib/i18n/config";
 
+// 正規URLと構造化データのURL組み立てに使うパス
+// Path used to build the canonical URL and the structured-data URLs
 const PROMPT_SHARE_LP_PATH = "/prompt_share/lp";
 
 // 紹介ページの構造化データ（WebPage・FAQ・パンくず）

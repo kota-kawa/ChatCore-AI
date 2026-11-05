@@ -1,3 +1,5 @@
+// メモ画面（/memo）のページ本体。サイドバー・ツールバー・作成欄・一覧と各モーダルを並べ、状態は MemoPageControllerProvider の context から受け取る。pages/memo.tsx から使われる。
+// Page body of the memo screen (/memo): arranges the sidebar, toolbar, composer, list, and modals, with state coming from the MemoPageControllerProvider context. Used by pages/memo.tsx.
 import { SeoHead } from "../../SeoHead";
 import { useTranslation } from "../../../contexts/locale_context";
 
@@ -27,6 +29,7 @@ import {
 import { memoPageDescription, memoStructuredData } from "../../../lib/memo/constants";
 
 // ---------------------------------------------------------------------------
+// メインページ
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -56,6 +59,8 @@ export default function MemoPage() {
 
 type MemoPageContentProps = Pick<ReturnType<typeof useTranslation>, "locale" | "t">;
 
+// ページ骨格。ログイン状態・表示面（メモ／マイコンテキスト）・ゴミ箱かどうかで、出す部品を切り替える。
+// Page shell; which parts appear depends on login state, the active view (memos or my context), and whether the trash is shown.
 function MemoPageContent({ locale, t }: MemoPageContentProps) {
   const { isLoggedIn, authUiReady, isSidebarCollapsed, activeView, setActiveView, viewMode } = useMemoPageUiContext();
   const { archiveScope } = useMemoPageListContext();
@@ -103,21 +108,25 @@ function MemoPageContent({ locale, t }: MemoPageContentProps) {
               {!isLoggedIn && (
                 <p className="memo-guest-intro">{t("memo.guestIntro")}</p>
               )}
-              {/* ── Toolbar ── */}
+              {/* ── ツールバー ──
+                  ── Toolbar ── */}
               <MemoToolbar />
 
               <MemoCrawlSummary />
 
-              {/* Bulk action bar */}
+              {/* 一括操作バー
+                  Bulk action bar */}
               {isBulkMode && (
                 <MemoBulkBar />
               )}
 
-              {/* ── Quick capture ── */}
+              {/* ── クイック作成 ──
+                  ── Quick capture ── */}
               {!isTrashScope && <MemoComposer />}
 
               <div className={`memo-board memo-board--${viewMode}${isTrashScope ? " memo-board--trash" : ""}`}>
-                {/* ── Memo list ── */}
+                {/* ── メモ一覧 ──
+                  ── Memo list ── */}
                 <MemoHistoryPanel />
               </div>
               {isLoggedIn && !isBulkMode && !isTrashScope && <MemoNewFab />}
@@ -129,21 +138,27 @@ function MemoPageContent({ locale, t }: MemoPageContentProps) {
       {/* ── 画面下の通知（「元に戻す」付き） / Bottom notice with an undo ── */}
       <MemoPageFlashToast />
 
-      {/* ── Memo detail modal ── */}
+      {/* ── メモ詳細モーダル ──
+          ── Memo detail modal ── */}
       <MemoDetailModal />
 
-      {/* ── Share modal ── */}
+      {/* ── 共有モーダル ──
+          ── Share modal ── */}
       <MemoShareModal />
 
-      {/* ── Collection management panel ── */}
+      {/* ── コレクション管理パネル ──
+          ── Collection management panel ── */}
       <MemoCollectionModal />
 
-      {/* ── Export modal ── */}
+      {/* ── 書き出しモーダル ──
+          ── Export modal ── */}
       <MemoExportModal />
     </div>
   );
 }
 
+// 通知の状態と操作を context から受け取り、トーストへ渡すだけの薄い橋渡し。
+// Thin bridge that takes the notice state and actions from the context and hands them to the toast.
 function MemoPageFlashToast() {
   const { flashState, runFlashAction, holdFlash, releaseFlash } = useMemoPageFlashContext();
   return <MemoFlashToast flash={flashState} onAction={runFlashAction} onHold={holdFlash} onRelease={releaseFlash} />;

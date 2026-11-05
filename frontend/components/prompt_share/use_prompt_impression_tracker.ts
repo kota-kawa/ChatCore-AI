@@ -1,3 +1,5 @@
+// 共有フィードでカードが表示された回数を、まとめて送信して記録する hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that records feed-card impressions in batches. Used by pages/prompt_share/index.tsx.
 import { useCallback, useEffect, useRef } from "react";
 
 import { recordPromptImpressions } from "../../scripts/prompt_share/api";
@@ -15,6 +17,8 @@ export function usePromptImpressionTracker() {
   const pendingIdsRef = useRef<string[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 溜まった ID を 1 回のリクエストで送る。タイマーが残っていれば止め、空なら何もしない
+  // Send the queued IDs in one request; cancels any pending timer and does nothing when the queue is empty
   const flush = useCallback(() => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
@@ -42,6 +46,8 @@ export function usePromptImpressionTracker() {
     };
   }, [flush]);
 
+  // カードが表示されたときに呼ぶ関数を返す。未計測の ID だけをキューに積み、最初の 1 件でタイマーを開始する
+  // Return the function to call when a card is shown; it queues only unseen IDs and starts the timer on the first one
   return useCallback(
     (prompt: PromptRecord) => {
       const promptId = getPromptId(prompt);

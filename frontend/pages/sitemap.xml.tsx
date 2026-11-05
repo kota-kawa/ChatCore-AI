@@ -1,3 +1,5 @@
+// /sitemap.xml をSSRで動的に生成するページ。静的な公開ルート、カテゴリ別ガイド、バックエンドから取得した公開プロンプトを日英のhreflang付きで列挙する。
+// Page that generates /sitemap.xml dynamically at SSR; lists static public routes, category guides and public prompts fetched from the backend, with ja/en hreflang alternates.
 import type { GetServerSideProps } from "next";
 import { buildPromptPath } from "../lib/promptSlug";
 import { localizePublicPath } from "../lib/seo";
@@ -69,8 +71,8 @@ export const PROMPT_CATEGORY_SITEMAP_ROUTES: readonly SitemapRoute[] = PROMPT_CA
 // Maximum number of public prompts to include in the sitemap (cap to avoid bloat)
 const MAX_PROMPT_ENTRIES = 5000;
 
-// created_atをW3C準拠のISO8601文字列に正規化する（不正な値はundefinedにしてグローバルlastmodへフォールバック）
-// Normalize created_at into a W3C-compliant ISO 8601 string (invalid values become undefined and fall back to the global lastmod)
+// created_atをW3C準拠のISO8601文字列に正規化する（不正な値はundefinedにし、その項目にはlastmodを出力しない）
+// Normalize created_at into a W3C-compliant ISO 8601 string (invalid values become undefined, so that entry gets no lastmod)
 function normalizeLastmod(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const parsed = new Date(value);
@@ -155,6 +157,8 @@ export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: re
     ...PROMPT_CATEGORY_SITEMAP_ROUTES,
     ...extraRoutes
   ];
+  // 各ルートを日本語版・英語版の2つの<url>に展開し、相互のhreflang代替リンクとx-default（日本語）を付ける
+  // Expand each route into Japanese and English <url> entries, each carrying hreflang alternates and an x-default (Japanese)
   const urls = routes
     .flatMap((route) => (["ja", "en"] as const).map((locale) => {
       const localizedPath = localizePublicPath(route.path, locale);
@@ -163,8 +167,8 @@ export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: re
       const englishPath = localizePublicPath(route.path, "en");
       const japaneseUrl = normalizedOrigin ? `${normalizedOrigin}${japanesePath}` : japanesePath;
       const englishUrl = normalizedOrigin ? `${normalizedOrigin}${englishPath}` : englishPath;
-      // 個別ルートにlastmodが指定されていればそれを優先する
-      // Prefer a route-specific lastmod when provided
+      // lastmodのキーを持つルート（カテゴリ・個別プロンプト）はその値を使い、値が無ければ出力しない。キーを持たない静的ルートだけ全体のlastmodを使う
+      // Routes that have a lastmod key (categories, individual prompts) use their own value and emit none when it is empty; only static routes without the key use the global lastmod
       const routeLastmod = "lastmod" in route ? route.lastmod : lastmod;
       return [
         "  <url>",

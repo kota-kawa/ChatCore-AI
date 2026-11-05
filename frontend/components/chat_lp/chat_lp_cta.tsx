@@ -1,3 +1,5 @@
+// AIチャット紹介ページ（/chat/lp）の末尾に置く、最後の行動喚起セクション。pages/chat/lp.tsx から使われる。
+// Final call-to-action section at the bottom of the AI chat landing page (/chat/lp); used by pages/chat/lp.tsx.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

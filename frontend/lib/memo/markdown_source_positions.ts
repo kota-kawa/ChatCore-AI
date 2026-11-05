@@ -1,20 +1,32 @@
+// メモ本文の Markdown 原文と、リッチエディタ上の表示（DOM）とのあいだで、カーソル位置を相互に変換する。
+// 表示される文字を marked のトークンから拾って原文の範囲に結び付け、表示側の文字列と突き合わせて位置を求める。
+// Converts caret positions between the memo's Markdown source and its rendered view in the rich editor (DOM).
+// Visible characters are collected from marked tokens and tied to source ranges, then matched against the rendered text to find the position.
+// Used by components/memo/MemoEditor.tsx when switching between source and rich editing.
+
 import { Lexer, type Token } from "marked";
 
 import type { DisplaySourceSpan } from "../../scripts/chat/display_source_positions";
 import { prepareMemoPreviewSource } from "./preview_source";
 
+// 表示される文字 1 つと、それに対応する原文上の範囲（start〜end）。空白は含めない。
+// One visible character and the source range (start..end) it comes from; whitespace is excluded.
 interface SourceCharacter {
   text: string;
   start: number;
   end: number;
 }
 
+// 表示される Markdown の文字を原文の位置へ対応づける。トークンの境界ごとに探すので、
+// リンク先・フェンスの言語名・書式の記号に同じ語が出てきても、取り違えない。
 // Map visible Markdown characters back to the source. Token boundaries keep repeated
 // words in link destinations, fence labels and formatting syntax out of the search.
 export function markdownSourceCharacters(source: string, doc: Document): SourceCharacter[] {
   const characters: SourceCharacter[] = [];
   const decoder = doc.createElement("textarea");
 
+  // text の各文字を、原文上の位置つきで characters に追加する。HTML のエンティティは、表示される 1 文字に戻して数える。
+  // Appends each character of text to characters with its source position; HTML entities are decoded to the single character that is displayed.
   function append(text: string, positions: DisplaySourceSpan[], decodeEntities: boolean) {
     for (let i = 0; i < text.length; i++) {
       const entity = decodeEntities && text[i] === "&" && text.slice(i).match(/^&(?:#\d+|#x[\da-f]+|[a-z][\da-z]+);/i)?.[0];
@@ -30,6 +42,8 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
     }
   }
 
+  // 引用やリストは、子要素を解析する前に続きの行の接頭辞を取り除くため、子のトークンの文字列は親の文字列にそのまま現れないことがある。
+  // そのときは行ごとに探して、位置を対応づけ直す。
   // Blockquotes/lists remove prefixes from continuation lines before lexing children.
   function locate(text: string, parent: string, positions: DisplaySourceSpan[], from: number) {
     const exact = parent.indexOf(text, from);
@@ -51,6 +65,8 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
     return { positions: mapped, end: cursor };
   }
 
+  // トークンを再帰的にたどり、表示される文字を持つトークン（text・escape・codespan・code・html の中の文字）だけを拾う。画像は対象外。
+  // Recursively walks the tokens and collects only those that produce visible characters (text, escape, codespan, code, and text inside html); images are skipped.
   function walk(tokens: Token[], parent: string, positions: DisplaySourceSpan[]) {
     let cursor = 0;
     for (const token of tokens) {
@@ -67,6 +83,7 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
         walk(token.tokens, token.raw, mapped);
       } else if (token.type === "html") {
         for (const match of token.raw.matchAll(/[^<>]+(?=<|$)/g)) {
+          // タグの外にある文字だけが対象（インライン HTML の生の記述も含む）。
           // Only text outside tags (including raw inline HTML) participates.
           if (match.index > 0 && token.raw[match.index - 1] === "<") continue;
           append(match[0], mapped.slice(match.index), true);
@@ -86,6 +103,8 @@ export function markdownSourceCharacters(source: string, doc: Document): SourceC
   return characters;
 }
 
+// コードブロックの言語名ラベルなど、pre の隣にあって原文に対応しない表示用の要素を集める。
+// Collects display-only elements beside a pre (such as the language label of a code block) that have no counterpart in the source.
 function codeHeaderNodes(root: HTMLElement) {
   return Array.from(root.querySelectorAll("pre")).flatMap((pre) => {
     const wrapper = pre.parentElement;
@@ -94,6 +113,10 @@ function codeHeaderNodes(root: HTMLElement) {
   });
 }
 
+// 表示側のカーソル位置（node と offset）を原文の位置に変換する。各テキストノードの空白を除いた文字列を、表示される文字列の中で
+// 先頭から順に探して対応づける。チェックボックスのラベル、aria-hidden の要素、コードの言語名は飛ばす。見つからなければ null。
+// Converts a caret in the rendered view (node and offset) to a source position by matching each text node's whitespace-free text, in order, against the visible text.
+// Checkbox labels, aria-hidden elements and code language labels are skipped; returns null if no match is found.
 export function sourceOffsetAtCaret(root: HTMLElement, node: Node, offset: number, source: string): number | null {
   const characters = markdownSourceCharacters(source, root.ownerDocument);
   const visible = characters.map((character) => character.text).join("");

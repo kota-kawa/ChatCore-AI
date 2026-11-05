@@ -1,3 +1,8 @@
+// ユーザーが管理する Skill（一覧・追加・有効/無効の切り替え・削除）を /api/skills で操作する API クライアント。
+// レスポンスはスキーマで検証してから呼び出し元（Skill 画面）へ返す。
+// API client for the user's Skills (list, create, toggle enabled, delete) via /api/skills.
+// Responses are validated against the generated schemas before reaching the Skill UI.
+
 import {
   UserSkillApiSchema,
   UserSkillMutationApiResponseSchema,
@@ -7,17 +12,23 @@ import {
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
+// fetch の差し替え口。既定は再試行つきの resilientFetch で、テストでは別の実装を渡せる。
+// Injection point for fetch: resilientFetch (with retries) by default, replaceable in tests.
 type SkillFetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export const MAX_USER_SKILL_NAME_LENGTH = 100;
 export const MAX_USER_SKILL_INSTRUCTIONS_LENGTH = 12_000;
 
+// 一覧レスポンスをスキーマで検証して Skill の配列を取り出す。
+// Validates the list response against the schema and extracts the array of Skills.
 function parseSkillsPayload(payload: unknown): UserSkillApi[] {
   const parsed = UserSkillsApiResponseSchema.safeParse(payload);
   if (!parsed.success) throw new Error("Skillの一覧を読み込めませんでした。");
   return parsed.data.skills ?? [];
 }
 
+// 追加・更新・状態変更のレスポンスに含まれる Skill を検証して取り出す。
+// Validates and extracts the Skill carried in a create/update/toggle response.
 function parseSkillMutationPayload(payload: unknown): UserSkillApi {
   const parsed = UserSkillMutationApiResponseSchema.safeParse(payload);
   if (!parsed.success || !parsed.data.skill) {

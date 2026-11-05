@@ -1,3 +1,5 @@
+// メモの共有モーダル（共有リンクの取得・作成・コピー・OS 共有シート）を扱うフック。
+// Hook for the memo share modal: fetching or creating the share link, copying it, and the native share sheet.
 import { useCallback, useState } from "react";
 import type { KeyedMutator } from "swr";
 
@@ -18,6 +20,7 @@ type UseMemoPageShareParams = {
 export function useMemoPageShare({ mutate, showFlash }: UseMemoPageShareParams) {
   const { t } = useTranslation();
 
+  // 共有モーダルの状態。
   // Share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareState, setShareState] = useState<SharePayload | null>(null);
@@ -36,6 +39,8 @@ export function useMemoPageShare({ mutate, showFlash }: UseMemoPageShareParams) 
     return payload;
   }, []);
 
+  // モーダルを開き、既存の有効な共有リンクがあればそれを表示する。無ければその場で作成して一覧を再取得する。
+  // Opens the modal and shows the existing active share link; if there is none, creates one on the spot and revalidates the list.
   const openShareModal = useCallback(async (memo: MemoSummary) => {
     const memoId = String(memo.id || "");
     if (!memoId) { showFlash("error", t("memo.shareTargetMissing")); return; }

@@ -1,3 +1,5 @@
+// チャット共有モーダル。共有リンクの表示・コピー・SNS共有・端末の共有シートを出す。pages/index.tsx から描画される。
+// Chat share modal showing the share link with copy, SNS sharing and the device share sheet; rendered by pages/index.tsx.
 import { memo } from "react";
 
 import type { ShareStatus } from "../../../lib/chat_page/types";

@@ -1,9 +1,15 @@
+// メモ画面で使う定数（一覧の取得件数、操作メニューの寸法、自動保存の間隔、書き出し形式、背景色の選択肢、SEO 用の構造化データ）。
+// Constants used by the memo page: list page sizes, action menu dimensions, autosave delay, export formats, background color options, and SEO structured data.
+
 import { absoluteUrl } from "../seo";
 
 // ---------------------------------------------------------------------------
+// メモ画面の定数
 // Memo page constants
 // ---------------------------------------------------------------------------
 
+// 一覧を 1 回で取得する既定の件数。
+// Default number of memos requested for the list.
 export const DEFAULT_LIMIT = 50;
 // バックエンド（services/repositories/memo_constants.py の MAX_MEMO_LIST_LIMIT）が 1 リクエストで返す上限。
 // これを超える件数は offset をずらした複数リクエストに分割して取得する。
@@ -29,7 +35,11 @@ export const memoStructuredData = {
     url: absoluteUrl("/")
   }
 };
+// 詳細モーダルで、編集が止まってから自動保存するまでの待ち時間（ミリ秒）。
+// Delay (ms) after the last edit before the detail modal autosaves.
 export const DETAIL_AUTOSAVE_DELAY_MS = 900;
+// 詳細モーダルを閉じるアニメーションの長さ（ミリ秒）。
+// Length (ms) of the detail modal's closing animation.
 export const MEMO_DETAIL_CLOSE_ANIMATION_MS = 240;
 export const EXPORT_FORMATS = [
   { value: "markdown", label: "Markdown (.md)", icon: "bi-markdown" },

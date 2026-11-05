@@ -1,3 +1,5 @@
+// ホーム画面のスキル一覧。スキルごとの詳細表示・オン/オフ切り替え・削除と、新規作成モーダルを持つ。ログイン時だけ描画する。setup_section.tsx から使われる。
+// Skill list on the home screen with per-skill detail view, on/off toggle and delete, plus the create modal; rendered only when logged in; used by setup_section.tsx.
 import { memo, useCallback, useState } from "react";
 
 import { useHomePageSkills } from "../../hooks/chat_page/use_home_page_skills";
@@ -23,6 +25,10 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
     setSelectedSkill(null);
   }, []);
 
+  // 未ログインではスキルを使えないので何も描画しない（フックは早期 return より前で呼んでいる）。
+  // 各スキルの行は、詳細を開くチップ・オン/オフのスイッチ・削除ボタンで構成される。組み込みの既定スキルは can_delete が false なので削除ボタンが出ない
+  // Nothing is rendered when logged out (the hooks above run before this early return).
+  // Each skill row has a details chip, an on/off switch and a delete button; built-in default skills have can_delete false, so they get no delete button
   if (!loggedIn) return null;
 
   const {

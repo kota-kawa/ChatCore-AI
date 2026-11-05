@@ -1,3 +1,5 @@
+// メモのコレクション一覧の取得と、コレクション管理パネル（作成・更新・削除）を扱うフック。
+// Hook for fetching memo collections and running the collection management panel (create, update, delete).
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import useSWR, { type KeyedMutator } from "swr";
 
@@ -31,6 +33,7 @@ export function useMemoPageCollections({
       dedupingInterval: 10000,
     });
 
+  // コレクション管理パネルの状態。
   // Collection management panel
   const [isCollectionPanelOpen, setIsCollectionPanelOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");

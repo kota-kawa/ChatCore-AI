@@ -1,3 +1,5 @@
+// ランディングページ系のページが共有する、最終CTAセクションとフッター。lp.tsx のほか、ヘルプ・規約・プライバシーなどの各ページからも使われる。
+// Final CTA section and footer shared by the landing-style pages (lp, help, terms, privacy, and others).
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

@@ -1,3 +1,7 @@
+// SSE の 1 ブロック（event: / id: / data: の行）を、イベント名・ID・JSON データを持つ StreamParsedEvent へ変換する。
+// Parses one SSE block (event: / id: / data: lines) into a StreamParsedEvent with event name, id and JSON data.
+// Used by lib/chat_page/generation_stream_consumer.ts.
+
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import type { StreamParsedEvent } from "./types";
 
@@ -5,6 +9,8 @@ function isStreamData(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
 
+// data 行が無い、または JSON が壊れているブロックは null を返して読み飛ばせるようにする。id は正の整数のときだけ採用する。
+// Returns null for blocks without data lines or with broken JSON so callers can skip them; id is kept only when it is a positive integer.
 export function parseStreamEventBlock(block: string): StreamParsedEvent | null {
   const lines = block
     .split(/\r?\n/)

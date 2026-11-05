@@ -1,3 +1,5 @@
+// 入力欄の「＋」追加メニュー（メモ参照・共有プロンプト参照・ファイル添付・貼り付け）と、参照中状態のチップ。setup_section.tsx と chat_main_section.tsx で使われる。
+// The composer's add (+) menu (memo lookup, shared-prompt lookup, file attach, paste) and the chips showing active lookups; used by setup_section.tsx and chat_main_section.tsx.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -46,6 +48,8 @@ export function SetupAttachMenu({
 }: SetupAttachMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  // useId() の ":" は CSS セレクタや属性参照で扱いにくいため取り除いて id にする
+  // Strip the ":" that useId() produces so the value is safe to use as an element id
   const menuId = `setup-attach-menu-${useId().replace(/:/g, "")}`;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);

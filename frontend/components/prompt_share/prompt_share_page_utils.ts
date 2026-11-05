@@ -1,3 +1,5 @@
+// プロンプト共有ページで共通に使う小さなヘルパー（カテゴリ表示名、プロンプトID、モーダル内のフォーカス可能要素の取得）。
+// Small shared helpers for the prompt sharing page: category labels, prompt IDs, and finding focusable elements in a modal.
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import type { PromptData } from "../../scripts/prompt_share/types";
 import { promptShareText } from "../../scripts/prompt_share/i18n";

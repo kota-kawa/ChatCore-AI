@@ -1,3 +1,6 @@
+// 画面で表示する英語メッセージのカタログを定義する。
+// Defines the English message catalog used by the UI.
+
 import type { MessageKey } from "./ja";
 
 export const enMessages = {

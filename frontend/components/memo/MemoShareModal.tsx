@@ -1,9 +1,12 @@
+// メモの共有リンクを表示・コピーし、SNS や端末の共有シートへ渡す共有モーダル。共通の ShareDialogContent を使う。MemoPage から使われる。
+// Share modal for a memo: shows and copies the share link and hands it to social links or the device share sheet, using the shared ShareDialogContent; used by MemoPage.
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { ShareDialogContent } from "../ui/share_dialog_content";
 import { useTranslation } from "../../contexts/locale_context";
 import { useMemoPageModalsContext } from "../../contexts/memo_page/memo_page_context";
 
+// ── 共有モーダル ──
 // ── Share modal ──
 // 共通モーダル面（cc-modal）の小サイズに、共通の共有ダイアログ本体（cc-share-modal）を載せる。
 // Small shared modal surface (cc-modal) carrying the shared share-dialog body (cc-share-modal).

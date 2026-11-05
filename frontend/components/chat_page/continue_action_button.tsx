@@ -1,3 +1,5 @@
+// 途中で止まった回答の「続きを生成」ボタン。chat_message_list.tsx のメッセージ操作列で使われる。
+// "Continue" button for an answer that stopped partway; used in the message action row of chat_message_list.tsx.
 // 途中までしか生成されなかった回答の続きを求めるアクションボタンのprops型定義
 // Props type definition for the action button that asks for the rest of a partial answer
 type ContinueActionButtonProps = {

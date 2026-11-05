@@ -1,3 +1,5 @@
+// メモカードのドラッグ＆ドロップによる手動並び替え（移動先の予測順、FLIP アニメーション、並び順の保存）を扱うフック。
+// Hook for manual drag-and-drop reordering of memo cards: projected order, FLIP animation, and persisting the new order.
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { KeyedMutator } from "swr";
 
@@ -45,6 +47,8 @@ export function useMemoPageDrag({
   const dragSnapshotRef = useRef<Map<string, FrozenRect>>(new Map());
   const dragScrollRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // ドラッグ中はカードが脇へ動いて新しい並びを先に見せる。この予測順はドラッグ開始時に固定した位置情報
+  // （computeProjectedOrderFromSnapshot を参照）から求めるので、並び替えの途中経過が行き来して揺れることがない。
   // While dragging, cards animate aside to preview the new order. The projection
   // is derived from a frozen geometry snapshot (see computeProjectedOrderFromSnapshot),
   // so the live reorder stays stable instead of oscillating.
@@ -63,6 +67,8 @@ export function useMemoPageDrag({
     return { pinnedMemos: pinned, otherMemos: other };
   }, [displayMemos]);
 
+  // 並び替えできるのは、通常（アーカイブ外）の一覧を手動順で表示し、検索も一括選択もしていないとき。
+  // Reordering is allowed only on the active list in manual order, with no search query, no bulk mode, and no save in progress.
   const canDragMemos =
     archiveScope === "active" &&
     !isBulkMode &&
@@ -89,6 +95,8 @@ export function useMemoPageDrag({
     closeMemoActionMenu();
     setDraggedMemoId(memoId);
     setDragProjectedOrder(null);
+    // 現在のカードの位置と大きさを固定する。dragover ごとの判定はこのスナップショットに対して行うので、
+    // 列の並び替え中の再配置が対象の判定を乱さない。
     // Freeze the current card geometry; every dragover hit-test resolves against
     // this snapshot so live column reflow can't perturb the targeting.
     dragSnapshotRef.current = captureCardSnapshot(cardRefs.current);
@@ -108,6 +116,7 @@ export function useMemoPageDrag({
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
 
+    // ポインターの位置を、スナップショットの座標系へ戻す。ドラッグ開始後にページがスクロールした分も補正する。
     // Map the pointer back into the snapshot's coordinate space, accounting for
     // any page scroll that happened since the drag began.
     const pointerX = event.clientX + (window.scrollX - dragScrollRef.current.x);
@@ -130,6 +139,8 @@ export function useMemoPageDrag({
 
   // ドラッグ＆ドロップ完了時の処理。並び順の更新を行う
   // Handler for dropping a memo. Updates the order of memos
+  // ドロップ時に、予測順から移動したメモの前後の id を求め、一覧を先に並び替えてからサーバーへ保存する。失敗時はサーバーの状態で再取得して戻す。
+  // On drop, derives the neighbouring ids of the moved memo from the projected order, reorders the list optimistically, then saves; a failure revalidates to restore the server state.
   const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
@@ -181,6 +192,7 @@ export function useMemoPageDrag({
     showFlash,
   ]);
 
+  // FLIP 方式で、並び替え後に各カードを新しい位置へなめらかに動かす（変更前の位置との差分を先に当て、transform を戻して遷移させる）。
   // FLIP: animate cards smoothly to their new positions after a reorder.
   useLayoutEffect(() => {
     const prevPositions = cardPositionsRef.current;

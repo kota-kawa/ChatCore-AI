@@ -1,3 +1,5 @@
+// メモのエクスポート（形式・対象範囲・対象メモの選択・ダウンロード開始）を扱うモーダル用のフック。
+// Hook for the memo export modal: format, scope, memo selection, and starting the download.
 import { useCallback, useEffect, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -14,6 +16,7 @@ type UseMemoPageExportParams = {
 export function useMemoPageExport({ memos, showFlash }: UseMemoPageExportParams) {
   const { t } = useTranslation();
 
+  // エクスポートモーダルの状態。
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<MemoExportFormat>("markdown");
@@ -48,8 +51,8 @@ export function useMemoPageExport({ memos, showFlash }: UseMemoPageExportParams)
     setExportSelectedIds(new Set());
   }, []);
 
-  // メモをJSON形式でエクスポートするハンドラー
-  // Handler to export memos in JSON format
+  // 選択した形式（markdown / csv / json）でメモをエクスポートするハンドラー。ダウンロード用のリンクを作ってクリックする
+  // Handler to export memos in the chosen format (markdown / csv / json) by creating and clicking a download link
   const handleExport = useCallback(() => {
     if (exportScope === "selected" && exportSelectedIds.size === 0) {
       showFlash("error", t("memo.exportSelectionRequired"));

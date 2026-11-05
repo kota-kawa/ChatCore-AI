@@ -1,3 +1,5 @@
+// 英語版ヘルプセンターのカテゴリ・FAQ定義。help_content.ts（日本語版）と同じ型・同じ id 構成で、pages/help.tsx がロケールに応じて切り替える。
+// English help center category and FAQ definitions; same type and ids as help_content.ts (Japanese), switched by locale in pages/help.tsx.
 import type { HelpCategory } from "./help_content";
 
 export const HELP_CATEGORIES_EN: HelpCategory[] = [

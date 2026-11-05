@@ -1,3 +1,5 @@
+// プロンプト共有フィードの一覧データを扱う純粋関数（PromptRecord への変換、重複排除つきの連結、絞り込み、件数表示の組み立て）。
+// Pure functions for the prompt sharing feed data: converting to PromptRecord, appending pages without duplicates, filtering, and building count text.
 import {
   getPromptFormatLabel,
   getPromptMediaLabel,
@@ -51,10 +53,14 @@ export function appendUniquePromptRecords(current: PromptRecord[], incoming: Pro
   ];
 }
 
+// フォーマットフィルターの表示名を返す（all は「すべて」）。
+// Returns the display label of a format filter ("all" maps to the generic label).
 export function getContentFormatFilterLabel(contentFormatFilter: ContentFormatFilter) {
   return contentFormatFilter === "all" ? promptShareText("promptShare.all") : getPromptFormatLabel(contentFormatFilter);
 }
 
+// メディアフィルターの表示名を返す（all は「すべて」）。
+// Returns the display label of a media filter ("all" maps to the generic label).
 export function getMediaTypeFilterLabel(mediaTypeFilter: MediaTypeFilter) {
   return mediaTypeFilter === "all" ? promptShareText("promptShare.all") : getPromptMediaLabel(mediaTypeFilter);
 }
@@ -79,6 +85,8 @@ export function filterPrompts(
   });
 }
 
+// 絞り込み後に表示される件数を数える。
+// Counts the prompts that remain visible after filtering.
 export function countVisiblePrompts(
   items: PromptRecord[],
   category: string | null,
@@ -112,6 +120,8 @@ export function buildPromptCountMeta(
   return `${getCategoryCountLabel(category || "all")}${filterSuffix}: ${loadedSuffix}`;
 }
 
+// 絞り込みの結果が0件のときのメッセージ。フォーマット・メディアの条件があれば、その名前を含める。
+// Message for an empty filtered result; it names the format/media conditions when any are set.
 export function getFilterEmptyMessage(
   contentFormatFilter: ContentFormatFilter,
   mediaTypeFilter: MediaTypeFilter

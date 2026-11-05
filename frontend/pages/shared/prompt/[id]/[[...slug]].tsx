@@ -1,3 +1,7 @@
+// 共有プロンプトの詳細ページ（/shared/prompt/[id]/[[...slug]]）。SSRでプロンプトとおすすめを取得し、本文をサニタイズ済みHTMLで出力する。
+// タイトル由来のスラッグが正規URLと違う場合は正規パスへ恒久リダイレクトする。
+// Shared prompt detail page (/shared/prompt/[id]/[[...slug]]); fetches the prompt and recommendations at SSR and emits the body as sanitized HTML.
+// Permanently redirects to the canonical path when the title-derived slug differs from the requested one.
 import type { GetServerSideProps } from "next";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
@@ -186,10 +190,10 @@ function buildRecommendationPreview(prompt: SharedPrompt) {
   return truncateText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
 }
 
-// プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）。
+// プロンプトIDでデータを取得してSSRで返す（IDが無い場合は404、バックエンドのエラーはそのステータスを引き継ぐ）。
 // タイトル由来のスラッグが正規URLと一致しない場合は正規パスへ恒久リダイレクトする。
 // 本文Markdownはサーバー側でサニタイズ済みHTMLへ変換し、クローラにも本文が見えるようにする。
-// Fetch prompt data by ID for SSR (returns 404 if the ID is missing).
+// Fetch prompt data by ID for SSR (404 when the ID is missing; a backend error status is carried over).
 // Permanently redirect to the canonical path when the title-derived slug does not match the requested one.
 // The body Markdown is converted to sanitized HTML on the server so crawlers can see it too.
 export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = async (context) => {
@@ -211,6 +215,8 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   let recommendationBasis: RecommendationBasis | null = null;
 
   try {
+    // 本体とおすすめ一覧を並行取得する。おすすめの失敗はページ表示に影響させない（nullにして空扱い）
+    // Fetch the prompt and its recommendations in parallel; a recommendations failure must not break the page (treated as empty)
     const [res, recommendedRes] = await Promise.all([
       resilientFetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`),
       resilientFetch(
@@ -307,6 +313,8 @@ export default function SharedPromptPage({
   }, []);
 
   const prompt = payload.prompt;
+  // 閲覧数の記録は1つのプロンプトIDにつき1回だけ送る（再描画やEffectの再実行で二重に数えないためのガード）
+  // Record a view only once per prompt ID (guard so re-renders or effect re-runs do not double count)
   const recordedPromptIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (prompt?.id === undefined || prompt.id === null) {
@@ -392,6 +400,8 @@ export default function SharedPromptPage({
       ]
     : undefined;
 
+  // 追加リソースの内容をクリップボードへコピーする。結果(true/false)はCopyButtonの表示切り替えに使われる
+  // Copy a resource's content to the clipboard; the boolean result drives the CopyButton's feedback state
   const copyResource = async (resource: PromptResource): Promise<boolean> => {
     try {
       // 成功フィードバックはボタンのチェックマークだけにして、トーストは出さない

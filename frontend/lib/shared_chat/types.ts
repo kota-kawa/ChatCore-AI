@@ -1,3 +1,6 @@
+// 共有チャットの API が返すデータの型定義。
+// Type definitions for the data returned by the shared chat API.
+
 import type { ChatMessagePart } from "../chat_page/types";
 
 // 共有チャットの個別メッセージを表す型

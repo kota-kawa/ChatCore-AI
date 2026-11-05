@@ -1,3 +1,5 @@
+// スキルの指示文を Markdown で読むだけの閲覧用モーダル。skill_section.tsx から描画される。
+// Read-only modal that shows a skill's instructions as Markdown; rendered by skill_section.tsx.
 import type { UserSkill } from "../../../lib/chat_page/skill_api";
 import { useTranslation } from "../../../contexts/locale_context";
 import MarkdownContent from "../../MarkdownContent";

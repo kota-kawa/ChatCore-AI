@@ -1,3 +1,6 @@
+// 画面キーボードで変わる可視領域の高さを計測してUIへ渡す。
+// Measures visual viewport height for UI that must adapt to the on-screen keyboard.
+
 import { useEffect, useState } from "react";
 
 // 画面上キーボードで縮む「表示領域（visual viewport）」の高さを px で返す。

@@ -1,10 +1,16 @@
+# Next.js フロントエンドの本番用イメージ。deps（依存の取得）→ builder（next build）→ runner（next start）の3段で、実行用には成果物だけを持ち込む。
+# Production image for the Next.js frontend, in three stages: deps (install dependencies) -> builder (next build) -> runner (next start); only build output reaches the final image.
 FROM node:24.17.0-alpine AS deps
 
 WORKDIR /app
 
+# 依存だけを先に入れておくと、ソースだけが変わったときに npm ci のレイヤーキャッシュが効く。
+# Installing dependencies first lets the npm ci layer stay cached when only the source changes.
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ビルド段。BACKEND_URL などは ARG で受け、next build が参照できるよう ENV にも設定する。
+# Build stage. BACKEND_URL and friends come in as ARGs and are also set as ENV so next build can read them.
 FROM node:24.17.0-alpine AS builder
 
 WORKDIR /app
@@ -21,6 +27,8 @@ COPY . .
 
 RUN npm run build
 
+# 実行段。ビルド段から実行に必要なものだけをコピーする。ここでの ENV はコンテナ実行時の既定値。
+# Runtime stage. Copies only what is needed to run from the build stage; the ENV values here are the container's runtime defaults.
 FROM node:24.17.0-alpine AS runner
 
 WORKDIR /app

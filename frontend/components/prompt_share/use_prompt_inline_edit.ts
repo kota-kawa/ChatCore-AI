@@ -1,3 +1,5 @@
+// 共有フィード上で、自分の投稿を編集するフォームの状態と保存処理を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook for the form state and save flow when editing your own post in the share feed. Used by pages/prompt_share/index.tsx.
 import {
   useCallback,
   useState,
@@ -39,10 +41,14 @@ export function usePromptInlineEdit({
   const [editPromptForm, setEditPromptForm] = useState<EditPromptFormState | null>(null);
   const [isEditSaving, setIsEditSaving] = useState(false);
 
+  // 編集フォームを閉じて状態を捨てる
+  // Close the edit form and discard its state
   const resetEditPrompt = useCallback(() => {
     setEditPromptForm(null);
   }, []);
 
+  // 自分の投稿であることを確認してから編集フォームを開く。他人の投稿や未ログインなら false を返す。Skill は本文の代わりに skill_markdown を編集対象にする
+  // Open the edit form only for the user's own post, returning false otherwise; for a Skill, skill_markdown is edited instead of content
   const beginEditPrompt = useCallback((prompt: PromptRecord) => {
     const promptId = getPromptId(prompt);
     if (
@@ -68,6 +74,8 @@ export function usePromptInlineEdit({
     return true;
   }, [currentUserId]);
 
+  // input / textarea の name をキーにして、フォームの該当項目を更新する
+  // Update the form field named by the input / textarea's name attribute
   const handleEditPromptChange = useCallback(
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = event.target;
@@ -80,6 +88,8 @@ export function usePromptInlineEdit({
     setEditPromptForm((current) => current ? { ...current, category: value } : current);
   }, []);
 
+  // 必須項目と所有者を再確認してから更新 API に送り、成功したらフィード側のレコードにも同じ内容を反映する。成功は true、失敗は false で返す
+  // Recheck required fields and ownership, send the update API request, and on success mirror the change into the feed record; resolves true on success and false otherwise
   const handleEditPromptSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (
@@ -121,6 +131,8 @@ export function usePromptInlineEdit({
       );
       const response = parsePromptManageMutationResponse(payload);
       const isSkill = editPromptForm.contentFormat === "skill";
+      // 入出力例を持つのは、Skill ではないテキスト投稿だけ
+      // Input / output examples apply only to non-Skill text posts
       const includeExamples = !isSkill && editPromptForm.mediaType === "text";
       const nextAttributes = isSkill
         ? { ...editPromptForm.attributes, skill_markdown: editPromptForm.content }

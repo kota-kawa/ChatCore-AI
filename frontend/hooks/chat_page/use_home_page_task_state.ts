@@ -1,3 +1,5 @@
+// ホーム画面のタスク一覧に関する表示状態（展開、並び替えモード、詳細、編集モーダル、起動中）を保持するフック。
+// Hook holding the home page task list UI state: expansion, reorder mode, detail, edit modal, and launching.
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { NormalizedTask, TaskEditFormState } from "../../lib/chat_page/types";
@@ -13,6 +15,8 @@ const EMPTY_TASK_EDIT_FORM: TaskEditFormState = {
   output_examples: "",
 };
 
+// 折りたたみ時に表示するタスク数（PC 幅）。
+// Number of tasks shown while collapsed on desktop widths.
 const DESKTOP_TASK_COLLAPSE_LIMIT = 6;
 // スマホは1列表示のため1件あたりの縦幅が2列時の倍になる。4件のままだとセットアップ画面が
 // 1画面に収まらず密度調整クラス（setup-fit-compact/tight）が常時発動してフォーム全体が縮むため3件に抑える。
@@ -22,6 +26,8 @@ const DESKTOP_TASK_COLLAPSE_LIMIT = 6;
 const MOBILE_TASK_COLLAPSE_LIMIT = 3;
 const MOBILE_TASK_COLLAPSE_QUERY = "(max-width: 576px)";
 
+// 画面幅（メディアクエリ）に応じて折りたたみ件数を切り替え、タスク一覧に関する状態をまとめて返す。
+// Returns the task list state, switching the collapsed count by viewport width via a media query.
 export function useHomePageTaskState() {
   const { locale } = useTranslation();
   const [tasks, setTasks] = useState<NormalizedTask[]>([]);

@@ -1,3 +1,5 @@
+// 共有プロンプトカードのいいね・追加などで出る、短いアニメーション効果の状態を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that holds the state of short animation effects on share prompt cards (like, add, etc.). Used by pages/prompt_share/index.tsx.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // カード操作時の一時的な視覚効果とタイマーを管理する

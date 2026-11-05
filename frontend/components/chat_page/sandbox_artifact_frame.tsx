@@ -1,3 +1,5 @@
+// 生成UI（Artifact）を sandbox iframe の中で実行して表示するコンポーネント。CSP の組み立て、iframe 内で動く監視スクリプト、実行結果の判定と失敗表示を担う。
+// Component that runs and displays a generated UI (artifact) inside a sandboxed iframe: builds the CSP, the in-frame monitoring script, and judges and reports the runtime outcome.
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GenerativeUiArtifactV1, SandboxArtifactRuntimeState } from "../../lib/chat_page/types";
@@ -54,6 +56,8 @@ function resolveLibraryScriptUrls(artifact: GenerativeUiArtifactV1) {
   return [`${origin}${THREE_VENDOR_SCRIPT_PATH}`];
 }
 
+// モデルによっては、Three.js だけを使うよう頼んでも OrbitControls アドオンの import を出力する。
+// バックエンドがそのネットワーク import を取り除くので、ここでは同等のドラッグ回転を小さな自前実装で補う。
 // Several providers emit the familiar OrbitControls addon import even when the
 // prompt asks for core-only Three.js. The backend removes that network import;
 // this small local control preserves the expected drag-to-orbit behavior.
@@ -160,6 +164,10 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, eng
   const libraryGuard = artifact.libraries?.includes("three")
     ? 'if (typeof THREE === "undefined") { throw new Error("Three.js failed to load"); }\n'
     : "";
+  // iframe の中で最初に動く管理スクリプト。高さの通知、描画された内容の有無の判定、実行結果（ready / blank / runtime_error / csp_blocked）の親への報告を行う。
+  // 以下はテンプレート文字列の中身なので、中のコメントもこの文字列の一部としてそのまま iframe に渡る。
+  // The management script that runs first inside the iframe: reports height, judges whether anything rendered, and reports the outcome (ready / blank / runtime_error / csp_blocked) to the parent.
+  // What follows is the template literal's content, so the comments inside it are part of the string and are passed to the iframe as is.
   const shellScript = `
 (function(){
   var MIN_HEIGHT = ${MIN_FRAME_HEIGHT};
@@ -409,8 +417,8 @@ type SandboxArtifactFrameProps = {
   artifact: GenerativeUiArtifactV1;
 };
 
-// フレームの高さを最小・最大の範囲内に収める
-// Clamp the frame height within the minimum and maximum range
+// iframe からの報告として受け付ける実行結果の状態名。これ以外の文字列は無視する
+// Runtime state names accepted as reports from the iframe; any other string is ignored
 const RUNTIME_STATES = new Set<SandboxArtifactRuntimeState>([
   "ready",
   "blank",
@@ -420,6 +428,8 @@ const RUNTIME_STATES = new Set<SandboxArtifactRuntimeState>([
   "navigation_blocked",
 ]);
 
+// フレームの高さを最小・最大の範囲内に収める。数値でなければ undefined を返す
+// Clamp the frame height within the minimum and maximum range; returns undefined for non-finite values
 function clampHeight(value: number) {
   if (!Number.isFinite(value)) return undefined;
   return Math.min(Math.max(Math.ceil(value), MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT);

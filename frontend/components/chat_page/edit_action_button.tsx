@@ -1,3 +1,5 @@
+// ユーザー発言の「編集」ボタン。chat_message_list.tsx のメッセージ操作列で使われる。
+// "Edit" button for a user message; used in the message action row of chat_message_list.tsx.
 // メッセージ編集ボタンのprops型定義
 // Props type definition for the message edit button
 type EditActionButtonProps = {

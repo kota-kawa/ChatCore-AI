@@ -1,3 +1,6 @@
+// 回答パーツの表示順・排他と件数の共通契約を適用する。
+// Applies shared ordering, exclusion and count rules to answer parts.
+
 import type { ChatMessagePart } from "./types";
 
 // アシスタントメッセージのパーツ表示順を決める規約。services/message_parts_display.py と

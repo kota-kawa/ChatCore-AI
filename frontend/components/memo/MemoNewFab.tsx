@@ -1,3 +1,5 @@
+// 作成欄が画面外へスクロールしたときだけ出る「新規メモ」の浮遊ボタン。押すと作成欄へ戻り、入力を始められる。MemoPage から使われる。
+// Floating "new memo" button shown only while the composer is scrolled off-screen; pressing it returns to the composer ready to type. Used by MemoPage.
 import { useEffect, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -15,6 +17,8 @@ export function MemoNewFab() {
   useEffect(() => {
     const composer = document.getElementById("memo-composer");
     if (!composer || typeof IntersectionObserver === "undefined") return undefined;
+    // 作成欄（#memo-composer）が画面内に見えているかを監視し、見えている間はボタンを出さない。
+    // Watches whether the composer (#memo-composer) is on screen and hides the button while it is.
     const observer = new IntersectionObserver(([entry]) => setComposerVisible(entry.isIntersecting));
     observer.observe(composer);
     return () => observer.disconnect();

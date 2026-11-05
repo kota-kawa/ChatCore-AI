@@ -1,3 +1,5 @@
+// 生成UI（Artifact）を表示できなかったときの案内表示。チャット画面と共有チャット画面の両方で使われる。
+// Notice shown when a generated UI (artifact) could not be displayed; used by both the chat page and the shared chat page.
 import { memo } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";

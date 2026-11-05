@@ -1,3 +1,5 @@
+// 共有プロンプトページのモーダル（投稿・編集・詳細・プロフィール）の開閉、背景スクロールのロック、フォーカス復元を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that manages open/close of the prompt-share page modals (post, edit, detail, profile), background scroll lock and focus restoration. Used by pages/prompt_share/index.tsx.
 import {
   useCallback,
   useEffect,

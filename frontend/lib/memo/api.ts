@@ -1,3 +1,8 @@
+// メモ画面が使う /memo/api/* の API クライアント。一覧・詳細・コレクションの取得と、作成・更新・削除・ピン留め・共有などの変更系リクエストを持つ。
+// 変更系はエラーを throw するだけで、表示は呼び出し側の hook が担当する。
+// API client for the /memo/api/* endpoints used by the memo page: fetching lists, details and collections, and mutations such as create, update, delete, pin and share.
+// Mutations only throw on failure; surfacing the error is left to the calling hook.
+
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { DEFAULT_LIMIT, MAX_MEMO_LIST_REQUEST_LIMIT } from "./constants";
@@ -21,6 +26,7 @@ import type {
 } from "./types";
 
 // ---------------------------------------------------------------------------
+// メモ画面のデータ取得
 // Memo page data fetching
 // ---------------------------------------------------------------------------
 
@@ -100,6 +106,8 @@ export async function loadMemoDetail(memoId: string | number) {
   return payload.memo || null;
 }
 
+// resilientFetch（タイムアウトと再試行つき）で JSON を取得し、失敗時は throw する共通ラッパー。メモとマイコンテキストの API が共有する。
+// Shared wrapper that fetches JSON through resilientFetch (timeout and retries) and throws on failure; used by the memo and My Context APIs.
 export function memoFetchJsonOrThrow<TPayload>(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -112,6 +120,7 @@ export function memoFetchJsonOrThrow<TPayload>(
 }
 
 // ---------------------------------------------------------------------------
+// メモ画面の変更系リクエスト
 // Memo page mutations
 // /memo/api/* への変更系リクエストの型付きラッパー。エラーは throw するだけで、
 // 表示（flash など）は呼び出し側の hook が担当する。
@@ -119,6 +128,8 @@ export function memoFetchJsonOrThrow<TPayload>(
 // surfacing the error (flash messages etc.) is the calling hook's job.
 // ---------------------------------------------------------------------------
 
+// JSON ボディを送るリクエストに共通のヘッダー。
+// Headers shared by requests that send a JSON body.
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // メモを新規作成する

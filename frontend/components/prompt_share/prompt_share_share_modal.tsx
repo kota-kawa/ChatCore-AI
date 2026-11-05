@@ -1,3 +1,6 @@
+// 公開投稿の共有先とコピー操作を共通モーダルで表示する。
+// Shows public post sharing destinations and copy actions in a shared modal.
+
 import { useCallback, type RefObject } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";

@@ -1,3 +1,5 @@
+// サイドバーのチャットルーム1件分のカードと操作メニュー（名前変更・ピン留め・複数選択・プロジェクト追加・削除）。chat_main_section.tsx から使われる。
+// One chat room card in the sidebar with its action menu (rename, pin, multi-select, add to project, delete); used by chat_main_section.tsx.
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useHomePageChatContext, useHomePageProjectContext } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
@@ -45,6 +47,8 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
   const roomTitle = room.title || t("chat.new");
   const roomMenuId = `room-actions-menu-${room.id}`;
   const roomSelected = selectedRoomIds.has(room.id);
+  // ピン留めは通常チャットだけが対象で、未保存（temporary）のルームにはメニュー項目を出さない（下の room.mode === "normal" 判定）
+  // Only normal chats can be pinned or added to a project; temporary rooms get no such menu items (see the room.mode === "normal" checks below)
   const roomPinned = Boolean(room.pinnedAt);
 
   return (

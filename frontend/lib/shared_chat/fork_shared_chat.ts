@@ -1,13 +1,20 @@
+// 共有されたチャットを、閲覧者自身のルームへ複製（フォーク）する API 呼び出しと、複製先をアクティブなチャットとして記録する処理。
+// Calls the API that forks a shared chat into the viewer's own room and records the new room as the active chat.
+
 import type { ChatRoomMode } from "../chat_page/types";
 import { writeStoredActiveChatRoom, writeStoredHomePageViewState } from "../chat_page/storage";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
+// 複製してできたルームの ID と種類。
+// The id and mode of the room created by the fork.
 export type ForkedChatRoom = {
   id: string;
   mode: ChatRoomMode;
 };
 
+// 複製 API のレスポンス。中身は信用せず、使う前に型を確かめる。
+// Response of the fork API; its contents are not trusted and are type-checked before use.
 type ForkResponsePayload = {
   id?: unknown;
   mode?: unknown;

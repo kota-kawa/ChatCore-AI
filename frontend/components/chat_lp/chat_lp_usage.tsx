@@ -1,3 +1,5 @@
+// AIチャット紹介ページの「使い方」セクション。3ステップの流れと、頼み方のこつ・料金と前提を示す。pages/chat/lp.tsx から使われる。
+// "How it works" section of the AI chat landing page: the three-step flow, how to ask, and price and prerequisites; used by pages/chat/lp.tsx.
 import { useTranslation } from "../../contexts/locale_context";
 
 // 3ステップの利用フローと、その下に「頼み方のこつ」「料金と前提」の2カラムを置く
@@ -94,6 +96,8 @@ const PRICING_EN: Step[] = [
   }
 ];
 
+// 各 *_JA / *_EN の配列は同じ構成で対になっていて、locale に合う方を選んで表示する
+// Each *_JA / *_EN array pair has the same structure; the one matching the locale is rendered
 export function ChatLpUsage() {
   const { locale } = useTranslation();
   const isEn = locale === "en";
