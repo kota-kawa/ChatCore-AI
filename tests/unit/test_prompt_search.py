@@ -1,3 +1,11 @@
+"""公開プロンプトの検索（blueprints.prompt_share.prompt_search）を検証するテスト。
+サービス結果の整形とページング、二軸フィルター・カテゴリの解決、
+クエリ埋め込みを使う条件（使えなければ語彙検索）を確かめる。
+
+Tests for public prompt search (blueprints.prompt_share.prompt_search): service-row mapping and pagination,
+two-axis filter and category resolution, and when a query embedding is used (lexical search otherwise).
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -6,6 +14,8 @@ from blueprints.prompt_share import prompt_search
 from blueprints.prompt_share.prompt_search import _embed_search_query, _search_public_prompts
 
 
+# 検索呼び出しの引数を記録し、固定の応答を返す共有コンテンツサービスの代役。
+# Stand-in for the shared content service that records search arguments and returns a fixed response.
 class StubSharedContentService:
     def __init__(self, response):
         self.response = response
@@ -16,6 +26,8 @@ class StubSharedContentService:
         return self.response
 
 
+# 検索ルートがサービスへ渡す引数と、返すペイロードの形を検証するテストクラス。
+# Test class for the arguments the search route passes to the service and the payload shape it returns.
 class PromptSearchTestCase(unittest.TestCase):
     @staticmethod
     def _row(**overrides):

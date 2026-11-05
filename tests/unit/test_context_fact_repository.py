@@ -1,3 +1,10 @@
+"""ContextFactRepository（文脈の事実の作成・検索・更新）の SQL とロック順、上限チェック、
+確認日時（confirmation）の扱いを検証するテスト。
+
+Tests ContextFactRepository's SQL and lock ordering, the active-fact cap, and how confirmation timestamps
+are written on create and update.
+"""
+
 import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,6 +18,8 @@ from services.repositories.context_fact_repository import (
 )
 
 
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。overrides で項目を差し替えます。
+# English: Build one fact-table row dict; overrides replace individual fields.
 def _fact_row(**overrides):
     row = {
         "id": 10,
@@ -35,12 +44,16 @@ def _fact_row(**overrides):
     return row
 
 
+# 日本語: SQLAlchemy の文を PostgreSQL 方言の SQL 文字列へコンパイルします。
+# English: Compile a SQLAlchemy statement into a PostgreSQL-dialect SQL string.
 def _sql(statement):
     # RETURNING は全列を読み戻すので、書き込み側の文だけを見る
     # RETURNING reads every column back, so look at the writing part of the statement only.
     return " ".join(str(statement.compile(dialect=dialect())).split()).split(" RETURNING")[0]
 
 
+# 日本語: DB の実行結果を模したモックを作ります。
+# English: Build a mock of a DB execution result.
 def _result(*, mapping=None, scalar_rows=None):
     result = MagicMock()
     result.mappings.return_value.first.return_value = mapping
@@ -49,6 +62,8 @@ def _result(*, mapping=None, scalar_rows=None):
     return result
 
 
+# 日本語: AsyncSession をモックし、作成・検索・更新の SQL とロックの順序を確認します。
+# English: Mock the AsyncSession and check the SQL and lock order for create, search and update.
 class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_create_fact_locks_checks_cap_and_returns_provenance(self):
         session = MagicMock()
@@ -153,6 +168,9 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
 
+# 日本語: 書き込み元（本人の画面、MCP、インポート）ごとに、確認日時と confidence を記録するか消すかを確認します。
+# English: Check, per write origin (owner UI, MCP, import), whether confirmation time and confidence are recorded
+# or cleared.
 class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
     async def _create(self, source_kind):
         session = MagicMock()

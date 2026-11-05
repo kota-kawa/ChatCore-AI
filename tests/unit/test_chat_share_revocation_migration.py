@@ -1,8 +1,15 @@
+"""共有リンクの期限・失効列を追加する migration（20260913_01）と SharedChatRoom モデルの整合を検証するテスト。
+
+Tests the share-link expiry/revocation migration (20260913_01) and its consistency with the SharedChatRoom model.
+"""
+
 import unittest
 from pathlib import Path
 
 from services.models import SharedChatRoom
 
+# 検証対象の Alembic migration ファイル。
+# The Alembic migration file under test.
 MIGRATION_PATH = (
     Path(__file__).parents[2]
     / "alembic"
@@ -25,6 +32,8 @@ class ChatShareRevocationMigrationTestCase(unittest.TestCase):
         # Expand/contract: additive only, never touching existing columns or indexes.
         self.assertNotIn("DROP", upgrade.upper())
 
+    # モデル側の列が migration と同じく NULL 許可・タイムゾーン付きであることを確認する。
+    # Checks the model columns are nullable and timezone-aware, matching the migration.
     def test_model_matches_the_migrated_columns(self):
         columns = SharedChatRoom.__table__.columns
         self.assertIn("expires_at", columns)

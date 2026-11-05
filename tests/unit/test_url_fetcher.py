@@ -1,3 +1,12 @@
+"""URL 取得（services.url_fetcher）を検証するテスト。
+URL の抽出、SSRF 対策（内部 IP・不正なポート・認証情報の拒否、リダイレクト先の再検証、DNS ピニング）、
+HTML の本文・リンク抽出、取得の制限（バイト数・時間・並列数）、ログでの URL 秘匿を確かめる。
+
+Tests for URL fetching (services.url_fetcher): URL extraction, SSRF defenses (rejecting internal IPs, unusual ports
+and credentials, revalidating redirects, DNS pinning), HTML text and link extraction,
+fetch limits (bytes, time, concurrency), and keeping URLs out of logs.
+"""
+
 import socket
 import time
 import unittest
@@ -9,6 +18,8 @@ import requests
 from services import url_fetcher
 
 
+# socket.getaddrinfo の戻り値を真似て、指定 IP の DNS 応答を作る補助関数。
+# Helper that builds a DNS answer for the given IP in the shape of socket.getaddrinfo's result.
 def _dns_answer(ip: str):
     family = socket.AF_INET6 if ":" in ip else socket.AF_INET
     sockaddr = (ip, 443, 0, 0) if family == socket.AF_INET6 else (ip, 443)
@@ -938,6 +949,8 @@ class DnsPinningTest(unittest.TestCase):
         self.assertIsNone(getattr(url_fetcher._dns_pin_local, "mapping", None))
 
 
+# ログへ出す URL からユーザー情報・クエリ・フラグメントを除き、署名付き URL が漏れないことを検証するテストクラス。
+# Test class verifying that userinfo, query and fragment are stripped from logged URLs so signed URLs do not leak.
 class UrlLoggingTest(unittest.TestCase):
     def test_removes_userinfo_query_and_fragment(self):
         self.assertEqual(

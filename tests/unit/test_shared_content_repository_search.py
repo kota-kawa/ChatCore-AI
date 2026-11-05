@@ -1,4 +1,12 @@
-"""SQL-shape tests for search and recommendations in SharedContentRepository.
+"""SharedContentRepository の検索とおすすめが生成する SQL の形を検証するテスト。
+
+search_public_prompts は以前、入力をそのまま ILIKE パターン（``f"%{query}%"``）へ埋め込んでいたため、
+``%`` や ``_`` を含む検索語が入力以上に多くの行へ一致していた（例: ``50%`` が「50」を含む任意の行に一致）。
+list_public_content はすでに ``services.search_terms.build_like_pattern`` を通していた。
+このファイルは search_public_prompts を同じ挙動に固定し、ベクトル列の追加後の
+「語の一致が先、意味の近さが後」という順位付けも固定する。
+
+SQL-shape tests for search and recommendations in SharedContentRepository.
 
 search_public_prompts used to interpolate the raw query into an ILIKE pattern
 (``f"%{query}%"``), so a search term containing ``%`` or ``_`` matched far more
@@ -16,6 +24,8 @@ from services.repositories.shared_content_repository import SharedContentReposit
 from services.search_terms import build_like_pattern
 
 
+# 行とスカラー値を返す DB 実行結果のモックを作る補助関数。
+# Helper that builds a mocked DB result returning rows and a scalar.
 def _result(rows=None, scalar=0):
     result = MagicMock()
     result.mappings.return_value.all.return_value = rows or []
@@ -23,6 +33,8 @@ def _result(rows=None, scalar=0):
     return result
 
 
+# 既定の引数で search_public_prompts を呼ぶ補助関数。
+# Helper that calls search_public_prompts with default arguments.
 async def _search(session, **overrides):
     kwargs = {
         "query": "architecture",
@@ -39,6 +51,8 @@ async def _search(session, **overrides):
     return await SharedContentRepository().search_public_prompts(session, **kwargs)
 
 
+# 検索 SQL のワイルドカードのエスケープ、語ごとの AND 条件と順位、ベクトル検索の併用を検証するテストクラス。
+# Test class for wildcard escaping in the search SQL, per-term AND matching and ranking, and optional vector matching.
 class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_wildcard_characters_in_the_query_are_escaped(self):
         session = MagicMock()
@@ -48,6 +62,7 @@ class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
 
         params = session.execute.await_args.args[1]
         self.assertEqual(params["search_term_0"], build_like_pattern("50%_off"))
+        # 入力された検索語が、エスケープされないワイルドカードのまま残ってはならない。
         # The raw query must not survive as an unescaped wildcard pattern.
         self.assertNotEqual(params["search_term_0"], "%50%_off%")
         self.assertIn("\\%", params["search_term_0"])
@@ -84,6 +99,7 @@ class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params["search_term_1"], "%要約%")
         self.assertIn("p.title ILIKE :search_term_0 ESCAPE '\\'", sql)
         self.assertIn("p.title ILIKE :search_term_1 ESCAPE '\\'", sql)
+        # すべての語のグループに一致する必要があり、順位はタイトルへの一致を最も高く数える。
         # Both term groups are required, and the rank counts title hits highest.
         self.assertIn(") AND (", sql)
         self.assertIn("THEN 3 WHEN", sql)
@@ -130,6 +146,8 @@ class SharedContentRepositorySearchTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["rows"][0]["author_avatar_url"], "/static/user-icon.png")
 
 
+# おすすめ SQL が基準プロンプトとの距離、カテゴリ、閲覧数の順で並べることを検証するテストクラス。
+# Test class verifying that the recommendation SQL orders by anchor distance, category and views.
 class SharedContentRepositoryRecommendationTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_recommendations_rank_by_anchor_distance_then_category_then_views(self):
         session = MagicMock()
@@ -148,6 +166,7 @@ class SharedContentRepositoryRecommendationTestCase(unittest.IsolatedAsyncioTest
         self.assertEqual(params["limit"], 3)
         self.assertGreater(params["semantic_max_distance"], 0)
         self.assertIn("WITH anchor AS", sql)
+        # 距離は CTE で 1 回だけ計算し、外側の SELECT で上限を掛ける。
         # The distance is computed once in the CTE and capped in the outer select.
         self.assertEqual(sql.count("p.embedding_vector <=> anchor.embedding_vector"), 1)
         self.assertIn("WHEN ranked.anchor_distance <= :semantic_max_distance THEN ranked.anchor_distance", sql)

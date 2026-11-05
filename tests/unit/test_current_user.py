@@ -1,3 +1,10 @@
+"""現在のログインユーザーを返す api_current_user と、アカウント削除の api_delete_user_account（認証、
+確認文字列、セッションの消去）を検証するテスト。
+
+Tests api_current_user, which returns the signed-in user, and api_delete_user_account: authentication, the
+confirmation text and clearing the session.
+"""
+
 import asyncio
 import json
 import unittest
@@ -8,6 +15,8 @@ from services.users import ACCOUNT_DELETE_CONFIRMATION_TEXT
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: /api/current_user へのリクエストを作ります。session でログイン状態を再現します。
+# English: Build a request to /api/current_user; session reproduces the sign-in state.
 def make_request(session=None):
     return build_request(method="GET", path="/api/current_user", session=session)
 
@@ -15,7 +24,7 @@ def make_request(session=None):
 # 日本語: Current Userの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Current User.
 class CurrentUserTestCase(unittest.TestCase):
-    # 日本語: 現在ユーザーログインoutことを検証します。
+    # 日本語: 未ログインのとき、/api/current_user が logged_in: False を返すことを検証します。
     # English: Verify that current user logged out.
     def test_current_user_logged_out(self):
         request = make_request()
@@ -23,7 +32,7 @@ class CurrentUserTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.body.decode()), {"logged_in": False})
 
-    # 日本語: 現在ユーザーログインことを検証します。
+    # 日本語: ログイン済みのとき、/api/current_user がユーザー情報（id・メール・ユーザー名・ロケール）を返すことを検証します。
     # English: Verify that current user logged in.
     def test_current_user_logged_in(self):
         request = make_request(session={"user_id": 7})
@@ -52,7 +61,7 @@ class CurrentUserTestCase(unittest.TestCase):
             },
         )
 
-    # 日本語: deleteユーザーaccount要求するログインことを検証します。
+    # 日本語: ログインしていないアカウント削除リクエストが 401 で拒否されることを検証します。
     # English: Verify that delete user account requires login.
     def test_delete_user_account_requires_login(self):
         request = build_request(
@@ -69,7 +78,7 @@ class CurrentUserTestCase(unittest.TestCase):
             {"error": "ログインが必要です。", "code": "auth.login_required"},
         )
 
-    # 日本語: deleteユーザーaccount拒否するmissingconfirmationことを検証します。
+    # 日本語: 確認文字列が一致しないアカウント削除リクエストが 400 で拒否され、削除処理が呼ばれないことを検証します。
     # English: Verify that delete user account rejects missing confirmation.
     def test_delete_user_account_rejects_missing_confirmation(self):
         request = build_request(
@@ -91,7 +100,7 @@ class CurrentUserTestCase(unittest.TestCase):
         )
         mock_delete.assert_not_called()
 
-    # 日本語: およびクリアするセッション、deleteユーザーaccount削除するaccountことを検証します。
+    # 日本語: アカウント削除が成功すると、ユーザーを削除してセッションを空にすることを検証します。
     # English: Verify that delete user account deletes account and clears session.
     def test_delete_user_account_deletes_account_and_clears_session(self):
         session = {"user_id": 7, "user_email": "user@example.com"}

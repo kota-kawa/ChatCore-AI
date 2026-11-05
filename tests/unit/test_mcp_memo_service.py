@@ -1,3 +1,10 @@
+"""MCP のメモサービス（一覧・検索・取得・作成・追記・更新）が、共有トークンを漏らさず、
+リビジョン保護と埋め込み更新を行うことを検証するテスト。
+
+Tests the MCP memo service (list, search, get, create, append, update): it never leaks share tokens and keeps revision guards
+and embedding updates.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -20,6 +27,8 @@ from services.request_models import (
 )
 
 
+# 共有トークンや URL など、MCP へ出してはいけない値を含むメモの辞書を作る。overrides で項目を上書きする。
+# Builds a memo dict that includes values that must never reach MCP clients, such as the share token and URL; overrides replace fields.
 def memo_payload(**overrides):
     payload = {
         "id": 10,
@@ -41,6 +50,8 @@ def memo_payload(**overrides):
     return payload
 
 
+# session_scope の代役。begin() も同じオブジェクトを返し、例外は握りつぶさない。
+# Stand-in for session_scope: begin() returns the same object and exceptions are not swallowed.
 class _SessionScope:
     async def __aenter__(self):
         return self
@@ -52,6 +63,8 @@ class _SessionScope:
         return self
 
 
+# 更新リクエストモデルが、リビジョンと変更項目を必須とすることを確かめる。
+# Checks the update request model requires a revision and at least one changed field.
 class McpMemoRequestModelTestCase(unittest.TestCase):
     def test_update_requires_revision_and_changed_field(self):
         with self.assertRaises(ValidationError):
@@ -60,6 +73,8 @@ class McpMemoRequestModelTestCase(unittest.TestCase):
             McpMemoUpdateRequest(expected_revision=0, title="title")
 
 
+# サービスの返す DTO が許可リストの項目だけを含み、書き込みがトランザクションとリビジョン保護の下で行われることを確かめる。
+# Checks the service DTOs contain allowlisted fields only and writes run in a transaction under the revision guard.
 class McpMemoServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_list_returns_allowlisted_metadata_without_share_bearer(self):
         fetch = AsyncMock(return_value={"total": 1, "memos": [memo_payload()]})

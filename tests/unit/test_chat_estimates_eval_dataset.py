@@ -1,3 +1,6 @@
+# 固定データで、概算回答に必要な前提・計算・根拠の扱いを検証する。
+# Checks assumptions, calculations and evidence handling for estimate answers with fixed evaluation cases.
+
 import json
 import re
 import unittest

@@ -1,3 +1,8 @@
+"""会話メッセージから記憶ファクトを抽出する memory_extraction を、LLM をモックして検証するテスト。
+
+Tests memory_extraction, which extracts memory facts from a chat message, with the LLM mocked.
+"""
+
 import unittest
 from unittest.mock import patch
 

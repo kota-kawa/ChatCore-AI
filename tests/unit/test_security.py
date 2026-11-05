@@ -1,3 +1,8 @@
+"""セキュリティ補助（services.security）の確認コード生成と、定数時間での文字列比較を検証するテスト。
+
+Tests for services.security helpers: verification-code generation and constant-time string comparison.
+"""
+
 import unittest
 
 from services.security import (

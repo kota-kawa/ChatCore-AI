@@ -1,3 +1,8 @@
+"""MCP のコンテキスト保管庫ツール（ダイジェスト・検索・保存・更新・廃止）の注釈、レート制限の区分、書き込み時の監査ログを検証するテスト。
+
+Tests the annotations, rate-limit buckets and write audit logging of the MCP context vault tools (digest, search, save, update, deprecate).
+"""
+
 import asyncio
 import os
 import unittest
@@ -14,7 +19,11 @@ MCP_ENVIRONMENT = {
 }
 
 
+# ツールの副作用の注釈と、読み取り／書き込み／意味検索ごとのレート制限の使い分けを確かめる。
+# Checks the tool effect annotations and that read, write and semantic-search rate-limit buckets are used correctly.
 class McpContextVaultToolTestCase(unittest.TestCase):
+    # テスト用の環境変数を当てて MCP サーバーを生成する。
+    # Builds an MCP server under the test environment variables.
     def _server(self):
         with patch.dict(os.environ, MCP_ENVIRONMENT, clear=False):
             return mcp_server._create_mcp()

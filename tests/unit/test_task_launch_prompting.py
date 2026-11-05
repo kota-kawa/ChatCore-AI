@@ -1,3 +1,10 @@
+"""チャットのシステムプロンプトと、タスク起動時のプロンプト組み立て（blueprints.chat.messages.chat）を検証するテスト。
+BASE_SYSTEM_PROMPT の文言規則、実行時コンテキスト、ユーザープロフィール、タスク起動・追質問・参照失敗時の挙動を確かめる。
+
+Tests for the chat system prompt and task-launch prompt assembly (blueprints.chat.messages.chat): the wording rules in BASE_SYSTEM_PROMPT,
+runtime context, the user profile prompt, and behavior on task launch, follow-ups and failed prompt lookups.
+"""
+
 import asyncio
 import json
 import re
@@ -28,6 +35,8 @@ from services.web_search import build_web_search_evidence_policy_message
 from tests.helpers.request_helpers import build_request
 
 
+# チャット API への POST リクエストを組み立てる補助関数。
+# Helper that builds a POST request for the chat API.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -41,6 +50,7 @@ def make_request(json_body, session=None):
 # English: Test case class to verify the functionality and specifications of Task Launch Prompting.
 class TaskLaunchPromptingTestCase(unittest.TestCase):
     def setUp(self):
+        # スキル選択の挙動は別のテストで扱うので、ここでは対象のスキルをすべて残す。
         # Selection semantics are covered separately; retain all eligible Skills here.
         self.enterContext(patch(
             "blueprints.chat.messages.select_chat_skills",

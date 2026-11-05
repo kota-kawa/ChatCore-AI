@@ -115,6 +115,9 @@ class MigrationRevisionGraphTest(unittest.TestCase):
 # Test class to check for PostgreSQL-incompatible CASE syntax in triggers.
 class MigrationTriggerCaseExpressionTest(unittest.TestCase):
     """
+    単純 CASE の判定対象（TG_OP など）に、真偽値を返す WHEN 分岐が混ざっていないかを見張る。
+    PostgreSQL では text = boolean の比較になり、実行時にエラーとなる。
+
     Guard against mixing simple-CASE selectors with boolean WHEN branches.
 
     PostgreSQL's simple CASE syntax is:
@@ -129,6 +132,8 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
         CASE WHEN TG_OP = '...' THEN ... WHEN NEW.col IS NOT NULL THEN ... END
     """
 
+    # CASE TG_OP ... WHEN NEW.<col> または WHEN OLD.<col> に一致する。
+    # 単純 CASE の中で NEW. / OLD. で始まる WHEN は必ず真偽値の条件なので、text の判定対象とは比較できない。
     # Matches:  CASE TG_OP ... WHEN NEW.<col>  or  WHEN OLD.<col>
     # A WHEN clause that starts with NEW./OLD. in a simple-CASE block is always
     # a boolean condition, which is incompatible with a text selector.
@@ -140,7 +145,11 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
     # CASE TG_OP での条件分岐内にレコードフィールド(NEW/OLD)の比較が混在していないかを検証します。
     # Verify that CASE TG_OP does not contain NEW/OLD record field comparisons in WHEN clauses.
     def test_no_simple_case_tg_op_with_record_field_when(self):
-        """CASE TG_OP must not have NEW.<col> or OLD.<col> as a WHEN value."""
+        """
+        CASE TG_OP の WHEN の値に NEW.<col> や OLD.<col> を使ってはならない。
+
+        CASE TG_OP must not have NEW.<col> or OLD.<col> as a WHEN value.
+        """
         # エラーの原因となる構文パターンを含むマイグレーションファイルをリストアップ
         # List up migration files that contain syntax patterns causing the error
         violations = [
@@ -167,10 +176,13 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
 # Test class to check if operation name string lengths in trigger functions are within VARCHAR(16).
 class MigrationTriggerOperationLengthTest(unittest.TestCase):
     """
+    *_versions テーブルの operation 列（VARCHAR(16) NOT NULL）の幅を超える操作名の文字列を見張る。
+
     Guard against operation strings that exceed the VARCHAR(16) column width
     in *_versions tables (operation VARCHAR(16) NOT NULL).
     """
 
+    # CREATE FUNCTION / DO $$ ブロック内の CASE 式で、THEN の後に続く 17 文字以上の文字列リテラルを拾う。
     # Capture every string literal that follows a THEN keyword inside a CASE
     # expression within a CREATE FUNCTION / DO $$ block.
     _THEN_STRING = re.compile(r"\bTHEN\s+'([^']{17,})'", re.IGNORECASE)
@@ -178,7 +190,11 @@ class MigrationTriggerOperationLengthTest(unittest.TestCase):
     # トリガー関数内のTHEN節の操作名文字列が16文字以下であることを検証します。
     # Verify that all operation name string literals after THEN are at most 16 characters.
     def test_operation_values_fit_in_varchar16(self):
-        """String literals after THEN in trigger functions must be ≤16 chars."""
+        """
+        トリガー関数内で THEN の後に置く文字列リテラルは 16 文字以下でなければならない。
+
+        String literals after THEN in trigger functions must be ≤16 chars.
+        """
         violations = []
         # 全てのSQLブロックで、THENの後に続く文字列の長さをチェック
         # Check the length of strings following THEN in all SQL blocks

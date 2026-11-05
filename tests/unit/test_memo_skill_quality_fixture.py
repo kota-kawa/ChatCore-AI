@@ -1,3 +1,10 @@
+"""メモ Skill の品質評価用の固定データ（llm_eval/memo_skill_quality_cases.json）が、形式・一意性・固定検索結果
+との整合を満たすことを検証するテスト。
+
+Tests that the memo skill quality fixture (llm_eval/memo_skill_quality_cases.json) is well formed, unique and consistent
+with its fixed search result.
+"""
+
 import json
 import re
 import unittest
@@ -13,6 +20,8 @@ FIXTURE_PATH = (
 _MEMO_TOOLS = {"memo_list", "memo_search", "memo_read", "memo_create", "memo_append", "memo_edit"}
 
 
+# 文中の年・日付・曜日・時刻を目印の集合に変える。主張が固定検索結果の抜粋に根拠を持つかの照合に使う。
+# Turns years, dates, weekdays and times in a text into a set of markers, used to check a claim is backed by the fixed search snippets.
 def _claim_fact_markers(text: str) -> set[str]:
     markers = {f"year:{year}" for year in re.findall(r"\d{4}年", text)}
     markers.update(
@@ -27,6 +36,8 @@ def _claim_fact_markers(text: str) -> set[str]:
     return markers
 
 
+# 評価データそのものを検証する。モデルの出力は検証しない。
+# Validates the evaluation data itself, not any model output.
 class MemoSkillQualityFixtureTestCase(unittest.TestCase):
     def test_fixture_is_well_formed_and_has_unique_cases_and_models(self):
         dataset = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))

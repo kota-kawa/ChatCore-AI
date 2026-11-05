@@ -1,3 +1,8 @@
+"""閲覧数カウンタ表と人気順インデックスを追加する Alembic マイグレーション（20260824_02）の内容を検証するテスト。
+
+Tests the contents of the Alembic migration 20260824_02 that adds the view-count table and its popularity index.
+"""
+
 import unittest
 from pathlib import Path
 
@@ -9,6 +14,8 @@ MIGRATION_PATH = (
 )
 
 
+# 非負制約付きの独立したカウンタ表と人気順インデックスの定義を検証するテストクラス。
+# Test class for the separate non-negative counter table and the popularity index definition.
 class PromptViewCountMigrationTestCase(unittest.TestCase):
     def test_migration_creates_separate_non_negative_counter_and_popularity_index(self):
         sql = MIGRATION_PATH.read_text()

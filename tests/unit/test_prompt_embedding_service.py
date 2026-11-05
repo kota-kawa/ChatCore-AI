@@ -1,3 +1,10 @@
+"""プロンプトの埋め込み生成（services.prompt_embedding_service）を検証するテスト。
+埋め込み用テキストの組み立て、更新時刻による保存ガード、生成から保存までの流れ、リクエスト外での実行予約を確かめる。
+
+Tests for prompt embedding generation (services.prompt_embedding_service): embedding-text building, the updated_at write guard,
+the read-embed-store flow, and scheduling the work off the request path.
+"""
+
 import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +20,8 @@ from services.prompt_embedding_service import (
 from services.repositories.prompt_embedding_repository import PromptEmbeddingRepository
 
 
+# DB セッションを非同期コンテキストとして返すだけのテスト用スコープ。
+# Test scope that simply yields a DB session as an async context manager.
 class _SessionScope:
     def __init__(self, session):
         self.session = session
@@ -24,6 +33,8 @@ class _SessionScope:
         return False
 
 
+# begin / execute を持つ非同期セッションのモックを作る補助関数。
+# Helper that builds a mock async session with begin / execute.
 def _session():
     session = MagicMock()
     session.execute = AsyncMock()
@@ -33,6 +44,8 @@ def _session():
     return session
 
 
+# 埋め込み対象テキスト（題名・説明・本文・スキル本文）の組み立てと長さ制限を検証するテストクラス。
+# Test class for building embedding text from title, description, body and skill markdown, and for its length cap.
 class PromptEmbeddingTextTestCase(unittest.TestCase):
     def test_combines_title_description_and_content(self):
         text = build_prompt_embedding_text("議事録テンプレート", "会議メモを整理する", "以下のメモを整理してください。")
@@ -58,6 +71,8 @@ class PromptEmbeddingTextTestCase(unittest.TestCase):
         self.assertLessEqual(len(text), prompt_embedding_service.EMBEDDING_MAX_INPUT_CHARS)
 
 
+# 埋め込みリポジトリの保存ガードと、公開中のプロンプトだけを読むことを検証するテストクラス。
+# Test class for the embedding repository's write guard and its reading of only live public prompts.
 class PromptEmbeddingRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_guards_on_the_updated_at_the_text_was_read_with(self):
         session = _session()
@@ -86,6 +101,8 @@ class PromptEmbeddingRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("prompts.deleted_at IS NULL", str(compiled))
 
 
+# embed_prompt の読み取り・生成・保存の流れと、スキップ条件を検証するテストクラス。
+# Test class for embed_prompt's read, embed and store flow and its skip conditions.
 class EmbedPromptTestCase(unittest.IsolatedAsyncioTestCase):
     def _patch_repository(self, source):
         repository = MagicMock()
@@ -137,6 +154,8 @@ class EmbedPromptTestCase(unittest.IsolatedAsyncioTestCase):
         repository.store.assert_not_awaited()
 
 
+# 埋め込み生成の実行予約（不可なら予約しない、リクエスト経路の外で実行）を検証するテストクラス。
+# Test class for scheduling embedding work: skipped when unavailable, and run off the request path.
 class PromptEmbeddingScheduleTestCase(unittest.TestCase):
     def test_skips_scheduling_when_embeddings_are_unavailable(self):
         with (

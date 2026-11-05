@@ -1,3 +1,10 @@
+"""MCP エンドポイントの保護ミドルウェアが、認証チャレンジ、本文サイズ上限、認可リクエストのレート制限、
+本文の再生を正しく行うことを検証するテスト。
+
+Tests that the MCP request protection middleware handles auth challenges, body size limits, authorize rate limiting and body
+replay.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -5,6 +12,8 @@ from unittest.mock import patch
 from services.mcp_request_protection import McpRequestProtectionMiddleware
 
 
+# ASGI の http スコープを組み立てる。
+# Builds an ASGI http scope.
 def _scope(path: str, *, method: str = "POST", headers: list[tuple[bytes, bytes]] | None = None):
     return {
         "type": "http",
@@ -20,6 +29,8 @@ def _scope(path: str, *, method: str = "POST", headers: list[tuple[bytes, bytes]
     }
 
 
+# 本文を 1 回だけ返し、その後は切断を返す ASGI の receive を作る。
+# Builds an ASGI receive that returns the body once and then reports a disconnect.
 async def _single_body_receive(body: bytes):
     sent = False
 
@@ -33,6 +44,8 @@ async def _single_body_receive(body: bytes):
     return receive
 
 
+# 内側のアプリを差し替え、ミドルウェアが内側を呼ぶ前後で何を返すかを確かめる。
+# Replaces the inner app and checks what the middleware returns before and after it calls the inner app.
 class McpRequestProtectionMiddlewareTestCase(unittest.TestCase):
     def test_mcp_auth_challenge_includes_required_scope(self):
         async def inner(scope, receive, send):

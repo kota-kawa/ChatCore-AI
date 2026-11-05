@@ -1,3 +1,9 @@
+"""プロンプト添付画像の加工（process_prompt_attachment）が、EXIF を除いた上限内の WebP に正規化し、
+不正な画像を拒否することを検証するテスト。
+
+Tests that process_prompt_attachment normalizes images to bounded EXIF-free WebP variants and rejects invalid ones.
+"""
+
 from __future__ import annotations
 
 import unittest
@@ -19,6 +25,8 @@ def _image_bytes(
     return buffer.getvalue()
 
 
+# 添付画像の変換（サイズ上限・WebP 化・破損/巨大/アニメーションの拒否）を検証するテストクラス。
+# Test class for attachment image conversion: size caps, WebP output, and rejection of corrupt, oversized and animated inputs.
 class PromptAttachmentProcessingTestCase(unittest.TestCase):
     def test_normalizes_to_bounded_webp_variants_without_exif(self):
         source = _image_bytes("JPEG", size=(3000, 1000))

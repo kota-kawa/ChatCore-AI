@@ -1,3 +1,8 @@
+"""メモ API（blueprints.memo）の各ハンドラー（一覧・作成・更新・削除・共有・コレクション・エクスポートなど）の応答を検証するテスト。
+
+Tests the responses of the memo API handlers in blueprints.memo: list, create, update, delete, share, collections and export.
+"""
+
 import asyncio
 import json
 import unittest
@@ -29,6 +34,8 @@ from services.api_errors import ResourceNotFoundError
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: メモ API 用のテストリクエストを組み立てる。
+# English: Builds a test request for the memo API.
 def make_request(method="GET", path="/memo/api", json_body=None, session=None, query_string=b""):
     return build_request(
         method=method,
@@ -39,17 +46,19 @@ def make_request(method="GET", path="/memo/api", json_body=None, session=None, q
     )
 
 
+# 日本語: ストリーミング応答の本文を最後まで読み、1 つのバイト列にして返す。
+# English: Reads a streaming response body to the end and returns it as bytes.
 async def collect_streaming_body(response):
-    # 日本語: 非同期の対象データを順番に処理します。
-    # English: Process each asynchronous target item in order.
+    # 日本語: ストリーミング応答の本文チャンクをすべて集めて連結します。
+    # English: Collect every chunk of the streaming response body and join them.
     chunks = [chunk async for chunk in response.body_iterator]
     return b"".join(chunks)
 
 
-# 日本語: Memo Apiの機能や仕様を検証するテストクラスです。
+# 日本語: メモ API（blueprints.memo）のハンドラーを、サービス関数をモックして直接呼び、応答の状態コードとペイロードを検証するクラスです。
 # English: Test case class to verify the functionality and specifications of Memo Api.
 class MemoApiTestCase(unittest.TestCase):
-    # 日本語: recentmemos返却するsummaryペイロードことを検証します。
+    # 日本語: 最近のメモ一覧が、要約形式のペイロードで返ることを検証します。
     # English: Verify that recent memos returns summary payload.
     def test_recent_memos_returns_summary_payload(self):
         request = make_request(
@@ -82,7 +91,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(mock_fetch.call_args.kwargs["date_from"], "2026-04-01")
         self.assertEqual(mock_fetch.call_args.kwargs["date_to"], "2026-04-30")
 
-    # 日本語: recentmemos要求するログインことを検証します。
+    # 日本語: 最近のメモ一覧の取得にはログインが必要なことを検証します。
     # English: Verify that recent memos requires login.
     def test_recent_memos_requires_login(self):
         request = make_request(path="/memo/api/recent", query_string=b"limit=5")
@@ -92,7 +101,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "ログインが必要です")
 
-    # 日本語: createメモ要求するレスポンスことを検証します。
+    # 日本語: メモの作成には本文（ai_response）が必要なことを検証します。
     # English: Verify that create memo requires response.
     def test_create_memo_requires_response(self):
         request = make_request(
@@ -105,7 +114,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "fail")
 
-    # 日本語: createメモ要求するログインことを検証します。
+    # 日本語: メモの作成にはログインが必要なことを検証します。
     # English: Verify that create memo requires login.
     def test_create_memo_requires_login(self):
         request = make_request(
@@ -118,7 +127,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "ログインが必要です")
 
-    # 日本語: createメモ成功することを検証します。
+    # 日本語: メモの作成が成功することを検証します。
     # English: Verify that create memo success.
     def test_create_memo_success(self):
         request = make_request(
@@ -144,7 +153,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(mock_insert.call_args.args[:4], (7, "ok", "ok", None))
         self.assertEqual(mock_insert.call_args.args[4], "#fff8b8")
 
-    # 日本語: メモdetail返却するペイロードことを検証します。
+    # 日本語: メモの詳細がペイロードとして返ることを検証します。
     # English: Verify that memo detail returns payload.
     def test_memo_detail_returns_payload(self):
         request = make_request(path="/memo/api/10", session={"user_id": 7})
@@ -160,7 +169,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo"]["title"], "詳細メモ")
 
-    # 日本語: 更新メモ要求するanyfieldことを検証します。
+    # 日本語: メモの更新には更新項目が 1 つ以上必要なことを検証します。
     # English: Verify that update memo requires any field.
     def test_update_memo_requires_any_field(self):
         request = make_request(
@@ -174,7 +183,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "fail")
 
-    # 日本語: 更新メモ成功することを検証します。
+    # 日本語: メモの更新が成功することを検証します。
     # English: Verify that update memo success.
     def test_update_memo_success(self):
         request = make_request(
@@ -195,7 +204,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo"]["title"], "Updated title")
 
-    # 日本語: 更新メモ許可するレスポンスeditsことを検証します。
+    # 日本語: メモの更新で本文（ai_response）の編集が許可されることを検証します。
     # English: Verify that update memo allows response edits.
     def test_update_memo_allows_response_edits(self):
         request = make_request(
@@ -221,7 +230,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(mock_update.call_args.kwargs["ai_response"], "updated answer")
         self.assertEqual(mock_update.call_args.kwargs["background_color"], "#dbeafe")
 
-    # 日本語: deleteメモ成功することを検証します。
+    # 日本語: メモの削除が成功することを検証します。
     # English: Verify that delete memo success.
     def test_delete_memo_success(self):
         request = make_request(method="DELETE", path="/memo/api/10", session={"user_id": 7})
@@ -233,7 +242,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "success")
 
-    # 日本語: archivetoggle成功することを検証します。
+    # 日本語: メモのアーカイブ切り替えが成功することを検証します。
     # English: Verify that archive toggle success.
     def test_archive_toggle_success(self):
         request = make_request(
@@ -250,7 +259,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["memo"]["is_archived"], True)
 
-    # 日本語: pintoggle成功することを検証します。
+    # 日本語: メモのピン留め切り替えが成功することを検証します。
     # English: Verify that pin toggle success.
     def test_pin_toggle_success(self):
         request = make_request(
@@ -267,7 +276,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertTrue(payload["memo"]["is_pinned"])
 
-    # 日本語: suggestメモ返却するタイトルことを検証します。
+    # 日本語: メモのタイトル提案がタイトルを返すことを検証します。
     # English: Verify that suggest memo returns title.
     def test_suggest_memo_returns_title(self):
         request = make_request(
@@ -288,7 +297,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["title"], "提案タイトル")
 
-    # 日本語: bulkメモ通過するactionペイロードことを検証します。
+    # 日本語: メモの一括操作が、操作内容のペイロードをそのままサービスへ渡すことを検証します。
     # English: Verify that bulk memo passes action payload.
     def test_bulk_memo_passes_action_payload(self):
         request = make_request(
@@ -307,7 +316,7 @@ class MemoApiTestCase(unittest.TestCase):
         mock_bulk.assert_awaited_once()
         self.assertEqual(mock_bulk.call_args.args[:3], (7, "archive", [10, 11]))
 
-    # 日本語: reorderメモ通過するneighborペイロードことを検証します。
+    # 日本語: メモの並べ替えが、隣接メモの指定をサービスへ渡すことを検証します。
     # English: Verify that reorder memo passes neighbor payload.
     def test_reorder_memo_passes_neighbor_payload(self):
         request = make_request(
@@ -330,7 +339,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(mock_reorder.call_args.kwargs["before_id"], 10)
         self.assertEqual(mock_reorder.call_args.kwargs["after_id"], 11)
 
-    # 日本語: collectionルーティングreturnpayloadsことを検証します。
+    # 日本語: コレクション関連のルートがそれぞれペイロードを返すことを検証します。
     # English: Verify that collection routes return payloads.
     def test_collection_routes_return_payloads(self):
         list_request = make_request(path="/memo/api/collections", session={"user_id": 7})
@@ -356,7 +365,7 @@ class MemoApiTestCase(unittest.TestCase):
         create_payload = json.loads(create_response.body.decode())
         self.assertEqual(create_payload["collection"]["id"], 2)
 
-    # 日本語: 更新collection成功することを検証します。
+    # 日本語: コレクションの更新が成功することを検証します。
     # English: Verify that update collection success.
     def test_update_collection_success(self):
         request = make_request(
@@ -373,7 +382,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["collection"]["name"], "Updated")
 
-    # 日本語: deletecollection成功することを検証します。
+    # 日本語: コレクションの削除が成功することを検証します。
     # English: Verify that delete collection success.
     def test_delete_collection_success(self):
         request = make_request(method="DELETE", path="/memo/api/collections/2", session={"user_id": 7})
@@ -385,7 +394,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "success")
 
-    # 日本語: exportmemos返却するjsondownloadことを検証します。
+    # 日本語: メモのエクスポートが JSON のダウンロード応答を返すことを検証します。
     # English: Verify that export memos returns json download.
     def test_export_memos_returns_json_download(self):
         request = make_request(path="/memo/api/export", session={"user_id": 7})
@@ -402,7 +411,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(body.decode())
         self.assertEqual(payload[0]["title"], "Export")
 
-    # 日本語: shareメモ要求するログインことを検証します。
+    # 日本語: メモの共有にはログインが必要なことを検証します。
     # English: Verify that share memo requires login.
     def test_share_memo_requires_login(self):
         request = make_request(
@@ -416,7 +425,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "ログインが必要です")
 
-    # 日本語: shareメモ返却するshareURLことを検証します。
+    # 日本語: メモの共有が共有 URL を返すことを検証します。
     # English: Verify that share memo returns share url.
     def test_share_memo_returns_share_url(self):
         request = make_request(
@@ -450,7 +459,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["share_token"], "memo-share-token")
         self.assertEqual(payload["share_url"], "https://chatcore-ai.com/shared/memo/memo-share-token")
 
-    # 日本語: メモsharedetail返却するstateことを検証します。
+    # 日本語: メモの共有詳細が現在の共有状態を返すことを検証します。
     # English: Verify that memo share detail returns state.
     def test_memo_share_detail_returns_state(self):
         request = make_request(path="/memo/api/5/share", session={"user_id": 7})
@@ -477,7 +486,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertTrue(payload["is_active"])
         self.assertIn("/shared/memo/", payload["share_url"])
 
-    # 日本語: メモsharerefresh成功することを検証します。
+    # 日本語: メモの共有リンクの再発行が成功することを検証します。
     # English: Verify that memo share refresh success.
     def test_memo_share_refresh_success(self):
         request = make_request(
@@ -509,7 +518,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["share_token"], "memo-share-token")
 
-    # 日本語: メモsharerevoke成功することを検証します。
+    # 日本語: メモの共有の取り消しが成功することを検証します。
     # English: Verify that memo share revoke success.
     def test_memo_share_revoke_success(self):
         request = make_request(
@@ -536,7 +545,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertFalse(payload["is_active"])
 
-    # 日本語: sharedメモendpoint返却するペイロードことを検証します。
+    # 日本語: 共有メモの公開エンドポイントがペイロードを返すことを検証します。
     # English: Verify that shared memo endpoint returns payload.
     def test_shared_memo_endpoint_returns_payload(self):
         request = make_request(path="/memo/api/shared", query_string=b"token=memo-share-token")
@@ -564,7 +573,7 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["memo"]["title"], "共有メモ")
         self.assertEqual(payload["memo"]["ai_response"], "response")
 
-    # 日本語: メモdetail〜しないfound返却する404ことを検証します。
+    # 日本語: 存在しないメモの詳細取得が 404 を返すことを検証します。
     # English: Verify that memo detail not found returns 404.
     def test_memo_detail_not_found_returns_404(self):
         request = make_request(path="/memo/api/999", session={"user_id": 7})

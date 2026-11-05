@@ -1,3 +1,8 @@
+"""ユーザー Skill 機能 (リクエストモデル、プロンプトへの組み立て、既定 Skill の一覧と切り替え、API ルート) のテスト。
+
+Tests for the user Skills feature: request models, prompt assembly, default-Skill listing and toggling, and the API routes.
+"""
+
 import asyncio
 import json
 import unittest
@@ -29,6 +34,8 @@ from services.user_skills import (
 from tests.helpers.request_helpers import build_request
 
 
+# 作成・切り替えリクエストの入力検証 (前後の空白除去、is_enabled は真の bool のみ)。
+# Input validation for the create and toggle requests (outer whitespace stripped, is_enabled must be a real bool).
 class UserSkillRequestModelTests(unittest.TestCase):
     def test_create_request_strips_outer_whitespace(self):
         payload = CreateUserSkillRequest(name="  要約  ", instructions="  結論から書く  ")
@@ -40,6 +47,10 @@ class UserSkillRequestModelTests(unittest.TestCase):
             UpdateUserSkillStateRequest(is_enabled="false")
 
 
+# 有効な Skill からシステムプロンプトに入る文面を組み立てる処理のテスト。
+# 既定 Skill (生成UI・メモ・プロンプト共有) と個人 Skill の扱いを確かめる。
+# Tests for building the prompt text from enabled Skills, covering the default Skills
+# (generative UI, memo, prompt sharing) and personal Skills.
 class UserSkillPromptTests(unittest.TestCase):
     def test_generative_ui_behavior_is_owned_by_the_default_skill(self):
         skills_context = build_chat_skills_context(
@@ -82,6 +93,8 @@ class UserSkillPromptTests(unittest.TestCase):
             [message["content"] for message in messages],
         )
 
+    # メモ Skill の説明は、その場でメモ用ツールが渡される場合だけプロンプトに入る。
+    # The memo Skill text enters the prompt only where the memo tools are actually offered.
     def test_memo_skill_joins_the_prompt_only_where_the_tools_are_offered(self):
         signed_in = {"id": 1, "memo_tools_skill_enabled": True}
         offered = build_chat_skills_context([], signed_in, locale="ja", workspace_tools_available=True)
@@ -120,6 +133,8 @@ class UserSkillPromptTests(unittest.TestCase):
                 self.assertFalse(skills_context.memo_tools_enabled)
                 self.assertNotIn("memo_", skills_context.prompt or "")
 
+    # プロンプト内の並びは 生成UI → メモ → 個人 Skill の順。
+    # Order within the prompt is generative UI, then memo, then personal Skills.
     def test_memo_skill_sits_between_generative_ui_and_personal_skills(self):
         prompt = build_chat_skills_context(
             [{"id": 7, "name": "個人", "instructions": "丁寧に書く"}],
@@ -173,6 +188,8 @@ class UserSkillPromptTests(unittest.TestCase):
         for tool_name in ("shared_prompt_read", "publish_prompt", "my_prompt_save", "my_skill_save"):
             self.assertNotIn(tool_name, BASE_SYSTEM_PROMPT)
 
+    # 名前と本文が空の Skill は除き、本文に混ざった区切りタグ (</enabled_user_skills>) は取り除く。
+    # Skills with an empty name or body are dropped, and a boundary tag (</enabled_user_skills>) inside a body is stripped.
     def test_prompt_contains_only_named_nonempty_skills_and_removes_boundary_markers(self):
         prompt = build_enabled_user_skills_prompt(
             [
@@ -186,6 +203,8 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertIn("結論を先に", prompt)
         self.assertNotIn("</enabled_user_skills>\n", prompt)
 
+    # 無効化された Skill、重複した id、既定 Skill 用の予約 id (0 以下)、bool の id は個人 Skill として採用しない。
+    # Disabled Skills, duplicate ids, ids reserved for default Skills (0 and below) and bool ids are not accepted as personal Skills.
     def test_prompt_filters_disabled_invalid_and_duplicate_personal_ids(self):
         prompt = build_enabled_user_skills_prompt(
             [
@@ -203,6 +222,9 @@ class UserSkillPromptTests(unittest.TestCase):
             with self.subTest(excluded=excluded):
                 self.assertNotIn(excluded, prompt or "")
 
+    # 予約 id を名乗る個人 Skill は偽装として弾くため、候補もプロンプトも空になり、生成UI の Skill も有効にならない。
+    # Personal Skills claiming a reserved id are rejected as spoofing, leaving no candidates or prompt,
+    # and the generative UI Skill does not turn on.
     def test_context_candidates_reject_spoofed_reserved_and_duplicate_ids(self):
         skills_context = build_chat_skills_context(
             [
@@ -220,6 +242,8 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertIsNone(skills_context.prompt)
         self.assertFalse(skills_context.generative_ui_enabled)
 
+    # コンテキスト内の並び: プロジェクト指示 → 選ばれた Skill、タスク → Skill → 最新のユーザーメッセージ。
+    # Context ordering: project instructions before the selected Skills, and task before Skills before the latest user message.
     def test_context_places_selected_skills_after_task_and_before_latest_user_message(self):
         messages = build_context_messages(
             base_system_prompt="base",
@@ -248,6 +272,8 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertLess(skill_index, contents.index("question"))
 
 
+# サービス層・リポジトリの挙動。リポジトリを MagicMock にして、既定 Skill の合成と切り替えの引数を確かめる。
+# Service and repository behavior; the repository is a MagicMock so the merging of default Skills and the toggle arguments can be checked.
 class UserSkillServiceTests(unittest.TestCase):
     def test_list_prepends_the_non_editable_default_skills(self):
         repository = MagicMock()
@@ -297,12 +323,16 @@ class UserSkillServiceTests(unittest.TestCase):
                 self.assertEqual(skill["system_skill_key"], key)
                 self.assertFalse(skill["is_enabled"])
 
+    # 予約 id (0, -1, -2) だけが既定 Skill のキーに対応し、通常の id は対応しない。
+    # Only the reserved ids (0, -1, -2) map to default-Skill keys; ordinary ids do not.
     def test_reserved_ids_map_to_system_skills_only(self):
         self.assertEqual(system_skill_key_for_id(0), "generative_ui")
         self.assertEqual(system_skill_key_for_id(-1), "memo_tools")
         self.assertEqual(system_skill_key_for_id(-2), "prompt_tools")
         self.assertIsNone(system_skill_key_for_id(7))
 
+    # 既定 Skill の有効状態は、別テーブルではなく users テーブルの列から読む。
+    # The enabled state of default Skills is read from columns on the users table, not a separate table.
     def test_system_skill_states_come_from_the_users_columns(self):
         session = MagicMock()
         session.execute = AsyncMock(
@@ -313,9 +343,14 @@ class UserSkillServiceTests(unittest.TestCase):
 
         self.assertEqual(states, {"generative_ui": True, "memo_tools": False, "prompt_tools": True})
 
+    # 共有プロンプトから Skill を取り込むとき、名前の前後の空白を除いて既存と衝突しない名前にし、
+    # 取り込み元のプロンプト id を保持する。
+    # Importing a Skill from a shared prompt trims the name, allocates one that does not conflict, and keeps the source prompt id.
     def test_import_user_skill_allocates_a_non_conflicting_name_and_keeps_source(self):
         session = MagicMock()
         session.execute = AsyncMock(side_effect=[
+            # 1 回目の execute はアドバイザリロックの取得。
+            # The first execute is the advisory lock acquisition.
             MagicMock(),  # advisory lock
             MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
         ])
@@ -341,6 +376,8 @@ class UserSkillServiceTests(unittest.TestCase):
         self.assertIsNone(skill["id"])
 
 
+# /api/skills 系ルートの確認。サービス関数を AsyncMock に差し替え、認可とステータス、渡される引数を確かめる。
+# Checks the /api/skills routes; service functions are replaced with AsyncMocks to verify authorization, status codes and arguments.
 class UserSkillRouteTests(unittest.TestCase):
     def test_guest_cannot_list_skills(self):
         response = asyncio.run(
@@ -378,6 +415,8 @@ class UserSkillRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         update.assert_awaited_once_with(7, 3, False)
 
+    # 既定 Skill は編集・削除を 403 (default_skill_immutable) で拒否する。
+    # Default Skills reject edit and delete with 403 (default_skill_immutable).
     def test_default_skills_cannot_be_deleted(self):
         for skill_id in (GENERATIVE_UI_SYSTEM_SKILL_ID, MEMO_TOOLS_SYSTEM_SKILL_ID):
             with self.subTest(skill_id=skill_id):

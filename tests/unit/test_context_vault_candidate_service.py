@@ -1,3 +1,10 @@
+"""文脈の候補サービス（保存の opt-in、一覧のカーソル、承認時の埋め込みスケジュール、却下）
+を検証するテスト。
+
+Tests the context candidate service: opt-in on store, list cursors, scheduling embeddings on approval, and
+rejection.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +18,8 @@ from services.context_vault_candidate_service import (
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
 
 
+# 日本語: 候補テーブルの 1 行分の辞書を作ります。
+# English: Build one candidate-table row dict.
 def _candidate(**overrides):
     row = {
         "id": 8,
@@ -34,6 +43,8 @@ def _candidate(**overrides):
     return row
 
 
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。
+# English: Build one fact-table row dict.
 def _fact(**overrides):
     row = {
         "id": 31,
@@ -54,6 +65,8 @@ def _fact(**overrides):
     return row
 
 
+# 日本語: リポジトリの非同期メソッドをモックに差し替えた入れ物を作ります。
+# English: Build a repository stand-in whose async methods are mocks.
 def _repo():
     repo = MagicMock()
     for name in (
@@ -68,6 +81,8 @@ def _repo():
     return repo
 
 
+# 日本語: リポジトリをモックし、サービス層の入出力の整形と呼び出し順を確認します。
+# English: Mock the repository and check the service layer's input/output shaping and call order.
 class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_candidates_requires_opt_in_and_normalizes_input(self):
         repo = _repo()
@@ -137,6 +152,8 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         with patch("services.context_vault_candidate_service._repository", return_value=repo), patch(
             "services.context_vault_candidate_service.schedule_embedding"
         ) as schedule:
+            # セッションを渡すことで、このユニットテストではリポジトリへの委譲だけを切り出して確認する。
+            # ルートの既定経路では、自前で開いたトランザクションが終わってから埋め込みを予約する。
             # Passing a session lets this unit test isolate repository delegation;
             # the route-level default path schedules after its owned transaction.
             result = await approve_candidate(

@@ -34,7 +34,10 @@ def _run_recovery(
     adopt_buffer_mode=None,
     should_stop=None,
 ):
-    """Drive the recovery helper over scripted passes and capture what it published."""
+    """台本どおりの生成パス(passes)で回復処理を動かし、結果・配信された本文・チャンク・イベントを返す。
+
+    Drive the recovery helper over scripted passes and capture what it published.
+    """
     published: list[str] = []
     events: list[tuple[str, dict]] = []
     calls: list[str] = []
@@ -56,6 +59,9 @@ def _run_recovery(
     return result, "".join(published), published, events
 
 
+# 日本語: 継続生成の境界の重複除去と、継続が冒頭から書き直された場合の検出・つなぎ直しを確かめる。
+# English: Checks removal of the overlap at a continuation boundary, and detecting and splicing a continuation
+# that restarted from the start.
 class ContinuationOverlapTestCase(unittest.TestCase):
     def test_exact_boundary_overlap_is_removed(self):
         self.assertEqual(strip_continuation_overlap("abcdef", "defghi"), "ghi")
@@ -87,6 +93,9 @@ class ContinuationOverlapTestCase(unittest.TestCase):
         self.assertIsNone(splice_restarted_answer(existing, "まったく別の本文です。"))
 
 
+# 日本語: 最終回答が出力上限などで途切れたときの継続生成(ライブ配信、重複除去、進捗なしの打ち切り、入力超過では継続しない)を確かめる。
+# English: Checks continuation when the final answer is cut off by an output limit: live streaming, de-duplication,
+#          stopping when no progress is made, and not continuing on an input overflow.
 class FinalAnswerRecoveryTestCase(unittest.TestCase):
     def test_first_pass_streams_live_without_buffering(self):
         result, text, published, _ = _run_recovery([lambda: ["a", "b", "c"]])
@@ -268,6 +277,8 @@ class FinalAnswerRecoveryTestCase(unittest.TestCase):
             self.assertEqual(get_final_answer_max_continuations(), 3)
 
 
+# 日本語: 入力トークンの予算超過時にツール結果を古い順に圧縮し、証拠 ID だけは残すことを確かめる。
+# English: Checks that tool results are compacted oldest-first when the input token budget is exceeded, keeping the evidence IDs.
 class InputBudgetTestCase(unittest.TestCase):
     def _tool_message(self, index):
         return {
@@ -361,6 +372,8 @@ class InputBudgetTestCase(unittest.TestCase):
         self.assertEqual(compacted[1]["content"], "plain text")
 
 
+# 日本語: 推論ターン数とツール呼び出し数を別々の予算として数える AgentStepBudget を確かめる。
+# English: Checks AgentStepBudget, which counts reasoning turns and tool calls as separate budgets.
 class AgentStepBudgetTestCase(unittest.TestCase):
     # 日本語: 推論ターンとツール実行を別々に数えることで、検索を増やしても推論回数が
     # 削られないことを検証します。共有カウンタが「調査が深いほど回答が痩せる」原因でした.

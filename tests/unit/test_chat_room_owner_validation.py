@@ -1,3 +1,8 @@
+"""services.chat_service.validate_room_owner が、リポジトリ由来の例外と結果をそのまま伝えることを検証するテスト。
+
+Tests that services.chat_service.validate_room_owner passes repository exceptions and results through unchanged.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, patch
 

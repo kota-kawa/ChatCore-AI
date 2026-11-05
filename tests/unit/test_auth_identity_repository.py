@@ -1,3 +1,9 @@
+"""認証情報のリポジトリ(AuthIdentityRepository)が、
+プロバイダー情報を users テーブルではなく user_auth_providers に書くという境界を守ることを検証する単体テスト。
+
+Unit tests that AuthIdentityRepository writes provider data to user_auth_providers rather than the users table.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -9,6 +15,13 @@ from services.repositories.user_repository import UserRepository
 
 
 class AuthIdentityRepositoryContractTestCase(unittest.IsolatedAsyncioTestCase):
+    """DB に接続せず、疑似セッションが受け取った SQL 文を調べて、認証情報の書き込み先を確かめる。
+
+    Without a database, inspects the SQL statements the fake session receives to confirm where authentication data is written.
+    """
+
+    # 日本語: flush / execute / scalar を非同期モックにした疑似セッションを返す。
+    # English: Return a fake session whose flush, execute and scalar are async mocks.
     def make_session(self):
         session = Mock()
         session.flush = AsyncMock()
@@ -16,6 +29,8 @@ class AuthIdentityRepositoryContractTestCase(unittest.IsolatedAsyncioTestCase):
         session.scalar = AsyncMock()
         return session
 
+    # 日本語: SQLAlchemy の文を PostgreSQL 方言の SQL 文字列にして、含まれる句を検査できるようにする。
+    # English: Compile a SQLAlchemy statement into PostgreSQL-dialect SQL text so its clauses can be inspected.
     @staticmethod
     def compiled_sql(statement) -> str:
         return str(statement.compile(dialect=postgresql.dialect()))

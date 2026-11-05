@@ -1,3 +1,10 @@
+"""Redis バックエンドのセッションミドルウェアの耐障害性を検証する統合テスト。
+ログイン時のセッション ID ローテーション、Redis 不通・書き込み失敗時にセッションが残らないことを、インメモリの疑似 Redis で確かめる。
+
+Integration tests for the resilience of the Redis-backed session middleware.
+Using an in-memory fake Redis, checks session-ID rotation on login and that no session survives when Redis is down or a write fails.
+"""
+
 import asyncio
 import json
 import unittest
@@ -11,6 +18,8 @@ from services.auth_session import establish_authenticated_session
 from services.session_middleware import REDIS_BACKEND, PermanentSessionMiddleware
 
 
+# 日本語: WATCH / MULTI / EXEC 風の流れを最小限だけ再現する疑似パイプライン。set を溜めて execute で一括反映する。
+# English: Minimal fake pipeline mimicking the WATCH / MULTI / EXEC flow: set calls are queued and applied together on execute.
 class DummyRedisPipeline:
     def __init__(self, redis_client):
         self.redis_client = redis_client
@@ -74,6 +83,8 @@ class DummyRedis:
             return 1
         return 0
 
+    # 日本語: ミドルウェアが使うパイプラインを返す。
+    # English: Return the pipeline the middleware uses.
     def pipeline(self):
         return DummyRedisPipeline(self)
 

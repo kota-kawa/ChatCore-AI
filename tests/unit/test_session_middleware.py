@@ -1,3 +1,12 @@
+"""Redis を保存先とするセッションミドルウェア（services.session_middleware）を検証するテスト。
+セッションの保存・復元、Redis 障害時の Cookie 破棄、旧 Cookie 方式の拒否、SameSite=None、
+ID のローテーションと古い書き込みの上書き防止を確かめる。
+
+Tests for the Redis-backed session middleware (services.session_middleware): session round trip,
+cookie clearing when Redis fails, rejection of the legacy cookie-backed format, SameSite=None,
+session-ID rotation, and protection against stale overwrites.
+"""
+
 import asyncio
 import unittest
 from http.cookies import SimpleCookie
@@ -17,6 +26,8 @@ from services.session_middleware import (
 )
 
 
+# 日本語: WATCH / MULTI / EXEC の最小限を再現する Redis パイプラインの代役。
+# English: Redis pipeline stand-in that reproduces the minimum of WATCH / MULTI / EXEC.
 class DummyRedisPipeline:
     def __init__(self, redis_client):
         self.redis_client = redis_client
@@ -209,8 +220,10 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertEqual(len(header_values), 1)
         cookie = SimpleCookie()
         cookie.load(header_values[0])
-        # No session data may be embedded in the cookie when Redis is down;
-        # instead the cookie must be cleared to force re-authentication.
+        # 日本語: Redis が止まっているときは、セッションのデータを Cookie に埋め込んではならない。
+        #         代わりに Cookie を破棄して、再認証を強制する。
+        # English: No session data may be embedded in the cookie when Redis is down;
+        #          instead the cookie must be cleared to force re-authentication.
         self.assertEqual(cookie["session"].value, "")
         self.assertEqual(cookie["session"]["max-age"], "0")
 
@@ -249,9 +262,11 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
     # 日本語: legacycookiebackedセッションがrejectedことを検証します。
     # English: Verify that legacy cookie backed session is rejected.
     def test_legacy_cookie_backed_session_is_rejected(self):
-        # A cookie minted by the old cookie-fallback path must be ignored: its
-        # contents (verification codes, is_admin, etc.) are signed but not
-        # encrypted, so we treat any such cookie as expired.
+        # 日本語: 旧 Cookie フォールバック方式で発行された Cookie は無視する。内容（確認コードや is_admin など）は
+        #         署名されているだけで暗号化されていないため、そのような Cookie は期限切れとして扱う。
+        # English: A cookie minted by the old cookie-fallback path must be ignored: its
+        #          contents (verification codes, is_admin, etc.) are signed but not
+        #          encrypted, so we treat any such cookie as expired.
         serializer = URLSafeSerializer("secret", salt="strike.session")
         legacy_cookie = serializer.dumps(
             {"backend": "cookie", "data": {"verification_code": "123456", "is_admin": True}}
@@ -277,7 +292,8 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
                 middleware(make_scope(f"session={legacy_cookie}"), receive, send)
             )
 
-        # Only the CSRF token may be present; the legacy payload must not leak in.
+        # 日本語: 含めてよいのは CSRF トークンだけで、旧方式のペイロードが混ざってはならない。
+        # English: Only the CSRF token may be present; the legacy payload must not leak in.
         self.assertNotIn("verification_code", captured["session"])
         self.assertNotIn("is_admin", captured["session"])
 
@@ -343,9 +359,13 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertIn('"foo": "fresh"', dummy_redis.get(f"session:{scope['session_id']}"))
 
     def test_stale_session_write_does_not_overwrite_newer_state(self):
+        # 日本語: Redis の WATCH 競合を表す例外の代役。
+        # English: Stand-in for the exception Redis raises on a WATCH conflict.
         class WatchError(Exception):
             pass
 
+        # 日本語: EXEC のたびに競合を起こし、別の書き込みが先に入った状況を再現するパイプライン。
+        # English: Pipeline that always conflicts on EXEC, simulating another write that landed first.
         class ConflictingPipeline(DummyRedisPipeline):
             def execute(self):
                 raise WatchError("session changed while writing")

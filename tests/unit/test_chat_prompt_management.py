@@ -1,3 +1,8 @@
+"""チャットのプロンプト定義が一箇所に集約され、旧来の import 名からも同じ定義を参照できることを検証するテスト。
+
+Tests that chat prompt definitions are centralized and legacy import names still point to the same objects.
+"""
+
 import unittest
 
 from blueprints.chat import messages as chat_messages

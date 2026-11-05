@@ -1,3 +1,4 @@
+# 既知のWeb出典を、再検索せず後続ターンでも読めることを検証する。
 """Known web sources can be read across turns without another search."""
 
 import json
@@ -32,6 +33,7 @@ def result():
             WebSearchSource(
                 url=f"https://example.com/{index}", title=f"Article {index}",
                 hostname="example.com", age="", snippets=(f"Snippet {index}",),
+                # 旧形式の記録との互換性も保つ。
                 page_text="Legacy saved body",  # Old records remain compatible.
             ) for index in range(1, 4)
         ),

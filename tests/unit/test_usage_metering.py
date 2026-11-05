@@ -1,3 +1,8 @@
+"""API 使用量の計測 (料金換算、計上先の決定と伝播、プロバイダ別の使用量記録、日次 upsert) のテスト。
+
+Tests for API usage metering: pricing, billing-subject resolution and propagation, per-provider usage recording, and the daily upsert.
+"""
+
 import asyncio
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +39,8 @@ from services.usage_subject import (
 )
 
 
+# ASGI の HTTP スコープを最小限で組み立てるヘルパー。session を渡したときだけ scope に入れる。
+# Helper that builds a minimal ASGI HTTP scope; the session is included only when given.
 def _http_scope(*, session=None, client=("203.0.113.7", 1234)):
     scope = {"type": "http", "headers": [], "client": client, "path": "/", "method": "GET"}
     if session is not None:
@@ -41,6 +48,8 @@ def _http_scope(*, session=None, client=("203.0.113.7", 1234)):
     return scope
 
 
+# 使用量の書き込み先 (sink) をテスト内のリストに差し替え、DB へ書かずに記録内容を検査できるようにする。終了時に元の no-op へ戻す。
+# Swaps the usage sink for an in-test list so records can be inspected without touching the DB; restored to a no-op on cleanup.
 class _RecordingSinkMixin:
     def setUp(self):
         super().setUp()
@@ -49,8 +58,11 @@ class _RecordingSinkMixin:
         self.addCleanup(set_usage_sink, lambda _increment: None)
 
 
+# トークン数から料金 (nano USD) への換算を確かめる。
+# Checks the conversion from token counts to cost in nano USD.
 class UsagePricingTests(unittest.TestCase):
     def test_cost_uses_published_per_million_prices(self):
+        # GPT-6 Luna の単価: 入力 $0.10、キャッシュ入力 $0.01、出力 $0.50 (いずれも 100 万トークンあたり)。
         # GPT-6 Luna: $0.10 in / $0.01 cached in / $0.50 out per 1M tokens.
         cost = token_cost_nano_usd(
             "gpt-6-luna",
@@ -67,6 +79,9 @@ class UsagePricingTests(unittest.TestCase):
         without_cache = token_cost_nano_usd("qwen/qwen3.8-27b", input_tokens=1000, output_tokens=0)
         self.assertEqual(with_cache, without_cache)
 
+    # 単価表に無いモデルは過小計上を避けるため最も高い単価 (FALLBACK_TOKEN_PRICE) で数え、警告を出す。
+    # A model missing from the price table is billed at the highest rate (FALLBACK_TOKEN_PRICE) to avoid
+    # under-counting, and a warning is logged.
     def test_unknown_model_is_billed_at_the_most_expensive_rate(self):
         with self.assertLogs("services.usage_pricing", level="WARNING"):
             cost = token_cost_nano_usd("mystery-model", input_tokens=10, output_tokens=10)
@@ -86,6 +101,8 @@ class UsagePricingTests(unittest.TestCase):
             ):
                 token_cost_nano_usd(model_name, input_tokens=1, output_tokens=1)
 
+    # Haiku 5.5 は入力が 100,000 トークンを超えると単価が 5 倍の層になる。層の判定にはキャッシュ分も含めた入力の合計を使う。
+    # Haiku 5.5 moves to a 5x price tier once input exceeds 100,000 tokens; the tier is decided on total input including cached tokens.
     def test_haiku_5_5_price_tier_includes_all_cached_input(self):
         for total_input in (99_999, 100_000, 100_001):
             with self.subTest(total_input=total_input):
@@ -102,6 +119,8 @@ class UsagePricingTests(unittest.TestCase):
                     (total_input - cached - written) * 100 + cached * 10 + written * 125 + output * 500
                 ))
 
+    # プロバイダ形式の使用量 (キャッシュ読み出し・書き込みを別項目で持つ) を合計して層を決め、長い文脈の単価で記録する。
+    # Provider-shaped usage (cache reads and writes reported separately) is summed to pick the tier, and recorded at the long-context rate.
     def test_haiku_5_5_provider_usage_selects_long_context_tier(self):
         from services.llm_usage import record_claude_usage
 
@@ -117,12 +136,16 @@ class UsagePricingTests(unittest.TestCase):
         self.assertEqual(records[0].cost_nano_usd, 20_001 * 500 + 60_000 * 50 + 20_000 * 625 + 1_000 * 2_500)
 
 
+# 課金日の区切りは日本時間の 0 時 (UTC の 15:00)。
+# The billing day rolls over at midnight Japan time (15:00 UTC).
 class UsageDateTests(unittest.TestCase):
     def test_day_boundary_is_midnight_japan_time(self):
         self.assertEqual(usage_date(datetime(2026, 9, 23, 14, 59, tzinfo=UTC)), date(2026, 9, 23))
         self.assertEqual(usage_date(datetime(2026, 9, 23, 15, 0, tzinfo=UTC)), date(2026, 9, 24))
 
 
+# リクエストから計上先を決めるルール: ログイン済みはユーザー、ゲストは接続元 IP のハッシュ、セッションなしは system。
+# Rules for choosing the billing subject: signed-in users by id, guests by a hash of the client IP, sessionless requests as system.
 class UsageSubjectTests(unittest.TestCase):
     def test_signed_in_user_is_the_subject(self):
         self.assertEqual(resolve_usage_subject(_http_scope(session={"user_id": 42})), "user:42")
@@ -148,6 +171,8 @@ class UsageSubjectTests(unittest.TestCase):
         self.assertEqual(current_usage_subject(), SYSTEM_USAGE_SUBJECT)
 
 
+# 計上先 (ContextVar) が、ワーカースレッドやバックグラウンドタスクへコンテキストごと引き継がれることを確かめる。
+# Checks the billing subject (a ContextVar) is carried into worker threads and background tasks along with the context.
 class UsageSubjectPropagationTests(unittest.TestCase):
     def setUp(self):
         token = _usage_subject_var.set(user_usage_subject(5))
@@ -169,6 +194,8 @@ class UsageSubjectPropagationTests(unittest.TestCase):
     def test_background_task_carries_the_subject(self):
         self.assertEqual(submit_background_task(current_usage_subject).result(timeout=5), "user:5")
 
+    # 専用の 1 スレッドのプールに差し替えてスケジュールし、終了を待つ。他のテストとスレッドを共有しないため。
+    # Schedules work on a dedicated single-thread pool and waits for it, so the test does not share threads with others.
     def _run_on_fresh_background_pool(self, schedule):
         executor = ThreadPoolExecutor(max_workers=1)
         with patch("services.background_executor.get_background_executor", return_value=executor):
@@ -217,6 +244,8 @@ class UsageSubjectPropagationTests(unittest.TestCase):
         self.assertEqual(seen, ["user:5"])
 
 
+# record_* が現在の計上先へ料金を付けて記録し、sink の失敗が呼び出し元へ伝わらないことを確かめる。
+# Checks that record_* attributes costs to the current subject and that a failing sink never reaches the caller.
 class UsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
     def test_token_usage_is_costed_and_attributed_to_the_current_subject(self):
         token = _usage_subject_var.set("user:9")
@@ -250,6 +279,8 @@ class UsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
             record_token_usage("gpt-6-luna", input_tokens=1, output_tokens=1)
 
 
+# プロバイダのストリーム応答を模したリスト。close() が呼ばれたかを記録する。
+# A list standing in for a provider streaming response; records whether close() was called.
 class _Stream(list):
     def __init__(self, *items):
         super().__init__(items)
@@ -259,6 +290,8 @@ class _Stream(list):
         self.closed = True
 
 
+# Groq / Claude / OpenAI の各クライアントをモックし、ストリーミング・非ストリーミングの応答から使用量が記録されることを確かめる。
+# Mocks the Groq / Claude / OpenAI clients and checks usage is recorded from both streaming and non-streaming responses.
 class ProviderUsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -304,6 +337,8 @@ class ProviderUsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
         [record] = self.records
         self.assertEqual((record.input_tokens, record.output_tokens), (50, 5))
 
+    # 使用量が届く前にストリームを閉じた場合は、送受信した文字量からの推定値で記録する。
+    # If the stream is closed before usage arrives, the usage is recorded from an estimate based on the text exchanged.
     def test_stream_closed_before_usage_arrives_is_recorded_from_an_estimate(self):
         client = MagicMock()
         stream = _Stream(
@@ -328,6 +363,8 @@ class ProviderUsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
         self.assertGreater(record.output_tokens, 0)
         self.assertGreater(record.cost_nano_usd, 0)
 
+    # リクエストが始まる前に失敗したときは課金が発生していないので、記録しない。
+    # A request that failed before starting incurred no charge, so nothing is recorded.
     def test_failed_request_that_never_started_is_not_recorded(self):
         client = MagicMock()
         client.chat.completions.create.side_effect = RuntimeError("connection refused")
@@ -340,6 +377,9 @@ class ProviderUsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
 
         self.assertEqual(self.records, [])
 
+    # Claude は message_start に入力側、message_delta に出力側の使用量を分けて返すので、両方を合算して記録する。
+    # 入力にはキャッシュ読み出し分を含める。
+    # Claude reports input usage in message_start and output usage in message_delta, so both are combined; input includes cache reads.
     def test_claude_stream_combines_start_and_delta_usage(self):
         client = MagicMock()
         client.messages.create.return_value = _Stream(
@@ -407,6 +447,8 @@ class ProviderUsageMeteringTests(_RecordingSinkMixin, unittest.TestCase):
         self.assertEqual((record.resource, record.input_tokens, record.output_tokens), (llm.GPT_OSS_20B_MODEL, 10, 2))
 
 
+# 日次の使用量テーブルへの加算が、1 回の upsert (ON CONFLICT DO UPDATE) で行われることを、コンパイルした SQL で確かめる。
+# Checks via compiled SQL that the daily usage table is incremented with a single upsert (ON CONFLICT DO UPDATE).
 class UsageRepositoryTests(unittest.TestCase):
     def test_add_usage_accumulates_with_a_single_upsert(self):
         session = MagicMock()

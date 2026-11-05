@@ -1,3 +1,10 @@
+"""検索語の前処理（services.search_terms）を検証するテスト。
+語の分割と重複除去、かな（ひらがな/カタカナ）の表記ゆれ展開、LIKE パターンのエスケープを確かめる。
+
+Tests for search-term preprocessing (services.search_terms): splitting and deduplication, hiragana/katakana variants,
+and escaping of LIKE patterns.
+"""
+
 import unittest
 
 from services.search_terms import (
@@ -9,6 +16,8 @@ from services.search_terms import (
 )
 
 
+# 検索クエリを語に分割する規則（空白・句読点・日本語句の保持・上限）を検証するテストクラス。
+# Test class for the rules that split a query into terms: whitespace, punctuation, Japanese phrases and the cap.
 class SplitSearchTermsTestCase(unittest.TestCase):
     def test_splits_on_ascii_and_full_width_whitespace(self):
         self.assertEqual(
@@ -35,6 +44,8 @@ class SplitSearchTermsTestCase(unittest.TestCase):
         self.assertEqual(split_search_terms(""), [])
 
 
+# ひらがな/カタカナの別表記を生成する kana_variants を検証するテストクラス。
+# Test class for kana_variants, which generates the other kana spelling of a term.
 class KanaVariantsTestCase(unittest.TestCase):
     def test_hiragana_term_gains_its_katakana_spelling(self):
         self.assertEqual(kana_variants("ぱすぽーと"), ["ぱすぽーと", "パスポート"])
@@ -60,6 +71,8 @@ class KanaVariantsTestCase(unittest.TestCase):
         self.assertEqual(kana_variants("ﾊﾟｽﾎﾟｰﾄ"), ["ﾊﾟｽﾎﾟｰﾄ"])
 
 
+# LIKE のワイルドカードとバックスラッシュをエスケープして検索語を包むことを検証するテストクラス。
+# Test class verifying that LIKE wildcards and backslashes are escaped when wrapping a search term.
 class LikeEscapingTestCase(unittest.TestCase):
     def test_wildcards_are_escaped(self):
         self.assertEqual(escape_like_term("100%_x"), "100\\%\\_x")

@@ -1,3 +1,10 @@
+"""WebPageReader の read_web_page 実行（取得は 1 回、範囲読み取り、取得失敗のキャッシュ、各種上限、
+貼り付け URL の本文の事前登録）を検証するテスト。
+
+Tests WebPageReader's read_web_page execution: a single fetch with ranged reads, cached failures, the
+various limits and bodies seeded from pasted URLs.
+"""
+
 import json
 import unittest
 from concurrent.futures import Future
@@ -9,6 +16,8 @@ from services.url_fetcher import MAX_URL_TEXT_CHARS, FetchedUrlDocument
 from services.web_search import WebSearchResult, WebSearchSource
 
 
+# 検索で得た Web ソースを、証拠 ID 指定で取得して範囲ごとに読み取る処理を検証する。外部取得は fetch_url_document などをモックする。
+# Covers reading search-result web sources by evidence ID in ranges; external fetching is mocked via fetch_url_document and similar.
 class WebPageReaderTestCase(unittest.TestCase):
     def setUp(self):
         self.store = EvidenceStore()
@@ -177,6 +186,8 @@ class WebPageReaderTestCase(unittest.TestCase):
 
 # チャット欄に貼られたURLは取得済み本文を種として渡され、再取得なしで分割読み取りできる。
 # A URL pasted into the chat seeds its already-fetched body, so chunked reads never refetch.
+# チャットに貼られた URL の取得済み本文をあらかじめ登録した場合に、再取得せず分割して読めることを検証する。
+# Covers pages whose already-fetched body was seeded from a pasted URL, which stay readable in chunks without refetching.
 class SeededPastedPageTestCase(unittest.TestCase):
     def setUp(self):
         self.store = EvidenceStore()

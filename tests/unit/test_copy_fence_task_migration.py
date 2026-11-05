@@ -1,3 +1,10 @@
+"""alembic マイグレーション 20260809_01（同梱タスクの文面をコピー用フェンスに合わせて更新）が、同梱
+JSON と一致することを検証するテスト。
+
+Tests that alembic migration 20260809_01, which updates the shipped task wording to use copy fences, matches
+the bundled default tasks JSON.
+"""
+
 import importlib.util
 import json
 import unittest
@@ -14,6 +21,8 @@ TASKS_PATH = REPO_ROOT / "frontend" / "data" / "default_tasks.v1.json"
 UPDATED_KEYS = {"email_writing", "reply_writing"}
 
 
+# 日本語: ファイルパスからマイグレーションのモジュールを読み込みます。
+# English: Load the migration module from its file path.
 def _load_migration_module():
     spec = importlib.util.spec_from_file_location("copy_fence_task_migration", MIGRATION_PATH)
     if spec is None or spec.loader is None:
@@ -23,11 +32,15 @@ def _load_migration_module():
     return module
 
 
+# 日本語: 同梱しているタスク JSON を system_task_key で引ける辞書にします。
+# English: Index the bundled task JSON by system_task_key.
 def _shipped_tasks_by_key() -> dict[str, dict]:
     tasks = json.loads(TASKS_PATH.read_text(encoding="utf-8"))
     return {task["system_task_key"]: task for task in tasks}
 
 
+# 日本語: マイグレーションの連鎖と、更新対象のタスク・文面が同梱 JSON と合っていることを確認します。
+# English: Check the revision chain and that the updated tasks and wording agree with the bundled JSON.
 class CopyFenceTaskMigrationTestCase(unittest.TestCase):
     def test_migration_follows_unique_active_tasks_revision(self):
         module = _load_migration_module()

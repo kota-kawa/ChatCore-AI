@@ -1,3 +1,8 @@
+"""MCP OAuth 管理用の HTTP ルート（クライアント発行、ラベル更新、接続の表示名更新）の入力検証と応答を検証するテスト。
+
+Tests input validation and responses of the MCP OAuth management routes (client issuing, label update, connection display name update).
+"""
+
 import asyncio
 import json
 import unittest
@@ -7,6 +12,8 @@ from blueprints.mcp_oauth import patch_client, patch_connection, post_client
 from tests.helpers.request_helpers import build_request
 
 
+# blueprints.mcp_oauth のハンドラーを直接呼び、サービス関数をモックして、渡す値と返却内容を確かめる。
+# Calls the blueprints.mcp_oauth handlers directly with mocked service functions and checks the passed values and returned payloads.
 class McpOAuthRouteTestCase(unittest.TestCase):
     def test_post_client_issues_a_public_client_when_secret_is_not_requested(self):
         request = build_request(

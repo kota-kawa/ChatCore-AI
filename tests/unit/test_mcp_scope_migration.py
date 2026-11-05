@@ -1,3 +1,10 @@
+"""旧 MCP 接続を再認可させる Alembic migration（スコープのバージョン付与とクライアント登録の拡張）
+の upgrade / downgrade を検証するテスト。
+
+Tests the upgrade and downgrade of the Alembic migration that forces legacy MCP connections to reauthorize (scope versioning and
+client registration expansion).
+"""
+
 import importlib.util
 import unittest
 from pathlib import Path
@@ -16,6 +23,8 @@ migration = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(migration)
 
 
+# migration を importlib で読み込み、op.execute をモックして実行される SQL を確かめる。
+# Loads the migration with importlib and checks the SQL it runs by mocking op.execute.
 class McpScopeMigrationTestCase(unittest.TestCase):
     def test_upgrade_marks_legacy_grants_and_expands_client_registration(self):
         with patch.object(migration.op, "execute") as execute:

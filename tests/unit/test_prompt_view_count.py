@@ -1,3 +1,8 @@
+"""公開プロンプトの閲覧数（詳細表示では増やさず、専用の記録エンドポイントで加算）を検証するテスト。
+
+Tests for public-prompt view counts: the detail view does not increment, and the dedicated record endpoint does.
+"""
+
 import asyncio
 import json
 import unittest
@@ -10,6 +15,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from services.repositories.prompt_view_repository import PromptViewRepository
 
 
+# 閲覧数の取得・加算の SQL・エンドポイント応答（非公開は 404）を検証するテストクラス。
+# Test class for reading the view count, the increment SQL, and endpoint responses (404 for unavailable prompts).
 class PromptViewCountTestCase(unittest.TestCase):
     def test_prompt_detail_returns_current_view_count_without_incrementing_it(self):
         with patch(

@@ -1,3 +1,10 @@
+"""システムタスクにリビジョン列を追加する Alembic マイグレーション（20260818_01）を検証するテスト。
+親リビジョン、共有システムタスクだけを進めるアップグレード、ダウングレードで列を削除することを確かめる。
+
+Tests the Alembic migration 20260818_01 that adds a revision column to system tasks:
+its parent revision, an upgrade that advances only shared system tasks, and a downgrade that drops the column.
+"""
+
 import importlib.util
 import unittest
 from pathlib import Path
@@ -12,6 +19,8 @@ MIGRATION_PATH = (
 )
 
 
+# マイグレーションのファイルを直接読み込んでモジュールとして返す補助関数（alembic の実行なし）。
+# Helper that loads the migration file directly as a module, without running Alembic.
 def _load_migration_module():
     spec = importlib.util.spec_from_file_location("system_task_revision_migration", MIGRATION_PATH)
     if spec is None or spec.loader is None:
@@ -21,6 +30,8 @@ def _load_migration_module():
     return module
 
 
+# マイグレーションのリビジョン連鎖とアップグレード/ダウングレードの SQL を検証するテストクラス。
+# Test class for the migration's revision chain and its upgrade/downgrade SQL.
 class SystemTaskRevisionMigrationTestCase(unittest.TestCase):
     def test_migration_follows_current_head(self):
         module = _load_migration_module()

@@ -1,3 +1,10 @@
+"""公開プロンプトのフィードとおすすめを、サービス層（CTE を使う SQL）へ委譲する実装を検証するテスト。
+注目枠の先頭固定、通常行だけでのページング、いずれかの行が基準から遠いときの人気順フォールバックを確かめる。
+
+Tests that the public feed and recommendations delegate to the service layer (CTE-based SQL):
+featured rows pinned to the first page, paging by regular rows only, and the popularity fallback when any row is far from the anchor.
+"""
+
 import unittest
 from datetime import datetime
 
@@ -9,6 +16,8 @@ from blueprints.prompt_share.prompt_share_api import (
 )
 
 
+# フィード・おすすめの呼び出し引数を記録し、固定行を返すサービスの代役。
+# Stand-in service that records feed/recommendation arguments and returns fixed rows.
 class _Service:
     def __init__(self, rows):
         self.rows = rows
@@ -24,6 +33,8 @@ class _Service:
         return self.rows
 
 
+# フィードとおすすめのルートが、DB を直接触らずサービスへ委譲し、行をフラグ付きで整形することを検証するテストクラス。
+# Test class verifying that feed and recommendation routes delegate to the service without touching the database, and shape rows with flags.
 class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
     def _rows(self):
         return [
@@ -70,6 +81,7 @@ class PromptShareQueryOptimizationTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([prompt["id"] for prompt in payload["prompts"]], [100, 101, 102, 0, 1])
         self.assertTrue(payload["pagination"]["has_next"])
+        # カーソルは最後の通常行から作り、注目行からは作らない。
         # The cursor comes from the last regular row, never from a featured one.
         self.assertEqual(_decode_prompt_feed_cursor(payload["pagination"]["next_cursor"])[2], 1)
 

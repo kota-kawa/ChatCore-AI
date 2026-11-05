@@ -1,12 +1,21 @@
+"""ユーザー Skill 関連の Alembic migration (user_skills テーブル追加、prompt_tools_skill_enabled 列追加) をソースの文字列で検証するテスト。
+
+Tests that inspect the source text of the user-skills Alembic migrations (user_skills table, prompt_tools_skill_enabled column).
+"""
+
 import unittest
 from pathlib import Path
 
+# migration を実行せず、ファイルを読んで upgrade / downgrade の中身を確かめる。
+# Does not run the migrations; reads the files and checks the contents of upgrade / downgrade.
 MIGRATION = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20260828_01_add_user_skills.py"
 PROMPT_TOOLS_MIGRATION = (
     Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20260928_01_add_prompt_tools_skill_column.py"
 )
 
 
+# どちらも expand-only (既存データを壊さない追加のみ) で、downgrade はユーザーデータ保護のため意図的に不可逆にしている。
+# Both migrations are expand-only (additive), and downgrade is intentionally irreversible to protect user data.
 class UserSkillsMigrationTests(unittest.TestCase):
     def test_migration_adds_expand_only_schema_and_uses_safe_index_operation(self):
         source = MIGRATION.read_text(encoding="utf-8")

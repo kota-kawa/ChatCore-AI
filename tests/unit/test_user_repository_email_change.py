@@ -1,4 +1,11 @@
-"""Regression tests for the commit_email_change duplicate-email race.
+"""commit_email_change のメールアドレス重複競合に対する回帰テスト。
+
+``SELECT ... FOR UPDATE`` は見つかった行しかロックしない。対象のメールに一致する行が無い通常の場合は何もロックされず、
+大文字小文字だけが違うアドレス (``Foo@x.com`` / ``foo@x.com``) へ別ユーザーが同時に変更すると、どちらも一致行 0 件を見てコミットし、
+``lower(email)`` 比較で防ぎたかった重複が生じる。そこで commit_email_change は、正規化した変更先メールをキーにした
+``pg_advisory_xact_lock`` を最初に取り、同じアドレスの取得を直列化する。
+
+Regression tests for the commit_email_change duplicate-email race.
 
 ``SELECT ... FOR UPDATE`` only locks rows it finds.  When no row matches the
 target email (the common case), it locks nothing, so two concurrent requests
@@ -18,6 +25,8 @@ from sqlalchemy.dialects.postgresql import dialect
 from services.repositories.user_repository import UserRepository
 
 
+# AsyncSession の代わりに使うモック。scalar は現在のメール所有者を返し、execute は rowcount だけを持つ結果を返す。
+# Mock standing in for AsyncSession: scalar returns the current owner of the email, execute returns a result with only rowcount.
 def _make_session(*, current_user=None, rowcount=1):
     session = MagicMock()
     session.execute = AsyncMock()
@@ -32,6 +41,8 @@ def _make_session(*, current_user=None, rowcount=1):
     return session
 
 
+# メールの現在の所有者を表す最小限のスタブ (id のみ)。
+# Minimal stub for the current owner of an email (id only).
 class _User:
     def __init__(self, id_):
         self.id = id_
@@ -39,6 +50,8 @@ class _User:
 
 class CommitEmailChangeTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_acquires_an_advisory_lock_keyed_on_the_normalized_target_email(self):
+        # ロック用の execute が最初の呼び出しで、キーが正規化 (小文字化) された変更先メールになっていることを確かめる。
+        # Checks the first execute call is the advisory lock and that its key uses the normalized (lowercased) target email.
         session = _make_session(current_user=None)
         repository = UserRepository(session)
 
@@ -71,10 +84,14 @@ class CommitEmailChangeTestCase(unittest.IsolatedAsyncioTestCase):
 
         await repository.commit_email_change(1, "new@example.com")
 
+        # 最初の execute がアドバイザリロックの取得にあたり、重複確認 (scalar) より前に呼ばれる。
+        # The first execute is the advisory lock acquisition, and it must come before the duplicate check (scalar).
         self.assertEqual(call_order[0], "execute")  # the advisory lock
         self.assertIn("scalar", call_order)
         self.assertLess(call_order.index("execute"), call_order.index("scalar"))
 
+    # 別ユーザーが所有するメールへの変更は、ロックを取った後も従来どおり拒否される。
+    # Changing to an email owned by another user is still rejected after the lock is taken.
     async def test_same_email_owned_by_another_user_is_still_rejected(self):
         session = _make_session(current_user=_User(id_=2))
         repository = UserRepository(session)

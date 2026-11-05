@@ -1,3 +1,9 @@
+"""プロフィール更新（user_profile）の各テキスト項目に長さ上限があり、上限ちょうどは保存され、超過や名前の欠落は保存前に拒否されることを検証するテスト。
+
+Tests that profile update (user_profile) caps each text field: values at the cap are stored, while over-long values
+or a missing username are rejected before saving.
+"""
+
 import json
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -40,6 +46,8 @@ class ProfileUpdateInputLimitTestCase(unittest.IsolatedAsyncioTestCase):
     Verify that the profile-update text fields are capped before anything is persisted.
     """
 
+    # 日本語: 現在のプロフィールと更新処理をモックして user_profile を呼び、応答と更新呼び出しを返す。
+    # English: Mocks the current profile and the update step, calls user_profile and returns the response and update call.
     async def _post(self, fields: dict[str, str]):
         with patch(
             "blueprints.chat.profile.get_user_by_id",

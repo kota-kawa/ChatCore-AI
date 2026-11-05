@@ -1,3 +1,9 @@
+"""固定した評価データセット（引用と生成UIのケース）の読み込み検証と、引用解決・生成UI正規化の結果が記録した期待どおりかを確かめるテスト。
+
+Tests that the frozen evaluation dataset (citation and generated-UI cases) validates, and that citation resolution
+and generated-UI normalisation match the recorded expectations.
+"""
+
 import json
 import tempfile
 import unittest
@@ -57,6 +63,8 @@ class LlmOutputEvalDatasetTestCase(unittest.TestCase):
 
         self._assert_rejected(broken)
 
+    # 壊したデータセットを一時ファイルへ書き出し、load_dataset が EvalDatasetError で拒否することを確かめる。
+    # Writes a broken dataset to a temp file and checks load_dataset rejects it with EvalDatasetError.
     def _assert_rejected(self, dataset: dict) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "broken.json"
@@ -71,6 +79,8 @@ class LlmOutputEvalTestCase(unittest.TestCase):
     Test case class verifying deterministic chat-output handling stays unchanged for frozen inputs.
     """
 
+    # 全テストが同じデータセットを使うので、クラス単位で一度だけ読み込む。
+    # Every test uses the same dataset, so it is loaded once per class.
     @classmethod
     def setUpClass(cls):
         cls.citation_cases, cls.artifact_cases = load_dataset()

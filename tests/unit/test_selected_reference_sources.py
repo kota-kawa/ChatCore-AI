@@ -1,3 +1,10 @@
+"""選択された参照元ごとの検索関数を作る処理（services.selected_reference_sources）を検証するテスト。
+同一クエリの重複検索の抑止と、ユーザーへの紐付け、ゲストで使えない参照元の扱いを確かめる。
+
+Tests for building per-source search functions for selected references (services.selected_reference_sources):
+suppressing duplicate queries, binding to the user, and handling sources unavailable to guests.
+"""
+
 import unittest
 from unittest.mock import Mock
 
@@ -7,6 +14,8 @@ from services.selected_reference_sources import (
 )
 
 
+# 日本語: 同じクエリを再送せず、失敗したクエリだけ再試行できることを検証するテストクラス。
+# English: Test class verifying that repeated queries are not re-forwarded while failed ones can be retried.
 class DeduplicatedLookupTestCase(unittest.TestCase):
     # 日本語: 同じクエリを二度引かず、事前検索済みの本文をコンテキストへ二重に積みません。
     # English: The same query is not run twice, so prefetched bodies are never stacked twice.
@@ -58,6 +67,8 @@ class DeduplicatedLookupTestCase(unittest.TestCase):
         self.assertEqual(second["status"], "ok")
 
 
+# 日本語: 選択フラグに応じて検索関数が組み立てられ、ユーザー固有の参照元がそのユーザーに束縛されることを検証するテストクラス。
+# English: Test class verifying that searchers are built from the selection flags and user-specific sources are bound to the user.
 class BuildSelectedReferenceSearchersTestCase(unittest.TestCase):
     def _build(self, **kwargs):
         defaults = {

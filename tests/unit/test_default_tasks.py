@@ -1,3 +1,10 @@
+"""起動時のシード（ensure_default_tasks_seeded）と、既定タスクの定義 JSON
+の読み込み・ロケール切り替え・システムタスクキーの解決を検証するテスト。
+
+Tests default task seeding (ensure_default_tasks_seeded) and the bundled catalog: loading, locale switching
+and resolution of system task keys.
+"""
+
 import asyncio
 import unittest
 from contextlib import asynccontextmanager
@@ -14,6 +21,8 @@ from services.default_tasks import (
 )
 
 
+# 日本語: session_scope の代わりに使う、begin() だけを持つ非同期セッションの代役です。
+# English: Stand-in for session_scope that yields an async session exposing only begin().
 @asynccontextmanager
 async def _session_scope():
     class _Transaction:
@@ -30,6 +39,8 @@ async def _session_scope():
     yield _Session()
 
 
+# 日本語: シードや変換のテストで使う、既定タスク 2 件分のサンプルデータです。
+# English: Two sample default tasks used by the seeding and conversion tests.
 SAMPLE_TASKS = [
     {
         "name": "Task A",
@@ -55,7 +66,7 @@ SAMPLE_TASKS = [
 # 日本語: Default Tasksの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Default Tasks.
 class DefaultTasksTestCase(unittest.TestCase):
-    # 日本語: およびrowsがderived、shareddataから、payloadsことを検証します。
+    # 日本語: 共有データから、ペイロードと行のタプルが導出されることを検証します。
     # English: Verify that payloads and rows are derived from shared data.
     def test_payloads_and_rows_are_derived_from_shared_data(self):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -74,7 +85,7 @@ class DefaultTasksTestCase(unittest.TestCase):
             ("Task A", "Prompt A", "Rules A", "Skeleton A", "Input A", "Output A", 0),
         )
 
-    # 日本語: seedinsertsmissingデフォルトtasksことを検証します。
+    # 日本語: シードが、未登録の既定タスクを挿入することを検証します。
     # English: Verify that seed inserts missing default tasks.
     def test_seed_inserts_missing_default_tasks(self):
         seed = AsyncMock(return_value=len(SAMPLE_TASKS))
@@ -92,7 +103,7 @@ class DefaultTasksTestCase(unittest.TestCase):
             ("Task A", "Prompt A", "Rules A", "Skeleton A", "Input A", "Output A", 0),
         )
 
-    # 日本語: デフォルトtasksalreadyexistのとき、seedskipsことを検証します。
+    # 日本語: 既定タスクが登録済みのとき、シードが何も挿入しないことを検証します。
     # English: Verify that seed skips when default tasks already exist.
     def test_seed_skips_when_default_tasks_already_exist(self):
         seed = AsyncMock(return_value=0)
@@ -130,6 +141,8 @@ class DefaultTasksTestCase(unittest.TestCase):
         ):
             self.assertEqual(asyncio.run(ensure_default_tasks_seeded()), 1)
 
+        # PostgreSQL 固有のアドバイザリロックや ON CONFLICT の挙動は、
+        # このサービス層のオーケストレーションのテストではなく、リポジトリ境界の責務である。
         # PostgreSQL-specific advisory locking and ON CONFLICT behavior belong
         # to the repository boundary, not to this service orchestration test.
         seed.assert_awaited_once()
@@ -147,7 +160,7 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertEqual(localized["name"], "My custom task")
         self.assertEqual(localized["prompt_template"], "Keep this prompt")
 
-    # 日本語: repositoryデフォルトtasksincludefullseedsetことを検証します。
+    # 日本語: リポジトリ同梱の既定タスクが、シードの全件を含むことを検証します。
     # English: Verify that repository default tasks include full seed set.
     def test_repository_default_tasks_include_full_seed_set(self):
         expected_names = {
@@ -327,7 +340,7 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertIn("```chatcore-copy", reply_task["response_rules"])
         self.assertIn("```chatcore-copy", reply_task["output_skeleton"])
 
-    # 日本語: またはformatsensitivetasksincludeexamples、repositoryテーブルことを検証します。
+    # 日本語: 表や出力形式に厳密さが要る同梱タスクが、入力例と出力例を持つことを検証します。
     # English: Verify that repository table or format sensitive tasks include examples.
     def test_repository_table_or_format_sensitive_tasks_include_examples(self):
         load_default_tasks.cache_clear()
@@ -344,7 +357,7 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertTrue(meeting_task["input_examples"])
         self.assertIn("## やること", meeting_task["output_examples"])
 
-    # 日本語: repositoryproblemsolvingタスクrequestsconciserationaleonlyことを検証します。
+    # 日本語: 同梱の「問題を解く」タスクが、簡潔な考え方だけを求める文面になっていることを検証します。
     # English: Verify that repository problem solving task requests concise rationale only.
     def test_repository_problem_solving_task_requests_concise_rationale_only(self):
         load_default_tasks.cache_clear()

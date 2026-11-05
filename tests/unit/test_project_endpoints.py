@@ -1,3 +1,8 @@
+"""プロジェクト API のエンドポイント（作成・一覧・削除・ルームへの割り当て）の認証、応答、権限エラーの伝播を検証するテスト。
+
+Tests the project API endpoints (create, list, delete, assign to a room): authentication, responses and propagation of permission errors.
+"""
+
 import asyncio
 import json
 import unittest
@@ -13,6 +18,8 @@ from services.api_errors import ForbiddenOperationError
 from tests.helpers.request_helpers import build_request
 
 
+# エンドポイント関数を直接呼び、サービス関数をモックして状態コードとペイロードを確かめる。
+# Calls the endpoint functions directly with mocked services and checks status codes and payloads.
 class ProjectEndpointsTestCase(unittest.TestCase):
     def test_create_project_requires_login(self):
         request = build_request(

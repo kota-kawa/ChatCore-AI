@@ -1,3 +1,6 @@
+# 会話文脈の選択と状態管理が、入力予算や保持すべき情報の契約を守ることを検証する。
+# Tests conversation context selection and state against input budgets and retained-information contracts.
+
 import unittest
 
 from services.chat_context import (

@@ -1,3 +1,12 @@
+"""チャットの分岐(枝)管理を検証する単体テスト。
+書き込みサービスが外部セッションのトランザクションを閉じないこと、枝の切り替えがリポジトリに委譲されること、ア
+クティブな枝の経路が active_child_id をたどって決まることを確かめる。
+
+Unit tests for chat branch handling.
+The write service must leave an external session transaction open, branch switching is delegated to the repository,
+and the active path follows the active_child_id chain.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -6,6 +15,11 @@ from services.repositories.chat_repository import ChatRepository
 
 
 class ChatBranchingTestCase(unittest.IsolatedAsyncioTestCase):
+    """DB は使わず、疑似セッションとモックで、サービス層の委譲とリポジトリのツリー走査(純粋関数)を確かめる。
+
+    Uses no database; a fake session and mocks check the service-layer delegation and the repository's pure tree-walking helpers.
+    """
+
     async def test_write_service_keeps_external_session_transaction_open(self):
         session = Mock()
         with patch("services.chat_service._write", new=AsyncMock(return_value=17)) as write:

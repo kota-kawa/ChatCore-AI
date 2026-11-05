@@ -1,3 +1,8 @@
+"""ルーター単体の API テスト用に、セッションミドルウェア付きの FastAPI アプリを組み立てるヘルパー。
+
+Helper that builds a FastAPI app with session middleware for router-level API tests.
+"""
+
 from fastapi import FastAPI, Request
 from starlette.middleware.sessions import SessionMiddleware
 

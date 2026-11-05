@@ -1,3 +1,8 @@
+"""Web 検索の「回答までのステップ」トレース (services.web_search_trace) が生成する HTML のテスト。
+
+Tests for the HTML produced by the web-search "steps to the answer" trace (services.web_search_trace).
+"""
+
 import unittest
 
 from services import web_search_trace as trace
@@ -137,6 +142,7 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__step-badge">4件</span>', block)
         self.assertIn('<span class="web-search-sources__step-chip">a.example</span>', block)
         # 上限を超えたドメインは「+N」に畳む
+        # Domains beyond the display limit are collapsed into a "+N" chip.
         self.assertIn('<span class="web-search-sources__step-chip">+1</span>', block)
         self.assertIn("1週間以内の情報に絞り込んで", block)
 
@@ -262,6 +268,8 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertIn("web-search-sources__step-marker--warning", block)
         self.assertIn("上限に達しました。", block)
 
+    # 日本語: 選択した参照元 (メモ・マイコンテキスト・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
+    # English: Verify selected-reference lookup steps (memos, personal context, shared prompts) show counts and the type of search.
     def test_selected_reference_steps_show_counts_and_search_types(self):
         block = trace.build_web_search_trace_markdown(
             steps=[
@@ -291,6 +299,8 @@ class WebSearchTraceTestCase(unittest.TestCase):
             block,
         )
 
+    # 日本語: 参照元の検索に失敗したときは警告ステップになることを検証します。
+    # English: Verify a failed reference lookup becomes a warning step.
     def test_failed_selected_reference_lookup_uses_warning_kind(self):
         step = trace.selected_reference_step(
             PERSONAL_KNOWLEDGE_SOURCE,
@@ -369,6 +379,8 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertEqual(trace.build_web_search_trace_markdown(None, steps=[{"title": "  "}]), "")
 
 
+# 日本語: 参照元の「棚卸し」(overview) ステップの表示を検証するテストクラスです。
+# English: Test case for how the reference "inventory" (overview) step is displayed.
 class SelectedReferenceOverviewStepTestCase(unittest.TestCase):
     # 日本語: 棚卸しのステップは「該当なし」ではなく、渡した件数を示します。
     # English: The inventory step reports what was handed over, not "no match".

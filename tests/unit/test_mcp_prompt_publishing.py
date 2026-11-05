@@ -1,3 +1,10 @@
+"""MCP からのプロンプト画像の保存（Base64・data URL・ChatGPT のファイル参照）で、形式の検証、サイズ上限、
+許可ホスト以外の拒否を検証するテスト。
+
+Tests saving prompt images sent over MCP (Base64, data URL, ChatGPT file references): format checks, size limits and rejecting
+disallowed hosts.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -20,7 +27,11 @@ from services.prompt_attachment_storage import (
 )
 
 
+# 画像は一時ディレクトリへ保存し、外部へのダウンロードは差し替えたレスポンスで再現する。
+# Images are saved to a temp directory and external downloads are reproduced with replaced responses.
 class McpPromptPublishingTestCase(unittest.TestCase):
+    # ファイルのダウンロード応答の代役。ストリーミング取得（iter_content）と状態コード・ヘッダーを再現する。
+    # Stand-in for a file download response, reproducing streamed reads (iter_content), status code and headers.
     class _DownloadResponse:
         def __init__(self, body: bytes, *, status_code: int = 200, headers=None):
             self.body = body
@@ -37,6 +48,8 @@ class McpPromptPublishingTestCase(unittest.TestCase):
             for offset in range(0, len(self.body), chunk_size):
                 yield self.body[offset : offset + chunk_size]
 
+    # 実際にデコードできる小さな画像のバイト列を作る。
+    # Builds the bytes of a small image that can actually be decoded.
     @staticmethod
     def _image_bytes(image_format: str = "PNG") -> bytes:
         buffer = BytesIO()

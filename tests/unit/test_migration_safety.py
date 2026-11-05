@@ -1,3 +1,10 @@
+"""Alembic migration の安全性チェック（scripts/check_migration_safety）が、データ変更・列削除・ロックを伴う索
+引や制約を正しく検出・許容することを検証するテスト。
+
+Tests the migration safety checker (scripts/check_migration_safety): it must flag or accept data changes, column
+drops and locking indexes or constraints correctly.
+"""
+
 import unittest
 from pathlib import Path
 
@@ -13,6 +20,8 @@ from scripts.check_migration_safety import (
 )
 
 
+# 実際の migration と、テスト内で組み立てた MigrationSource の両方を checker に通して判定を確かめる。
+# Runs both real migrations and MigrationSource objects built in the tests through the checker and checks its verdicts.
 class MigrationSafetyTestCase(unittest.TestCase):
     def test_current_history_hardening_migration_is_reviewed_for_data_changes(self):
         path = (
@@ -30,6 +39,9 @@ class MigrationSafetyTestCase(unittest.TestCase):
         )
 
         self.assertIn(DATA_REVIEW_MARKER, source)
+        # このリビジョンの UPDATE 文はレビュー済みのバックフィルで、残る指摘は下で追加される
+        # NOT VALID なしの CHECK だけ。これは適用済みの既知の違反である
+        # （test_check_migrations_grandfathers_the_applied_history_hardening_check を参照）。
         # This revision's UPDATE statements are the reviewed backfill; the only
         # remaining finding is the CHECK-without-NOT-VALID pattern added below,
         # which is a known, already-applied violation (see
@@ -37,6 +49,8 @@ class MigrationSafetyTestCase(unittest.TestCase):
         self.assertEqual(classify_upgrade(migration), [VALIDATED_CHECK_LABEL])
 
     def test_check_migrations_grandfathers_the_applied_history_hardening_check(self):
+        # 20260826_01 はすでにマージ・適用済み。履歴を書き換えない限り取り消せない違反のために、
+        # CI が実際に実行する入口の check_migrations() を失敗させてはいけない。
         # 20260826_01 is already merged and applied; check_migrations() (the entry
         # point CI actually runs) must not fail the build over a violation that
         # can no longer be un-applied without rewriting history.
@@ -53,6 +67,8 @@ class MigrationSafetyTestCase(unittest.TestCase):
             self.assertNotIn(revision, violations_by_revision)
 
     def test_new_memory_facts_index_migration_passes_the_checker(self):
+        # このリビジョンはこのブランチで新規に加えたものなので、猶予（grandfather）の登録ではなく、
+        # 自前の明示的なレビュー用マーカーで通す。
         # This revision uses its own explicit review marker rather than a
         # grandfather entry, since it is new work introduced on this branch.
         violations_by_revision = {

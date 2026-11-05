@@ -1,3 +1,10 @@
+"""メモ・共有プロンプトの参照フラグが ChatPostUseCase から生成ジョブへ渡る条件（ゲスト、Skill 選択、
+非ストリーミングを含む）を検証するテスト。
+
+Tests the conditions under which the memo and shared-prompt lookup flags travel from ChatPostUseCase to the
+generation job, including guests, Skill selection and non-streaming models.
+"""
+
 import asyncio
 import unittest
 from types import SimpleNamespace
@@ -21,6 +28,8 @@ def _async_return(value):
 # 日本語: メモ・共有プロンプトの参照フラグが生成ジョブまで正しく伝わるかを検証するテスト。
 # English: Verify the memo and shared-prompt flags reach the generation job exactly when they should.
 class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
+    # 日本語: 参照用の検索関数をモックに差し替えた、ChatPostUseCase の依存一式を組み立てます。
+    # English: Build the ChatPostUseCase dependencies with the lookup functions replaced by stubs.
     def _build_deps(self, search_personal_knowledge, search_shared_prompts=None):
         async def require_json_dict(request):
             return await request.json(), None
@@ -102,6 +111,8 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             logger=Mock(),
         )
 
+    # 日本語: 1 リクエスト分のユースケースを実行し、生成ジョブの起動引数のうち key で指定した値を返します。
+    # English: Run one request through the use case and return the named keyword argument given to the generation job.
     def _run(self, deps, *, body_extra, session, key="personal_knowledge_search"):
         use_case = ChatPostUseCase(deps, default_model="test-model")
         request = build_request(

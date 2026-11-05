@@ -1,3 +1,10 @@
+"""リクエスト ID などのコンテキストをログとレスポンスヘッダーへ付けるミドルウェアとログフィルター
+（services.request_context）を検証するテスト。
+
+Tests for the request-context middleware and log filter (services.request_context)
+that attach the request ID and related fields to logs and response headers.
+"""
+
 import asyncio
 import io
 import logging

@@ -1,3 +1,10 @@
+"""API ハンドラの入力検証（不正な JSON・不明なモデル・存在しないルーム）と、応答のシリアライズ（日時の形式、
+検索なし時にソース表示を作らないこと）を検証する単体テスト。
+
+Unit tests for API handler input validation (malformed JSON, unknown model, missing room)
+and response serialization (datetime format, no source blocks when nothing was searched).
+"""
+
 import asyncio
 import json
 import unittest

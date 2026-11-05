@@ -1,3 +1,8 @@
+"""期限切れゴミ箱メモの定期削除（cleanup_expired_memo_trash）のバッチ処理と、定期クリーンアップで一つの失敗が他の処理を止めないことを検証するテスト。
+
+Tests the batched purge in cleanup_expired_memo_trash and that one failing task does not stop the other periodic cleanups.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,6 +11,8 @@ from services.memo_trash_cleanup import MAX_PURGE_BATCHES_PER_CYCLE, cleanup_exp
 from services.repositories.memo_constants import MEMO_TRASH_PURGE_BATCH_SIZE
 
 
+# 満杯のバッチは周期あたりの上限まで続け、端数のバッチで止まることを確かめる。
+# Checks full batches continue up to the per-cycle cap and a partial batch stops the loop.
 class MemoTrashCleanupTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_cleanup_returns_the_number_of_purged_memos(self):
         purge = AsyncMock(return_value=4)
@@ -31,10 +38,13 @@ class MemoTrashCleanupTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(total, MEMO_TRASH_PURGE_BATCH_SIZE + 7)
 
 
+# app.periodic_cleanup を実際に 1 周させ、ゴミ箱の削除が失敗しても他の掃除が呼ばれることを確かめる。
+# Runs app.periodic_cleanup for one cycle and checks the other cleanups still run when the trash purge fails.
 class PeriodicCleanupIsolationTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_a_failing_memo_trash_purge_does_not_skip_the_other_cleanups(self):
         try:
             import app as app_module
+        # app の import には実行時の環境変数などが要るので、読み込めない環境ではスキップする。
         except Exception as exc:  # the app needs its runtime environment to import
             self.skipTest(f"app cannot be imported here: {exc}")
 

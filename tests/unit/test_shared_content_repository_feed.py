@@ -1,4 +1,7 @@
-"""SQL-shape tests for the public prompt feed in SharedContentRepository."""
+"""SharedContentRepository の公開プロンプトフィードが生成する SQL の形を検証するテスト。
+
+SQL-shape tests for the public prompt feed in SharedContentRepository.
+"""
 
 import unittest
 from datetime import datetime
@@ -7,18 +10,24 @@ from unittest.mock import AsyncMock, MagicMock
 from services.repositories.shared_content_repository import SharedContentRepository
 
 
+# mappings().all() が行を返す DB 実行結果のモックを作る補助関数。
+# Helper that builds a mocked DB result whose mappings().all() returns the rows.
 def _result(rows=None):
     result = MagicMock()
     result.mappings.return_value.all.return_value = rows or []
     return result
 
 
+# 既定の引数で get_public_feed を呼ぶ補助関数。
+# Helper that calls get_public_feed with default arguments.
 async def _feed(session, **overrides):
     kwargs = {"user_id": None, "limit": 24, "locale": "ja"}
     kwargs.update(overrides)
     return await SharedContentRepository().get_public_feed(session, **kwargs)
 
 
+# 公開フィードの SQL に、注目枠の先頭固定・同じフィルター条件・キーセット順序が含まれることを検証するテストクラス。
+# Test class verifying that the feed SQL pins featured prompts first, applies the same filters, and keeps keyset ordering.
 class SharedContentRepositoryFeedTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_first_page_leads_with_featured_prompts_and_exposes_counts(self):
         session = MagicMock()
@@ -35,6 +44,7 @@ class SharedContentRepositoryFeedTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("COALESCE(lc.like_count, 0) AS like_count", sql)
         self.assertIn("SELECT COUNT(*) AS like_count", sql)
         self.assertNotIn("feed_view_count", params)
+        # 最初のページでは、通常のページに加えて注目の行をすべて取得する。
         # The first page fetches every featured row on top of the regular page.
         self.assertIn(":fetch_limit + (", sql)
         self.assertIn("SELECT COUNT(*) FROM prompts AS f", sql)

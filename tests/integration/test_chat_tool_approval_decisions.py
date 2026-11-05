@@ -35,6 +35,11 @@ from services.tool_approval_parts import tool_approval_part
     "requires DATABASE_URL pointing at a PostgreSQL test database",
 )
 class ChatToolApprovalDecisionIntegrationTest(unittest.IsolatedAsyncioTestCase):
+    """承認カードの拒否・1回承認・常に承認を実 DB で通し、メモ作成の有無と許可一覧を確かめる。
+
+    Runs deny, approve-once and approve-always through a real database and checks whether the memo was written and the grant list.
+    """
+
     async def asyncSetUp(self) -> None:
         suffix = uuid4().hex
         self.room_id = f"integration-approval-{suffix}"
@@ -61,6 +66,8 @@ class ChatToolApprovalDecisionIntegrationTest(unittest.IsolatedAsyncioTestCase):
             await session.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": self.user_id})
         await dispose_engine()
 
+    # 日本語: memo_create の承認待ちカードを作り、それを含むアシスタントメッセージまで保存して、カードを返す。
+    # English: Create a pending memo_create approval card, save the assistant message that carries it, and return the card.
     async def _propose_memo(self, content: str) -> dict[str, Any]:
         proposal = Proposal(
             arguments={"title": "承認テスト", "content": content},

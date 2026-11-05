@@ -1,3 +1,8 @@
+"""プロンプト共有 API の create_prompt を、未ログイン（ゲスト）と ログイン済みの両方で呼んだときの投稿規則を検証するテスト。
+
+Tests the posting rules of the prompt share API create_prompt for guests and for logged-in users.
+"""
+
 import asyncio
 import json
 import unittest
@@ -8,6 +13,8 @@ from services.guest_prompt_service import GuestPromptLimitExceededError
 from tests.helpers.request_helpers import build_request
 
 
+# プロンプト作成 API への POST リクエストを組み立てる。
+# Builds a POST request to the prompt creation API.
 def make_request(payload, session=None):
     return build_request(
         method="POST",
@@ -17,6 +24,8 @@ def make_request(payload, session=None):
     )
 
 
+# ゲストが投稿できる範囲（テキストのみ・URL 不可・回数制限）と、ログイン済み投稿の経路が変わらないことを確かめる。
+# Checks what guests may post (text only, no URLs, rate limited) and that the logged-in path is unchanged.
 class GuestPromptPostingTestCase(unittest.TestCase):
     @staticmethod
     def _payload(**overrides):

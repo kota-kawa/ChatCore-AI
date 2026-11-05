@@ -1,3 +1,8 @@
+"""ゲスト投稿サービス（セッショントークンの発行、投稿作成、ログイン後の引き継ぎ）を、リポジトリを差し替えて検証するテスト。
+
+Tests the guest prompt service (session token, prompt creation, claiming after login) with a fake repository.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -11,6 +16,8 @@ from services.guest_prompt_service import (
 from services.request_models import SharedPromptCreateRequest
 
 
+# ゲスト投稿のリポジトリの代役。呼び出し引数を記録し、固定の結果を返す。
+# Stand-in for the guest prompt repository: records call arguments and returns fixed results.
 class _Repository:
     def __init__(self, *, prompt_id=88, retry_after=None, claimed=None):
         self.prompt_id = prompt_id
@@ -28,6 +35,8 @@ class _Repository:
         return self.claimed
 
 
+# サービスがトランザクションを呼び出し側に残し、Cookie をハッシュ化して扱うことを確かめる。
+# Checks the service leaves transactions to the caller and works with a hashed cookie.
 class GuestPromptServiceTestCase(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     def _payload():

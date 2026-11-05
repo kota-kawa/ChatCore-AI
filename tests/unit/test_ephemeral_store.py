@@ -1,3 +1,6 @@
+# 一時チャットストアの保持期限・並行更新とRedis代替の契約を検証する。
+# Tests ephemeral chat expiry, concurrent updates and the Redis substitute contract.
+
 import threading
 import time
 import unittest

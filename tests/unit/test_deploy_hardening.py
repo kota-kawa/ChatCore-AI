@@ -1,3 +1,10 @@
+"""デプロイスクリプト（blue_green_deploy.sh）、docker-compose、nginx 設定、CI
+ワークフローが守るべきデプロイ上の前提を、ファイルの内容から検証するテスト。
+
+Tests the deployment assumptions held by the blue/green deploy script, the compose files, the nginx config
+and the CI workflow, by inspecting their contents.
+"""
+
 import re
 import subprocess
 import unittest
@@ -14,12 +21,12 @@ NGINX_CONFIG = REPO_ROOT / "deploy" / "chatcore-ai.conf"
 # 日本語: DeployHardeningTest のテストケースをまとめます。
 # English: Group test cases for DeployHardeningTest.
 class DeployHardeningTest(unittest.TestCase):
-    # 日本語: デプロイscripthas有効なbashsyntaxことを検証します。
+    # 日本語: デプロイスクリプトが bash の構文として正しいことを検証します。
     # English: Verify that deploy script has valid bash syntax.
     def test_deploy_script_has_valid_bash_syntax(self):
         subprocess.run(["bash", "-n", str(DEPLOY_SCRIPT)], check=True)
 
-    # 日本語: bracedenvreferencesが〜しないflaggedasunresolvedことを検証します。
+    # 日本語: ${VAR} 形式の環境変数参照が、未解決の値として扱われないことを検証します。
     # English: Verify that braced env references are not flagged as unresolved.
     def test_braced_env_references_are_not_flagged_as_unresolved(self):
         script_text = DEPLOY_SCRIPT.read_text()
@@ -39,7 +46,7 @@ class DeployHardeningTest(unittest.TestCase):
         )
         subprocess.run(["bash", "-c", bash_script], check=True)
 
-    # 日本語: およびDBクエリwait、デプロイscriptusesnoninteractivesudoことを検証します。
+    # 日本語: デプロイスクリプトが、パスワード入力を求めない sudo と、DB がクエリを受け付けるまでの待機を使うことを検証します。
     # English: Verify that deploy script uses noninteractive sudo and db query wait.
     def test_deploy_script_uses_noninteractive_sudo_and_db_query_wait(self):
         script_text = DEPLOY_SCRIPT.read_text()
@@ -69,7 +76,7 @@ class DeployHardeningTest(unittest.TestCase):
                 with self.subTest(compose_file=compose_file.name, entry=entry):
                     self.assertIn(entry, compose_text)
 
-    # 日本語: 通常構成とBlue/Green構成が同じ明示名volumeをアプリへmountすることを確認します。
+    # 日本語: 通常構成と Blue/Green 構成が、同じ名前を明示したアップロード用ボリュームをアプリへマウントすることを確認します。
     # English: Verify standard and blue/green apps mount the same explicitly named upload volume.
     def test_compose_files_persist_prompt_share_uploads(self):
         expected_entries = (
@@ -162,7 +169,7 @@ class DeployHardeningTest(unittest.TestCase):
         self.assertIn("proxy_buffering off;", streaming_block.group(1))
         self.assertIn("proxy_read_timeout 3600s;", streaming_block.group(1))
 
-    # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
+    # 日本語: CI のワークフローが、nginx の設定テストコマンドをリモートデプロイへ引き渡すことを検証します。
     # English: Verify that workflow forwards nginx test command to remote deploy.
     def test_workflow_forwards_nginx_test_command_to_remote_deploy(self):
         workflow_text = WORKFLOW.read_text()

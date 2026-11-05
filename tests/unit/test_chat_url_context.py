@@ -22,6 +22,8 @@ from services.url_fetcher import MAX_URL_TEXT_CHARS, FetchedUrlDocument
 from services.web_search import WebSearchResult, WebSearchSource
 
 
+# 日本語: テスト用の取得済みURL文書を作る。リダイレクト先を省略した場合は final_url を url と同じにする。
+# English: Builds a fetched URL document for tests; final_url defaults to url when no redirect is given.
 def document(
     url: str, text: str, *, title: str = "", final_url: str = ""
 ) -> FetchedUrlDocument:
@@ -30,6 +32,8 @@ def document(
     )
 
 
+# 日本語: 貼り付けURLを、予算内の抜粋と全文を持つページへ変換する処理（build_pasted_url_pages）のテスト。
+# English: Tests build_pasted_url_pages, which turns pasted URLs into pages with a budgeted excerpt and the full text.
 class BuildPastedUrlPagesTestCase(unittest.TestCase):
     # 予算内の短いページはそのまま全文が抜粋になることを検証します。
     # Verify a short page fits the budget and becomes its own excerpt.
@@ -113,6 +117,8 @@ class BuildPastedUrlPagesTestCase(unittest.TestCase):
         self.assertTrue(page.text.startswith(page.excerpt))
 
 
+# 日本語: ページを LLM へ渡す <fetched_urls> ブロック（XML）へ描画する処理のテスト。
+# English: Tests rendering pages into the <fetched_urls> XML block handed to the LLM.
 class RenderFetchedUrlsBlockTestCase(unittest.TestCase):
     def build(self, text: str, url: str = "https://example.com/a"):
         return build_pasted_url_pages({url: document(url, text)})
@@ -156,6 +162,8 @@ class RenderFetchedUrlsBlockTestCase(unittest.TestCase):
         self.assertEqual(render_fetched_urls_block(()), "")
 
 
+# 日本語: 過去のユーザー発話から貼り付け済みURLを集める処理のテスト。
+# English: Tests collecting previously pasted URLs from earlier user messages.
 class CollectEarlierPastedUrlsTestCase(unittest.TestCase):
     # 過去ターンで貼られたURLを、新しい順に拾うことを検証します。
     # Verify URLs pasted in earlier turns are collected newest first.
@@ -253,6 +261,8 @@ class CollectEarlierPastedUrlsTestCase(unittest.TestCase):
         self.assertEqual(collect_earlier_pasted_urls(messages), ())
 
 
+# 日本語: 貼り付けページを EvidenceStore へ Web 根拠として登録する処理のテスト。
+# English: Tests registering pasted pages in the EvidenceStore as web evidence.
 class PastedPageEvidenceTestCase(unittest.TestCase):
     # 貼り付けページはWeb根拠として登録され、read_web_page が受け付けるIDを返すことを検証します。
     # Verify a pasted page registers as web evidence with an ID read_web_page accepts.

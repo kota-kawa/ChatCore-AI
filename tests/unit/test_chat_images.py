@@ -47,12 +47,16 @@ OWNER = "user:42"
 OTHER_OWNER = "user:7"
 
 
+# 日本語: 指定サイズ・形式・色の単色画像を作り、base64 文字列にして返す（アップロード本文の代わり）。
+# English: Builds a solid-color image of the given size and format and returns it as base64 (stands in for an upload body).
 def _image_base64(size=(64, 48), fmt="PNG", color=(200, 30, 30)):
     buffer = io.BytesIO()
     Image.new("RGB", size, color).save(buffer, format=fmt)
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
+# 日本語: 2 フレームのアニメーション GIF を base64 で返す（アニメーション拒否の検証用）。
+# English: Returns a two-frame animated GIF as base64, for the animated-image rejection test.
 def _animated_gif_base64():
     frames = [Image.new("RGB", (16, 16), color) for color in ((255, 0, 0), (0, 255, 0))]
     buffer = io.BytesIO()
@@ -61,7 +65,10 @@ def _animated_gif_base64():
 
 
 class _UploadRootTestCase(unittest.TestCase):
-    """Point the chat image storage at a throwaway directory for each test."""
+    """各テストごとに、チャット画像の保存先を使い捨てのディレクトリへ向ける。
+
+    Point the chat image storage at a throwaway directory for each test.
+    """
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -74,6 +81,8 @@ class _UploadRootTestCase(unittest.TestCase):
         return prepare_chat_images([{"name": name, "data_base64": _image_base64(size)}], owner)[0]
 
 
+# 日本語: アップロード画像の検証・変換・保存（prepare_chat_images）と、画像/文書の振り分けを検証する。
+# English: Tests validating, converting and storing uploaded images (prepare_chat_images) and splitting images from documents.
 class PrepareChatImagesTests(_UploadRootTestCase):
     def test_stores_a_webp_display_and_thumbnail_bound_to_the_owner(self):
         image = self._store()
@@ -111,6 +120,8 @@ class PrepareChatImagesTests(_UploadRootTestCase):
         self.assertEqual([item["name"] for item in images], ["Photo.JPG", "shot.webp"])
 
 
+# 日本語: 画像の所有者キー、保存パスの解決、参照されなくなった画像の掃除を検証する。
+# English: Tests the image owner key, storage path resolution and cleanup of unreferenced images.
 class ChatImageStorageTests(_UploadRootTestCase):
     def test_owner_key_prefers_the_signed_in_user_over_the_guest_session(self):
         self.assertEqual(chat_image_owner_key(user_id=42, sid="abc"), "user:42")
@@ -139,6 +150,8 @@ class ChatImageStorageTests(_UploadRootTestCase):
         self.assertTrue(os.path.isfile(resolve_chat_image_path(recent_orphan.id, thumbnail=True)))
 
 
+# 日本語: 画像配信ルートが所有者にだけ画像を返し、他者には存在しない画像と同じ 404 を返すことを検証する。
+# English: Tests the image delivery routes serve only the owner and give everyone else the same 404 as a missing image.
 class ChatImageMediaRouteTests(_UploadRootTestCase):
     def _request(self, **session):
         return SimpleNamespace(session=session)
@@ -165,6 +178,8 @@ class ChatImageMediaRouteTests(_UploadRootTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+# 日本語: モデルごとの画像の渡し方（Luna へは参照、テキスト専用モデルへは注記のみ）を検証する。
+# English: Tests how images are handed to each model: references for Luna, only a text note for text-only models.
 class ModelInputTests(_UploadRootTestCase):
     def test_luna_receives_references_and_text_only_models_receive_a_note(self):
         image = self._store()
@@ -201,6 +216,8 @@ class ModelInputTests(_UploadRootTestCase):
         self.assertEqual(decode_chat_images_from_storage([{"id": "../x"}, "junk", None]), [])
 
 
+# 日本語: LLM クライアントへ送る実際のリクエストに、画像パートが正しい形で入る（または入らない）ことを検証する。
+# English: Tests that the actual LLM client requests carry image parts in the right shape, or none for text-only models.
 class LlmRequestImageTests(_UploadRootTestCase):
     def _conversation(self, image):
         return [
@@ -267,6 +284,8 @@ _LARGE_IMAGE = {"id": "a" * 48, "name": "photo.png", "width": 2048, "height": 15
 _SMALL_IMAGE = {"id": "c" * 48, "name": "photo.png", "width": 10, "height": 10}
 
 
+# 日本語: 画像の入力トークン見積もりと、予算が足りないときに古い履歴の画像を落とす選択を検証する。
+# English: Tests image input token estimation and dropping older history images when the budget is tight.
 class ImageBudgetTests(unittest.TestCase):
 
     def test_images_are_budgeted_by_patches_not_by_their_encoded_size(self):
@@ -304,6 +323,8 @@ class ImageBudgetTests(unittest.TestCase):
         self.assertTrue(all(IMAGE_INPUTS_KEY not in message for message in base[:-1]))
 
 
+# 日本語: チャット投稿が、画像非対応モデルでは保存前に 400 で拒否し、Luna では画像を保存することを検証する。
+# English: Tests that chat posting rejects images for text-only models with 400 before storing, and stores them for Luna.
 class ChatPostImageGateTests(_UploadRootTestCase):
     def _use_case(self):
         deps = MagicMock()
@@ -347,6 +368,8 @@ class ChatPostImageGateTests(_UploadRootTestCase):
         self.assertTrue(chat_image_belongs_to(stored_images[0].id, "user:42"))
 
 
+# 日本語: 履歴の LLM 用・表示用の整形に、有効な画像参照だけが載ることを検証する。
+# English: Tests that only valid image references appear in the LLM and display forms of history.
 class ChatHistoryImageSerializationTests(unittest.TestCase):
 
     def _node(self):
@@ -369,6 +392,8 @@ class ChatHistoryImageSerializationTests(unittest.TestCase):
         self.assertEqual(entry["attached_file_names"], ["photo.png"])
 
 
+# 日本語: 一時チャットが参照する画像 ID の報告（掃除で消してよい画像の判定材料）を検証する。
+# English: Tests how temporary rooms report the image IDs they reference, which the cleanup uses to decide what is safe to delete.
 class TemporaryRoomImageReferenceTests(unittest.TestCase):
     def test_in_memory_rooms_report_the_images_they_reference(self):
         store = EphemeralChatStore(3600)

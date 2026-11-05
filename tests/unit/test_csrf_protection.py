@@ -1,3 +1,10 @@
+"""CSRF 保護ミドルウェアが、メモ API への POST
+をヘッダーの有無・不一致で拒否することを検証するテスト。
+
+Tests that the CSRF protection middleware rejects POSTs to the memo API when the CSRF header is missing or
+does not match.
+"""
+
 import asyncio
 import unittest
 

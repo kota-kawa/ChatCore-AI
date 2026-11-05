@@ -1,3 +1,12 @@
+"""利用上限（services.usage_limits）を検証するテスト。
+日本時間を基準にした日・週・月の区切り、ユーザー/ゲスト/デモ/システムごとの上限判定、
+上限超過時にチャットやプロンプトアシストを止めること、利用状況エンドポイントの応答を確かめる。
+
+Tests for usage limits (services.usage_limits): day/week/month periods based on Japan time,
+limit checks for users, guests, demo accounts and the system, stopping chat and prompt assist over the limit,
+and the usage-limits endpoint response.
+"""
+
 import asyncio
 import json
 import os
@@ -28,15 +37,22 @@ from services.usage_subject import SYSTEM_USAGE_SUBJECT
 from tests import _no_usage
 from tests.helpers.request_helpers import build_request
 
+# 1 ドルあたりのナノドル数。
+# Nano-dollars per US dollar.
 _USD = 1_000_000_000
+# 2026-09-23 12:00 JST（水曜日）。
 # 2026-09-23 12:00 JST (a Wednesday).
 _NOW = datetime(2026, 9, 23, 3, 0, tzinfo=UTC)
 
 
+# 日本時間の指定日 0 時を返す補助関数。
+# Helper that returns midnight Japan time on the given date.
 def _jst(year, month, day):
     return datetime(year, month, day, tzinfo=USAGE_TIMEZONE)
 
 
+# 利用量の集計リーダーを差し替え、渡された対象と期間を記録するテスト用ミックスイン。
+# Test mixin that swaps in a usage-totals reader and records the subject and periods it is called with.
 class _TotalsMixin:
     def use_totals(self, *, daily=0.0, weekly=0.0, monthly=0.0, demo_used=None, demo_expires_at=None):
         seen = []
@@ -62,6 +78,8 @@ class _TotalsMixin:
         return seen
 
 
+# 日・週・月の区切り（週は月曜始まり、日本時間 0 時で切り替わる）を検証するテストクラス。
+# Test class for the day/week/month boundaries (weeks start Monday, switching at midnight Japan time).
 class UsagePeriodTests(unittest.TestCase):
     def test_week_starts_on_monday_and_resets_at_midnight_japan_time(self):
         periods = usage_periods(_NOW)
@@ -73,6 +91,7 @@ class UsagePeriodTests(unittest.TestCase):
         self.assertEqual(periods.next_month, _jst(2026, 10, 1))
 
     def test_japan_midnight_starts_the_next_day_before_utc_does(self):
+        # 2026-09-27 15:00 UTC は日本時間の月曜 0:00 にあたる。
         # 2026-09-27 15:00 UTC is Monday 00:00 JST.
         periods = usage_periods(datetime(2026, 9, 27, 15, 0, tzinfo=UTC))
         self.assertEqual(periods.day, date(2026, 9, 28))
@@ -83,6 +102,8 @@ class UsagePeriodTests(unittest.TestCase):
         self.assertEqual(periods.next_month, _jst(2027, 1, 1))
 
 
+# 上限設定の既定値を検証するテストクラス。
+# Test class for the default limit settings.
 class UsageLimitSettingsTests(unittest.TestCase):
     def test_defaults_match_the_agreed_limits(self):
         with patch.dict(os.environ, {}, clear=False):
@@ -107,6 +128,8 @@ class UsageLimitSettingsTests(unittest.TestCase):
         self.assertEqual(settings.monthly_stop, 27 * _USD)
 
 
+# 利用量に応じて開始可否と案内の時刻を判定する処理を、対象の種別ごとに検証するテストクラス。
+# Test class for deciding whether a request may start and which reset time to report, per subject type.
 class UsageLimitCheckTests(_TotalsMixin, unittest.TestCase):
     def test_user_under_every_limit_may_start(self):
         self.use_totals(daily=1.00, weekly=5.00, monthly=20)
@@ -195,6 +218,8 @@ class UsageLimitCheckTests(_TotalsMixin, unittest.TestCase):
         self.assertIn("demo", usage_limit_message(demo_block, "en"))
 
 
+# 利用量リポジトリの集計 SQL（日と週を 1 クエリで読む、範囲内の総額）を検証するテストクラス。
+# Test class for the usage repository's totals SQL: day and week read in one query, and the total over a range.
 class UsageRepositoryTotalsTests(unittest.TestCase):
     def _compile(self, coroutine_factory, result):
         session = MagicMock()
@@ -237,6 +262,8 @@ class UsageRepositoryTotalsTests(unittest.TestCase):
 _WEEKLY_BLOCK = UsageLimitBlock(reason="weekly", resets_at=_NOW, retry_after_seconds=3600)
 
 
+# 上限超過時に、チャット投稿とプロンプトアシストが保存や回数消費より前に拒否されることを検証するテストクラス。
+# Test class verifying that chat posts and prompt assist are refused before anything is stored or any request quota is consumed.
 class UsageLimitEnforcementTests(unittest.TestCase):
     def test_chat_post_refuses_before_the_guest_quota_and_before_storing_the_message(self):
         rate_limited = Mock(return_value="429 response")
@@ -288,6 +315,8 @@ class UsageLimitEnforcementTests(unittest.TestCase):
         create_payload.assert_not_called()
 
 
+# 利用上限エンドポイントが割合とリセット時刻だけを返し、金額を返さないことを検証するテストクラス。
+# Test class verifying that the usage-limits endpoint returns shares and reset times but never amounts.
 class UsageLimitsEndpointTests(_TotalsMixin, unittest.TestCase):
     def _get(self, session):
         request = build_request(method="GET", path="/api/user/usage-limits", session=session)

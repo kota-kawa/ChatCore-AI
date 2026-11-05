@@ -1,3 +1,8 @@
+"""プロンプト投稿 API の multipart フォームのパート上限と、超過時の日本語 JSON エラーを検証するテスト。
+
+Tests for the multipart part-size limit of the prompt-create API and its Japanese JSON error on overflow.
+"""
+
 import asyncio
 import json
 import unittest

@@ -8,6 +8,8 @@ import unittest
 from services.llm_protocol_leak import ProtocolLeakGuard, find_protocol_leak, strip_leaked_reasoning_chunks
 
 
+# find_protocol_leak が、実際に観測された漏れの形だけを検出し、通常の文章やコードブロックは誤検出しないことを確かめる。
+# Checks find_protocol_leak detects the observed leak shapes without flagging ordinary text or code blocks.
 class FindProtocolLeakTestCase(unittest.TestCase):
     def test_finds_observed_leak_shapes(self):
         # 実 API で観測した漏れの形 / leak shapes observed against the real API
@@ -40,6 +42,8 @@ class FindProtocolLeakTestCase(unittest.TestCase):
                 self.assertIsNone(find_protocol_leak(text))
 
 
+# ストリームのチャンク境界をまたぐ目印の先頭を保留し、確定するまで利用者へ流さないことを確かめる。
+# Checks the guard holds back a possible marker head across chunk boundaries until it is confirmed.
 class ProtocolLeakGuardTestCase(unittest.TestCase):
     def test_never_releases_the_head_of_a_marker_split_across_chunks(self):
         # 逐次配信では渡した文字を取り消せないので、目印の頭が先に出てはいけない（issue #778）。
@@ -89,6 +93,8 @@ class ProtocolLeakGuardTestCase(unittest.TestCase):
         self.assertEqual(guard.overflow_chars, len("xyz"))
 
 
+# 閉じタグより前の推論の下書きを取り除き、回答側のインデントや例示のタグは残すことを確かめる。
+# Checks the reasoning draft before the closing tag is dropped while the answer's indentation and quoted tags are kept.
 class StripLeakedReasoningChunksTestCase(unittest.TestCase):
     def test_drops_the_draft_before_the_closing_tag_and_keeps_answer_boundaries(self):
         # 実 API で観測した形: 開始タグの無い下書き、空行、閉じタグ、回答の順。

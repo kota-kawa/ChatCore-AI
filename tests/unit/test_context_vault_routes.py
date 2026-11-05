@@ -1,3 +1,10 @@
+"""blueprints/context_vault のルートが、非同期サービスを await し、
+認証・パラメータ検証・リビジョン競合（409）を正しく扱うことを検証するテスト。
+
+Tests that the blueprints/context_vault routes await the async services and handle authentication, parameter
+validation and revision conflicts (409).
+"""
+
 import asyncio
 import json
 import unittest
@@ -25,6 +32,8 @@ from services.response_models import (
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: 事実の ContextFactResponse を作ります。overrides で項目を差し替えます。
+# English: Build a ContextFactResponse for a fact; overrides replace individual fields.
 def _fact(**overrides):
     payload = {
         "id": 3,
@@ -42,6 +51,8 @@ def _fact(**overrides):
     return ContextFactResponse(**payload)
 
 
+# 日本語: 候補の ContextFactCandidateResponse を作ります。overrides で項目を差し替えます。
+# English: Build a ContextFactCandidateResponse for a candidate; overrides replace individual fields.
 def _candidate(**overrides):
     payload = {
         "id": 8,
@@ -61,6 +72,8 @@ def _candidate(**overrides):
     return ContextFactCandidateResponse(**payload)
 
 
+# 日本語: サービス層をモックし、ルート関数を直接呼んで応答を確認します。
+# English: Mock the service layer, call the route functions directly and check the responses.
 class ContextVaultRouteTestCase(unittest.TestCase):
     def test_authentication_and_parameter_validation_are_async_safe(self):
         anonymous = build_request(method="GET", path="/api/context-facts", session={})

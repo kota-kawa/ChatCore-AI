@@ -1,4 +1,7 @@
-"""PostgreSQL integration coverage for demo access codes: first use, reuse, revoke, expiry and the allowance."""
+"""デモ用アクセスコードの発行・初回利用・再利用・失効・期限切れ削除・利用額の枠を実 PostgreSQL で検証する。
+
+PostgreSQL integration coverage for demo access codes: first use, reuse, revoke, expiry and the allowance.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +25,8 @@ from services.usage_subject import user_usage_subject
 from services.users import delete_user_account
 from tests import _no_usage
 
+# 日本語: 時刻を固定してコードの期限判定を再現可能にするための基準時刻と、1 ドルあたりの nano USD。
+# English: A fixed reference time so expiry logic is reproducible, and the number of nano USD per dollar.
 _NOW = datetime(2026, 10, 28, 3, 0, tzinfo=UTC)
 _USD = 1_000_000_000
 
@@ -31,6 +36,11 @@ _USD = 1_000_000_000
     "requires DATABASE_URL pointing at a PostgreSQL test database",
 )
 class DemoAccessIntegrationTest(unittest.IsolatedAsyncioTestCase):
+    """発行したコードと、利用で作られたユーザーを記録し、テスト後に DB から掃除しながら各シナリオを通す。
+
+    Tracks the codes it issues and the users their use creates, runs each scenario, and cleans them out of the database afterwards.
+    """
+
     async def asyncSetUp(self) -> None:
         self.code_ids: list[int] = []
         self.user_ids: list[int] = []
@@ -47,17 +57,23 @@ class DemoAccessIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 await session.execute(text("DELETE FROM demo_access_codes WHERE id = :id"), {"id": code_id})
         await dispose_engine()
 
+    # 日本語: デモコードを発行し、後片付け用に ID を控えて、利用者が入力する平文のコードを返す。
+    # English: Issue a demo code, remember its id for cleanup, and return the plain code a recipient would type.
     async def _issue(self, label: str = "株式会社サンプル") -> str:
         issued = await issue_demo_code(label, now=_NOW)
         self.code_ids.append(issued.summary.id)
         return issued.code
 
+    # 日本語: コードで入場する。新しく作られたユーザーは後片付け対象に加える。コードが無効なら None。
+    # English: Redeem a code; a newly created user is added to the cleanup list. Returns None when the code is invalid.
     async def _redeem(self, code: str, now: datetime = _NOW):
         sign_in = await redeem_demo_code(code, now=now)
         if sign_in is not None and sign_in.user_id not in self.user_ids:
             self.user_ids.append(sign_in.user_id)
         return sign_in
 
+    # 日本語: 指定ユーザーが table に持つ行数を数える。サンプルデータが入ったかの確認に使う。
+    # English: Count a user's rows in the given table, to confirm that sample data was seeded.
     async def _count(self, table: str, user_id: int) -> int:
         async with session_scope() as session:
             return int(
@@ -66,6 +82,8 @@ class DemoAccessIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 ).scalar_one()
             )
 
+    # 日本語: 指定コードの現在の状態（active / revoked / ended など）を一覧から取り出す。
+    # English: Pull the current status (active / revoked / ended ...) of one code out of the code list.
     async def _status(self, code_id: int, now: datetime = _NOW) -> str:
         [summary] = [item for item in await list_demo_codes(now=now) if item.id == code_id]
         return summary.status

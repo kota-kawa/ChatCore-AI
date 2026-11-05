@@ -1,3 +1,8 @@
+"""ヘルスチェック（liveness と readiness）が、DB・Redis・埋め込みの状態に応じて ok / degraded / error を返すことを検証するテスト。
+
+Tests that the liveness and readiness checks report ok, degraded or error depending on the database, Redis and embeddings.
+"""
+
 import asyncio
 import unittest
 from contextlib import asynccontextmanager
@@ -6,6 +11,8 @@ from unittest.mock import patch
 from services.health import get_liveness_status, get_readiness_status
 
 
+# readiness の DB 疎通確認に使う、常に 1 を返す非同期セッションの代役。
+# Async session stand-in for the readiness database ping; it always returns 1.
 class _AsyncSession:
     async def scalar(self, _statement):
         return 1
@@ -16,6 +23,8 @@ async def _session_scope():
     yield _AsyncSession()
 
 
+# 必須の依存（DB）が落ちると error、任意の依存（Redis・埋め込み）が落ちると degraded になる区別を確かめる。
+# Checks that a missing required dependency (database) gives error while optional ones (Redis, embeddings) only give degraded.
 class HealthServiceTestCase(unittest.TestCase):
     def test_liveness_status_is_ok(self):
         self.assertEqual(get_liveness_status(), {"status": "ok"})

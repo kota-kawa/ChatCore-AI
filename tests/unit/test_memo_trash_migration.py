@@ -1,3 +1,10 @@
+"""メモのゴミ箱用 Alembic migration（deleted_at 列と部分インデックスの追加）が、安全な内容で、ゴミ箱が空でない
+ときの downgrade を拒否することを検証するテスト。
+
+Tests the memo trash Alembic migration (deleted_at column and partial index): it is safe and its downgrade is refused
+while trashed memos exist.
+"""
+
 import importlib.util
 import unittest
 from pathlib import Path
@@ -12,12 +19,16 @@ migration = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(migration)
 
 
+# ゴミ箱内のメモ件数が trashed 件と答える DB 接続の代役を作る。
+# Builds a database connection stand-in that reports trashed memos.
 def _connection(trashed: int) -> MagicMock:
     connection = MagicMock()
     connection.execute.return_value.scalar_one.return_value = trashed
     return connection
 
 
+# migration のソースと op をモックし、upgrade の内容と downgrade の保護を確かめる。
+# Inspects the migration source and mocks op to check the upgrade contents and the downgrade guard.
 class MemoTrashMigrationTestCase(unittest.TestCase):
     def setUp(self):
         self.source = MIGRATION_PATH.read_text(encoding="utf-8")

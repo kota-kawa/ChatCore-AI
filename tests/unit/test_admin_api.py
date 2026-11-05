@@ -1,3 +1,9 @@
+"""管理画面 API（ダッシュボード・ログイン・テーブル操作）の権限チェック、入力検証、リダイレクト先の安全性、
+ログイン試行回数制限を検証する単体テスト。
+
+Unit tests for the admin API (dashboard, login, table operations): authorization, input validation, redirect safety and login rate limiting.
+"""
+
 import asyncio
 import json
 import unittest

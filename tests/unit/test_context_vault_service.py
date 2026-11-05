@@ -1,3 +1,10 @@
+"""文脈の事実のリクエストモデルの検証と ContextVaultService（作成・更新・一覧・検索・ダイジェスト）
+の入出力と埋め込みの予約を検証するテスト。
+
+Tests the context fact request models and ContextVaultService (create, update, list, search, digest),
+including input/output shaping and embedding scheduling.
+"""
+
 import unittest
 from hashlib import sha256
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,6 +27,8 @@ from services.request_models import (
 )
 
 
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。
+# English: Build one fact-table row dict.
 def fact_row(**overrides):
     row = {
         "id": 3,
@@ -40,6 +49,8 @@ def fact_row(**overrides):
     return row
 
 
+# 日本語: async with と begin() だけを備えた、トランザクション境界の代役です。
+# English: A stand-in for the transaction boundary that supports only async with and begin().
 class _TransactionSession:
     async def __aenter__(self):
         return self
@@ -51,6 +62,8 @@ class _TransactionSession:
         return self
 
 
+# 日本語: リポジトリの非同期メソッドをモックに差し替えた入れ物を作ります。
+# English: Build a repository stand-in whose async methods are mocks.
 def _repo():
     repo = MagicMock()
     for name in (
@@ -67,6 +80,8 @@ def _repo():
     return repo
 
 
+# 日本語: 作成・更新リクエストの入力契約を確認します。
+# English: Check the input contract of the create and update requests.
 class ContextFactRequestModelTestCase(unittest.TestCase):
     def test_create_and_update_requests_validate_contracts(self):
         with self.assertRaises(ValidationError):
@@ -88,6 +103,8 @@ class ContextFactRequestModelTestCase(unittest.TestCase):
         self.assertEqual(payload.idempotency_key, "retry-1")
 
 
+# 日本語: リポジトリをモックし、サービスの冪等性、リビジョン、埋め込みの予約を確認します。
+# English: Mock the repository and check idempotency, revisions and embedding scheduling in the service.
 class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_create_hashes_idempotency_and_schedules_after_transaction(self):
         repo = _repo()

@@ -1,3 +1,10 @@
+"""プロンプトのカテゴリ定義（services.prompt_categories）の正規化・旧名の読み替えと、
+作成/更新リクエストでのカテゴリ検証を検証するテスト。
+
+Tests for the prompt category registry (services.prompt_categories): key normalization, legacy-alias resolution,
+and category validation in create/update requests.
+"""
+
 import unittest
 
 from pydantic import ValidationError

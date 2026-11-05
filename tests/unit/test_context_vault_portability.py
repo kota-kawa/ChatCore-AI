@@ -1,3 +1,10 @@
+"""文脈の事実のエクスポート（JSON / Markdown）とインポート（プレビューと確定）を扱う
+context_vault_portability を検証するテスト。
+
+Tests context_vault_portability, which exports context facts as JSON or Markdown and imports them through a
+preview and a confirm step.
+"""
+
 import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +20,8 @@ from services.context_vault_portability import (
 )
 
 
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。
+# English: Build one fact-table row dict.
 def _row(**overrides):
     row = {
         "id": 3,
@@ -33,6 +42,8 @@ def _row(**overrides):
     return row
 
 
+# 日本語: エクスポート形式の JSON 文書を、指定した事実の一覧から組み立てます。
+# English: Build an export-format JSON document from the given list of facts.
 def _json_document(facts):
     return json.dumps(
         {
@@ -45,6 +56,8 @@ def _json_document(facts):
     )
 
 
+# 日本語: DB を使わない、文書の解析と上限チェックの検証です。
+# English: Parsing and size-limit checks that need no database.
 class ContextVaultPortabilityParsingTestCase(unittest.TestCase):
     def test_markdown_round_trip_preserves_untrusted_title(self):
         fact = {
@@ -102,6 +115,8 @@ class ContextVaultPortabilityParsingTestCase(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 413)
 
 
+# 日本語: リポジトリをモックし、エクスポートとインポートのサービス境界での振る舞いを確認します。
+# English: Mock the repository and check export and import behaviour at the service boundary.
 class ContextVaultPortabilityDatabaseTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_json_export_uses_async_repository_and_excludes_internal_fields(self):
         repo = MagicMock()

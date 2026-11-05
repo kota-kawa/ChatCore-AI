@@ -1,3 +1,10 @@
+"""添付ファイルの準備(拡張子・マジックナンバー検証、テキスト/PDF/docx/xlsx/pptx からの本文抽出、マクロ付き Office の拒否)と、
+保存形式・プロンプト用整形を検証する単体テスト。
+
+Unit tests for attached-file preparation (extension and magic-number checks, text extraction from text/PDF/docx/xlsx/pptx, rejecting
+macro-enabled Office files) and for the storage encoding and prompt formatting.
+"""
+
 import base64
 import io
 import unittest

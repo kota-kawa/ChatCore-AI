@@ -1,3 +1,10 @@
+"""MCP サーバー（mcp_server）が公開するツール一覧とスキーマ、OAuth のディスカバリ用メタデータ、未認証クライア
+ントへのチャレンジ、クライアント登録を検証するテスト。
+
+Tests mcp_server: the exposed tool list and schemas, OAuth discovery metadata, challenges for unauthenticated clients
+and client registration.
+"""
+
 import asyncio
 import os
 import unittest
@@ -17,6 +24,8 @@ from services.request_models import (
 )
 
 
+# サーバーを生成して公開内容そのものを確かめる。ツールの入力スキーマ、スコープ、メタデータ URL が仕様どおりに揃うことを見る。
+# Builds the server and checks what it publishes: tool input schemas, scopes and metadata URLs follow the specification.
 class McpServerTestCase(unittest.TestCase):
     def test_server_exposes_scoped_content_and_memo_tools(self):
         environment = {
@@ -305,6 +314,8 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(metadata["scopes_supported"], list(mcp_server.MCP_ALLOWED_SCOPES))
 
     def test_issuer_matches_protected_resource_authorization_server(self):
+        # RFC 8414 §3.3: issuer は、SDK が AnyHttpUrl で直列化する authorization_servers の値
+        # （ホストだけの URL では末尾スラッシュ付き）とバイト単位で一致しなければならない。
         # RFC 8414 §3.3: the issuer must byte-match the authorization_servers value
         # the SDK serializes via AnyHttpUrl (trailing slash on a bare host).
         from pydantic import AnyHttpUrl
@@ -313,6 +324,7 @@ class McpServerTestCase(unittest.TestCase):
             metadata = mcp_server.get_oauth_authorization_metadata()
 
         self.assertEqual(metadata["issuer"], str(AnyHttpUrl("https://example.test")))
+        # 正規化された issuer から各エンドポイントを作っても、スラッシュが二重にならないこと。
         # Endpoints must not gain a double slash from the normalized issuer.
         self.assertEqual(metadata["authorization_endpoint"], "https://example.test/authorize")
         self.assertEqual(metadata["token_endpoint"], "https://example.test/token")

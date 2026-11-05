@@ -1,3 +1,10 @@
+"""プロンプト添付画像の保存先（services.prompt_attachment_storage）と配信ルートの挙動を検証するテスト。
+URL の正規化、保存・配信・削除、ユーザー容量の上限、旧保存場所へのフォールバックを確かめる。
+
+Tests for prompt attachment storage (services.prompt_attachment_storage) and the media-serving route:
+URL normalization, save/serve/delete, per-user quota, and the legacy-location fallback.
+"""
+
 import asyncio
 import json
 import os
@@ -25,6 +32,8 @@ from services.prompt_attachment_storage import (
 )
 
 
+# 添付ファイルの保存・配信・削除とパス検証、容量管理を検証するテストクラス。
+# Test class for attachment save/serve/delete, path validation and quota handling.
 class PromptAttachmentStorageTestCase(unittest.TestCase):
     @staticmethod
     def _valid_png_bytes() -> bytes:

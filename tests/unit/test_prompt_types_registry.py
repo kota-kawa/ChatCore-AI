@@ -1,3 +1,10 @@
+"""プロンプトの種類定義（services.prompt_types）を検証するテスト。
+旧 prompt_type と二軸（媒体・内容形式）の相互変換、属性の検証と選別、添付可否、シリアライズを確かめる。
+
+Tests for the prompt type registry (services.prompt_types): conversion between the legacy prompt_type and the two axes
+(media, content format), attribute validation and sanitizing, attachment rules, and serialization.
+"""
+
 import unittest
 
 from services.prompt_types import (

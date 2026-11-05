@@ -1,3 +1,10 @@
+"""プロンプト投稿の上限制御を検証するテスト。
+添付を含むリクエスト本文の大きさの上限（prompt_share_api）と、投稿の頻度制限（services.prompt_create_limits）を確かめる。
+
+Tests for prompt-create limits: the request-body size cap for uploads with attachments (prompt_share_api)
+and the posting rate limits in services.prompt_create_limits.
+"""
+
 from __future__ import annotations
 
 import unittest
@@ -12,6 +19,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from services.prompt_create_limits import consume_prompt_create_limits
 
 
+# 指定ヘッダーを持つ投稿 API 向けの Starlette Request を作る補助関数。
+# Helper that builds a Starlette Request for the prompt-create endpoint with the given headers.
 def _request(headers: list[tuple[bytes, bytes]]) -> Request:
     return Request(
         {
@@ -24,6 +33,8 @@ def _request(headers: list[tuple[bytes, bytes]]) -> Request:
     )
 
 
+# Content-Length に基づく投稿リクエストの大きさ上限を検証するテストクラス。
+# Test class for the Content-Length based request-size limit on prompt creation.
 class PromptCreateAttachmentLimitTestCase(unittest.TestCase):
     def test_rejects_content_length_above_upload_request_limit(self):
         request = _request(

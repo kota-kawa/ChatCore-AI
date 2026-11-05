@@ -1,3 +1,10 @@
+"""ChatPostUseCase の初回ターンで、空のルーム文脈クエリを省き、
+記憶・文脈の抽出を背景に回すことを検証するテスト。
+
+Tests that ChatPostUseCase skips empty room-context queries on a first turn and moves memory and context
+extraction off the response path.
+"""
+
 import asyncio
 import json
 import unittest
@@ -88,6 +95,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         # 依存関係モックオブジェクトの作成
         # Create mocked dependency container for the chat post usecase
         def submit_background_task(task, *args, **kwargs):
+            # _run_async_callback は自前のイベントループを持つため、asyncio.run() を入れ子にせず、
+            # 本番の背景実行基盤と同じようにワーカースレッドで実行する。
             # _run_async_callback owns an event loop, so execute it in a worker thread just
             # like the production background executor instead of nesting asyncio.run().
             with ThreadPoolExecutor(max_workers=1) as executor:
@@ -226,6 +235,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             locale="ja",
         )
 
+        # 抽出の各条件は、それぞれ単独で抽出用の LLM タスクの起動を止める。
         # Each eligibility gate independently prevents an extraction LLM task.
         deps.schedule_context_extraction.reset_mock()
         deps.should_extract_context.return_value = False

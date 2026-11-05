@@ -1,3 +1,8 @@
+"""ロケールの正規化、Accept-Language の解釈、翻訳、回答言語ポリシーといった i18n サービスの純粋関数を検証するテスト。
+
+Tests the pure functions of the i18n service: locale normalisation, Accept-Language parsing, translation and the response language policy.
+"""
+
 import re
 import unittest
 
@@ -14,6 +19,8 @@ from services.i18n import (
 )
 
 
+# services.i18n の公開関数の入出力を確かめる。
+# Checks inputs and outputs of the public functions in services.i18n.
 class I18nTestCase(unittest.TestCase):
     def test_normalize_locale_accepts_region_tags(self):
         self.assertEqual(normalize_locale("en-US"), "en")

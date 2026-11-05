@@ -1,3 +1,12 @@
+"""プロンプトアシストと AI エージェント（blueprints.chat.tasks のルート）の応答・入力検証・上限制御を検証するテスト。
+AI エージェントの SSE（進捗・done・action_plan）、メモ編集の計画、ログイン要否、
+429 や LLM 失敗時のエラーを LLM モックで確かめる。
+
+Tests for the prompt-assist and AI-agent routes (blueprints.chat.tasks): responses, input validation and limit handling.
+Uses a mocked LLM to check the agent's SSE stream (progress, done, action_plan), memo-edit plans,
+login requirements, and 429 / LLM-failure errors.
+"""
+
 import asyncio
 import json
 import unittest

@@ -1,3 +1,10 @@
+"""実行環境の設定読み取り（services.runtime_config）を検証するテスト。
+環境名の既定値と本番判定、セッション秘密鍵、セッション Cookie の SameSite の既定・上書き・不正値の扱いを確かめる。
+
+Tests for runtime configuration helpers (services.runtime_config): the environment name and production check, the session secret key,
+and the default, override and invalid-value handling of the session cookie SameSite setting.
+"""
+
 import unittest
 from unittest.mock import patch
 

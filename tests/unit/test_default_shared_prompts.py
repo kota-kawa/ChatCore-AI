@@ -1,3 +1,10 @@
+"""起動時に既定の共有プロンプト（サンプル）を登録する ensure_default_shared_prompts の定義内容と、1
+トランザクションでの登録を検証するテスト。
+
+Tests the bundled sample shared prompts and ensure_default_shared_prompts, which registers them inside one
+async transaction.
+"""
+
 import asyncio
 import unittest
 from contextlib import asynccontextmanager
@@ -9,6 +16,8 @@ from services.default_shared_prompts import (
 )
 
 
+# 日本語: session_scope の代わりに使う、begin() だけを持つ非同期セッションの代役です。
+# English: Stand-in for session_scope that yields an async session exposing only begin().
 @asynccontextmanager
 async def _session_scope():
     class _Transaction:
@@ -25,6 +34,9 @@ async def _session_scope():
     yield _Session()
 
 
+# 日本語: サンプルがキーごとに日英の両ロケールを持つことと、所有者・登録処理の呼び出しをモックで確認します。
+# English: Check that each sample key has both locales, and mock the owner and seeding calls to verify how they are
+# invoked.
 class DefaultSharedPromptsTestCase(unittest.TestCase):
     def test_samples_have_stable_keys_and_both_locales(self):
         grouped = {}

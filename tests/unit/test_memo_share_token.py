@@ -1,3 +1,9 @@
+"""メモの共有トークン作成（create_or_get_shared_memo_token）が、upsert、メモ未所有時の NotFound、トークン衝突
+時の再試行を行うことを検証するテスト。
+
+Tests create_or_get_shared_memo_token: the upsert, NotFound for a memo the user does not own, and retry on a token collision.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,12 +13,16 @@ from services.api_errors import ResourceNotFoundError
 from services.memo_share import create_or_get_shared_memo_token
 
 
+# mappings().first() が row を返す DB 実行結果の代役を作る。
+# Builds a database result stand-in whose mappings().first() returns row.
 def _mapping_result(row):
     result = MagicMock()
     result.mappings.return_value.first.return_value = row
     return result
 
 
+# session_scope の代役。begin() も同じオブジェクトを返す。
+# Stand-in for session_scope; begin() returns the same object.
 class _Scope:
     async def __aenter__(self):
         return self
@@ -24,10 +34,14 @@ class _Scope:
         return self
 
 
+# PostgreSQL の一意制約違反（SQLSTATE 23505）を表す例外の代役。
+# Exception stand-in for a PostgreSQL unique violation (SQLSTATE 23505).
 class _PostgresUniqueViolationError(Exception):
     sqlstate = "23505"
 
 
+# セッションと upsert をモックし、トークン衝突時は新しい非同期セッションで再試行されることを確かめる。
+# Mocks the session and upsert and checks a token collision is retried in a new async session.
 class MemoShareTokenTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_create_uses_async_upsert_and_returns_share_state(self):
         session = MagicMock()

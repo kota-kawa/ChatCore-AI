@@ -1,3 +1,8 @@
+"""LLM・認証メール・AI エージェント・Brave Web 検索の日次／月次クォータ制限（llm_daily_limit）を検証するテスト。
+
+Tests the daily and monthly quota limits in llm_daily_limit for LLM calls, auth emails, AI agent calls and Brave web search.
+"""
+
 import os
 import unittest
 from unittest.mock import patch

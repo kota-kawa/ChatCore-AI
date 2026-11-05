@@ -1,4 +1,7 @@
-"""PostgreSQL integration coverage for the memo trash: hidden everywhere, restorable, purgeable."""
+"""メモのゴミ箱（削除したメモがあらゆる経路から見えなくなる／復元できる／完全削除・期限切れ削除できる）を実 PostgreSQL で検証する。
+
+PostgreSQL integration coverage for the memo trash: hidden everywhere, restorable, purgeable.
+"""
 
 from __future__ import annotations
 
@@ -50,9 +53,13 @@ from services.repositories.memo_repository import (
 )
 from services.request_models import McpMemoAppendRequest, McpMemoUpdateRequest
 
+# 日本語: 意味検索の対象にするための 768 次元のダミー埋め込みベクトル。
+# English: A dummy 768-dimension embedding vector so memos take part in semantic search.
 VECTOR = [1.0] + [0.0] * 767
 
 
+# 日本語: ゴミ箱を除く既定の条件でメモ一覧を取る共通ヘルパー。overrides で検索条件を差し替える。
+# English: Shared helper that lists memos with permissive default options; overrides swaps individual search options.
 async def _summaries(user_id, session, **overrides):
     options = {
         "limit": 50,
@@ -76,6 +83,10 @@ async def _summaries(user_id, session, **overrides):
     os.environ.get("DATABASE_URL"),
     "requires DATABASE_URL pointing at a PostgreSQL test database",
 )
+# 日本語: owner と other の 2 ユーザーを用意し、ゴミ箱に関する各経路の挙動を確かめる。
+#         （pydantic のリクエストモデルを import しているため、docstring ではなくコメントで書く）
+# English: Sets up two users, owner and other, and checks every path that touches the trash.
+#          (Written as a comment, not a docstring, because this file imports pydantic request models.)
 class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         suffix = uuid4().hex
@@ -98,6 +109,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 await session.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
         await dispose_engine()
 
+    # 日本語: 本文に検索用マーカーを含むメモを作り、ID を返す。user_id を省略すると owner のメモになる。
+    # English: Create a memo whose body contains the search marker and return its id; defaults to the owner's memo.
     async def _memo(self, session, title: str, *, user_id: int | None = None, collection_id=None) -> int:
         memo_id = await insert_memo(
             user_id or self.owner,
@@ -109,6 +122,10 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
         assert memo_id is not None
         return int(memo_id)
 
+    # 日本語: ゴミ箱へ移したメモが、一覧・検索・詳細・更新・並べ替え・一括操作・共有・エクスポート・MCP サービス・
+    #         埋め込みバックフィルのどこにも現れず、ゴミ箱一覧にだけ現れることを確かめる。
+    # English: A trashed memo must not appear in listing, search, detail, update, reorder, bulk actions, sharing, export,
+    #          the MCP services or the embedding backfill; it shows up only in the trash listing.
     async def test_trashed_memo_is_invisible_to_every_other_path(self) -> None:
         async with session_scope() as session, session.begin():
             collection = await insert_collection(self.owner, "未分類", "#112233", session=session)
@@ -213,6 +230,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(trash["memos"][0]["trash_expires_at"])
             self.assertEqual((await _summaries(self.other, session, only_trashed=True))["total"], 0)
 
+    # 日本語: ピン済みのままゴミ箱へ移したメモが、新しくピンしたメモの sort_order に影響しないことを確かめる。
+    # English: A memo trashed while pinned must not affect the sort_order given to a newly pinned memo.
     async def test_trashed_pinned_memo_does_not_shift_the_sort_order_of_new_pins(self) -> None:
         async with session_scope() as session, session.begin():
             trashed = await self._memo(session, "ピン済みのゴミ")
@@ -227,6 +246,10 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(int(sort_order), 1)
 
+    # 日本語: 復元するとピン・アーカイブ・コレクションなどが元に戻る一方、共有は解除されたままで、
+    #         再度有効にすると新しいリンクになり古いリンクは使えないことを確かめる。
+    # English: Restoring brings back pin, archive and collection state, but sharing stays revoked;
+    #          enabling it again yields a new link and the old link stays dead.
     async def test_restore_brings_back_memo_with_its_previous_state(self) -> None:
         async with session_scope() as session, session.begin():
             collection = await insert_collection(self.owner, "戻す先", "#445566", session=session)
@@ -264,6 +287,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ResourceNotFoundError):
                 await restore_memo(self.owner, memo_id, session=session)
 
+    # 日本語: 一括削除でも共有が解除され、一括復元しても共有は再開しないことを確かめる。
+    # English: Bulk trash revokes sharing too, and bulk restore does not resume it.
     async def test_bulk_trash_revokes_sharing_and_bulk_restore_does_not_resume_it(self) -> None:
         async with session_scope() as session, session.begin():
             shared = await self._memo(session, "共有中")
@@ -288,6 +313,10 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ResourceNotFoundError):
                 await get_shared_memo_payload(token, session=session)
 
+    # 日本語: 共有の作成とゴミ箱への移動が、同じメモ行の取り合いで直列化される（後から来た側が待つ）ことを、
+    #         別セッションの並行実行で確かめる。
+    # English: Share creation and trashing serialize on the same memo row (the later one waits), checked with
+    #          concurrent sessions.
     async def test_share_creation_and_trashing_serialize_on_the_memo_row(self) -> None:
         async with session_scope() as session, session.begin():
             racing = await self._memo(session, "共有と削除の競合")
@@ -325,6 +354,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(rows, 0)
 
+    # 日本語: 他ユーザーのゴミ箱は、復元・完全削除・空にする操作のいずれでも触れないことを確かめる。
+    # English: One user's trash cannot be restored, purged or emptied by another user.
     async def test_other_users_cannot_restore_purge_or_empty_each_others_trash(self) -> None:
         async with session_scope() as session, session.begin():
             mine = await self._memo(session, "自分")
@@ -351,6 +382,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await _summaries(self.owner, session, only_trashed=True))["total"], 0)
             self.assertEqual((await _summaries(self.other, session, only_trashed=True))["total"], 1)
 
+    # 日本語: 完全削除はゴミ箱内のメモと共有行だけを消し、生きているメモには効かないことを確かめる。
+    # English: Purge deletes only trashed memos and their share rows, and refuses live memos.
     async def test_purge_deletes_only_trashed_memos_and_their_share_rows(self) -> None:
         async with session_scope() as session, session.begin():
             live = await self._memo(session, "生きている")
@@ -368,6 +401,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await session.scalar(shares, {"id": trashed}), 0)
             self.assertEqual(await session.scalar(count, {"id": live}), 1)
 
+    # 日本語: 一括の delete / restore / purge が、それぞれ対象となる状態のメモにだけ効くことを確かめる。
+    # English: Bulk delete, restore and purge each affect only memos in the state they apply to.
     async def test_bulk_actions_move_restore_and_purge_within_their_own_scope(self) -> None:
         async with session_scope() as session, session.begin():
             first = await self._memo(session, "一括1")
@@ -400,6 +435,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(list(remaining), [first, third])
 
+    # 日本語: 保持期限（30 日）を過ぎてゴミ箱にあるメモだけが期限切れ削除の対象になることを、31 日前と 29 日前で確かめる。
+    # English: Only memos trashed longer than the 30-day retention are purged; checked with 31 and 29 days ago.
     async def test_retention_purge_removes_only_memos_trashed_over_thirty_days_ago(self) -> None:
         async with session_scope() as session, session.begin():
             expired = await self._memo(session, "期限切れ")
@@ -423,6 +460,8 @@ class MemoTrashIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(list(remaining), [recent, live])
 
+    # 日本語: 期限切れ削除は limit 件までを古い順に消し、残りは次回に回ることを確かめる。
+    # English: The retention purge deletes at most `limit` memos, oldest first, leaving the rest for the next run.
     async def test_retention_purge_deletes_at_most_one_batch_oldest_first(self) -> None:
         async with session_scope() as session, session.begin():
             ids = [await self._memo(session, f"期限切れ{index}") for index in range(3)]

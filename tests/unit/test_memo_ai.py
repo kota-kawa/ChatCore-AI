@@ -1,3 +1,8 @@
+"""メモのタイトル提案（memo_ai.suggest_title）が軽量モデルを使い、メモ本文から言語を決めることを検証するテスト。
+
+Tests memo_ai.suggest_title: it uses the lightweight model and takes the language from the memo body.
+"""
+
 import unittest
 from unittest.mock import patch
 
@@ -5,6 +10,8 @@ from services.llm import LIGHTWEIGHT_TASK_MODEL
 from services.memo_ai import suggest_title
 
 
+# 日本語: LLM 呼び出しをモックして、使うモデルと渡す内容を確かめる。
+# English: Mocks the LLM call and checks the model used and the content sent.
 class MemoAiTestCase(unittest.TestCase):
     def test_suggest_title_uses_lightweight_model(self):
         with patch(

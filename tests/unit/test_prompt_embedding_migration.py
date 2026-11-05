@@ -1,3 +1,8 @@
+"""プロンプトの埋め込みベクトル列を追加する Alembic マイグレーション（20260924_01）の内容を、ソース文字列で検証するテスト。
+
+Tests the contents of the Alembic migration 20260924_01 that adds prompt embedding columns, by inspecting its source text.
+"""
+
 import unittest
 from pathlib import Path
 
@@ -9,6 +14,8 @@ MIGRATION_PATH = (
 )
 
 
+# マイグレーションの親リビジョン、ベクトル列・状態列・並行作成インデックスの定義を検証するテストクラス。
+# Test class for the migration's parent revision and its vector column, status column and concurrent index.
 class PromptEmbeddingMigrationTestCase(unittest.TestCase):
     def test_migration_adds_vector_status_and_concurrent_index(self):
         source = MIGRATION_PATH.read_text(encoding="utf-8")

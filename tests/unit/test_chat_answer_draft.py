@@ -19,7 +19,10 @@ LONG_BODY = "これは下書きとして先に見せてよい十分に長い回�
 
 
 def feed_all(draft, chunks):
-    """Feed chunks and return (drafted text after resets, number of resets)."""
+    """チャンクを順に与え、(リセット後に見えている下書き本文, リセット回数) を返す。
+
+    Feed chunks and return (drafted text after resets, number of resets).
+    """
     shown = ""
     resets = 0
     for chunk in chunks:
@@ -32,6 +35,12 @@ def feed_all(draft, chunks):
 
 
 class AnswerDraftFilterTestCase(unittest.TestCase):
+    """閾値までの保留、JSON/封筒の除去、推論終了タグでのリセット、引用マーカーの除去といった下書き判定の規則を個別に確かめる。
+
+    Checks the draft rules one by one: holding back until a threshold, stripping JSON and envelopes,
+    resetting on the reasoning close tag, and removing citation markers.
+    """
+
     # 日本語: 見える文字が閾値に達するまでは何も出さず、達した時点でそれまでをまとめて出すことを検証します。
     # English: Nothing is drafted until the visible characters reach the threshold; then the held text is released at once.
     def test_holds_back_until_enough_visible_characters(self):

@@ -1,3 +1,8 @@
+"""非同期 DB 層（services.db）の接続 URL の解決、接続プールの上限設定、エラー時のロールバックとクローズを検証する単体テスト。
+
+Unit tests for the async DB layer (services.db): connection URL resolution, bounded pool settings, and rollback plus close on error.
+"""
+
 from __future__ import annotations
 
 import os
@@ -8,6 +13,11 @@ import services.db as database
 
 
 class _FakeSession:
+    """ロールバックとクローズの回数だけを数える、DB 非依存の疑似セッション。
+
+    A database-free fake session that only counts rollbacks and closes.
+    """
+
     def __init__(self) -> None:
         self.rolled_back = 0
         self.closed = 0
@@ -25,6 +35,11 @@ class _FakeSession:
 
 
 class AsyncDatabaseTests(unittest.IsolatedAsyncioTestCase):
+    """services.db のモジュール変数(エンジン・セッションファクトリ)を使うため、各テスト後に初期化して他のテストへ漏らさない。
+
+    These tests touch services.db's module-level engine and session factory, so each test resets them to avoid leaking state.
+    """
+
     def tearDown(self) -> None:
         database._engine = None
         database._session_factory = None

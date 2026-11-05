@@ -66,6 +66,8 @@ MULTIPLE = {
 }
 
 
+# 選択ボタンの JSON をコードフェンス形式（モデルの標準の出力形）へ包む。
+# Wraps a button payload in the code-fence form models normally emit.
 def _buttons_block(payload: dict[str, Any], *, fence: str = "chatcore-buttons") -> str:
     return f"```{fence}\n{json.dumps(payload, ensure_ascii=False)}\n```"
 
@@ -80,14 +82,20 @@ def _buttons_tag_block(
     return f"<{open_tag}>\n{json.dumps(payload, ensure_ascii=False)}\n</{close}>"
 
 
+# 品質ゲートを通る生成UI（ARTIFACT）を chatcore-artifact フェンスへ包む。
+# Wraps the quality-gate-passing ARTIFACT in a chatcore-artifact fence.
 def _artifact_block() -> str:
     return f"```chatcore-artifact\n{json.dumps(ARTIFACT, ensure_ascii=False)}\n```"
 
 
+# メッセージパーツ列から、指定した type のものだけを取り出す。
+# Picks the message parts of the given type.
 def _parts_of_type(parts: list[dict[str, Any]] | None, part_type: str) -> list[dict[str, Any]]:
     return [part for part in parts or [] if part.get("type") == part_type]
 
 
+# validate_interactive_buttons_payload が型ごとの契約（選択肢数・文字数）を守ることを確かめる。
+# Checks validate_interactive_buttons_payload enforces the per-type contract (option count and length).
 class InteractiveButtonsValidationTests(unittest.TestCase):
     def test_each_type_keeps_its_contract(self):
         self.assertEqual(validate_interactive_buttons_payload(YES_NO), YES_NO)
@@ -144,6 +152,8 @@ class InteractiveButtonsValidationTests(unittest.TestCase):
         self.assertEqual(validated["options"], options)
 
 
+# 回答本文からフェンス・タグ形式のボタンを抽出し、生成UIの判定や修復と干渉しないことを確かめる。
+# Checks buttons are extracted from fence and tag forms in a reply without disturbing generated-UI decisions or repair.
 class InteractiveButtonsExtractionTests(unittest.TestCase):
     def test_buttons_survive_a_disabled_or_refused_generated_ui(self):
         raw = f"移行すると3列が削除されます。\n\n{_buttons_block(YES_NO)}"
@@ -367,6 +377,8 @@ class InteractiveButtonsExtractionTests(unittest.TestCase):
         self.assertEqual(_parts_of_type(normalized.parts, "interactive_buttons")[0]["buttons"], SINGLE)
 
 
+# ボタンと Web 検索画像が並んで表示される順序の規約を確かめる。
+# Checks the display-order contract that keeps buttons beside web search images.
 class InteractiveButtonsDisplayContractTests(unittest.TestCase):
     def test_buttons_sit_beside_web_search_images(self):
         parts = [
@@ -405,6 +417,8 @@ class InteractiveButtonsDisplayContractTests(unittest.TestCase):
         self.assertEqual(normalize_message_parts_for_display(parts), parts)
 
 
+# 保存済みパーツの読み戻しと、後続ターンのコンテキストに質問と選択肢が載ることを確かめる。
+# Checks stored parts decode again and that later turns see the question and options in context.
 class InteractiveButtonsStoredPartsTests(unittest.TestCase):
     def test_previously_saved_parts_still_decode(self):
         # 変更前の保存形式（yes_no に options が残っていた形も含む）をそのまま読めること。
@@ -454,6 +468,8 @@ class InteractiveButtonsStoredPartsTests(unittest.TestCase):
         self.assertIn("<options>概要 | 費用 | リスク | 日程</options>", context)
 
 
+# システムプロンプトの説明が実際の検証ルールと一致していることを確かめる。
+# Checks the system prompt text matches the rules the validator actually enforces.
 class InteractiveButtonsPromptContractTests(unittest.TestCase):
     def test_prompt_describes_every_type_and_the_enforced_limits(self):
         section = BASE_SYSTEM_PROMPT.split("## Choice buttons\n", 1)[1].split("\n## ", 1)[0]

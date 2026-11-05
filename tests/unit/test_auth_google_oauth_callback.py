@@ -1,3 +1,10 @@
+"""Google OAuth コールバックの URL 組み立て(redirect_uri のオリジン優先)と、
+state パラメータの欠落・不一致を拒否する照合を検証する単体テスト。
+
+Unit tests for building the Google OAuth callback URL (preferring the redirect_uri origin)
+and for rejecting a missing or mismatched state parameter.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import Mock, patch

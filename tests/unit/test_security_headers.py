@@ -1,3 +1,10 @@
+"""セキュリティヘッダー用ミドルウェア（SecurityHeadersMiddleware）が CSP とフレーム保護ヘッダーを付け、
+既存の CSP を上書きしないことを検証するテスト。
+
+Tests that SecurityHeadersMiddleware adds CSP and frame-protection headers
+and preserves an existing Content-Security-Policy.
+"""
+
 import asyncio
 import unittest
 

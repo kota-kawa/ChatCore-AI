@@ -1,3 +1,10 @@
+"""新規登録・ログインのメールコード検証で、専用トランザクションへの分離、有効期限切れ、試行回数上限、
+成功時のセッション ID ローテーションと is_verified 更新を検証する単体テスト。
+
+Unit tests for email-code verification at registration and login: isolation in a dedicated transaction, expiry, attempt limits, and
+session-ID rotation plus is_verified update on success.
+"""
+
 import asyncio
 import json
 import unittest

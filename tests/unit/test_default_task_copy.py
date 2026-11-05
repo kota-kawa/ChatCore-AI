@@ -1,3 +1,10 @@
+"""新規ユーザーへ既定タスクをコピーする copy_default_tasks_for_user が、
+リポジトリのトランザクション境界を使うことを検証するテスト。
+
+Tests that copy_default_tasks_for_user, which copies the default tasks to a new user, goes through the
+repository's transaction boundary.
+"""
+
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
@@ -5,11 +12,15 @@ from unittest.mock import AsyncMock, Mock, patch
 from services.users import copy_default_tasks_for_user
 
 
+# 日本語: session_scope の代わりに、渡されたセッションをそのまま返す非同期コンテキストです。
+# English: Async context that yields the given session in place of session_scope.
 @asynccontextmanager
 async def fake_session_scope(session):
     yield session
 
 
+# 日本語: リポジトリとセッションをモックし、成功時はコミット、失敗時はロールバックされることを確認します。
+# English: Mock the repository and session, and check that success commits and failure rolls back.
 class DefaultTaskCopyTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_copy_uses_repository_transaction_boundary(self):
         session = Mock()

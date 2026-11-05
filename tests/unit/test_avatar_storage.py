@@ -1,3 +1,10 @@
+"""アバター画像の保存(公開 URL の組み立て、パストラバーサルや未対応拡張子の拒否、保存先の切り替え、旧 URL の正規化)、配信ルート、
+参照されない古い画像の掃除を検証する単体テスト。
+
+Unit tests for avatar storage (building public URLs, rejecting path traversal and unsupported extensions, the configurable storage root,
+normalizing legacy URLs), the media route, and cleanup of unreferenced old files.
+"""
+
 import asyncio
 import json
 import os
@@ -28,12 +35,16 @@ from services.repositories.shared_content_repository import _rows
 from services.repositories.user_repository import UserRepository
 
 
+# 日本語: アバターのテスト用に、PNG のマジックバイトとダミーの埋め草だけを持つ最小のバイト列を返す。
+# English: Return minimal bytes for avatar tests: the PNG magic bytes plus filler.
 def _png_bytes() -> bytes:
     # 実ファイルを読ませる必要はないため、マジックバイトだけを持つ最小データを使う。
     # The route only stats the file, so magic bytes plus filler are enough.
     return b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
 
+# 日本語: URL・ファイル名・保存先の解決など、ファイルシステムに触れない保存規則を確かめる。
+# English: Checks the storage rules (URLs, filenames, storage root) that do not touch the filesystem.
 class AvatarStorageTestCase(unittest.TestCase):
     # 日本語: 保存済みファイル名から公開URLが1つの接頭辞で組み立てられることを検証します。
     # English: Verify the public URL is built from the single shared prefix.
@@ -163,6 +174,10 @@ class AvatarStorageTestCase(unittest.TestCase):
         self.assertEqual(rows[1]["avatar_url"], DEFAULT_AVATAR_URL)
 
 
+# 日本語: 一時ディレクトリを保存先にして、アバター配信ルートの応答(200 / 404 / シンボリックリンクの拒否 / 旧保存場所へのフォールバック)
+#         を確かめる。
+# English: Uses a temp directory as the storage root to check the avatar media route (200, 404, refusing escaping symlinks, falling back
+#          to the legacy location).
 class AvatarMediaRouteTestCase(unittest.TestCase):
     # 日本語: アップロードしたアバターが配信ルートから取得できることを検証します。
     # English: Verify an uploaded avatar is served back by the media route.
@@ -272,7 +287,11 @@ class AvatarMediaRouteTestCase(unittest.TestCase):
         self.assertEqual(response.media_type, "image/png")
 
 
+# 日本語: 参照されていない古いアバターファイルの掃除処理を確かめる。
+# English: Checks the cleanup of avatar files that are no longer referenced.
 class AvatarCleanupTestCase(unittest.TestCase):
+    # 日本語: 2 時間前の更新時刻を付けたアバターファイルを作り、掃除の対象になる「古い」ファイルを再現する。
+    # English: Create an avatar file with a modification time two hours ago, reproducing an "aged" file eligible for cleanup.
     @staticmethod
     def _write_old_file(root: str, name: str) -> str:
         path = os.path.join(root, name)

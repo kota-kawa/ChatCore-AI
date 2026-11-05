@@ -1,3 +1,10 @@
+"""公開プロンプトのコメント API（取得・投稿・削除・通報）を検証するテスト。
+ログイン要否、レート制限、リンク数の上限、通報の重複判定を、非同期サービスをモックして確かめる。
+
+Tests for the public-prompt comment APIs (list, create, delete, report):
+login requirement, rate limiting, the link-count cap and duplicate-report handling, with the async service mocked.
+"""
+
 import asyncio
 import json
 import unittest
@@ -12,6 +19,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from tests.helpers.request_helpers import build_request
 
 
+# テスト用の JSON リクエストを組み立てる補助関数。
+# Helper that builds a JSON request for the tests.
 def make_request(method, path, payload=None, session=None):
     return build_request(
         method=method,
@@ -21,6 +30,8 @@ def make_request(method, path, payload=None, session=None):
     )
 
 
+# コメント API の各ルートが入力を検証し、サービスの結果を HTTP 応答へ変換することを検証するテストクラス。
+# Test class verifying that each comment route validates input and turns the service result into an HTTP response.
 class PromptCommentApiTestCase(unittest.TestCase):
     def test_get_prompt_comments_returns_payload_from_async_service(self):
         request = make_request(

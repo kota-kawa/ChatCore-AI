@@ -1,3 +1,10 @@
+"""会話から文脈の候補を取り出す context_vault_extraction（固定モデル、閾値、原文の一致、入力長、
+背景実行）を検証するテスト。
+
+Tests context_vault_extraction, which pulls context candidates out of a chat: fixed model, thresholds,
+verbatim evidence, input bounds and background execution.
+"""
+
 import json
 import unittest
 from types import SimpleNamespace
@@ -13,6 +20,8 @@ from services.context_vault_extraction import (
 from services.llm import GPT_6_LUNA_MODEL
 
 
+# 日本語: LLM 呼び出しをモックし、抽出結果の採否と、背景実行時のエラー処理を確認します。
+# English: Mock the LLM call and check which candidates are accepted, plus error handling in background runs.
 class ContextVaultExtractionTestCase(unittest.TestCase):
     def test_extracts_only_high_value_high_confidence_non_secret_candidates_with_fixed_model(self):
         llm = Mock(

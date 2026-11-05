@@ -1,3 +1,10 @@
+"""services.llm の LLM 呼び出し（Groq・OpenAI・Claude のストリーミング／非ストリーミング応答、ツール呼び出し、
+エラー分類、推論量や出力枠の設定）を、プロバイダのクライアントをモックして検証するテスト。
+
+Tests the LLM calls in services.llm (Groq, OpenAI and Claude streaming and non-streaming responses, tool calls, error mapping,
+reasoning effort and output budgets) with mocked provider clients.
+"""
+
 import json
 import unittest
 from types import SimpleNamespace
@@ -282,6 +289,8 @@ class LlmServiceTestCase(unittest.TestCase):
     # English: Verify an OpenAI-compatible context_length_exceeded (400) is classified as an
     # input limit rather than collapsing into a generic internal error.
     def test_provider_error_mapping_detects_context_length_exceeded(self):
+        # llm.APIStatusError の代役。HTTP ステータスとエラー本文を持つ。
+        # Stand-in for llm.APIStatusError carrying an HTTP status and error body.
         class _FakeStatusError(Exception):
             status_code = 400
             body: ClassVar[dict] = {
@@ -301,6 +310,8 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertIsInstance(mapped, llm.LlmInputLimitError)
 
     def test_provider_error_mapping_does_not_misclassify_output_token_limit(self):
+        # llm.APIStatusError の代役。HTTP ステータスとエラー本文を持つ。
+        # Stand-in for llm.APIStatusError carrying an HTTP status and error body.
         class _FakeStatusError(Exception):
             status_code = 400
             body: ClassVar[dict] = {
@@ -369,6 +380,8 @@ class LlmServiceTestCase(unittest.TestCase):
     # 日本語: エラーコードだけで届く tool_use_failed も同じ分類になることを検証します。
     # English: Verify a tool_use_failed carried only in the error code maps the same way.
     def test_provider_error_mapping_detects_tool_use_failed_code(self):
+        # llm.APIStatusError の代役。HTTP ステータスとエラー本文を持つ。
+        # Stand-in for llm.APIStatusError carrying an HTTP status and error body.
         class _FakeStatusError(Exception):
             status_code = 400
             body: ClassVar[dict] = {"error": {"code": "tool_use_failed", "message": "Failed to call a function."}}
@@ -413,6 +426,8 @@ class LlmServiceTestCase(unittest.TestCase):
     # 日本語: ストリーム途中で届くステータスコード無しのAPIErrorを、再試行可能へ分類することを検証します。
     # English: Verify a mid-stream APIError without a status code maps to a retryable failure.
     def test_provider_error_mapping_classifies_status_less_api_errors(self):
+        # llm.APIError の代役。ステータスコードを持たない。
+        # Stand-in for llm.APIError, which carries no status code.
         class _FakeApiError(Exception):
             pass
 
@@ -1061,6 +1076,8 @@ class LlmServiceTestCase(unittest.TestCase):
         logged_text = "\n".join(cm.output)
         self.assertIn(llm.CLAUDE_HAIKU_4_5_MODEL, logged_text)
         self.assertIn("provider down", logged_text)
+        # ログだけで原因を追えるよう、トレースバックを付ける。
+        # A traceback must be attached so the failure is debuggable from the log alone.
         # A traceback must be attached so the failure is debuggable from the log alone.
         self.assertIsNotNone(record.exc_info)
         self.assertEqual(record.llm_model, llm.CLAUDE_HAIKU_4_5_MODEL)

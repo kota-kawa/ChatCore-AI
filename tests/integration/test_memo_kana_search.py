@@ -1,4 +1,7 @@
-"""PostgreSQL integration coverage for hiragana/katakana-insensitive memo keyword search."""
+"""メモのキーワード検索が、ひらがなとカタカナを区別せずタイトルと本文の両方に当たることを実 PostgreSQL で検証する。
+
+PostgreSQL integration coverage for hiragana/katakana-insensitive memo keyword search.
+"""
 
 from __future__ import annotations
 
@@ -17,9 +20,16 @@ from services.repositories.memo_repository import fetch_memo_summaries, insert_m
     "requires DATABASE_URL pointing at a PostgreSQL test database",
 )
 class MemoKanaSearchIntegrationTest(unittest.IsolatedAsyncioTestCase):
+    """fetch_memo_summaries のキーワード検索をかな表記ゆれのクエリで確かめる。
+
+    Exercises fetch_memo_summaries keyword search with queries that differ in kana script.
+    """
+
     async def asyncTearDown(self) -> None:
         await dispose_engine()
 
+    # 日本語: キーワード検索だけを指定して一覧を取り、ヒットしたメモのタイトルを並べ替えて返す。
+    # English: Run a keyword-only listing and return the sorted titles of the memos that matched.
     async def _search(self, session, user_id: int, query: str) -> list[str]:
         result = await fetch_memo_summaries(
             user_id,

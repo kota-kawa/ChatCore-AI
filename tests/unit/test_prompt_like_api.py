@@ -1,3 +1,10 @@
+"""公開プロンプトの「いいね」API（add_like / remove_like）を検証するテスト。
+ログイン要否、prompt_id の検証、作成・削除時の応答を確かめる。
+
+Tests for the public-prompt like APIs (add_like / remove_like):
+login requirement, prompt_id validation, and the create/delete responses.
+"""
+
 import asyncio
 import json
 import unittest
@@ -9,6 +16,8 @@ from tests.helpers.request_helpers import build_request
 
 # いいね操作のAPIテスト用のHTTPリクエストを構築します。
 # Build a mock HTTP request for testing prompt like API endpoints.
+# テスト用の JSON リクエストを組み立てる補助関数。
+# Helper that builds a JSON request for the tests.
 def make_request(method, payload, session=None):
     # build_request ヘルパーを使用してリクエストオブジェクトを作成
     # Create the request object using the build_request helper

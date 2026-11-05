@@ -1,3 +1,8 @@
+"""パスキー利用状況の更新で、呼び出し側のセッションをロールバックしないことと、デッドロック時に新しいセッションで再試行することを検証するテスト。
+
+Tests that updating passkey usage never rolls back a caller-owned session and retries in a fresh session on a deadlock.
+"""
+
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
@@ -6,10 +11,14 @@ from services.passkeys import update_passkey_usage
 from services.repositories.passkey_repository import PasskeyRepository
 
 
+# 再試行できる DB エラーの代役。PostgreSQL のデッドロック（SQLSTATE 40P01）を表す。
+# Stand-in for a retryable database error: a PostgreSQL deadlock (SQLSTATE 40P01).
 class RetryableDeadlockError(Exception):
     sqlstate = "40P01"
 
 
+# リポジトリとセッションをモックし、ロールバックと commit が呼ばれる条件を確かめる。
+# Mocks the repository and sessions and checks when rollback and commit are called.
 class PasskeyDbRetryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_repository_does_not_rollback_a_caller_owned_session(self):
         session = Mock()

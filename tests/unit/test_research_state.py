@@ -1,3 +1,10 @@
+"""調査状態 TurnState（services.research_state）を検証するテスト。
+外部参照の記録と統合、モデルからの更新、生の本文を含まない形での射影と、トークン予算を超える場合の拒否を確かめる。
+
+Tests for TurnState (services.research_state): recording and merging evidence references, applying model updates,
+projecting without raw content, and rejecting a projection that would exceed the token budget.
+"""
+
 import json
 import unittest
 
@@ -9,8 +16,11 @@ from services.research_state import (
 )
 
 
+# TurnState の証拠参照・事実・射影の振る舞いを検証するテストクラス。
+# Test class for TurnState's evidence references, facts and projection.
 class TurnStateTestCase(unittest.TestCase):
     def _web_ref(self, evidence_id: str, *, raw_text: str = ""):
+        # 証拠ストア由来の未知のメタデータは無視する。生の本文が状態へ入り込まないようにするため。
         # Unknown metadata from the evidence store is ignored, so raw content cannot enter state.
         return {
             "evidence_id": evidence_id,

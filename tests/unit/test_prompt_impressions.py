@@ -1,3 +1,10 @@
+"""プロンプトの表示回数（インプレッション）の記録を検証するテスト。
+リポジトリの upsert SQL、記録エンドポイントの入力検証、カウンタ表と注目列を追加するマイグレーションを確かめる。
+
+Tests for recording prompt impressions: the repository's upsert SQL, the endpoint's input validation,
+and the migration that adds the counter table and the featured column.
+"""
+
 import asyncio
 import json
 import unittest
@@ -18,6 +25,8 @@ MIGRATION_PATH = (
 )
 
 
+# 公開中のプロンプトだけを対象にした表示回数の upsert が、期待する SQL になることを検証するテストクラス。
+# Test class verifying that the impression upsert targets only live public prompts and compiles to the expected SQL.
 class PromptImpressionRepositoryTestCase(unittest.TestCase):
     def _run(self, prompt_ids, returned_ids):
         session = MagicMock()
@@ -38,6 +47,7 @@ class PromptImpressionRepositoryTestCase(unittest.TestCase):
         self.assertIn("prompts.deleted_at IS NULL", compiled)
         self.assertIn("ON CONFLICT (prompt_id) DO UPDATE", compiled)
         self.assertIn("impression_count + ", compiled)
+        # 同じリクエスト内で ID が重複していても 1 回として数える。
         # Duplicate IDs in one request still count once.
         self.assertIn([3, 7], [list(value) for value in statement.compile().params.values() if isinstance(value, list)])
 
@@ -51,6 +61,8 @@ class PromptImpressionRepositoryTestCase(unittest.TestCase):
         session.execute.assert_not_awaited()
 
 
+# 表示回数の記録エンドポイントが件数を返し、空または過大なバッチを 400 で拒否することを検証するテストクラス。
+# Test class verifying that the impression endpoint reports the counted number and rejects empty or oversized batches with 400.
 class PromptImpressionEndpointTestCase(unittest.TestCase):
     def _post(self, body):
         request = build_request(
@@ -79,6 +91,8 @@ class PromptImpressionEndpointTestCase(unittest.TestCase):
         service_factory.assert_not_called()
 
 
+# 表示回数カウンタ表と featured_at 列を追加するマイグレーションの内容を検証するテストクラス。
+# Test class for the migration that adds the impression counter table and the featured_at column.
 class PromptImpressionMigrationTestCase(unittest.TestCase):
     def test_migration_adds_counter_table_and_featured_column(self):
         source = MIGRATION_PATH.read_text(encoding="utf-8")

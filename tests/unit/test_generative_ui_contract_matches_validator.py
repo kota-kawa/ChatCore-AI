@@ -1,3 +1,6 @@
+# モデルへ渡す生成UI契約と、サーバー検証器の上限・許可形式が一致することを検証する。
+# Tests agreement between model-facing UI contracts and server validation limits and formats.
+
 import unittest
 
 from services.generative_ui import (

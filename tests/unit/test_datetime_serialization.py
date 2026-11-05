@@ -1,3 +1,8 @@
+"""serialize_datetime_iso（datetime を ISO 8601 文字列へ変換するヘルパー）を検証するテスト。
+
+Tests serialize_datetime_iso, the helper that turns a datetime into an ISO 8601 string.
+"""
+
 import unittest
 from datetime import datetime
 

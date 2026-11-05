@@ -1,3 +1,8 @@
+"""チャットルームのタイトル生成（services.chat_title）と初期タイトル候補の組み立てを検証するテスト。
+
+Tests chat room title generation and initial title candidates in services.chat_title.
+"""
+
 import unittest
 from unittest.mock import MagicMock
 
