@@ -1,4 +1,5 @@
-/* index.css
+/* チャットページのトークンと共通枠。読み込み順はpages/_app.tsxが管理する。
+  index.css
    Chat page root-level tokens and shell styles.
    Import ordering is controlled by frontend/pages/_app.tsx. */
 
@@ -161,7 +162,8 @@ body.chat-page .model-select-option {
   color: var(--text-secondary, #6b7280);
 }
 
-/* Model select is informational UI, so keep high-contrast neutral styling. */
+/* モデル選択は情報表示として、コントラストの高い中立色を使う。
+  Model select is informational UI, so keep high-contrast neutral styling. */
 body.chat-page .model-select-trigger {
   background: var(--surface-primary, #ffffff) !important;
   color: var(--text-dark, #1a1a1a) !important;
@@ -312,7 +314,8 @@ body.chat-page {
   --chat-shell-max-width-wide: 1800px;
   --chat-readable-width: 1120px;
   --chat-readable-width-narrow: 820px;
-  /* Keep the conversation legible and visually quiet without affecting other pages. */
+  /* 他のページには影響させず、会話を読みやすい外観に整える。
+    Keep the conversation legible and visually quiet without affecting other pages. */
   --chat-font-body-size: 1rem;
   --chat-font-body-weight: 400;
   --chat-font-body-leading: 1.7;
@@ -474,7 +477,8 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   background: #080f1c;
 }
 
-/* Model select dark mode: rely on variable-driven colors, fix hardcoded borders */
+/* モデル選択のダーク表示は変数に従い、固定の境界色を補正する。
+  Model select dark mode: rely on variable-driven colors, fix hardcoded borders */
 [data-theme="dark"] body.chat-page .model-select-trigger {
   border-color: rgba(148, 163, 184, 0.26) !important;
 }
@@ -605,7 +609,8 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   }
 }
 
-/* AI Agent Modal Styles */
+/* AIエージェントのモーダル。
+  AI Agent Modal Styles */
 :where(body.chat-page, .chat-page-shell) .ai-agent-modal {
   width: 320px;
   height: 420px;
@@ -650,7 +655,8 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   min-height: 0;
 }
 
-/* Mini Chat Styles */
+/* ミニチャット。
+  Mini Chat Styles */
 :where(body.chat-page, .chat-page-shell) .mini-chat-container {
   flex: 1;
   display: flex;

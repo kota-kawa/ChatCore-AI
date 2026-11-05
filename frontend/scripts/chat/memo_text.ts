@@ -81,6 +81,7 @@ function stripWebSearchArtifacts(text: string): string {
 
 export { stripWebSearchArtifacts, stripWebSearchCitationsHtml, stripWebSearchSourcesHtml };
 
+// プレビューと同じ旧形式の生成物を除きながら、位置対応は保つ。
 // Retain offsets while excluding the same legacy artifacts as the visible preview.
 export function maskWebSearchArtifacts(text: string): string {
   const mask = (match: string) => match.replace(/[^\r\n]/g, " ");

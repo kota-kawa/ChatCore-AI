@@ -1,3 +1,6 @@
+// 外部から受けた値を実行時に検証する共通処理を提供する。
+// Provides shared runtime checks for externally supplied values.
+
 import { ApiErrorPayloadSchema } from "../../types/chat";
 import { getRuntimeLocale } from "../../lib/i18n/config";
 

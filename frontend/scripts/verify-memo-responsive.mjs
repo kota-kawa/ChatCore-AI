@@ -1,3 +1,7 @@
+// モックAPIと独立ブラウザーで、メモ画面のレスポンシブ表示を測定する。
+// Measures responsive memo layouts using mocked APIs and isolated browser contexts.
+
+// 指定したPlaywright・Chromiumでメモ表示を確認する。独立コンテキストとモックAPIで外部接続を避ける。
 // Usage: node scripts/verify-memo-responsive.mjs <playwright-core/index.mjs> <chromium executable> [base URL] [output directory]
 // Uses isolated browser contexts and mocked APIs; no real account, database, or LLM request is made.
 import assert from 'node:assert/strict';

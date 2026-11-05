@@ -1,5 +1,7 @@
 /* chat_messages.css
    チャットメッセージバブル、ユーザー／ボットの位置付け、コピーアイコン、Thinking プレースホルダー
+
+   Styles message bubbles, speaker placement, copy icons and thinking placeholders.
 */
 :where(body.chat-page, .chat-page-shell) .chat-area {
   display: flex;
@@ -716,7 +718,8 @@
   outline-offset: 1px;
 }
 
-/* ‹ n/m › branch version switcher */
+/* メッセージ分岐の版を切り替える操作。
+  ‹ n/m › branch version switcher */
 :where(body.chat-page, .chat-page-shell) .branch-navigator {
   display: inline-flex;
   align-items: center;
@@ -1366,7 +1369,8 @@
     font-size: 1rem;
   }
 
-  /* Thinking message */
+  /* 思考中のメッセージ。
+    Thinking message */
   :where(body.chat-page, .chat-page-shell) .thinking-message-wrapper {
     max-width: 14.2rem;
   }

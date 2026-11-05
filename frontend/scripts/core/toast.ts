@@ -1,3 +1,6 @@
+// 一時通知のDOM生成・表示・破棄を共通化する。
+// Shares creation, display and cleanup of toast notifications.
+
 import { getRuntimeLocale } from "../../lib/i18n/config";
 
 type ToastVariant = "info" | "success" | "error";

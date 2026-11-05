@@ -34,7 +34,8 @@
   --cc-modal-exit-duration: 0.16s;
   --cc-modal-icon-size: 2.5rem;
   --cc-modal-icon-gap: 0.875rem;
-  /* Keeps the title, message and prompt field on a single left edge. */
+  /* タイトル・メッセージ・入力欄の左端を揃える。
+    Keeps the title, message and prompt field on a single left edge. */
   --cc-modal-indent: calc(var(--cc-modal-icon-size) + var(--cc-modal-icon-gap));
 
   position: fixed;
@@ -51,7 +52,8 @@
   display: flex;
 }
 
-/* ---------- overlay ---------- */
+/* 背景オーバーレイ。
+  ---------- overlay ---------- */
 
 .cc-alert-modal__overlay {
   position: absolute;
@@ -67,7 +69,8 @@
   animation: cc-alert-modal-overlay-in var(--cc-modal-exit-duration) ease reverse both;
 }
 
-/* ---------- dialog shell ---------- */
+/* ダイアログの枠。
+  ---------- dialog shell ---------- */
 
 .cc-alert-modal__dialog {
   position: relative;
@@ -92,7 +95,8 @@
   animation: cc-alert-modal-dialog-out var(--cc-modal-exit-duration) ease-in both;
 }
 
-/* ---------- close button ---------- */
+/* 閉じるボタン。
+  ---------- close button ---------- */
 
 .cc-alert-modal__close {
   position: absolute;
@@ -129,7 +133,8 @@
   box-shadow: var(--cc-modal-focus-ring);
 }
 
-/* ---------- header ---------- */
+/* ヘッダー。
+  ---------- header ---------- */
 
 .cc-alert-modal__head {
   display: flex;
@@ -154,7 +159,8 @@
   height: 1.375rem;
 }
 
-/* Fills the row so long messages wrap against the dialog edge, and so the
+/* 行幅を使い切って長文を折り返し、ヘッダーの固有幅で入力欄が狭まることを防ぐ。
+  Fills the row so long messages wrap against the dialog edge, and so the
    prompt field below can never be squeezed by the header's intrinsic width. */
 .cc-alert-modal__text {
   flex: 1 1 auto;
@@ -162,7 +168,8 @@
   padding-top: 0.125rem;
 }
 
-/* Only the title shares a line with the close button, so the reserved gutter
+/* 閉じるボタン用の余白はタイトルだけに取り、長いメッセージには全幅を使う。
+  Only the title shares a line with the close button, so the reserved gutter
    stays on the title and long messages keep the full dialog width. */
 .cc-alert-modal__title {
   margin: 0;
@@ -186,7 +193,8 @@
   display: none;
 }
 
-/* ---------- body (prompt field) ---------- */
+/* 本文と入力欄。
+  ---------- body (prompt field) ---------- */
 
 .cc-alert-modal__body {
   margin-top: 1.125rem;
@@ -234,7 +242,8 @@
   border-color: var(--cc-modal-accent);
 }
 
-/* ---------- actions ---------- */
+/* 操作ボタン。
+  ---------- actions ---------- */
 
 .cc-alert-modal__actions {
   display: flex;
@@ -287,7 +296,8 @@
   color: var(--cc-modal-title-color);
 }
 
-/* ---------- responsive ---------- */
+/* 画面幅への適応。
+  ---------- responsive ---------- */
 
 @media (max-width: 30rem) {
   .cc-alert-modal__dialog {
@@ -304,7 +314,8 @@
     height: 1.25rem;
   }
 
-  /* Width is scarce here, so the field reclaims the icon gutter. */
+  /* 横幅が狭いため、入力欄ではアイコン用の余白を使い直す。
+    Width is scarce here, so the field reclaims the icon gutter. */
   .cc-alert-modal__body {
     margin-left: 0;
   }
@@ -319,13 +330,15 @@
   }
 }
 
-/* ---------- body lock ---------- */
+/* 本文のスクロールロック。
+  ---------- body lock ---------- */
 
 .cc-alert-modal-open {
   overflow: hidden;
 }
 
-/* ---------- motion ---------- */
+/* アニメーション。
+  ---------- motion ---------- */
 
 @keyframes cc-alert-modal-overlay-in {
   from {

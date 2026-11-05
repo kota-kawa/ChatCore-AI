@@ -1,4 +1,8 @@
-/* variables.css
+/* 配色・余白・影などのデザイントークンを一元定義する。
+ * Centralizes design tokens for colors, spacing, shadows and related properties. */
+
+/* デザイントークンの正本。rootのカスタムプロパティはこのファイルだけで定義する。
+  variables.css
    Design token single source of truth.
    All :root custom properties must be declared in this file only.
 */

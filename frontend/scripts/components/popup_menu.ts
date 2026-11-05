@@ -1,3 +1,7 @@
+// ページ間で使う共通ポップアップメニューを提供する。
+// Provides the shared popup menu used across pages.
+
+// 共通ポップアップメニュー。
 // components/popup_menu.ts
 
 const template = document.createElement("template");

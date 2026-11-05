@@ -1,3 +1,6 @@
+/* メモ画面の一覧・編集・サイドバーとレスポンシブ表示のスタイルを定義する。
+ * Styles memo lists, editing, sidebars and responsive layouts. */
+
 body.memo-page {
   --memo-amber: #d97706;
   --memo-amber-strong: #b45309;
@@ -10,7 +13,8 @@ body.memo-page {
   --memo-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
   margin: 0;
   min-height: 100vh;
-  /* Never allow the memo page to scroll horizontally on desktop or mobile.
+  /* 横方向だけclipしてスクロールコンテナ化を避け、サイドバーのstickyと縦スクロールを保つ。
+    Never allow the memo page to scroll horizontally on desktop or mobile.
      `clip` suppresses horizontal overflow without creating a scroll
      container, so the sticky sidebar and vertical page scroll keep working. */
   max-width: 100%;
@@ -46,7 +50,8 @@ body.memo-page.modal-open {
   transition: gap 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ===== Sidebar panel ===== */
+/* サイドバーパネル。
+  ===== Sidebar panel ===== */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar {
   width: 232px;
@@ -72,7 +77,8 @@ body.memo-page.modal-open {
   gap: 0.75rem;
 }
 
-/* ---- Brand header ---- */
+/* ブランドのヘッダー。
+  ---- Brand header ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-header {
   display: flex;
@@ -141,7 +147,8 @@ body.memo-page.modal-open {
   color: #d97706;
 }
 
-/* ---- Scrollable inner content ---- */
+/* スクロール可能な内部領域。
+  ---- Scrollable inner content ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-inner {
   flex: 1;
@@ -167,7 +174,8 @@ body.memo-page.modal-open {
   border-radius: 4px;
 }
 
-/* ---- Nav ---- */
+/* ナビゲーション。
+  ---- Nav ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-nav {
   display: flex;
@@ -234,7 +242,8 @@ body.memo-page.modal-open {
   opacity: 1;
 }
 
-/* ---- Divider ---- */
+/* 区切り線。
+  ---- Divider ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-divider {
   height: 1px;
@@ -243,7 +252,8 @@ body.memo-page.modal-open {
   flex-shrink: 0;
 }
 
-/* ---- Sections ---- */
+/* セクション。
+  ---- Sections ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-section {
   display: flex;
@@ -265,13 +275,15 @@ body.memo-page.modal-open {
   transition: opacity 0.18s;
 }
 
-/* ---- Sort ---- */
+/* 並べ替え。
+  ---- Sort ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-sort {
   padding: 0;
 }
 
-/* ---- Collection list ---- */
+/* コレクション一覧。
+  ---- Collection list ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-list {
   display: flex;
@@ -385,7 +397,8 @@ body.memo-page.modal-open {
   margin: 0;
 }
 
-/* ---- Manage button ---- */
+/* 管理ボタン。
+  ---- Manage button ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-manage-btn {
   margin-top: 0.375rem;
@@ -414,7 +427,8 @@ body.memo-page.modal-open {
   opacity: 0.8;
 }
 
-/* ---- Collapsed state ---- */
+/* 折りたたみ状態。
+  ---- Collapsed state ---- */
 
 :where(body.memo-page, .memo-page-shell) .is-sidebar-collapsed .memo-sidebar-title {
   opacity: 0;
@@ -460,7 +474,8 @@ body.memo-page.modal-open {
   align-items: center;
 }
 
-/* ---- Container (unchanged) ---- */
+/* 既存のコンテナ配置。
+  ---- Container (unchanged) ---- */
 
 :where(body.memo-page, .memo-page-shell) .memo-container {
   flex: 1;
@@ -471,7 +486,8 @@ body.memo-page.modal-open {
   gap: 1rem;
 }
 
-/* The desktop sidebar owns this navigation above the tablet breakpoint. */
+/* タブレット幅より広い場合、このナビゲーションはサイドバーに置く。
+  The desktop sidebar owns this navigation above the tablet breakpoint. */
 :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
   display: none;
 }
@@ -565,7 +581,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   }
 }
 
-/* The shared buttons stylesheet scopes its auth-button rules to chat/settings.
+/* 共通の認証ボタンCSSは他画面だけが対象なので、メモでも同じ外観になる規則をここに持つ。
+  The shared buttons stylesheet scopes its auth-button rules to chat/settings.
    Keep the memo-scoped counterpart here so the floating login button has the
    same appearance as on the home and prompt-share screens. */
 :where(body.memo-page, .memo-page-shell) #auth-buttons .auth-btn {
@@ -848,7 +865,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   background: rgba(248, 113, 113, 0.12);
 }
 
-/* ============================================================
+/* 付箋風カードの段組みグリッド。
+  ============================================================
    Keep-style sticky-note cards — masonry grid
    ============================================================ */
 :where(body.memo-page, .memo-page-shell) .memo-history__sections {
@@ -856,7 +874,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   flex-direction: column;
   gap: 1rem;
   overflow: auto;
-  /* allow the pin button (positioned with negative offsets) to bleed outside list bounds */
+  /* 負の位置指定で配置するピンが一覧の外へはみ出せるようにする。
+    allow the pin button (positioned with negative offsets) to bleed outside list bounds */
   padding: 0.4rem 0.4rem 0;
   margin: -0.4rem -0.4rem 0;
 }
@@ -893,7 +912,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   margin: 0;
   padding: 0;
   list-style: none;
-  /* Modern Masonry via CSS Columns */
+  /* CSS Columnsによる段組み。
+    Modern Masonry via CSS Columns */
   columns: 320px;
   column-gap: 1.25rem;
 }
@@ -1021,7 +1041,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   display: flex;
   flex-direction: column;
   gap: 0.42rem;
-  padding-right: 1.8rem; /* avoid overlapping the pin button */
+  padding-right: 1.8rem; /* ピンとの重なりを避ける。
+    avoid overlapping the pin button */
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-item__title {
@@ -1096,7 +1117,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   font-size: 0.72rem;
 }
 
-/* Pin button — top-right of card, like Google Keep */
+/* カード右上のピンボタン。
+  Pin button — top-right of card, like Google Keep */
 :where(body.memo-page, .memo-page-shell) .memo-item__pin {
   position: absolute;
   top: 0.32rem;
@@ -1156,7 +1178,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   transform: translateY(0);
 }
 
-/* Always-on on touch devices so they aren't unreachable */
+/* タッチ端末で操作不能にならないよう常時表示する。
+  Always-on on touch devices so they aren't unreachable */
 @media (hover: none) {
   :where(body.memo-page, .memo-page-shell) .memo-item__pin,
 :where(body.memo-page, .memo-page-shell) .memo-item__actions {
@@ -1369,7 +1392,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   border: 0;
 }
 
-/* ============================================================
+/* タイトルと操作ボタンを置くツールバー上段。
+  ============================================================
    Toolbar top row: title + action buttons
    ============================================================ */
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__top-row {
@@ -1475,7 +1499,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   width: min(18rem, 100%);
 }
 
-/* Collection badge inside memo item */
+/* メモ項目内のコレクションバッジ。
+  Collection badge inside memo item */
 :where(body.memo-page, .memo-page-shell) .memo-collection-badge {
   display: inline-flex;
   align-items: center;
@@ -1493,7 +1518,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   white-space: nowrap;
 }
 
-/* ============================================================
+/* 一括選択。
+  ============================================================
    Bulk selection
    ============================================================ */
 :where(body.memo-page, .memo-page-shell) .memo-bulk-checkbox {
@@ -1568,7 +1594,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   border-color: rgba(248, 113, 113, 0.35);
 }
 
-/* ============================================================
+/* 作成フォーム内のMarkdownプレビュー。
+  ============================================================
    Markdown preview in compose form
    ============================================================ */
 :where(body.memo-page, .memo-page-shell) .memo-response-header {
@@ -1833,17 +1860,22 @@ html[data-cc-auth="in"] .memo-guest-intro {
   display: inline-block;
 }
 
-/* Typing / progress indicators */
+/* 入力中と進捗の表示。
+  Typing / progress indicators */
 
-/* Input area */
+/* 入力領域。
+  Input area */
 
-/* Message toolbar */
+/* メッセージ操作のツールバー。
+  Message toolbar */
 
 /* 実行内容を確認するための開閉ボタン / Disclosure button revealing what a step runs */
 
-/* Three-class specificity (0,0,3,0) beats theme-scoped [attr]+class (0,0,2,0) */
+/* クラス3個の詳細度で、テーマ属性とクラスの規則より優先する。
+  Three-class specificity (0,0,3,0) beats theme-scoped [attr]+class (0,0,2,0) */
 
-/* ============================================================
+/* 独自の選択コンポーネントMemoSelect。
+  ============================================================
    Custom Select component (MemoSelect)
    ============================================================ */
 :where(body.memo-page, .memo-page-shell) .memo-select {
@@ -1904,7 +1936,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   transform: rotate(180deg);
 }
 
-/* Small variant (bulk bar) */
+/* 一括操作バー用の小型表示。
+  Small variant (bulk bar) */
 :where(body.memo-page, .memo-page-shell) .memo-select--sm .memo-select__trigger {
   min-height: 34px;
   font-size: 0.82rem;
@@ -1912,7 +1945,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   border-radius: var(--radius-full);
 }
 
-/* Menu – rendered at document.body via portal, position set inline */
+/* メニューはbodyへのportalで描画し、位置をインラインで設定する。
+  Menu – rendered at document.body via portal, position set inline */
 :where(body.memo-page, .memo-page-shell) .memo-select__menu {
   margin: 0;
   padding: 0.38rem;
@@ -1965,7 +1999,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   flex-shrink: 0;
 }
 
-/* ============================================================
+/* ダークモード用の追加規則。
+  ============================================================
    Dark mode additions
    ============================================================ */
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn,
@@ -2122,7 +2157,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   border-color: transparent;
 }
 
-/* ============================================================
+/* レスポンシブ表示の追加規則。
+  ============================================================
    Responsive additions
    ============================================================ */
 @media (max-width: 768px) {
@@ -2183,7 +2219,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
     flex-shrink: 0;
   }
 
-  /* Give the memo body as much horizontal room as possible on phones:
+  /* スマートフォンでは外側と本文内側の余白を減らし、メモ本文の横幅を確保する。
+    Give the memo body as much horizontal room as possible on phones:
      shrink the outer gutter and the inner header/body padding. */
 
   :where(body.memo-page, .memo-page-shell) .memo-item__actions {
@@ -2426,7 +2463,8 @@ html[data-cc-auth="in"] .memo-guest-intro {
   border-color: rgba(148, 163, 184, 0.22);
 }
 
-/* ============================================================
+/* Google Keepを参考にしたメモカードUI。
+  ============================================================
    Google Keep-inspired card memo UI
    ============================================================ */
 body.memo-page {
@@ -2569,7 +2607,8 @@ body.memo-page {
   border-color: rgba(217, 119, 6, 0.3);
 }
 
-/* The alternate controls are available whenever the sidebar is hidden. */
+/* サイドバーを隠す場合には、代わりの操作を表示する。
+  The alternate controls are available whenever the sidebar is hidden. */
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__filter-toggle {
   display: none;
   position: relative;
@@ -2587,7 +2626,8 @@ body.memo-page {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.96);
 }
 
-/* The panel replaces the sidebar at the same breakpoint. */
+/* 同じ画面幅の境界で、パネルをサイドバーの代わりにする。
+  The panel replaces the sidebar at the same breakpoint. */
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__mobile-controls {
   display: none;
   grid-area: mobile-controls;
@@ -2721,7 +2761,8 @@ body.memo-page {
   box-shadow: var(--memo-shadow);
 }
 
-/* ── Quick capture (Google Keep–inspired) ── */
+/* 素早いメモ入力。
+  ── Quick capture (Google Keep–inspired) ── */
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture {
   width: min(38rem, calc(100% - 2rem));
   margin: 1.5rem auto 1.75rem;
@@ -2876,7 +2917,8 @@ body.memo-page {
   transform: scale(0.95);
 }
 
-/* Expanded form */
+/* 展開したフォーム。
+  Expanded form */
 :where(body.memo-page, .memo-page-shell) .memo-form--quick {
   gap: 0;
   padding: 0.25rem 0 0;
@@ -3346,7 +3388,8 @@ body.memo-page {
   box-shadow:
     0 0 0 2px rgba(95, 99, 104, 0.08),
     inset 0 0 0 1px rgba(255, 255, 255, 0.45) !important;
-  /* The placeholder itself doesn't transform; the surrounding cards animate
+  /* 仮置き位置自体は変形せず、周りのカードをFLIPで動かして並べ替え先の空間を作る。
+    The placeholder itself doesn't transform; the surrounding cards animate
      (via the FLIP pass) to open up space as the order is previewed. */
   transition: opacity 0.16s ease;
 }
@@ -3461,7 +3504,8 @@ body.memo-page {
   background: #f8fafd;
 }
 
-/* Keep the toolbar action buttons clear of the fixed top-right user/login
+/* 狭い画面で操作をタイトル行へ戻す際、固定アバター分の幅を空けて重なりを避ける。
+  Keep the toolbar action buttons clear of the fixed top-right user/login
    icon when narrower layouts put the actions back on the title row. Reserve
    room equal to the floating avatar footprint. */
 @media (max-width: 1024px) {
@@ -3503,7 +3547,8 @@ body.memo-page {
 
 @media (max-width: 768px) {
   :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card {
-    /* On phones the toolbar should scroll with the memo content instead of
+    /* スマートフォンではツールバーを固定せず、メモ本文と一緒にスクロールさせる。
+      On phones the toolbar should scroll with the memo content instead of
        staying pinned to the viewport. */
     position: static;
     top: 0.4rem;
@@ -3577,7 +3622,8 @@ body.memo-page {
     min-height: var(--tap-target-min);
   }
 
-  /* Keep the mobile view switcher visually separate from the toolbar below it.
+  /* 親に共通gapがないため、表示切り替えと下の検索・操作領域の間に専用の余白を置く。
+    Keep the mobile view switcher visually separate from the toolbar below it.
      The parent container intentionally has no generic gap, so the tab control
      needs its own spacing before the search and action controls. */
   :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
@@ -3764,7 +3810,8 @@ body.memo-page {
   color: #bdc1c6;
 }
 
-/* Final dark-mode polish: keep the memo page readable without the harsh black/yellow contrast. */
+/* 黒と黄色の強い対比を避け、ダークモードでも読みやすく整える。
+  Final dark-mode polish: keep the memo page readable without the harsh black/yellow contrast. */
 [data-theme="dark"] body.memo-page {
   --memo-amber: #fbbc04;
   --memo-amber-strong: #f9ab00;
@@ -4034,7 +4081,8 @@ body.memo-page {
   box-shadow: none;
 }
 
-/* Keep uncolored cards uniform while allowing saved memo colors to own the surface. */
+/* 色未指定のカードは統一し、指定済みのカードには保存された色を使う。
+  Keep uncolored cards uniform while allowing saved memo colors to own the surface. */
 :where(body.memo-page, .memo-page-shell) .memo-history__list > li:nth-child(n) .memo-item:not(.has-accent),
 :where(body.memo-page, .memo-page-shell) .memo-item.is-pinned:not(.has-accent) {
   background: var(--memo-card-strong);
@@ -4084,7 +4132,8 @@ body.memo-page {
   opacity: 0;
 }
 
-/* ============================================================
+/* 前のツールバー規則より優先するため、ダーク用の仕上げを末尾へ置く。
+  ============================================================
    Modern toolbar header polish (dark) — placed last so it wins
    over the earlier grouped toolbar rules.
    ============================================================ */
@@ -4123,7 +4172,8 @@ body.memo-page {
   color: #fcd34d;
 }
 
-/* ============================================================
+/* 既存の配置や配色に操作感を加える。後置して必要な範囲だけ前の規則を上書きする。
+  ============================================================
    Modern interaction layer
    ------------------------------------------------------------
    Adds tactile micro-interactions, springy motion and clear
@@ -4138,7 +4188,8 @@ body.memo-page {
   --memo-press: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ---- Card entrance: gentle staggered rise on mount ----
+/* 安定したReact keyにより、カードが現れたときだけ段階表示し、検索の入力ごとには再実行しない。
+  ---- Card entrance: gentle staggered rise on mount ----
    Cards keep a stable React key per memo, so this fires only when a
    card first appears (initial load, a newly-saved memo, or a pin
    toggle that moves it between sections) — never on every keystroke
@@ -4169,12 +4220,14 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-history__list > li:nth-child(9)  { animation-delay: 240ms; }
 :where(body.memo-page, .memo-page-shell) .memo-history__list > li:nth-child(n + 10) { animation-delay: 270ms; }
 
-/* ---- Cards: hint cursor + smoother hover, keep the existing lift ---- */
+/* カードのカーソルと滑らかなホバー。
+  ---- Cards: hint cursor + smoother hover, keep the existing lift ---- */
 :where(body.memo-page, .memo-page-shell) .memo-item {
   will-change: transform;
 }
 
-/* ---- Sidebar nav & collections: subtle nudge + press ---- */
+/* サイドバーとコレクションの押下表現。
+  ---- Sidebar nav & collections: subtle nudge + press ---- */
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-nav__item {
   transition: background 0.15s, color 0.15s, transform 0.18s var(--memo-spring);
 }
@@ -4203,7 +4256,8 @@ body.memo-page {
   transform: scale(0.94);
 }
 
-/* ---- Toolbar icon buttons: lift on hover, press down on click ---- */
+/* ツールバーボタンのホバーと押下表現。
+  ---- Toolbar icon buttons: lift on hover, press down on click ---- */
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn {
   transition: background 0.15s, border-color 0.15s, color 0.15s,
     transform 0.18s var(--memo-spring), box-shadow 0.18s var(--memo-spring);
@@ -4219,7 +4273,8 @@ body.memo-page {
   box-shadow: 0 8px 18px -8px rgba(217, 119, 6, 0.55);
 }
 
-/* ---- Filter chips & collection chips: lift + press ---- */
+/* 絞り込みチップとコレクションチップの押下表現。
+  ---- Filter chips & collection chips: lift + press ---- */
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip {
   transition: background 0.15s, border-color 0.15s, color 0.15s,
     transform 0.18s var(--memo-spring), box-shadow 0.18s var(--memo-spring);
@@ -4234,7 +4289,8 @@ body.memo-page {
   box-shadow: 0 8px 18px -8px rgba(217, 119, 6, 0.5);
 }
 
-/* ---- Pin button: pop when pinned, springy press ---- */
+/* ピン留めと押下時の弾む表現。
+  ---- Pin button: pop when pinned, springy press ---- */
 @keyframes memo-pin-pop {
   0%   { transform: scale(1); }
   45%  { transform: scale(1.35) rotate(-8deg); }
@@ -4247,7 +4303,8 @@ body.memo-page {
   transform: scale(0.82);
 }
 
-/* ---- Card row action buttons: press feedback ---- */
+/* カード行の操作ボタンの押下反応。
+  ---- Card row action buttons: press feedback ---- */
 :where(body.memo-page, .memo-page-shell) .memo-item__action {
   transition: background 0.12s ease, color 0.12s ease, transform 0.14s var(--memo-spring);
 }
@@ -4255,7 +4312,8 @@ body.memo-page {
   transform: scale(0.82);
 }
 
-/* ---- Primary / CTA buttons: lift, brighten, press ---- */
+/* 主操作とCTAボタンのホバー・押下表現。
+  ---- Primary / CTA buttons: lift, brighten, press ---- */
 :where(body.memo-page, .memo-page-shell) .primary-button {
   transition: transform 0.18s var(--memo-spring), box-shadow 0.25s var(--memo-spring),
     filter 0.18s ease;
@@ -4270,7 +4328,8 @@ body.memo-page {
   box-shadow: 0 8px 16px rgba(217, 119, 6, 0.24);
 }
 
-/* ---- Small round/clear buttons: snappy press ---- */
+/* 小型の丸ボタンとクリアボタンの押下反応。
+  ---- Small round/clear buttons: snappy press ---- */
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search-clear,
 :where(body.memo-page, .memo-page-shell) .memo-item__pin {
   transition-property: background, border-color, color, transform, box-shadow, opacity;
@@ -4281,12 +4340,14 @@ body.memo-page {
   transform: scale(0.9);
 }
 
-/* ---- Select trigger: tiny press acknowledgement ---- */
+/* 選択メニューを開くボタンの押下反応。
+  ---- Select trigger: tiny press acknowledgement ---- */
 :where(body.memo-page, .memo-page-shell) .memo-select__trigger:active {
   transform: scale(0.99);
 }
 
-/* ---- Unified, accessible keyboard focus ring ----
+/* マウス操作の見た目は保ち、キーボード移動だけでフォーカス枠を表示する。
+  ---- Unified, accessible keyboard focus ring ----
    Mouse clicks keep the original look (no ring); only keyboard
    navigation reveals the amber outline. */
 .memo-page-shell button:focus-visible,
@@ -4315,7 +4376,8 @@ body.memo-page {
   outline-color: rgba(251, 188, 4, 0.7);
 }
 
-/* ---- Respect users who prefer reduced motion ---- */
+/* 動きを減らす利用者設定に従う。
+  ---- Respect users who prefer reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   :where(body.memo-page, .memo-page-shell) .memo-history__list > li {
     animation: none;
@@ -4458,7 +4520,8 @@ body.memo-page {
   color: #fff;
 }
 
-/* AI-extracted context candidates */
+/* AIが抽出したコンテキスト候補。
+  AI-extracted context candidates */
 :where(body.memo-page, .memo-page-shell) .memo-context-candidates {
   display: flex;
   flex-direction: column;
@@ -4669,7 +4732,8 @@ body.memo-page {
 
 }
 
-/* Fact cards */
+/* 事実のカード。
+  Fact cards */
 :where(body.memo-page, .memo-page-shell) .memo-context-list {
   list-style: none;
   margin: 0;
@@ -4789,7 +4853,8 @@ body.memo-page {
   cursor: default;
 }
 
-/* Empty / guest states */
+/* 空の一覧とゲストの表示。
+  Empty / guest states */
 :where(body.memo-page, .memo-page-shell) .memo-context-empty {
   display: flex;
   flex-direction: column;
@@ -5280,7 +5345,8 @@ body.memo-page {
   min-height: 0;
 }
 
-/* One Markdown document owns both the formatted view and source mode. */
+/* 同じMarkdown文書から整形表示とソース編集を切り替える。
+  One Markdown document owns both the formatted view and source mode. */
 .memo-live-editor {
   min-width: 0;
   min-height: 0;

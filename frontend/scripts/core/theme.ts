@@ -31,6 +31,7 @@ export function getStoredThemePreference(): ThemePreference {
       return raw;
     }
   } catch {
+    // localStorageが利用できない場合。
     // localStorage unavailable
   }
   return DEFAULT_THEME_PREFERENCE;
@@ -69,6 +70,7 @@ export function setThemePreference(preference: ThemePreference): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, preference);
   } catch {
+    // localStorageが利用できない場合。
     // localStorage unavailable
   }
   applyTheme(resolveTheme(preference));

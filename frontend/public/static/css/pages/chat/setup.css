@@ -1,5 +1,7 @@
 /* setup.css
   最初の画面（フォーム、モーダル、タスク選択ヘッダー）のレイアウトと入力要素スタイル
+
+   Styles the initial task screen, forms, modals and task-selection header.
 */
 :where(body.chat-page, .chat-page-shell) #setup-container {
   --setup-container-padding-y: 2.25rem;
@@ -49,7 +51,8 @@
   pointer-events: auto;
 }
 
-/* While the chat is being prepared, the setup panel recedes into 3D depth
+/* チャット準備中はタスク画面を奥へ退かせ、ぼかしで会話画面への移行を示す。
+  While the chat is being prepared, the setup panel recedes into 3D depth
    (the parent .chat-page-stage provides the perspective) and softly blurs,
    signalling that focus is shifting to the incoming chat view. */
 :where(body.chat-page, .chat-page-shell) #setup-container[data-view="launching"] {
@@ -755,7 +758,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   z-index: 2;
 }
 
-/* Expanding accent ring that radiates out from the tapped card. */
+/* 押したカードから広がるアクセントの輪。
+  Expanding accent ring that radiates out from the tapped card. */
 :where(body.chat-page, .chat-page-shell) .prompt-card[data-launching="true"]::before {
   content: '';
   position: absolute;
@@ -766,7 +770,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   pointer-events: none;
 }
 
-/* A second, softer ring trailing the first for a layered, tactile pulse. */
+/* 少し遅れて柔らかい輪を重ねる。
+  A second, softer ring trailing the first for a layered, tactile pulse. */
 :where(body.chat-page, .chat-page-shell) .prompt-card[data-launching="true"]::after {
   content: '';
   position: absolute;
@@ -1074,7 +1079,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: inherit;
 }
 
-/* ===== Mobile Responsive Styles ===== */
+/* スマートフォン向けの配置。
+  ===== Mobile Responsive Styles ===== */
 @media (max-width: 768px) {
   :where(body.chat-page, .chat-page-shell) #setup-container {
     --setup-container-padding-y: 2rem;
@@ -1124,7 +1130,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     -webkit-overflow-scrolling: touch;
     background: var(--surface-sidebar);
     padding:
-      /* Share the first row with the right-side account control instead of reserving an empty toolbar row. */
+      /* 右側のアカウント操作と最初の行を共有し、空のツールバー行を作らない。
+        Share the first row with the right-side account control instead of reserving an empty toolbar row. */
       calc(0.625rem + env(safe-area-inset-top, 0px))
       calc(var(--setup-container-padding-x) + env(safe-area-inset-right, 0px))
       calc(1.35rem + env(safe-area-inset-bottom, 0px))
@@ -1397,7 +1404,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   box-shadow: none;
 }
 
-/* Model select trigger */
+/* モデル選択を開く操作。
+  Model select trigger */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-trigger {
   background: rgba(15, 23, 42, 0.95) !important;
   border-color: rgba(148, 163, 184, 0.22) !important;
@@ -1414,7 +1422,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-color: rgba(15, 118, 110, 0.52) !important;
 }
 
-/* Model select dropdown */
+/* モデル選択メニュー。
+  Model select dropdown */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-menu {
   background: #0f172a;
   border-color: rgba(15, 118, 110, 0.22);
@@ -1430,7 +1439,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-color: rgba(15, 118, 110, 0.3);
 }
 
-/* Prompt cards */
+/* プロンプトカード。
+  Prompt cards */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .prompt-card {
   background: var(--surface-secondary);
   color: var(--text-dark, #e5e7eb);
@@ -1445,7 +1455,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   outline-offset: 2px;
 }
 
-/* Save mode toggle */
+/* 保存モード切り替え。
+  Save mode toggle */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
   background: var(--surface-primary);
   border-color: var(--border-default);
@@ -1484,7 +1495,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
 }
 
-/* Setup attach button (dark mode: brighter blue) */
+/* ダークモードで明るい青を使う添付ボタン。
+  Setup attach button (dark mode: brighter blue) */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   --chat-button-base: #34d399;
   --chat-button-accent: #10b981;

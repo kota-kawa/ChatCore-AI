@@ -1,4 +1,8 @@
-/* OAuth authorization confirmation screen. */
+/* OAuth認可確認画面の権限表示と承認操作を整える。
+ * Styles permissions and consent actions on the OAuth authorization screen. */
+
+/* OAuthの認可確認画面。
+  OAuth authorization confirmation screen. */
 .oauth-authorize-page {
   display: grid;
   min-height: 100vh;

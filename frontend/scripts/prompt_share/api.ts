@@ -1,3 +1,6 @@
+// 公開投稿APIへの要求と応答の変換を共通化する。
+// Shares requests and response adaptation for public post APIs.
+
 import type {
   ContentFormat,
   MediaType,

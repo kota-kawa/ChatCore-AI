@@ -1,3 +1,6 @@
+// タスク画面の高さを測り、表示領域に合う配置を選ぶ。
+// Measures task view height and selects a layout that fits the viewport.
+
 const SETUP_FIT_COMPACT_CLASS = "setup-fit-compact";
 const SETUP_FIT_TIGHT_CLASS = "setup-fit-tight";
 
@@ -40,6 +43,7 @@ function applySetupViewportFit() {
   const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
   const availableHeight = Math.max(0, viewportHeight - shellPaddingTop - shellPaddingBottom);
 
+  // 変形中の見かけの高さではなくscrollHeightで測り、チャットから戻る遷移中の配置判定の揺れを防ぐ。
   // Measure the untransformed layout height via scrollHeight rather than
   // getBoundingClientRect(). While returning from the chat view to the setup
   // view, the card is still mid-transition (3D scale/translate + blur driven by

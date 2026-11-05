@@ -1,4 +1,8 @@
-/* sidebar.css
+/* 共通サイドバーの配置と表示状態を整える。
+ * Styles shared sidebar layout and visibility states. */
+
+/* サイドバーとルーム一覧カードを配置する。画面幅の境界はbase/responsive.cssで管理する。
+  sidebar.css
    Sidebar layout and chat room list card styles. Breakpoints are managed in
    base/responsive.css. */
 :where(body.chat-page, .chat-page-shell) .sidebar {
@@ -782,7 +786,8 @@
 @media (max-width: 576px) {
   :where(body.chat-page, .chat-page-shell) .sidebar {
     padding:
-      /* Place the project header in the toggle row instead of reserving a blank row above it. */
+      /* 空の行を確保せず、プロジェクト見出しを切り替えボタンと同じ行に置く。
+        Place the project header in the toggle row instead of reserving a blank row above it. */
       calc(0.5rem + env(safe-area-inset-top, 0px))
       calc(0.72rem + env(safe-area-inset-right, 0px))
       calc(1.2rem + env(safe-area-inset-bottom, 0px))
@@ -793,7 +798,8 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .sidebar-projects__header {
-    /* Keep the title clear of the 2.65rem mobile sidebar toggle while sharing its row. */
+    /* 同じ行のモバイル用切り替えボタンに、見出しが重ならないよう余白を取る。
+      Keep the title clear of the 2.65rem mobile sidebar toggle while sharing its row. */
     padding-left: 2.85rem;
   }
 

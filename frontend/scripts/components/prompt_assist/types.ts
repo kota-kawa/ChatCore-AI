@@ -1,3 +1,6 @@
+// プロンプト作成補助の状態と操作に使う型を定義する。
+// Defines state and action types for prompt assistance.
+
 export type PromptAssistTarget = "task_modal" | "shared_prompt_modal";
 
 export type PromptAssistFieldName =

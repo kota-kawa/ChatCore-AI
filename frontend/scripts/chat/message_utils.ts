@@ -1,4 +1,5 @@
 // message_utils.ts – 共通メッセージユーティリティ
+// Provides shared chat message helpers.
 // --------------------------------------------------
 import DOMPurify from "dompurify";
 import { getSharedDomRefs } from "../core/dom";

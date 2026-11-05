@@ -1,7 +1,13 @@
 /* ==========================================================================
-   Dark Mode Overrides
+   Dark Mode Overrides / ダークテーマ上書き
+   Prompt Share ページ全体（ヘッダー、検索、カテゴリ、カード、メニュー、フォーム）のダークテーマ用の色。
+   [data-theme="dark"] 配下で、まず --ps-* トークンを差し替え、トークンで表せない部分だけ個別に上書きする。
+   Dark-theme colors for the whole Prompt Share page (header, search, categories, cards, menus, forms).
+   Under [data-theme="dark"] the --ps-* tokens are swapped first; only what tokens cannot express is overridden per rule.
    ========================================================================== */
 
+/* ダーク用の --ps-* トークン。ライトテーマ側の定義を、ページ全体で共通に差し替える。
+   Dark values for the --ps-* tokens, replacing the light-theme definitions page-wide. */
 [data-theme="dark"] body.prompt-share-page,
 
 [data-theme="dark"] .prompt-share-page {
@@ -98,6 +104,8 @@
   color: #93c5fd;
 }
 
+/* カテゴリカード・種別フィルターは、暗い面に沈まないよう縁と文字色を調整する。
+   Category cards and type filters get border/text colors tuned so they do not sink into the dark surface. */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .category-card {
   background: #1e293b;
   border-color: #334155;
@@ -250,6 +258,7 @@
 }
 
 /* specificity を light-mode (.prompt-share-page .prompt-actions-dropdown .dropdown-item = 0,3,0) と揃える */
+/* Match the light-mode specificity (.prompt-share-page .prompt-actions-dropdown .dropdown-item = 0,3,0) */
 [data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item {
   color: #f3f4f6;
   background: transparent;
@@ -273,6 +282,8 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* カード下部の操作ボタン。いいね・チャット利用は塗りを持たない（下のブロックで透明に戻す）。
+   Card action buttons; like and use-in-chat have no fill (restored to transparent in the block below). */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-action-btn {
   background: rgba(255, 255, 255, 0.08);
   color: #d1d5db;
@@ -323,6 +334,8 @@
    Dark theme swaps the --pd-* tokens first; per-rule overrides are limited to
    what the tokens cannot express. */
 
+/* 投稿フォームの入力欄・「もっと見る」ボタン・ログインボタンのダーク配色。
+   Dark colors for the post form fields, the load-more button and the auth button. */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .form-label {
   color: #e5e7eb;
 }

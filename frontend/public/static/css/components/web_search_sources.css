@@ -8,7 +8,9 @@
 
    配色はコンポーネント先頭の CSS 変数に集約し、ダークモードは変数の
    上書きだけで切り替える（各ルールを二重に書かない）。
-   ============================================================ */
+   ============================================================
+   Styles web evidence citations and research-step summaries in answers.
+*/
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation,
 :where(body.chat-page, .chat-page-shell) .bot-message .selected-reference-citation,

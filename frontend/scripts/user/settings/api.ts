@@ -1,3 +1,6 @@
+// 利用者設定のAPI要求と応答処理を共通化する。
+// Shares API requests and response handling for user settings.
+
 import { resilientFetch } from "../../core/resilient_fetch";
 import { extractApiErrorMessage, fetchJsonOrThrow } from "../../core/runtime_validation";
 import {

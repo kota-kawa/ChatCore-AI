@@ -1,3 +1,6 @@
+// ブラウザーのWebAuthnとAPI間でパスキーの登録・認証データを変換する。
+// Adapts passkey registration and authentication data between browser WebAuthn and APIs.
+
 import { fetchJsonOrThrow } from "./runtime_validation";
 import { resilientFetch } from "./resilient_fetch";
 import { getRuntimeLocale } from "../../lib/i18n/config";

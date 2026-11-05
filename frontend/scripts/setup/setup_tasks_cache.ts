@@ -1,3 +1,6 @@
+// 認証状態と言語ごとに、初期タスク一覧のキャッシュを分離する。
+// Scopes initial task-list caches by authentication state and locale.
+
 import type { TaskItem } from "./setup_types";
 import { CACHE_TTL_MS, STORAGE_KEYS } from "../core/constants";
 import type { Locale } from "../../lib/i18n/config";

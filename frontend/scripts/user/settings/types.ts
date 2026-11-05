@@ -1,3 +1,6 @@
+// 利用者設定画面で使うデータ型を定義する。
+// Defines data types used by user settings views.
+
 import { z } from "zod";
 
 import {

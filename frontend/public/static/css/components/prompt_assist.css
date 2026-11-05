@@ -1,4 +1,6 @@
-/* AI によるプロンプト作成補助（トップページ／プロンプト共有ページの投稿モーダル内） */
+/* AI によるプロンプト作成補助（トップページ／プロンプト共有ページの投稿モーダル内）
+   Styles AI prompt assistance inside home and public-post modals.
+*/
 /* AI-assisted prompt creation block inside the new-prompt / post modals. */
 
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist {
@@ -27,7 +29,8 @@
   --assist-border: rgba(24, 90, 188, 0.18);
 }
 
-/* --- header --- */
+/* ヘッダー。
+  --- header --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__head {
   display: flex;
   align-items: center;
@@ -72,7 +75,8 @@
   line-height: 1.55;
 }
 
-/* --- brief input --- */
+/* 依頼の入力欄。
+  --- brief input --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief {
   display: flex;
   flex-direction: column;
@@ -108,7 +112,8 @@
   border-color: color-mix(in srgb, var(--assist-hue-2) 55%, var(--assist-border));
 }
 
-/* --- run button --- */
+/* 実行ボタン。
+  --- run button --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run-row {
   display: flex;
   flex-wrap: wrap;
@@ -152,7 +157,8 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--assist-hue-2) 24%, transparent);
 }
 
-/* --- loading row --- */
+/* 読み込み中の行。
+  --- loading row --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__loading {
   display: flex;
   align-items: center;
@@ -174,7 +180,8 @@
   animation: prompt-assist-spin 0.7s linear infinite;
 }
 
-/* --- status line --- */
+/* 状態表示の行。
+  --- status line --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status {
   margin: 0;
   font-size: 0.82rem;
@@ -194,7 +201,8 @@
   color: #c2410c;
 }
 
-/* --- result preview --- */
+/* 生成結果のプレビュー。
+  --- result preview --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview {
   display: flex;
   flex-direction: column;
@@ -269,7 +277,8 @@
   font-size: 0.9rem;
 }
 
-/* --- preview actions --- */
+/* プレビューの操作。
+  --- preview actions --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview-actions {
   display: flex;
   flex-wrap: wrap;
@@ -325,7 +334,8 @@
   color: var(--assist-ink-strong);
 }
 
-/* --- field highlight after applying a suggestion --- */
+/* 提案適用後の入力欄の強調。
+  --- field highlight after applying a suggestion --- */
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist-applied {
   animation: prompt-assist-field-glow 0.9s ease;
 }
@@ -359,7 +369,8 @@
   }
 }
 
-/* --- dark theme --- */
+/* ダークテーマ。
+  --- dark theme --- */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist {
   --assist-ink-strong: #e2f4ef;
   --assist-ink: #9fc4bd;
@@ -387,7 +398,8 @@
   color: #fbbf24;
 }
 
-/* --- reduced motion --- */
+/* 動きを減らす設定。
+  --- reduced motion --- */
 @media (prefers-reduced-motion: reduce) {
   :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run,
 :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply,

@@ -1,3 +1,6 @@
+// フロントエンドのロジックテストをNodeで実行する。
+// Runs frontend logic tests with Node.
+
 const { readdirSync } = require("node:fs");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");

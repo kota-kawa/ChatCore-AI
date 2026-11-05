@@ -21,6 +21,7 @@ export function readCachedAuthState(): boolean | null {
     if (cached === "1") return true;
     if (cached === "0") return false;
   } catch {
+    // localStorageの失敗は許容する。
     // ignore localStorage failures
   }
   return null;
@@ -43,6 +44,7 @@ export function writeCachedAuthState(loggedIn: boolean) {
     localStorage.setItem(STORAGE_KEYS.authStateCache, loggedIn ? "1" : "0");
     localStorage.setItem(STORAGE_KEYS.authStateCachedAt, String(Date.now()));
   } catch {
+    // localStorageの失敗は許容する。
     // ignore localStorage failures
   }
 }

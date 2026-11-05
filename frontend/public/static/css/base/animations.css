@@ -1,5 +1,7 @@
 /* animations.css
    チャットUIやボタン用のアニメーション @keyframes 定義
+
+   Defines keyframes for chat UI and button animations.
 */
 
 @keyframes typing {

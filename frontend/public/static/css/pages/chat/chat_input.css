@@ -1,5 +1,7 @@
 /* chat_input.css
    メッセージ入力フォーム、送信ボタン、タイピングインジケータのスタイル
+
+   Styles the message composer, send button and typing indicator.
 */
 /* PC の入力コンテナは .chat-area 下端に重ねる透明オーバーレイ。帯の背景を持たず、
    メッセージが下を通り抜けて見える「浮いた入力欄」にする。透明部分は
@@ -203,7 +205,8 @@
   transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* send-btn morphing */
+/* 送信ボタンの形状遷移。
+  send-btn morphing */
 :where(body.chat-page, .chat-page-shell) .send-btn-spinner {
   position: absolute;
   inset: 14px;
@@ -217,7 +220,8 @@
   z-index: 2;
 }
 
-/* paperclip icon doesn't need the send-icon visual offset */
+/* クリップのアイコンには送信アイコン用の位置補正を適用しない。
+  paperclip icon doesn't need the send-icon visual offset */
 :where(body.chat-page, .chat-page-shell) .chat-attach-btn i,
 :where(body.chat-page, .chat-page-shell) .setup-attach-btn i {
   left: 0;
@@ -312,7 +316,8 @@
     background: transparent;
   }
 
-  /* The keyboard already covers the home-indicator area. Keeping the safe-area
+  /* キーボードがホームインジケーター領域を覆うため、safe-areaの余白を外して不要な隙間を防ぐ。
+    The keyboard already covers the home-indicator area. Keeping the safe-area
      inset here leaves an unnecessary gap between the composer and keyboard. */
   html[data-chat-keyboard-open="true"] :where(body.chat-page, .chat-page-shell) .input-container {
     padding-bottom: 0.35rem;

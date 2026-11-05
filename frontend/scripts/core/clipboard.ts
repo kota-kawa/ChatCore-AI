@@ -25,7 +25,8 @@ function copyTextWithExecCommand(text: string): boolean {
     document.body.removeChild(textArea);
   }
 }
-/**
+/** 非同期Clipboard APIを優先し、未対応のブラウザーや埋め込み環境用にDOM経由の代替を保つ。
+ *
  * Copy text using the async Clipboard API, with the legacy DOM fallback kept
  * for browsers and embedded contexts where that API is unavailable.
  */

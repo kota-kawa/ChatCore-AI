@@ -1,3 +1,6 @@
+// 公開投稿の日時・件数・表示ラベルを整形する。
+// Formats public post dates, counts and display labels.
+
 import type { ContentFormat, MediaType, PromptData, PromptType } from "./types";
 import { CONTENT_CHAR_LIMIT } from "./constants";
 import { formatDate } from "../../lib/datetime";

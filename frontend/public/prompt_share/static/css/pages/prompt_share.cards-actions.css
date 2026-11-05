@@ -1,3 +1,6 @@
+/* Prompt Share の一覧カード（グリッド、読み込み中・エラー表示、投稿者・バッジ・本文プレビュー）と、カード下部の操作ボタン・「…」メニューの見た目をまとめる。
+   Styles for the Prompt Share list cards (grid, loading/error messages, author, badges, body preview) plus the action buttons and the "..." menu at the bottom of each card. */
+
 :where(body.prompt-share-page, .prompt-share-page) .prompt-load-more:disabled {
   opacity: 0.65;
   cursor: wait;
@@ -14,6 +17,8 @@
   min-height: 0;
 }
 
+/* カード一覧は3列のグリッド。画面幅に応じた列数の変更は prompt_share.responsive.css のメディアクエリで行う。
+   The card list is a 3-column grid; column-count changes for narrower viewports are made in the media queries of prompt_share.responsive.css. */
 .prompt-share-page .prompt-cards {
   position: relative;
   z-index: 1;
@@ -23,6 +28,8 @@
   width: 100%;
 }
 
+/* 読み込み中・エラー・空の各メッセージは、カード列を横断する1枚の帯として表示する。
+   Loading, error and empty messages render as one full-width band across the card columns. */
 .prompt-share-page .prompt-loading-message,
 
 .prompt-share-page .prompt-feedback,
@@ -49,6 +56,8 @@
   color: var(--ps-text-muted);
 }
 
+/* カード本体。メニューを開いたとき内容が切れないよう overflow: visible にし、クリックで詳細を開くため文字選択は止める。
+   The card itself. overflow is visible so the open menu is not clipped, and text selection is off because a click opens the detail view. */
 .prompt-share-page .prompt-card {
   position: relative;
   display: flex;
@@ -74,10 +83,14 @@
   box-shadow: var(--shadow-card-hover);
 }
 
+/* メニューを開いたカードだけ前面に出し、ドロップダウンが隣・下のカードの上に重なるようにする。
+   Only the card with its menu open is raised so the dropdown overlaps neighbouring and lower cards. */
 .prompt-share-page .prompt-card.menu-open {
   z-index: 20;
 }
 
+/* 読み込み中のスケルトンカードは操作できず、ホバーしても見た目を変えない。
+   Skeleton cards shown while loading are not interactive and keep their look on hover. */
 .prompt-share-page .prompt-card--skeleton {
   cursor: default;
   pointer-events: none;
@@ -189,6 +202,8 @@
   cursor: pointer;
 }
 
+/* ユーザーIDが無い投稿者はクリックできないので、ポインターと名前のホバー色を出さない。
+   An author without a user ID is not clickable, so no pointer cursor or hover color is shown. */
 .prompt-share-page .prompt-card__author--static {
   cursor: default;
 }
@@ -248,6 +263,8 @@
   color: #3182ce;
 }
 
+/* ピル内の文字は長いと省略記号で切り、ピル自体は縮ませない。
+   Long labels inside a pill are truncated with an ellipsis rather than growing the pill. */
 .prompt-share-page .prompt-card__category-pill span,
 
 .prompt-share-page .prompt-card__type-pill span {
@@ -257,6 +274,8 @@
   white-space: nowrap;
 }
 
+/* 投稿の種類（プロンプト・画像・スキルなど）を示すピル。種類ごとの色は下の --prompt / --image / --skill などの修飾子で変える。
+   Pill showing the post type (prompt, image, skill, ...); per-type colors come from the --prompt / --image / --skill modifiers below. */
 .prompt-share-page .prompt-card__type-pill {
   display: inline-flex;
   align-items: center;
@@ -307,6 +326,8 @@
   font-size: 0.72rem;
 }
 
+/* 画像投稿のサムネイル枠。16:10 に固定して一覧の高さをそろえ、読み込み前は淡いグラデーションが見える。
+   Thumbnail frame for image posts. Fixed at 16:10 to keep card heights even; a soft gradient shows behind the image before it loads. */
 .prompt-share-page .prompt-card__image {
   position: relative;
   z-index: 1;
@@ -327,6 +348,8 @@
   object-fit: cover;
 }
 
+/* タイトルは2行で切って省略する。長い単語や URL でもカードからはみ出さないよう折り返しを許可する。
+   The title is clamped to two lines; wrapping is allowed so long words or URLs do not overflow the card. */
 .prompt-share-page .prompt-card > h3 {
   margin: 0;
   position: relative;
@@ -356,6 +379,8 @@
   text-decoration: underline;
 }
 
+/* 本文プレビュー。max-height で3行分に収め、はみ出しは隠す。
+   Body preview; max-height limits it to three lines and the rest is hidden. */
 .prompt-share-page .prompt-card__content {
   margin: 0;
   position: relative;
@@ -404,6 +429,8 @@
   white-space: pre-wrap;
 }
 
+/* 操作ボタン列（.prompt-actions）を包む領域。margin-top: auto でカード内の本文より下、カード下端へ押し下げる。
+   Wrapper around the action button row (.prompt-actions); margin-top: auto pushes it to the bottom of the card below the body. */
 .prompt-share-page .prompt-meta {
   margin-top: auto;
   display: block;
@@ -433,6 +460,8 @@
   color: #9ab0c5;
 }
 
+/* カード下部の操作ボタン列。3つのボタンを等幅の3列に並べる。
+   Action button row at the bottom of the card; three buttons laid out in equal-width columns. */
 .prompt-share-page .prompt-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -444,6 +473,8 @@
   padding-top: 0.42rem;
 }
 
+/* 操作ボタンはタップしやすい 44px の円形アイコンボタン。件数バッジをはみ出して置くため overflow は visible にする。
+   Action buttons are 44px round icon buttons (a comfortable tap size); overflow stays visible so the count badge can poke out. */
 .prompt-share-page .prompt-action-btn {
   width: 44px;
   height: 44px;
@@ -468,6 +499,8 @@
   overflow: visible;
 }
 
+/* ボタン右下に重ねる件数バッジ。クリックを邪魔しないよう pointer-events を切る。
+   Count badge overlaid at the button's bottom-right; pointer-events are off so it never blocks clicks. */
 .prompt-share-page .prompt-action-count {
   position: absolute;
   right: -3px;
@@ -485,6 +518,8 @@
   pointer-events: none;
 }
 
+/* カード右上の「…」メニューボタン。ヘッダーのグリッドでは menu 領域に置く。
+   The "..." menu button at the card's top right, placed in the header grid's menu area. */
 .prompt-share-page .meatball-menu {
   grid-area: menu;
   justify-self: end;
@@ -522,6 +557,8 @@
   transform: none;
 }
 
+/* アイコンフォントが他のスタイルで上書きされても表示されるよう、フォント指定と可視性を !important で固定する。
+   The font and visibility are pinned with !important so the icon still renders if other styles override the icon font. */
 .prompt-share-page .prompt-action-btn i,
 
 .prompt-share-page .meatball-menu i {
@@ -542,6 +579,8 @@
   z-index: 1;
 }
 
+/* いいね・チャット利用ボタンは、押したときに火花が散る演出用の ::after を持つ。::before は使わない。
+   The like and use-in-chat buttons use ::after for the celebration burst; ::before is unused. */
 .prompt-share-page .prompt-action-btn.like-btn::before,
 
 .prompt-share-page .prompt-action-btn.use-in-chat-btn::before {
@@ -598,6 +637,8 @@
   cursor: pointer;
 }
 
+/* 実行済み（いいね済み・チャットで利用済み・スキル追加済み）の状態は、背景なしで色だけ変える。
+   Done states (liked, used in chat, added to skills) change only the color, with no background. */
 .prompt-share-page .like-btn.liked {
   color: var(--ps-like);
   background: transparent;
@@ -636,6 +677,8 @@
   color: var(--ps-skill-added);
 }
 
+/* 操作した直後の is-celebrating の間だけ、アイコンを弾ませ、::after の点を放射状に飛ばす。
+   Only while is-celebrating is set right after the action: the icon pops and the ::after dots burst outward. */
 .prompt-share-page .like-btn.liked.is-celebrating i,
 
 .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating i,
@@ -679,6 +722,8 @@
   animation: prompt-action-burst 640ms ease-out both;
 }
 
+/* アイコンが縮んだ状態から跳ね上がって戻る動き。
+   Icon pops up from a shrunken state and settles back. */
 @keyframes prompt-action-icon-pop {
   0% {
     transform: scale(0.72) rotate(-10deg);
@@ -694,6 +739,8 @@
   }
 }
 
+/* ::after の点（box-shadow で6方向に複製）を中心から広げながら消す動き。
+   Expands and fades the ::after dot (duplicated in six directions via box-shadow) from the center. */
 @keyframes prompt-action-burst {
   0% {
     opacity: 0;
@@ -708,6 +755,8 @@
   }
 }
 
+/* 動きを減らす設定では、祝福アニメーションを止める。
+   Under reduced motion, the celebration animations are turned off. */
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page .like-btn.liked.is-celebrating i,
 
@@ -724,7 +773,8 @@
   }
 }
 
-/* Dark theme overrides */
+/* ダークテーマ用の上書き。ライト用の色だと暗い面で沈むため、いいね済み・利用済みの色を明るくする。
+   Dark theme overrides: brighter colors for the liked/used states, since the light-theme colors sink into a dark surface. */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .like-btn.liked {
   background: transparent;
   color: #ff7675;
@@ -756,6 +806,8 @@
   box-shadow: 0 10px 24px rgba(47, 115, 199, 0.18);
 }
 
+/* 「…」メニューのドロップダウン。常に DOM にあり、is-open で opacity / transform を変えて開閉する（閉じている間は pointer-events と visibility で操作不能にする）。
+   The "..." dropdown stays in the DOM and opens by changing opacity/transform via is-open; while closed, pointer-events and visibility make it inert. */
 .prompt-share-page .prompt-actions-dropdown {
   position: absolute;
   top: 42px;
@@ -783,6 +835,8 @@
   z-index: var(--z-dropdown, 30);
 }
 
+/* ドロップダウン上辺の吹き出し用の三角（45度回した正方形）。
+   Triangle pointer on the dropdown's top edge (a square rotated 45 degrees). */
 .prompt-share-page .prompt-actions-dropdown::before {
   content: "";
   position: absolute;
@@ -837,6 +891,8 @@
   transform: translateX(0);
 }
 
+/* 開いたときに項目を1つずつ時間差で現す。
+   Stagger the items so they appear one after another when the menu opens. */
 .prompt-share-page .prompt-actions-dropdown.is-open .dropdown-item:nth-child(1) {
   transition-delay: 30ms;
 }
@@ -881,6 +937,8 @@
   background: #f7f8f9;
 }
 
+/* 動きを減らす設定では、メニューの開閉と項目の時間差表示をほぼ無効にし、位置の移動も止める。
+   Under reduced motion, the menu open/close and staggered items are effectively disabled and the position shift is removed. */
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page .prompt-actions-dropdown,
 

@@ -1,4 +1,8 @@
-/* global.css
+/* 各ページで共有する基本リセットを定義する。ページの配置は個別CSSで扱う。
+ * Defines shared base resets; page layouts belong to page stylesheets. */
+
+/* 基本リセット専用とし、ページ配置は各ページのCSSに置く。
+  global.css
    Base reset only. Page layout styles should live in each page stylesheet.
 */
 * {

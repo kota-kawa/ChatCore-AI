@@ -1,4 +1,8 @@
-/* Shared visual/state hooks for actions that import shared content. */
+/* コンテンツ取り込みボタンと処理中表示を整える。
+ * Styles the content import button and its pending state. */
+
+/* 共有コンテンツを取り込む操作の外観と状態。
+  Shared visual/state hooks for actions that import shared content. */
 .content-import-button {
   align-items: center;
   display: inline-flex;

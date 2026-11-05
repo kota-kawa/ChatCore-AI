@@ -1,3 +1,6 @@
+/* 新規プロンプトの入力モーダルを整える。
+ * Styles the new prompt input modal. */
+
 :where(body.chat-page, .chat-page-shell) .task-selection-header {
   display: flex;
   align-items: center;

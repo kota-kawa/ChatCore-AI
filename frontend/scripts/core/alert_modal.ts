@@ -1,3 +1,6 @@
+// 共通の通知・確認・入力ダイアログをキューで管理する。
+// Queues and manages shared alert, confirm and prompt dialogs.
+
 import { getRuntimeLocale } from "../../lib/i18n/config";
 import {
   isImeCompositionKeyEvent,
@@ -18,7 +21,8 @@ const PROMPT_MODAL_ROOT_ID = "cc-prompt-modal-root";
 const ALERT_MODAL_OPEN_CLASS = "cc-alert-modal-open";
 const PROMPT_INPUT_ID = "cc-prompt-modal-input";
 
-/** Wires `aria-labelledby` / `aria-describedby` so screen readers announce the dialog. */
+/** スクリーンリーダーがダイアログを読み上げるよう、ラベルと説明を関連付ける。
+ * Wires `aria-labelledby` / `aria-describedby` so screen readers announce the dialog. */
 function applyDialogAria(root: HTMLElement, titleId: string, messageId: string) {
   root.setAttribute("aria-labelledby", titleId);
   root.setAttribute("aria-describedby", messageId);
@@ -371,7 +375,8 @@ class GlobalConfirmModal {
   }
 }
 
-/**
+/** messageはwindow.promptと同じ入力ラベルなので、長い補足はdescriptionへ分ける。
+ *
  * `message` is the field label (it maps 1:1 onto `window.prompt(message)`), so
  * anything longer belongs in `description` to keep the label scannable.
  */
@@ -584,6 +589,7 @@ class GlobalPromptModal {
 
     this.previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // メッセージを入力ラベルに使い、ヘッダーは短い見出し、段落は任意の補足にする。
     // The message is the field label, so the header keeps a short title and the
     // paragraph is reserved for optional extra context (hidden while empty).
     this.titleEl.textContent = options.title || (english ? "Input" : "入力");
