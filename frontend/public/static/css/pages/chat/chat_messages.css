@@ -1902,7 +1902,24 @@
   overflow-wrap: anywhere;
 }
 
+/* 展開した指示文は吹き出しの幅で折り返すため、タスク名だけの短い発話でも読める幅を開閉に関係なく確保する。
+   上限は外枠の max-width（全幅で 75%、狭い幅で 88%）を超えない 75% にとどめる。
+   The disclosed prompt wraps to the bubble width, so keep a readable width even for a bare task name,
+   open or closed. Cap it at 75% so it never exceeds the wrapper's max-width (75%, or 88% when narrow). */
+:where(body.chat-page, .chat-page-shell) .user-message-wrapper:has(.task-prompt-disclosure) {
+  min-inline-size: min(20rem, 75%);
+}
+
+:where(body.chat-page, .chat-page-shell) .user-message:has(> .task-prompt-disclosure) {
+  min-inline-size: 100%;
+}
+
+/* 吹き出しは fit-content なので、展開した指示文の長い行が幅の計算に入ると開くたびに横へ広がる。
+   中身の幅を計算から外し、閉じたときの幅のまま縦に伸ばす。
+   The bubble is fit-content, so the long lines of the disclosed prompt would widen it on every
+   open. Keep the contents out of the width calculation so the bubble only grows vertically. */
 :where(body.chat-page, .chat-page-shell) .task-prompt-disclosure__body {
+  contain: inline-size;
   margin-top: 0.55rem;
   display: flex;
   flex-direction: column;
