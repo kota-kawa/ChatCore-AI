@@ -15,8 +15,8 @@
 
 ## スタイルシートの読み込み場所 / Where a stylesheet is loaded
 
-CSS がアプリに入る場所は次の 2 つだけ。
-There are exactly two places CSS enters the app:
+外部 CSS ファイルを読み込む経路は次の 2 つ。
+External CSS files enter the app through two loading paths:
 
 1. **グローバルバンドル** — `pages/_app.tsx` の先頭にある `import "...css"`。Webpack が import 順に連結し、Next が全ルート共通の `<link>` 群として出力する。
 2. **ページの `<link>`** — そのページ自身がスタイルシートの link を描画する。既存のページは `next/head`（`<SeoHead>` の子）を使う。クライアント遷移で入るページは `<link rel="stylesheet" href="..." precedence="..." />` を直接描画でき、React がスタイルシートを管理し、読み込み完了を待ってからページを表示する。`frontend/public/` 配下のファイルは同じ URL パスで配信されるため、`public/static/css/pages/docs/docs.css` は `/static/css/pages/docs/docs.css` になる。
@@ -26,6 +26,9 @@ There are exactly two places CSS enters the app:
 
 ページ専用の新しい CSS は 2 の形を使う。本当に共有するものでない限り、`_app.tsx` には何も足さない。
 New page-only CSS should use form 2. Nothing new should be added to `_app.tsx` unless it is genuinely shared.
+
+認証ゲートの `components/auth/auth_gateway_modules/styles/auth_gateway_global_styles.tsx` は、`<style jsx global>` でページ固有 CSS を埋め込む。これは外部ファイルの読み込みとは別の経路であり、上の 2 種類には数えない。
+The auth gateway embeds page-specific CSS with `<style jsx global>` in `components/auth/auth_gateway_modules/styles/auth_gateway_global_styles.tsx`. This embedded style is separate from the two external-file loading paths above.
 
 ### `_app` から外す前に守るカスケード規則 / Cascade rule you must respect before moving a file out of `_app`
 
