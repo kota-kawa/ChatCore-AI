@@ -162,10 +162,9 @@ def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
 
 @prompt_manage_api_bp.get("/my_prompts", name="prompt_manage_api.get_my_prompts")
 async def get_my_prompts(request: Request):
-    """ログインユーザーが投稿したプロンプトの一覧を返す。
-
-    Return the prompts posted by the signed-in user.
-    """
+    # ログインユーザーが投稿したプロンプトの一覧を返す。
+    #
+    # Return the prompts posted by the signed-in user.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:
@@ -176,10 +175,9 @@ async def get_my_prompts(request: Request):
 
 @prompt_manage_api_bp.get("/liked_prompts", name="prompt_manage_api.get_liked_prompts")
 async def get_liked_prompts(request: Request):
-    """ログインユーザーがいいねしたプロンプトの一覧を返す。
-
-    Return the prompts liked by the signed-in user.
-    """
+    # ログインユーザーがいいねしたプロンプトの一覧を返す。
+    #
+    # Return the prompts liked by the signed-in user.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:
@@ -190,10 +188,9 @@ async def get_liked_prompts(request: Request):
 
 @prompt_manage_api_bp.put("/prompts/{prompt_id}", name="prompt_manage_api.update_prompt")
 async def update_prompt(prompt_id: int, request: Request):
-    """自分のプロンプトを更新する。対象が無い（他人のものを含む）場合は 404 を返す。
-
-    Update one of the user's own prompts; returns 404 when it is not found (including someone else's).
-    """
+    # 自分のプロンプトを更新する。対象が無い（他人のものを含む）場合は 404 を返す。
+    #
+    # Update one of the user's own prompts; returns 404 when it is not found (including someone else's).
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -217,11 +214,10 @@ async def update_prompt(prompt_id: int, request: Request):
 
 @prompt_manage_api_bp.delete("/prompts/{prompt_id}", name="prompt_manage_api.delete_prompt")
 async def delete_prompt(prompt_id: int, request: Request):
-    """自分のプロンプトを削除する。DB の削除後に添付ファイルを消すが、ファイル削除の失敗は記録するだけで成功応答は変えない。
-
-    Delete one of the user's own prompts. Attachment files are removed after the DB delete; a file-removal failure is only logged and
-    does not change the success response.
-    """
+    # 自分のプロンプトを削除する。DB の削除後に添付ファイルを消すが、ファイル削除の失敗は記録するだけで成功応答は変えない。
+    #
+    # Delete one of the user's own prompts. Attachment files are removed after the DB delete; a file-removal failure is only logged and
+    # does not change the success response.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:

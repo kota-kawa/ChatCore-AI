@@ -207,10 +207,9 @@ async def _search_public_prompts(
 
 @search_bp.get("/prompts", name="search.search_prompts")
 async def search_prompts(request: Request):
-    """クエリ文字列（q・page・per_page・各種フィルタ）から公開プロンプトを検索して JSON で返す。
-
-    Search public prompts from the query string (q, page, per_page and filters) and return JSON.
-    """
+    # クエリ文字列（q・page・per_page・各種フィルタ）から公開プロンプトを検索して JSON で返す。
+    #
+    # Search public prompts from the query string (q, page, per_page and filters) and return JSON.
     query = request.query_params.get("q", "").strip()
     include_total = request.query_params.get("include_total", "1").strip().lower() not in {"0", "false", "no"}
     page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)

@@ -1,12 +1,12 @@
-"""メモ・マイコンテキスト・公開プロンプトの埋め込みベクトルを後から埋め直す（バックフィル）スクリプト。
-
-埋め込みの提供元が壊れていた間に書き込まれた行は `embedding_vector IS NULL` になり、意味検索から完全に外れる。
-提供元を直すだけではそれらの行は見えないままなので、このスクリプトで補う。
-再実行しても安全で、既定ではベクトルが無い行だけを処理するため、中断しても続きから再開できる。
-埋め込みモデルを変えたあとに全ベクトルを作り直したいときは --include-existing を付ける。
-使い方は下の英語の説明を参照（リポジトリのルートから実行する）。
-
-Backfill memo, My Context, and public prompt embedding vectors.
+# メモ・マイコンテキスト・公開プロンプトの埋め込みベクトルを後から埋め直す（バックフィル）スクリプト。
+#
+# 埋め込みの提供元が壊れていた間に書き込まれた行は `embedding_vector IS NULL` になり、意味検索から完全に外れる。
+# 提供元を直すだけではそれらの行は見えないままなので、このスクリプトで補う。
+# 再実行しても安全で、既定ではベクトルが無い行だけを処理するため、中断しても続きから再開できる。
+# 埋め込みモデルを変えたあとに全ベクトルを作り直したいときは --include-existing を付ける。
+# 使い方は下の英語の説明を参照（リポジトリのルートから実行する）。
+#
+"""Backfill memo, My Context, and public prompt embedding vectors.
 
 Rows written while the embedding provider was broken have `embedding_vector IS NULL`,
 and semantic search skips them entirely — fixing the provider alone leaves those rows

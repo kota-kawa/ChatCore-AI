@@ -503,10 +503,9 @@ async def _get_public_author_profile(user_id: int) -> dict[str, Any] | None:
 
 @prompt_share_api_bp.get("/media/{filename}", name="prompt_share_api.get_prompt_attachment_media")
 async def get_prompt_attachment_media(filename: str):
-    """投稿の添付ファイルを配信する。現行の保存場所に無ければ旧保存場所を探し、どちらにも無ければ 404 を返す。
-
-    Serve a prompt attachment. If it is not in the current storage location, look in the legacy location; 404 if neither has it.
-    """
+    # 投稿の添付ファイルを配信する。現行の保存場所に無ければ旧保存場所を探し、どちらにも無ければ 404 を返す。
+    #
+    # Serve a prompt attachment. If it is not in the current storage location, look in the legacy location; 404 if neither has it.
     try:
         filepath = resolve_prompt_attachment_path(filename)
         media_type = prompt_attachment_content_type(filename)
@@ -530,10 +529,9 @@ async def get_prompt_attachment_media(filename: str):
 
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
 async def get_prompts(request: Request, author_id: int | None = None):
-    """公開プロンプトのフィードをカーソル方式で返す。カテゴリ・形式・メディア種別・投稿者で絞り込める。
-
-    Return the public prompt feed with cursor paging, filterable by category, format, media type and author.
-    """
+    # 公開プロンプトのフィードをカーソル方式で返す。カテゴリ・形式・メディア種別・投稿者で絞り込める。
+    #
+    # Return the public prompt feed with cursor paging, filterable by category, format, media type and author.
     user_id = (getattr(request, "session", {}) or {}).get("user_id")
     try:
         limit = _parse_prompt_feed_limit(request.query_params.get("limit"))
@@ -562,10 +560,9 @@ async def get_prompts(request: Request, author_id: int | None = None):
 
 @prompt_share_api_bp.get("/prompts/recommended", name="prompt_share_api.get_recommended_prompts")
 async def get_recommended_prompts(request: Request, exclude_id: int | None = None):
-    """閲覧中の投稿を除いた、おすすめの公開プロンプトとその根拠を返す。
-
-    Return recommended public prompts, excluding the one being viewed, together with their basis.
-    """
+    # 閲覧中の投稿を除いた、おすすめの公開プロンプトとその根拠を返す。
+    #
+    # Return recommended public prompts, excluding the one being viewed, together with their basis.
     try:
         prompts, basis = await _get_recommended_prompts(
             exclude_id,
@@ -579,10 +576,9 @@ async def get_recommended_prompts(request: Request, exclude_id: int | None = Non
 
 @prompt_share_api_bp.post("/prompts/{prompt_id}/view", name="prompt_share_api.record_prompt_view")
 async def record_prompt_view(prompt_id: int):
-    """公開プロンプトの閲覧を 1 件記録し、更新後の閲覧数を返す。対象が無ければ 404。
-
-    Record one view of a public prompt and return the updated view count; 404 if it does not exist.
-    """
+    # 公開プロンプトの閲覧を 1 件記録し、更新後の閲覧数を返す。対象が無ければ 404。
+    #
+    # Record one view of a public prompt and return the updated view count; 404 if it does not exist.
     try:
         view_count = await _service().record_public_view(prompt_id)
         if view_count is None:
@@ -594,10 +590,9 @@ async def record_prompt_view(prompt_id: int):
 
 @prompt_share_api_bp.post("/prompts/impressions", name="prompt_share_api.record_prompt_impressions")
 async def record_prompt_impressions(request: Request):
-    """一覧に表示された投稿の ID をまとめて受け取り、表示回数として記録する。
-
-    Receive the IDs of prompts shown in a list and record them as impressions in one call.
-    """
+    # 一覧に表示された投稿の ID をまとめて受け取り、表示回数として記録する。
+    #
+    # Receive the IDs of prompts shown in a list and record them as impressions in one call.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
@@ -617,10 +612,9 @@ async def record_prompt_impressions(request: Request):
 
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
 async def get_prompt_detail(prompt_id: int):
-    """公開プロンプト 1 件の詳細を返す。無ければ 404。
-
-    Return the details of one public prompt; 404 if it does not exist.
-    """
+    # 公開プロンプト 1 件の詳細を返す。無ければ 404。
+    #
+    # Return the details of one public prompt; 404 if it does not exist.
     try:
         prompt = await _get_public_prompt_by_id(prompt_id)
         if not prompt:
@@ -632,10 +626,9 @@ async def get_prompt_detail(prompt_id: int):
 
 @prompt_share_api_bp.get("/users/{user_id}", name="prompt_share_api.get_author_profile")
 async def get_author_profile(user_id: int):
-    """投稿者の公開プロフィールを返す。無ければ 404。
-
-    Return an author's public profile; 404 if not found.
-    """
+    # 投稿者の公開プロフィールを返す。無ければ 404。
+    #
+    # Return an author's public profile; 404 if not found.
     try:
         profile = await _get_public_author_profile(user_id)
         if not profile:
@@ -647,10 +640,9 @@ async def get_author_profile(user_id: int):
 
 @prompt_share_api_bp.get("/prompts/{prompt_id}/comments", name="prompt_share_api.get_prompt_comments")
 async def get_prompt_comments(prompt_id: int, request: Request):
-    """公開プロンプトのコメント一覧を返す。閲覧者が管理者か本人かによって、各コメントの削除可否を付ける。
-
-    Return the comments of a public prompt, marking for each whether the viewer (admin or owner) may delete it.
-    """
+    # 公開プロンプトのコメント一覧を返す。閲覧者が管理者か本人かによって、各コメントの削除可否を付ける。
+    #
+    # Return the comments of a public prompt, marking for each whether the viewer (admin or owner) may delete it.
     session = getattr(request, "session", {}) or {}
     actor_user_id = session.get("user_id")
     actor_is_admin = bool(session.get("is_admin"))
@@ -675,10 +667,9 @@ async def get_prompt_comments(prompt_id: int, request: Request):
 
 @prompt_share_api_bp.post("/prompts/{prompt_id}/comments", name="prompt_share_api.create_prompt_comment")
 async def create_prompt_comment(prompt_id: int, request: Request):
-    """コメントを投稿する。ログイン必須で、レート制限と URL 数の上限を確認し、重複投稿はサービス層で判定する。
-
-    Post a comment. Requires login; checks the rate limits and URL cap, while duplicate detection is done in the service layer.
-    """
+    # コメントを投稿する。ログイン必須で、レート制限と URL 数の上限を確認し、重複投稿はサービス層で判定する。
+    #
+    # Post a comment. Requires login; checks the rate limits and URL cap, while duplicate detection is done in the service layer.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = int(request.session["user_id"])
@@ -731,10 +722,9 @@ async def create_prompt_comment(prompt_id: int, request: Request):
 
 @prompt_share_api_bp.delete("/comments/{comment_id}", name="prompt_share_api.delete_prompt_comment")
 async def delete_prompt_comment(comment_id: int, request: Request):
-    """コメントを削除する。削除できる人（管理者・投稿者・投稿の所有者）の判定はサービス層で行う。
-
-    Delete a comment. Whether the actor may do so (admin, author or prompt owner) is decided in the service layer.
-    """
+    # コメントを削除する。削除できる人（管理者・投稿者・投稿の所有者）の判定はサービス層で行う。
+    #
+    # Delete a comment. Whether the actor may do so (admin, author or prompt owner) is decided in the service layer.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:
@@ -752,10 +742,9 @@ async def delete_prompt_comment(comment_id: int, request: Request):
 
 @prompt_share_api_bp.post("/comments/{comment_id}/report", name="prompt_share_api.report_prompt_comment")
 async def report_prompt_comment(comment_id: int, request: Request):
-    """コメントを通報する。通報が一定数に達するとコメントは自動で非表示になる。
-
-    Report a comment. Once reports reach a threshold, the comment is hidden automatically.
-    """
+    # コメントを通報する。通報が一定数に達するとコメントは自動で非表示になる。
+    #
+    # Report a comment. Once reports reach a threshold, the comment is hidden automatically.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -791,14 +780,13 @@ async def report_prompt_comment(comment_id: int, request: Request):
 
 @prompt_share_api_bp.post("/prompts", name="prompt_share_api.create_prompt")
 async def create_prompt(request: Request):
-    """プロンプトを投稿する。multipart（添付ファイルつき）と JSON の両方を受け付ける。
-    未ログインはゲスト投稿（テキストのみ・URL 禁止・トークンで後から引き継ぎ）、ログイン済みは投稿レート制限を消費してから、
-    必要なら添付を保存して作成する。作成に失敗したら保存済みの添付を削除する。
-
-    Create a prompt, accepting both multipart (with an attachment) and JSON.
-    Signed-out users post as guests (text only, no URLs, claimable later via a token); signed-in users consume the posting rate limit,
-    then the attachment is saved if present and the prompt created. If creation fails, saved attachments are removed.
-    """
+    # プロンプトを投稿する。multipart（添付ファイルつき）と JSON の両方を受け付ける。
+    # 未ログインはゲスト投稿（テキストのみ・URL 禁止・トークンで後から引き継ぎ）、ログイン済みは投稿レート制限を消費してから、
+    # 必要なら添付を保存して作成する。作成に失敗したら保存済みの添付を削除する。
+    #
+    # Create a prompt, accepting both multipart (with an attachment) and JSON.
+    # Signed-out users post as guests (text only, no URLs, claimable later via a token); signed-in users consume the posting rate limit,
+    # then the attachment is saved if present and the prompt created. If creation fails, saved attachments are removed.
     is_guest_post = "user_id" not in request.session
     user_id = request.session.get("user_id")
     if _request_body_exceeds_prompt_attachment_limit(request):
@@ -919,10 +907,9 @@ async def create_prompt(request: Request):
 
 @prompt_share_api_bp.post("/task", name="prompt_share_api.add_prompt_as_task")
 async def add_prompt_as_task(request: Request):
-    """公開プロンプトを、自分のチャットで使うタスクとして取り込む。
-
-    Import a public prompt as a task the user can use in their own chat.
-    """
+    # 公開プロンプトを、自分のチャットで使うタスクとして取り込む。
+    #
+    # Import a public prompt as a task the user can use in their own chat.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -953,10 +940,9 @@ async def add_prompt_as_task(request: Request):
 
 @prompt_share_api_bp.post("/skill", name="prompt_share_api.add_prompt_as_skill")
 async def add_prompt_as_skill(request: Request):
-    """公開プロンプトを、自分の Skill として取り込む。
-
-    Import a public prompt as one of the user's Skills.
-    """
+    # 公開プロンプトを、自分の Skill として取り込む。
+    #
+    # Import a public prompt as one of the user's Skills.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -987,10 +973,9 @@ async def add_prompt_as_skill(request: Request):
 
 @prompt_share_api_bp.delete("/task", name="prompt_share_api.remove_prompt_as_task")
 async def remove_prompt_as_task(request: Request):
-    """チャットで使うタスクとして取り込んだ公開プロンプトを、使う設定から外す。
-
-    Remove a public prompt from the tasks the user uses in chat.
-    """
+    # チャットで使うタスクとして取り込んだ公開プロンプトを、使う設定から外す。
+    #
+    # Remove a public prompt from the tasks the user uses in chat.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -1021,10 +1006,9 @@ async def remove_prompt_as_task(request: Request):
 
 @prompt_share_api_bp.post("/like", name="prompt_share_api.add_like")
 async def add_like(request: Request):
-    """公開プロンプトにいいねを付ける。
-
-    Like a public prompt.
-    """
+    # 公開プロンプトにいいねを付ける。
+    #
+    # Like a public prompt.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -1049,10 +1033,9 @@ async def add_like(request: Request):
 
 @prompt_share_api_bp.delete("/like", name="prompt_share_api.remove_like")
 async def remove_like(request: Request):
-    """公開プロンプトのいいねを解除する。
-
-    Remove the user's like from a public prompt.
-    """
+    # 公開プロンプトのいいねを解除する。
+    #
+    # Remove the user's like from a public prompt.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)

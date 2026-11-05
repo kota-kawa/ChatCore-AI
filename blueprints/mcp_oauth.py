@@ -45,10 +45,9 @@ def _disabled_response():
 
 @mcp_oauth_bp.get("/consent", name="mcp_oauth.consent_details")
 async def get_consent_details(request: Request):
-    """同意画面に表示する、認可リクエスト（トークン）の内容を返す。
-
-    Return the details of an authorization request (by token) for the consent screen.
-    """
+    # 同意画面に表示する、認可リクエスト（トークン）の内容を返す。
+    #
+    # Return the details of an authorization request (by token) for the consent screen.
     if not is_mcp_enabled():
         return _disabled_response()
     if _current_verified_user_id(request) is None:
@@ -62,10 +61,9 @@ async def get_consent_details(request: Request):
 
 @mcp_oauth_bp.post("/consent", name="mcp_oauth.complete_consent")
 async def post_consent(request: Request):
-    """同意画面での承認・拒否を確定し、クライアントへ戻すリダイレクトURLを返す。
-
-    Record the approve/deny decision from the consent screen and return the redirect URL back to the client.
-    """
+    # 同意画面での承認・拒否を確定し、クライアントへ戻すリダイレクトURLを返す。
+    #
+    # Record the approve/deny decision from the consent screen and return the redirect URL back to the client.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -86,10 +84,9 @@ async def post_consent(request: Request):
 
 @mcp_oauth_bp.get("/connections", name="mcp_oauth.list_connections")
 async def get_connections(request: Request):
-    """ユーザーが許可済みの AI サービス連携（グラント）の一覧を返す。
-
-    List the AI-service connections (grants) the user has authorized.
-    """
+    # ユーザーが許可済みの AI サービス連携（グラント）の一覧を返す。
+    #
+    # List the AI-service connections (grants) the user has authorized.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -101,10 +98,9 @@ async def get_connections(request: Request):
 
 @mcp_oauth_bp.get("/clients", name="mcp_oauth.list_clients")
 async def get_clients(request: Request):
-    """ユーザーが発行した連携用の OAuth クライアント認証情報の一覧を返す。
-
-    List the OAuth client credentials the user has issued for integrations.
-    """
+    # ユーザーが発行した連携用の OAuth クライアント認証情報の一覧を返す。
+    #
+    # List the OAuth client credentials the user has issued for integrations.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -115,10 +111,9 @@ async def get_clients(request: Request):
 
 @mcp_oauth_bp.post("/clients", name="mcp_oauth.issue_client")
 async def post_client(request: Request):
-    """連携用の OAuth クライアント認証情報を発行する。入力型とスコープを検証し、サービス層の例外を HTTP ステータスへ対応づける。
-
-    Issue OAuth client credentials for an integration. Validates input types and scopes, and maps service-layer errors to HTTP statuses.
-    """
+    # 連携用の OAuth クライアント認証情報を発行する。入力型とスコープを検証し、サービス層の例外を HTTP ステータスへ対応づける。
+    #
+    # Issue OAuth client credentials for an integration. Validates input types and scopes, and maps service-layer errors to HTTP statuses.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -162,10 +157,9 @@ async def post_client(request: Request):
 
 @mcp_oauth_bp.delete("/clients/{client_id}", name="mcp_oauth.revoke_client")
 async def delete_client(client_id: str, request: Request):
-    """指定した OAuth クライアント認証情報を削除（失効）する。
-
-    Delete (revoke) the specified OAuth client credentials.
-    """
+    # 指定した OAuth クライアント認証情報を削除（失効）する。
+    #
+    # Delete (revoke) the specified OAuth client credentials.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -179,10 +173,9 @@ async def delete_client(client_id: str, request: Request):
 
 @mcp_oauth_bp.patch("/clients/{client_id}", name="mcp_oauth.update_client_label")
 async def patch_client(client_id: str, request: Request):
-    """OAuth クライアント認証情報の名前（ラベル）を更新する。
-
-    Update the label of the specified OAuth client credentials.
-    """
+    # OAuth クライアント認証情報の名前（ラベル）を更新する。
+    #
+    # Update the label of the specified OAuth client credentials.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -202,10 +195,9 @@ async def patch_client(client_id: str, request: Request):
 
 @mcp_oauth_bp.delete("/connections/{grant_id}", name="mcp_oauth.revoke_connection")
 async def delete_connection(grant_id: str, request: Request):
-    """指定した AI サービス連携（グラント）を解除する。
-
-    Revoke the specified AI-service connection (grant).
-    """
+    # 指定した AI サービス連携（グラント）を解除する。
+    #
+    # Revoke the specified AI-service connection (grant).
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
@@ -219,10 +211,9 @@ async def delete_connection(grant_id: str, request: Request):
 
 @mcp_oauth_bp.patch("/connections/{grant_id}", name="mcp_oauth.update_connection_display_name")
 async def patch_connection(grant_id: str, request: Request):
-    """AI サービス連携の表示名を更新する。
-
-    Update the display name of the specified AI-service connection.
-    """
+    # AI サービス連携の表示名を更新する。
+    #
+    # Update the display name of the specified AI-service connection.
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
