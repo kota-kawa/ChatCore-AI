@@ -1,3 +1,6 @@
+// ミニチャットのページ操作と実行状態を検証する。
+// Tests mini chat runtime behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

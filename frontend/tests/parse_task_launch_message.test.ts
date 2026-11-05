@@ -1,3 +1,6 @@
+// 保存済みタスク起動メッセージの解析を検証する。
+// Tests parse task launch message behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

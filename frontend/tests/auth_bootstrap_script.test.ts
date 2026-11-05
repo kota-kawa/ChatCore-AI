@@ -1,3 +1,6 @@
+// 初期描画前の認証状態の復元を検証する。
+// Tests auth bootstrap script behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

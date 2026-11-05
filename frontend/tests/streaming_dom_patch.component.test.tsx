@@ -1,3 +1,6 @@
+// 配信中の本文DOMの差分更新を検証する。
+// Tests streaming dom patch behavior.
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { patchElementChildren } from "../lib/chat_page/streaming_dom_patch";

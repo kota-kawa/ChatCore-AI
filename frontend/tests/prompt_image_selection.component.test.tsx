@@ -1,3 +1,6 @@
+// 公開投稿での参照画像選択を検証する。
+// Tests prompt image selection behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import type { ChangeEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";

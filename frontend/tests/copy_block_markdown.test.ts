@@ -1,3 +1,6 @@
+// Markdownからのコピーブロック抽出を検証する。
+// Tests copy block markdown behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// 日時の表示形式とタイムゾーンを検証する。
+// Tests datetime behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

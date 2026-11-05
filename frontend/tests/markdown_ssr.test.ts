@@ -1,3 +1,6 @@
+// サーバー側Markdown描画と安全化を検証する。
+// Tests markdown ssr behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

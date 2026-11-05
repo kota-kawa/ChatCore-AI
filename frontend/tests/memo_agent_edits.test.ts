@@ -1,3 +1,6 @@
+// AIが提案したメモ編集の反映を検証する。
+// Tests memo agent edits behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

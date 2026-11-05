@@ -1,3 +1,6 @@
+// LLM応答の表示用整形を検証する。
+// Tests format llm output behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

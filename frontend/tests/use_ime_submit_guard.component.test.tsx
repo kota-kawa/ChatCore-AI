@@ -1,3 +1,6 @@
+// IME変換中の誤送信防止を検証する。
+// Tests use ime submit guard behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

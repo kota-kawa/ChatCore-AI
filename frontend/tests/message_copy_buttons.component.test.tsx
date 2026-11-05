@@ -1,3 +1,6 @@
+// 回答のコピーボタンを検証する。
+// Tests message copy buttons behavior.
+
 import { render } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 

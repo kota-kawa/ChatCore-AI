@@ -1,3 +1,6 @@
+// 思考中の状態表示を検証する。
+// Tests thinking status behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

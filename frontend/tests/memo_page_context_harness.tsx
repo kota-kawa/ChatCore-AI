@@ -1,3 +1,6 @@
+// メモ画面の状態と操作を差し替えるテスト用スタブを提供する。
+// Provides test stubs for memo page state and actions.
+
 import type { MemoPageControllerState } from "../contexts/memo_page/memo_page_context";
 
 // テスト用の controller スタブ。全キーを不活性なデフォルトで埋め、必要なものだけ上書きする。

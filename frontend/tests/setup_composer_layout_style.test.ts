@@ -1,3 +1,6 @@
+// タスク画面の入力欄と操作の配置を検証する。
+// Tests setup composer layout style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
