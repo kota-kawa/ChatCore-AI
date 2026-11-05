@@ -1,3 +1,6 @@
+// ブラウザーとSSRで共有するMarkdownのサニタイズ境界を提供する。
+// Provides a shared Markdown sanitization boundary for the browser and SSR.
+
 import { marked } from "marked";
 import { sanitizeClassAttributeValue } from "./html";
 

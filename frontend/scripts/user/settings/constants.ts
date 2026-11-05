@@ -1,3 +1,6 @@
+// 設定画面のテーマ・言語・ナビゲーションの選択肢を定義する。
+// Defines theme, language and navigation choices for settings.
+
 import type { LanguageOption, SettingsNavItem, ThemeOption } from "./page_types";
 
 // 選択可能なテーマの一覧 — ライト・ダーク・システム追従の 3 択

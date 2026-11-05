@@ -1,3 +1,6 @@
+// 状態変更リクエストへCSRFトークンを付け、取得中の要求を共有する。
+// Adds CSRF tokens to state-changing requests and shares in-flight token requests.
+
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // CSRF トークン取得の多重リクエストを避けるため Promise を共有する

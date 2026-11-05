@@ -1,3 +1,6 @@
+// React外の作成補助パネルに、実行時言語に応じた文言を供給する。
+// Supplies runtime-localized text for the prompt assistance panel outside React.
+
 import { getRuntimeLocale } from "../../../lib/i18n/config";
 
 // このパネルは React 外のバニラJSなので、scripts/core/passkeys.ts と同じく

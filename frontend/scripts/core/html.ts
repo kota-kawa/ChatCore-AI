@@ -1,5 +1,6 @@
 /**
  * HTML エスケープ・テキスト整形ユーティリティ
+ * Utilities for HTML escaping and text formatting.
  */
 
 const SAFE_CLASS_PATTERNS = [

@@ -1,3 +1,6 @@
+// 利用量を割合と日本時間の期限・リセット日時へ整形する。
+// Formats usage ratios, expiry and reset times in Japan time.
+
 import type { Locale } from "../../../lib/i18n/config";
 
 // 上限の区切りは日本時間で決まるため、表示も日本時間に固定する。

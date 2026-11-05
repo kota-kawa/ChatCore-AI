@@ -1,3 +1,6 @@
+// 初回描画で認証依存UIを復元するため、認証状態を画面間で共有する。
+// Shares cached authentication state across pages for the initial UI paint.
+
 import { CACHE_TTL_MS, STORAGE_KEYS } from "./constants";
 
 // ページ間で共有する認証状態キャッシュ。トップページ・メモなど、認証依存のUIを

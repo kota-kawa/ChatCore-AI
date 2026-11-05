@@ -1,3 +1,6 @@
+// テーマ設定の保存・復元と、利用者が明示した表示設定を扱う。
+// Handles theme persistence, restoration and explicit appearance preferences.
+
 export type ThemePreference = "light" | "dark" | "auto";
 
 const STORAGE_KEY = "chatcore-theme";
