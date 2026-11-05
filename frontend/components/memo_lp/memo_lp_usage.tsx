@@ -1,3 +1,6 @@
+// メモの利用手順とAI支援・料金の前提を紹介する。
+// Presents memo usage steps, AI assistance and pricing prerequisites.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // 3ステップの利用フローと、その下に「AIに任せられること」「料金と前提」の2カラムを置く

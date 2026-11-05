@@ -1,3 +1,6 @@
+// メモの保存・整理・再確認の機能を紹介する。
+// Presents memo capture, organization and review features.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // 「残す・整える・見返す」の3つに絞り、メモ画面に実在する操作だけを並べる。

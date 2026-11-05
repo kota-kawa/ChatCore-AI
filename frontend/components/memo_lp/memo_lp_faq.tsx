@@ -1,3 +1,6 @@
+// メモ紹介ページのFAQ表示と構造化データを定義する。
+// Defines memo landing FAQ content and structured data.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // メモ紹介ページのFAQ。JSON-LDと表示の両方でこのデータを使う

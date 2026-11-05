@@ -1,3 +1,6 @@
+// 画面で表示する日本語メッセージとメッセージキーの型を定義する。
+// Defines Japanese UI messages and the message-key type.
+
 export const jaMessages = {
   "common.appName": "Chat Core",
   "common.loading": "読み込み中…",

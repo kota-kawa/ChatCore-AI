@@ -1,3 +1,6 @@
+// サーバー側でMarkdownを安全なHTMLへ変換する。
+// Converts Markdown into sanitized HTML on the server.
+
 import createDOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import { createMarkdownHtmlRenderer } from "../../scripts/core/markdown_safe_html";

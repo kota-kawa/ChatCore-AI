@@ -238,10 +238,10 @@ export function useTaskReorderDrag({
       // Determine which slot this item shifts to based on drag and drop positions
       let shiftedIndex = originalIndex;
       if (dropTarget > dragIndex && originalIndex > dragIndex && originalIndex <= dropTarget) {
-        shiftedIndex = originalIndex - 1; // 後方へずらす。
+        shiftedIndex = originalIndex - 1; // 配列の先頭側へ1つ移す。
         // shift back
       } else if (dropTarget < dragIndex && originalIndex >= dropTarget && originalIndex < dragIndex) {
-        shiftedIndex = originalIndex + 1; // 前方へずらす。
+        shiftedIndex = originalIndex + 1; // 配列の末尾側へ1つ移す。
         // shift forward
       }
 

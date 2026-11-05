@@ -1,3 +1,6 @@
+// 管理者ログイン画面の入力と認証要求を扱う。
+// Handles administrator login input and authentication requests.
+
 import { useRouter } from "next/router";
 import { useState, type FormEvent } from "react";
 

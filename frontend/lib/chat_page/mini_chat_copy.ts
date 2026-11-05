@@ -1,3 +1,6 @@
+// 画面遷移をまたぐミニチャット処理の表示文言を日英で提供する。
+// Provides Japanese and English runtime messages for mini chat across navigation.
+
 import type { Locale } from "../i18n/config";
 
 // 画面遷移をまたぐ操作でも使えるよう文言をReactの外に置き、両言語を一緒に管理する。

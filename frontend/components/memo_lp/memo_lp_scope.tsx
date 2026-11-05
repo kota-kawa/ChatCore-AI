@@ -1,3 +1,6 @@
+// メモ機能の対応範囲と利用上の前提を紹介する。
+// Presents memo feature scope and usage prerequisites.
+
 import { useTranslation } from "../../contexts/locale_context";
 
 // 対応範囲と前提。できることより先に、非公開の範囲・共有リンクが見せるもの・できないことを出す。

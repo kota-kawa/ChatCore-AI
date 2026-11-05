@@ -1,3 +1,6 @@
+// プライバシーポリシーを日英の公開文書として表示する。
+// Displays the privacy policy as a localized public document.
+
 import { SeoHead } from "../components/SeoHead";
 import Link from "next/link";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
