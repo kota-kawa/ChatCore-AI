@@ -1,3 +1,17 @@
+"""認証系 API のルーター(auth_bp)を組み立てるファサード。
+
+ルートの登録と、サブモジュール(auth_account / auth_email / auth_google / auth_passkeys / auth_common)が使う依存の集約を担う。
+サブモジュールは auth_support.dep() 経由でこのモジュールの名前を引くため、
+テストは blueprints.auth の属性を差し替えるだけで依存を置き換えられる。
+__all__ が長いのは、その差し替え対象と互換性のための再公開を並べているため。
+
+Facade that assembles the authentication router (auth_bp): it registers the routes and gathers the dependencies used by the
+submodules (auth_account / auth_email / auth_google / auth_passkeys / auth_common).
+Submodules look names up on this module through auth_support.dep(),
+so tests can swap a dependency by patching a blueprints.auth attribute.
+__all__ is long because it lists those patch targets and the names re-exported for compatibility.
+"""
+
 import logging
 import os
 import time
@@ -7,6 +21,8 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
 from starlette.responses import RedirectResponse
 
+# Google OAuth・WebAuthn のライブラリは任意依存。無い環境(テストなど)でも import できるよう、フォールバックを用意する。
+# The Google OAuth and WebAuthn libraries are optional; fallbacks keep this module importable where they are absent (e.g. tests).
 try:
     from google_auth_oauthlib.flow import Flow
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
@@ -15,12 +31,16 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 try:
     from google.auth.exceptions import GoogleAuthError
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    # ライブラリが無いときの代替例外。except 節で名前を参照できるようにするだけ。
+    # Stand-in exception so except clauses can still reference the name when the library is missing.
     class GoogleAuthError(Exception):
         pass
 
 try:
     from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    # ライブラリが無いときの代替例外。except 節で名前を参照できるようにするだけ。
+    # Stand-in exception so except clauses can still reference the name when the library is missing.
     class OAuth2Error(Exception):
         pass
 
@@ -213,6 +233,8 @@ from services.web import (
 
 load_dotenv()
 
+# 開発環境ではローカルの http で OAuth のコールバックを受けるため、oauthlib の HTTPS 必須チェックを外す。本番では外さない。
+# Outside production, relax oauthlib's HTTPS requirement so OAuth callbacks work over local http; never done in production.
 if not is_production_env():
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
@@ -225,6 +247,8 @@ GOOGLE_SCOPES = [
     "openid",
 ]
 
+# 認証系の全ルートに CSRF 検証を掛けたルーター。
+# Router that applies CSRF verification to every authentication route.
 auth_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
@@ -234,6 +258,8 @@ GOOGLE_CODE_VERIFIER_SESSION_KEY = "google_oauth_code_verifier"
 GOOGLE_NEXT_PATH_SESSION_KEY = "google_login_next_path"
 AUTH_FAILURE_STATUS_CODE = 401
 
+# 各サブモジュールのハンドラーをここで URL に結び付ける(ハンドラー本体は auth_* に分割されている)。
+# Bind each submodule handler to its URL here; the handlers themselves live in the auth_* modules.
 auth_bp.get("/register", name="auth.register_page")(register_page)
 auth_bp.get("/api/current_user", name="auth.api_current_user")(api_current_user)
 auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")(api_delete_user_account)
@@ -254,6 +280,8 @@ auth_bp.get("/google-callback", name="auth.google_callback")(google_callback)
 auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")(api_send_login_code)
 auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")(api_verify_login_code)
 
+# テストが差し替える依存と互換用の再公開名を明示する。
+# Spells out the dependencies tests patch and the names re-exported for compatibility.
 __all__ = [
     "ACCOUNT_DELETE_CONFIRMATION_TEXT",
     "AUTH_FAILURE_STATUS_CODE",

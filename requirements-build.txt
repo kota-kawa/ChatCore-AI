@@ -1,3 +1,5 @@
+# 日本語: Python のビルドツール（packaging・pip・setuptools・wheel）の固定バージョン。
+# English: Pinned versions of the Python build tooling (packaging, pip, setuptools, wheel).
 packaging==26.2
 pip==26.1.2
 setuptools==83.0.0

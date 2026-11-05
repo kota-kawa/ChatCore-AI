@@ -1,3 +1,13 @@
+"""タスクカード(定型プロンプトの一覧)の取得・並び替え・追加・編集・削除と、プロンプト作成支援、全ページ共通 AI エージェント(Chaco)の API。
+
+AI エージェントは SSE で進捗と回答を返し、意図分類に応じて画面操作プランの提案、マニュアルやコードの検索、メモの編集提案を行う。
+いずれも呼び出し頻度・料金・月間枠の制限を通してから処理する。
+
+APIs for task cards (reusable prompt shortcuts: list, reorder, add, edit, delete), prompt-writing assistance and the page-wide AI agent (Chaco).
+The agent streams progress and answers over SSE and, by classified intent, proposes UI action plans, searches the manual or code, or proposes memo edits.
+All of them pass the call-rate, cost and monthly quota limits before doing work.
+"""
+
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -116,6 +126,8 @@ AI_AGENT_PER_ACTOR_LIMIT = 40
 # AIエージェントに渡すメモコンテキストの最大文字長
 # Maximum character length for memo context sent to the AI Agent.
 AI_AGENT_MEMO_CONTEXT_MAX_LENGTH = 20000
+# AI エージェントへ渡す会話履歴の最大メッセージ数(直近のものから数える)。
+# Maximum number of conversation messages passed to the AI agent, counted from the most recent.
 AI_AGENT_HISTORY_MAX_MESSAGES = 20
 
 # メモ本文が長すぎて切り詰められたことを示す注記
@@ -123,6 +135,7 @@ AI_AGENT_HISTORY_MAX_MESSAGES = 20
 MEMO_CONTEXT_TRUNCATED_NOTICE = "(part of the body was omitted because it is long)"
 
 # 日本語: 全ページ共通AIエージェントの役割、安全規則、読みやすい回答方法を定めるシステムプロンプト。
+# English: System prompt defining the page-wide AI agent's role, safety rules and how to write easy-to-read answers.
 AI_AGENT_SYSTEM_PROMPT = """
 You are ChatCore's AI agent, shared across every page.
 Support the user's work briefly and practically.

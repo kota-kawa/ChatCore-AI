@@ -1,3 +1,9 @@
+"""AGENTS.md や ARCHITECTURE.md などの文書が書くファイル・ディレクトリのパス参照が、リポジトリに実在するかを検
+証するスクリプト（CI で実行する）。
+
+Verifies that the file and directory paths mentioned in documents such as AGENTS.md and ARCHITECTURE.md exist in the repository (run in CI).
+"""
+
 from __future__ import annotations
 
 import re
@@ -26,6 +32,7 @@ DOCUMENT_GLOBS = (
 # English: Paths the docs mention on purpose although they are untracked or temporary. Missing ones are not failures.
 KNOWN_UNTRACKED: frozenset[str] = frozenset(
     {
+        # 秘密情報、一時成果物、依存物、削除済み文書など、存在確認から除外する参照。
         ".env",  # secrets, gitignored
         ".playwright-mcp/",  # Playwright MCP output, gitignored
         "docker-compose.local.yml",  # developer-local compose override, gitignored
@@ -59,7 +66,12 @@ FALLBACK_BASES = ("frontend",)
 
 
 def tracked_paths() -> frozenset[str]:
-    """Tracked files plus untracked files that are not ignored, so a local run before `git add` still passes."""
+    """git で追跡されているファイルと、無視されていない未追跡ファイルの一覧を返す。`git add` の前にローカルで実行しても通るようにするため。
+    git が使えない場合は、ファイルシステムを直接走査する。
+
+    Tracked files plus untracked files that are not ignored, so a local run before `git add` still passes.
+    Falls back to walking the filesystem when git is unavailable.
+    """
     try:
         tracked = _git_ls_files()
         untracked = _git_ls_files("--others", "--exclude-standard")
@@ -69,21 +81,39 @@ def tracked_paths() -> frozenset[str]:
 
 
 def _git_ls_files(*options: str) -> frozenset[str]:
+    """`git ls-files -z` の結果（リポジトリ相対パス）を集合で返す。
+
+    Return the repository-relative paths from `git ls-files -z` as a set.
+    """
     output = subprocess.run(["git", "ls-files", "-z", *options], cwd=REPO_ROOT, check=True, capture_output=True, text=True).stdout
     return frozenset(entry for entry in output.split("\0") if entry)
 
 
 class PathIndex:
+    """リポジトリ内のファイルとディレクトリの存在を、パス参照の検証用にすばやく引ける索引。
+
+    Index of the repository's files and directories for fast existence lookups when verifying path references.
+    """
+
     def __init__(self, files: Iterable[str]) -> None:
         self.files = frozenset(files)
         self.directories = frozenset(str(parent) for file in self.files for parent in Path(file).parents if str(parent) != ".")
         self.unique_basenames = frozenset(name for name, count in Counter(Path(file).name for file in self.files).items() if count == 1)
 
     def exists(self, candidate: str) -> bool:
+        """末尾の `/` を除いたパスが、追跡ファイルまたはディレクトリとして存在するかを返す。
+
+        Return whether the path (without a trailing `/`) exists as a tracked file or directory.
+        """
         normalized = candidate.rstrip("/")
         return normalized in self.files or normalized in self.directories
 
     def resolve(self, reference: str, document: Path) -> bool:
+        """文書内のパス参照が実在するかを、文書のあるディレクトリ・ルート・追加の基準ディレクトリの順に試して判定する。
+
+        Decide whether a path reference in a document exists, trying the document's directory, the repo
+        root and extra base directories in turn.
+        """
         extra_bases = (*DOCUMENT_BASES.get(document.as_posix(), ()), *FALLBACK_BASES)
         bases = (document.parent, Path("."), *(Path(base) for base in extra_bases))
         for base in bases:
@@ -99,6 +129,10 @@ class PathIndex:
 
 
 def _collapse_parent_segments(path: str) -> str | None:
+    """パス中の `..` を畳み込む。リポジトリの外へ出てしまう場合は None を返す。
+
+    Collapse `..` segments in a path; return None if it would escape the repository.
+    """
     parts: list[str] = []
     for part in Path(path).parts:
         if part == "..":
@@ -111,6 +145,10 @@ def _collapse_parent_segments(path: str) -> str | None:
 
 
 def iter_references(text: str) -> Iterator[str]:
+    """1 行の中から、Markdown リンクの宛先（`#` 以降を除く）とバッククォートで囲まれた語を取り出す。
+
+    Yield the Markdown link targets (minus any `#` anchor) and the backtick-quoted spans found in one line.
+    """
     for match in LINK_PATTERN.finditer(text):
         yield match.group(1).split("#", 1)[0]
     for match in BACKTICK_PATTERN.finditer(text):
@@ -132,6 +170,10 @@ def is_path_reference(reference: str) -> bool:
 
 
 def iter_documents() -> Iterator[Path]:
+    """DOCUMENT_GLOBS に一致する文書を、重複なく順に返す。
+
+    Yield the documents matching DOCUMENT_GLOBS, without duplicates.
+    """
     seen: set[Path] = set()
     for pattern in DOCUMENT_GLOBS:
         for path in sorted(REPO_ROOT.glob(pattern)):
@@ -141,6 +183,10 @@ def iter_documents() -> Iterator[Path]:
 
 
 def check_document(document: Path, index: PathIndex) -> list[str]:
+    """1 つの文書を行ごとに調べ、実在しないパス参照を「文書:行: 参照」の形で集めて返す。
+
+    Scan one document line by line and return the nonexistent path references as "document:line: reference" messages.
+    """
     relative_document = document.relative_to(REPO_ROOT)
     failures: list[str] = []
     for line_number, line in enumerate(document.read_text(encoding="utf-8").splitlines(), start=1):
@@ -153,6 +199,10 @@ def check_document(document: Path, index: PathIndex) -> list[str]:
 
 
 def main() -> int:
+    """すべての文書のパス参照を検証し、壊れた参照があれば標準エラーに出して 1 を返す。
+
+    Verify the path references in every document; print broken ones to stderr and return 1 if any exist.
+    """
     index = PathIndex(tracked_paths())
     failures = [failure for document in iter_documents() for failure in check_document(document, index)]
     for failure in failures:

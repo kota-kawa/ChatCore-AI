@@ -64,6 +64,8 @@ TOOL_APPROVAL_DECIDE_LIMIT = 30
 TOOL_APPROVAL_DECIDE_WINDOW_SECONDS = 60
 
 
+# セッションからログイン中のユーザー ID を整数で返す。未ログインや不正な値は None。
+# Return the signed-in user id from the session as an int; None when signed out or the value is invalid.
 def _authenticated_user_id(request: Request) -> int | None:
     user_id = request.session.get("user_id")
     if not user_id:
@@ -74,10 +76,14 @@ def _authenticated_user_id(request: Request) -> int | None:
         return None
 
 
+# 未ログイン時の 403 応答。
+# 403 response for signed-out requests.
 def _login_required():
     return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
 
+# パスの approval_id を UUID に変換する。形式が不正なら None。
+# Convert the approval_id path value to a UUID; None when malformed.
 def _parse_approval_id(value: str) -> UUID | None:
     try:
         return UUID(value)
@@ -86,7 +92,10 @@ def _parse_approval_id(value: str) -> UUID | None:
 
 
 async def _sync_approved_profile_locale(request: Request, user_id: int, card: dict) -> str | None:
-    """Synchronize from the latest persisted locale after a profile locale write settled."""
+    """プロフィールのロケール更新が確定した後、DB に保存された最新のロケールをセッションへ同期する。
+
+    Synchronize from the latest persisted locale after a profile locale write settled.
+    """
     if card.get("status") != "succeeded" or card.get("tool") != "profile_settings_update":
         return None
     preview = card.get("preview")
@@ -110,6 +119,8 @@ async def _sync_approved_profile_locale(request: Request, user_id: int, card: di
     return locale
 
 
+# ロケールが分かっているときだけ、承認結果に合わせてロケール Cookie を更新する。
+# Update the locale cookie to match the approval result, only when a locale is known.
 def _set_profile_locale_cookie(request: Request, response, locale: str | None) -> None:
     if locale is None:
         return
@@ -121,6 +132,10 @@ def _set_profile_locale_cookie(request: Request, response, locale: str | None) -
     )
 
 
+# 承認カードに対する承認/却下の決定を受け付ける。ログイン → 入力検証 → 利用者ごとの回数制限 → サービスでの決定の順に進み、
+# プロフィールのロケール変更が承認された場合は、セッションと Cookie も最新に合わせる。
+# Accept an approve/reject decision for an approval card: sign-in, input validation, per-user rate limit, then the service decides;
+# when an approved change touched the profile locale, the session and cookie are brought up to date too.
 @chat_bp.post("/api/chat/tool-approvals/{approval_id}/decision", name="chat.decide_tool_approval")
 async def decide_chat_tool_approval(
     approval_id: str,
@@ -196,6 +211,8 @@ async def decide_chat_tool_approval(
     return response
 
 
+# 「今後は常に承認」に設定されているツールの一覧を返す。
+# List the tools currently set to "always approve".
 @chat_bp.get("/api/chat/tool-auto-approvals", name="chat.list_tool_auto_approvals")
 async def get_chat_tool_auto_approvals(request: Request):
     user_id = _authenticated_user_id(request)
@@ -208,6 +225,8 @@ async def get_chat_tool_auto_approvals(request: Request):
     return jsonify(ToolAutoApprovalsResponse(grants=grants).model_dump())
 
 
+# 指定ツールの「常に承認」を取り消す。
+# Revoke "always approve" for the given tool.
 @chat_bp.delete("/api/chat/tool-auto-approvals/{tool_name}", name="chat.revoke_tool_auto_approval")
 async def delete_chat_tool_auto_approval(tool_name: str, request: Request):
     user_id = _authenticated_user_id(request)

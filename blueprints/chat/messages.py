@@ -1,3 +1,6 @@
+# チャット送信・再生成・編集と履歴取得をHTTP/SSEへ接続する。生成と永続化は共通サービスへ委譲する。
+# Connects chat posting, regeneration, editing and history to HTTP/SSE through shared services.
+
 import html
 import json
 import logging
@@ -915,6 +918,7 @@ async def chat_regenerate(
     sid = None
     room_mode = "temporary"
     user_id = session.get("user_id")
+    # DB保存ルームの再生成は、元の回答を消さず同じ質問の下に兄弟分岐を追加する。
     # For DB-backed rooms, regeneration adds a sibling assistant answer (a new
     # branch) under the same user message instead of deleting the old answer.
     assistant_parent_id: int | None = None
@@ -955,6 +959,7 @@ async def chat_regenerate(
             )
             if path and path[-1]["sender"] == "assistant" and len(path) >= 2:
                 assistant_parent_id = path[-2]["id"]
+            # 既存回答を文脈から外し、その回答を再生成する。
             # Exclude the existing answer from the context so it is regenerated.
             if path and path[-1]["sender"] == "assistant":
                 path = path[:-1]
@@ -1081,6 +1086,7 @@ async def chat_edit_and_regenerate(
     room_mode = "temporary"
     user_id = session.get("user_id")
     formatted_user_message = html.escape(new_message).replace("\n", "<br>")
+    # DB保存ルームの編集では質問を兄弟分岐にし、元の質問と回答も切り替え可能に保つ。
     # For DB-backed rooms, editing forks a new user message as a sibling branch
     # (the original message and its answers are preserved and remain switchable).
     assistant_parent_id: int | None = None
@@ -1158,6 +1164,7 @@ async def chat_edit_and_regenerate(
                 edit_parent_id,
                 **attachment_content_kwargs,
             )
+            # 編集地点までの祖先メッセージに、新しい質問を加えた文脈を使う。
             # Context = branch ancestors up to the edited point, then the new message.
             all_messages = [
                 {
@@ -1272,6 +1279,7 @@ async def chat_switch_branch(request: Request):
     チャット履歴内の指定されたメッセージ分岐（編集履歴や再生成回答）へアクティブな会話ツリーパスを切り替えます。
     Switches the active conversation path to the specified message branch.
     """
+    # DB保存ルームの有効分岐を切り替え、切り替え後の会話経路を返す。
     # Switch the active branch (a regenerated answer or an edited message version)
     # for a DB-backed chat room and return the resulting active conversation path.
     data, error_response = await require_json_dict(request)
@@ -1440,6 +1448,7 @@ async def get_chat_history(request: Request):
         try:
             payload = await _fetch_chat_history(chat_room_id, limit, before_message_id)
             payload["room_mode"] = room_mode
+            # 履歴取得を軽く保ち、チャット画面がすぐに描画できるようにする。
             # Keep the history endpoint lightweight so the chat view can render immediately.
             payload["summary"] = ""
             payload["memory_facts"] = []

@@ -1,4 +1,8 @@
-"""Authenticated management endpoints for shared prompts."""
+"""共有プロンプトについて、ログインユーザー自身の投稿・いいね一覧の取得、更新、削除を行う API（/prompt_manage/api）。
+
+Authenticated management endpoints for shared prompts.
+Lists the user's own and liked prompts, and updates or deletes the user's own prompts (/prompt_manage/api).
+"""
 
 from __future__ import annotations
 
@@ -20,6 +24,8 @@ from services.web import (
     validate_payload_model,
 )
 
+# CSRF保護付きの、ログインユーザー自身のプロンプト管理用ルーター。
+# Router for the signed-in user's own prompt management, with CSRF protection.
 prompt_manage_api_bp = APIRouter(
     prefix="/prompt_manage/api",
     dependencies=[Depends(require_csrf)],
@@ -28,10 +34,20 @@ logger = logging.getLogger(__name__)
 
 
 def _service() -> SharedContentService:
+    # 共有URLを組み立てない用途（一覧・更新・削除）なので public_base_url は空で生成する。
+    # Created with an empty public_base_url because these operations (list/update/delete) never build share URLs.
     return SharedContentService(public_base_url="")
 
 
 def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
+    """いいねしたプロンプトの DB 行を API 出力用の辞書に変換する。
+
+    日時は ISO 文字列にし、スキルの Python スクリプトが空なら resource_python_script か scripts/main.py リソースから補う。
+
+    Convert a liked-prompt DB row into an API dict.
+
+    Datetimes become ISO strings, and an empty skill_python_script is filled from resource_python_script or the scripts/main.py resource.
+    """
     prompt_created_at = row.get("prompt_created_at")
     liked_at = row.get("liked_at")
     serialized = {
@@ -66,6 +82,10 @@ def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
+    """自分が投稿したプロンプトの一覧を取得し、軸フィールドとスキルのスクリプトを補って返す。
+
+    Fetch the user's own prompts, adding axis fields and filling in the skill script where it is missing.
+    """
     rows = await _service().list_my_prompts(user_id=user_id)
     prompts = []
     for row in rows:
@@ -86,6 +106,10 @@ async def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
 
 
 async def _fetch_liked_prompts(user_id: int) -> list[dict[str, Any]]:
+    """いいねしたプロンプトの一覧を、API 出力用の形に変換して返す。
+
+    Fetch the prompts the user has liked, serialized for API output.
+    """
     return [_serialize_liked_prompt(row) for row in await _service().list_liked_prompts(user_id=user_id)]
 
 
@@ -94,6 +118,11 @@ async def _update_prompt_for_user(
     prompt_id: int,
     payload: PromptUpdateRequest,
 ) -> int:
+    """プロンプトを更新し、更新件数を返す（0 なら対象なし）。skill 以外の形式ではリソース未指定を空リスト扱いにする。
+
+    Update a prompt and return the number of updated rows (0 means not found). For non-skill formats, unspecified resources are treated
+    as an empty list.
+    """
     resources = payload.resources
     if resources is None and payload.content_format != "skill":
         resources = []
@@ -115,16 +144,28 @@ async def _update_prompt_for_user(
 
 
 async def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
+    """プロンプトを削除し、削除件数だけを返す（添付ファイル情報は捨てる）。
+
+    Delete a prompt and return only the deleted count, discarding the attachment info.
+    """
     _, deleted = await _service().delete_prompt(user_id=user_id, prompt_id=prompt_id)
     return deleted
 
 
 def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
+    """プロンプトの添付ファイルをストレージから削除し、削除できた数を返す（同期処理のため呼び出し側でスレッドに逃がす）。
+
+    Delete prompt attachment files from storage and return how many were removed (blocking, so callers run it off the event loop).
+    """
     return sum(delete_prompt_attachment(attachment) for attachment in attachments)
 
 
 @prompt_manage_api_bp.get("/my_prompts", name="prompt_manage_api.get_my_prompts")
 async def get_my_prompts(request: Request):
+    """ログインユーザーが投稿したプロンプトの一覧を返す。
+
+    Return the prompts posted by the signed-in user.
+    """
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:
@@ -135,6 +176,10 @@ async def get_my_prompts(request: Request):
 
 @prompt_manage_api_bp.get("/liked_prompts", name="prompt_manage_api.get_liked_prompts")
 async def get_liked_prompts(request: Request):
+    """ログインユーザーがいいねしたプロンプトの一覧を返す。
+
+    Return the prompts liked by the signed-in user.
+    """
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:
@@ -145,6 +190,10 @@ async def get_liked_prompts(request: Request):
 
 @prompt_manage_api_bp.put("/prompts/{prompt_id}", name="prompt_manage_api.update_prompt")
 async def update_prompt(prompt_id: int, request: Request):
+    """自分のプロンプトを更新する。対象が無い（他人のものを含む）場合は 404 を返す。
+
+    Update one of the user's own prompts; returns 404 when it is not found (including someone else's).
+    """
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     data, error_response = await require_json_dict(request)
@@ -168,6 +217,11 @@ async def update_prompt(prompt_id: int, request: Request):
 
 @prompt_manage_api_bp.delete("/prompts/{prompt_id}", name="prompt_manage_api.delete_prompt")
 async def delete_prompt(prompt_id: int, request: Request):
+    """自分のプロンプトを削除する。DB の削除後に添付ファイルを消すが、ファイル削除の失敗は記録するだけで成功応答は変えない。
+
+    Delete one of the user's own prompts. Attachment files are removed after the DB delete; a file-removal failure is only logged and
+    does not change the success response.
+    """
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     try:

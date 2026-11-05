@@ -1,3 +1,11 @@
+"""実行時コードが読む環境変数と `.env.example` の記載が一致しているかを検証するスクリプト（CI で実行する）。
+
+app.py・blueprints・services を AST で解析して環境変数の読み取りを集め、`.env.example` の `KEY=` 行と突き合わせる。
+
+Verifies that the environment variables read by runtime code match the entries in `.env.example` (run in CI).
+It statically analyzes app.py, blueprints and services for environment reads and compares them with the `KEY=` lines.
+"""
+
 from __future__ import annotations
 
 import ast

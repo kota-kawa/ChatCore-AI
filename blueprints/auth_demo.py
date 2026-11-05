@@ -1,4 +1,7 @@
-"""Sign in with a demo access code handed to one recipient."""
+"""配布されたデモ用アクセスコードでサインインする API。コードの検証はサーバー側で行い、IP ごとの試行回数も制限する。
+
+Sign in with a demo access code handed to one recipient; the code is verified server-side with a per-IP attempt limit.
+"""
 
 from __future__ import annotations
 
@@ -23,10 +26,14 @@ from services.web import (
     validate_payload_model,
 )
 
+# デモログイン用のルーター。ほかの認証ルートと同様に CSRF 検証を掛ける。
+# Router for demo login; CSRF verification applies as with the other auth routes.
 auth_demo_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
 
+# デモコードを引き換えてログインする。入力検証 → 試行回数制限 → コード引き換え → セッション確立の順に進む。
+# Redeem a demo code and sign in: validate input, apply the attempt limit, redeem the code, then establish the session.
 @auth_demo_bp.post("/api/auth/demo-login", name="auth.api_demo_login")
 async def api_demo_login(request: Request):
     locale = get_request_locale(request)

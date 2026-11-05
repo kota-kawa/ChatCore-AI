@@ -1,3 +1,6 @@
+# バックエンドのPydanticモデルから、フロントエンド用Zodスキーマと型を生成する。
+# Generates frontend Zod schemas and types from backend Pydantic models.
+
 from __future__ import annotations
 
 import hashlib
@@ -111,6 +114,7 @@ GENERATED_FILE = FRONTEND_GENERATED_DIR / "api_schemas.ts"
 
 
 MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
+    # リクエストの正本はバックエンドのrequest_models。
     # Request payloads (source of truth: services/request_models.py)
     ("EmailRequest", EmailRequest),
     ("AuthCodeRequest", AuthCodeRequest),
@@ -154,6 +158,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ContextFactCandidateRejectRequest", ContextFactCandidateRejectRequest),
     ("ContextExtractionSettingsUpdateRequest", ContextExtractionSettingsUpdateRequest),
     ("UserProfileUpdateRequest", UserProfileUpdateRequest),
+    # レスポンスの正本はバックエンドのresponse_models。
     # Response payloads (source of truth: services/response_models.py)
     ("ApiErrorPayload", ApiErrorPayload),
     ("ApiDetailObject", ApiDetailObject),

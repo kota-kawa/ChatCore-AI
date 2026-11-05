@@ -1,3 +1,7 @@
+"""メモ機能のルート間で共有する小さなヘルパー（パッケージ属性の動的参照）。
+
+Small helper shared by the memo route modules (dynamic lookup of package attributes).
+"""
 from __future__ import annotations
 
 import sys

@@ -1,3 +1,11 @@
+"""ログイン中アカウントの API ハンドラー群(現在のユーザー取得、アカウント一覧と切り替え、アカウント削除、ログアウト)。
+
+blueprints/auth.py がルートへ結び付ける。切り替え対象の「待機中セッション」は services.account_sessions が管理する。
+
+Handlers for the signed-in account: current user lookup, account list and switching, account deletion and logout.
+blueprints/auth.py binds them to routes; the parked sessions that can be switched to are managed by services.account_sessions.
+"""
+
 from __future__ import annotations
 
 from fastapi import Request
@@ -32,6 +40,8 @@ async def _sign_out_current_account(request: Request) -> bool:
     return False
 
 
+# このブラウザでログイン済みのアカウント(現在のものと待機中のもの)を一覧で返す。削除済みのアカウントは除く。
+# List the accounts signed in on this browser (the active one plus parked ones), skipping deleted accounts.
 async def api_list_accounts(request: Request):
     current_user_id = _user_id_from_session(request.session)
     if current_user_id is None:
@@ -55,6 +65,8 @@ async def api_list_accounts(request: Request):
     return dep("jsonify")({"accounts": accounts})
 
 
+# 待機中のアカウントのうち指定した user_id のものを表示中に切り替える。現在のセッションは待機側へ退避する(keep_current=True)。
+# Make the parked account with the given user_id the active one, parking the current session (keep_current=True).
 async def api_switch_account(request: Request):
     if _user_id_from_session(request.session) is None:
         return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
@@ -80,10 +92,15 @@ async def api_switch_account(request: Request):
     return dep("jsonify")({"status": "success"})
 
 
+# 新規登録画面はフロントエンドが描画するため、そちらへ転送するだけ。
+# The registration page is rendered by the frontend, so this only redirects to it.
 async def register_page(request: Request):
     return dep("redirect_to_frontend")(request)
 
 
+# セッションのユーザー情報とロケールを返す。ユーザーが既に削除されていた場合は、残っている認証用のセッション値を消して未ログインとして返
+# す。
+# Return the session user and locale; if the user no longer exists, clear the leftover auth session values and report signed-out.
 async def api_current_user(request: Request):
     session = request.session
     if "user_id" not in session:
@@ -112,6 +129,8 @@ async def api_current_user(request: Request):
             }
         )
 
+    # ユーザーが存在しない(削除済みなど)場合は、認証に関するセッション値を消して未ログインにする。
+    # The user no longer exists (e.g. deleted), so clear the auth-related session values and report signed-out.
     session.pop("user_id", None)
     session.pop("user_email", None)
     session.pop("login_verification_code", None)
@@ -125,6 +144,8 @@ async def api_current_user(request: Request):
     return dep("jsonify")({"logged_in": False})
 
 
+# 確認文字列が一致したときだけ、ログイン中のアカウントを削除してそのアカウントからサインアウトする。
+# Delete the signed-in account only when the confirmation text matches, then sign out of that account.
 async def api_delete_user_account(request: Request):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
@@ -155,10 +176,14 @@ async def api_delete_user_account(request: Request):
     return dep("jsonify")({"message": "アカウントを削除しました。", "user_id": user_id})
 
 
+# ログイン画面はフロントエンドが描画するため、そちらへ転送するだけ。
+# The login page is rendered by the frontend, so this only redirects to it.
 async def login(request: Request):
     return dep("redirect_to_frontend")(request)
 
 
+# 表示中のアカウントだけをログアウトする。待機中のアカウントがあればトップへ、無ければログイン画面へ送る。
+# Sign out the active account only; redirect to the top page when another account took over, else to the login page.
 async def logout(request: Request):
     if await _sign_out_current_account(request):
         return dep("RedirectResponse")(dep("frontend_url")("/"), status_code=302)

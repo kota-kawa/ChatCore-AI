@@ -1,3 +1,13 @@
+"""チャットルームの作成・一覧・削除・名前変更・ピン留めと、ルームの共有リンク(発行・失効・閲覧・複製)の API。
+
+ログイン済みユーザーのルームは DB に保存し、未ログイン(ゲスト)や一時ルームはメモリ上の EphemeralChatStore に置く。
+一覧はカーソル方式のページングで返す。共有ルームは読み取り専用で、複製して初めて閲覧者自身のルームになる。
+
+APIs for chat rooms (create, list, delete, rename, pin) and room share links (issue, revoke, view, fork).
+Signed-in users' rooms are persisted in the DB; guest and temporary rooms live in the in-memory EphemeralChatStore.
+Lists use cursor-based paging. A shared room is read-only until forked into one the viewer owns.
+"""
+
 import base64
 import binascii
 import json
@@ -71,6 +81,8 @@ from . import (
 
 logger = logging.getLogger(__name__)
 
+# 共有チャットを一時ルームへ複製するときに引き継ぐメッセージ数の上限。
+# Maximum number of messages copied when forking a shared chat into a temporary room.
 MAX_FORKED_MESSAGES = 500
 
 
@@ -79,7 +91,10 @@ async def _fork_shared_chat_into_ephemeral_room(
     sid: str,
     room_id: str,
 ) -> dict[str, Any]:
-    """Load the shared room asynchronously, then write only to the ephemeral store."""
+    """共有ルームを非同期で読み込み、メモリ上の一時ストアにだけ書き込んで、閲覧者自身の一時ルームとして複製する。
+
+    Load the shared room asynchronously, then write only to the ephemeral store.
+    """
     payload = await get_shared_chat_room_payload(token)
     room = payload.get("room") if isinstance(payload, dict) else None
     title = str((room or {}).get("title") or "共有チャット").strip() or "共有チャット"

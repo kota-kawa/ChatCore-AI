@@ -1,9 +1,10 @@
+"""AI の回答本文から、メモに付けるタイトル候補を提案する API（/memo/api/suggest）。
+
+API that suggests memo titles from an AI answer body (/memo/api/suggest).
+"""
 from __future__ import annotations
 
 import asyncio
-
-# AI によるメモタイトル提案
-# AI title suggestion for a memo body
 import logging
 
 from fastapi import Request

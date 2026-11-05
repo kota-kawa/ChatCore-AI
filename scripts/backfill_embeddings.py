@@ -1,4 +1,12 @@
-"""Backfill memo, My Context, and public prompt embedding vectors.
+"""メモ・マイコンテキスト・公開プロンプトの埋め込みベクトルを後から埋め直す（バックフィル）スクリプト。
+
+埋め込みの提供元が壊れていた間に書き込まれた行は `embedding_vector IS NULL` になり、意味検索から完全に外れる。
+提供元を直すだけではそれらの行は見えないままなので、このスクリプトで補う。
+再実行しても安全で、既定ではベクトルが無い行だけを処理するため、中断しても続きから再開できる。
+埋め込みモデルを変えたあとに全ベクトルを作り直したいときは --include-existing を付ける。
+使い方は下の英語の説明を参照（リポジトリのルートから実行する）。
+
+Backfill memo, My Context, and public prompt embedding vectors.
 
 Rows written while the embedding provider was broken have `embedding_vector IS NULL`,
 and semantic search skips them entirely — fixing the provider alone leaves those rows
@@ -63,7 +71,11 @@ async def _fetch_batch(
     include_existing: bool,
     batch_size: int,
 ) -> list[tuple]:
-    """Read one keyset-paginated batch through the mapped SQLAlchemy entity."""
+    """キーセット方式のページングで 1 バッチ分の行を読み出す（マップされた SQLAlchemy エンティティ経由）。
+    columns は互換のため残してあり使わない。
+
+    Read one keyset-paginated batch through the mapped SQLAlchemy entity.
+    """
     del columns
     async with session_scope() as session:
         return await EmbeddingBackfillRepository(session).fetch_batch(
@@ -75,6 +87,10 @@ async def _fetch_batch(
 
 
 async def _count_pending(table: str, *, include_existing: bool) -> int:
+    """処理対象の行数を数える（既定ではベクトルが無い行、include_existing なら全行）。
+
+    Count the rows to process (rows without a vector by default, all rows with include_existing).
+    """
     async with session_scope() as session:
         return await EmbeddingBackfillRepository(session).count_pending(
             table,
@@ -83,7 +99,10 @@ async def _count_pending(table: str, *, include_existing: bool) -> int:
 
 
 async def _store_embedding(table: str, row_id: int, embedding: list[float]) -> None:
-    """Persist one vector in an isolated native-async transaction."""
+    """1 行分のベクトルを、独立した非同期トランザクションで保存する。行ごとにコミットするので、途中で止まっても保存済みの分は残る。
+
+    Persist one vector in an isolated native-async transaction, so rows stored before an interruption are kept.
+    """
     async with session_scope() as session, session.begin():
         await EmbeddingBackfillRepository(session).store_embedding(
             table,
@@ -104,7 +123,10 @@ class BackfillTarget:
 
 
 class BackfillStats:
-    """Counters for one table's run."""
+    """1 つのテーブルの実行結果（対象数・生成数・空のため省略した数・失敗数）の集計。
+
+    Counters for one table's run (pending, embedded, skipped as empty, failed).
+    """
 
     def __init__(self, label: str) -> None:
         self.label = label
@@ -132,6 +154,15 @@ async def _backfill_table(
     sleep_seconds: float,
     dry_run: bool,
 ) -> BackfillStats:
+    """1 つのテーブルについて、ベクトルの無い行を ID 順にバッチで読み、1 行ずつ埋め込みを生成して保存する。
+
+    dry_run か対象が 0 件なら件数の報告だけで終わる。埋め込みが連続して失敗し提供元が止まった場合は、残りを叩き続けず中断する。
+
+    For one table, read rows lacking a vector in ID order in batches, then embed and store them one at a time.
+
+    With dry_run or nothing pending it only reports the count. If embeddings keep failing and the provider pauses, it aborts instead of
+    hammering the rest.
+    """
     stats = BackfillStats(label)
     pending = await _count_pending(table, include_existing=include_existing)
     stats.pending = pending
@@ -168,6 +199,7 @@ async def _backfill_table(
                 stats.skipped_empty += 1
                 continue
 
+            # 提供元の SDK は同期呼び出しなので、イベントループを止めないようスレッドへ逃がす。DB 側は最後まで非同期の SQLAlchemy のまま。
             # The provider SDK is synchronous; keep it off the event loop.  The
             # database path itself remains entirely native async SQLAlchemy.
             embedding = await asyncio.to_thread(generate_embedding, text)
@@ -195,11 +227,19 @@ async def _backfill_table(
 
 
 def _memo_text(row: tuple[Any, ...]) -> str:
+    """メモの行（id, title, ai_response）から、埋め込み用のテキストを組み立てる。
+
+    Build the embedding text from a memo row (id, title, ai_response).
+    """
     _, title, ai_response = row
     return build_memo_embedding_text(str(title or ""), str(ai_response or ""))
 
 
 def _fact_text(row: tuple[Any, ...]) -> str:
+    """マイコンテキストの事実の行（id, fact_type, title, content）から、埋め込み用のテキストを組み立てる。
+
+    Build the embedding text from a context-fact row (id, fact_type, title, content).
+    """
     _, fact_type, title, content = row
     return build_context_fact_embedding_text(
         str(fact_type or ""), str(title or ""), str(content or "")
@@ -207,6 +247,10 @@ def _fact_text(row: tuple[Any, ...]) -> str:
 
 
 def _prompt_text(row: tuple[Any, ...]) -> str:
+    """公開プロンプトの行（id, title, description, content, attributes）から、埋め込み用のテキストを組み立てる。
+
+    Build the embedding text from a prompt row (id, title, description, content, attributes).
+    """
     _, title, description, content, attributes = row
     return build_prompt_embedding_text(
         str(title or ""),
@@ -217,6 +261,10 @@ def _prompt_text(row: tuple[Any, ...]) -> str:
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
+    """コマンドライン引数を解釈する。--help には、このファイル冒頭の説明をそのまま使う。
+
+    Parse the command-line arguments; --help reuses this module's docstring as its description.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--target",
@@ -255,6 +303,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 async def _async_main(argv: list[str] | None = None) -> int:
+    """バックフィル本体。対象テーブルを順に処理し、失敗した行があるか、--fail-on-pending で未処理が残っていれば 1 を返す。
+
+    Main backfill routine. Processes the target tables in turn and returns 1 if any row failed,
+    or if --fail-on-pending finds rows still pending.
+    """
     configure_logging()
     args = _parse_args(argv if argv is not None else sys.argv[1:])
 
@@ -329,6 +382,10 @@ async def _async_main(argv: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """同期のエントリーポイント。非同期の本体を実行して終了コードを返す。
+
+    Synchronous entry point that runs the async main and returns its exit code.
+    """
     return asyncio.run(_async_main(argv))
 
 

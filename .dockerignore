@@ -1,3 +1,5 @@
+# Docker ビルドコンテキストから除外するファイル（秘密情報・Git 履歴・依存キャッシュ・ログなど）を定める。
+# Lists files excluded from the Docker build context (secrets, Git history, dependency caches, logs).
 .env
 .env.*
 *.env

@@ -1,4 +1,7 @@
-"""Constants for the personal context vault blueprint."""
+"""個人コンテキスト保管庫ブループリントで使う定数(一覧の既定件数とエラーメッセージ)。
+
+Constants for the personal context vault blueprint: the default list size and error messages.
+"""
 
 from __future__ import annotations
 

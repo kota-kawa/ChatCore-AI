@@ -1,3 +1,6 @@
+# Python・npm・コンテナの依存バージョン固定とロックの整合性をCIで検査する。
+# Checks pinned Python, npm and container versions and lock consistency in CI.
+
 from __future__ import annotations
 
 import json

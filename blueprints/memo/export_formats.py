@@ -1,3 +1,7 @@
+"""メモのエクスポート用に、メモ一覧を Markdown / JSON / CSV の文字列へ変換する純粋関数群（blueprints/memo/export.py から利用）。
+
+Pure functions that convert a list of memos into Markdown, JSON or CSV text for export (used by blueprints/memo/export.py).
+"""
 from __future__ import annotations
 
 import csv
@@ -10,6 +14,10 @@ from services.repositories.memo_helpers import parse_memo_text
 
 
 def build_markdown_export(memos: list[dict[str, Any]]) -> str:
+    """メモ一覧を、タイトル・作成日時・背景色・本文を含む 1 本の Markdown 文書に整形する。
+
+    Format a list of memos into one Markdown document with title, creation time, background color and body.
+    """
     parts: list[str] = ["# メモエクスポート\n"]
     for memo in memos:
         title = memo.get("title") or "保存したメモ"
@@ -27,6 +35,10 @@ def build_markdown_export(memos: list[dict[str, Any]]) -> str:
 
 
 def build_json_export(memos: list[dict[str, Any]]) -> str:
+    """メモ一覧を、id・タイトル・本文・背景色・作成/更新日時を持つ JSON 配列（日本語はそのまま出力）に整形する。
+
+    Format a list of memos into a JSON array (id, title, body, background color, created/updated times) keeping non-ASCII text as is.
+    """
     result = [
         {
             "id": memo.get("id"),
@@ -42,6 +54,10 @@ def build_json_export(memos: list[dict[str, Any]]) -> str:
 
 
 def build_csv_export(memos: list[dict[str, Any]]) -> str:
+    """メモ一覧を、JSON 形式と同じ列を持つ CSV（ヘッダー行つき）に整形する。
+
+    Format a list of memos into CSV with a header row, using the same columns as the JSON export.
+    """
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["id", "title", "ai_response", "background_color", "created_at", "updated_at"])

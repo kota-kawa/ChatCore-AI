@@ -1,7 +1,12 @@
+"""メモの共有リンクの作成・状態取得・更新・取り消しと、共有トークンによる公開メモの取得 API（/memo/api/...）。
+
+/api/shared だけはログイン不要の公開エンドポイントで、それ以外は所有者のセッションで認可する。
+
+API endpoints under /memo/api to create, inspect, refresh and revoke memo share links, and to read a public shared memo by token.
+Only /api/shared is a public (no login) endpoint; the others are authorized through the owner's session.
+"""
 from __future__ import annotations
 
-# 共有リンクの作成・取得・更新・取り消しと、公開共有メモの取得
-# Share link create / state / refresh / revoke plus the public shared-memo read
 import logging
 
 from fastapi import Request

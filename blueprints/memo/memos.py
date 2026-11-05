@@ -1,9 +1,13 @@
+"""メモ本体の一覧・作成・詳細・更新・削除（ゴミ箱へ移動）・アーカイブ・ピン留めを行う API（/memo/api/...）。
+
+メモの保存・更新時は、意味検索用の埋め込みベクトル生成を非同期にスケジュールする。
+
+API endpoints under /memo/api to list, create, show, update, delete (move to trash), archive and pin memos.
+Saving or updating a memo also schedules embedding generation for semantic search.
+"""
 from __future__ import annotations
 
 import asyncio
-
-# メモ本体の一覧・作成・詳細・更新・削除・アーカイブ・ピン留め
-# Memo list, create, detail, update, delete, archive and pin endpoints
 import logging
 
 from fastapi import Request

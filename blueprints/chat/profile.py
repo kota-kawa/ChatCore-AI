@@ -1,3 +1,13 @@
+"""ユーザープロフィールの取得・更新(アバター画像のアップロードを含む)と、メールアドレス変更の API。
+
+メールアドレスの変更は、現在のアドレスと変更先アドレスの2段階で認証コードを確認してから反映する。
+一般のプロフィール更新ではメールアドレスを変えられない。
+
+APIs for reading and updating the user profile (including avatar upload) and for changing the email address.
+An email change is applied only after confirming a code at the current address and then at the new one;
+the generic profile update cannot change the email.
+"""
+
 import logging
 import os
 import secrets
@@ -280,6 +290,10 @@ async def _update_user_profile(user_id, username, email, bio, avatar_url, llm_pr
     ユーザーのプロフィール情報（ユーザー名、自己紹介、LLM設定、アバターURL）をDBで更新します。
     Updates user profile details (username, bio, LLM context, avatar URL) in the database.
     """
+    # メールアドレス以外のプロフィール項目だけを更新する。メールの変更は特権的な操作で、
+    # /api/user/email の確認フロー(request_change + confirm_change)を必ず通す。そうしないと、認証済みセッションを
+    # 1つ奪われただけでメールを書き換えられ、以後の確認メールを横取りされる。email 引数はテストの互換のためシグネチャに残しており、DB に
+    # は書かない。
     # Update only non-identity profile fields. The email column is intentionally
     # excluded — changing the email is privileged and must go through the
     # verification flow at /api/user/email (request_change + confirm_change),
@@ -287,7 +301,8 @@ async def _update_user_profile(user_id, username, email, bio, avatar_url, llm_pr
     # the email and intercept future verification mails. The `email` argument
     # is kept in the signature for backwards compatibility with the test
     # fixtures but is no longer written to the database.
-    _ = email  # intentionally ignored; see docstring above
+    # email は意図的に無視する(理由は上のコメント)。
+    _ = email  # intentionally ignored; see the comment above
 
     await update_user_profile(
         user_id,
@@ -318,6 +333,7 @@ async def user_profile(request: Request):
     user_id = request.session['user_id']
 
     # ---------- GET ----------
+    # 現在のプロフィールを JSON で返す。
     # Return current profile data as JSON.
     if request.method == 'GET':
         # ユーザー情報をDBから取得
@@ -412,6 +428,7 @@ async def user_profile(request: Request):
             'message': MESSAGE_PROFILE_UPDATED,
             'avatar_url': avatar_url,        # 新しい画像 URL（ない場合は null）
             'llm_profile_context': llm_profile_context,
+            # 新規アップロード時だけアバターURLを返し、変更がなければnullにする。
             # Newly uploaded avatar URL (null when unchanged).
         })
     except Exception:
@@ -491,6 +508,8 @@ async def _commit_email_change(user_id: int, new_email: str) -> bool:
     DBに対して、新しいメールアドレスを一意性の重複衝突に注意しながら反映します。
     Updates the email address in the database, checking for collisions first.
     """
+    # 新しいアドレスの確認後に users.email を原子的に書き換える。確認から反映までの間に別のアカウントが同じアドレスを取得していたら
+    # False を返し、呼び出し側が中途半端な状態を残さず明確なエラーを返せるようにする。
     # Atomically rewrite users.email after the new address has been verified.
     # Returns False if some other account claimed the address between the
     # request and the confirmation step, so the caller can report a clear

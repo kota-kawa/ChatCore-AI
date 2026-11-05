@@ -1,3 +1,11 @@
+"""管理画面の API。管理者パスワードによるログイン/ログアウトと、DB ダッシュボード（テーブル・カラムの一覧、作成、削除）を提供する。
+
+SQL 識別子や列定義は、実行前にこのモジュールの検証関数で許可した形式だけを通す。
+
+Admin console API: password login/logout and the database dashboard (list, create and drop tables and columns).
+SQL identifiers and column definitions pass only the formats allowed by the validators in this module before execution.
+"""
+
 import inspect
 import logging
 import re

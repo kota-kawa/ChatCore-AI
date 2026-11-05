@@ -1,3 +1,9 @@
+"""ユーザー登録時のメール認証コードの送信と検証を行う API（/api/send_verification_email、/api/verify_registration_code）。
+
+API for sending and verifying the email verification code during user registration
+(/api/send_verification_email and /api/verify_registration_code).
+"""
+
 import logging
 import time
 from typing import Any
@@ -86,6 +92,16 @@ async def _verify_dedicated_registration_code(
     transaction: Any,
     auth_limit_service: AuthLimitService | None,
 ) -> Any:
+    """専用トランザクション（Redis）方式で登録用の認証コードを検証し、結果に応じた応答を返す。
+
+    試行回数制限を消費してからコードを照合し、成功時はユーザーを確認済みにしてログイン状態へ移行する。
+    失敗の種別（不一致・上限到達・期限切れ・不存在）ごとに、専用Cookieを消すかどうかを切り替える。
+
+    Verify a registration code through the dedicated (Redis) transaction and return the matching response.
+
+    Consumes the attempt rate limit before checking the code; on success it marks the user verified and signs them in.
+    Whether the dedicated cookie is cleared depends on the failure kind (mismatch, exhausted, expired, missing).
+    """
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     allowed, limit_error = await run_blocking(
         consume_verification_attempt_limit,
@@ -379,7 +395,7 @@ async def api_verify_registration_code(
         return error_response
 
     # JSONデータを検証し、AuthCodeRequestモデルにマッピング
-    # Validate JSON data and map to EmailRequest model.
+    # Validate JSON data and map to AuthCodeRequest model.
     payload, validation_error = validate_payload_model(
         data,
         AuthCodeRequest,

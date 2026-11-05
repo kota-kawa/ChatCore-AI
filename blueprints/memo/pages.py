@@ -1,7 +1,9 @@
+"""Next.js のメモ画面へリダイレクトするレガシーのページルート（/memo）。
+
+Legacy page route (/memo) that redirects to the Next.js memo screen.
+"""
 from __future__ import annotations
 
-# Next.js のメモ画面へリダイレクトするレガシーページルート
-# Legacy page route that redirects to the Next.js memo screen
 from fastapi import Request
 
 from services.web import redirect_to_frontend

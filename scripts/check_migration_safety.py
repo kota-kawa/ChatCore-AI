@@ -1,3 +1,4 @@
+# 既存の適用履歴を基準とし、新規migrationの破壊的DDLや未承認のデータ変更でCIを止める。
 """Fail CI/deploy when a new migration violates the expand/contract policy.
 
 The historical migration chain contains operations that were safe for the
@@ -178,6 +179,7 @@ def _upgrade_source(source: str) -> str:
 
 
 def _op_calls(upgrade_module: ast.Module, attribute: str) -> Iterator[ast.Call]:
+    # upgrade内のop呼び出しを列挙する。
     """Yield every ``op.<attribute>(...)`` call in the upgrade."""
     for node in ast.walk(upgrade_module):
         if (
@@ -191,6 +193,7 @@ def _op_calls(upgrade_module: ast.Module, attribute: str) -> Iterator[ast.Call]:
 
 
 def _string_argument(call: ast.Call, position: int, keyword: str) -> str | None:
+    # 位置引数またはキーワード引数から文字列リテラルを取り出す。
     """Read one literal string argument, by position or by keyword."""
     if len(call.args) > position:
         value = call.args[position]
@@ -214,6 +217,7 @@ def _keyword_is_true(call: ast.Call, keyword: str) -> bool:
 
 
 def _sql_statements(upgrade_module: ast.Module | None) -> list[str]:
+    # upgrade内のSQL文字列を文単位に分割する。
     """Split every SQL string literal in the upgrade into separate statements."""
     if upgrade_module is None:
         return []
@@ -245,6 +249,7 @@ def _created_tables(upgrade_module: ast.Module | None, statements: list[str]) ->
 def _blocking_ddl_violations(
     migration: MigrationSource, upgrade_module: ast.Module | None
 ) -> list[str]:
+    # 書き込みをロックするインデックス作成とCHECK検証を検出する。
     """Flag index builds and CHECK validations that lock a live table for writes."""
     statements = _sql_statements(upgrade_module)
     created_tables = _created_tables(upgrade_module, statements)
@@ -279,6 +284,7 @@ def _blocking_ddl_violations(
 
 
 def classify_upgrade(migration: MigrationSource) -> list[str]:
+    # 1つのmigrationのupgradeから方針違反を収集する。
     """Return policy violations found in one migration's upgrade function."""
     upgrade = _upgrade_source(migration.source)
     violations: list[str] = []

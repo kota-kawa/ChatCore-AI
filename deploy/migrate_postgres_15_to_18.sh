@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# One-time, offline PostgreSQL 15 -> 18 logical migration.
-# The legacy volume is never modified or removed. A failed restore removes only
-# the incomplete pg18 volume so rerunning this script is safe.
+# [JP] 一度きり・オフラインで行う PostgreSQL 15 から 18 への論理移行（ダンプとリストア）。
+#      deploy/blue_green_deploy.sh から呼ばれる。旧ボリュームは変更も削除もしない。リストアに失敗したら不完全な pg18 ボリュームだけを削除するので、再実行しても安全。
+# [EN] One-time, offline PostgreSQL 15 -> 18 logical migration.
+#      Called from deploy/blue_green_deploy.sh. The legacy volume is never modified or removed. A failed restore removes only
+#      the incomplete pg18 volume so rerunning this script is safe.
 
 COMPOSE_FILE="${COMPOSE_FILE:-deploy/docker-compose.bluegreen.yml}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-docker-compose.yml}"
@@ -18,18 +20,26 @@ MIGRATION_MARKER=".chatcore-pg15-to-pg18-complete"
 TARGET_CREATED=0
 WORK_DIR=""
 
+# [JP] blue/green 用の Compose ファイルで docker compose を実行する。
+# [EN] Run docker compose against the blue/green Compose file.
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+# [JP] 従来の単一構成の Compose ファイルで docker compose を実行する。
+# [EN] Run docker compose against the legacy single-stack Compose file.
 legacy_compose() {
   docker compose --env-file "${ENV_FILE}" -f "${LEGACY_COMPOSE_FILE}" "$@"
 }
 
+# [JP] 指定した Docker ボリュームが存在するかを返す。
+# [EN] Return whether the named Docker volume exists.
 volume_exists() {
   docker volume inspect "$1" >/dev/null 2>&1
 }
 
+# [JP] ボリューム内のファイルを、読み取り専用でマウントした一時コンテナ越しに読んで出力する（無ければ失敗）。
+# [EN] Print a file from a volume through a throwaway container with a read-only mount (fails if the file does not exist).
 read_volume_file() {
   local volume="$1"
   local path="$2"
@@ -38,6 +48,8 @@ read_volume_file() {
     "${INSPECT_IMAGE}" sh -ceu 'test -f "/volume/$1" && cat "/volume/$1"' sh "${path}" 2>/dev/null
 }
 
+# [JP] コンテナ内の PostgreSQL が接続を受け付けるまで待つ（2 秒間隔、最大 60 回）。
+# [EN] Wait until the PostgreSQL in the container accepts connections (every 2s, up to 60 tries).
 wait_for_postgres() {
   local container="$1"
   local retries=60
@@ -56,6 +68,10 @@ wait_for_postgres() {
   return 1
 }
 
+# [JP] 移行元が単一データベース・単一オーナーであることを確かめる。ほかのユーザーDBや別オーナーのオブジェクトがあると、
+#      --no-owner のダンプで失われるので移行を拒否する。
+# [EN] Verify the source is a single database with a single owner. Extra user databases or objects owned by other roles
+#      would be lost by a --no-owner dump, so the migration is refused.
 validate_source_scope() {
   local database_names
   local database_name
@@ -88,6 +104,8 @@ validate_source_scope() {
   fi
 }
 
+# [JP] 全テーブルの行数を「テーブル名 件数」で出力ファイルへ書く。移行前後で比べて取りこぼしを検出するために使う。
+# [EN] Write every table's row count to the destination file; compared before and after the migration to detect missing rows.
 snapshot_table_counts() {
   local container="$1"
   local destination="$2"
@@ -108,6 +126,8 @@ ORDER BY schemaname, tablename
 SQL
 }
 
+# [JP] DB を使うクライアント（blue/green の app と frontend、従来構成、現行の DB コンテナ）をすべて止める。
+# [EN] Stop every database client (blue/green app and frontend, the legacy stack) and the current DB container.
 stop_database_clients() {
   compose stop app_blue app_green frontend_blue frontend_green >/dev/null 2>&1 || true
   if [ -f "${LEGACY_COMPOSE_FILE}" ]; then
@@ -116,6 +136,8 @@ stop_database_clients() {
   docker rm -f "${TARGET_CONTAINER}" >/dev/null 2>&1 || true
 }
 
+# [JP] EXIT トラップ。一時コンテナと作業ディレクトリを消し、失敗かつ pg18 ボリュームを作成済みなら、その不完全なボリュームだけを削除する。
+# [EN] EXIT trap: remove the temporary container and work directory, and on failure delete only the incomplete pg18 volume if it was created.
 cleanup() {
   local exit_code="$?"
 
@@ -135,6 +157,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# [JP] ここからがメインの流れ。移行が必要かを確かめる（旧ボリュームの有無、PG_VERSION、移行先の完了マーカー）。
+# [EN] Main flow starts here: first decide whether a migration is needed (legacy volume, PG_VERSION, target completion marker).
 if ! volume_exists "${LEGACY_VOLUME}"; then
   echo "No PostgreSQL 15 archive volume (${LEGACY_VOLUME}) exists; no upgrade is required."
   exit 0
@@ -160,6 +184,8 @@ if volume_exists "${TARGET_VOLUME}"; then
   exit 1
 fi
 
+# [JP] 移行本体: pg15 をダンプ（行数も記録）してから、pg18 へリストアし、行数・pgvector のバージョンを検証して完了マーカーを書く。
+# [EN] The migration itself: dump pg15 (recording row counts), restore into pg18, verify row counts and the pgvector version, then write the completion marker.
 echo "PostgreSQL 15 data detected. Starting one-time offline dump/restore into PostgreSQL 18."
 stop_database_clients
 WORK_DIR="$(mktemp -d)"

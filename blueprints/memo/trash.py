@@ -1,7 +1,9 @@
+"""ゴミ箱内のメモの復元・完全削除・ゴミ箱を空にする操作の API（/memo/api/...）。
+
+API endpoints under /memo/api to restore, permanently delete and empty the trash of memos.
+"""
 from __future__ import annotations
 
-# ゴミ箱のメモの復元・完全削除・ゴミ箱を空にする操作
-# Restore, permanent delete and empty-trash endpoints for trashed memos
 import logging
 
 from fastapi import Request

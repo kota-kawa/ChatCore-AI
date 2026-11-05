@@ -1,7 +1,9 @@
+"""複数メモへの一括操作（ゴミ箱・復元・ピン留め・アーカイブ・コレクション設定など）の API（/memo/api/bulk）。
+
+Bulk-action API over several memos (trash, restore, pin, archive, set collection, etc.) at /memo/api/bulk.
+"""
 from __future__ import annotations
 
-# 複数メモへの一括操作
-# Bulk actions over several memos
 import logging
 
 from fastapi import Request

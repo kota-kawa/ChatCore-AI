@@ -1,3 +1,11 @@
+"""プロジェクト(チャットルームをまとめる単位)の作成・一覧・詳細・更新・削除と、ルームの所属変更の API。
+
+プロジェクトのカスタム指示は所属チャットに共通で使われる。すべてログインユーザー本人のものだけを扱う。
+
+APIs for projects (groups of chat rooms): create, list, detail, update, delete, and assigning a room to a project.
+A project's custom instructions apply to its chats. Every route works only on the signed-in user's own projects.
+"""
+
 import logging
 from typing import Any
 

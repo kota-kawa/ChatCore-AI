@@ -1,7 +1,9 @@
+"""メモの手動並び順（ドラッグ＆ドロップ）を保存する API（/memo/api/reorder）。
+
+API that saves the manual (drag-and-drop) ordering of memos at /memo/api/reorder.
+"""
 from __future__ import annotations
 
-# 手動並び順（ドラッグ＆ドロップ）の保存
-# Manual (drag-and-drop) ordering
 import logging
 
 from fastapi import Request

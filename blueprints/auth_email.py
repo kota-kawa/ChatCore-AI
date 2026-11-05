@@ -1,3 +1,15 @@
+"""メールの認証コードによるログイン API(コード送信、検証、送信先に応じた振り分け)。
+
+認証コードは専用のトランザクション(サーバー側保存 + Cookie の ID)で扱う。
+従来のセッション保存方式も、その状態が残っているセッションに限って検証できる。
+ルートへの結び付けは blueprints/auth.py、新規登録側は blueprints/verification.py が担う。
+
+Email-code login APIs: sending and verifying the code, and routing by whether the address is already verified.
+Codes are handled as a dedicated transaction (stored server-side, referenced by a cookie id);
+the older session-stored form can still be verified for sessions that hold it.
+Routes are bound in blueprints/auth.py; registration lives in blueprints/verification.py.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -26,6 +38,10 @@ from blueprints.email_auth_support import (
 from services.email_service import resolve_request_email_locale
 
 
+# 専用トランザクションで保存したログイン用コードを検証する。メールアドレスごとの試行回数制限 → コード照合 → 結果別の応答の順で、成功時だ
+# け認証済みセッションを確立する。
+# Verify a login code held in a dedicated transaction: apply the per-address attempt limit, check the code, then answer per outcome;
+# only success establishes an authenticated session.
 async def _verify_dedicated_login_code(
     request: Request,
     auth_code: Any,
@@ -118,6 +134,8 @@ async def _verify_dedicated_login_code(
     return email_auth_unavailable_response()
 
 
+# メールアドレスが認証済みのユーザーならログイン用コード、そうでなければ新規登録用の確認メールを送る入口。
+# Entry point that sends a login code when the address belongs to a verified user, otherwise a registration verification email.
 async def api_send_email_code(
     request: Request,
     auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
@@ -156,6 +174,8 @@ async def api_send_email_code(
     )
 
 
+# 認証コードの検証を、保存方式(専用トランザクション Cookie か従来のセッション)と用途(ログインか新規登録)に応じて振り分ける。
+# Route code verification by storage form (dedicated transaction cookie or legacy session) and purpose (login or registration).
 async def api_verify_email_code(request: Request):
     transaction_id = request.cookies.get(dep("EMAIL_AUTH_TRANSACTION_COOKIE_NAME"))
     if transaction_id is not None:
@@ -195,6 +215,10 @@ async def api_verify_email_code(request: Request):
     )
 
 
+# 認証済みユーザーへログイン用コードをメールで送る。送信回数・全体の日次上限を消費してからコードを保存し、メール送信に失敗したら保存した
+# トランザクションを消す。
+# Email a login code to a verified user: consume the send and daily limits, store the code, and delete the stored transaction if sending
+# fails.
 async def api_send_login_code(
     request: Request,
     auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
@@ -237,6 +261,8 @@ async def api_send_login_code(
         )
 
     user = await call_dependency("get_user_by_email", email)
+    # 未登録・未認証のアドレスでもメール送信の回数制限は消費済み。ここでは送らずに失敗を返す。
+    # The send-rate limit is already consumed even for unknown or unverified addresses; fail here without sending.
     if not user or not user["is_verified"]:
         return dep("jsonify")(
             {"status": "fail", "error": "ユーザーが存在しないか、認証されていません"},
@@ -297,6 +323,10 @@ async def api_send_login_code(
         )
 
 
+# ログイン用コードを検証する。専用トランザクションがあればそちらへ、無ければセッション保存の旧方式で、期限・試行上限・照合を順に確認する
+# 。
+# Verify a login code: use the dedicated transaction when present, else the legacy session form, checking expiry, attempt cap and the
+# code in turn.
 async def api_verify_login_code(
     request: Request,
     auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
@@ -342,6 +372,8 @@ async def api_verify_login_code(
             status_code=dep("AUTH_FAILURE_STATUS_CODE"),
         )
 
+    # ここから先は専用トランザクションを使わない旧方式(セッション保存)の検証。
+    # From here on: verification of the legacy form that keeps the code in the session.
     issued_at = int(session.get("login_verification_code_issued_at") or 0)
     attempts = int(session.get("login_verification_code_attempts") or 0)
     if issued_at <= 0 or int(dep("time").time()) - issued_at > dep("LOGIN_VERIFICATION_CODE_TTL_SECONDS"):
