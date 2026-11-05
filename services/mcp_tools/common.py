@@ -1,4 +1,9 @@
-"""Shared MCP tool authorization, metadata, and rate-limit helpers."""
+"""MCP ツール共通の、認可（scope 検査）・必要 scope の対応表・レート制限・監査ログのヘルパー。
+
+`mcp_server.py` と `mcp_tools/` の各ツールが、実行ユーザーの特定と権限確認、操作回数の制限に使う。
+Shared MCP tool authorization, scope metadata, rate-limit and audit-log helpers.
+Used by `mcp_server.py` and the tools under `mcp_tools/` to identify the caller, check permission and limit operation counts.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +27,8 @@ from services.mcp_oauth import (
 audit_logger = logging.getLogger("chat_core.mcp.audit")
 
 
+# ツール名ごとに必要な OAuth scope。ここに無いツールは一覧取得時に登録漏れとして例外になる（ChatCoreFastMCP.list_tools）。
+# OAuth scope required per tool name; a tool missing here raises as a registration bug when tools are listed (ChatCoreFastMCP.list_tools).
 TOOL_REQUIRED_SCOPES: dict[str, str] = {
     "publish_prompt": MCP_PROMPTS_WRITE_SCOPE,
     "publish_image_prompt": MCP_PROMPTS_WRITE_SCOPE,
@@ -54,14 +61,20 @@ TOOL_REQUIRED_SCOPES: dict[str, str] = {
 
 @dataclass(frozen=True)
 class McpActor:
-    """Authenticated Chat-Core user and OAuth client invoking one MCP tool."""
+    """1回の MCP ツール呼び出しを行う、認証済みの Chat-Core ユーザーと OAuth クライアント。
+
+    Authenticated Chat-Core user and OAuth client invoking one MCP tool.
+    """
 
     user_id: int
     client_id: str
 
 
 def require_actor(required_scope: str) -> McpActor:
-    """Resolve the authenticated user and enforce the tool's OAuth scope."""
+    """認証済みユーザーを特定し、ツールに必要な OAuth scope を持つか検査する。
+
+    Resolve the authenticated user and enforce the tool's OAuth scope.
+    """
     token = get_access_token()
     if token is None or not token.subject:
         raise ToolError("MCPアクセストークンに認証済みユーザーがありません。")
@@ -81,7 +94,10 @@ async def consume_tool_limit(
     limit: int,
     window_seconds: int,
 ) -> None:
-    """Apply a per-user and per-client limit to an MCP operation family."""
+    """MCP の操作群に対して、ユーザーとクライアントの組ごとの回数制限をかける。
+
+    Apply a per-user and per-client limit to an MCP operation family.
+    """
     allowed, _, retry_after = await run_blocking(
         consume_rate_limit,
         f"mcp_tool:{bucket}",
@@ -94,7 +110,10 @@ async def consume_tool_limit(
 
 
 def audit_tool_success(actor: McpActor, tool_name: str, target_id: int | None = None) -> None:
-    """Record a content-free audit event for a successful MCP mutation."""
+    """MCP で書き込み系の操作が成功したことを、内容を含まない監査イベントとして記録する。
+
+    Record a content-free audit event for a successful MCP mutation.
+    """
     audit_logger.info(
         "MCP mutation succeeded",
         extra={

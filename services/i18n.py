@@ -1,3 +1,10 @@
+"""多言語対応（日本語・英語）の共通処理。ロケールの正規化と判定（Accept-Language・Cookie・セッション）、
+システム文言の翻訳、応答言語のルール作成、入力文からの言語推定を提供する。
+
+Shared i18n helpers for Japanese and English: locale normalization and resolution (Accept-Language, cookie, session),
+system message translation, response-language rules for prompts, and language inference from user text.
+"""
+
 from __future__ import annotations
 
 import re
@@ -6,12 +13,16 @@ from typing import Any, Literal
 
 from fastapi import Request
 
+# 日本語: 対応ロケール（ja / en）、既定値、ロケール保存に使う Cookie 名とセッションのキー。
+# English: Supported locales (ja / en), the default, and the cookie name and session keys used to persist the locale.
 Locale = Literal["ja", "en"]
 SUPPORTED_LOCALES: tuple[Locale, ...] = ("ja", "en")
 DEFAULT_LOCALE: Locale = "ja"
 LOCALE_COOKIE_NAME = "chatcore_locale"
 PREFERRED_LOCALE_SESSION_KEY = "preferred_locale"
 PREFERRED_LOCALE_LOADED_SESSION_KEY = "_preferred_locale_loaded"
+# 日本語: infer_response_language が「依頼を述べている行」を見つけるための日本語・英語の語彙パターン。
+# English: Japanese and English word patterns that infer_response_language uses to find the line stating the request.
 _JAPANESE_REQUEST_PATTERN = re.compile(
     r"(?:して|ください|お願い|作成|提案|改善|修正|要約|翻訳|教えて|書いて|作って)"
 )
@@ -21,12 +32,16 @@ _ENGLISH_REQUEST_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 日本語: 処理中のリクエストのロケールを保持する ContextVar（非同期タスクごとに独立する）。
+# English: ContextVar holding the current request's locale (isolated per async task).
 _current_locale: ContextVar[Locale] = ContextVar(
     "chatcore_current_locale",
     default=DEFAULT_LOCALE,
 )
 
 
+# 日本語: メッセージキー → 文言のカタログ（ロケール別）。{seconds} などのプレースホルダは translate が埋める。
+# English: Per-locale catalog of message key -> text; placeholders such as {seconds} are filled by translate.
 _MESSAGES: dict[Locale, dict[str, str]] = {
     "ja": {
         "common.login_required": "ログインが必要です",
@@ -174,7 +189,10 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
 
 
 def normalize_locale(value: Any, *, default: Locale | None = None) -> Locale | None:
-    """Normalize a supported BCP 47 language tag to the application's base locale."""
+    """対応している BCP 47 の言語タグを、アプリの基本ロケール（ja / en）に正規化する。対応外なら default を返す。
+
+    Normalize a supported BCP 47 language tag to the application's base locale.
+    """
     if not isinstance(value, str):
         return default
     language = value.strip().lower().replace("_", "-").split("-", 1)[0]
@@ -184,7 +202,12 @@ def normalize_locale(value: Any, *, default: Locale | None = None) -> Locale | N
 
 
 def parse_accept_language(value: str | None) -> Locale:
-    """Resolve the best supported locale from an Accept-Language header."""
+    """Accept-Language ヘッダーから、対応している中で最も適したロケールを選ぶ。
+    q 値が大きいものを優先し、同点なら先に書かれたものを選ぶ。
+
+    Resolve the best supported locale from an Accept-Language header.
+    Higher q values win; ties go to the earlier entry.
+    """
     if not value:
         return DEFAULT_LOCALE
 
@@ -216,7 +239,10 @@ def get_current_locale() -> Locale:
 
 
 def set_current_locale(locale: Any):
-    """Set the request locale and return the ContextVar token for optional resetting."""
+    """リクエストのロケールを設定し、後で元に戻すための ContextVar のトークンを返す。
+
+    Set the request locale and return the ContextVar token for optional resetting.
+    """
     return _current_locale.set(normalize_locale(locale, default=DEFAULT_LOCALE))
 
 
@@ -224,6 +250,8 @@ def reset_current_locale(token: Any) -> None:
     _current_locale.reset(token)
 
 
+# 日本語: リクエストのロケールを、request.state → セッション → Cookie → Accept-Language の順で最初に見つかったものに決める。
+# English: Resolve the request locale from the first source that has one: request.state, session, cookie, then Accept-Language.
 def get_request_locale(request: Request) -> Locale:
     state_locale = normalize_locale(getattr(request.state, "locale", None))
     if state_locale is not None:
@@ -244,7 +272,10 @@ def get_request_locale(request: Request) -> Locale:
 # 日本語: 応答言語をユーザーの入力言語へ合わせるための共通ルールを組み立てます。
 # English: Build the shared rules that bind the reply language to the user's input language.
 def build_response_language_policy(locale: Any = None) -> str:
-    """Return the response-language rules, including how to resolve mixed-language input.
+    """応答言語のルール（LLM への指示文）を返す。複数言語が混在する入力の判断順も含む。
+    保存済みの画面言語は最後の手段で、まずユーザー自身の入力の言語から決める。
+
+    Return the response-language rules, including how to resolve mixed-language input.
 
     The saved interface locale is only the last-resort fallback: the reply language is
     decided from the user's own text first.
@@ -295,6 +326,10 @@ def infer_response_language(text: Any, locale: Any = None) -> Locale:
     return normalize_locale(locale, default=DEFAULT_LOCALE) or DEFAULT_LOCALE
 
 
+# 日本語: メッセージキーを指定ロケールの文言にして返す。キーが無ければ日本語、それも無ければキー自体を返す。
+# params があれば format で埋め、埋められなければテンプレートのまま返す。
+# English: Return the text for a message key in the given locale, falling back to Japanese and then to the key itself.
+# Params are filled with format; if that fails the template is returned as is.
 def translate(message_key: str, locale: Any = None, **params: Any) -> str:
     resolved_locale = normalize_locale(locale, default=get_current_locale())
     template = _MESSAGES.get(resolved_locale, {}).get(message_key)
@@ -309,7 +344,10 @@ def translate(message_key: str, locale: Any = None, **params: Any) -> str:
 
 
 def translate_text(value: Any, locale: Any = None) -> Any:
-    """Translate a known exact Japanese system string, preserving all other values."""
+    """完全一致する既知の日本語システム文言だけを英語にして返す。それ以外の値や英語以外のロケールはそのまま返す。
+
+    Translate a known exact Japanese system string, preserving all other values.
+    """
     if not isinstance(value, str):
         return value
     resolved_locale = normalize_locale(locale, default=get_current_locale())

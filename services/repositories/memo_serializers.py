@@ -1,3 +1,8 @@
+"""メモの DB レコードを API 応答用の dict に変換するシリアライザ(一覧用の概要、詳細、共有メタデータ、ゴミ箱の状態)。
+
+Serializers that convert memo DB records into API response dicts: list summaries, details, share metadata and trash state.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta

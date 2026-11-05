@@ -1,3 +1,14 @@
+"""利用者の Skill（再利用できる指示）と、組み込みの既定 Skill を、チャットのシステム文脈へ組み立てる。
+
+個人の Skill の名前・指示の正規化、予約 ID を持つ組み込み Skill（生成 UI・メモ・プロンプト共有と設定）の定義、
+有効な Skill を 1 つの文脈ブロックにまとめる処理を持つ。
+
+Builds the user's reusable Skills and the built-in default Skills into the chat system context.
+
+Holds normalization of personal Skill names and instructions, the definitions of the built-in Skills with reserved IDs
+(Generative UI, Memo, Prompt sharing and settings), and the assembly of enabled Skills into one context block.
+"""
+
 from __future__ import annotations
 
 import json
@@ -8,15 +19,21 @@ from typing import Any
 
 from services.i18n import get_current_locale
 
+# 日本語: 個人 Skill の件数・名前・指示の長さの上限。
+# English: Limits on the number of personal Skills and on the length of a name and of instructions.
 MAX_USER_SKILLS = 20
 MAX_USER_SKILL_NAME_LENGTH = 100
 MAX_USER_SKILL_INSTRUCTIONS_LENGTH = 12_000
-# Preserve the original 2,600-token allowance for personal Skills after the
+# 日本語: 個人 Skill に割り当てるトークン予算。組み込みの生成 UI Skill（例を含め約 800 トークン）と
+# メモ Skill（約 400 トークン）が同じ文脈ブロックに入ったあとも、元の 2,600 トークンの枠を保つ値。
+# English: Preserve the original 2,600-token allowance for personal Skills after the
 # built-in Generative UI Skill (roughly 800 tokens including few-shot examples)
 # and the built-in Memo Skill (roughly 400 tokens) moved into the same context block.
 USER_SKILLS_TOKEN_BUDGET = 3_800
 
-# System-owned Skills use reserved non-positive IDs so the existing numeric
+# 日本語: システムが持つ Skill は 0 以下の予約 ID を使う。既存の数値 ID の切り替えエンドポイントで扱えて、
+# PostgreSQL が採番する個人 Skill の ID（正の値）と衝突しない。
+# English: System-owned Skills use reserved non-positive IDs so the existing numeric
 # toggle endpoint can serve them without colliding with PostgreSQL identities.
 GENERATIVE_UI_SYSTEM_SKILL_ID = 0
 GENERATIVE_UI_SYSTEM_SKILL_KEY = "generative_ui"
@@ -61,7 +78,9 @@ GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 </examples>
 """.strip()
 
-# This final contract is injected after the per-room context only while the built-in
+# 日本語: この最後の契約は、組み込みの Skill が有効なときだけ、ルームごとの文脈の後ろに挿入する。
+# Skill の定義と同じ場所に置くことで、生成 UI に関するプロンプト側の指示がすべて同じ既定機能の一部になる。
+# English: This final contract is injected after the per-room context only while the built-in
 # Skill is enabled. Keeping it with the Skill definition makes every prompt-side
 # Generative UI instruction part of the same default capability.
 _GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE = """
@@ -178,6 +197,8 @@ PROMPT_TOOLS_SKILL_INSTRUCTIONS = """
 - Text you write and your replies have independent language rules. Write prompt, Task and Skill text in the language explicitly requested; otherwise preserve the language of the user-provided facts or source text. Write replies in the language of the latest substantive user message, giving any explicit language request priority.
 """.strip()
 
+# 日本語: Skill の文脈ブロックの境界を表すタグ。利用者の入力に含まれていたら除去し、指示の境界を偽装されないようにする。
+# English: Tags that delimit the Skill context block; stripped from user input so it cannot forge an instruction boundary.
 _SKILL_BOUNDARY_MARKERS = (
     "<enabled_user_skills>",
     "</enabled_user_skills>",
@@ -187,12 +208,18 @@ _SKILL_BOUNDARY_MARKERS = (
 
 
 def normalize_user_skill_name(value: Any) -> str:
-    """Collapse whitespace so names remain compact and single-line in every UI."""
+    """空白をまとめ、どの UI でも名前が短い 1 行で表示されるようにする。
+
+    Collapse whitespace so names remain compact and single-line in every UI.
+    """
     return " ".join(str(value or "").split())[:MAX_USER_SKILL_NAME_LENGTH]
 
 
 def normalize_user_skill_instructions(value: Any) -> str:
-    """Normalize line endings while preserving Markdown structure."""
+    """改行コードをそろえ、Markdown の構造は保つ。境界タグは取り除き、上限の長さで切る。
+
+    Normalize line endings while preserving Markdown structure.
+    """
     normalized = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     for marker in _SKILL_BOUNDARY_MARKERS:
         normalized = normalized.replace(marker, "[boundary marker removed]")
@@ -228,7 +255,10 @@ SYSTEM_SKILL_KEYS: tuple[str, ...] = tuple(_SYSTEM_SKILLS)
 
 
 def system_skill_key_for_id(skill_id: int) -> str | None:
-    """Return the built-in Skill key for a reserved id, or None for a personal Skill."""
+    """予約 ID に対応する組み込み Skill のキーを返す。個人 Skill の ID なら None。
+
+    Return the built-in Skill key for a reserved id, or None for a personal Skill.
+    """
     for key, skill in _SYSTEM_SKILLS.items():
         if skill.skill_id == int(skill_id):
             return key
@@ -236,26 +266,37 @@ def system_skill_key_for_id(skill_id: int) -> str | None:
 
 
 def is_generative_ui_skill_enabled(user: dict[str, Any] | None) -> bool:
-    """Default to enabled for guests and pre-migration-compatible user payloads."""
+    """ゲストや、列が追加される前の形式の利用者データでは有効を既定にする。
+
+    Default to enabled for guests and pre-migration-compatible user payloads.
+    """
     if not isinstance(user, dict):
         return True
     return user.get("generative_ui_skill_enabled", True) is not False
 
 
 def is_memo_tools_skill_enabled(user: dict[str, Any] | None) -> bool:
-    """Guests have no memos, so the Memo Skill is off without a signed-in user payload."""
+    """ゲストにはメモが無いので、ログイン済みの利用者データが無ければメモ Skill は無効。
+
+    Guests have no memos, so the Memo Skill is off without a signed-in user payload.
+    """
     if not isinstance(user, dict):
         return False
     return user.get("memo_tools_skill_enabled", True) is not False
 
 
 def is_prompt_tools_skill_enabled(user: dict[str, Any] | None) -> bool:
-    """Guests have no saved prompts or Skills, so this Skill is off without a signed-in user payload."""
+    """ゲストには保存したプロンプトや Skill が無いので、ログイン済みの利用者データが無ければこの Skill は無効。
+
+    Guests have no saved prompts or Skills, so this Skill is off without a signed-in user payload.
+    """
     if not isinstance(user, dict):
         return False
     return user.get("prompt_tools_skill_enabled", True) is not False
 
 
+# 日本語: 組み込み Skill を、個人 Skill の一覧と同じ形の辞書にする。編集・削除はできず、表示名は言語に合わせる。
+# English: Render a built-in Skill as a dict shaped like the personal Skill listing; it cannot be edited or deleted and its name follows the locale.
 def build_system_skill(
     key: str,
     *,
@@ -282,7 +323,10 @@ def build_system_skill(
 # One turn's Skill context: prompt is the system text, the rest are the built-in Skills' states.
 @dataclass(frozen=True)
 class SkillCandidate:
-    """One enabled Skill eligible for a chat turn's selection decision."""
+    """チャット 1 ターンで、使うかどうかの選択対象になる有効な Skill。
+
+    One enabled Skill eligible for a chat turn's selection decision.
+    """
 
     id: int
     name: str
@@ -311,7 +355,13 @@ def build_chat_skills_context(
     prompt_builder: Callable[[list[dict[str, Any]]], str | None] | None = None,
     workspace_tools_available: bool = False,
 ) -> ChatSkillsContext:
-    """Combine enabled personal Skills with the built-in Skills that apply to this turn.
+    """有効な個人 Skill と、このターンに当てはまる組み込み Skill を合わせる。
+
+    ``workspace_tools_available`` は、データ系ツールを渡せる場面（ストリーミング経路でのログイン利用者の通常ルーム）
+    でだけ True になる。メモ Skill とプロンプト共有と設定 Skill はその場合だけ文脈に入るので、モデルが持たないツールを
+    指示が説明することはない。
+
+    Combine enabled personal Skills with the built-in Skills that apply to this turn.
 
     ``workspace_tools_available`` is True only where the data tools can be offered at all (a
     signed-in user's normal room on the streaming path). The Memo Skill and the Prompt sharing
@@ -359,7 +409,10 @@ def _eligible_skill_records(
     system_skills: list[dict[str, Any]],
     personal_skills: list[dict[str, Any]],
 ) -> list[tuple[int, dict[str, Any]]]:
-    """Keep valid built-ins and unique, well-formed personal Skills in canonical order."""
+    """有効な組み込み Skill と、ID が重複せず形式の正しい個人 Skill を、組み込み → 個人の順で残す。
+
+    Keep valid built-ins and unique, well-formed personal Skills in canonical order.
+    """
     records: list[tuple[int, dict[str, Any]]] = []
     for skill in system_skills:
         if skill.get("is_enabled", True) is not False and _has_skill_content(skill):
@@ -388,7 +441,9 @@ def _eligible_skill_records(
             or skill_id <= 0
             or skill_id in duplicate_personal_ids
         ):
-            # Personal Skills use positive PostgreSQL identities; reserved IDs belong only
+            # 日本語: 個人 Skill は PostgreSQL が採番する正の ID を使う。予約 ID はサーバーが作る組み込み Skill 専用で、
+            # 個人の行から渡されても採用しない。
+            # English: Personal Skills use positive PostgreSQL identities; reserved IDs belong only
             # to server-built system Skills and cannot be supplied by personal rows.
             continue
         if _has_skill_content(skill):
@@ -396,6 +451,8 @@ def _eligible_skill_records(
     return records
 
 
+# 日本語: 正規化後に名前と指示が両方とも空でないか。
+# English: Whether both the name and the instructions are non-empty after normalization.
 def _has_skill_content(skill: dict[str, Any]) -> bool:
     return bool(
         normalize_user_skill_name(skill.get("name"))
@@ -404,7 +461,10 @@ def _has_skill_content(skill: dict[str, Any]) -> bool:
 
 
 def build_enabled_user_skills_prompt(skills: list[dict[str, Any]]) -> str | None:
-    """Build one bounded system-context block from enabled account Skills."""
+    """有効な Skill から、システム文脈に入れる 1 つのブロックを作る。有効なものが無ければ None。
+
+    Build one bounded system-context block from enabled account Skills.
+    """
     sections: list[str] = []
     system_skills = [
         skill

@@ -1,4 +1,7 @@
-"""Persistence boundary for authentication identities and login-facing user data."""
+"""認証 ID(メール・Google・Passkey 共通のユーザー行と user_auth_providers)の永続化境界。ログイン処理が使うユーザー情報を返す。
+
+Persistence boundary for authentication identities and login-facing user data.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.avatar_storage import normalize_avatar_url
 from services.models import User, UserAuthProvider
 
+# 日本語: 認証ハンドラへ返すユーザー項目。ここに無い列(パスワード等)は外へ出さない。
+# English: The user fields exposed to authentication handlers; columns not listed here never leave the repository.
 _AUTH_USER_FIELDS = (
     "id",
     "email",
@@ -30,6 +35,7 @@ def _serialize_auth_user(
     *,
     google_provider_lookup: bool = False,
 ) -> dict[str, Any]:
+    # 認証ハンドラが使う安定したpayloadを返す。
     """Return the stable payload consumed by authentication handlers."""
 
     payload = {field: getattr(user, field) for field in _AUTH_USER_FIELDS}
@@ -43,7 +49,9 @@ def _serialize_auth_user(
             provider_email=provider.provider_email,
         )
     elif google_provider_lookup:
-        # Email lookup also drives the Google account-conflict check. An email
+        # 日本語: メール検索は Google アカウントの衝突確認にも使われる。メール ID を既存の Google ID と取り違えないよう、
+        # Google 連携が無いときは provider 項目を明示的に None にする。
+        # English: Email lookup also drives the Google account-conflict check. An email
         # identity must never be mistaken for an existing Google identity.
         payload.update(
             auth_provider=None,
@@ -54,7 +62,11 @@ def _serialize_auth_user(
 
 
 class AuthIdentityRepository:
+    # メール・Google・パスキー認証で共通のスキーマ契約を持つ。
     """Own the schema contract used by email, Google, and passkey login."""
+
+    # 日本語: セッションの commit/rollback は呼び出し側(ユースケース)が持つ。ここでは flush と実行のみ行う。
+    # English: Transaction commit/rollback belongs to the calling use case; this class only flushes and executes.
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -65,6 +77,8 @@ class AuthIdentityRepository:
             return None
         return _serialize_auth_user(user)
 
+    # 日本語: メールでの検索。Google 連携の有無を同時に引き(外部結合)、連携が無くても行は返す。
+    # English: Looks up by email, outer-joining the Google provider row so users without a Google link are still returned.
     async def get_by_email(self, email: str) -> dict[str, Any] | None:
         statement = (
             select(User, UserAuthProvider)
@@ -100,6 +114,8 @@ class AuthIdentityRepository:
         user, provider = row
         return _serialize_auth_user(user, provider)
 
+    # 日本語: (user_id, provider) の組を一意キーとして挿入し、既にあれば外部 ID とメールを更新する。
+    # English: Upserts on the (user_id, provider) unique key, updating the external id and email when the row exists.
     async def _upsert_provider(
         self,
         *,
@@ -139,7 +155,9 @@ class AuthIdentityRepository:
         is_verified: bool,
         preferred_locale: str | None,
     ) -> int:
-        # Provider metadata belongs only to user_auth_providers. Keeping it out
+        # 日本語: プロバイダー情報は user_auth_providers だけに持たせる。User のコンストラクタに渡さないことで、
+        # スキーマ移動があったときにこの認証境界で必ず気付けるようにする。
+        # English: Provider metadata belongs only to user_auth_providers. Keeping it out
         # of the User constructor makes a schema move impossible to miss in
         # this dedicated authentication boundary.
         user = User(
@@ -185,6 +203,8 @@ class AuthIdentityRepository:
         default_username: str,
         default_avatar_url: str,
     ) -> None:
+        # 日本語: 既存の名前・アバターが空か既定値のままのときだけ Google の値で埋め、ユーザーが変更した内容は上書きしない。
+        # English: Fills in the Google name/avatar only when the current value is empty or still the default, never overwriting user edits.
         user = await self.session.scalar(select(User).where(User.id == int(user_id)))
         if user is None:
             return

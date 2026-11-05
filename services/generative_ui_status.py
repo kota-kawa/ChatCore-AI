@@ -58,7 +58,10 @@ def artifact_status_payload(
     *,
     repair_attempted: bool = False,
 ) -> dict[str, str] | None:
-    """Render one internal status as the client-facing ``{state, reason_code}`` pair.
+    """内部状態 1 つを、クライアント向けの ``{state, reason_code}`` の組に変換する。
+    修復を試みた上で受理された場合は repaired にする。
+
+    Render one internal status as the client-facing ``{state, reason_code}`` pair.
 
     報告する必要のない状態（未要求・ユーザーの明示拒否）では ``None`` を返す。
     Returns ``None`` for statuses that need no report (not requested, explicit opt-out).
@@ -73,12 +76,17 @@ def artifact_status_payload(
 
 
 def artifact_status_part(payload: dict[str, str] | None) -> dict[str, Any] | None:
-    """Build the message part that tells the user a generated UI could not be shown."""
+    """生成 UI を表示できなかったことを利用者に伝えるメッセージパーツを作る。表示不要な状態では None。
+
+    Build the message part that tells the user a generated UI could not be shown.
+    """
     if not payload or payload.get("state") not in USER_VISIBLE_CLIENT_STATES:
         return None
     return {"type": ARTIFACT_STATUS_PART_TYPE, "status": dict(payload)}
 
 
+# 日本語: 理由コードに許す文字（小文字・数字・_ . -）以外を置き換えるための正規表現。
+# English: Regex for replacing any character outside the allowed set (lowercase, digits, _ . -) in a reason code.
 _REASON_CODE_RE = __import__("re").compile(r"[^a-z0-9_.-]+")
 MAX_REASON_CODE_CHARS = 80
 

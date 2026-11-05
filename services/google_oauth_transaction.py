@@ -1,3 +1,9 @@
+"""Google OAuth ログインの途中状態（state・PKCE の code_verifier・戻り先）を Redis に短時間だけ保存し、コールバック時に一度だけ取り出す。
+
+Keeps the in-flight state of a Google OAuth login (state, PKCE code_verifier, redirect target) in Redis for a short time
+and hands it out exactly once at callback time.
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +19,10 @@ GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME = "google_oauth_transaction"
 
 @dataclass(frozen=True)
 class GoogleOAuthTransaction:
-    """短時間だけ有効なGoogle OAuth認証トランザクション。"""
+    """短時間だけ有効なGoogle OAuth認証トランザクション。
+
+    A short-lived Google OAuth authentication transaction.
+    """
 
     state: str
     code_verifier: str
@@ -36,7 +45,12 @@ def store_google_oauth_transaction(
     redirect_uri: str,
     next_path: str | None,
 ) -> bool:
-    """OAuth callbackに必要な状態をRedisへ短時間だけ保存する。"""
+    """OAuth callbackに必要な状態をRedisへ短時間だけ保存する。
+    入力が不正、Redis が使えない、または同じ state が既にある場合は False を返す。
+
+    Store the state needed by the OAuth callback in Redis for a short time.
+    Returns False for invalid input, an unavailable Redis, or a state that already exists.
+    """
     if not all(
         _valid_text(value)
         for value in (state, code_verifier, redirect_uri)
@@ -73,16 +87,25 @@ def store_google_oauth_transaction(
 
 
 def _consume_raw(redis_client: Any, key: str) -> Any:
-    """Redis 6.2以降のGETDELで一度だけ値を取り出す。"""
+    """Redis 6.2以降のGETDELで一度だけ値を取り出す。
+
+    Fetch a value exactly once with GETDEL (Redis 6.2 or later).
+    """
     getdel = getattr(redis_client, "getdel", None)
     if callable(getdel):
         return getdel(key)
     # redis-pyの実装差分がある場合も、GETDELコマンド自体は原子的に実行する。
+    # Even when redis-py lacks a getdel method, the GETDEL command itself still runs atomically.
     return redis_client.execute_command("GETDEL", key)
 
 
 def consume_google_oauth_transaction(state: str) -> GoogleOAuthTransaction | None:
-    """stateに紐づくOAuth状態を原子的に読み取り、直ちに削除する。"""
+    """stateに紐づくOAuth状態を原子的に読み取り、直ちに削除する。
+    見つからない・壊れている場合は None を返す。使い捨てなので、コールバックの再送では再利用できない。
+
+    Atomically read the OAuth state tied to ``state`` and delete it immediately.
+    Returns None when missing or malformed. It is single-use, so a replayed callback cannot reuse it.
+    """
     if not _valid_text(state):
         return None
 

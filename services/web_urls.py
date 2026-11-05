@@ -1,3 +1,8 @@
+"""フロントエンド URL の組み立て、リダイレクト先 (`next`) の検証、FastAPI 用の url_for 互換関数。
+
+Builders for frontend URLs, validation of the `next` redirect target, and a Flask-style url_for for FastAPI.
+"""
+
 from __future__ import annotations
 
 from typing import Any

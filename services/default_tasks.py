@@ -1,3 +1,10 @@
+"""新規ユーザー向けの既定タスク（システムタスク）のカタログを読み込み、API 応答・DB 投入用の形に変換する。
+カタログは frontend/data/ 配下の JSON（リビジョンと言語ごと）で、起動時に不足分を共通タスクとして DB へ投入する。
+
+Loads the catalog of built-in system tasks and converts it into API payloads and DB insert rows.
+The catalogs are JSON files under frontend/data/ (per revision and locale); missing ones are seeded as shared tasks at startup.
+"""
+
 import asyncio
 import json
 from functools import lru_cache
@@ -9,6 +16,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from services.db import is_retryable_db_error, session_scope
 from services.repositories.default_seed_repository import seed_default_tasks
 
+# 日本語: 既定タスクの JSON の場所。無印が現行リビジョン、v1 は旧リビジョン、.en は英語版。
+# English: Locations of the default task JSON files; unsuffixed is the current revision, v1 is the old one, and .en is English.
 DEFAULT_TASKS_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.json"
 )
@@ -21,12 +30,16 @@ DEFAULT_TASKS_V1_JSON = (
 DEFAULT_TASKS_V1_EN_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.v1.en.json"
 )
+# 日本語: 現行のシステムタスクのリビジョン。リビジョン → 言語 → JSON のパスの対応表を持ち、旧リビジョンの行も表示用に解決できる。
+# English: Current system task revision, plus a revision -> locale -> JSON path map so rows from older revisions can still be resolved.
 CURRENT_SYSTEM_TASK_REVISION = 2
 DEFAULT_TASK_CATALOG_PATHS = {
     1: {"ja": DEFAULT_TASKS_V1_JSON, "en": DEFAULT_TASKS_V1_EN_JSON},
     CURRENT_SYSTEM_TASK_REVISION: {"ja": DEFAULT_TASKS_JSON, "en": DEFAULT_TASKS_EN_JSON},
 }
 DEFAULT_TASK_CATALOGS = DEFAULT_TASK_CATALOG_PATHS[CURRENT_SYSTEM_TASK_REVISION]
+# 日本語: シード時の DB 書き込みを、一時的なエラーに限って再試行する回数と待ち時間の基準（秒）。
+# English: Retry count and base backoff (seconds) for seed writes on transient DB errors.
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
@@ -97,7 +110,10 @@ def default_tasks_by_key(
     locale: str = "ja",
     revision: int = CURRENT_SYSTEM_TASK_REVISION,
 ) -> dict[str, dict[str, Any]]:
-    """Return the localized system task catalog indexed by its stable key."""
+    """言語別のシステムタスクカタログを、不変のキー（system_task_key）で引ける辞書にして返す。
+
+    Return the localized system task catalog indexed by its stable key.
+    """
     return {
         str(task["system_task_key"]): task
         for task in load_default_tasks(locale, revision)
@@ -106,7 +122,12 @@ def default_tasks_by_key(
 
 
 def resolve_system_task_key(identifier: Any) -> str | None:
-    """Resolve a stable key or a localized built-in task name to its stable key."""
+    """不変のキー、または言語別の組み込みタスク名から、不変のキーを解決する。
+    全リビジョン・全言語のカタログを順に調べ、見つからなければ None を返す。
+
+    Resolve a stable key or a localized built-in task name to its stable key.
+    Searches every revision and locale; returns None when nothing matches.
+    """
     normalized = str(identifier or "").strip()
     if not normalized:
         return None
@@ -126,7 +147,12 @@ def localize_system_task(
     task: dict[str, Any],
     locale: str = "ja",
 ) -> dict[str, Any]:
-    """Overlay localized fields only when a row is a known, untouched system task."""
+    """既知で未編集のシステムタスクの行にだけ、指定言語の文言を上書きして返す。
+    ユーザーが編集済み、キーやリビジョンが不明な行は、そのままコピーして返す。
+
+    Overlay localized fields only when a row is a known, untouched system task.
+    Customized rows and rows with an unknown key or revision are returned as an unchanged copy.
+    """
     if task.get("is_system_task_customized"):
         return dict(task)
 
@@ -201,6 +227,8 @@ async def ensure_default_tasks_seeded() -> int:
                     session, default_task_rows(include_key=True)
                 )
         except SQLAlchemyError as exc:
+            # 日本語: 一時的な PostgreSQL の障害だけ再試行する。
+            # 失敗したトランザクションは、次の独立した試行の前に session_scope がロールバックする。
             # Retry only transient PostgreSQL failures. session_scope rolls back
             # the failed transaction before the next isolated attempt.
             if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:

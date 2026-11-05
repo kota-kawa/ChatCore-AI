@@ -1,3 +1,13 @@
+"""メモを開いたままの AI エージェントの編集依頼を、編集計画（部分置換または全文置換）として生成・検証する。
+
+ユーザーの発言を「編集」か「質問」に分類し、編集なら LLM に編集計画の JSON を作らせて、保存済み本文に当てて適用できるかを確かめる。
+検証に通らない計画は理由を添えて一度だけ作り直させる。`services/chat_workspace_tools/memo.py` と `blueprints/chat/tasks.py` から使われる。
+Generates and validates edit plans (partial or full replacement) for requests made to the AI agent while a memo is open.
+Classifies the user's message as edit or QA; for an edit it asks the LLM for a JSON plan and checks that it applies to the stored body.
+A plan that fails validation is regenerated once with the reasons.
+Used from `services/chat_workspace_tools/memo.py` and `blueprints/chat/tasks.py`.
+"""
+
 from __future__ import annotations
 
 import json

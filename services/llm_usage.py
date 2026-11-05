@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def _field(source: Any, name: str) -> Any:
+    # 使用量オブジェクトが辞書でも属性付きオブジェクトでも、同じ名前で値を取り出す。
+    # Read a field whether the usage object is a mapping or an attribute-style object.
     if source is None:
         return None
     if isinstance(source, Mapping):
@@ -29,6 +31,8 @@ def _field(source: Any, name: str) -> Any:
 
 
 def _count(source: Any, name: str) -> int:
+    # 欠損や不正値は 0、負数も 0 に丸め、メーターに不正な値を渡さない。
+    # Missing or malformed values become 0 and negatives are clamped, so the meter never gets bad input.
     try:
         return max(int(_field(source, name) or 0), 0)
     except (TypeError, ValueError):
@@ -36,7 +40,10 @@ def _count(source: Any, name: str) -> int:
 
 
 def record_chat_completion_usage(model_name: str, usage: Any) -> bool:
-    """Record Chat Completions usage (OpenAI and Groq). Returns False when absent."""
+    """Chat Completions（OpenAI と Groq）の使用量を記録する。使用量が無ければ False。
+
+    Record Chat Completions usage (OpenAI and Groq). Returns False when absent.
+    """
 
     if usage is None:
         return False
@@ -51,7 +58,10 @@ def record_chat_completion_usage(model_name: str, usage: Any) -> bool:
 
 
 def record_responses_usage(model_name: str, usage: Any) -> bool:
-    """Record OpenAI Responses API usage. Returns False when absent."""
+    """OpenAI Responses API の使用量を記録する。使用量が無ければ False。
+
+    Record OpenAI Responses API usage. Returns False when absent.
+    """
 
     if usage is None:
         return False
@@ -66,7 +76,9 @@ def record_responses_usage(model_name: str, usage: Any) -> bool:
 
 
 def record_claude_usage(model_name: str, usage: Any) -> bool:
-    """Record Anthropic usage. Returns False when absent.
+    """Anthropic の使用量を記録する。使用量が無ければ False。
+
+    Record Anthropic usage. Returns False when absent.
 
     Anthropic は入力をキャッシュ読み出し・キャッシュ書き込み・それ以外に分けて返すため、
     合計して入力とし、書き込み分は割増の単価で数える。
@@ -89,7 +101,10 @@ def record_claude_usage(model_name: str, usage: Any) -> bool:
 
 
 def record_embedding_usage(model_name: str, usage: Any) -> bool:
-    """Record embeddings usage, which is billed on input only."""
+    """埋め込みの使用量を記録する。課金は入力のみ。
+
+    Record embeddings usage, which is billed on input only.
+    """
 
     if usage is None:
         return False
@@ -104,7 +119,10 @@ def record_estimated_usage(
     *,
     tools: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
-    """Record a call whose provider usage never arrived, from a text-based estimate."""
+    """プロバイダの使用量が届かなかった呼び出しを、本文からの見積もりで記録する。
+
+    Record a call whose provider usage never arrived, from a text-based estimate.
+    """
 
     # 見積もり関数は Web 検索経由で services.llm を読み込むため、ここで遅延 import する。
     # The estimators import services.llm through web search, so import them lazily here.

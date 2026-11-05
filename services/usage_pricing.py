@@ -1,4 +1,6 @@
-"""Provider price table used to turn API usage into a cost.
+"""API の使用量を料金に換算するための、プロバイダ別の価格表。
+
+Provider price table used to turn API usage into a cost.
 
 料金は各プロバイダの公開価格（Haiku 5.5 は 2026-10-08、ほかは 2026-09-23 時点）を写したものです。価格改定や
 モデル追加のときはこの表を更新してください。
@@ -23,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class TokenPrice:
-    """Per-token prices in nano-dollars."""
+    """1 トークンあたりの価格（ナノドル）。
+
+    Per-token prices in nano-dollars.
+    """
 
     input: int
     output: int
@@ -54,12 +59,14 @@ TOKEN_PRICES: dict[str, TokenPrice] = {
     # Groq bills cached GPT-OSS input at 50%; the 20B half-price is rounded up to stay safe.
     "openai/gpt-oss-120b": TokenPrice(input=150, cached_input=75, output=600),
     "openai/gpt-oss-20b": TokenPrice(input=75, cached_input=38, output=300),
+    # Anthropicの入力・出力単価に、キャッシュ読み取りと5分間の書き込み倍率を適用する。
     # Anthropic: $1 / $5 per 1M, cache reads at 0.1x, 5-minute cache writes at 1.25x.
     "claude-haiku-4-5-20251001": TokenPrice(
         input=1_000, cached_input=100, cache_write=1_250, output=5_000
     ),
     # https://platform.claude.com/docs/en/models/haiku-5-5/overview
     "claude-haiku-5-5": TokenPrice(input=100, cached_input=10, cache_write=125, output=500),
+    # OpenAIの埋め込みは入力だけを課金対象とする。
     # OpenAI embeddings are billed on input only.
     "text-embedding-3-small": TokenPrice(input=20, output=0),
 }
@@ -69,6 +76,7 @@ TOKEN_PRICES: dict[str, TokenPrice] = {
 # make the limits more permissive.
 FALLBACK_TOKEN_PRICE = TokenPrice(input=1_000, cached_input=1_000, output=5_000)
 
+# Brave検索APIは1000リクエスト単位の単価を使う。
 # Brave Search API: $5 per 1,000 requests.
 BRAVE_WEB_SEARCH_REQUEST_NANO_USD = 5_000_000
 
@@ -77,7 +85,10 @@ HAIKU_5_5_LONG_CONTEXT_PRICE = TokenPrice(input=500, cached_input=50, cache_writ
 
 
 def token_price_for_model(model_name: str) -> TokenPrice:
-    """Return the price for ``model_name``, falling back to the most expensive rate."""
+    """``model_name`` の価格を返す。表に無ければ最も高い単価に落とす。
+
+    Return the price for ``model_name``, falling back to the most expensive rate.
+    """
 
     price = TOKEN_PRICES.get(model_name)
     if price is not None:
@@ -94,7 +105,11 @@ def token_cost_nano_usd(
     cached_input_tokens: int = 0,
     cache_write_input_tokens: int = 0,
 ) -> int:
-    """Return the cost of one request in nano-dollars.
+    """1 リクエストの料金をナノドルで返す。
+
+    ``input_tokens`` はキャッシュの読み取り・書き込み分を含む入力の総量で、OpenAI と Groq の使用量の報告方法に合わせている。
+
+    Return the cost of one request in nano-dollars.
 
     ``input_tokens`` is the total input, including the portions read from and written to the
     cache, which matches how OpenAI and Groq report usage.

@@ -1,4 +1,10 @@
-"""SQLAlchemy persistence for daily API usage totals."""
+"""LLM などの API 利用量(費用・トークン数・リクエスト数)を、対象(subject)・日・リソースごとに日次で集計して保存する。
+
+利用上限の判定(services/usage_limits.py)や管理画面の集計が読む。費用はナノドル(1e-9 USD)の整数で持つ。
+
+SQLAlchemy persistence for daily API usage totals.
+Costs are integer nano-dollars (1e-9 USD); the usage-limit checks and admin totals read these rows.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +20,10 @@ from services.models import ApiUsageDaily
 
 @dataclass(frozen=True, slots=True)
 class SubjectUsageTotals:
-    """A subject's cost for one day and for the week containing it, in nano-dollars."""
+    """ある対象の 1 日分と、その日を含む週の費用(ナノドル)。
+
+    A subject's cost for one day and for the week containing it, in nano-dollars.
+    """
 
     daily_nano_usd: int
     weekly_nano_usd: int
@@ -22,7 +31,10 @@ class SubjectUsageTotals:
 
 @dataclass(frozen=True, slots=True)
 class UsageIncrement:
-    """One metered API call (or a batch of them) to add to a day's totals."""
+    """日次の集計に加算する、計測された API 呼び出し 1 件(またはそのまとまり)。
+
+    One metered API call (or a batch of them) to add to a day's totals.
+    """
 
     subject_key: str
     usage_date: date
@@ -35,7 +47,10 @@ class UsageIncrement:
 
 
 class UsageRepository:
-    """Accumulate usage per (subject, day, resource) with an atomic upsert."""
+    """(対象, 日, リソース)ごとの利用量を、原子的な UPSERT で加算していく。
+
+    Accumulate usage per (subject, day, resource) with an atomic upsert.
+    """
 
     async def add_usage(self, session: AsyncSession, increment: UsageIncrement) -> None:
         values = {
@@ -79,7 +94,10 @@ class UsageRepository:
         day: date,
         week_start: date,
     ) -> SubjectUsageTotals:
-        """Return ``subject_key``'s cost on ``day`` and from ``week_start`` through ``day``."""
+        """``subject_key`` の ``day`` 当日の費用と、``week_start`` から ``day`` までの週の費用を返す。
+
+        Return ``subject_key``'s cost on ``day`` and from ``week_start`` through ``day``.
+        """
 
         statement = select(
             func.coalesce(
@@ -96,7 +114,10 @@ class UsageRepository:
         return SubjectUsageTotals(daily_nano_usd=int(daily), weekly_nano_usd=int(weekly))
 
     async def total_cost(self, session: AsyncSession, *, start: date, end: date) -> int:
-        """Return every subject's combined cost from ``start`` through ``end``."""
+        """``start`` から ``end`` までの、全対象の費用の合計を返す。
+
+        Return every subject's combined cost from ``start`` through ``end``.
+        """
 
         statement = select(func.coalesce(func.sum(ApiUsageDaily.cost_nano_usd), 0)).where(
             ApiUsageDaily.usage_date >= start,
@@ -105,7 +126,10 @@ class UsageRepository:
         return int((await session.execute(statement)).scalar_one())
 
     async def lifetime_costs(self, session: AsyncSession, subject_keys: list[str]) -> dict[str, int]:
-        """Return each subject's cost over every recorded day; subjects with no usage map to 0."""
+        """各対象の、記録されている全期間の費用を返す。利用の無い対象は 0 になる。
+
+        Return each subject's cost over every recorded day; subjects with no usage map to 0.
+        """
 
         if not subject_keys:
             return {}

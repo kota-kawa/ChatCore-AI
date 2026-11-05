@@ -1,4 +1,11 @@
-"""Remote Streamable HTTP MCP server for Chat-Core content and memos."""
+"""Chat-Core の公開プロンプト/SKILL とメモを扱うリモート MCP サーバー（Streamable HTTP）の組み立て。
+
+OAuth 認可、公開投稿ツール（画像のチャンクアップロードを含む）、メモ・コンテキストのツール登録を行い、
+ASGI アプリとして `app.py` からマウントされる。
+Remote Streamable HTTP MCP server for Chat-Core content and memos.
+Wires up OAuth, the public-post tools (including chunked image upload) and the memo/context tool registrars,
+and is mounted as an ASGI app from `app.py`.
+"""
 
 from __future__ import annotations
 
@@ -77,6 +84,8 @@ from services.request_models import (
 from services.share_common import ShareContentKind, build_public_share_url
 from services.shared_prompt_service import create_shared_prompt
 
+# 生成済みの MCP サーバーと ASGI アプリ。初回アクセス時に一度だけ作り、以降は使い回す。
+# The built MCP server and ASGI app, created once on first access and reused.
 _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
 logger = logging.getLogger(__name__)
@@ -88,10 +97,15 @@ MCP_CATEGORY_DESCRIPTION = (
     "Usage category for the post. Omit it for uncategorized. "
     "Allowed category keys: " + MCP_CATEGORY_LABELS
 )
+# 画像アップロード系ツール(開始・追記・取消)の1時間あたりの呼び出し上限。チャンク数が多くなるため公開上限より大きい。
+# Hourly call cap for the image-upload tools (start, append, cancel); higher than publishing because uploads take many chunk calls.
 MCP_IMAGE_UPLOAD_OPERATION_LIMIT_PER_HOUR = 2_000
 
 
+# 公開投稿(プロンプト/SKILL)が成功したときに返す構造化結果。
+# Structured result returned after a prompt or SKILL is published.
 class McpPublishResult(BaseModel):
+    # 公開プロンプトまたはSkill投稿後に返す構造化結果。
     """Structured result returned after a public prompt or SKILL is published."""
 
     prompt_id: int = Field(description="ID of the public post created in Chat-Core")
@@ -106,7 +120,10 @@ class McpPublishResult(BaseModel):
     public_url: AnyHttpUrl = Field(description="URL for opening the published post")
 
 
+# チャンクアップロードの開始時に返す、ID と次の手順の案内。
+# Upload ID and next-step guidance returned when a chunked upload starts.
 class McpImageUploadSessionResult(BaseModel):
+    # 分割画像アップロードの手順と状態。
     """Instructions and state returned for a chunked image upload."""
 
     upload_id: str = Field(description="Opaque ID for this temporary image upload")
@@ -116,7 +133,10 @@ class McpImageUploadSessionResult(BaseModel):
     expires_in_seconds: int = Field(description="Seconds until this temporary upload expires")
 
 
+# チャンクを1つ受け付けた後に返す進捗。
+# Progress returned after one chunk is accepted.
 class McpImageUploadChunkResult(BaseModel):
+    # 画像チャンク受理後の進捗。
     """Progress returned after one image chunk is accepted."""
 
     upload_id: str = Field(description="Opaque ID for this temporary image upload")
@@ -124,7 +144,10 @@ class McpImageUploadChunkResult(BaseModel):
     received_characters: int = Field(description="Total Base64 characters received so far")
 
 
+# FastMCP の拡張。ツールごとの OAuth 要件の公開と、保護リソースのメタデータでの全 scope の公開を補う。
+# Extension of FastMCP that adds per-tool OAuth requirements and advertises every scope in the protected-resource metadata.
 class ChatCoreFastMCP(FastMCP):
+    # ChatGPTの接続UIが必要とするOAuth要件を、各ツールの拡張フィールドにも宣言する。
     """Expose the OAuth requirement on each tool for ChatGPT's linking UI.
 
     ``mcp`` 1.28 does not expose ``securitySchemes`` as a typed constructor
@@ -134,6 +157,8 @@ class ChatCoreFastMCP(FastMCP):
     """
 
     async def list_tools(self):
+        # 各ツールに必要な scope を securitySchemes として付ける。scope 未定義のツールは登録漏れなので起動時に気づけるよう例外にする。
+        # Attach each tool's required scope as securitySchemes; a tool without a declared scope is a registration bug, so raise.
         tools = await super().list_tools()
         secured_tools = []
         for tool in tools:
@@ -151,7 +176,13 @@ class ChatCoreFastMCP(FastMCP):
         return secured_tools
 
     def streamable_http_app(self) -> Any:
-        """Advertise every tool scope without requiring every scope globally.
+        """全ツールの scope を公開しつつ、全 scope を全体の必須にはしない。
+
+        FastMCP 1.28 は保護リソースのメタデータを ``AuthSettings.required_scopes`` から作る。Chat-Core は各ツールが
+        最小権限の scope を個別に検査するため、その一覧を意図的に空にしている。この置き換えが無いと、探索文書が
+        ``scopes_supported: []`` を返し、scope を省略するクライアントは旧来の公開ツールの分しか認可しなくなる。
+
+        Advertise every tool scope without requiring every scope globally.
 
         FastMCP 1.28 builds protected-resource metadata from
         ``AuthSettings.required_scopes``. Chat-Core intentionally leaves that
@@ -182,6 +213,8 @@ class ChatCoreFastMCP(FastMCP):
 
 
 async def _consume_publish_limit(user_id: int) -> None:
+    # 公開投稿のレート制限(1時間と1日)をユーザーごとに消費し、超過したら再試行までの秒数付きで拒否する。
+    # Consume the per-user publish limits (hourly and daily), rejecting with the retry delay when exceeded.
     allowed, _, retry_after = await run_blocking(
         consume_rate_limit,
         "mcp_prompt_publish:hour",
@@ -203,6 +236,8 @@ async def _consume_publish_limit(user_id: int) -> None:
 
 
 async def _consume_image_upload_operation_limit(actor: McpActor) -> None:
+    # 画像アップロード系ツールの共通のレート制限を消費する。
+    # Consume the shared rate limit for the image-upload tools.
     await consume_tool_limit(
         actor,
         "image_upload",
@@ -211,6 +246,10 @@ async def _consume_image_upload_operation_limit(actor: McpActor) -> None:
     )
 
 
+# 公開投稿の共通処理。画像の入力元(Base64 / ChatGPT ファイル)の排他と整合を確かめて保存し、共有投稿を作る。
+# 投稿作成に失敗したら、保存済みの添付を削除して元のエラーを返す。
+# Shared publishing path: validate that at most one image source is given and consistent, save it, and create the post.
+# If anything fails, saved attachments are removed and the original error is raised.
 async def _publish(
     user_id: int,
     payload: SharedPromptCreateRequest,
@@ -257,6 +296,7 @@ async def _publish(
         )
     except Exception:
         for attachment in attachments:
+            # 後始末の失敗で元の公開エラーを隠さない（MCP クライアントには元のエラーのほうが有用）。
             # The original publication error is more useful to the MCP client.
             with contextlib.suppress(Exception):
                 await run_blocking(delete_prompt_attachment, attachment)
@@ -265,6 +305,8 @@ async def _publish(
 
 
 def _validation_tool_error(exc: ValidationError, subject: str) -> ToolError:
+    # 入力検証エラーを、MCP クライアントが直せる文面の ToolError に変換する。カテゴリ不正のときは指定可能な値を示す。
+    # Turn a validation error into a ToolError the client can act on; for a bad category, list the allowed keys.
     for error in exc.errors():
         if tuple(error.get("loc", ())) == ("category",) or "カテゴリ" in str(error.get("msg", "")):
             allowed = ", ".join(MCP_CATEGORY_KEYS)
@@ -273,6 +315,7 @@ def _validation_tool_error(exc: ValidationError, subject: str) -> ToolError:
 
 
 def _create_mcp() -> FastMCP:
+    # DCR のシークレットを受け付ける前に、暗号鍵として使えるかを起動時に検証する。
     # Validate encryption-key material at startup, before accepting DCR secrets.
     for key in get_mcp_encryption_keys():
         Fernet(key.encode("ascii"))
@@ -299,6 +342,7 @@ def _create_mcp() -> FastMCP:
         auth=AuthSettings(
             issuer_url=public_base_url,
             resource_server_url=get_mcp_server_url(),
+            # 認証は全体で必須とし、scope は各ツールが実行時に個別に検査して securitySchemes で公開する（全体の必須 scope は空）。
             # Authentication is required globally. Each tool enforces its own
             # least-privilege scope at runtime and advertises it in securitySchemes.
             required_scopes=[],
@@ -318,6 +362,10 @@ def _create_mcp() -> FastMCP:
             allowed_origins=get_mcp_allowed_origins(),
         ),
     )
+    # ツールの性質をクライアントへ伝えるヒント。公開投稿は外部(公開の場)に影響し、ステージング系は影響せず、
+    # 追記は同じ再送が安全(冪等)、取消だけが破壊的。
+    # Hints telling clients what each tool does: publishing affects the outside world, staging does not,
+    # append is safe to retry (idempotent), and only cancel is destructive.
     annotations = ToolAnnotations(
         readOnlyHint=False,
         destructiveHint=False,
@@ -344,6 +392,7 @@ def _create_mcp() -> FastMCP:
     )
 
     # 日本語: テキストまたは画像生成プロンプトを公開共有へ投稿するMCPツール説明。
+    # 画像は任意で、Base64 または ChatGPT のファイルで渡す。media_type が image なら画像が必須。
     @mcp.tool(
         name="publish_prompt",
         title="Publish a public prompt",
@@ -446,6 +495,8 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "publish_prompt", result.prompt_id)
         return result
 
+    # ChatGPT のファイル入力は、画像が任意のツールとは別のツールに分ける。トップレベルの必須ファイル引数があると、
+    # ChatGPT が会話中のファイルを fileParams の契約へ結び付けられる。
     # Keep the ChatGPT file input separate from the optional-image tool. The
     # top-level required file field is important: ChatGPT can bind an available
     # conversation file to the documented fileParams contract.
@@ -515,6 +566,7 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "publish_image_prompt", result.prompt_id)
         return result
 
+    # 日本語: 画像を実バイトの Base64 で渡して画像プロンプトを投稿するツール。image_file が使えないときの代替。
     @mcp.tool(
         name="publish_image_prompt_base64",
         title="Publish a public image prompt from Base64",
@@ -601,6 +653,7 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "publish_image_prompt_base64", result.prompt_id)
         return result
 
+    # 日本語: 1回の呼び出しに収まらない大きな Base64 画像を分割して送るため、アップロードセッションを開始するツール。
     @mcp.tool(
         name="start_image_prompt_upload",
         title="Start a chunked image prompt upload",
@@ -646,6 +699,7 @@ def _create_mcp() -> FastMCP:
             expires_in_seconds=MCP_IMAGE_UPLOAD_TTL_SECONDS,
         )
 
+    # 日本語: 開始済みのアップロードへ、順番どおりに Base64 の断片を追記するツール（同じ内容の再送は安全）。
     @mcp.tool(
         name="append_image_prompt_upload",
         title="Append a chunked image prompt upload",
@@ -695,6 +749,7 @@ def _create_mcp() -> FastMCP:
             received_characters=received_characters,
         )
 
+    # 日本語: 未完了のチャンクアップロードを公開せずに破棄するツール。
     @mcp.tool(
         name="cancel_image_prompt_upload",
         title="Cancel a chunked image prompt upload",
@@ -724,6 +779,7 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "cancel_image_prompt_upload")
         return "Temporary image upload cancelled."
 
+    # 日本語: 全断片が揃ったチャンクアップロードの画像を添えて、画像プロンプトを投稿するツール。
     @mcp.tool(
         name="publish_chunked_image_prompt",
         title="Publish a completed chunked image prompt upload",
@@ -785,6 +841,8 @@ def _create_mcp() -> FastMCP:
         except ValidationError as exc:
             raise _validation_tool_error(exc, "投稿") from exc
         actor = require_actor(MCP_PROMPTS_WRITE_SCOPE)
+        # 取り出した時点で一時アップロードは使用済みになる。公開が成功しても失敗しても finally で後始末する。
+        # Once consumed the temporary upload is spent; clean it up in finally whether publishing succeeds or fails.
         upload_consumed = False
         try:
             image_base64 = await run_blocking(
@@ -813,6 +871,7 @@ def _create_mcp() -> FastMCP:
                         actor.client_id,
                     )
                 except Exception:
+                    # 後始末は尽力のみで、公開の成功や元のエラーを後始末の失敗で置き換えない。期限切れの掃除が後で再試行する。
                     # Publication success or its original error must not be replaced
                     # by best-effort staging cleanup. Expired cleanup retries later.
                     logger.warning(
@@ -889,6 +948,8 @@ def _create_mcp() -> FastMCP:
 
 
 def get_mcp_asgi_app():
+    # MCP サーバーを遅延生成して、リクエスト保護のミドルウェアで包んだ ASGI アプリを返す（プロセス内で単一）。
+    # Lazily build the MCP server and return its ASGI app wrapped in the request-protection middleware (one per process).
     global _mcp, _mcp_asgi_app
     if _mcp_asgi_app is None:
         _mcp = _create_mcp()
@@ -900,13 +961,21 @@ def get_mcp_asgi_app():
 
 
 def get_mcp_lifespan_context():
+    # アプリ起動時に MCP のセッション管理を開始するための lifespan コンテキスト（app.py の lifespan から使う）。
+    # Lifespan context that starts MCP session management at app startup (used from app.py's lifespan).
     app = get_mcp_asgi_app()
     return app.router.lifespan_context(app)
 
 
 def get_oauth_authorization_metadata() -> dict[str, Any]:
-    """Expose CIMD support, which the v1 SDK metadata helper does not advertise."""
+    """CIMD 対応を公開する。v1 SDK のメタデータ用ヘルパーはこれを広告しない。
+
+    Expose CIMD support, which the v1 SDK metadata helper does not advertise.
+    """
     base = get_mcp_public_base_url()
+    # RFC 8414 §3.3 では issuer が、保護リソースのメタデータの authorization_servers の値とバイト単位で一致する必要がある。
+    # MCP SDK は AnyHttpUrl で直列化する(ホストだけなら末尾にスラッシュが付く)ため、
+    # 同じ正規化をして厳格なクライアントにも受け入れられるようにする。
     # RFC 8414 §3.3 requires the issuer to byte-match the value advertised in the
     # protected resource metadata's authorization_servers, which the MCP SDK
     # serializes via AnyHttpUrl (a trailing slash is appended to a bare host).
@@ -928,7 +997,10 @@ def get_oauth_authorization_metadata() -> dict[str, Any]:
 
 
 def get_oauth_protected_resource_metadata() -> dict[str, Any]:
-    """Return RFC 9728 metadata for clients that probe the root well-known URI."""
+    """ルートの well-known URI を探索するクライアント向けに、RFC 9728 のメタデータを返す。
+
+    Return RFC 9728 metadata for clients that probe the root well-known URI.
+    """
     base = get_mcp_public_base_url()
     return {
         "resource": get_mcp_server_url(),

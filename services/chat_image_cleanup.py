@@ -1,4 +1,7 @@
-"""Reconcile stored chat images with the messages that still reference them."""
+"""保存済みのチャット画像を、まだ参照している発話と突き合わせて整理する。
+
+Reconcile stored chat images with the messages that still reference them.
+"""
 
 from __future__ import annotations
 

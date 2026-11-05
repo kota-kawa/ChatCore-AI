@@ -1,3 +1,12 @@
+"""JSON レスポンス・セッション・フロントエンド URL の各ヘルパーを 1 か所から使えるようにする窓口。
+
+実処理は web_json.py、web_session.py、web_urls.py にあり、ここでは同名の関数で包んで公開する。
+
+Single entry point exposing the JSON response, session and frontend-URL helpers.
+
+The real work lives in web_json.py, web_session.py and web_urls.py; this module wraps them under the same names.
+"""
+
 from __future__ import annotations
 
 import logging

@@ -27,6 +27,7 @@ ToolBudget = Literal["tool_calls", "reads", "write_proposals"]
 
 
 class WorkspaceToolArgumentError(ValueError):
+    # 利用できないモデル引数の問題点を、そのままモデルへ返す。
     """The model's arguments are unusable; ``problems`` goes back to the model as is."""
 
     def __init__(self, problems: Sequence[str]) -> None:
@@ -35,6 +36,7 @@ class WorkspaceToolArgumentError(ValueError):
 
 
 class WorkspaceToolError(Exception):
+    # 実行できない理由をカードまたはモデルへコードで通知する。
     """A tool could not run for a reason the card or the model sees only as a code."""
 
     def __init__(self, code: str) -> None:

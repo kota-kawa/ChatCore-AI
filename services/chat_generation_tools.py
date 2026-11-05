@@ -195,6 +195,9 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
         try:
             payload = search(query)  # type: ignore[misc]
             if inspect.isawaitable(payload):
+                # 生成ループは、LLM のストリームがブロッキングなので意図的に同期ワーカーにしている。
+                # ネイティブ async のリポジトリコールバックはこのワーカー境界でだけ橋渡しし、
+                # リクエスト経路のデータベースアクセスでは run_blocking を使わない。
                 # The generation loop is intentionally a synchronous worker because the LLM
                 # stream is blocking. Native-async repository callbacks are bridged only at
                 # this worker boundary; request-path database access never uses run_blocking.
@@ -370,6 +373,8 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                     trace_steps=state.web_search_trace_steps,
                 )
                 if _contains_unconfirmed_context_facts(lookup_payload):
+                    # MCP や取り込みで入った事実は、本人の確認なしで有効になりうる。外部入力と同様に扱い、
+                    # 「常に承認」でも、それを根拠にした書き込みが黙って実行されないようにする。
                     # MCP/import facts can be active without owner review. Treat them like
                     # external input so "always approve" cannot turn one into a silent write.
                     state.untrusted_input_ingested = True

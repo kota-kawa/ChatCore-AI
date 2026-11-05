@@ -1,4 +1,8 @@
-"""Embedding generation for memo and personal-context semantic search.
+"""メモと個人コンテキストの意味検索（セマンティック検索）に使う埋め込みベクトルを生成する。
+埋め込みを保存・検索する処理はすべて generate_embedding を通すので、モデルと次元数が
+vector(768) 列とずれない。連続して失敗したら一定時間は呼び出しを止める（失敗のラッチ）。
+
+Embedding generation for memo and personal-context semantic search.
 
 One provider, one place. Everything that stores or queries an embedding vector goes
 through :func:`generate_embedding`, so the model and its dimension count cannot drift
@@ -44,7 +48,10 @@ SEMANTIC_MAX_DISTANCE = 0.75
 
 
 def get_semantic_max_distance() -> float:
-    """Return the cosine-distance ceiling for semantic search."""
+    """意味検索で採用するコサイン距離の上限を返す。環境変数 SEMANTIC_MAX_DISTANCE が (0, 2] の数値ならそれを、無効なら既定値を使う。
+
+    Return the cosine-distance ceiling for semantic search.
+    """
     raw = os.environ.get("SEMANTIC_MAX_DISTANCE")
     if raw is None:
         return SEMANTIC_MAX_DISTANCE
@@ -60,19 +67,26 @@ def get_semantic_max_distance() -> float:
 EMBEDDING_FAILURE_THRESHOLD = 3
 EMBEDDING_FAILURE_COOLDOWN_SECONDS = 300.0
 
+# 日本語: 失敗のラッチ状態（連続失敗回数と、再開できる時刻）。複数スレッドから更新されるためロックで守る。
+# English: Failure-latch state (consecutive failures and the time calls may resume), guarded by a lock because several threads update it.
 _state_lock = threading.Lock()
 _consecutive_failures = 0
 _disabled_until = 0.0
 
 
 def reset_embedding_failure_state() -> None:
-    """Clear the failure latch (used by tests and after a configuration change)."""
+    """失敗のラッチを解除する（テストや設定変更の後に使う）。
+
+    Clear the failure latch (used by tests and after a configuration change).
+    """
     global _consecutive_failures, _disabled_until
     with _state_lock:
         _consecutive_failures = 0
         _disabled_until = 0.0
 
 
+# 日本語: 成功したらラッチを解除する。
+# English: A success clears the latch.
 def _record_success() -> None:
     global _consecutive_failures, _disabled_until
     with _state_lock:
@@ -80,6 +94,8 @@ def _record_success() -> None:
         _disabled_until = 0.0
 
 
+# 日本語: 失敗を数え、連続失敗が閾値に達したらクールダウンを開始してエラーログを 1 回出す。
+# English: Count a failure; once the threshold is reached, start the cooldown and log one error.
 def _record_failure() -> None:
     global _consecutive_failures, _disabled_until
     with _state_lock:
@@ -97,7 +113,10 @@ def _record_failure() -> None:
 
 
 def embeddings_available() -> bool:
-    """Return True when embeddings are configured and not in a failure cooldown."""
+    """埋め込みが設定済みで、失敗によるクールダウン中でもなければ True を返す。
+
+    Return True when embeddings are configured and not in a failure cooldown.
+    """
     if openai_client is None:
         return False
     with _state_lock:
@@ -105,7 +124,13 @@ def embeddings_available() -> bool:
 
 
 def get_embedding_health() -> dict[str, Any]:
-    """Report the embedding provider state for the readiness endpoint."""
+    """埋め込みプロバイダーの状態をレディネス用に返す。disabled（未設定）/ error（クールダウン中）/
+    degraded（直近に失敗はあるが利用は可能）/ ok のいずれか。埋め込みは任意機能なので required は False。
+
+    Report the embedding provider state for the readiness endpoint.
+    Status is disabled (unconfigured), error (cooling down), degraded (some recent failures) or ok;
+    required is False because embeddings are optional.
+    """
     with _state_lock:
         cooling_down = time.monotonic() < _disabled_until
         failures = _consecutive_failures
@@ -127,7 +152,12 @@ def get_embedding_health() -> dict[str, Any]:
 
 
 def generate_embedding(text: str) -> list[float] | None:
-    """Generate one dense embedding, or None when embeddings are unavailable."""
+    """テキスト 1 件の埋め込みベクトルを生成する。使えない・空文字・失敗・次元不一致のときは None を返す。
+    成功と失敗はラッチに記録し、使用量も記録する。
+
+    Generate one dense embedding, or None when embeddings are unavailable.
+    Returns None for empty text, failures and dimension mismatches; outcomes feed the failure latch and usage is recorded.
+    """
     if not embeddings_available():
         return None
 

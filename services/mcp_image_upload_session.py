@@ -1,4 +1,9 @@
-"""Bounded temporary storage for chunked MCP image uploads."""
+"""MCP 経由の画像アップロードを、分割(チャンク)送信された Base64 として一時保存する上限付きストレージ。
+
+ユーザーごとのセッションディレクトリにチャンクを順に溜め、完了後に結合して返す。有効期限切れや壊れたセッションは掃除する。
+Bounded temporary storage for MCP image uploads sent as chunked Base64.
+Chunks accumulate in a per-session directory and are joined once complete; expired or corrupt sessions are cleaned up.
+"""
 
 from __future__ import annotations
 
@@ -45,21 +50,29 @@ logger = logging.getLogger(__name__)
 
 
 def _upload_root() -> str:
+    # プロンプト添付の保存先配下に、所有者のみアクセスできる一時ディレクトリを用意する。
+    # Ensure an owner-only staging directory under the prompt attachment upload root.
     root = os.path.join(get_prompt_attachment_upload_root(), _UPLOAD_DIRECTORY_NAME)
     os.makedirs(root, mode=0o700, exist_ok=True)
     return root
 
 
 def _owner_digest(user_id: int, client_id: str) -> str:
+    # ユーザーと MCP クライアントの組をハッシュ化し、メタデータに生の ID を残さず所有者を照合する。
+    # Hash the (user, MCP client) pair so ownership can be checked without storing raw IDs in metadata.
     owner = f"{int(user_id)}\0{client_id!s}"
     return hashlib.sha256(owner.encode("utf-8")).hexdigest()
 
 
 def _user_digest(user_id: int) -> str:
+    # ユーザー単位の同時アップロード数を数えるためのハッシュ。
+    # Per-user hash used to count that user's concurrent uploads.
     return hashlib.sha256(str(int(user_id)).encode("ascii")).hexdigest()
 
 
 def _session_directory(upload_id: str) -> str:
+    # upload_id は 32 桁の16進に限定し、パス区切りなどによるディレクトリ外への参照を防ぐ。
+    # Restrict upload_id to 32 hex characters so it cannot escape the staging directory.
     normalized = str(upload_id or "").strip().lower()
     if not _UPLOAD_ID_PATTERN.fullmatch(normalized):
         raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED)
@@ -67,10 +80,14 @@ def _session_directory(upload_id: str) -> str:
 
 
 def _processing_directory(upload_id: str) -> str:
+    # 取り出し済み(公開処理中)のセッションを置く、`.processing` 付きのディレクトリ名。
+    # Directory name with the `.processing` suffix for a consumed session that is being published.
     return f"{_session_directory(upload_id)}.processing"
 
 
 def _atomic_write_text(path: str, content: str) -> None:
+    # 一時ファイルへ書いて fsync 後に置き換え、途中で落ちても中途半端なファイルを残さない。
+    # Write to a temp file, fsync, then replace, so a crash never leaves a half-written file.
     directory = os.path.dirname(path)
     fd, temporary_path = tempfile.mkstemp(prefix=".mcp-image-", dir=directory, text=True)
     try:
@@ -90,6 +107,8 @@ def _metadata_path(directory: str) -> str:
 
 
 def _read_metadata(directory: str) -> dict[str, Any]:
+    # セッションの metadata.json を読む。読めない・壊れている場合は期限切れ扱いにする。
+    # Read the session's metadata.json; unreadable or corrupt metadata is treated as expired.
     try:
         with open(_metadata_path(directory), encoding="ascii") as file_obj:
             value = json.load(file_obj)
@@ -113,6 +132,8 @@ def _write_metadata(directory: str, metadata: dict[str, Any]) -> None:
 
 @contextmanager
 def _session_lock(directory: str):
+    # セッション単位の排他ロック。同じアップロードへの並行リクエストでチャンクやメタデータが競合しないようにする。
+    # Per-session exclusive lock so concurrent requests on one upload cannot race on chunks or metadata.
     with ExitStack() as stack:
         # ロックファイルを開く段階の OSError だけをアップロード期限切れエラーへ変換する。
         # ExitStack が確実にクローズするため、ロック本体の例外はそのまま呼び出し元へ伝える。
@@ -133,6 +154,8 @@ def _session_lock(directory: str):
 
 @contextmanager
 def _user_lock(root: str, user_id: int):
+    # ユーザー単位の排他ロック。同時アップロード数の確認と新規作成を不可分にして上限を超えさせない。
+    # Per-user exclusive lock making the active-upload count check and creation atomic, so the cap holds.
     lock_path = os.path.join(root, f".user-{_user_digest(user_id)}.lock")
     with open(lock_path, "a+b") as lock_file:
         if fcntl is not None:
@@ -145,12 +168,17 @@ def _user_lock(root: str, user_id: int):
 
 
 def _remove_session_directory(directory: str) -> None:
+    # シンボリックリンクは辿らず、通常のディレクトリだけを削除する。
+    # Remove only real directories, never following symbolic links.
     if os.path.isdir(directory) and not os.path.islink(directory):
         shutil.rmtree(directory)
 
 
 def _claim_session_for_removal(directory: str) -> str:
-    """Atomically hide a session before removing it outside the session lock."""
+    """セッションを原子的にリネームして見えなくし、セッションロックの外で削除できるようにする。
+
+    Atomically hide a session before removing it outside the session lock.
+    """
     claimed_directory = f"{directory}.deleting-{uuid4().hex}"
     try:
         os.replace(directory, claimed_directory)
@@ -160,6 +188,8 @@ def _claim_session_for_removal(directory: str) -> str:
 
 
 def _metadata_is_expired(metadata: dict[str, Any], now: float) -> bool:
+    # 作成時刻が読めないメタデータは期限切れとして扱う。
+    # Metadata without a readable creation time counts as expired.
     try:
         created_at = float(metadata["created_at"])
     except (KeyError, TypeError, ValueError):
@@ -168,7 +198,10 @@ def _metadata_is_expired(metadata: dict[str, Any], now: float) -> bool:
 
 
 def cleanup_expired_mcp_image_uploads(*, now: float | None = None) -> int:
-    """Delete expired or corrupt upload sessions from the shared staging root."""
+    """共有ステージング領域から、期限切れまたは壊れたアップロードセッションを削除し、削除数を返す。
+
+    Delete expired or corrupt upload sessions from the shared staging root.
+    """
     current_time = time.time() if now is None else float(now)
     deleted = 0
     for entry in os.scandir(_upload_root()):
@@ -204,7 +237,10 @@ def create_mcp_image_upload(
     client_id: str,
     expected_base64_characters: int,
 ) -> str:
-    """Create an actor-bound chunk upload session and return its opaque ID."""
+    """ユーザーとクライアントに結び付いたチャンクアップロードのセッションを作り、不透明な ID を返す。
+
+    Create an actor-bound chunk upload session and return its opaque ID.
+    """
     if (
         expected_base64_characters <= 0
         or expected_base64_characters % 4 != 0
@@ -250,6 +286,8 @@ def create_mcp_image_upload(
 
 
 def _read_owned_metadata(directory: str, user_id: int, client_id: str) -> dict[str, Any]:
+    # 所有者が一致し期限内のときだけメタデータを返す。他人のセッションも「期限切れ」と同じ失敗にして存在を悟らせない。
+    # Return metadata only for the owner and within the TTL; a foreign session fails like an expired one so its existence is not revealed.
     metadata = _read_metadata(directory)
     if (
         metadata.get("owner_digest") != _owner_digest(user_id, client_id)
@@ -266,7 +304,10 @@ def append_mcp_image_upload_chunk(
     chunk_index: int,
     chunk_base64: str,
 ) -> tuple[int, int]:
-    """Append one ordered Base64 fragment, accepting identical retries."""
+    """順序付きの Base64 断片を1つ追記する。同じ内容の再送は受け付ける。
+
+    Append one ordered Base64 fragment, accepting identical retries.
+    """
     normalized_chunk = "".join(str(chunk_base64 or "").split())
     if (
         not normalized_chunk
@@ -288,6 +329,8 @@ def append_mcp_image_upload_chunk(
             raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_CHUNK_ORDER)
 
         chunk_path = os.path.join(directory, f"chunk-{chunk_index:04d}.txt")
+        # 既に受け取ったチャンクの再送は、内容が同じなら冪等に成功させ、違えば順序エラーにする。
+        # A resent chunk already received succeeds idempotently if identical, otherwise it is an order error.
         if chunk_index < next_chunk_index:
             try:
                 with open(chunk_path, encoding="ascii") as file_obj:
@@ -311,7 +354,10 @@ def append_mcp_image_upload_chunk(
 
 
 def consume_mcp_image_upload(user_id: int, client_id: str, upload_id: str) -> str:
-    """Atomically close and return a complete actor-owned Base64 upload."""
+    """完了した自分のアップロードを原子的に閉じ、結合した Base64 を返す。
+
+    Atomically close and return a complete actor-owned Base64 upload.
+    """
     directory = _session_directory(upload_id)
     with _session_lock(directory):
         metadata = _read_owned_metadata(directory, user_id, client_id)
@@ -335,6 +381,8 @@ def consume_mcp_image_upload(user_id: int, client_id: str, upload_id: str) -> st
                     chunks.append(file_obj.read())
         except OSError as exc:
             raise ValueError(ERROR_MCP_PROMPT_IMAGE_UPLOAD_EXPIRED) from exc
+        # 取り出したセッションは `.processing` へ移し、同じ内容を二重に取り出せないようにする。
+        # Move the consumed session to `.processing` so the same content cannot be consumed twice.
         try:
             os.replace(directory, _processing_directory(upload_id))
         except OSError as exc:
@@ -343,7 +391,10 @@ def consume_mcp_image_upload(user_id: int, client_id: str, upload_id: str) -> st
 
 
 def delete_mcp_image_upload(upload_id: str, user_id: int, client_id: str) -> None:
-    """Delete an actor-owned staging session after publication or cancellation."""
+    """公開後またはキャンセル時に、自分のステージングセッションを削除する。
+
+    Delete an actor-owned staging session after publication or cancellation.
+    """
     directory = _session_directory(upload_id)
     with _session_lock(directory):
         _read_owned_metadata(directory, user_id, client_id)
@@ -352,7 +403,10 @@ def delete_mcp_image_upload(upload_id: str, user_id: int, client_id: str) -> Non
 
 
 def delete_consumed_mcp_image_upload(upload_id: str, user_id: int, client_id: str) -> None:
-    """Delete a processing upload without allowing its content to be reused."""
+    """処理中(取り出し済み)のアップロードを、内容を再利用させずに削除する。
+
+    Delete a processing upload without allowing its content to be reused.
+    """
     directory = _processing_directory(upload_id)
     with _session_lock(directory):
         metadata = _read_metadata(directory)

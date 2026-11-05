@@ -1,3 +1,4 @@
+# Skill同梱テキストリソースの検証と正規化を担う。
 """Validation and normalization helpers for text resources bundled with SKILL posts."""
 
 from __future__ import annotations
@@ -144,6 +145,7 @@ _CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def validate_resource_path(value: str) -> str:
+    # 安全なPOSIX形式の相対リソースパスへ正規化する。
     """Return a safe canonical POSIX-relative resource path."""
     path = str(value or "").strip()
     if not path:
@@ -176,6 +178,7 @@ def validate_resource_path(value: str) -> str:
 
 
 def validate_resource_content(value: str) -> str:
+    # 内容がUTF-8テキストであり、ファイル別の容量制限内か検証する。
     """Validate that resource content is UTF-8 text within the per-file limit."""
     content = str(value)
     if "\x00" in content:
@@ -192,11 +195,13 @@ def validate_resource_content(value: str) -> str:
 
 
 def infer_resource_language(path: str) -> str:
+    # 検証済みパスから表示用の言語識別子を推定する。
     """Infer a display language identifier from a validated path."""
     return _LANGUAGE_BY_SUFFIX.get(PurePosixPath(path).suffix.casefold(), "text")
 
 
 def infer_resource_media_type(path: str) -> str:
+    # 検証済みパスから安全なテキストメディア型を推定する。
     """Infer a safe text media type from a validated path."""
     suffix = PurePosixPath(path).suffix.casefold()
     if suffix in _MIME_BY_SUFFIX:

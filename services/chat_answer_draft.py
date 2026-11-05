@@ -35,7 +35,10 @@ DRAFT_MIN_VISIBLE_CHARS = 24
 
 @dataclass(frozen=True)
 class AnswerDraftUpdate:
-    """One feed result: ``reset`` discards the draft already shown, then ``text`` is appended."""
+    """feed 1回分の結果。``reset`` が真なら表示済みの下書きを捨ててから ``text`` を追記する。
+
+    One feed result: ``reset`` discards the draft already shown, then ``text`` is appended.
+    """
 
     text: str = ""
     reset: bool = False
@@ -61,6 +64,8 @@ class AnswerDraftFilter:
         self._segment_start = 0
         self._start_segment()
 
+    # 新しい区間（先頭、または `</think>` の直後）の状態を初期化する
+    # Reset the state for a new segment (the start, or just after a `</think>`)
     def _start_segment(self) -> None:
         self._envelope_filter = TurnStateUpdateFilter()
         # 下書きを出し始める前に溜めている、封筒を除いた本文。
@@ -74,7 +79,10 @@ class AnswerDraftFilter:
         self._emitted = False
 
     def feed(self, chunk: str) -> AnswerDraftUpdate:
-        """Return the draft delta for ``chunk``, flagging a discard of the draft shown so far."""
+        """``chunk`` に対する下書きの差分を返す。これまでの下書きを捨てるべきときは reset を立てる。
+
+        Return the draft delta for ``chunk``, flagging a discard of the draft shown so far.
+        """
         if not chunk:
             return AnswerDraftUpdate()
         previous_length = len(self._seen)
@@ -98,6 +106,10 @@ class AnswerDraftFilter:
         answer_start = reasoning_answer_start(self._seen, self._latest_user_message)
         return answer_start if answer_start > self._segment_start else None
 
+    # 封筒を除いた本文を、表示開始の最小文字数が揃うまで溜める。揃ったら先頭が封筒 JSON でないことを
+    # 確かめてから下書きを流し始める。
+    # Hold the envelope-free body until the minimum visible length is reached, then check it does not
+    # open like an envelope JSON and start drafting.
     def _advance(self, chunk: str) -> str:
         visible = self._envelope_filter.feed(chunk)
         if self._blocked:

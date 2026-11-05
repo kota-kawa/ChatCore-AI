@@ -245,6 +245,8 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             max(1_000, context_budget.available_input_tokens // 3),
         )
 
+        # 射影したメッセージに、必要なら Web 検索の根拠ポリシーを足す内部関数
+        # Inner helper that adds the web-evidence policy to a projected message list when needed
         def with_web_policy(
             projection: list[dict[str, Any]],
         ) -> list[dict[str, Any]]:
@@ -312,7 +314,10 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
     # The single-decision loop: read TurnState, optionally run tools, update state, decide again.
     # Only the newest call and its result are replayed, never the whole tool history.
     def _run_agent_loop(self, state: ChatTurnRunState) -> bool:
-        """Drive the decision loop; return True when a stop request ended the turn."""
+        """判断ループを回す。停止要求でターンが終わったときは True を返す。
+
+        Drive the decision loop; return True when a stop request ended the turn.
+        """
         budget = state.budget
         telemetry = state.telemetry
         while True:

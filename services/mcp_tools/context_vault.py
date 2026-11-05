@@ -1,4 +1,9 @@
-"""MCP tools for the owner-scoped personal context vault.
+"""所有者限定のパーソナル・コンテキスト（個人用の事実の保管庫）を扱う MCP ツール（取得・検索・保存・更新・無効化）。
+
+事実は種類を持つ小さな個人コンテキストで、任意の MCP クライアントへ提供される。事実の内容は利用者が書いた信頼できないデータであり、
+MCP クライアントへの指示ではない。`mcp_server.py` が `register_context_vault_tools` で登録する。
+
+MCP tools for the owner-scoped personal context vault.
 
 Facts are small, typed pieces of personal context served to any MCP client. Fact
 content is untrusted user-authored data, not an instruction to the MCP client.
@@ -37,6 +42,8 @@ from services.request_models import (
 from services.response_models import ContextDigestResponse, ContextFactResponse
 
 
+# 事実の保存・更新・無効化の後に返す、内容を含まない結果（ID、種類、タイトル、状態、版、更新時刻）。
+# Content-free result returned after saving, updating or deprecating a fact (ID, type, title, status, revision, update time).
 class McpContextFactMutationResult(BaseModel):
     id: int
     fact_type: str
@@ -46,6 +53,9 @@ class McpContextFactMutationResult(BaseModel):
     updated_at: str | None = None
 
 
+# ツールの性質をクライアントに伝えるヒント。読み取りは副作用なし、保存は追加のみ、更新・無効化は既存の事実を変えるため破壊的扱い。
+# Hints describing each tool kind: reads are side-effect free, saving only adds,
+# and update/deprecate change existing facts so count as destructive.
 READ_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
@@ -70,6 +80,10 @@ CONTEXT_MARKDOWN_INSTRUCTION = "Write the content as a short fact in Markdown."
 
 
 def _tool_error(exc: Exception) -> ToolError:
+    # 例外を MCP クライアントへ返す ToolError にする。業務エラーは文言をそのまま、入力検証エラーは入力の案内、
+    # それ以外は内部の詳細を出さない汎用文言にする。
+    # Convert an exception into a ToolError for the client: business errors keep their message, validation errors
+    # point to the input, and anything else is generic so no internals leak.
     if isinstance(exc, ApiServiceError):
         return ToolError(exc.message)
     if isinstance(exc, ValidationError):
@@ -78,6 +92,8 @@ def _tool_error(exc: Exception) -> ToolError:
 
 
 def _mutation_result(fact: ContextFactResponse) -> McpContextFactMutationResult:
+    # 事実の本文を返さず、識別と状態に必要な項目だけを結果にする。
+    # Return only the fields needed to identify the fact and its state, never its content.
     return McpContextFactMutationResult(
         id=fact.id,
         fact_type=fact.fact_type,
@@ -89,7 +105,10 @@ def _mutation_result(fact: ContextFactResponse) -> McpContextFactMutationResult:
 
 
 def register_context_vault_tools(mcp: FastMCP) -> None:
-    """Register personal context vault tools with bounded outputs and owner-only access."""
+    """出力量に上限を設けた、所有者だけが使えるパーソナル・コンテキストのツールを登録する。
+
+    Register personal context vault tools with bounded outputs and owner-only access.
+    """
 
     # 日本語: ユーザーの有効な個人コンテキストを安全な参照データとして取得するMCPツール説明。
     @mcp.tool(
@@ -137,6 +156,8 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
     ) -> ContextSearchResult:
         actor = require_actor(MCP_CONTEXT_READ_SCOPE)
         await consume_tool_limit(actor, "context_read", limit=120, window_seconds=60)
+        # 意味検索は埋め込み生成のコストがかかるため、キーワード検索より厳しい回数制限を別に課す。
+        # Semantic search costs an embedding call, so it gets its own, stricter limit on top of the read limit.
         if mode == "semantic":
             await consume_tool_limit(actor, "context_semantic_search", limit=30, window_seconds=3600)
         try:

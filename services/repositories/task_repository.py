@@ -1,4 +1,9 @@
-"""Async SQLAlchemy persistence boundary for user task templates.
+"""チャットのトップに並ぶ再利用可能なプロンプトテンプレート(タスク)の永続化境界。
+
+user_id が NULL の行は同梱の標準タスクで、system_task_key で同梱定義とユーザー行を結び付けておくと、
+ユーザーが編集するまでは言語別の文面が同梱定義に追随する。
+
+Async SQLAlchemy persistence boundary for user task templates.
 
 Tasks are the reusable prompt templates listed on the chat top page.  Rows with
 user_id IS NULL are the bundled catalog, and system_task_key links a
@@ -27,11 +32,18 @@ from services.i18n import get_current_locale
 from services.models import Task
 from services.share_common import is_unique_violation
 
+# 日本語: ユーザー単位の advisory lock の名前空間。名前の重複確認と挿入/並べ替えの間に別の書き込みが入らないようにする。
+# English: Advisory-lock namespace for per-user task writes, so no other write lands between the duplicate-name
+# check and the insert/reorder.
 TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307
 
 
 class TaskRepository:
-    """Repository for the bundled and user-owned task templates.
+    """同梱の標準タスクとユーザー所有のタスクテンプレートを扱うリポジトリ。
+
+    commit はせず、トランザクションは Service 側が持つ(1 つの作業単位ごとに独立した AsyncSession を渡す)。
+
+    Repository for the bundled and user-owned task templates.
 
     The repository never commits.  Services own the transaction and pass an
     isolated AsyncSession for one unit of work.
@@ -40,8 +52,12 @@ class TaskRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    # タスク
     # Tasks ------------------------------------------------------------------
 
+    # 日本語: user_id 指定でそのユーザーのタスク、None で同梱の標準タスクを、表示順(未設定は末尾)で返す。locale に合わせて文面を差し替える。
+    # English: Returns the user's tasks, or the bundled catalog when user_id is None, in display order (unset
+    # last), localized to the locale.
     async def fetch_tasks(self, user_id: int | None, locale: str) -> list[dict[str, Any]]:
         rows = (
             await self.session.execute(
@@ -52,6 +68,10 @@ class TaskRepository:
         ).scalars().all()
         return [self._localize_task(task, locale, is_default=False) for task in rows]
 
+    # 日本語: プロンプト組み立て用に 1 件を引く。task_id があればそれを、無ければ標準タスクのキー(または名前)で探し、
+    # ユーザー自身のタスクが同梱のものより優先される。
+    # English: Fetches one task for prompt building: by task_id when given, otherwise by system key (or name),
+    # preferring the user's own task over a bundled one.
     async def get_task_prompt_data(
         self, task: str, user_id: int | None, task_id: int | None = None
     ) -> dict[str, Any] | None:
@@ -83,6 +103,9 @@ class TaskRepository:
         row = (await self.session.execute(stmt)).mappings().first()
         return localize_system_task(dict(row), get_current_locale()) if row is not None else None
 
+    # 日本語: 並び順の更新。new_order は有効なタスク ID の全件と過不足なく一致する必要があり、ずれていれば 400(同時の追加/削除を検知する)。
+    # English: Reorders tasks. new_order must match the full set of active task ids exactly, otherwise 400
+    # (detects concurrent adds/deletes).
     async def update_tasks_order(self, user_id: int, new_order: list[int]) -> None:
         await self._lock_user_tasks(user_id)
         rows = (
@@ -102,6 +125,8 @@ class TaskRepository:
             if result.rowcount != 1:
                 raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
 
+    # 日本語: タスクの論理削除(deleted_at を立てる)。
+    # English: Soft-deletes a task by setting deleted_at.
     async def delete_task(self, user_id: int, task_id: int) -> None:
         await self._lock_user_tasks(user_id)
         result = await self.session.execute(
@@ -113,7 +138,10 @@ class TaskRepository:
             raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
 
     async def get_owned_task(self, user_id: int, task_id: int) -> dict[str, Any]:
-        """Read one of the user's own Tasks in full, for chat tools to propose an edit against."""
+        """ユーザー自身のタスク 1 件を全項目で読み出す。チャットのツールが編集を提案する際の基準になる。
+
+        Read one of the user's own Tasks in full, for chat tools to propose an edit against.
+        """
         task = (
             await self.session.execute(
                 select(Task).where(Task.id == task_id, Task.user_id == user_id, Task.deleted_at.is_(None))
@@ -123,6 +151,13 @@ class TaskRepository:
             raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
         return self._localize_task(task, get_current_locale(), is_default=False)
 
+    # 日本語: タスクを編集する。expected_updated_at があれば、提案時から別の場所で更新されていないか確認
+    # し、変わっていれば 409(target_changed)。
+    # 同名(大文字小文字・前後空白を無視)の別タスクがあれば 409。None の項目は変更せず、標準タスク由来の行は「編集済み」の印を立てる。
+    # English: Edits a task. With expected_updated_at it rejects with 409 (target_changed) if the task changed
+    # since the proposal, and with 409 if another
+    # task has the same name (case/whitespace-insensitive). None fields are left untouched, and rows derived
+    # from a bundled task are flagged as customized.
     async def edit_task(
         self,
         user_id: int,
@@ -176,6 +211,9 @@ class TaskRepository:
         await self.session.flush()
         return True
 
+    # 日本語: タスクを末尾に追加する。同名のタスクは 409。事前確認をすり抜けた並行追加は、一意制約違反を同じ 409 に変換する。
+    # English: Appends a task. A duplicate name gives 409; a concurrent insert that slips past the pre-check
+    # is mapped from the unique violation to the same 409.
     async def add_task(
         self,
         user_id: int,
@@ -222,8 +260,11 @@ class TaskRepository:
             raise
         return task.id
 
+    # 内部ヘルパー
     # Internal helpers -------------------------------------------------------
 
+    # 日本語: ユーザー単位のトランザクション内 advisory lock。タスクの書き込みを直列化する。
+    # English: Transaction-scoped per-user advisory lock that serializes task writes.
     async def _lock_user_tasks(self, user_id: int) -> None:
         await self.session.execute(
             text("SELECT pg_advisory_xact_lock(:namespace, :user_id)").bindparams(

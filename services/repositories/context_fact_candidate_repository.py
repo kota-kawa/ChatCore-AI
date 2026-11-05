@@ -1,4 +1,10 @@
-"""Async SQLAlchemy persistence for the context-fact review queue."""
+"""My Context の事実候補(レビュー待ちキュー)の保存・一覧・承認・却下と、自動抽出の設定を永続化する。
+
+承認すると候補が正式な context fact に昇格する。services/context_vault_candidate_service.py から使われる。
+
+Async SQLAlchemy persistence for the context-fact review queue.
+Approving a candidate promotes it to a context fact; used by services/context_vault_candidate_service.py.
+"""
 
 from __future__ import annotations
 
@@ -21,8 +27,14 @@ from services.error_messages import (
 from services.models import ContextFact, ContextFactCandidate, User
 from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS
 
+# 日本語: 承認待ち候補の 1 ユーザーあたり上限と、重複判定(BM25)に使う既存文書の最大件数。
+# English: Per-user cap on pending candidates, and the maximum number of existing documents used for BM25 duplicate detection.
 MAX_PENDING_CONTEXT_FACT_CANDIDATES = 100
 MAX_CONTEXT_DEDUPLICATION_DOCUMENTS = 500
+# 日本語: advisory lock の名前空間(第 1 キー)。context_fact_repository と同じ値で、第 2 キーに user_id を渡すため、
+# 同一ユーザーの候補と事実の更新が同じロックで直列化される。
+# English: Advisory-lock namespace (first key), the same value as in context_fact_repository; with user_id as the second key,
+# candidate and fact writes of one user are serialized by the same lock.
 _CONTEXT_VAULT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
 
 _CANDIDATE_COLUMNS = (
@@ -64,6 +76,9 @@ _CANDIDATE_RETURNING = tuple(getattr(ContextFactCandidate, name) for name in _CA
 _FACT_RETURNING = tuple(getattr(ContextFact, name) for name in _FACT_COLUMNS)
 
 
+# 日本語: ORM モデル・Row・マッピングのどれが来ても、指定列だけの dict にそろえる(RETURNING の結果と ORM 行
+# を同じ関数でシリアライズするため)。
+# English: Normalizes an ORM model, Row or mapping into a dict of the given columns so RETURNING results and ORM rows share one serializer.
 def _record(row: Any, columns: tuple[str, ...]) -> dict[str, Any]:
     if isinstance(row, (ContextFactCandidate, ContextFact, User)):
         return {name: getattr(row, name) for name in columns}
@@ -130,18 +145,26 @@ def _serialize_fact(row: Any) -> dict[str, Any]:
 
 
 class ContextFactCandidateRepository:
-    """Owner-scoped candidate persistence; transaction ownership stays with the caller."""
+    """所有ユーザーで絞った候補の永続化。トランザクションは呼び出し側が持つ。
+
+    Owner-scoped candidate persistence; transaction ownership stays with the caller.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    # 日本語: トランザクション終了まで続くユーザー単位のロック。上限判定や重複判定と挿入の間に別リクエストが割り込むのを防ぐ。
+    # English: Transaction-scoped per-user lock, so another request cannot slip in between the cap/duplicate checks and the insert.
     async def _lock_user(self, user_id: int) -> None:
         await self.session.execute(
             select(func.pg_advisory_xact_lock(_CONTEXT_VAULT_LOCK_NAMESPACE, user_id))
         )
 
     async def store_candidates(self, user_id: int, candidates: list[dict[str, Any]]) -> int:
-        """Insert unique candidates up to the per-user pending cap."""
+        """重複を除いた候補を、ユーザーごとの承認待ち上限まで挿入し、挿入件数を返す。
+
+        Insert unique candidates up to the per-user pending cap.
+        """
         await self._lock_user(user_id)
         pending_count = await self.session.scalar(
             select(func.count(ContextFactCandidate.id)).where(
@@ -174,6 +197,10 @@ class ContextFactCandidateRepository:
                 ContextFactCandidate.status.in_(("pending", "rejected")),
             )
         )
+        # 日本語: 既存の事実・候補を重複判定の比較対象にする。active の事実と pending の候補を優先(priority 0)し、
+        # 却下済みは最後(2)に回して、上限件数で切ったときに有効な内容を残す。同順位では更新が新しいものが先。
+        # English: Existing facts and candidates become the duplicate-check corpus. Active facts and pending candidates rank first
+        # (priority 0) and rejected ones last (2), so the cap drops the least relevant documents; newer updates win within a rank.
         existing_documents = [
             {
                 "fact_type": str(row.fact_type),
@@ -208,6 +235,10 @@ class ContextFactCandidateRepository:
             existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS],
         )
 
+        # 日本語: 同じ fingerprint の候補は挿入しない。事前確認に加え、承認待ちに限る部分ユニーク索
+        # 引への ON CONFLICT DO NOTHING で並行挿入も防ぐ。
+        # English: Candidates with an existing fingerprint are skipped; ON CONFLICT DO NOTHING on the pending-only partial unique index
+        # also covers concurrent inserts beyond the up-front check.
         inserted = 0
         for candidate in unique_candidates:
             if inserted >= remaining:
@@ -239,6 +270,8 @@ class ContextFactCandidateRepository:
                 inserted += 1
         return inserted
 
+    # 日本語: (created_at, id) の降順によるキーセットページング。before_* を渡すとそれより古い行だけを返す。
+    # English: Keyset pagination ordered by (created_at, id) descending; before_* restricts the result to older rows.
     async def list_candidates(
         self,
         user_id: int,
@@ -285,7 +318,12 @@ class ContextFactCandidateRepository:
         content: str | None = None,
         importance: int | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Promote a pending candidate and approve it atomically."""
+        """承認待ちの候補を事実へ昇格させ、候補を承認済みにする(同一トランザクション)。
+
+        expected_revision が一致しないとき(他の操作で更新済み)は 409 で拒否する。
+
+        Promote a pending candidate and approve it atomically.
+        """
         await self._lock_user(user_id)
         candidate_model = await self.session.scalar(
             select(ContextFactCandidate)
@@ -333,6 +371,8 @@ class ContextFactCandidateRepository:
             raise RuntimeError("Promoted context fact was not returned.")
         fact = _serialize_fact(fact_row)
 
+        # 日本語: 状態と revision を条件に含めた UPDATE で楽観ロックし、取得後に変更されていたら 0 行になって競合として扱う。
+        # English: The UPDATE repeats the status and revision conditions as optimistic locking; zero rows means it changed meanwhile.
         candidate_statement = (
             update(ContextFactCandidate)
             .where(
@@ -358,6 +398,9 @@ class ContextFactCandidateRepository:
             )
         return _serialize_candidate(approved_row), fact
 
+    # 日本語: 却下。更新できなかった場合は、候補が無い(404)のか revision/状態の不一致(409)なのかを再確認して区別する。
+    # English: Rejects a candidate. When the update matches nothing, a follow-up lookup tells "not found"
+    # (404) from a revision/status conflict (409).
     async def reject_candidate(
         self,
         user_id: int,
@@ -416,6 +459,8 @@ class ContextFactCandidateRepository:
             raise ResourceNotFoundError(ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND)
         return bool(value)
 
+    # 日本語: 自動抽出を実行してよいか。ユーザー設定が有効で、承認待ちが上限未満のときだけ True(キューが満杯なら抽出しない)。
+    # English: Whether auto-extraction may run: enabled for the user and the pending queue is below its cap (no extraction when full).
     async def should_extract_context(self, user_id: int) -> bool:
         pending_count = (
             select(func.count(ContextFactCandidate.id))

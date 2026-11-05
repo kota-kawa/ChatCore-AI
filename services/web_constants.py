@@ -1,3 +1,8 @@
+"""フロントエンドの URL、プロジェクトのベースディレクトリ、内部エラーの既定メッセージなど、Web 層の共通定数。
+
+Shared web-layer constants such as the frontend URL, the project base directory and the default internal-error message.
+"""
+
 from __future__ import annotations
 
 import os

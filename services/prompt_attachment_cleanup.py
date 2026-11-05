@@ -1,3 +1,4 @@
+# 有効な投稿の添付情報とローカル画像ファイルを照合する。
 """Reconcile local prompt-share attachment files with active prompt records."""
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ async def cleanup_orphaned_prompt_attachments() -> int:
     async with session_scope() as session:
         attachments = await PromptAttachmentRepository(session).list_active_attachments()
 
+    # ファイル照合はDBセッションの外で行うブロッキングI/Oなので、DB専用executorを使わない。
     # File reconciliation is blocking I/O, but it is deliberately outside the
     # database session and does not use the DB blocking executor.
     deleted = await asyncio.to_thread(

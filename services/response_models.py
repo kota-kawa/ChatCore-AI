@@ -1,3 +1,14 @@
+"""API のレスポンス(と一部の入出力文書)の Pydantic モデルをまとめたファイル。
+
+共通のエラー形式、チャット履歴、Skill、プロンプト、メモ、コンテキスト金庫、デモ用アクセスコード、利用上限、
+チャットの承認カード(書き込みツール)など。frontend の生成型(api_schemas)の元になるため、項目の変更は契約の変更になる。
+
+Pydantic models for API responses (and a few import/export documents).
+Covers the shared error shape, chat history, Skills, prompts, memos, the context vault, demo access codes, usage
+limits and chat approval cards.
+These models are the source of the generated frontend types (api_schemas), so changing a field changes the contract.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -82,6 +93,8 @@ class DemoAccessCodeApi(ResponsePayloadModel):
     limit_usd: float
 
 
+# 日本語: 管理画面のデモ用アクセスコード一覧。
+# English: List of demo access codes on the admin screen.
 class DemoAccessCodeListResponse(ResponsePayloadModel):
     codes: list[DemoAccessCodeApi]
 
@@ -93,6 +106,8 @@ class DemoAccessCodeIssueResponse(ResponsePayloadModel):
     item: DemoAccessCodeApi
 
 
+# 日本語: デモ用アクセスコードを失効させた後の、更新済みの1件。
+# English: The updated code returned after revoking a demo access code.
 class DemoAccessCodeRevokeResponse(ResponsePayloadModel):
     item: DemoAccessCodeApi
 
@@ -150,10 +165,14 @@ class UserSkillApi(ResponsePayloadModel):
     updated_at: str | None = None
 
 
+# 日本語: Skill の一覧応答。
+# English: Skill list response.
 class UserSkillsApiResponse(ResponsePayloadModel):
     skills: list[UserSkillApi] = Field(default_factory=list)
 
 
+# 日本語: Skill の作成・更新・切り替えの結果(更新後の Skill とメッセージ)。
+# English: Result of creating, updating or toggling a Skill (the updated Skill and a message).
 class UserSkillMutationApiResponse(ResponsePayloadModel):
     skill: UserSkillApi | None = None
     message: str | None = None
@@ -309,6 +328,8 @@ class ContextVaultPortableFact(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     last_confirmed_at: str | None = Field(default=None, max_length=64)
 
+    # 日本語: 空白だけのタイトル/本文、NUL 文字、UTF-8 に変換できない文字を含む事実は、取り込みの時点で拒否する。
+    # English: Rejects facts whose title/content is blank, contains NUL, or cannot be encoded as UTF-8, at import time.
     @model_validator(mode="after")
     def _require_non_blank_text(self) -> ContextVaultPortableFact:
         if not self.title.strip() or not self.content.strip():
@@ -334,6 +355,8 @@ class ContextVaultExportDocument(BaseModel):
     facts: list[ContextVaultPortableFact]
 
 
+# 日本語: 取り込み前のプレビュー結果。件数の内訳と、取り込みを確定するための preview_token(期限つき)を返す。
+# English: Result of the import preview: count breakdowns and an expiring preview_token used to confirm the import.
 class ContextVaultImportPreviewResponse(ResponsePayloadModel):
     preview_token: str
     total_count: int = Field(ge=0)
@@ -347,6 +370,8 @@ class ContextVaultImportPreviewResponse(ResponsePayloadModel):
     expires_at: str
 
 
+# 日本語: 取り込み確定の結果(取り込んだ件数と、重複でスキップした件数)。
+# English: Result of a confirmed import: how many facts were imported and how many duplicates were skipped.
 class ContextVaultImportResponse(ResponsePayloadModel):
     status: Literal["success"] = "success"
     imported_count: int = Field(ge=0)
@@ -372,17 +397,23 @@ class ContextFactCandidateResponse(ResponsePayloadModel):
     updated_at: str | None = None
 
 
+# 日本語: 承認待ち候補の一覧。next_cursor で続きを取得し、total_pending は承認待ちの総数。
+# English: List of pending candidates; next_cursor fetches the next page and total_pending is the overall pending count.
 class ContextFactCandidateListResponse(ResponsePayloadModel):
     candidates: list[ContextFactCandidateResponse] = Field(default_factory=list)
     next_cursor: str | None = None
     total_pending: int = 0
 
 
+# 日本語: 候補を承認した結果。承認済みの候補と、昇格して作られた事実の両方を返す。
+# English: Result of approving a candidate: the approved candidate and the fact it was promoted to.
 class ContextFactCandidateApprovalResponse(ResponsePayloadModel):
     candidate: ContextFactCandidateResponse
     fact: ContextFactResponse
 
 
+# 日本語: 会話からの事実の自動抽出が有効かどうか。
+# English: Whether automatic fact extraction from conversations is enabled.
 class ContextExtractionSettingsResponse(ResponsePayloadModel):
     enabled: bool = False
 
@@ -544,6 +575,8 @@ class MySkillSavePreviewApi(ToolApprovalModel):
     name: str | None = None
     instructions: str | None = None
 
+    # 日本語: 新規作成(skill_id なし)では、name と instructions の両方が必要。
+    # English: Creating a Skill (no skill_id) requires both name and instructions.
     @model_validator(mode="after")
     def _require_content_to_create(self) -> MySkillSavePreviewApi:
         if self.skill_id is None and (not self.name or not self.instructions):
@@ -563,6 +596,8 @@ class ProfileSettingsUpdatePreviewApi(ToolApprovalModel):
     preferred_locale: Literal["ja", "en"] | None = None
     theme: Literal["light", "dark", "auto"] | None = None
 
+    # 日本語: 変更案を最低 1 つ含め、渡した項目は null にできない。display_name は空白だけも不可。
+    # English: At least one proposed value is required, supplied fields cannot be null, and display_name cannot be blank.
     @model_validator(mode="after")
     def _require_nonempty_changes(self) -> ProfileSettingsUpdatePreviewApi:
         fields = ("display_name", "bio", "llm_profile_context", "preferred_locale", "theme")
@@ -653,6 +688,8 @@ class ToolAutoApprovalApi(ResponsePayloadModel):
     family: ToolApprovalFamily
     created_at: str
 
+    # 日本語: tool_name に対応しない family の組み合わせを拒否する。
+    # English: Rejects a family that does not correspond to tool_name.
     @model_validator(mode="after")
     def _require_matching_family(self) -> ToolAutoApprovalApi:
         if _TOOL_NAME_FAMILIES.get(self.tool_name) != self.family:
@@ -660,6 +697,8 @@ class ToolAutoApprovalApi(ResponsePayloadModel):
         return self
 
 
+# 日本語: 「常に承認」を付与済みのツール一覧。
+# English: List of tools granted "always approve".
 class ToolAutoApprovalsResponse(ResponsePayloadModel):
     grants: list[ToolAutoApprovalApi] = Field(default_factory=list)
 

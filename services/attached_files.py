@@ -1,3 +1,12 @@
+"""チャットに添付されたファイル（テキスト、PDF、DOCX、XLSX、PPTX）を検証し、プロンプト用のテキストに変換する。
+
+Validates files attached to a chat (text, PDF, DOCX, XLSX, PPTX) and converts them into text for the prompt.
+Office ファイルは ZIP 爆弾・マクロ・外部エンティティ展開を拒否したうえで本文だけを取り出す。
+保存用 JSON との相互変換も持つ。
+Office files are checked against zip bombs, macros and entity expansion before only the text is
+extracted. This module also converts attachments to and from the stored JSON.
+"""
+
 from __future__ import annotations
 
 import base64

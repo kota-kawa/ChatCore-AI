@@ -1,3 +1,9 @@
+"""実行環境(FASTAPI_ENV)、セッション署名キー、セッション Cookie の SameSite 設定を環境変数から読む小さな設定ヘルパー。
+
+Small config helpers that read the runtime environment (FASTAPI_ENV), the session secret key and the session cookie
+SameSite setting from environment variables.
+"""
+
 import logging
 import os
 

@@ -131,6 +131,7 @@ def _map_repository_error(exc: Exception) -> str:
 
 
 def _trim_entries_to_budget(payload: dict[str, Any], key: str, max_chars: int) -> None:
+    # 項目を飛ばさず、索引ページを読み取り予算に収める。
     """Fit a compact index page to the read budget without skipping entries."""
     entries = payload[key]
     requested_count = len(entries)
@@ -147,6 +148,7 @@ def _trim_entries_to_budget(payload: dict[str, Any], key: str, max_chars: int) -
         payload["budget_truncated"] = True
 
 
+# 即時実行する読み取りツール。
 # Read tools -------------------------------------------------------------------
 
 
@@ -349,6 +351,7 @@ async def _read_my_skill(user_id: int, arguments: dict[str, Any], max_chars: int
     return ReadResult(payload=payload, query=f"skill:{params.skill_id}:instructions:{start}")
 
 
+# 承認待ちの書き込み提案。
 # Write proposals ---------------------------------------------------------------
 
 
@@ -640,6 +643,7 @@ async def _execute_my_skill_save(
     return ExecutionOutcome(target_id=int(skill_id), target_title=str(updated.get("name") or ""))
 
 
+# モデルへ公開するツール定義。
 # Definitions -------------------------------------------------------------------
 
 _function = build_function_definition

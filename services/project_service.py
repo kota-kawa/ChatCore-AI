@@ -1,9 +1,10 @@
+# Chatのblueprintへ非同期プロジェクト操作を公開する薄いサービス境界。
 """Async project operations exposed to the Chat blueprint.
 
-Projects are owned by the Chat repository because assigning a room to a
-project is part of the same persistence boundary as chat rooms.  Keeping this
-module as a thin async facade preserves the public service import path without
-reintroducing the legacy synchronous connection repository.
+プロジェクト行とルーム所属はProjectRepositoryが所有する。既存のimport先を保ちながら、
+同期DBアクセスを持ち込まないための薄い非同期窓口とする。
+Projects and room membership are owned by ProjectRepository. This thin async facade
+preserves the public service import path without adding synchronous database access.
 """
 
 from __future__ import annotations

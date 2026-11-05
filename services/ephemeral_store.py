@@ -1,3 +1,12 @@
+"""未ログイン（ゲスト）ユーザーの一時チャットルームを保持するストア。
+Redis が使えれば有効期限（TTL）付きで Redis に、使えなければプロセス内メモリに保存する。
+ルームの更新はルーム単位のロックと Redis の楽観ロックで read-modify-write を安全に行う。
+
+Store for temporary chat rooms of unauthenticated (guest) users.
+Held in Redis with a TTL when available, otherwise in process memory. Room updates are
+read-modify-write operations guarded by per-room locks and Redis optimistic locking.
+"""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +27,10 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     # redis 未導入の環境でも import できるよう、決して送出されない代替例外を用意する。
     # Provide a stand-in exception that is never raised so the module imports without redis.
     class WatchError(Exception):  # type: ignore[no-redef]
-        """Placeholder used when the redis package is not installed."""
+        """redis パッケージが無い環境で使う、送出されない代替の例外。
+
+        Placeholder used when the redis package is not installed.
+        """
 
 
 logger = logging.getLogger(__name__)
@@ -71,6 +83,8 @@ class EphemeralChatStore:
     # 遅延初期化でRedisクライアントを取得します。
     # Retrieve the Redis client using lazy initialization.
     def _get_redis(self):
+        # 日本語: モジュールの import 時にはネットワークへ接続しない。
+        # CI やユニットテストは Redis 無しでチャットのルートを import することが多いため。
         # Avoid network access during module import; CI/unit tests often import
         # chat routes without a Redis service available.
         # 取得できたクライアントだけをキャッシュする。None をキャッシュすると Redis 断や
@@ -239,8 +253,8 @@ class EphemeralChatStore:
         with self._memory_lock:
             self._memory.setdefault(sid, {})[room_id] = room
 
-    # 指定されたチャットルームを取得します。期限切れの場合は自動的に削除します。
-    # Retrieve the specified chat room. Deletes the room automatically if it has expired.
+    # 指定されたチャットルームを取得します。Redis 利用時は、期限切れなら読み出し時に削除します（メモリ利用時の掃除は cleanup が担当）。
+    # Retrieve the specified chat room. With Redis, an expired room is deleted on read (in-memory rooms are pruned by cleanup).
     def get_room(self, sid: str, room_id: str) -> dict | None:
         # 取得時にも期限切れを判定し、期限超過ルームは削除して None を返す
         # Validate expiry on read and delete expired rooms before returning None.
@@ -392,10 +406,13 @@ class EphemeralChatStore:
                     del self._memory[sid]
                 return True
 
-    # 指定されたユーザーメッセージ数よりも前のメッセージ履歴を削除します。
-    # Delete message history prior to the specified trailing user message count.
+    # 末尾から数えて trailing_user_count 個後ろにあるユーザー発話以降（その発話を含む）のメッセージを削除します。
+    # Delete messages starting from the user message that has trailing_user_count user messages after it (inclusive).
     def delete_messages_from_trailing_user_count(self, sid: str, room_id: str, trailing_user_count: int) -> bool:
-        """Delete messages from the user message that has `trailing_user_count` user messages after it."""
+        """後ろにユーザー発話が trailing_user_count 個あるユーザー発話以降（その発話を含む）を削除する。
+
+        Delete messages from the user message that has `trailing_user_count` user messages after it.
+        """
 
         # 日本語: 読み出し直後の履歴に対して切り詰めを適用します。
         # English: Apply the trim to the history as it was read inside the lock.
@@ -415,15 +432,18 @@ class EphemeralChatStore:
     # 最後のAIアシスタントメッセージ（およびそれ以降のメッセージ）を削除します。
     # Remove the last assistant message (and any messages following it).
     def delete_last_assistant_message(self, sid: str, room_id: str) -> bool:
-        """Delete the last assistant message (and any messages after it) from an ephemeral room."""
+        """一時ルームから、最後のアシスタント発話とそれ以降のメッセージを削除する。
+
+        Delete the last assistant message (and any messages after it) from an ephemeral room.
+        """
 
         # 日本語: 最後のアシスタント発話以降を切り落とします。
         # English: Cut everything from the last assistant message onwards.
         def trim(room: dict) -> bool:
             messages = room.get("messages") or []
             last_idx = -1
-            # メッセージ履歴を末尾から走査して、最後のアシスタントメッセージのインデックスを特定します。
-            # Scan message history from the end to identify the last assistant message index.
+            # メッセージ履歴を先頭から走査し、最後に現れたアシスタントメッセージのインデックスを記録します。
+            # Scan the message history from the start, recording the index of the last assistant message seen.
             for i, message in enumerate(messages):
                 if message.get("role") == "assistant":
                     last_idx = i

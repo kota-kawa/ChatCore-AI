@@ -1,3 +1,10 @@
+"""リクエストごとの表示言語（ロケール）を決め、レスポンスの言語ヘッダとクッキーへ反映する ASGI ミドルウェア。
+
+セッション、ユーザー設定、クッキー、Accept-Language の順に判定し、現在のロケールを `services.i18n` のコンテキストへ設定する。
+ASGI middleware that decides each request's display locale and reflects it in the response language headers and cookie.
+It resolves from session, user preference, cookie, then Accept-Language, and sets the current locale in the `services.i18n` context.
+"""
+
 from __future__ import annotations
 
 import inspect
@@ -26,12 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 async def _await_result(value: Any) -> Any:
+    # 同期関数でもコルーチンでも、呼び出し側が同じ書き方で結果を受け取れるようにする。
+    # Let callers receive the result the same way whether the function is sync or a coroutine.
     if inspect.isawaitable(value):
         return await value
     return value
 
 
 def _append_vary(headers: MutableHeaders, name: str) -> None:
+    # 既存の Vary を壊さず、まだ無い場合だけ項目を足す（言語で応答が変わるためキャッシュを分けさせる）。
+    # Add the name to Vary only when absent, keeping existing entries, so caches key responses by language.
     existing = headers.get("vary", "")
     values = [item.strip() for item in existing.split(",") if item.strip()]
     lower_values = {item.lower() for item in values}
@@ -46,6 +57,8 @@ def _locale_cookie_header(
     same_site: str = "lax",
     https_only: bool = False,
 ) -> str:
+    # ロケール用 Set-Cookie ヘッダ値を作る。
+    # Build the Set-Cookie header value for the locale cookie.
     cookie = SimpleCookie()
     cookie[LOCALE_COOKIE_NAME] = locale
     cookie[LOCALE_COOKIE_NAME]["path"] = "/"
@@ -58,6 +71,8 @@ def _locale_cookie_header(
 
 
 def _response_sets_locale_cookie(headers: MutableHeaders) -> bool:
+    # ハンドラが既にロケールのクッキーを設定済みか調べ、二重に Set-Cookie を付けないようにする。
+    # Check whether the handler already set the locale cookie, so a second Set-Cookie is not added.
     prefix = f"{LOCALE_COOKIE_NAME}=".lower()
     return any(value.lower().startswith(prefix) for value in headers.getlist("set-cookie"))
 
@@ -69,6 +84,10 @@ def set_locale_cookie(
     same_site: str = "lax",
     https_only: bool = False,
 ) -> None:
+    """ロケールのクッキーをレスポンスに設定する。未対応のロケールは ValueError。
+
+    Set the locale cookie on the response; raises ValueError for an unsupported locale.
+    """
     normalized = normalize_locale(locale)
     if normalized is None:
         raise ValueError("Unsupported locale")
@@ -84,6 +103,11 @@ def set_locale_cookie(
 
 
 class LocaleMiddleware:
+    """リクエストのロケールを決めて現在のロケールに設定し、応答へ Content-Language と必要ならクッキーを付ける。
+
+    Resolve the request locale, set it as the current locale, and add Content-Language (and the cookie when needed) to the response.
+    """
+
     def __init__(
         self,
         app: ASGIApp,
@@ -98,6 +122,8 @@ class LocaleMiddleware:
         self.bypass_paths = tuple(bypass_paths)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # HTTP 以外と bypass_paths のパスはロケール処理を行わず、そのまま内側へ渡す。
+        # Pass non-HTTP scopes and bypass_paths straight through without locale handling.
         if scope["type"] != "http" or str(scope.get("path") or "") in self.bypass_paths:
             await self.app(scope, receive, send)
             return
@@ -109,6 +135,8 @@ class LocaleMiddleware:
         token = set_current_locale(locale)
 
         async def send_wrapper(message: Message) -> None:
+            # 応答開始時に、ハンドラが state で書き換えたロケールも反映してヘッダを付ける。
+            # On response start, add headers using the locale the handler may have changed in state.
             if message["type"] == "http.response.start":
                 response_locale = normalize_locale(state.get("locale"), default=locale) or locale
                 headers = MutableHeaders(scope=message)
@@ -116,6 +144,8 @@ class LocaleMiddleware:
                 _append_vary(headers, "Accept-Language")
                 _append_vary(headers, "Cookie")
                 request_cookies = self._cookies_from_scope(scope)
+                # セッションやユーザー設定由来で、クッキーが現在の言語と食い違うときだけクッキーを更新する。
+                # Refresh the cookie only when the locale came from session/preference and the cookie differs.
                 if (
                     state.get("persist_locale_cookie") is True
                     and normalize_locale(request_cookies.get(LOCALE_COOKIE_NAME)) != response_locale
@@ -137,6 +167,10 @@ class LocaleMiddleware:
             reset_current_locale(token)
 
     async def _resolve_locale(self, scope: Scope) -> tuple[Locale, bool]:
+        # 優先順位は、セッションの言語、ログインユーザーの保存済み設定、クッキー、Accept-Language の順。
+        # 戻り値の bool は、クッキーへ書き戻すべきか（セッション/設定由来なら True）。
+        # Priority: session locale, the signed-in user's stored preference, cookie, then Accept-Language.
+        # The bool says whether the locale should be written back to the cookie (True for session/preference).
         session = scope.get("session")
         if isinstance(session, dict):
             session_locale = normalize_locale(session.get(PREFERRED_LOCALE_SESSION_KEY))
@@ -144,6 +178,8 @@ class LocaleMiddleware:
                 return session_locale, True
 
             user_id = session.get("user_id")
+            # ユーザー設定の DB 参照はセッションにつき一度だけ行い、結果（設定なしも）を LOADED フラグで記録する。
+            # Look up the stored preference only once per session; the LOADED flag records it even when none is set.
             if user_id and session.get(PREFERRED_LOCALE_LOADED_SESSION_KEY) is not True:
                 try:
                     preferred_locale = await _await_result(
@@ -165,6 +201,8 @@ class LocaleMiddleware:
 
     @staticmethod
     def _cookies_from_scope(scope: Scope) -> dict[str, str]:
+        # Cookie ヘッダを辞書にする。壊れたヘッダは空として扱う。
+        # Parse the Cookie header into a dict, treating a malformed header as empty.
         cookie_header = Headers(scope=scope).get("cookie")
         if not cookie_header:
             return {}

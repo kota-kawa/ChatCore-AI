@@ -1,4 +1,9 @@
-"""Wiring for the memo / shared-prompt reference sources a chat turn has selected.
+"""チャット 1 ターンで選ばれたメモ・共有プロンプトの参照元を、使ってよい検索関数へ組み立てる。
+
+送信・再生成・編集再生成の 3 経路が同じ規則（リクエストで有効化され、かつセッションが読める参照元だけをモデルへ渡す）を
+共有するため、この規則をここに 1 か所だけ置いている。
+
+Wiring for the memo / shared-prompt reference sources a chat turn has selected.
 
 Chat posts, regenerations and edit-regenerations all need the same rule: a reference source
 reaches the model only when the request enabled it and the session is allowed to read it.
@@ -27,7 +32,12 @@ __all__ = [
 
 
 class DeduplicatedLookup:
-    """Run each distinct query at most once per turn.
+    """同じクエリは 1 ターンに 1 回しか実行しない検索ラッパー。
+
+    選ばれた参照元は生成前に先読みされ、その後も絞り込み検索のためにツールとして使える。このラッパーが無いと、
+    先読み済みと同じクエリでツールを呼んだ場合に、同じメモ本文が二重に文脈へ入ってしまう。
+
+    Run each distinct query at most once per turn.
 
     The selected sources are prefetched before generation and their tools stay available for
     narrower follow-up searches. Without this wrapper a model that calls a tool with the query
@@ -40,10 +50,16 @@ class DeduplicatedLookup:
         self._lock = threading.Lock()
         self._searched: set[str] = set()
 
+    # 空白の連続と大文字小文字の差を無視して同一クエリとみなすための正規化キー。
+    # Normalized key so queries differing only in whitespace runs or letter case count as the same query.
     @staticmethod
     def _key(query: str) -> str:
         return " ".join(str(query or "").split()).casefold()
 
+    # 実行済みのクエリなら検索せず already_searched を返し、未実行なら検索して成功時だけ記録する。
+    # 空クエリ（key が空）は重複判定の対象にせず、毎回そのまま検索へ渡す。
+    # Return already_searched for a query run earlier; otherwise search and record it only on success.
+    # An empty query (empty key) is never deduplicated and always goes straight to the search.
     def __call__(self, query: str) -> dict[str, Any]:
         key = self._key(query)
         if key:
@@ -76,7 +92,10 @@ class DeduplicatedLookup:
 
 @dataclass(frozen=True)
 class SelectedReferenceSearchers:
-    """The lookups a single chat turn may use, plus the enabled ones it could not use."""
+    """1 回のチャットターンが使える検索関数と、有効化されたが使えなかった参照元をまとめる。
+
+    The lookups a single chat turn may use, plus the enabled ones it could not use.
+    """
 
     personal_knowledge: Callable[[str], dict[str, Any]] | None = None
     shared_prompt: Callable[[str], dict[str, Any]] | None = None
@@ -86,6 +105,10 @@ class SelectedReferenceSearchers:
     unavailable_sources: tuple[str, ...] = ()
 
 
+# リクエストのフラグとログイン状態から、このターンで実際に実行してよい検索関数を組み立てる。
+# 検索関数は呼び出し側から注入されるので、実際の DB や検索を使わずにテストできる。
+# Build the lookups this turn may run from the request flags and the sign-in state.
+# The search functions are injected by the caller, so the rule is testable without a real database or search.
 def build_selected_reference_searchers(
     *,
     user_id: int | None,
@@ -95,7 +118,10 @@ def build_selected_reference_searchers(
     search_shared_prompts: Callable[..., dict[str, Any]],
     personal_overview: Callable[..., dict[str, Any]] = build_personal_overview,
 ) -> SelectedReferenceSearchers:
-    """Resolve the request flags into the lookups this turn is actually allowed to run."""
+    """リクエストのフラグを、このターンで実際に実行してよい検索関数へ解決する。
+
+    Resolve the request flags into the lookups this turn is actually allowed to run.
+    """
     personal_knowledge: Callable[[str], dict[str, Any]] | None = None
     overview: Callable[[], dict[str, Any]] | None = None
     unavailable: list[str] = []

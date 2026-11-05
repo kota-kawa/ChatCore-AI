@@ -1,3 +1,12 @@
+"""リクエスト ID・メソッド・パスを ContextVar に保持し、ログへ付与して X-Request-ID を応答に返すミドルウェアとログフィルター。
+
+app.py がミドルウェアとして登録する。
+
+Middleware and log filter that keep the request ID, method and path in ContextVars, attach them to log records
+and echo X-Request-ID in responses.
+Registered as middleware by app.py.
+"""
+
 from __future__ import annotations
 
 import logging

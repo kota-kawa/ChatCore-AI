@@ -280,6 +280,7 @@ def _matching_non_memo_write_cards(
     explicit_matches = [card for card in cards if _write_card_matches_target(card, statement)]
     if explicit_matches:
         return explicit_matches
+    # 回答に対象名がなければ、直近の依頼で対象が一意な明確な完了主張だけを結び付ける。
     # Without a name in the answer, only bind an unambiguous direct completion claim
     # to the unique target named by the latest request. Draft-like language stays alone.
     if not cards or any(
@@ -396,6 +397,7 @@ def _matching_memo_claim_card(
     latest_user_message: str,
     approval_cards: Sequence[dict[str, Any]],
 ) -> dict[str, Any] | None:
+    # 対象が見える単一カードだけを根拠にする。別のメモのカード状態では裏付けられない。
     # A single card with a visible target is required; another card's status cannot
     # substantiate a claim about this memo.
     if len(approval_cards) != 1:
@@ -423,6 +425,7 @@ def _matching_memo_claim_card(
     title_folded = title.casefold()
     if title_folded in statement_folded:
         return card
+    # 対象名のない主張は依頼対象のメモが一意な場合に限り検証し、別名や対象不明なら未検証とする。
     # Generic statements can refer to the sole requested memo. A different named
     # memo, or a missing target in the request, leaves the claim unverified.
     if title_folded not in latest_user_message.casefold():
@@ -442,7 +445,9 @@ def _unconfirmed_write_claim_fallback(
     latest_user_message: str,
     approval_cards: Sequence[dict[str, Any]] = (),
 ) -> str | None:
+    # メモの書き込み完了主張と、カードが否定する他の書き込み主張を通知文へ置き換える。
     """Replace memo write claims, and non-memo write claims its cards contradict, with a notice."""
+    # 引用例やコードはデータとして扱い、アシスタント自身の主張には数えない。
     # Quoted examples and code are data, not claims made by the assistant.
     prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     for line in prose.splitlines():

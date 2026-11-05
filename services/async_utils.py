@@ -1,3 +1,9 @@
+"""ブロッキング I/O と同期イテレータを、専用スレッドプール経由で非同期コードから安全に呼ぶためのユーティリティ。
+
+Utilities for calling blocking I/O and sync iterators from async code through dedicated thread pools.
+`run_blocking` offloads short blocking calls; `iterate_blocking` exposes a blocking iterator (such as an SSE stream) as an async iterator.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -64,10 +70,14 @@ class _LazyExecutor:
             executor.shutdown(wait=wait)
 
 
+# ブロッキング用プールのスレッド数。環境変数 RUN_BLOCKING_MAX_WORKERS（既定 64）
+# Thread count of the blocking pool, from RUN_BLOCKING_MAX_WORKERS (default 64)
 def _resolve_max_workers() -> int:
     return env_int("RUN_BLOCKING_MAX_WORKERS", _DEFAULT_MAX_WORKERS)
 
 
+# ストリーム用プールのスレッド数。環境変数 SSE_STREAM_MAX_WORKERS（既定 256）
+# Thread count of the stream pool, from SSE_STREAM_MAX_WORKERS (default 256)
 def _resolve_stream_max_workers() -> int:
     return env_int("SSE_STREAM_MAX_WORKERS", _DEFAULT_STREAM_MAX_WORKERS)
 

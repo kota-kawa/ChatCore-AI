@@ -66,7 +66,9 @@ CHAT_TOOL_WRITE_WINDOW_SECONDS = 3_600
 _STORED_DECISION = {"approve_once": "once", "approve_always": "always", "deny": "deny"}
 
 
+# 利用者のチャット書き込み回数の上限に達したときのエラー。カードは承認待ちのまま残る（429）。
 class ChatToolRateLimitedError(ApiServiceError):
+    # 利用者の書き込み予算が尽きた場合、カードを保留のまま残す。
     """The user's chat write budget is exhausted; the card stays pending."""
 
     def __init__(self, retry_after: int) -> None:
@@ -84,6 +86,7 @@ class ChatToolRateLimitedError(ApiServiceError):
 # The row already holds the card's latest, settled state, so the response carries it as is and
 # the caller can resync whatever card it is showing.
 class ToolApprovalConflictError(ApiServiceError):
+    # 別の判断で確定済みのカードは、現在の状態を返す。
     """Another decision already settled the card; the payload carries its current state."""
 
     def __init__(self, approval: dict[str, Any]) -> None:
@@ -97,7 +100,9 @@ class ToolApprovalConflictError(ApiServiceError):
         )
 
 
+# ロックを取る前に、その行がすでに承認待ちでなくなっていたことを知らせる内部用の例外（トランザクション内で送出する）。
 class _ApprovalAlreadySettledError(Exception):
+    # ロック取得前に保留状態が変わったことをトランザクション内で通知する。
     """Raised inside a transaction when the row stopped being pending before it was locked."""
 
     def __init__(self, row: ChatToolApproval) -> None:
@@ -161,6 +166,11 @@ def _requires_acknowledgement(target_ref: dict[str, Any]) -> bool:
 
 
 def _audit(row: ChatToolApproval, *, outcome: str) -> None:
+    """承認の結果を監査ログに残す。本文や差分は書かず、誰が・どのルームで・どのツールを・どう決めたかだけを記録する。
+
+    Write an audit log entry for an approval outcome: who, which room, which tool and how it was decided, never bodies
+    or diffs.
+    """
     result = row.result or {}
     audit_logger.info(
         "Chat tool approval %s.",
@@ -227,10 +237,15 @@ def consume_chat_tool_write_limit(
     return allowed, int(retry_after or 0)
 
 
+# 提案時（生成ワーカーから呼ばれる）
 # Proposal time (called from the generation worker) ---------------------------
 
 
 async def has_auto_approval(user_id: int, tool_name: str) -> bool:
+    """この利用者がこのツールに「常に承認」を付与済みかを調べる。
+
+    Check whether the user has granted "always approve" for this tool.
+    """
     async with session_scope() as db:
         return await ChatToolApprovalRepository(db).has_grant(user_id, tool_name)
 
@@ -250,6 +265,11 @@ async def create_pending_approval(
     proposal: Proposal,
     untrusted_input: bool,
 ) -> dict[str, Any]:
+    """提案を承認待ちの行として保存し、回答の末尾に付けるカードを返す。行は 24 時間で期限切れになる。
+
+    Store a proposal as a pending approval row and return the card to append to the reply; the row expires after 24
+    hours.
+    """
     now = _now()
     async with session_scope() as db, db.begin():
         row = await ChatToolApprovalRepository(db).insert_approval(
@@ -330,6 +350,7 @@ async def _execute(
     return await spec.execute(session, user_id, dict(arguments), execute_target_ref)
 
 
+# 回答の保存とライフサイクル
 # Reply persistence and lifecycle ---------------------------------------------
 
 
@@ -410,6 +431,7 @@ async def cancel_unattached_approvals(approval_ids: Sequence[str], user_id: int)
         )
 
 
+# 利用者の決定（承認 API）
 # Decisions (the approval API) --------------------------------------------------
 
 
@@ -450,7 +472,10 @@ async def _settle_locked(
     now: datetime,
     client_ip: str | None = None,
 ) -> tuple[ChatToolApproval, dict[str, Any], ExecutionOutcome | None]:
-    """Settle one pending row: ``decision`` None expires it, "deny" denies it, else it runs."""
+    """承認待ちの行 1 件を確定する。decision が None なら期限切れ、"deny" なら拒否、それ以外ならツールを実行する。
+
+    Settle one pending row: ``decision`` None expires it, "deny" denies it, else it runs.
+    """
     outcome: ExecutionOutcome | None = None
     async with session_scope() as db, db.begin():
         repo = ChatToolApprovalRepository(db)
@@ -547,10 +572,15 @@ async def decide_tool_approval(
     return card
 
 
+# 「常に承認」の付与
 # "Always approve" grants ------------------------------------------------------
 
 
 async def list_auto_approvals(user_id: int) -> list[dict[str, Any]]:
+    """この利用者が付与済みの「常に承認」を、ツール名・ツール群・付与日時の一覧で返す（現在は存在しないツールは除く）。
+
+    List the user's "always approve" grants as tool name, family and grant time, skipping tools that no longer exist.
+    """
     # decide_tool_approval と同じく、閉じた後に属性を読むので確定させる。
     # As in decide_tool_approval, the grants are read after the close, so commit.
     async with session_scope() as db, db.begin():
@@ -571,6 +601,10 @@ async def list_auto_approvals(user_id: int) -> list[dict[str, Any]]:
 
 
 async def revoke_auto_approval(user_id: int, tool_name: str) -> bool:
+    """「常に承認」の付与を取り消す。取り消せたら True を返し、監査ログに残す。
+
+    Revoke an "always approve" grant; returns True and writes an audit entry when one was removed.
+    """
     async with session_scope() as db, db.begin():
         revoked = await ChatToolApprovalRepository(db).delete_grant(user_id, tool_name)
     if revoked:

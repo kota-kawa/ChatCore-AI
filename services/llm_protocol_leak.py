@@ -47,6 +47,8 @@ _RESCAN_CHARS = 64
 
 
 def _prefixes(literal: str, min_chars: int = 1) -> str:
+    # 文字列の先頭からの部分一致（長い順）を正規表現の選択肢に展開する。末尾保留の判定用。
+    # Expand every prefix of the literal (longest first) into regex alternatives for the hold-back check.
     return "|".join(re.escape(literal[:end]) for end in range(len(literal), min_chars - 1, -1))
 
 
@@ -71,7 +73,9 @@ _PARTIAL_MARKER_AT_END = re.compile(
 
 
 def find_protocol_leak(text: str, start: int = 0) -> int | None:
-    """Return the offset where leaked protocol begins, or ``None``.
+    """漏れた内部形式の開始位置を返す。無ければ ``None``。
+
+    Return the offset where leaked protocol begins, or ``None``.
 
     コードの中は、利用者が内部形式そのものを尋ねた回答でありうるため対象外にする。コードの範囲は
     目印が見つかったときだけ求め、通常のチャンクでは本文全体を走査しない。
@@ -88,7 +92,9 @@ def find_protocol_leak(text: str, start: int = 0) -> int | None:
 
 
 def reasoning_answer_start(text: str, latest_user_message: str = "") -> int:
-    """Return where the answer begins after a leaked reasoning draft, or 0 when there is none.
+    """漏れた推論の下書きの後ろで回答が始まる位置を返す。下書きが無ければ 0。
+
+    Return where the answer begins after a leaked reasoning draft, or 0 when there is none.
 
     コードの外にある最後の `</think>` の直後が回答の先頭。利用者がタグ自体を話題にしているときは 0。
     The answer begins right after the last `</think>` outside code; 0 when the user is asking about
@@ -105,7 +111,9 @@ def reasoning_answer_start(text: str, latest_user_message: str = "") -> int:
 
 
 def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: str = "") -> list[str]:
-    """Drop a leaked reasoning draft, keeping the chunk boundaries of the answer after it.
+    """漏れた推論の下書きを落とし、その後ろの回答のチャンク境界は保つ。
+
+    Drop a leaked reasoning draft, keeping the chunk boundaries of the answer after it.
 
     コードの外にある最後の `</think>` までを下書きとして落とす。タグが無ければそのまま返す。
     Everything up to the last `</think>` outside code is the draft. Without one the chunks are
@@ -133,7 +141,9 @@ def strip_leaked_reasoning_chunks(chunks: Sequence[str], latest_user_message: st
 
 
 class ProtocolLeakGuard:
-    """Track one stream and report the text that precedes leaked protocol.
+    """1本のストリームを追跡し、漏れた内部形式より前の本文だけを渡す。
+
+    Track one stream and report the text that precedes leaked protocol.
 
     目印の頭になりうる末尾は保留し、次のチャンクかストリームの終わりの ``flush`` で渡す。
     A text end that could start a marker is held until the next chunk or ``flush`` at the end.
@@ -149,7 +159,10 @@ class ProtocolLeakGuard:
         self.overflow_chars = 0
 
     def feed(self, chunk: str) -> str:
-        """Return the text now safe to pass on; set ``tripped`` once a leak begins."""
+        """いま渡してよい本文を返す。漏れが始まったら ``tripped`` を立てる。
+
+        Return the text now safe to pass on; set ``tripped`` once a leak begins.
+        """
         if self.tripped:
             return ""
         chunk_start = len(self._text)
@@ -163,12 +176,17 @@ class ProtocolLeakGuard:
         return self._release(held.start() if held else len(self._text))
 
     def flush(self) -> str:
-        """Return the held-back text; nothing once a leak has tripped the guard."""
+        """保留していた本文を返す。漏れを検出済みなら何も返さない。
+
+        Return the held-back text; nothing once a leak has tripped the guard.
+        """
         if self.tripped:
             return ""
         return self._release(len(self._text))
 
     def _release(self, end: int) -> str:
+        # 未配信の位置から end までを切り出し、配信済みの位置を進める。
+        # Slice from the released offset up to end and advance the released offset.
         released = self._text[self._released : end]
         self._released = end
         return released

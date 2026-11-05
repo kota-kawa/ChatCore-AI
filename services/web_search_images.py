@@ -1,3 +1,15 @@
+"""Web 検索結果の画像候補から、回答に添える画像を LLM で選び、回答本文の適切な位置に差し込む。
+
+候補の抽出と絞り込み、選定 LLM の呼び出しと応答の検証、画像パーツの生成、ストリーミング中・最終確定時の挿入位置の決定を担当する。
+配置は LLM が決めた計画（先頭／被写体の直後／段落の後）に従い、バックエンドはそれを実現するだけに留める。
+
+Chooses images from web-search image candidates with an LLM and inserts them at suitable places in the answer.
+
+Handles extracting and filtering candidates, calling the selector LLM and validating its reply, building image parts, and
+deciding insertion offsets both while streaming and in the final layout. Placement follows the LLM's plan
+(start / right after a subject / after a paragraph); the backend only realizes that plan.
+"""
+
 from __future__ import annotations
 
 import json
@@ -26,12 +38,16 @@ from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE
 
 logger = logging.getLogger(__name__)
 
+# 日本語: 選定 LLM に渡す画像候補の最大数と、alt・出典タイトルの最大文字数。
+# English: Maximum number of image candidates handed to the selector LLM, and maximum lengths of alt text and source titles.
 MAX_IMAGE_CANDIDATES = 18
 MAX_IMAGE_ALT_CHARS = 180
 MAX_IMAGE_SOURCE_TITLE_CHARS = 160
 # JSON modeで推論を本文から分離し、GroqのJSON検証エラーを避ける。
 # Keep reasoning separate from JSON content to avoid Groq JSON validation errors.
 IMAGE_SELECTION_REASONING_FORMAT = "parsed"
+# 日本語: ストリーミング中、画像と画像の間に最低限あける本文の文字数。
+# English: Minimum number of text characters between two images while streaming.
 MIN_STREAMING_IMAGE_GAP_CHARS = 64
 _IMAGE_PLACEMENT_POSITIONS = frozenset(
     {"start", "after_subject", "after_paragraph"}
@@ -83,7 +99,10 @@ _NON_PHOTO_FILENAME_FRAGMENTS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class WebSearchImageCandidate:
-    """An image URL and the small amount of page metadata used for selection."""
+    """画像の URL と、選定に使うわずかなページ側のメタデータ。
+
+    An image URL and the small amount of page metadata used for selection.
+    """
 
     url: str
     alt: str = ""
@@ -155,11 +174,15 @@ _IMAGE_SELECTION_SYSTEM_PROMPT = (
 )
 
 
+# 日本語: 空白をまとめ、max_chars に切り詰めて前後の空白を除く。
+# English: Collapse whitespace, truncate to max_chars and strip.
 def _normalize_text(value: Any, max_chars: int) -> str:
     text = " ".join(str(value or "").split())
     return text[:max_chars].strip()
 
 
+# 日本語: http(s) のURLだけを通す。認証情報つきや制御文字を含む URL は空文字にする。
+# English: Let only http(s) URLs through; URLs with credentials or control characters become an empty string.
 def _safe_http_url(value: Any, *, max_chars: int = 2000) -> str:
     url = _normalize_text(value, max_chars)
     try:
@@ -177,6 +200,8 @@ def _safe_http_url(value: Any, *, max_chars: int = 2000) -> str:
     return url
 
 
+# 日本語: 候補が辞書でも属性を持つオブジェクトでも、項目を文字列として読む。
+# English: Read a field as a string whether the candidate is a dict or an object with attributes.
 def _candidate_value(candidate: Any, name: str) -> str:
     if isinstance(candidate, dict):
         return str(candidate.get(name) or "")
@@ -208,6 +233,9 @@ def _is_non_photo_image_url(url: str) -> bool:
     return any(fragment in squashed for fragment in _NON_PHOTO_FILENAME_FRAGMENTS)
 
 
+# 日本語: 検索結果の各ソースから画像候補を集める。URL の重複と写真ではない URL は除き、LLM が参照する ID（image-1…）を振る。
+# English: Gather image candidates from each source, skipping duplicate and non-photo URLs, and assign the IDs (image-1, ...) the LLM refers
+# to.
 def _candidate_rows(result: Any) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     seen_urls: set[str] = set()
@@ -237,6 +265,8 @@ def _candidate_rows(result: Any) -> list[dict[str, str]]:
     return rows
 
 
+# 日本語: LLM の応答から JSON オブジェクトを取り出す。コードフェンスや前後の余計な文字があっても、最初の { から最後の } までを読む。
+# English: Extract a JSON object from an LLM reply, tolerating code fences and surrounding text by reading from the first { to the last }.
 def _parse_json_object(raw_response: str | None) -> dict[str, Any] | None:
     text = str(raw_response or "").strip()
     if text.startswith("```"):
@@ -261,6 +291,9 @@ def _parse_json_object(raw_response: str | None) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+# 日本語: 「画像を表示する」を意味する各言語の文字列。モデルが厳密な真偽値ではなく自国語の文字列で返しても受け付けるため。
+# English: Strings in various languages meaning "show the image", so a reply that uses a localized word instead of a strict boolean is still
+# accepted.
 _POSITIVE_IMAGE_SELECTION_VALUES = frozenset(
     {
         "1",
@@ -294,7 +327,10 @@ _POSITIVE_IMAGE_SELECTION_VALUES = frozenset(
 
 
 def _is_positive_image_selection(value: Any) -> bool:
-    """Accept a strict JSON boolean plus common localized string equivalents."""
+    """厳密な JSON の真偽値に加えて、各言語でそれに当たる一般的な文字列も受け付ける。
+
+    Accept a strict JSON boolean plus common localized string equivalents.
+    """
     if value is True:
         return True
     if not isinstance(value, str):
@@ -303,7 +339,12 @@ def _is_positive_image_selection(value: Any) -> bool:
 
 
 def _parse_image_placement(raw_plan: Any) -> tuple[str, str]:
-    """Validate one LLM-provided image placement plan."""
+    """LLM が出した画像 1 枚分の配置計画を検証し、(位置, アンカー) を返す。不正なら ("", "")。
+
+    after_subject はアンカーの語句が必須で、それ以外の位置ではアンカーを捨てる。
+
+    Validate one LLM-provided image placement plan.
+    """
     if isinstance(raw_plan, str):
         position = raw_plan
         anchor = ""
@@ -333,6 +374,8 @@ def _parse_image_placement(raw_plan: Any) -> tuple[str, str]:
     return normalized_position, normalized_anchor
 
 
+# 日本語: LLM の応答から、指定した候補 ID の配置計画を取り出して検証する。
+# English: Pull the placement plan for a candidate ID out of the LLM reply and validate it.
 def _image_placement_for_candidate(payload: dict[str, Any], candidate_id: str) -> tuple[str, str]:
     placements = payload.get("placements")
     if not isinstance(placements, dict):
@@ -346,7 +389,12 @@ def choose_web_search_images(
     *,
     answer_text: str = "",
 ) -> list[dict[str, str]]:
-    """Ask the lightweight task model which images to show and where they belong."""
+    """軽量タスク用モデルに、どの画像を表示し、どこに置くかを選ばせる。
+
+    失敗や不正な応答では空のリストを返し、画像なしで回答を続ける。
+
+    Ask the lightweight task model which images to show and where they belong.
+    """
     rows = _candidate_rows(result)
     if not rows or not str(user_question or "").strip():
         return []
@@ -405,10 +453,12 @@ def choose_web_search_images(
     if isinstance(raw_ids, list):
         candidate_ids = raw_ids
     elif isinstance(raw_ids, str):
-        # Tolerate a single scalar ID from providers that collapse a one-item array.
+        # 日本語: 要素 1 つの配列を単なる文字列にしてしまうプロバイダの応答も許容する。
+        # English: Tolerate a single scalar ID from providers that collapse a one-item array.
         candidate_ids = [raw_ids]
     else:
-        # Accept the original one-image response while providers roll forward.
+        # 日本語: プロバイダの切り替え中は、画像 1 枚だけを返す従来形式の応答も受け付ける。
+        # English: Accept the original one-image response while providers roll forward.
         candidate_ids = [payload.get("image_id")]
     alt_texts = payload.get("alt_texts")
     alt_text_map = alt_texts if isinstance(alt_texts, dict) else {}
@@ -451,6 +501,8 @@ def choose_web_search_images(
     return selections
 
 
+# 日本語: 選定結果 1 件を、検証済みの画像パーツにする。URL が不正なら None。配置の情報は内部用の _placement に入れる。
+# English: Turn one selection into a validated image part, or None if a URL is invalid; placement goes into the internal _placement fields.
 def build_web_search_image_part(selection: dict[str, str] | None) -> dict[str, Any] | None:
     if not selection:
         return None
@@ -474,7 +526,8 @@ def build_web_search_image_part(selection: dict[str, str] | None) -> dict[str, A
         }
     )
     if placement:
-        # These private fields are used only while the current response is being
+        # 日本語: この内部用フィールドは、現在の応答を並べる間だけ使う。公開する画像ペイロードの検証とフロントエンドでは取り除かれる。
+        # English: These private fields are used only while the current response is being
         # laid out. The public image payload validator and frontend omit them.
         image_part["_placement"] = placement
         if placement_anchor:
@@ -483,7 +536,10 @@ def build_web_search_image_part(selection: dict[str, str] | None) -> dict[str, A
 
 
 def build_web_search_image_parts(selections: Any) -> list[dict[str, Any]]:
-    """Build validated, de-duplicated image parts from selector output."""
+    """選定の出力から、検証済みで重複のない画像パーツを作る。枚数は 1 回答の上限まで。
+
+    Build validated, de-duplicated image parts from selector output.
+    """
     if isinstance(selections, dict):
         raw_selections = [selections]
     elif isinstance(selections, (list, tuple)):
@@ -509,11 +565,15 @@ def build_web_search_image_parts(selections: Any) -> list[dict[str, Any]]:
     return image_parts
 
 
+# 日本語: 回答本文が始まる位置。先頭の「回答までのステップ」ブロックがあれば、その直後。
+# English: Offset where the answer body starts: right after the leading answer-trace block when present.
 def _answer_body_start(text: str) -> int:
     trace, _ = split_answer_trace_block(text)
     return len(trace) if trace else 0
 
 
+# 日本語: 画像パーツに入っている内部用の配置情報を読み、(位置, アンカー) を返す。不正な値は空にする。
+# English: Read the internal placement info of an image part and return (position, anchor); invalid values become empty.
 def _image_placement(image_part: dict[str, Any]) -> tuple[str, str]:
     placement = _normalize_text(image_part.get("_placement"), 40).casefold()
     anchor = _normalize_text(image_part.get("_placement_anchor"), MAX_IMAGE_SOURCE_TITLE_CHARS)
@@ -524,6 +584,8 @@ def _image_placement(image_part: dict[str, Any]) -> tuple[str, str]:
     return placement, anchor
 
 
+# 日本語: after_subject のアンカー語句が本文中にある場合、その直後の位置を返す。無ければ None。
+# English: When the after_subject anchor phrase appears in the text, return the offset right after it; otherwise None.
 def _find_llm_image_anchor_end(
     text: str,
     image_part: dict[str, Any],
@@ -541,6 +603,8 @@ def _find_llm_image_anchor_end(
     return index + len(anchor)
 
 
+# 日本語: 改行や句点・感嘆符・疑問符の直後を、自然な区切りの位置として列挙する。
+# English: List the offsets right after a newline or sentence-ending mark as natural boundaries.
 def _natural_text_boundaries(text: str, *, start: int = 0) -> list[int]:
     return [
         index + 1
@@ -556,7 +620,12 @@ def find_next_streaming_image_insertion(
     revealed_indices: set[int] | None = None,
     after_offset: int = 0,
 ) -> tuple[int, int] | None:
-    """Return the next image index and text offset that can be revealed now.
+    """いま表示できる次の画像のインデックスと、本文中の挿入位置を返す。
+
+    配置は LLM が決める。バックエンドはその計画を実現するだけで、LLM が示したアンカーに一致させ、要求があれば自然な
+    区切りを使い、計画が無い・不正な場合は安全な代替を適用する。
+
+    Return the next image index and text offset that can be revealed now.
 
     Placement is decided by the LLM. The backend only realizes that plan: it
     matches the LLM-provided anchor, uses a natural boundary when requested, and
@@ -596,7 +665,9 @@ def find_next_streaming_image_insertion(
     if actionable:
         return min(actionable)
 
-    # An omitted plan is supported for old persisted/test data. Do not invent a
+    # 日本語: 配置計画が無いのは、過去に保存したデータやテストのために許容している。計画のある画像には被写体を勝手に作らず、
+    # アンカーが出るのを待つか、生成の完了後に最終レイアウトの安全な代替に任せる。
+    # English: An omitted plan is supported for old persisted/test data. Do not invent a
     # subject for a planned image: wait for its anchor or let final layout apply
     # the safe fallback after generation completes.
     unplanned = [
@@ -617,6 +688,11 @@ def find_next_streaming_image_insertion(
     return (boundaries[0] if boundaries else len(text)), unplanned[0]
 
 
+# 日本語: 生成の完了後に、すべての画像の最終的な挿入位置を決める。アンカーに一致した画像を本文順に並べ、決められない画像は
+# 次の自然な区切り（それも無ければ一定の間隔）に置く。戻り値は (並べ替えた画像, 各画像の挿入オフセット)。
+# English: After generation finishes, decide the final insertion offsets of all images. Images whose anchor matched are
+# ordered by text position; the rest go to the next natural boundary (or a fixed gap if none).
+# Returns (reordered images, offsets).
 def _final_image_layout(
     text: str,
     image_parts: list[dict[str, Any]],
@@ -674,7 +750,10 @@ def build_web_search_image_parts_at_offsets(
     *,
     keep_empty_tail: bool = False,
 ) -> list[dict[str, Any]]:
-    """Build inline parts by inserting images at offsets in the generated text."""
+    """生成された本文の指定オフセットに画像を差し込んだ、インラインのパーツ列を作る。
+
+    Build inline parts by inserting images at offsets in the generated text.
+    """
     if not image_parts:
         return [{"type": "text", "text": text}] if text else []
 
@@ -704,7 +783,12 @@ def place_web_search_image_parts(
     fallback_text: str = "",
     keep_empty_tail: bool = False,
 ) -> list[dict[str, Any]] | None:
-    """Realize the selector LLM's image placement plan in the answer."""
+    """選定 LLM の画像配置計画を、回答に実現する。
+
+    生成 UI を含む回答には画像を足さない。選択ボタンと承認カードは回答を締めくくる部品なので失わず、末尾に置く。
+
+    Realize the selector LLM's image placement plan in the answer.
+    """
     normalized_parts = apply_visual_part_contract(list(parts or []))
     if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized_parts):
         return normalized_parts
@@ -761,7 +845,10 @@ def append_web_search_image_parts(
     *,
     fallback_text: str = "",
 ) -> list[dict[str, Any]] | None:
-    """Insert up to five selected images while preserving visual exclusivity."""
+    """選ばれた画像を最大 5 枚まで差し込む。生成 UI などの視覚部品との排他は保つ。
+
+    Insert up to five selected images while preserving visual exclusivity.
+    """
     normalized_parts = apply_visual_part_contract(list(parts or []))
     image_parts = build_web_search_image_parts(selections)
     if not image_parts:

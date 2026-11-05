@@ -1,4 +1,10 @@
-"""MCP-specific decoding and persistence for prompt-share images."""
+"""MCP 経由で受け取ったプロンプト共有用の画像（Base64 または ChatGPT のファイル URL）をデコード・検証して保存する。
+
+保存は共通のアップロード処理 (`prompt_attachment_upload`) に委ね、ここでは MCP 固有の入力形式と取得元の制限を扱う。
+Decodes, validates and saves prompt-share images received through MCP (Base64 or a ChatGPT file URL).
+Saving is delegated to the shared upload logic (`prompt_attachment_upload`);
+this module handles MCP-specific input formats and source restrictions.
+"""
 
 from __future__ import annotations
 
@@ -42,6 +48,9 @@ _MIME_TO_EXTENSION = {
     "image/gif": ".gif",
 }
 _OPENAI_FILE_DOWNLOAD_DOMAIN = "oaiusercontent.com"
+# ChatGPT のファイル引数は、アップロード済みファイルと生成画像で別々の OpenAI 管理の Azure ストレージアカウントを使うことがある。
+# Azure のアカウント名は小文字英数字3〜24文字なので、OpenAI の ``oai`` 接頭辞を必須にする。これで任意の Azure Blob URL が
+# 汎用の取得手段にならず、かつ ChatGPT 側がアカウントやリージョンを変えても通る。
 # ChatGPT file parameters may use different OpenAI-managed Azure storage
 # accounts for uploaded files and generated images. Azure storage account names
 # contain 3-24 lowercase alphanumeric characters; require the OpenAI ``oai``
@@ -56,7 +65,10 @@ _DOWNLOAD_CHUNK_BYTES = 64 * 1024
 logger = logging.getLogger(__name__)
 
 
+# ChatGPT の ``openai/fileParams`` で渡されるファイル引数（ダウンロード URL とメタデータ）。
+# File parameter passed by ChatGPT's ``openai/fileParams`` (download URL and metadata).
 class OpenAIFileInput(BaseModel):
+    # openai/fileParamsで定義されるChatGPTのファイル引数payload。
     """ChatGPT file parameter payload documented for ``openai/fileParams``."""
 
     model_config = ConfigDict(extra="forbid")
@@ -68,7 +80,10 @@ class OpenAIFileInput(BaseModel):
 
 
 def _decode_mcp_image_base64(image_base64: str) -> tuple[bytes, str | None]:
-    """Decode a strict Base64 image value, accepting an optional data URL prefix."""
+    """厳密な Base64 の画像値をデコードする。data URL 形式の接頭辞は任意で受け付ける。
+
+    Decode a strict Base64 image value, accepting an optional data URL prefix.
+    """
     encoded = "".join(str(image_base64 or "").split())
     if not encoded:
         raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
@@ -102,7 +117,10 @@ def save_mcp_prompt_image(
     *,
     mime_type: str = "",
 ) -> dict[str, str]:
-    """Decode and save one MCP prompt reference image through the shared upload boundary."""
+    """MCP のプロンプト参照画像を1枚デコードし、共通のアップロード境界を通して保存する。
+
+    Decode and save one MCP prompt reference image through the shared upload boundary.
+    """
     try:
         source, data_url_mime = _decode_mcp_image_base64(image_base64)
         return _save_mcp_prompt_image_source(
@@ -128,7 +146,10 @@ def _save_mcp_prompt_image_source(
     mime_type: str = "",
     source_mime_type: str | None = None,
 ) -> dict[str, str]:
-    """Validate declared metadata and persist already-loaded MCP image bytes."""
+    """申告されたメタデータを検証し、読み込み済みの MCP 画像バイト列を保存する。
+
+    Validate declared metadata and persist already-loaded MCP image bytes.
+    """
     declared_mime = str(mime_type or "").strip().lower()
     if declared_mime and declared_mime not in MCP_PROMPT_IMAGE_MIME_TYPES:
         raise ValueError(ERROR_MCP_PROMPT_IMAGE_MIME_UNSUPPORTED)
@@ -157,7 +178,10 @@ def _save_mcp_prompt_image_source(
 
 
 def _validate_openai_file_download_url(download_url: str) -> str:
-    """Allow only HTTPS URLs issued by ChatGPT's supported file hosts."""
+    """ChatGPT が対応するファイルホストが発行した HTTPS の URL だけを許可する。
+
+    Allow only HTTPS URLs issued by ChatGPT's supported file hosts.
+    """
     parsed = urlsplit(str(download_url))
     hostname = (parsed.hostname or "").rstrip(".").lower()
     try:
@@ -180,7 +204,10 @@ def _validate_openai_file_download_url(download_url: str) -> str:
 
 
 def _download_openai_file(download_url: str) -> tuple[bytes, str]:
-    """Fetch one bounded ChatGPT file without following redirects."""
+    """ChatGPT のファイルを、リダイレクトを辿らず上限付きで1件取得する。
+
+    Fetch one bounded ChatGPT file without following redirects.
+    """
     validated_url = _validate_openai_file_download_url(download_url)
     try:
         with requests.get(
@@ -197,6 +224,9 @@ def _download_openai_file(download_url: str) -> tuple[bytes, str]:
                     urlsplit(validated_url).hostname,
                 )
                 raise ValueError(ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED)
+            # 申告サイズが上限超過なら本文を読む前に断る。申告が無い・偽りの場合に備え、読み込み中も累計で上限を確認する。
+            # Reject an oversized declared length before reading; the running total is also checked
+            # while streaming in case the header is absent or false.
             content_length = response.headers.get("Content-Length", "").strip()
             if content_length:
                 try:
@@ -224,7 +254,10 @@ def _download_openai_file(download_url: str) -> tuple[bytes, str]:
 
 
 def save_mcp_prompt_file(image_file: OpenAIFileInput, user_id: int) -> dict[str, str]:
-    """Download and save one ChatGPT ``openai/fileParams`` image."""
+    """ChatGPT の ``openai/fileParams`` の画像を1枚ダウンロードして保存する。
+
+    Download and save one ChatGPT ``openai/fileParams`` image.
+    """
     source = b""
     response_mime = ""
     try:

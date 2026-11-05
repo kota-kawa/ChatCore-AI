@@ -1,4 +1,10 @@
-"""Versioned, owner-scoped export/import for the personal context vault."""
+"""個人コンテキスト（Context Vault）のエクスポート／インポート（JSON・Markdown）を扱う。
+形式にはバージョンを持たせ、所有者単位で処理する。インポートは「プレビュー → 確定」の 2 段階で、
+プレビューで発行した署名付きトークンと内容のダイジェストが一致した場合だけ確定できる。
+
+Versioned, owner-scoped export/import (JSON and Markdown) for the personal context vault.
+Import is two-step (preview, then confirm): confirmation requires the signed preview token to match the content digest.
+"""
 
 from __future__ import annotations
 
@@ -56,6 +62,10 @@ MAX_CONTEXT_VAULT_IMPORT_FACTS = 1000
 IMPORT_PREVIEW_TOKEN_TTL_SECONDS = 15 * 60
 IMPORT_PREVIEW_SAMPLE_SIZE = 20
 
+# 日本語: Markdown 形式の目印と事実ブロック（```context-fact の 1 行 JSON）を厳密に見つける正規表現。
+# 開始行の数とブロック全体の一致数が違えば、壊れたブロックがあるとして拒否する。
+# English: Regexes that strictly locate the Markdown version marker and fact blocks (a one-line JSON in ```context-fact).
+# If the number of opening fences differs from the number of full matches, the document is rejected as malformed.
 _MARKDOWN_VERSION_MARKER = "<!-- chat-core-context-vault-version: 1 -->"
 _MARKDOWN_VERSION_MARKER_RE = re.compile(
     r"^<!-- chat-core-context-vault-version: 1 -->[ \t]*\r?$",
@@ -66,6 +76,8 @@ _MARKDOWN_BLOCK_RE = re.compile(
     re.MULTILINE,
 )
 _MARKDOWN_BLOCK_OPEN_RE = re.compile(r"^```context-fact[ \t]*\r?$", re.MULTILINE)
+# 日本語: プレビュー用トークンの署名ソルト。他用途の署名と取り違えないよう用途専用の値にしている。
+# English: Signing salt for preview tokens, dedicated to this use so it cannot be confused with other signatures.
 _TOKEN_SALT = "chat-core.context-vault-import-preview.v1"
 
 ImportFormat = Literal["json", "markdown"]
@@ -78,6 +90,10 @@ def _repository(session: AsyncSession) -> ContextFactRepository:
     return ContextFactRepository(session)
 
 
+# 日本語: session があればそのまま使い、なければ新規トランザクションで実行する。
+# 一時的な DB エラーのときだけバックオフ付きで再試行する。
+# English: Use the given session as is, otherwise run in a new transaction,
+# retrying with backoff only on retryable DB errors.
 async def _transaction(
     session: AsyncSession | None,
     operation: Callable[[AsyncSession], Awaitable[T]],
@@ -109,6 +125,8 @@ def _portable_fact(row: dict[str, Any]) -> ContextVaultPortableFact:
     )
 
 
+# 日本語: 重複判定用のキー。種別・題名・本文・状態・重要度がすべて一致する事実を同一とみなす。
+# English: Key for duplicate detection; facts with identical type, title, content, status and importance count as the same.
 def _portable_signature(fact: ContextVaultPortableFact) -> tuple[str, str, str, str, int]:
     return (
         fact.fact_type,
@@ -119,11 +137,15 @@ def _portable_signature(fact: ContextVaultPortableFact) -> tuple[str, str, str, 
     )
 
 
+# 日本語: 題名を Markdown の見出しに埋め込む前に、改行を潰して HTML と Markdown の記号をエスケープする。
+# English: Collapse newlines and escape HTML and Markdown syntax before embedding a title in a heading.
 def _escape_markdown_heading(value: str) -> str:
     escaped = html.escape(" ".join(value.splitlines()).strip(), quote=True)
     return re.sub(r"([\\`*_[\]{}()#+.!|>-])", r"\\\1", escaped)
 
 
+# 日本語: UTF-8 に変換できない文字列は JSON 不正として扱い、サイズ上限（バイト数）も確認する。
+# English: Strings that cannot be encoded as UTF-8 are treated as invalid JSON; the byte-size limit is also enforced.
 def _validate_content_size(content: str) -> None:
     try:
         content_bytes = content.encode("utf-8")
@@ -205,7 +227,10 @@ def parse_import_document(
     import_format: ImportFormat,
     content: str,
 ) -> list[ContextVaultPortableFact]:
-    """Strictly parse a bounded versioned portability document."""
+    """サイズ上限のあるバージョン付きの移行ドキュメントを、形式（json / markdown）に応じて厳密に解析する。
+
+    Strictly parse a bounded versioned portability document.
+    """
     _validate_content_size(content)
     if import_format == "json":
         return _parse_json_document(content)
@@ -214,6 +239,8 @@ def parse_import_document(
     raise ApiServiceError(ERROR_CONTEXT_VAULT_IMPORT_FORMAT_INVALID, 400, status="fail")
 
 
+# 日本語: 形式と事実一覧を正規化した JSON のハッシュ。プレビュー時と確定時で内容が同じか確かめるのに使う。
+# English: Hash of the canonicalized format and fact list, used to verify that preview and confirm saw the same content.
 def _canonical_digest(import_format: ImportFormat, facts: list[ContextVaultPortableFact]) -> str:
     canonical = json.dumps(
         {
@@ -227,6 +254,8 @@ def _canonical_digest(import_format: ImportFormat, facts: list[ContextVaultPorta
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
+# 日本語: セッション秘密鍵が未設定ならプレビュー署名を作れないため、503 で利用不可を返す。
+# English: Without a session secret the preview token cannot be signed, so respond with 503 (unavailable).
 def _preview_serializer() -> URLSafeTimedSerializer:
     secret = get_session_secret_key()
     if not secret:
@@ -238,6 +267,8 @@ def _preview_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(secret, salt=_TOKEN_SALT)
 
 
+# 日本語: ユーザー ID・形式・内容ダイジェストを署名したトークンを作る。
+# English: Build a token that signs the user id, format and content digest.
 def _build_preview_token(
     user_id: int,
     import_format: ImportFormat,
@@ -252,6 +283,8 @@ def _build_preview_token(
     )
 
 
+# 日本語: 署名と有効期限を確認し、トークンが別ユーザー・別形式・別内容のものでないことも確かめる。
+# English: Check signature and expiry, and ensure the token does not belong to another user, format or content.
 def _verify_preview_token(
     token: str,
     user_id: int,
@@ -308,7 +341,13 @@ async def build_export(
     *,
     session: AsyncSession | None = None,
 ) -> tuple[str, str, str]:
-    """Build a complete, non-truncated owner export."""
+    """所有者の事実を切り捨てずにすべてエクスポートし、(本文, Content-Type, ファイル名) を返す。
+    件数かサイズが上限を超える場合は、欠けたデータを渡さないよう 409 で失敗させる。
+
+    Build a complete, non-truncated owner export.
+    Returns (content, content type, filename); fails with 409 if count or size exceeds the limits,
+    rather than handing out incomplete data.
+    """
     rows = await _transaction(
         session,
         lambda db: _repository(db).list_all_facts(
@@ -392,7 +431,12 @@ async def preview_import(
     *,
     session: AsyncSession | None = None,
 ) -> ContextVaultImportPreviewResponse:
-    """Validate and compare an import without changing persistent state."""
+    """データを変更せずに、インポート内容の検証と既存データとの比較を行い、確定用のトークンを発行する。
+    完全一致する重複はスキップ扱いとして数え、有効な事実の上限を超える場合は can_import を False にする。
+
+    Validate and compare an import without changing persistent state.
+    Exact duplicates are counted as skipped, and can_import is False if the active-fact cap would be exceeded.
+    """
     facts = parse_import_document(import_format, content)
     fact_payloads = [fact.model_dump(mode="python") for fact in facts]
     existing, current_active = await _transaction(
@@ -445,7 +489,12 @@ async def confirm_import(
     *,
     session: AsyncSession | None = None,
 ) -> ContextVaultImportResponse:
-    """Append the exact previewed payload in one cap-safe transaction."""
+    """プレビューしたものと同一の内容を、上限を守る 1 つのトランザクションで追記する。
+    トークンが一致しなければ書き込まず、追記された有効な事実には埋め込み生成を予約する。
+
+    Append the exact previewed payload in one cap-safe transaction.
+    Nothing is written if the token does not match; embeddings are scheduled for newly imported active facts.
+    """
     facts = parse_import_document(import_format, content)
     _verify_preview_token(preview_token, user_id, import_format, facts)
     result = await _transaction(

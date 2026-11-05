@@ -1,3 +1,11 @@
+"""認証メール・管理者/デモ/Passkey ログイン・認証コード検証・ゲストチャットのレート制限を扱う。
+
+判定は Redis を使い、使えない場合やエラー時はプロセス内メモリへフォールバックする。クライアント IP は信頼済みプロキシを考慮して決める。
+
+Rate limiting for auth emails, admin/demo/passkey logins, verification-code attempts and guest chat.
+Counting uses Redis and falls back to in-process memory when Redis is unavailable or errors; the client IP respects trusted proxies.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -237,6 +245,10 @@ class AuthLimitService:
         limit: int,
         window_seconds: int,
     ) -> tuple[bool, int, int] | None:
+        # 判定と加算を 1 回の eval にまとめ、同時リクエストでも上限を超えて通さないようにする。
+        # TTL が負（-1: 期限なし / -2: キーなし）のときは、キーが期限を持たないまま残らないよう既定の ttl を使う。
+        # One eval does the check and the increment so concurrent requests cannot slip past the limit.
+        # A negative TTL (-1: no expiry, -2: missing key) falls back to the default ttl so a key never lives forever.
         lua_script = """
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -331,6 +343,8 @@ return {1, current, key_ttl}
         normalized_identifier = (identifier or "").strip().lower() or "unknown"
         redis_key = f"{key_prefix}:{_hash_identifier(normalized_identifier)}"
 
+        # 上限 0 以下はその操作を完全に閉じる設定として、常に拒否する（_limit_from_env が負値を 0 に丸める）。
+        # A limit of 0 or less closes the action entirely and always denies (_limit_from_env clamps negatives to 0).
         if limit <= 0:
             return False, 0, max(window_seconds, 1)
 
@@ -394,6 +408,8 @@ return {1, current, key_ttl}
             DEFAULT_AUTH_EMAIL_COOLDOWN_SECONDS,
         )
 
+        # 各段階の判定は呼んだ時点でカウントを消費するため、後段で拒否されても前段のカウントは戻らない。
+        # Each stage consumes its counter when called, so an earlier count is not rolled back if a later stage denies.
         # 1. IPアドレスごとの累積上限チェック
         # 1. Cumulative limit check per IP address
         allowed, _, retry_after = self.consume_rate_limit(

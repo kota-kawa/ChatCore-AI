@@ -1,3 +1,8 @@
+"""datetime を ISO 8601 文字列に変換する小さなヘルパー（None はそのまま None）。
+
+Small helper that converts a datetime to an ISO 8601 string (None stays None).
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

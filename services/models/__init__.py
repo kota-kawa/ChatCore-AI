@@ -1,4 +1,7 @@
-"""SQLAlchemy models used by application repositories and Alembic."""
+"""アプリのリポジトリと Alembic が使う SQLAlchemy モデルを、まとめて再エクスポートする。
+
+SQLAlchemy models used by application repositories and Alembic.
+"""
 
 from .base import Base
 from .entities import (

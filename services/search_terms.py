@@ -1,4 +1,10 @@
-"""Query-term splitting and LIKE escaping shared by keyword search paths.
+"""メモや My Context のキーワード検索が共有する、クエリの語分割と LIKE のエスケープ。
+
+以前は検索文字列全体を 1 つの部分一致として扱っていたため、複数語のクエリは「その文字列がそのまま入ったメモ」
+にしか当たらなかった。クエリを語に分け、すべての語を含むことを条件にすることで、
+「沖縄 旅行 予算」が 3 語を任意の順で含むメモに当たる。
+
+Query-term splitting and LIKE escaping shared by keyword search paths.
 
 Memo and My Context keyword search used to match the whole query as one substring, so a
 multi-word query only ever matched a memo containing that exact string end to end.
@@ -28,7 +34,10 @@ MAX_SEARCH_TERMS = 8
 
 
 def split_search_terms(query: str, *, limit: int = MAX_SEARCH_TERMS) -> list[str]:
-    """Split a query into distinct search terms, preserving the caller's order."""
+    """クエリを重複のない検索語に分割する。呼び出し側が渡した順序は保つ。
+
+    Split a query into distinct search terms, preserving the caller's order.
+    """
     terms: list[str] = []
     for raw_term in _TERM_SEPARATOR_PATTERN.split(str(query or "")):
         term = raw_term.strip()
@@ -51,7 +60,9 @@ _TO_HIRAGANA = {kata: hira for hira, kata in _KANA_PAIRS}
 
 
 def kana_variants(term: str) -> list[str]:
-    """Return the term plus its all-hiragana and all-katakana spellings, without duplicates.
+    """語そのものと、全ひらがな・全カタカナに直した綴りを重複なしで返す。
+
+    Return the term plus its all-hiragana and all-katakana spellings, without duplicates.
 
     ひらがなの「ぱすぽーと」とカタカナの「パスポート」を同じ語として当てるため、列を正規化せず
     クエリ側だけで両方の綴りを作り、呼び出し側が OR で当てる。列に関数をかけると
@@ -68,10 +79,16 @@ def kana_variants(term: str) -> list[str]:
 
 
 def escape_like_term(term: str) -> str:
-    """Escape LIKE wildcards so a literal % or _ cannot widen the match."""
+    """LIKE のワイルドカードをエスケープし、入力中の % や _ で一致範囲が広がらないようにする。
+
+    Escape LIKE wildcards so a literal % or _ cannot widen the match.
+    """
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def build_like_pattern(term: str) -> str:
-    """Build the ``%term%`` pattern for a single search term."""
+    """1 つの検索語から ``%term%`` 形式の部分一致パターンを作る。
+
+    Build the ``%term%`` pattern for a single search term.
+    """
     return f"%{escape_like_term(term)}%"

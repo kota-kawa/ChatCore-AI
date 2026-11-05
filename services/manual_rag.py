@@ -1,3 +1,12 @@
+"""docs/manual の操作マニュアルを検索するRAGインデックス（BM25 とベクトル検索のハイブリッド）。
+
+マニュアルを見出し単位のチャンクに分け、BM25 で引いて精度が弱いときだけ埋め込みベクトル検索へ切り替える。
+`search_manual` がチャット側へ渡す参照テキストを返す。
+RAG index over the operation manual in docs/manual (hybrid of BM25 and vector search).
+Splits the manual into heading-level chunks, queries BM25 first, and falls back to embedding search only when BM25 is weak.
+`search_manual` returns the reference text handed to the chat side.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +32,8 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMS = 512
 EMBEDDING_BATCH_SIZE = 100
 
+# BM25 の識別比率（最高スコア / 正のスコアの平均）。これを下回ると BM25 だけでは弱いとみなし、ベクトル検索へ切り替える。
+# 経験的な値で、良いクエリは 5〜9 倍、弱いクエリは 1〜3 倍になる。
 # BM25 discrimination ratio: top_score / mean_positive_score.
 # Below this value BM25 is considered too weak and vector search is used instead.
 # Empirically determined: good queries score 5-9x, weak queries score 1-3x.
@@ -33,6 +44,8 @@ _CACHE_HASH_FILE = MANUAL_DIR / ".embeddings_hash.txt"
 
 
 def normalize_manual_locale(locale: str | None) -> str:
+    # "ja_JP" や "en-US" のような値を言語部分だけにし、マニュアルが無い言語は ja にする。
+    # Reduce values like "ja_JP" or "en-US" to the language part, using ja for languages without a manual.
     normalized = str(locale or "ja").lower().replace("_", "-").split("-", 1)[0]
     return normalized if normalized in MANUAL_DIRS else "ja"
 
@@ -46,6 +59,7 @@ class ManualChunk:
     file_title: str
 
 
+# Markdownの分割と解析。
 # ---------------------------------------------------------------------------
 # Markdown parsing
 # ---------------------------------------------------------------------------
@@ -110,6 +124,7 @@ def _tokenize(text: str) -> list[str]:
     return tokenize_bm25(text)
 
 
+# 埋め込み生成の補助処理。
 # ---------------------------------------------------------------------------
 # Embedding helpers
 # ---------------------------------------------------------------------------
@@ -148,6 +163,7 @@ def _normalize_rows(mat: np.ndarray) -> np.ndarray:
     return mat / np.maximum(norms, 1e-10)
 
 
+# 検索索引。
 # ---------------------------------------------------------------------------
 # Index
 # ---------------------------------------------------------------------------
@@ -163,7 +179,9 @@ class ManualRagIndex:
         self._cache_hash_file = manual_dir / ".embeddings_hash.txt"
         self._chunks: list[ManualChunk] = []
         self._bm25 = None
-        self._chunk_embeddings: np.ndarray | None = None  # shape (n, EMBEDDING_DIMS), L2-normalized
+        # 形状は (チャンク数, EMBEDDING_DIMS)。L2 正規化済みで、None ならベクトル検索は無効。
+        # Shape (n, EMBEDDING_DIMS), L2-normalized; None means vector search is disabled.
+        self._chunk_embeddings: np.ndarray | None = None
 
         chunks = self._load_chunks(manual_dir)
         if not chunks:
@@ -179,6 +197,7 @@ class ManualRagIndex:
             "enabled" if self._chunk_embeddings is not None else "disabled",
         )
 
+    # チャンク読み込み。
     # ------------------------------------------------------------------
     # Chunk loading
     # ------------------------------------------------------------------
@@ -237,6 +256,7 @@ class ManualRagIndex:
         mean_pos = sum(positive) / len(positive) if positive else 0.0
         return (top / (mean_pos + 1e-8)) < BM25_MIN_DISCRIMINATION_RATIO
 
+    # ベクトル埋め込み。
     # ------------------------------------------------------------------
     # Vector embeddings
     # ------------------------------------------------------------------
@@ -251,6 +271,8 @@ class ManualRagIndex:
 
         chunks_hash = _compute_chunks_hash(chunks)
 
+        # チャンクのハッシュが一致するキャッシュがあれば再利用し、API 呼び出しを避ける。
+        # Reuse the cache when its chunk hash matches, avoiding an API call.
         # Try loading from cache
         if self._cache_file.exists() and self._cache_hash_file.exists():
             try:
@@ -262,6 +284,8 @@ class ManualRagIndex:
             except Exception:
                 logger.warning("Embedding cache corrupted; rebuilding.")
 
+        # キャッシュが無い・古い・壊れているときは API で作り直して保存する。失敗したらベクトル検索を無効にする。
+        # Rebuild via the API and cache it when the cache is missing, stale or corrupt; on failure vector search is disabled.
         # Build via OpenAI API
         try:
             texts = [f"{c.heading}\n{c.content}" for c in chunks]
@@ -307,6 +331,7 @@ class ManualRagIndex:
         ranked = np.argsort(-scores)[:top_k]
         return [self._chunks[int(i)] for i in ranked]
 
+    # 公開検索処理。
     # ------------------------------------------------------------------
     # Public search
     # ------------------------------------------------------------------
@@ -314,6 +339,8 @@ class ManualRagIndex:
     # BM25検索を実行し、精度が不十分な場合（または弱い場合）はベクトル検索を併用して類似チャンクを返します。
     # Perform BM25 search, falling back to semantic vector search if BM25 results are weak.
     def search(self, query: str, top_k: int = TOP_K) -> list[ManualChunk]:
+        # ベクトル検索が使えない（キー無し・失敗）場合は、弱くても BM25 の結果を返す。
+        # When vector search is unavailable (no key or failure), return the BM25 result even if weak.
         bm25_chunks, all_scores = self._bm25_search(query, top_k)
 
         if not self._is_bm25_weak(all_scores):
@@ -328,6 +355,7 @@ class ManualRagIndex:
         return bm25_chunks
 
 
+# 共有インスタンスと公開API。
 # ---------------------------------------------------------------------------
 # Singleton & public API
 # ---------------------------------------------------------------------------
@@ -338,6 +366,8 @@ _indexes: dict[str, ManualRagIndex] = {}
 # マニュアルRAGインデックスのシングルトンインスタンスを取得・初期化します。
 # Retrieve or initialize the singleton instance of ManualRagIndex.
 def get_manual_rag_index(locale: str = "ja") -> ManualRagIndex:
+    # 言語ごとに一度だけ構築し、プロセス内で使い回す（構築時にファイル読み込みと埋め込み取得が走るため）。
+    # Build once per language and reuse in-process, since construction reads files and may fetch embeddings.
     normalized_locale = normalize_manual_locale(locale)
     if normalized_locale not in _indexes:
         _indexes[normalized_locale] = ManualRagIndex(

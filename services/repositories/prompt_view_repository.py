@@ -1,4 +1,10 @@
-"""SQLAlchemy persistence for public prompt view counters."""
+"""公開プロンプトの閲覧回数カウンタの永続化。
+
+services/shared_content_service.py から使われる。
+
+SQLAlchemy persistence for public prompt view counters.
+Used by services/shared_content_service.py.
+"""
 
 from __future__ import annotations
 
@@ -10,14 +16,20 @@ from services.models import Prompt, PromptViewCount
 
 
 class PromptViewRepository:
-    """Record prompt views without mutating prompts or their revision history."""
+    """プロンプトの閲覧を記録する。プロンプト本体や編集履歴は変更しない(カウンタは別テーブル)。
+
+    Record prompt views without mutating prompts or their revision history.
+    """
 
     async def increment_public_view(
         self,
         session: AsyncSession,
         prompt_id: int,
     ) -> int | None:
-        """Atomically increment an active public prompt and return its new count."""
+        """公開中で削除されていないプロンプトの閲覧数を 1 つ増やし、新しい値を返す(対象外なら None)。
+
+        Atomically increment an active public prompt and return its new count.
+        """
         insert_statement = pg_insert(PromptViewCount).from_select(
             [PromptViewCount.prompt_id, PromptViewCount.view_count],
             select(Prompt.id, literal(1)).where(

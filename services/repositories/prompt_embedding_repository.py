@@ -1,4 +1,10 @@
-"""Persistence for public prompt embedding vectors."""
+"""公開プロンプトの埋め込みベクトルの元テキスト取得と保存。
+
+services/prompt_embedding_service.py から使われる。
+
+Persistence for public prompt embedding vectors.
+Used by services/prompt_embedding_service.py.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +18,12 @@ from services.models import Prompt
 
 
 class PromptEmbeddingRepository:
-    """Read the text to embed and store the vector under an ``updated_at`` guard.
+    """埋め込み対象のテキストを読み出し、``updated_at`` を条件にベクトルを保存する。
+
+    プロンプトには revision が無いため、編集のたびに更新される ``updated_at`` がその代わりになる。
+    テキストを読んだ時点の ``updated_at`` のままの行にだけ保存するので、遅れて終わった古い生成が新しい編集のベクトルを上書きしない。
+
+    Read the text to embed and store the vector under an ``updated_at`` guard.
 
     Prompts carry no revision counter, so ``updated_at`` (bumped by every edit) plays the
     role that ``revision`` plays for memos: a vector is stored only while the row still
@@ -24,7 +35,10 @@ class PromptEmbeddingRepository:
         self.session = session
 
     async def fetch_source(self, prompt_id: int) -> dict[str, Any] | None:
-        """Return the embeddable fields of a live public prompt, or None."""
+        """公開中で削除されていないプロンプトの、埋め込み対象のフィールドを返す(該当しなければ None)。
+
+        Return the embeddable fields of a live public prompt, or None.
+        """
         result = await self.session.execute(
             select(
                 Prompt.title,

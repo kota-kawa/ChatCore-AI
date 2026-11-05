@@ -64,7 +64,12 @@ def build_artifact_repair_messages(
     reason_codes: list[str],
     issues: list[str],
 ) -> list[dict[str, Any]]:
-    """Build a self-contained repair prompt with no competing turn protocols."""
+    """他のターン用プロトコルを含まない、それだけで完結する修復用のメッセージ列を組み立てる。
+    直前の出力（assistant）、修復指示（system）、元の依頼（user）の順に並べる。
+
+    Build a self-contained repair prompt with no competing turn protocols.
+    Messages are ordered: previous output (assistant), repair instruction (system), original request (user).
+    """
     issue_lines = "\n".join(f"- {issue}" for issue in issues[:MAX_REPORTED_ISSUES])
     code_line = ", ".join(dict.fromkeys(code for code in reason_codes if code)) or "artifact_invalid"
     repair_prompt = (
@@ -100,7 +105,12 @@ def build_artifact_repair_messages(
 def with_answer_output_budget(
     generate_response: Callable[..., str | None],
 ) -> Callable[..., str | None]:
-    """Bind the answer-phase output budget when the provider call accepts a phase."""
+    """プロバイダ呼び出しが generation_phase を受け取れる場合に限り、回答フェーズの出力枠を束縛して返す。
+    受け取れない関数は、そのまま返す。
+
+    Bind the answer-phase output budget when the provider call accepts a phase.
+    A function that does not accept one is returned unchanged.
+    """
     try:
         parameters = inspect.signature(generate_response).parameters
     except (TypeError, ValueError):

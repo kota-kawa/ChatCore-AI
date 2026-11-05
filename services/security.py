@@ -1,3 +1,5 @@
+# 日本語: 6桁の検証コードの生成と、タイミング攻撃に強い文字列比較をまとめたユーティリティ。
+# English: Utilities for generating six-digit verification codes and comparing strings in a timing-attack-resistant way.
 import hashlib
 import hmac
 import secrets

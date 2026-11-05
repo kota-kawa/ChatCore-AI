@@ -26,12 +26,17 @@ logger = logging.getLogger(__name__)
 def _extract_json(raw: str) -> dict[str, Any]:
     # テキストからMarkdownのコードフェンスを除去し、最初に見つかったJSONオブジェクトをパースします。
     # Strip Markdown code fences and parse the first JSON object found.
-    """Strip Markdown code fences and parse the first JSON object found."""
+    """Markdown のコードフェンスを除き、最初に見つかった JSON オブジェクトをパースする。
+
+    Strip Markdown code fences and parse the first JSON object found.
+    """
     cleaned = raw.strip()
+    # JSONなどのコードフェンスを取り除く。
     # Remove ```json ... ``` or ``` ... ```
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.MULTILINE)
     cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE)
     cleaned = cleaned.strip()
+    # 最初のJSONオブジェクト候補を探す。
     # Find first {...}
     start = cleaned.find("{")
     end = cleaned.rfind("}")
@@ -45,7 +50,10 @@ def _extract_json(raw: str) -> dict[str, Any]:
 def _fallback_suggest(ai_response: str) -> dict[str, Any]:
     # AI応答の最初の空行以外の行から、最小限のタイトル案を生成します。
     # Return a minimal suggestion from the first non-empty line of the AI response.
-    """Return a minimal suggestion from the first non-empty line of the AI response."""
+    """AI 応答の最初の空でない行から、最小限のタイトル案を返す。
+
+    Return a minimal suggestion from the first non-empty line of the AI response.
+    """
     for line in (ai_response or "").splitlines():
         cleaned = re.sub(r"^#+\s*", "", line).strip()
         if cleaned:
@@ -56,7 +64,11 @@ def _fallback_suggest(ai_response: str) -> dict[str, Any]:
 # メモの本文テキストをもとに、LLMを呼び出して適切なタイトルを提案させます。不全時はヒューリスティクスにフォールバックします。
 # Call LLM to suggest a concise title for a memo, falling back to heuristics on failure.
 def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
-    """Use LLM to suggest a title for a memo.
+    """LLM を使ってメモのタイトルを提案する。
+
+    キー ``title`` (str) を持つ辞書を返す。LLM が使えない、または不正な JSON が返ったときは簡易なタイトルにフォールバックする。
+
+    Use LLM to suggest a title for a memo.
 
     Returns a dict with key ``title`` (str).
     Falls back to heuristics when the LLM is unavailable or returns malformed JSON.
@@ -109,7 +121,10 @@ def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
 def build_memo_embedding_text(title: str, ai_response: str) -> str:
     # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
     # Combine the title and body content into a format optimized for embedding.
-    """Combine memo fields into a single string optimised for embedding."""
+    """メモの各項目を、埋め込みに適した1つの文字列にまとめる。
+
+    Combine memo fields into a single string optimised for embedding.
+    """
     parts: list[str] = []
     if title:
         parts.append(f"タイトル: {title}")

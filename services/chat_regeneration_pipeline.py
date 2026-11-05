@@ -329,6 +329,15 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     """
     再生成・編集再生成の両エンドポイントで共通の処理を実行します。
     Runs the pipeline shared by the regenerate and edit-and-regenerate endpoints.
+
+    流れ: 履歴の正規化と画像・添付・URL の前置 → タスク・プロフィール・要約・記憶・Skill・参照資料の読み込み → 生成中の
+    重複と利用上限の確認 → Skill の選択とプロンプト構築。
+    その後、ストリーミングモデルならバックグラウンドの生成ジョブを開始して ChatRegenerationStreamStarted を返し、
+    そうでなければ同期で生成して保存し ChatRegenerationCompleted を返す。
+    Flow: normalize the history and prepend images, attachments and URLs; load the task, profile, summary, memory,
+    Skills and references; check for a running generation and the usage limits; select Skills and build the prompt.
+    Then a streaming model starts a background generation job (ChatRegenerationStreamStarted), while any other model
+    generates synchronously, saves the reply and returns ChatRegenerationCompleted.
     """
     deps = pipeline_input.dependencies
     logger = deps.logger
@@ -343,6 +352,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     request_locale = pipeline_input.locale
 
     normalized_all_messages = normalize_messages_for_llm(all_messages)
+    # 外部文書やタスクの標識を足す前の会話を控えておく（Skill の選択にはこの素の履歴を使う）。
     # Snapshot the conversation before external documents and task markers are added.
     skill_selection_history = [dict(message) for message in normalized_all_messages]
     # 添付本文を前置する前のテキストを検索クエリに使う（前置後は添付本文が混ざる）。

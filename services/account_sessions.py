@@ -32,6 +32,8 @@ from services.session_scope import (
 )
 
 
+# 待機中の 1 セッション。Redis から読んだセッション本体(data)と、その持ち主のユーザー ID を持つ。
+# One parked session: the session body read from Redis (data) and the user ID that owns it.
 @dataclass(frozen=True)
 class ParkedSession:
     session_id: str
@@ -39,6 +41,8 @@ class ParkedSession:
     data: dict[str, Any]
 
 
+# scope に載っている待機セッション ID の一覧を返す（無ければ空）。Cookie から復元された値が入る。
+# Return the parked session IDs held in the scope (empty if absent); filled from the cookie.
 def _parked_session_ids(scope: Scope) -> list[str]:
     session_ids = scope.get(PARKED_SESSION_IDS_SCOPE_KEY)
     return list(session_ids) if isinstance(session_ids, list) else []

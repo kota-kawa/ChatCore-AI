@@ -1,4 +1,8 @@
-"""LLM request context-window accounting.
+"""LLM へのリクエストがコンテキストウィンドウに収まるかの計算をまとめる。
+出力用の予約、ツール定義、安全マージンを引いた「メッセージに使える入力トークン数」を求める。
+プロバイダのクライアントから独立しているので、送信前の事前チェックに使える。
+
+LLM request context-window accounting.
 
 The chat agent can make several model calls during one turn.  A provider's
 context limit applies to each individual request, including the output budget
@@ -30,6 +34,8 @@ from services.llm_model_limits import (
     get_model_max_output_tokens,
 )
 
+# 日本語: 対応モデル名はここに意図的に重複して書いている。services.llm から import すると、
+# LLM 層がこのモジュールを事前チェックに使う時点で循環 import になるため。
 # The supported model names are repeated here intentionally.  Importing these
 # constants from services.llm would create an import cycle once the LLM layer
 # uses this module for its preflight check.
@@ -39,6 +45,8 @@ GPT_6_LUNA_MODEL = "gpt-6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_HAIKU_5_5_MODEL = "claude-haiku-5-5"
 
+# 日本語: コンテキストウィンドウはモデルごとに持ち、プロバイダが混在してもよいようにする。
+# 未知のモデルの既定値は小さめにして、楽観的なリクエストを送らないようにしている。
 # Known windows are kept per model so a deployment can safely run different
 # providers in the same process.  The fallback is substantially smaller than
 # these values: an unrecognised model must never cause an optimistic request.
@@ -53,6 +61,8 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
 DEFAULT_CONTEXT_WINDOW_TOKENS = 65_536
 UNKNOWN_MODEL_CONTEXT_WINDOW_TOKENS = DEFAULT_CONTEXT_WINDOW_TOKENS
 
+# 日本語: 出力トークンの既定値。services.llm のフェーズ別の予算と同じ値を、そのモジュールを import せずに写している。
+# 値は呼び出し時に読むので、モジュールを再読み込みしなくても設定を変えられる。
 # These defaults mirror the phase budgets in services.llm without importing
 # that provider module.  The values are read at call time, so a test or a
 # long-running deployment can change its configuration without reloading this
@@ -60,10 +70,12 @@ UNKNOWN_MODEL_CONTEXT_WINDOW_TOKENS = DEFAULT_CONTEXT_WINDOW_TOKENS
 DEFAULT_OUTPUT_TOKENS = 16_384
 DEFAULT_ANSWER_OUTPUT_TOKENS = 32_768
 
+# 日本語: プロバイダ側のトークン化の差やリクエストの枠組みに備えて確保する余白。入力テキストの見積もりとは独立した値にしている。
 # Reserve room for provider-side tokenization differences and request framing.
 # The margin is intentionally independent of the input text estimate.
 DEFAULT_SAFETY_MARGIN_TOKENS = 2_048
 
+# 日本語: ツール定義の JSON はそのまま数え、定義ごとに少しだけ枠組みぶんを加える。この加算は見積もりの考え方を変えずに調整できる。
 # Tool schema JSON is counted directly and each definition receives a small
 # framing allowance.  The framing allowance can be tuned without changing the
 # estimator's semantic behavior.
@@ -78,7 +90,10 @@ ANSWER_GENERATION_PHASES = frozenset(
 
 
 def _positive_int(value: Any, default: int) -> int:
-    """Return a positive integer or ``default`` for malformed values."""
+    """正の整数を返す。不正な値や 0 以下のときは ``default`` を返す。
+
+    Return a positive integer or ``default`` for malformed values.
+    """
 
     try:
         parsed = int(value)
@@ -88,7 +103,10 @@ def _positive_int(value: Any, default: int) -> int:
 
 
 def _non_negative_int(value: Any, default: int) -> int:
-    """Return a non-negative integer or ``default`` for malformed values."""
+    """0 以上の整数を返す。不正な値や負の値のときは ``default`` を返す。
+
+    Return a non-negative integer or ``default`` for malformed values.
+    """
 
     try:
         parsed = int(value)
@@ -97,6 +115,8 @@ def _non_negative_int(value: Any, default: int) -> int:
     return parsed if parsed >= 0 else default
 
 
+# 日本語: 環境変数を 0 以上の整数として読む。未設定なら default。
+# English: Read an environment variable as a non-negative integer; default when unset.
 def _non_negative_int_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None:
@@ -105,7 +125,10 @@ def _non_negative_int_env(name: str, default: int) -> int:
 
 
 def _model_env_suffix(model_name: str) -> str:
-    """Convert a model name into a safe, readable environment suffix."""
+    """モデル名を、環境変数名に使える読みやすい接尾辞（英数字と _）に変換する。
+
+    Convert a model name into a safe, readable environment suffix.
+    """
 
     return "".join(character if character.isalnum() else "_" for character in model_name.upper()).strip(
         "_"
@@ -113,7 +136,10 @@ def _model_env_suffix(model_name: str) -> str:
 
 
 def get_model_context_window(model_name: str | None) -> int:
-    """Return the configured context window for ``model_name``.
+    """``model_name`` のコンテキストウィンドウ（トークン数）を返す。
+    モデル別の上書き（LLM_CONTEXT_WINDOW_<MODEL>）が全体の上書きより優先される。未知のモデルは小さめの既定値を使う。
+
+    Return the configured context window for ``model_name``.
 
     A model-specific override (``LLM_CONTEXT_WINDOW_<MODEL>``) wins over the
     global override.  Unknown and empty model names use the conservative
@@ -140,7 +166,10 @@ def get_output_reserved_tokens(
     generation_phase: str = "default",
     model_name: str | None = None,
 ) -> int:
-    """Return the output tokens reserved for a generation phase.
+    """生成フェーズ用に確保する出力トークン数を返す。回答系のフェーズは回答用の上限、それ以外は通常の上限を使い、
+    プロバイダの上限があればそれを超えない。
+
+    Return the output tokens reserved for a generation phase.
 
     This follows the same environment variables as ``services.llm``.  Unknown
     phases intentionally use the general output cap rather than the larger
@@ -159,7 +188,10 @@ def get_output_reserved_tokens(
 
 
 def get_safety_margin_tokens() -> int:
-    """Return the configured safety margin for provider-side accounting drift."""
+    """プロバイダ側の計算のずれに備える安全マージン（トークン数）を返す。
+
+    Return the configured safety margin for provider-side accounting drift.
+    """
 
     return _non_negative_int_env(
         "LLM_CONTEXT_SAFETY_MARGIN_TOKENS",
@@ -168,7 +200,10 @@ def get_safety_margin_tokens() -> int:
 
 
 def get_tool_definition_overhead_tokens() -> int:
-    """Return the per-tool schema framing allowance."""
+    """ツール定義 1 件ごとに加える枠組みぶんのトークン数を返す。
+
+    Return the per-tool schema framing allowance.
+    """
 
     return _non_negative_int_env(
         "LLM_TOOL_SCHEMA_OVERHEAD_TOKENS",
@@ -177,7 +212,9 @@ def get_tool_definition_overhead_tokens() -> int:
 
 
 def _serialize_for_estimation(value: Any) -> str:
-    """Serialize an SDK-shaped value without allowing estimation to fail.
+    """SDK 形式の値を、見積もりが失敗しないように文字列化する。
+
+    Serialize an SDK-shaped value without allowing estimation to fail.
 
     Provider payloads are normally JSON-compatible dictionaries.  ``default``
     handles lightweight SDK objects and test doubles while keeping estimation
@@ -196,7 +233,10 @@ def _serialize_for_estimation(value: Any) -> str:
 
 
 def estimate_messages_tokens(messages: Sequence[Mapping[str, Any]] | None) -> int:
-    """Estimate all message fields, including tool calls and metadata.
+    """メッセージのすべてのフィールド（ツール呼び出しやメタデータを含む）のトークン数を見積もる。
+    content だけを数えると、ツールループで膨らむリクエストを過小に見積もってしまう。
+
+    Estimate all message fields, including tool calls and metadata.
 
     Estimating the complete serialized message catches ``role``, ``name``,
     ``tool_call_id``, multimodal content blocks, and assistant ``tool_calls``;
@@ -219,11 +259,15 @@ def estimate_messages_tokens(messages: Sequence[Mapping[str, Any]] | None) -> in
 
 
 def estimate_tools_tokens(tools: Sequence[Mapping[str, Any]] | None) -> int:
-    """Estimate tool schemas plus per-definition/provider framing overhead."""
+    """ツール定義のスキーマと、定義ごとの枠組みぶんを合わせたトークン数を見積もる。
+
+    Estimate tool schemas plus per-definition/provider framing overhead.
+    """
 
     if not tools:
         return 0
 
+    # 一度しか読めないgeneratorも、JSON見積もりと件数計算で同じ内容を使えるよう実体化する。
     # Materialize once so generators and other one-shot sequences are handled
     # consistently by both the JSON estimator and the count below.
     tool_list = list(tools)
@@ -239,14 +283,19 @@ def estimate_request_tokens(
     messages: Sequence[Mapping[str, Any]] | None,
     tools: Sequence[Mapping[str, Any]] | None = None,
 ) -> int:
-    """Estimate the complete input portion of a provider request."""
+    """プロバイダへのリクエストの入力部分全体（メッセージとツール定義）のトークン数を見積もる。
+
+    Estimate the complete input portion of a provider request.
+    """
 
     return estimate_messages_tokens(messages) + estimate_tools_tokens(tools)
 
 
 @dataclass(frozen=True, slots=True)
 class LlmContextBudget:
-    """The effective token budget for one model/phase request.
+    """1 つのモデル・フェーズのリクエストに対する、実際に使えるトークン予算。
+
+    The effective token budget for one model/phase request.
 
     ``available_input_tokens`` is the amount available to serialized messages;
     tool schema tokens, output reservation, and the safety margin are already
@@ -265,7 +314,10 @@ class LlmContextBudget:
 
     @property
     def reserved_tokens(self) -> int:
-        """Tokens unavailable to message content in this request."""
+        """このリクエストで、メッセージ本文に使えない（出力予約・ツール定義・安全マージンの）トークン数。
+
+        Tokens unavailable to message content in this request.
+        """
 
         return (
             self.output_reserved_tokens
@@ -275,12 +327,18 @@ class LlmContextBudget:
 
     @property
     def available_input_tokens(self) -> int:
-        """Return the non-negative message-token allowance."""
+        """メッセージに使えるトークン数（0 以上）を返す。
+
+        Return the non-negative message-token allowance.
+        """
 
         return max(self.context_window_tokens - self.reserved_tokens, 0)
 
     def fits_message_tokens(self, message_tokens: int) -> bool:
-        """Return whether a message-only estimate fits this budget."""
+        """メッセージだけの見積もりがこの予算に収まるかを返す。
+
+        Return whether a message-only estimate fits this budget.
+        """
 
         return _non_negative_int(message_tokens, 0) <= self.available_input_tokens
 
@@ -294,7 +352,10 @@ def get_context_budget(
     safety_margin_tokens: int | None = None,
     tool_schema_tokens: int | None = None,
 ) -> LlmContextBudget:
-    """Build a context budget for a model and generation phase.
+    """モデルと生成フェーズに対するコンテキスト予算を作る。
+    プロバイダがリクエスト固有の出力上限を返す場合のために、各値を引数で上書きできる。
+
+    Build a context budget for a model and generation phase.
 
     Optional overrides are useful when a provider reports a request-specific
     output cap.  By default all values are resolved from the model table,
@@ -341,7 +402,10 @@ def get_available_input_tokens(
     safety_margin_tokens: int | None = None,
     tool_schema_tokens: int | None = None,
 ) -> int:
-    """Return the available message-token allowance for one request."""
+    """1 つのリクエストでメッセージに使えるトークン数を返す。
+
+    Return the available message-token allowance for one request.
+    """
 
     return get_context_budget(
         model_name,
@@ -363,7 +427,10 @@ def request_fits_context(
     safety_margin_tokens: int | None = None,
     tool_schema_tokens: int | None = None,
 ) -> bool:
-    """Check a complete request against its effective context budget."""
+    """リクエスト全体が、実際のコンテキスト予算に収まるかを確認する。
+
+    Check a complete request against its effective context budget.
+    """
 
     budget = get_context_budget(
         model_name,
@@ -377,6 +444,7 @@ def request_fits_context(
     return message_tokens <= budget.available_input_tokens
 
 
+# 日本語: 呼び出し側で読みやすい別名。設計資料にある用語でも呼べるようにしている。
 # Explicit aliases keep call sites readable while allowing future integrations
 # to use terminology from the planning document.
 get_llm_context_budget = get_context_budget

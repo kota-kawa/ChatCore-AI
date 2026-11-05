@@ -1,4 +1,10 @@
-"""Async SQLAlchemy persistence for the personal context vault."""
+"""個人のコンテキスト保管庫(My Context の事実 = context_facts)の永続化。一覧、検索(意味・テキスト)、作成、一括取り込み、更新を扱う。
+
+更新は revision による楽観ロック、作成は idempotency キーによる重複防止を持つ。services 側のコンテキスト保管庫サービスから使われる。
+
+Async SQLAlchemy persistence for the personal context vault.
+Updates use revision-based optimistic locking and creation supports idempotency keys.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +43,11 @@ from services.models import ContextFact
 from services.models.types import Vector
 from services.search_terms import build_like_pattern, split_search_terms
 
+# 日本語: 有効(active)な事実の 1 ユーザーあたり上限。
+# English: Per-user cap on active facts.
 MAX_ACTIVE_CONTEXT_FACTS = 200
+# 日本語: advisory lock の名前空間。候補リポジトリと同じ値で、同一ユーザーの事実/候補の書き込みを直列化する。
+# English: Advisory-lock namespace, shared with the candidate repository so one user's fact/candidate writes are serialized.
 _CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
 
 _FACT_COLUMNS = (
@@ -109,6 +119,7 @@ def _serialize_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 class ContextFactRepository:
+    # context_factsの永続化境界。複数操作を原子的にまとめるため、commitとrollbackは呼び出し元が担う。
     """Persistence boundary for ``context_facts``.
 
     The repository never commits or rolls back.  The caller owns the
@@ -123,6 +134,8 @@ class ContextFactRepository:
     def _serialize_row(row: Any) -> dict[str, Any]:
         return _serialize_record(_record_from_row(row))
 
+    # 日本語: トランザクション終了までのユーザー単位ロック。件数上限の確認と挿入の間に別の書き込みが入らないようにする。
+    # English: Transaction-scoped per-user lock, so no other write lands between the cap check and the insert.
     async def _lock_user_writes(self, user_id: int) -> None:
         await self.session.execute(
             select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id))
@@ -137,6 +150,8 @@ class ContextFactRepository:
         )
         return int(count or 0)
 
+    # 日本語: (updated_at, id) の降順によるキーセットページング。before_* より古い行だけを返す。
+    # English: Keyset pagination ordered by (updated_at, id) descending; only rows older than before_* are returned.
     async def list_facts(
         self,
         user_id: int,
@@ -163,6 +178,8 @@ class ContextFactRepository:
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
 
+    # 日本語: LLM へ渡す要約用に、有効な事実を重要度の高い順(同順位は新しい順)で上限件数まで返す。
+    # English: Returns active facts for the LLM digest, most important first (newest first on ties), up to the cap.
     async def list_active_for_digest(self, user_id: int) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ContextFact)
@@ -197,6 +214,7 @@ class ContextFactRepository:
         user_id: int,
         facts: list[dict[str, Any]],
     ) -> set[tuple[str, str, str, str, int]]:
+        # PostgreSQLのVALUES CTEでインポート時の完全一致重複を探す。
         """Find exact import duplicates with a PostgreSQL ``VALUES`` CTE."""
         if not facts:
             return set()
@@ -259,6 +277,8 @@ class ContextFactRepository:
             raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
         return self._serialize_row(fact)
 
+    # 日本語: pgvector のコサイン距離演算子(<=>)で、クエリ埋め込み(768 次元)との距離の式を作る。
+    # English: Builds the pgvector cosine-distance expression (<=>) against the 768-dimension query embedding.
     @staticmethod
     def _distance(embedding: list[float]):
         query_vector = bindparam(
@@ -268,6 +288,8 @@ class ContextFactRepository:
         )
         return ContextFact.embedding_vector.op("<=>")(query_vector)
 
+    # 日本語: 埋め込みのある行だけを対象に、距離が設定された最大距離以内のものを近い順に返す。
+    # English: Searches only rows that have an embedding, returning those within the configured max distance, nearest first.
     async def semantic_search(
         self,
         user_id: int,
@@ -290,6 +312,8 @@ class ContextFactRepository:
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
 
+    # 日本語: 語ごとに title/content の部分一致(ILIKE)を AND で重ねる簡易検索。新しい更新順に返す。
+    # English: Simple search that ANDs a title/content ILIKE match per term, newest update first.
     async def text_search(
         self,
         user_id: int,
@@ -327,6 +351,8 @@ class ContextFactRepository:
         idempotency_key_hash: str | None = None,
         idempotency_payload_hash: str | None = None,
     ) -> dict[str, Any]:
+        # 日本語: 同じ idempotency キーの再送は、内容が同じなら既存行を再生(_idempotent_replay)し、内容が違えば 409 にする。
+        # English: A retry with the same idempotency key replays the existing row (_idempotent_replay) if the payload matches, else 409.
         await self._lock_user_writes(user_id)
         if idempotency_key_hash is not None:
             existing = await self.session.scalar(
@@ -375,6 +401,8 @@ class ContextFactRepository:
         if row is not None:
             return self._serialize_row(row)
 
+        # 日本語: 挿入が ON CONFLICT で何も返さなかった場合は、ロック取得後でも同じキーが先に入ったことを意味するので、もう一度照合する。
+        # English: If ON CONFLICT returned nothing, the same key was inserted first; look it up again and replay or report a conflict.
         if idempotency_key_hash is not None:
             existing = await self.session.scalar(
                 select(ContextFact).where(
@@ -399,7 +427,12 @@ class ContextFactRepository:
         user_id: int,
         facts: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Append an import batch atomically and skip exact duplicates."""
+        """取り込みバッチを一括で追加し、完全一致の重複はスキップする。
+
+        有効な事実が上限を超える場合は、一部だけ入れずに 409 で全体を拒否する。
+
+        Append an import batch atomically and skip exact duplicates.
+        """
         await self._lock_user_writes(user_id)
 
         def signature(fact: dict[str, Any]) -> tuple[str, str, str, str, int]:
@@ -474,13 +507,20 @@ class ContextFactRepository:
         importance: int | None = None,
         confirmed_by_owner: bool = False,
     ) -> dict[str, Any]:
-        """Update a fact under optimistic locking.
+        """revision による楽観ロックで事実を更新する。
+
+        title・content・種類を実際に変えたときは、本人の操作なら last_confirmed_at を現在時刻にし、
+        それ以外(MCP クライアントの書き換え)なら NULL に戻す。同じ値の再送、状態変更、重要度の変更では確認状態を変えない。
+
+        Update a fact under optimistic locking.
 
         Changing title, content, or type sets ``last_confirmed_at`` to now when the owner
         made the change and clears it otherwise (an MCP client rewrote it and the owner has
         not seen it). Re-sending unchanged fields, status changes, and importance changes
         leave confirmation alone.
         """
+        # 日本語: deprecated などから active に戻すときだけ、有効件数の上限を確認する(既に active なら件数は増えない)。
+        # English: The active-count cap is checked only when reactivating a non-active fact, since an already-active fact adds no count.
         if status == "active":
             await self._lock_user_writes(user_id)
             current_status = await self.session.scalar(
@@ -507,6 +547,8 @@ class ContextFactRepository:
         if fact_type is not None:
             changes["fact_type"] = fact_type
             content_change_conditions.append(ContextFact.fact_type.is_distinct_from(fact_type))
+        # 日本語: 値が実際に変わった(IS DISTINCT FROM)ときだけ埋め込みを再生成待ちにし、確認時刻を更新する。
+        # English: Only when a value actually changes (IS DISTINCT FROM) is the embedding marked pending and confirmation updated.
         if content_change_conditions:
             content_changed = or_(*content_change_conditions)
             changes["embedding_status"] = case(
@@ -540,6 +582,8 @@ class ContextFactRepository:
         if row is not None:
             return self._serialize_row(row)
 
+        # 日本語: 更新が 0 行のとき、事実が無い(404)のか revision の不一致(409)なのかを区別する。
+        # English: With zero rows updated, tell "fact not found" (404) apart from a revision mismatch (409).
         exists_for_owner = await self.session.scalar(
             select(exists().where(ContextFact.id == fact_id, ContextFact.user_id == user_id))
         )
@@ -547,6 +591,9 @@ class ContextFactRepository:
             raise ResourceNotFoundError(ERROR_CONTEXT_FACT_NOT_FOUND)
         raise ApiServiceError(ERROR_CONTEXT_FACT_REVISION_CONFLICT, 409, status="fail")
 
+    # 日本語: 埋め込みを保存して ready にする。expected_revision を渡すと、生成中に事実が更新されていた場合は古い埋め込みを書き込まない。
+    # English: Stores the embedding and marks it ready; with expected_revision, a stale embedding is not
+    # written if the fact changed meanwhile.
     async def store_embedding(
         self,
         fact_id: int,

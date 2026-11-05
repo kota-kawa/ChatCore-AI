@@ -69,7 +69,10 @@ VISIBLE_TEXT_EVENTS = frozenset({"chunk", "answer_draft"})
 
 
 def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
-    """Return the latest user prompt for request-aware UI recovery."""
+    """UI の回復で依頼内容を参照するために、最新のユーザー発話を返す。
+
+    Return the latest user prompt for request-aware UI recovery.
+    """
     for message in reversed(messages):
         if message.get("role") == "user":
             content = message.get("content")
@@ -227,6 +230,8 @@ class ChatGenerationJobBase:
         # Whether the last model stream was cut off by the output cap; an answer then
         # continues instead of being persisted as if the model had finished.
         self._last_stream_output_limited = False
+        # 検索画像の選定は検索結果が届いた時点で行うので、キャンセルされても、
+        # すでに露出した画像は保存できる。
         # Search-image selections are made as soon as search results arrive so a
         # cancellation can still persist images that were already revealed.
         self._selected_web_search_images: list[dict[str, str]] = []
@@ -312,6 +317,8 @@ class ChatGenerationJobBase:
             tool_approval_ids=[str(card["id"]) for card in approval_cards],
         )
 
+    # 下書きを出すターンのときだけ、新しい下書き判定器を作る（出さないターンは None）
+    # Create a fresh draft filter only for a turn that drafts (None otherwise)
     def _new_answer_draft(self) -> AnswerDraftFilter | None:
         if self._answer_draft_request is None:
             return None

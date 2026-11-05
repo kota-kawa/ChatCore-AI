@@ -1,4 +1,10 @@
-"""Persistence boundary for the prompt-share domain.
+"""プロンプト共有(公開プロンプト、SKILL、いいね、コメント、ゲスト投稿)の永続化境界。
+
+フィード用 CTE、JSONB のリソース集計、advisory lock によるゲスト/タスク操作など PostgreSQL 固有の読み取りは
+SQLAlchemy Core の SQL としてここに置き、単純な行の変更はマップされたモデルで行う。
+どのメソッドも呼び出し側の AsyncSession を commit / rollback しない。services/shared_content_service.py から使われる。
+
+Persistence boundary for the prompt-share domain.
 
 The prompt-share domain has a few deliberately PostgreSQL-specific reads (the
 feed CTE, JSONB resource aggregation, and advisory-lock based guest/task
@@ -41,10 +47,13 @@ from services.models.types import Vector
 from services.prompt_types import normalize_content_format, normalize_media_type
 from services.search_terms import build_like_pattern, split_search_terms
 
+# 日本語: 一覧カードの抜粋の元にするテキストの最大文字数(SQL の LEFT で切る)。
+# English: Maximum characters of source text for a list-card snippet (cut in SQL with LEFT).
 SNIPPET_SOURCE_MAX_LENGTH = 1000
 
 
 def _rowcount(result: Any) -> int:
+    # PostgreSQLの更新結果から影響行数を読む。
     """Read the affected-row count exposed by PostgreSQL DML results."""
     return int(getattr(result, "rowcount", 0) or 0)
 
@@ -56,6 +65,8 @@ def _rowcount(result: Any) -> int:
 _AVATAR_ROW_KEYS = ("author_avatar_url", "avatar_url")
 
 
+# 日本語: 行内のアバター URL を現行の配信 URL へ読み替えて、同じ dict を返す。
+# English: Rewrites avatar URLs in a row to the served URL and returns the same dict.
 def _normalize_row_avatars(row: dict[str, Any]) -> dict[str, Any]:
     for key in _AVATAR_ROW_KEYS:
         if key in row:
@@ -73,7 +84,10 @@ def _first(result: Any) -> dict[str, Any] | None:
 
 
 class SharedContentRepository:
-    """ORM/Core repository for public prompts and their interactions."""
+    """公開プロンプトと、いいね・コメントなどの操作を扱う ORM/Core のリポジトリ。
+
+    ORM/Core repository for public prompts and their interactions.
+    """
 
     async def list_public_content(
         self,
@@ -87,7 +101,13 @@ class SharedContentRepository:
         media_type: str | None = None,
         matching_category_keys: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """List public content using stable keyset pagination."""
+        """公開コンテンツを、安定したキーセットページングで一覧する。
+
+        cursor は (created_at, id)。limit + 1 件取得し、超過分の有無で次ページがあるかを返す。
+        検索語は語ごとに AND で、タイトル・本文・説明・カテゴリ・投稿者・SKILL 定義のいずれかに一致すればよい。
+
+        List public content using stable keyset pagination.
+        """
         conditions = ["p.is_public = TRUE", "p.deleted_at IS NULL"]
         params: dict[str, Any] = {
             "snippet_limit": SNIPPET_SOURCE_MAX_LENGTH,
@@ -167,7 +187,10 @@ class SharedContentRepository:
         session: AsyncSession,
         prompt_id: int,
     ) -> dict[str, Any] | None:
-        """Read a visible public prompt and its JSONB fields."""
+        """公開中で削除されていないプロンプトと、その JSONB 列を読み出す。
+
+        Read a visible public prompt and its JSONB fields.
+        """
         result = await session.execute(
             text(
                 """
@@ -216,7 +239,15 @@ class SharedContentRepository:
         matching_category_keys: list[str],
         query_embedding: list[float] | None = None,
     ) -> dict[str, Any]:
-        """Search public prompts by word hits first, then by meaning.
+        """公開プロンプトを、語の一致を優先し、次に意味の近さで検索する。
+
+        すべての語がどこか(タイトル・本文・説明・カテゴリ・投稿者・SKILL 定義)に一致する必要がある。
+        順位は一致の場所で決まり、タイトル > 説明/カテゴリ > 本文の順。クエリのベクトルがあるときは、語の一致が無くても
+        意味距離の上限内の行を対象に含め、語の順位が同じ行の中では距離で並べる。
+        ORDER BY が語の順位から始まるため HNSW インデックスは使えず、一致した全行を採点する。語の一致を意味より優先することが
+        この順位付けの狙いで、公開プロンプトの表は小さいのでこの走査は軽い。
+
+        Search public prompts by word hits first, then by meaning.
 
         Every term has to hit somewhere (title, body, description, category, author, or
         skill markdown). Rows are ranked by where the terms hit: a title hit outranks a
@@ -229,6 +260,8 @@ class SharedContentRepository:
         matching row instead. Word hits outranking meaning is the point of the ranking, and
         the public prompt table is small enough that the scan is cheap.
         """
+        # 日本語: 日本語/英語の標準プロンプトはロケールが一致するものだけを出し、ユーザー投稿(system_prompt_key なし)は常に対象にする。
+        # English: Bundled system prompts are limited to the requested locale, while user posts (no system_prompt_key) always qualify.
         offset = (int(page) - 1) * int(per_page)
         axis_conditions = ["(p.system_prompt_key IS NULL OR p.content_locale = :locale)"]
         params: dict[str, Any] = {
@@ -245,6 +278,9 @@ class SharedContentRepository:
             axis_conditions.append("p.media_type = :search_media_type")
             params["search_media_type"] = media_type
 
+        # 日本語: 語ごとに一致場所を点数化する(タイトル 3、説明/カテゴリ 2、本文 1)。語の条件は AND、点数は合計して lexical_rank にする。
+        # English: Each term is scored by where it hits (title 3, description/category 2, body 1); term
+        # conditions are ANDed and scores summed into lexical_rank.
         terms = split_search_terms(query) or [query]
         term_conditions: list[str] = []
         rank_terms: list[str] = []
@@ -283,6 +319,8 @@ class SharedContentRepository:
             semantic_distance = "NULL::double precision"
             matched_condition = lexical_match
 
+        # 日本語: 総件数は要求されたときだけ数える。数えない場合は fetch_limit が 1 件多いことで次ページの有無を判断する。
+        # English: The total is counted only on request; otherwise the extra fetched row (per_page + 1) signals whether a next page exists.
         count = None
         if include_total:
             count_result = await session.execute(
@@ -400,7 +438,13 @@ class SharedContentRepository:
         author_id: int | None = None,
         locale: str = "ja",
     ) -> list[dict[str, Any]]:
-        """Fetch a feed page with flags and JSONB resource metadata in one query.
+        """フィードの 1 ページ分を、いいね/追加済みなどのフラグと JSONB のリソース情報つきで 1 回のクエリで取得する。
+
+        注目(featured)のプロンプトは先頭ページにだけ、通常の 1 ページ分に加えて並べる。先頭ページは注目の全行と
+        ``limit + 1`` 件の通常行を返すので、注目が 1 ページより多くても、最後の通常行からキーセットのカーソルを作れる。
+        次ページ以降は注目の行を除くため、カーソル(閲覧数, created_at, id)で通常のプロンプトが重複も欠落もしない。
+
+        Fetch a feed page with flags and JSONB resource metadata in one query.
 
         Featured prompts lead the first page only, on top of the regular page: the first
         page returns every featured row plus ``limit + 1`` regular rows, so the caller can
@@ -409,6 +453,10 @@ class SharedContentRepository:
         count, created_at, id) never repeats or skips a regular prompt.
         """
 
+        # 日本語: カテゴリ・形式・メディア・投稿者・ロケールの絞り込み条件。注目件数のサブクエリ(別
+        # 名 f)にも同じ条件を適用するために別名を引数にしている。
+        # English: Builds the category/format/media/author/locale filters; the alias is a parameter so
+        # the featured-count subquery (alias f) applies the same filters.
         def filters(alias: str) -> list[str]:
             filter_conditions = [f"({alias}.system_prompt_key IS NULL OR {alias}.content_locale = :locale)"]
             if category is not None:
@@ -431,6 +479,10 @@ class SharedContentRepository:
             "feed_media_type": media_type,
             "feed_author_id": author_id,
         }
+        # 日本語: カーソルありは 2 ページ目以降(注目を除き、閲覧数→作成日時→id の降順で続きから)。カーソルなしは先頭ページで、
+        # 注目の行数を LIMIT に足して注目の全行を含める。
+        # English: With a cursor this is a later page (featured rows excluded, continuing in view-count, created_at, id descending order).
+        # Without one it is the first page, and the featured row count is added to the LIMIT so every featured row fits.
         if cursor is not None:
             conditions.append("p.featured_at IS NULL")
             conditions.append(
@@ -559,7 +611,15 @@ class SharedContentRepository:
         limit: int,
         locale: str = "ja",
     ) -> list[dict[str, Any]]:
-        """Return prompts related to the one being read, then popular ones.
+        """読んでいるプロンプトに関連するプロンプトを返し、足りない分は人気のものを続ける。
+
+        基準のプロンプトにベクトルがあるとき、意味距離の上限内の行を距離順で先頭に置く。上限外やベクトルの無い行は
+        ``semantic_distance`` が NULL になり、同じカテゴリ、次に閲覧数の多い順にフォールバックする。これにより呼び出し側は、
+        この節がどの基準に基づくかを読者に伝えられる。RANDOM() は残った同順位を崩すためだけに使う。
+        距離を CASE で包み、ほかの並び替えキーも続けるため HNSW インデックスはここでも使えない。見えるプロンプト全件を採点するが、
+        表の規模では軽く、人気順のフォールバックも同じ文に収められる。
+
+        Return prompts related to the one being read, then popular ones.
 
         When the anchor prompt has a stored vector, rows within the semantic ceiling come
         first by distance. Rows beyond the ceiling or without a vector report a NULL
@@ -660,7 +720,10 @@ class SharedContentRepository:
         session: AsyncSession,
         prompt_id: int,
     ) -> dict[str, Any] | None:
-        """Read a public prompt detail with view/comment/resource aggregates."""
+        """公開プロンプトの詳細を、閲覧数・コメント数・リソースの集計つきで読み出す。
+
+        Read a public prompt detail with view/comment/resource aggregates.
+        """
         result = await session.execute(
             text(
                 """
@@ -738,7 +801,10 @@ class SharedContentRepository:
         session: AsyncSession,
         user_id: int,
     ) -> dict[str, Any] | None:
-        """Return a profile only when the user has a visible public post."""
+        """公開中の投稿を持つユーザーに限り、そのプロフィールを返す(投稿が無ければ None)。
+
+        Return a profile only when the user has a visible public post.
+        """
         result = await session.execute(
             text(
                 """
@@ -784,7 +850,10 @@ class SharedContentRepository:
         attributes: dict[str, Any],
         attachments: list[dict[str, Any]],
     ) -> int:
-        """Insert a public prompt using ORM and return its generated ID."""
+        """公開プロンプトを ORM で挿入し、採番された ID を返す。
+
+        Insert a public prompt using ORM and return its generated ID.
+        """
         username = await session.scalar(select(User.username).where(User.id == int(user_id)))
         prompt = Prompt(
             user_id=int(user_id),
@@ -822,7 +891,10 @@ class SharedContentRepository:
         output_examples: str | None,
         attributes: dict[str, Any],
     ) -> bool:
-        """Update a live prompt owned by the actor."""
+        """操作者が所有する削除されていないプロンプトを更新する(該当が無ければ False)。
+
+        Update a live prompt owned by the actor.
+        """
         result = await session.execute(
             select(Prompt).where(
                 Prompt.id == int(prompt_id),
@@ -857,7 +929,10 @@ class SharedContentRepository:
         user_id: int,
         prompt_id: int,
     ) -> int:
-        """Soft-delete a prompt owned by the actor."""
+        """操作者が所有するプロンプトを論理削除し、更新した行数を返す。
+
+        Soft-delete a prompt owned by the actor.
+        """
         result = await session.execute(
             update(Prompt)
             .where(
@@ -876,7 +951,10 @@ class SharedContentRepository:
         user_id: int,
         prompt_id: int,
     ) -> list[dict[str, Any]]:
-        """Read attachment descriptors before a prompt is soft-deleted."""
+        """プロンプトを論理削除する前に、削除すべき添付ファイルの記述子を読み出す。
+
+        Read attachment descriptors before a prompt is soft-deleted.
+        """
         result = await session.execute(
             select(Prompt.attachments).where(
                 Prompt.id == int(prompt_id),
@@ -893,7 +971,10 @@ class SharedContentRepository:
         *,
         user_id: int,
     ) -> list[dict[str, Any]]:
-        """List a user's non-deleted prompts with resource metadata."""
+        """ユーザー自身の削除されていないプロンプトを、リソース情報つきで一覧する。
+
+        List a user's non-deleted prompts with resource metadata.
+        """
         result = await session.execute(
             text(
                 """
@@ -936,7 +1017,10 @@ class SharedContentRepository:
         *,
         user_id: int,
     ) -> list[dict[str, Any]]:
-        """List a user's likes and the currently visible prompt cards."""
+        """ユーザーのいいねと、現在も表示できるプロンプトのカードを一覧する(非公開・削除済みになったものは含めない)。
+
+        List a user's likes and the currently visible prompt cards.
+        """
         result = await session.execute(
             text(
                 """
@@ -983,7 +1067,10 @@ class SharedContentRepository:
         *,
         prompt_id: int,
     ) -> dict[str, Any] | None:
-        """Load the public prompt data needed by the task-import workflow."""
+        """タスクとして取り込む処理に必要な、公開プロンプトのデータを読み出す。
+
+        Load the public prompt data needed by the task-import workflow.
+        """
         result = await session.execute(
             text(
                 """
@@ -1018,7 +1105,12 @@ class SharedContentRepository:
         user_id: int,
         title: str,
     ) -> str:
-        """Allocate a deterministic non-conflicting task title."""
+        """ユーザーの既存タスク名と重複しないタスク名を決める。
+
+        重複するときは " (2)", " (3)" のように連番を付ける(大文字小文字と前後空白は無視して比較し、255 文字に収める)。
+
+        Allocate a deterministic non-conflicting task title.
+        """
         base_title = title[:255]
         candidate = base_title
         suffix_number = 1
@@ -1048,7 +1140,13 @@ class SharedContentRepository:
         prompt_id: int,
         prompt_template: str,
     ) -> tuple[dict[str, Any], int]:
-        """Import a prompt into task templates under an advisory lock."""
+        """公開プロンプトを、advisory lock の下でユーザーのタスクテンプレートとして取り込む。
+
+        ユーザー単位のロックで同時の取り込みを直列化する。同じ元プロンプトが追加済みなら新規作成せず 200 で既存の ID を返し、
+        新規作成なら 201。ON CONFLICT で挿入されなかった場合は、並行で追加された行があれば 200、同名の衝突なら 409 にする。
+
+        Import a prompt into task templates under an advisory lock.
+        """
         prompt = await self.get_prompt_for_import(session, prompt_id=prompt_id)
         if prompt is None:
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
@@ -1139,6 +1237,8 @@ class SharedContentRepository:
             "used_in_chat": True,
         }, 201
 
+    # 日本語: 取り込み済みのタスクを論理削除して「チャットで使う」設定を解除する。すでに解除済みでも成功(冪等)として 200 を返す。
+    # English: Soft-deletes the imported task to turn off "use in chat". An already removed task still returns 200 (idempotent).
     async def remove_prompt_as_task(
         self,
         session: AsyncSession,
@@ -1159,6 +1259,8 @@ class SharedContentRepository:
             return {"message": "チャットで使う設定はすでに解除されています。", "used_in_chat": False}, 200
         return {"message": "チャットで使う設定を解除しました。", "used_in_chat": False}, 200
 
+    # 日本語: いいねを付ける。公開プロンプトだけが対象で、すでにいいね済みなら 200(新規は 201)として冪等に扱う。
+    # English: Adds a like for a public prompt only; an existing like is treated idempotently with 200 (a new one gives 201).
     async def add_like(
         self,
         session: AsyncSession,
@@ -1201,6 +1303,8 @@ class SharedContentRepository:
         )
         return _rowcount(result)
 
+    # 日本語: 表示されるコメント数。削除済みと、通報により自動非表示になったコメントは数えない。
+    # English: Number of visible comments, excluding deleted ones and those hidden automatically after reports.
     async def count_visible_comments(self, session: AsyncSession, prompt_id: int) -> int:
         value = await session.scalar(
             select(func.count(PromptComment.id)).where(
@@ -1218,7 +1322,10 @@ class SharedContentRepository:
         prompt_id: int,
         limit: int,
     ) -> list[dict[str, Any]] | None:
-        """Return visible comments, or None when the prompt is not public."""
+        """表示されるコメントを古い順に返す。プロンプトが公開でなければ None。
+
+        Return visible comments, or None when the prompt is not public.
+        """
         prompt_exists = await session.scalar(
             select(Prompt.id).where(
                 Prompt.id == int(prompt_id),
@@ -1248,6 +1355,8 @@ class SharedContentRepository:
         )
         return _rows(result)
 
+    # 日本語: コメントを追加する。同じユーザーが同じ内容を duplicate_window_seconds 以内に再投稿した場合は 409 で拒否する(連投対策)。
+    # English: Adds a comment. The same user re-posting identical text within duplicate_window_seconds is rejected with 409 (spam guard).
     async def add_comment(
         self,
         session: AsyncSession,
@@ -1311,6 +1420,8 @@ class SharedContentRepository:
         inserted["comment_count"] = await self.count_visible_comments(session, prompt_id)
         return inserted, 201
 
+    # 日本語: コメントの論理削除。削除できるのは、投稿者本人・プロンプトの所有者・管理者のいずれか。
+    # English: Soft-deletes a comment; allowed for its author, the prompt owner, or an admin.
     async def delete_comment(
         self,
         session: AsyncSession,
@@ -1350,6 +1461,10 @@ class SharedContentRepository:
             "comment_count": count,
         }, 200
 
+    # 日本語: コメントを通報する。自分のコメントは通報できず、同じユーザーの再通報は無視する(already_reported)。
+    # 通報数が auto_hide_threshold に達したら、コメントを自動で非表示にする。
+    # English: Reports a comment. Users cannot report their own comments and a repeat report is ignored (already_reported).
+    # When the report count reaches auto_hide_threshold the comment is hidden automatically.
     async def report_comment(
         self,
         session: AsyncSession,
@@ -1439,11 +1554,20 @@ class SharedContentRepository:
         description: str | None,
         lock_keys: Iterable[str],
     ) -> tuple[int | None, int | None]:
-        """Enforce the guest quota and insert prompt/submission atomically.
+        """ゲスト投稿の回数制限を確認し、プロンプトと投稿記録を同一トランザクションで挿入する。
+
+        戻り値は ``(prompt_id, retry_after)``。``retry_after`` が ``None`` でないときは、直近 24 時間以内に同じ Cookie または IP で
+        投稿済みで、挿入は行われていない(再投稿できるまでの秒数)。
+
+        Enforce the guest quota and insert prompt/submission atomically.
 
         The return value is ``(prompt_id, retry_after)``.  A non-``None`` retry
         value means the quota was consumed recently and no insert occurred.
         """
+        # 日本語: Cookie と IP の両方のキーで advisory lock を取り、同時投稿による制限のすり抜けを防
+        # ぐ。ロック順を固定(ソート)してデッドロックを避ける。
+        # English: Takes advisory locks for both the cookie and IP keys so concurrent posts cannot slip
+        # past the quota; sorting fixes the lock order to avoid deadlocks.
         for lock_key in sorted(lock_keys):
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
@@ -1504,7 +1628,10 @@ class SharedContentRepository:
         user_id: int,
         cookie_hash: str,
     ) -> list[int]:
-        """Claim every matching unclaimed guest prompt in one CTE."""
+        """Cookie が一致する未紐づけのゲスト投稿を、1 つの CTE でまとめてユーザーのものにし、紐づけた投稿の ID を返す。
+
+        Claim every matching unclaimed guest prompt in one CTE.
+        """
         result = await session.execute(
             text(
                 """

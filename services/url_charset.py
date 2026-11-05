@@ -1,3 +1,11 @@
+"""ダウンロード済みのレスポンスボディ（bytes）を、文字コードを判定して文字列へデコードする。
+
+BOM、Content-Type ヘッダー、HTML の meta 宣言、UTF-8 の厳密判定、統計的推定の順に解決する。
+
+Resolves the charset of an already-downloaded response body (bytes) and decodes it into text,
+trying the BOM, the Content-Type header, the HTML meta declaration, strict UTF-8 and then statistical detection.
+"""
+
 from __future__ import annotations
 
 import codecs

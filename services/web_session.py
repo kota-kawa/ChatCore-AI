@@ -1,3 +1,8 @@
+"""セッション辞書の永続化フラグと、一度読むと消えるフラッシュメッセージを扱う小さなヘルパー。
+
+Small helpers for the session's permanence flag and for one-time flash messages kept in the session.
+"""
+
 from __future__ import annotations
 
 from fastapi import Request

@@ -2,6 +2,8 @@
 # Prepare tool (function-calling) schemas so provider-side validation cannot fail them.
 """Relax tool schemas at the provider boundary.
 
+プロバイダとの境界でツールのスキーマを緩める。
+
 Groq をはじめとする OpenAI 互換プロバイダは、モデルが生成したツール引数をサーバー側で
 JSON Schema 検証し、違反をストリーム途中の再試行不可エラーとして返します。引数1つの
 綴り違い（例: 検索言語に ISO の ``ja`` を返す。Brave の正しい値は ``jp``）だけで、
@@ -131,14 +133,20 @@ def _relax_schema(schema: Any) -> Any:
 
 
 def relax_tool_parameters_schema(parameters: Any) -> Any:
-    """Return a provider-safe copy of one tool's JSON Schema parameters."""
+    """1つのツールの JSON Schema パラメータについて、プロバイダ向けに緩めたコピーを返す。
+
+    Return a provider-safe copy of one tool's JSON Schema parameters.
+    """
     return _relax_schema(deepcopy(parameters))
 
 
 def prepare_provider_tools(
     tools: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
-    """Return provider-safe copies of OpenAI-style tool definitions."""
+    """OpenAI 形式のツール定義について、プロバイダ向けに緩めたコピーを返す。
+
+    Return provider-safe copies of OpenAI-style tool definitions.
+    """
     if not tools:
         return []
 

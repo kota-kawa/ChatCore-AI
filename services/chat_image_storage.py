@@ -38,7 +38,10 @@ _DEVELOPMENT_OWNER_SECRET = "chat-image-development-owner-secret"
 
 
 def get_chat_image_upload_root() -> str:
-    """Return the configured absolute storage directory for chat images."""
+    """保存先ディレクトリを絶対パスで返す。CHAT_IMAGE_UPLOAD_DIR が相対パスなら BASE_DIR 基準で解決する。
+
+    Return the configured absolute storage directory for chat images.
+    """
     configured = str(os.getenv(CHAT_IMAGE_UPLOAD_ROOT_ENV, "") or "").strip()
     if not configured:
         return os.path.abspath(_DEFAULT_CHAT_IMAGE_UPLOAD_ROOT)
@@ -48,7 +51,10 @@ def get_chat_image_upload_root() -> str:
 
 
 def chat_image_owner_key(*, user_id: object, sid: object) -> str | None:
-    """Return the owner identity for images: the signed-in user, else the guest session."""
+    """画像の持ち主を表すキーを返す。ログイン利用者なら user、そうでなければゲストのセッション ID を使う。
+
+    Return the owner identity for images: the signed-in user, else the guest session.
+    """
     if user_id is not None:
         return f"user:{int(user_id)}"
     if isinstance(sid, str) and sid:
@@ -57,6 +63,10 @@ def chat_image_owner_key(*, user_id: object, sid: object) -> str | None:
 
 
 def _owner_digest(owner_key: str) -> str:
+    """持ち主キーの HMAC の先頭部分を返す。画像 ID の先頭に埋め込み、配信時の持ち主照合に使う。
+
+    Return the leading part of the owner key HMAC; it is embedded in the image id and checked at delivery.
+    """
     secret = get_session_secret_key() or _DEVELOPMENT_OWNER_SECRET
     digest = hmac.new(secret.encode("utf-8"), owner_key.encode("utf-8"), hashlib.sha256).hexdigest()
     return digest[:_OWNER_DIGEST_LENGTH]
@@ -67,13 +77,20 @@ def is_valid_chat_image_id(image_id: object) -> bool:
 
 
 def chat_image_belongs_to(image_id: object, owner_key: str | None) -> bool:
+    """画像 ID の先頭に埋め込まれた HMAC が、この持ち主のものと一致するかを定数時間で比べる。
+
+    Compare the HMAC prefix of the image id with this owner in constant time.
+    """
     if not owner_key or not is_valid_chat_image_id(image_id):
         return False
     return hmac.compare_digest(str(image_id)[:_OWNER_DIGEST_LENGTH], _owner_digest(owner_key))
 
 
 def resolve_chat_image_path(image_id: object, *, thumbnail: bool = False) -> str:
-    """Resolve a validated image id to its file, refusing anything outside the root."""
+    """検証済みの画像 ID から保存ファイルのパスを求める。保存先の外を指すパスは拒否する。
+
+    Resolve a validated image id to its file, refusing anything outside the root.
+    """
     if not is_valid_chat_image_id(image_id):
         raise ValueError("Invalid chat image id.")
     root = os.path.realpath(get_chat_image_upload_root())
@@ -85,7 +102,10 @@ def resolve_chat_image_path(image_id: object, *, thumbnail: bool = False) -> str
 
 
 def save_chat_image(owner_key: str, display_bytes: bytes, thumbnail_bytes: bytes) -> str:
-    """Persist both variants atomically and return the new owner-bound image id."""
+    """表示用とサムネイルの 2 ファイルを書き込み、持ち主を埋め込んだ新しい画像 ID を返す。片方が失敗したら書いた分を消す。
+
+    Persist both variants atomically and return the new owner-bound image id.
+    """
     if not display_bytes or not thumbnail_bytes:
         raise ValueError("画像の変換結果が空です。")
     root = get_chat_image_upload_root()
@@ -105,7 +125,10 @@ def save_chat_image(owner_key: str, display_bytes: bytes, thumbnail_bytes: bytes
 
 
 def read_chat_image_bytes(image_id: str) -> bytes | None:
-    """Return the display variant sent to the model, or None when it is gone."""
+    """モデルへ送る表示用の画像を読む。ファイルが無い場合は None を返す。
+
+    Return the display variant sent to the model, or None when it is gone.
+    """
     try:
         with open(resolve_chat_image_path(image_id), "rb") as file_obj:
             return file_obj.read()
@@ -141,7 +164,10 @@ def cleanup_unreferenced_chat_images(referenced_ids: Iterable[str], grace_second
 
 
 def _atomic_write(destination: str, content: bytes) -> None:
-    """Write a variant atomically so readers never observe a partial image."""
+    """一時ファイルへ書いてから置き換え、読み手が書きかけの画像を見ないようにする。
+
+    Write a variant atomically so readers never observe a partial image.
+    """
     fd, temporary_path = tempfile.mkstemp(prefix=".chat-image-", dir=os.path.dirname(destination))
     try:
         with os.fdopen(fd, "wb") as file_obj:

@@ -1,3 +1,4 @@
+# 投稿の現行テキストから非同期に埋め込みを作る。updated_atで競合を検知し、古いベクトルを保存しない。
 """Background embedding generation for public shared prompts.
 
 The worker reads the prompt text itself instead of receiving it from the caller, so the
@@ -31,6 +32,7 @@ def build_prompt_embedding_text(
     content: str,
     attributes: dict[str, Any] | None = None,
 ) -> str:
+    # 読者に見える項目を埋め込み入力へまとめる。Skillは空のcontentの代わりにskill_markdownを使う。
     """Combine the fields a reader sees into one embedding input.
 
     Skill posts keep their body in ``attributes.skill_markdown`` and leave ``content``
@@ -50,6 +52,7 @@ def build_prompt_embedding_text(
 
 
 async def embed_prompt(prompt_id: int) -> bool:
+    # DB処理は非同期のまま、同期SDKの埋め込み生成だけをスレッドへ移し、更新ガード付きで保存する。
     """Read the current text, embed it, and store the vector under the row's guard.
 
     Returns True when a vector was stored. The provider SDK is synchronous, so the
@@ -76,6 +79,7 @@ async def embed_prompt(prompt_id: int) -> bool:
 
 
 def schedule_prompt_embedding(prompt_id: int) -> None:
+    # コミット後に別接続で読むため、投稿保存の確定後にバックグラウンド生成を呼ぶ。
     """Embed a prompt off the request path.
 
     Call this after the prompt row is committed: the worker reads through its own

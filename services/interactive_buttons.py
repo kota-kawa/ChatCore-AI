@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+# 日本語: 選択ボタンのメッセージパーツ種別と、モデルが返す選択ボタンのブロック（フェンスまたはタグ）を見つける正規表現。
+# English: The message part type for choice buttons, and the regex that finds the model's button block (fenced or tag-wrapped).
 INTERACTIVE_BUTTONS_PART_TYPE = "interactive_buttons"
 # 旧来の別名（interactive-buttons / interactive_buttons）も読み、本文へJSONを漏らさない。
 # 一部モデル（実測: Qwen 3.8 27B）はフェンスの代わりに <chatcore_button>/<chatcore_buttons>
@@ -32,6 +34,8 @@ INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"(?(tag)</chatcore_buttons?>|```)",
     re.IGNORECASE,
 )
+# 日本語: Markdown のコードフェンス開始行と、インラインコードの区切り（連続するバッククォート）を見つける正規表現。
+# English: Regexes for the start of a Markdown code fence and for inline-code delimiters (runs of backticks).
 _MARKDOWN_FENCE_START_RE = re.compile(r" {0,3}(`{3,}|~{3,})")
 _INLINE_CODE_DELIMITER_RE = re.compile(r"(`+)")
 # 上限はモデルに見せる説明（services/chat_prompt.py の「Choice buttons」）と揃える。
@@ -42,15 +46,25 @@ MIN_MULTIPLE_SELECT_OPTIONS = 2
 MAX_INTERACTIVE_BUTTON_BLOCKS_PER_MESSAGE = 3
 
 
+# 日本語: 選択ボタンの定義が契約を満たさないときの例外。
+# English: Raised when a choice-buttons payload does not satisfy the contract.
 class InteractiveButtonsValidationError(ValueError):
+    # 選択ボタンのpayloadが契約を満たさないことを通知する。
     """Raised when a choice-buttons payload does not satisfy the contract."""
 
 
 def is_markdown_code_position(text: str, position: int) -> bool:
-    """Whether a response offset is inside a Markdown code span or fenced block."""
+    """応答テキスト中の位置 ``position`` が、Markdown のコードスパンまたはフェンス付きコードブロックの内側かを返す。
+    コード内に書かれた選択ボタンの例を、実際のボタン指示として扱わないために使う。開始行のフェンス自体は内側に含めない。
+
+    Whether a response offset is inside a Markdown code span or fenced block.
+    The fence's own opening line is not counted as inside.
+    """
     if position < 0 or position >= len(text):
         return False
 
+    # 日本語: まず行ごとにフェンス付きコードブロックの範囲を求め、次にフェンス外のインラインコードを調べる。
+    # English: First collect the fenced-block ranges line by line, then look for inline code outside those fences.
     fenced_ranges: list[tuple[int, int]] = []
     fenced_opening_lines: list[tuple[int, int]] = []
     fence_start: int | None = None

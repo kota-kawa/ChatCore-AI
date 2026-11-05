@@ -31,6 +31,8 @@ from services.async_utils import run_blocking
 from services.runtime_config import get_session_secret_key
 from services.url_fetcher import FetchedImageContent, FetchSlotsBusyError, fetch_image_content
 
+# 日本語: 中継パスの接頭辞。生成UIの画像URLは「接頭辞/署名/base64 の元URL」の形になる。
+# English: Prefix of the relay path; a generated UI's image URL is "prefix/signature/base64 of the original URL".
 WEB_SEARCH_IMAGE_PROXY_PATH_PREFIX = "/api/chat/web-images/"
 
 _SIGNATURE_LENGTH = 32
@@ -66,6 +68,10 @@ _image_cache_bytes = 0
 _inflight_fetches: dict[str, asyncio.Future[FetchedImageContent | None]] = {}
 
 
+# 日本語: キャッシュを引く。戻り値は (命中したか, 画像)。画像が None の命中は「直近の取得に失敗した」ことを表す。
+# 期限切れの項目はここで捨てる。
+# English: Look up the cache. Returns (hit, image); a hit with image None means a recent fetch failed.
+# Expired entries are dropped here.
 def _cached_image(image_url: str) -> tuple[bool, FetchedImageContent | None]:
     entry = _image_cache.get(image_url)
     if entry is None:
@@ -78,6 +84,8 @@ def _cached_image(image_url: str) -> tuple[bool, FetchedImageContent | None]:
     return True, image
 
 
+# 日本語: 項目を取り除き、保持しているバイト数を合わせる。
+# English: Remove an entry and keep the cached byte count in step.
 def _drop_cached_image(image_url: str) -> None:
     global _image_cache_bytes
     _, image = _image_cache.pop(image_url)
@@ -85,6 +93,9 @@ def _drop_cached_image(image_url: str) -> None:
         _image_cache_bytes -= len(image.data)
 
 
+# 日本語: 結果を保存する。失敗（None）は成功より短い期間だけ覚え、バイト数か件数の上限を超えたら古い順に捨てる。
+# English: Store a result. A failure (None) is kept for a shorter time than a success,
+# and the oldest entries are evicted past the byte or entry cap.
 def _store_image(image_url: str, image: FetchedImageContent | None) -> None:
     global _image_cache_bytes
     if image_url in _image_cache:
@@ -99,6 +110,8 @@ def _store_image(image_url: str, image: FetchedImageContent | None) -> None:
         _drop_cached_image(next(iter(_image_cache)))
 
 
+# 日本語: 元サイトから画像を取得してキャッシュに入れる。重い取得はブロッキング用のスレッドで行う。
+# English: Fetch the image from the origin and cache it; the blocking fetch runs on a worker thread.
 async def _fetch_and_store_image(image_url: str) -> FetchedImageContent | None:
     try:
         image = await run_blocking(fetch_image_content, image_url)
@@ -111,7 +124,12 @@ async def _fetch_and_store_image(image_url: str) -> FetchedImageContent | None:
 
 
 async def load_web_search_image(image_url: str) -> FetchedImageContent | None:
-    """Return the image for a signed URL, fetching the origin at most once per cache period."""
+    """署名済み URL の画像を返す。元サイトへの取得はキャッシュ期間につき多くても 1 回。
+
+    同じ画像への同時の要求は、進行中の取得 1 つを共有する。
+
+    Return the image for a signed URL, fetching the origin at most once per cache period.
+    """
     cached, image = _cached_image(image_url)
     if cached:
         return image
@@ -125,6 +143,8 @@ async def load_web_search_image(image_url: str) -> FetchedImageContent | None:
     return await asyncio.shield(pending)
 
 
+# 日本語: 画像 URL の HMAC-SHA256 署名（先頭 32 文字）。秘密鍵が無い開発環境では固定の値で代用する。
+# English: HMAC-SHA256 signature of the image URL (first 32 hex chars); a fixed secret stands in when no key is set in development.
 def _signature(image_url: str) -> str:
     secret = get_session_secret_key() or _DEVELOPMENT_SIGNING_SECRET
     digest = hmac.new(
@@ -136,13 +156,19 @@ def _signature(image_url: str) -> str:
 
 
 def build_web_search_image_proxy_path(image_url: str) -> str:
-    """Return the signed relay path for an image URL the server selected."""
+    """サーバーが選んだ画像 URL に対する、署名付きの中継パスを返す。
+
+    Return the signed relay path for an image URL the server selected.
+    """
     token = base64.urlsafe_b64encode(image_url.encode("utf-8")).decode("ascii").rstrip("=")
     return f"{WEB_SEARCH_IMAGE_PROXY_PATH_PREFIX}{_signature(image_url)}/{token}"
 
 
 def resolve_web_search_image_proxy_url(signature: str, token: str) -> str | None:
-    """Return the original image URL when the signature matches it, else None."""
+    """署名が一致したときだけ元の画像 URL を返し、それ以外は None。
+
+    Return the original image URL when the signature matches it, else None.
+    """
     if not _SIGNATURE_RE.fullmatch(signature or "") or not _TOKEN_RE.fullmatch(token or ""):
         return None
     try:
@@ -155,7 +181,10 @@ def resolve_web_search_image_proxy_url(signature: str, token: str) -> str | None
 
 
 def is_signed_web_search_image_proxy_path(path: object) -> bool:
-    """Whether *path* is a relay path carrying a signature this server issued."""
+    """*path* が、このサーバーが発行した署名を持つ中継パスかどうか。
+
+    Whether *path* is a relay path carrying a signature this server issued.
+    """
     if not isinstance(path, str):
         return False
     match = _PROXY_PATH_RE.fullmatch(path)

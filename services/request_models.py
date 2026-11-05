@@ -1,3 +1,11 @@
+"""API リクエストボディの pydantic モデルと、入力長・形式の上限定数を定義する。
+
+チャット・タスク・プロンプト共有・メモ・パーソナルコンテキスト・MCP などのルートが、受け取った入力の検証と正規化に使う。
+
+Pydantic models and size/format limits for API request payloads.
+Routes for chat, tasks, prompt sharing, memos, personal context and MCP use them to validate and normalize incoming input.
+"""
+
 from __future__ import annotations
 
 import re
@@ -47,6 +55,8 @@ NonEmptyStr = Annotated[str, Field(min_length=1)]
 TaskNameStr = Annotated[str, Field(min_length=1, max_length=255)]
 MAX_TASKS_PER_USER = 500
 
+# RFC 5321 はアドレス全体を 254 文字までと定める。パターンは意図的に厳しめの部分集合で、CR/LF（メールヘッダー注入）や
+# 印字できない空白を弾く。SMTP エンベロープや `To:` ヘッダーに使う前にここで検証する目的はそれに尽きる。
 # RFC 5321 caps the full address at 254 chars. The pattern is a deliberately
 # strict subset — it rejects CR/LF (mail-header injection) and any non-printable
 # whitespace, which is the whole point of pre-validating before the address is
@@ -69,6 +79,7 @@ def _validate_email_address(value: str) -> str:
         raise ValueError("メールアドレスの形式が正しくありません")
     return cleaned.lower()
 
+# バックエンドの検証を、フロントエンドのチャット入力上限に揃える。
 # Keep backend validation aligned with the frontend chat input limit.
 MAX_CHAT_MESSAGE_LENGTH = 30000
 MAX_CHAT_ROOM_ID_LENGTH = 128
@@ -88,6 +99,8 @@ MAX_SHARED_PROMPT_CONTENT_LENGTH = 256_000
 MAX_SHARED_PROMPT_DESCRIPTION_LENGTH = 300
 MAX_SHARED_PROMPT_AI_MODEL_LENGTH = 100
 MAX_MCP_MEMO_TITLE_LENGTH = 255
+# MCP のリクエストボディにはバイト数の上限が別に設定でき、それとは独立している。メモ本文は、1 件を取得・編集しやすい大きさに
+# 保つため、意図的にそれより小さくしている。
 # MCP request bodies have an independent, configurable byte limit. Memo content
 # remains intentionally smaller so a single memo stays easy to retrieve and edit.
 MAX_MCP_MEMO_CONTENT_LENGTH = 20000
@@ -442,6 +455,8 @@ class SkillResourceInput(BaseModel):
         if language and not re.fullmatch(r"[a-z0-9][a-z0-9_+.#-]{0,63}", language):
             raise ValueError("リソースの language が不正です。")
         self.language = language or infer_resource_language(self.path)
+        # テキストとして保存できる media_type（text/* と一部のアプリケーション形式）だけを許可する。
+        # Only media types storable as text are allowed: text/* plus a few text-based application types.
         media_type = self.media_type.strip().lower()
         if media_type and not (
             media_type.startswith("text/")
@@ -465,7 +480,10 @@ def _validate_skill_resources(
     attributes: dict[str, str],
     resources: list[SkillResourceInput],
 ) -> tuple[dict[str, str], list[SkillResourceInput]]:
-    """Normalize legacy Python input and enforce collection-wide resource constraints."""
+    """旧形式の Python 入力を scripts/main.py のリソースへ移し、リソース全体の制約（件数・重複パス・合計サイズ）を検証する。
+
+    Normalize legacy Python input and enforce collection-wide resource constraints.
+    """
     legacy_python = str(attributes.pop(SKILL_PYTHON_SCRIPT_KEY, "") or "")
     normalized_resources = list(resources)
     if (
@@ -688,6 +706,8 @@ class McpMemoUpdateRequest(BaseModel):
         return self
 
 
+# 日本語: MCP 経由で非公開メモを新規作成するリクエスト。本文は空白のみを許さない。
+# English: Request for creating a private memo through MCP; whitespace-only content is rejected.
 class McpMemoCreateRequest(BaseModel):
     """Validated input for creating a private memo through MCP."""
 
@@ -703,6 +723,8 @@ class McpMemoCreateRequest(BaseModel):
         return self
 
 
+# 日本語: MCP 経由で非公開メモへ追記するリクエスト。expected_revision で競合を検知し、追記内容は空白のみを許さない。
+# English: Request for appending to a private memo through MCP; expected_revision detects conflicts and whitespace-only text is rejected.
 class McpMemoAppendRequest(BaseModel):
     """Validated input for appending content to a private memo through MCP."""
 

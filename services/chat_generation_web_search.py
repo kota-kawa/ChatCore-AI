@@ -107,6 +107,8 @@ def _web_search_result_tool_payload(
         if source.page_text and remaining > 0:
             item["page_text"] = source.page_text[:remaining]
 
+    # JSON エスケープで少し長くなる。出典 ID は削らず、詳細だけを削って、
+    # シリアライズ後のツール結果を同じコンテキスト予算に収める。
     # JSON escaping adds a small amount of overhead. Trim details, never source IDs,
     # until the serialized tool result is within the same context budget.
     while len(json.dumps(payload, ensure_ascii=False)) > max_chars:
@@ -125,6 +127,8 @@ def _web_search_result_tool_payload(
                 break
         if not changed:
             break
+    # 悪意あるメタデータは JSON エスケープで大きく膨らみうる。サーバーが発行した
+    # 根拠 ID はすべて残したまま、任意項目を決まった順に取り除く。
     # Adversarial metadata can expand substantially when JSON-escaped. Remove optional
     # fields in a stable order while preserving every server-issued evidence ID.
     optional_fields = (
@@ -161,6 +165,9 @@ def _web_search_result_tool_payload(
             "This answer's evidence budget is exhausted, so the source text was omitted. "
             "Answer from the evidence already gathered and do not request another search."
         )
+        # 状態の説明文は、任意メタデータを削った後に足される。必須の根拠 ID を入れても余地がある
+        # 限り説明文を予算内に収める。極端に小さい予算では、紛らわしい「成功」の結果を黙って返すより、
+        # ID と明示的な状態を残すほうが安全。
         # The status explanation is added after optional metadata has been trimmed. Keep the
         # explanation within the requested budget whenever the required evidence IDs leave room;
         # for an impossibly tiny budget, preserving IDs and the explicit status is safer than
@@ -176,6 +183,10 @@ def _web_search_result_tool_payload(
     return payload
 
 
+# 検索結果のツール結果を、残りの根拠予算に収まる形で作り、使った文字数を予算から差し引く。
+# 内容が予算で空になったか切り詰められたかはテレメトリに記録する。
+# Build the web-search tool result within the remaining evidence budget and charge its size to the budget;
+# whether it ended up empty or truncated is recorded in telemetry.
 def _budgeted_web_search_result_tool_payload(
     result: WebSearchResult,
     budget: WebEvidenceContextBudget,

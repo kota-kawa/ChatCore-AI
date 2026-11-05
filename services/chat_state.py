@@ -1,4 +1,7 @@
-"""Durable chat memory and summary state backed by the async Chat repository."""
+"""チャットルームの記憶（利用者について抽出した事実）と会話要約を、非同期の ChatRepository 経由で読み書きする。
+
+Durable chat memory and summary state backed by the async Chat repository.
+"""
 
 from __future__ import annotations
 
@@ -30,6 +33,10 @@ __all__ = [
 
 
 async def _read(operation, session: AsyncSession | None):
+    """読み取り用に ChatRepository を用意して操作を実行する。session が無ければ自前のセッションを開く。
+
+    Run an operation against a ChatRepository for reading; opens its own session when none is given.
+    """
     if session is not None:
         return await operation(ChatRepository(session))
     async with session_scope() as scoped:
@@ -37,6 +44,12 @@ async def _read(operation, session: AsyncSession | None):
 
 
 async def _write(operation, session: AsyncSession | None):
+    """書き込み用に操作を実行する。session が無ければ自前のセッションでトランザクションを開く。
+    渡されたセッションのトランザクションは呼び出し元が管理する。
+
+    Run an operation for writing; opens its own transaction when no session is given, otherwise the caller owns the
+    transaction.
+    """
     if session is not None:
         return await operation(ChatRepository(session))
     async with session_scope() as scoped, scoped.begin():
@@ -71,6 +84,14 @@ async def remember_facts_from_message(
     source_message_id: int | None = None,
     session: AsyncSession | None = None,
 ) -> list[str]:
+    # LLM による抽出は同期的で DB を使わない処理なので、イベントループの外（別スレッド）で実行し、
+    # 永続化だけを AsyncSession で行う。
+    """発話から記憶すべき事実を LLM で抽出し、見つかった分をルームの記憶へ保存する。保存した事実のリストを返す（無ければ空）。
+
+    Extract facts worth remembering from a message with the LLM and persist them; returns the saved facts (empty when
+    none).
+    """
+    # 同期LLM処理はイベントループの外で行い、保存段階だけAsyncSessionを使う。
     # LLM extraction is synchronous and non-DB work.  Run it off the event
     # loop, then perform only the persistence step through AsyncSession.
     facts = await asyncio.to_thread(extract_memory_facts, message)
@@ -103,6 +124,12 @@ async def rebuild_room_summary(
     model: str | None = None,
     session: AsyncSession | None = None,
 ) -> str:
+    """アーカイブ済みの履歴から要約を作り直して保存する。要約文を返す。
+
+    Rebuild the summary from the archived history, store it and return the summary text.
+    """
+    # 要約の生成はブロッキングな LLM クライアントを呼ぶことがあるため、別スレッドで実行する。DB 向けの run_blocking は使わず、
+    # DB の処理とは切り離しておく。
     # Summary generation may call a blocking LLM client; it is deliberately
     # isolated from the DB migration and never uses DB-oriented run_blocking.
     summary_text, archived_count = await asyncio.to_thread(

@@ -1,3 +1,8 @@
+"""API が利用者に返すエラー・通知メッセージの定数を集めたファイル。サービスやルートから共通で参照する。
+
+Constants for the error and notice messages the API returns to users, shared by services and routes.
+"""
+
 from __future__ import annotations
 
 # APIエラーメッセージの共通定義ファイルです。各サービスやルートで再利用可能なテキストを一元管理します。
@@ -83,6 +88,8 @@ ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION = (
 MESSAGE_PROFILE_UPDATED = "プロフィールを更新しました"
 ERROR_INVALID_PROMPT_FEED_CURSOR = "プロンプト一覧のカーソルが不正です。"
 ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件が不正です。"
+# 日本語: 共有プロンプト（一覧・投稿・添付）関連のメッセージ。
+# English: Messages for shared prompts (feed, posting and attachments).
 ERROR_PROMPT_NOT_FOUND = "プロンプトが見つかりません"
 ERROR_PROMPT_ATTACHMENT_EMPTY = "空の添付ファイルはアップロードできません。"
 ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
@@ -101,6 +108,10 @@ ERROR_PROMPT_CREATE_RATE_LIMITED = (
 ERROR_PROMPT_CREATE_RATE_LIMITED_TEMPLATE = (
     "プロンプトの投稿回数が多すぎます。{seconds}秒ほど待ってから再試行してください。"
 )
+# 日本語: MCP 経由のプロンプト画像投稿（Base64・ファイル取得・チャンク式アップロード）のメッセージ。
+# 元画像のバイトを縮小・再圧縮せずに再試行させる案内を含む。
+# English: Messages for prompt-image posting through MCP (Base64, file download, chunked upload),
+# including the guidance to retry with the original bytes without resizing or recompressing.
 ERROR_MCP_PROMPT_IMAGE_BASE64_INVALID = "画像のBase64データを読み取れませんでした。"
 ERROR_MCP_PROMPT_IMAGE_DATA_URL_INVALID = "画像データURLはBase64形式で指定してください。"
 ERROR_MCP_PROMPT_IMAGE_MIME_UNSUPPORTED = "対応していない画像のMIMEタイプです。"
@@ -137,11 +148,15 @@ ERROR_MCP_PROMPT_IMAGE_UPLOAD_INCOMPLETE = (
 ERROR_MCP_PROMPT_IMAGE_UPLOAD_LIMIT = (
     "同時に保持できる画像の一時アップロード数を超えています。不要なアップロードをキャンセルしてから再試行してください。"
 )
+# 日本語: 未ログイン（ゲスト）によるプロンプト投稿の制限に関するメッセージ。
+# English: Messages for the limits on prompt posting by unauthenticated guests.
 ERROR_GUEST_PROMPT_TEXT_ONLY = (
     "ゲスト投稿ではテキストプロンプトのみ投稿できます。"
 )
 ERROR_GUEST_PROMPT_URL_FORBIDDEN = "ゲスト投稿ではURLを含めることはできません。"
 ERROR_GUEST_PROMPT_LIMIT_REACHED = "ゲスト投稿は24時間に1件までです。"
+# 日本語: 個人コンテキスト（保存・インポート／エクスポート・抽出候補・抽出設定）関連のメッセージ。
+# English: Messages for the personal context vault (saving, import/export, extracted candidates, extraction settings).
 ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT = (
     "同じ冪等キーが別のコンテキスト保存に使用されています。"
 )

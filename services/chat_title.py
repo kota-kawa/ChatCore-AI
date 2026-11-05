@@ -1,3 +1,10 @@
+"""チャットルームのタイトルを作る。最初の発話から付く仮タイトルの候補を作る関数と、
+LLM で短いタイトルを生成して整える関数を持つ（services/chat_use_case.py が利用）。
+
+Builds chat room titles: the candidates for the provisional title taken from the first message,
+and an LLM-generated short title that is cleaned up (used by services/chat_use_case.py).
+"""
+
 from __future__ import annotations
 
 import json
@@ -60,6 +67,14 @@ def build_initial_title_candidates(
     *,
     task_launch_request: dict[str, str] | None = None,
 ) -> list[str]:
+    """改名前に付いていたかもしれないタイトルの候補を返す（既定名、発話の冒頭、タスクの状況設定とタスク名）。
+    利用者がまだ名前を変えていないルームだけを自動で改名するため、現在のタイトルがこの中にあるときに限って、
+    生成したタイトルへ置き換える（services/chat_use_case.py）。
+
+    Return the titles a room may still carry before the user renames it (default name, start of the message, task setup
+    and name).
+    The generated title replaces the current one only when it is among these candidates (services/chat_use_case.py).
+    """
     candidates = [DEFAULT_CHAT_ROOM_TITLE, user_message[:255].strip()]
     if task_launch_request:
         setup_info = str(task_launch_request.get("setup_info") or "").strip()
@@ -80,6 +95,12 @@ def generate_chat_room_title(
     locale: str = "ja",
     llm_response_getter: Callable[..., str] = get_llm_response,
 ) -> str:
+    """利用者の発話とアシスタントの回答から、軽量モデルに短いタイトルを JSON で生成させ、整えて返す。
+    発話が空のときや LLM が失敗したときは空文字列を返す。
+
+    Ask the lightweight model for a short title as JSON and return it cleaned up.
+    Returns "" for an empty message or an LLM failure.
+    """
     user_text = _plain_text(user_message)
     assistant_text = _plain_text(assistant_response)
     if not user_text:

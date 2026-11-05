@@ -1,3 +1,5 @@
+# 日本語: 全 HTTP レスポンスに CSP などのセキュリティヘッダーを付ける ASGI ミドルウェアを定義する。
+# English: Defines the ASGI middleware that adds security headers such as CSP to every HTTP response.
 from __future__ import annotations
 
 from starlette.datastructures import MutableHeaders

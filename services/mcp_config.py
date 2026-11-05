@@ -1,4 +1,8 @@
-"""Runtime configuration for the optional remote MCP server."""
+"""任意で有効にするリモート MCP サーバーの実行時設定（公開URL、許可ホスト、レート制限など）を環境変数から読む。
+
+Runtime configuration for the optional remote MCP server (public URL, allowed hosts, rate limits and so on),
+read from environment variables.
+"""
 
 from __future__ import annotations
 
@@ -21,10 +25,15 @@ DEFAULT_MCP_CIMD_MAX_CONCURRENT_FETCHES = 4
 
 
 def is_mcp_enabled() -> bool:
+    # MCP_ENABLED が真のときだけリモート MCP サーバーを有効にする。
+    # The remote MCP server is enabled only when MCP_ENABLED is truthy.
     return env_bool("MCP_ENABLED")
 
 
 def get_mcp_public_base_url() -> str:
+    # MCP の公開ベース URL を返す。パスやクエリ、認証情報を含む値と、本番での非 HTTPS は設定ミスとして拒否する。
+    # Return the public base URL for MCP; a path, query or credentials, and non-HTTPS in production,
+    # are rejected as misconfiguration.
     value = (os.getenv("MCP_PUBLIC_BASE_URL") or frontend_base_url()).strip().rstrip("/")
     parsed = urlparse(value)
     if (
@@ -49,6 +58,9 @@ def get_mcp_server_url() -> str:
 
 
 def get_mcp_encryption_keys() -> list[str]:
+    # OAuth の保存データ暗号化に使う Fernet 鍵をカンマ区切りで読む（MultiFernet のため先頭の鍵で暗号化し、残りは復号用）。
+    # Read the comma-separated Fernet keys for stored OAuth data (MultiFernet: the first encrypts,
+    # the rest only decrypt); at least one is required.
     raw = os.getenv("MCP_OAUTH_ENCRYPTION_KEYS", "")
     keys = [value.strip() for value in raw.split(",") if value.strip()]
     if not keys:
@@ -57,6 +69,8 @@ def get_mcp_encryption_keys() -> list[str]:
 
 
 def get_mcp_allowed_origins() -> list[str]:
+    # 許可する Origin。未設定なら公開ベース URL だけを許可する。
+    # Allowed Origins; when unset, only the public base URL is allowed.
     raw = os.getenv("MCP_ALLOWED_ORIGINS", "")
     configured = [value.strip() for value in raw.split(",") if value.strip()]
     if configured:
@@ -65,7 +79,12 @@ def get_mcp_allowed_origins() -> list[str]:
 
 
 def get_mcp_allowed_hosts() -> list[str]:
-    """Host header values accepted by the MCP DNS-rebinding protection.
+    """MCP の DNS リバインディング対策が受け付ける Host ヘッダの値を返す。
+
+    既定は公開ホストと、その ``www`` 付き/なしの兄弟ホスト。どちらの形で設定したクライアントでも動き、
+    両方を受ける nginx の ``server_name`` と揃う。``MCP_ALLOWED_HOSTS``（カンマ区切り）で上書きできる。
+
+    Host header values accepted by the MCP DNS-rebinding protection.
 
     Defaults to the public host and its ``www``/apex sibling so a client
     configured with either form works — matching the nginx ``server_name`` that
@@ -80,6 +99,8 @@ def get_mcp_allowed_hosts() -> list[str]:
     return [host, sibling]
 
 
+# 以下は MCP の OAuth 入口、公開操作、クライアント情報取得に対する上限値を、環境変数または既定値から返す。
+# The getters below return the limits for MCP OAuth entry points, publishing and client-metadata fetches, from env or defaults.
 def get_mcp_dcr_rate_limit_per_hour() -> int:
     return env_int("MCP_DCR_RATE_LIMIT_PER_HOUR", DEFAULT_MCP_DCR_RATE_LIMIT_PER_HOUR)
 

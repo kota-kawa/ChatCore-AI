@@ -47,6 +47,8 @@ def normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str,
             "role": role,
             "content": normalize_message_content_for_llm(message.get("content", ""), role),
         }
+        # アーティファクトのソースはモデルへ再送しない。要約だけを付ければ、
+        # HTML/CSS/JavaScript でコンテキストを消費せずに「そのグラフを直して」のような追質問の文脈を保てる。
         # Artifact source is intentionally not replayed to the model. A compact
         # description keeps follow-up requests such as "edit that chart" grounded
         # without consuming the context window with HTML/CSS/JavaScript.
@@ -135,6 +137,7 @@ def parse_task_launch_message(message: str) -> dict[str, Any] | None:
     parsed: dict[str, Any] = {
         "task": task_match.group("task").strip(),
         "setup_info": setup_info,
+        # setup_info は既存の UI・タイトルの契約のために残す。LLM に渡す意味としての値は task_input。
         # Keep setup_info for the existing UI/title contract; task_input is the LLM-facing meaning.
         "task_input": setup_info,
     }
@@ -163,7 +166,11 @@ def find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str,
 def mark_task_launch_input_for_llm(
     messages: list[dict[str, Any]], task_request: dict[str, Any] | None
 ) -> list[dict[str, Any]]:
-    """Label the current launch input in its user-role message without changing stored/UI text."""
+    """最新のユーザー発話の「【状況・作業環境】」以降を <task_input> で囲み、LLM にだけ入力部分を明示する。
+    保存済みの本文や UI の表示は変えない。
+
+    Label the current launch input in its user-role message without changing stored/UI text.
+    """
     if not task_request or not task_request.get("task_input"):
         return messages
     for index in range(len(messages) - 1, -1, -1):

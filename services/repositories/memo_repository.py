@@ -1,4 +1,12 @@
-"""Async SQLAlchemy repository for memo entries and collections."""
+"""メモ(memo_entries)とコレクション(memo_collections)の永続化。一覧・検索、詳細、作成・更新、アーカイブ/ピン留め/並べ替え、ゴミ箱、一括操作を扱う。
+
+各関数は session を受け取れば呼び出し側のトランザクションに参加し、渡さなければ自前のトランザクションで実行する。
+ゴミ箱のメモは一覧・復元・完全削除以外では見せない(_live_memo / _trashed_memo)。
+
+Async SQLAlchemy repository for memo entries and collections.
+Each function joins the caller's transaction when given a session and otherwise runs in its own;
+trashed memos are hidden except for the trash list, restore and permanent delete.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +55,10 @@ async def _in_transaction(
     session: AsyncSession | None,
     operation: Callable[[AsyncSession], Awaitable[T]],
 ) -> T:
-    """Run one repository operation in an isolated transaction when needed."""
+    """session があればそれを使い、無ければ独立したトランザクションで 1 つの操作を実行する。
+
+    Run one repository operation in an isolated transaction when needed.
+    """
     if session is not None:
         return await operation(session)
     async with session_scope() as owned_session, owned_session.begin():
@@ -76,6 +87,9 @@ def _trashed_memo():
     return MemoEntry.deleted_at.is_not(None)
 
 
+# 日本語: 一覧用は本文を先頭 400 文字(preview_response)に切り詰め、詳細用は全文(ai_response)を返す。コレクションと共有の列も同時に取得する。
+# English: List rows carry a 400-character preview (preview_response) while detail rows carry the full ai_response;
+# collection and share columns come along.
 def _summary_columns(*, detail: bool = False):
     response = MemoEntry.ai_response if detail else func.left(
         func.coalesce(MemoEntry.ai_response, ""), 400
@@ -109,6 +123,8 @@ def _memo_from_detail_row(row: Any) -> dict[str, Any]:
     return _memo_from_row(row, detail=True)
 
 
+# 日本語: メモにコレクションと共有設定を外部結合した SELECT。コレクション/共有が無いメモも行として残る。
+# English: SELECT joining memos with their collection and share rows via outer joins, so memos without either still appear.
 def _memo_join_statement(*, detail: bool = False):
     return (
         select(*_summary_columns(detail=detail))
@@ -135,6 +151,11 @@ async def fetch_memo_summaries(
     only_trashed: bool = False,
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
+    # 日本語: メモ一覧。キーワード(語ごとの AND、かな揺れ対応)または意味検索(ベクトル距離順)、日付・コレクション・アーカイブ状態で絞り込み、
+    # 件数(total)とページ分のメモを返す。意味検索の埋め込みがあるときはキーワード検索を使わない。
+    # English: Memo list. Filters by keyword (per-term AND, kana-insensitive) or semantic search (ordered
+    # by vector distance), plus date, collection
+    # and archive state, and returns the total with one page. When a semantic embedding is given, keyword matching is skipped.
     async def operation(db: AsyncSession) -> dict[str, Any]:
         # ゴミ箱の一覧は削除した新しい順に固定し、アーカイブの絞り込みと意味検索は使わない。
         # The trash list is fixed to newest-deleted first and ignores the archive filters and semantic search.
@@ -196,6 +217,9 @@ async def fetch_memo_summaries(
                 "memos": [_memo_from_row(row, detail=False) for row in rows],
             }
 
+        # 日本語: 並び順。ピン留めを先頭にする場合は、手動並びのときだけピン留めの新しさでは並べず sort_order に任せる。
+        # English: Ordering. With pinned_first, pinned memos come first; under manual sort their order
+        # is left to sort_order rather than pin time.
         order_by = []
         if only_trashed:
             order_by.extend((MemoEntry.deleted_at.desc(), MemoEntry.id.desc()))
@@ -227,6 +251,9 @@ async def fetch_memo_summaries(
     return await _in_transaction(session, operation)
 
 
+# 日本語: sort パラメータを ORDER BY 式に変換する。manual は sort_order、未設定なら作成時刻(エポック秒)で代用し、未知の値は作成の新しい順。
+# English: Maps the sort parameter to an ORDER BY expression. manual uses sort_order, falling back to created_at
+# as epoch seconds; unknown values mean newest first.
 def _resolve_sort_expression(sort: str):
     if sort == "manual":
         return func.coalesce(
@@ -242,6 +269,8 @@ def _resolve_sort_expression(sort: str):
     return MemoEntry.created_at.desc()
 
 
+# 日本語: pgvector のコサイン距離(<=>)の式。クエリ埋め込みは 768 次元。
+# English: pgvector cosine-distance expression (<=>) against the 768-dimension query embedding.
 def _vector_distance(embedding: list[float]):
     return MemoEntry.embedding_vector.op("<=>")(
         bindparam(
@@ -275,6 +304,8 @@ async def fetch_memo_detail(
     return await _in_transaction(session, operation)
 
 
+# 日本語: コレクションが指定ユーザーのものか確かめる。他人のコレクションへメモを紐づけさせないために使う。
+# English: Checks that the collection belongs to the user, so a memo can never be attached to someone else's collection.
 async def validate_collection_owner(
     session: AsyncSession,
     user_id: int,
@@ -291,6 +322,8 @@ async def validate_collection_owner(
     )
 
 
+# 日本語: メモを作成する。コレクション ID は所有者を確認できたときだけ採用し、sort_order は既存の最大値 + 1 にして末尾へ置く。
+# English: Creates a memo. The collection id is used only if the user owns it, and sort_order is the current max + 1 to place it last.
 async def insert_memo(
     user_id: int,
     ai_response: str,
@@ -326,6 +359,14 @@ async def insert_memo(
     return await _in_transaction(session, operation)
 
 
+# 日本語: メモを更新する。expected_revision が違えば 409(楽観ロック)。allow_shared_content_change=False のと
+# き、共有中のメモの内容変更は 409 で拒否する。
+# 本文または題名を変えたら埋め込みを再生成待ち(pending)に戻す。UPDATE が 0 行だった場合は、不在・共有中・revision
+# 競合のどれかを再確認して返す。
+# English: Updates a memo. A wrong expected_revision gives 409 (optimistic locking), and with allow_shared_content_change
+# =False editing a shared memo is
+# rejected with 409. Changing the body or title resets the embedding to pending. If the UPDATE matches no row, a recheck tells not-found,
+# shared, or revision conflict apart.
 async def update_memo(
     user_id: int,
     memo_id: int,
@@ -476,6 +517,9 @@ async def set_memo_archive_state(
     return await _in_transaction(session, operation)
 
 
+# 日本語: ピン留めの切り替え。ピン留めするときは、既存のピン留めメモの末尾に来るよう sort_order をサブクエリで最大値 + 1 にする。
+# English: Toggles the pin. When pinning, sort_order becomes the max among pinned memos + 1 (via subquery) so
+# the memo lands last among pins.
 async def set_memo_pin_state(
     user_id: int,
     memo_id: int,
@@ -513,10 +557,19 @@ async def set_memo_pin_state(
     return await _in_transaction(session, operation)
 
 
+# 日本語: sort_order(Numeric)を Decimal にそろえる。None は 0 として扱う。
+# English: Coerces a sort_order value to Decimal, treating None as 0.
 def _decimal_order(value: Any) -> Decimal:
     return value if isinstance(value, Decimal) else Decimal(str(value or 0))
 
 
+# 日本語: ドラッグ後の位置に合わせて sort_order を決める。前後の隣接メモの中間値を使い(小数のため全件を振り直さずに済む)、
+# 片側しか無ければ ±1、どちらも無ければ同じ状態(ピン留め/アーカイブ)のグループの末尾にする。ピン留め・アーカ
+# イブ状態が異なるメモの間への移動は 400 で拒否する。
+# English: Computes sort_order for the dropped position. It takes the midpoint of the neighbours (a decimal,
+# so no mass renumbering), ±1 with one
+# neighbour, or the end of the same pinned/archived group with none. Moving between memos in different pinned/archived
+# states is rejected with 400.
 async def reorder_memo(
     user_id: int,
     memo_id: int,
@@ -626,7 +679,10 @@ async def delete_memo(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    """Move a memo to the trash and revoke its share link; it is deleted for good after the retention period."""
+    """メモをゴミ箱に移して共有リンクを失効させる。保持期間を過ぎると完全に削除される。
+
+    Move a memo to the trash and revoke its share link; it is deleted for good after the retention period.
+    """
 
     async def operation(db: AsyncSession) -> None:
         statement = (
@@ -648,7 +704,10 @@ async def restore_memo(
     *,
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
-    """Take a memo out of the trash with its archive, pin and collection state unchanged."""
+    """メモをゴミ箱から戻す。アーカイブ・ピン留め・コレクションの状態は変えない。
+
+    Take a memo out of the trash with its archive, pin and collection state unchanged.
+    """
 
     async def operation(db: AsyncSession) -> dict[str, Any]:
         statement = (
@@ -670,7 +729,10 @@ async def purge_memo(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    """Permanently delete one memo that is in the trash. A memo outside the trash is not found."""
+    """ゴミ箱にある 1 件のメモを完全に削除する。ゴミ箱の外のメモは「見つからない」扱いになる。
+
+    Permanently delete one memo that is in the trash. A memo outside the trash is not found.
+    """
 
     async def operation(db: AsyncSession) -> None:
         statement = (
@@ -689,7 +751,10 @@ async def empty_memo_trash(
     *,
     session: AsyncSession | None = None,
 ) -> int:
-    """Permanently delete every trashed memo of one user and return how many were deleted."""
+    """1 ユーザーのゴミ箱のメモをすべて完全に削除し、削除した件数を返す。
+
+    Permanently delete every trashed memo of one user and return how many were deleted.
+    """
 
     async def operation(db: AsyncSession) -> int:
         deleted = await db.execute(
@@ -707,7 +772,10 @@ async def purge_expired_memo_trash(
     limit: int = MEMO_TRASH_PURGE_BATCH_SIZE,
     session: AsyncSession | None = None,
 ) -> int:
-    """Permanently delete up to `limit` trashed memos of any user past the retention period, oldest first."""
+    """保持期間を過ぎたゴミ箱のメモを、ユーザーを問わず古い順に最大 `limit` 件まで完全に削除する。
+
+    Permanently delete up to `limit` trashed memos of any user past the retention period, oldest first.
+    """
 
     async def operation(db: AsyncSession) -> int:
         expired_ids = (
@@ -728,6 +796,12 @@ async def purge_expired_memo_trash(
     return await _in_transaction(session, operation)
 
 
+# 日本語: 選択したメモへの一括操作(delete / restore / purge / archive / unarchive / pin / unpin / set_collection / clear_collection)。
+# まず自分のメモだけに絞ってから更新し、未知の操作や所有していないコレクションへの移動は何もせず affected=0 を返す。
+# English: Bulk actions on selected memos (delete / restore / purge / archive / unarchive / pin / unpin / set_collection
+# / clear_collection).
+# It narrows to the user's own memos first, and an unknown action or a move into a collection the user does not
+# own affects nothing (affected=0).
 async def bulk_action(
     user_id: int,
     action: str,
@@ -798,6 +872,8 @@ async def bulk_action(
     return await _in_transaction(session, operation)
 
 
+# 日本語: コレクション一覧。memo_count はアーカイブ・ゴミ箱に入っていないメモだけを数える。
+# English: Collection list; memo_count counts only memos that are neither archived nor trashed.
 async def fetch_collections(
     user_id: int,
     *,
@@ -932,6 +1008,8 @@ async def update_collection(
     return await _in_transaction(session, operation)
 
 
+# 日本語: コレクションを削除する。所属メモは削除せず collection_id を外す(revision も進める)。
+# English: Deletes a collection; its memos are kept with collection_id cleared (and their revision bumped).
 async def delete_collection(
     user_id: int,
     collection_id: int,
